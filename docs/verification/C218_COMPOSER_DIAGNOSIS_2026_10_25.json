@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C218",
+  "sourceParent": "fc3d57e2f6407e401346a2418f4d8e84945772b0",
+  "branch": "codex/web-rollover-oct17",
+  "finding": {
+    "type": "LOCAL_LIBRARY_REGRESSION_PROOF",
+    "nativeAttributeRejectsTimeout": true,
+    "legacyLayoutReaderCanAlterFragmentedText": true,
+    "actualPendingReviewCauseProven": false,
+    "browserOrProfileAccess": false,
+    "evidenceSha256": "91da8154226ab41ae9a3c66c7c094f5bd555c8ebb08048dba05ea48c7597e175"
+  },
+  "implementation": [
+    "Use the existing DOM text-data reader for normal composer confirmation.",
+    "Use the installed two-argument attribute getter for reduced adapters.",
+    "Diagnose one existing dispatched review using historical grant and exact project/target checks.",
+    "Return bounded draft classifications, reader agreement and visible-message counts without text or unrelated hashes.",
+    "Reject unsupported adapter capabilities before launch; never fall through to a sender.",
+    "Preserve pending state and all drafts; diagnostics do not create receipts or authorize replay."
+  ],
+  "sourceQualification": {
+    "priorEvidenceSha256": "f7d2d2ae5f220d2987e3c3903b0a2ad03aff651baa8d11bf16429fb70645d9d5",
+    "startedUtc": "2026-10-25T19:13:20.3112411+00:00",
+    "continuationStartedUtc": "2026-10-25T19:17:34.9379482+00:00",
+    "counts": {
+      "wake-all": {
+        "ignored": 1,
+        "passed": 434
+      },
+      "error-codes": {
+        "ignored": 0,
+        "passed": 1
+      },
+      "web-work-and-grants": {
+        "ignored": 0,
+        "passed": 29
+      },
+      "python-bridge": {
+        "skipped": 0,
+        "passed": 126
+      },
+      "python-new-conversation": {
+        "skipped": 0,
+        "passed": 71
+      },
+      "operator-web": {
+        "ignored": 0,
+        "passed": 24
+      },
+      "python-current-dom": {
+        "skipped": 0,
+        "passed": 30
+      },
+      "python-adapter": {
+        "skipped": 0,
+        "passed": 31
+      }
+    },
+    "type": "SOURCE_FIXTURES_ONLY",
+    "strictClippy": "ROOT_AND_WAKE_PASS",
+    "verifiedPrefixReused": true,
+    "boundedOwnerExit": 0,
+    "maximumSeconds": 600,
+    "priorFailedRuns": [
+      "One existing mock lacked a DOM text response; fixture updated to the actual native signature.",
+      "An older snapshot fixture lacked the existing max_message_bytes argument; fixed and remaining checks resumed."
+    ],
+    "ignoredOrSkipped": 1,
+    "sourcePins": [
+      {
+        "sha256": "a95426196a530f1b201b84625adb15a2bcdc87de7f2f88c2eee05b6fb24d8119",
+        "path": "src/main.rs"
+      },
+      {
+        "sha256": "cf4314f2a2a6ddd5ff0d0de3232aa54bc36f700ee6216785aac0af97df3a5bec",
+        "path": "src/operator_web_cli.rs"
+      },
+      {
+        "sha256": "7a0976c8774c54870829f770f69d08b9a0d96485d5ffbc05a8c2904dbad983e8",
+        "path": "src/operator_web_review.rs"
+      },
+      {
+        "sha256": "69be7a119bc6d55bd89a46cfb74cd60d18c357bfe49fb9e8052ac24ba00d562c",
+        "path": "wake/src/runtime.rs"
+      },
+      {
+        "sha256": "c618fd77122d1b2c22108a1d506432e7b8c44b83fbfc25436d521e0fcbeee144",
+        "path": "wake/src/runtime_review_reconcile.rs"
+      },
+      {
+        "sha256": "b59e105453137f6137d5a9238075c3f398107af526dd701c1d63c001f31f6574",
+        "path": "scripts/wake_bridge.py"
+      },
+      {
+        "sha256": "7d8708a1c1e856d09e296a0c9f729049b21077187f3e1e1c776a1bcd243da978",
+        "path": "wake/adapter.py"
+      },
+      {
+        "sha256": "f448dd74f59223a6b45e91e9ea2220344759d880518a8856c3c91ea53f0ead54",
+        "path": "tests/test_wake_bridge.py"
+      },
+      {
+        "sha256": "f88e539d5a727aa71ee97476c1ce71d7048102e7f5903d9f215cd2a68eb18eef",
+        "path": "tests/test_wake_bridge_current_dom.py"
+      },
+      {
+        "sha256": "343305bbb960cb6b284754491cc75660061d82abb90ee6b1ec6387bc700132b6",
+        "path": "wake/tests/test_adapter.py"
+      },
+      {
+        "sha256": "0b07d4b696107273a8c01ff9261810357f5bb0b7e52f10ed49d811bab2094a0f",
+        "path": "wake/tests/test_new_conversation.py"
+      }
+    ],
+    "independentStaticReview": "PASS",
+    "finishedUtc": "2026-10-25T19:21:35.5094529+00:00",
+    "status": "PASS",
+    "distinctPassed": 746
+  },
+  "developmentPackage": "UNCHANGED_PENDING_QUALIFICATION",
+  "liveDiagnosis": "PENDING_QUALIFIED_ADAPTER",
+  "productionActions": 0,
+  "limitations": [
+    "A local regression does not establish the original live typing failure's cause.",
+    "Visible-message absence is not proof that submission never occurred.",
+    "C217A remains unknown; no resend, refund, second review or draft deletion is implied.",
+    "Development qualification is separate from installed production and two-conversation coding acceptance."
+  ],
+  "recordedUtc": "2026-10-25T19:21:56.5344206+00:00"
+}

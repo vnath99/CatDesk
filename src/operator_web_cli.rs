@@ -94,6 +94,10 @@ pub(crate) enum WebAction {
         project_id: String,
         event_id: String,
     },
+    ReviewDiagnose {
+        project_id: String,
+        event_id: String,
+    },
     ReviewAuthorization {
         project_id: String,
         operation: String,
@@ -391,14 +395,19 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         ("context", "capture") if options.is_empty() => Ok(WebAction::ContextCapture {
             project_id: project_id.into(),
         }),
-        ("review", "read" | "reobserve" | "reconcile") => {
+        ("review", "read" | "reobserve" | "reconcile" | "diagnose") => {
             let event_id = options
                 .remove("--event-id")
                 .ok_or("WEB_USAGE: --event-id is required")?;
             if !catdesk_wake::protocol::valid_id(event_id) || !options.is_empty() {
                 return Err("WEB_USAGE: invalid review event or unexpected option".into());
             }
-            if verb == "reconcile" {
+            if verb == "diagnose" {
+                Ok(WebAction::ReviewDiagnose {
+                    project_id: project_id.into(),
+                    event_id: event_id.into(),
+                })
+            } else if verb == "reconcile" {
                 Ok(WebAction::ReviewReconcile {
                     project_id: project_id.into(),
                     event_id: event_id.into(),
@@ -1311,6 +1320,10 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             project_id,
             event_id,
         } => review::reconcile(&workspace, &project_id, &event_id),
+        WebAction::ReviewDiagnose {
+            project_id,
+            event_id,
+        } => review::diagnose(&workspace, &project_id, &event_id),
         WebAction::ReviewAuthorization {
             project_id,
             operation,
@@ -1848,6 +1861,35 @@ mod tests {
             Ok(WebAction::ReviewReconcile { .. })
         ));
         assert!(parse(&valid[..6]).is_err());
+        for flag in [
+            "--url",
+            "--message",
+            "--submit",
+            "--force",
+            "--max-runtime-seconds",
+        ] {
+            let mut invalid = valid.clone();
+            invalid.extend(args(&[flag, "override"]));
+            assert!(parse(&invalid).is_err());
+        }
+    }
+
+    #[test]
+    fn review_diagnose_has_no_sender_or_destination_override() {
+        let valid = args(&[
+            "operator",
+            "web",
+            "review",
+            "diagnose",
+            "--project-id",
+            "alpha",
+            "--event-id",
+            "review-one",
+        ]);
+        assert!(matches!(
+            parse(&valid),
+            Ok(WebAction::ReviewDiagnose { .. })
+        ));
         for flag in [
             "--url",
             "--message",

@@ -245,6 +245,34 @@ class CurrentDomTests(unittest.TestCase):
             "https://chatgpt.com/c/current-dom", Path(self.directory.name), 1, 1
         )
 
+    def test_typing_confirmation_reads_text_data_and_native_attribute_signature(self):
+        class NativeSignatureDom(CurrentDom):
+            # Match the installed SeleniumBase signature: no timeout argument.
+            def get_attribute(self, selector, attribute):
+                return self.evaluate(f"document.querySelector({json.dumps(selector)})?.getAttribute({json.dumps(attribute)}) ?? null")
+            def get_text(self, selector, timeout):
+                # SeleniumBase's text_all separates adjacent DOM text nodes.
+                return self.evaluate(f"Array.from(document.querySelector({json.dumps(selector)}).childNodes).map(n => n.nodeValue ?? n.textContent ?? '').join(' ')")
+        expected = 'Review https://github.com/vnath99/CatDesk now'
+        cdp = NativeSignatureDom(composerCount=1, composerLink=True,
+            composerPrefix='Review https://github.com/vnath99/', linkText='CatDesk',
+            composerSuffix=' now', normalizationTrace=True)
+        legacy, available = self.sink.legacy_composer_observation(cdp)
+        self.assertTrue(available)
+        self.assertNotEqual(bridge.normalize_message(legacy), expected)
+        self.assertEqual(self.sink.text(cdp), expected)
+        self.assertEqual(cdp.mutations, 0)
+        self.assertEqual(cdp.commands, [])
+
+    def test_reduced_native_attribute_reader_and_ambiguous_dom_fail_closed(self):
+        class Reduced:
+            def is_element_visible(self, selector): return selector == bridge.EDITOR
+            def get_attribute(self, selector, attribute): return 'native value'
+            def get_text(self, selector, timeout): raise AssertionError('attribute already read')
+        self.assertEqual(self.sink.text(Reduced()), 'native value')
+        with self.assertRaises(bridge.Attention):
+            self.sink.text(CurrentDom(composerCount=2, composerText='foreign draft'))
+
     def test_bootstrap_serialization_probe_reads_only_one_plain_home_composer(self):
         home = bridge.NEW_CONVERSATION_HOME
         self.sink.check_plain_home_draft(CurrentDom(

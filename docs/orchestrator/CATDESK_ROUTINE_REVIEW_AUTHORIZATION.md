@@ -26,6 +26,7 @@ versions do not gain these commands merely because source tests pass.
 <controller> operator web review resume --project-id <id> --input-file <review.json>
 <controller> operator web review revoke --project-id <id> --input-file <revoke.json>
 <controller> operator web review reconcile --project-id <id> --event-id <existing-submitting-id>
+<controller> operator web review diagnose --project-id <id> --event-id <existing-submitting-id>
 ```
 
 Grant input is `{projectId, authorization}`. `authorization` contains `grantId`,
@@ -87,6 +88,14 @@ submission-start witness remains unchanged. An I/O failure during these existing
 multi-file writes may retain partial positive evidence, which must be inspected
 without rollback or resend. Reconciliation does not verify a response, resolve
 work, refund a grant or establish production acceptance.
+
+`diagnose` uses the same exact pending-event and historical-dispatch checks but
+has no receipt-commit path. With a qualified adapter it compares the saved draft
+through the existing text-data reader and legacy layout getter, and reports
+fixed classes, bounded counts and agreement flags only. It never returns draft
+text or unrelated draft hashes. It cannot establish global message absence,
+clear a draft or authorize replay. An unsupported adapter is refused before any
+browser starts, preserving older packages and their pending work.
 
 Compatibility: scoped events use the dedicated `source_review` event type,
 which old Wake hosts reject instead of treating it as unrestricted work. New

@@ -730,6 +730,106 @@ def source_snapshot(bridge, sb, request):
     emit(payload)
 
 
+def submission_diagnostic_sample(bridge, sink, cdp, message):
+    """Return bounded comparisons, never draft text or unrelated draft hashes."""
+    if not sink.exact(cdp.get_current_url()):
+        raise bridge.Attention("SUBMISSION_DIAGNOSE_TARGET_CHANGED")
+    expected = bridge.normalize_message(message)
+    observation = {
+        "composerClass": "UNAVAILABLE", "composerBytes": 0,
+        "legacyAvailable": False, "readersAgree": None,
+        "legacyMatchesExpected": None, "expectedUserCount": None,
+        "lastUserMatches": None, "trustedMatches": None, "turnsAfter": None,
+        "stable": False, "coverage": "VISIBLE_BOUNDED_ONLY",
+    }
+    private_tokens = []
+    if sink.document_ready_state(cdp) == "complete":
+        try:
+            actual = sink.composer_plain_text(cdp)
+            normalized = bridge.normalize_message(actual)
+            observation["composerBytes"] = len(actual.encode("utf-8"))
+            observation["composerClass"] = ("EMPTY" if not normalized else
+                "EXACT" if normalized == expected else
+                "PREFIX" if expected.startswith(normalized) else "OTHER")
+            private_tokens.append(bridge.digest(normalized))
+            try:
+                legacy, available = sink.legacy_composer_observation(cdp)
+                if not available:
+                    raise ValueError("legacy read unavailable")
+                if len(legacy.encode("utf-8")) > bridge.MAX_USER_MESSAGE_CHARS:
+                    raise ValueError("bounded legacy read required")
+                legacy = bridge.normalize_message(legacy)
+                observation.update(legacyAvailable=True, readersAgree=legacy == normalized,
+                                   legacyMatchesExpected=legacy == expected)
+                private_tokens.append(bridge.digest(legacy))
+            except Exception:
+                pass
+        except Exception:
+            pass
+        try:
+            users = sink.user_message_digests(cdp)
+            count, after = sink.trusted_turn_anchor_state(cdp, message)
+            if (len(users) > bridge.MAX_USER_MESSAGES or type(count) is not int or
+                    type(after) is not int or not 0 <= count <= bridge.MAX_USER_MESSAGES or
+                    not 0 <= after <= 1024):
+                raise ValueError("bounded turn read required")
+            expected_digest = bridge.digest(expected)
+            observation.update(expectedUserCount=users.count(expected_digest),
+                lastUserMatches=bool(users) and users[-1] == expected_digest,
+                trustedMatches=count, turnsAfter=after)
+            private_tokens.extend(users)
+        except Exception:
+            pass
+    if not sink.exact(cdp.get_current_url()):
+        raise bridge.Attention("SUBMISSION_DIAGNOSE_TARGET_CHANGED")
+    # Comparison tokens are private working values and never enter the frame.
+    return observation, (json.dumps(observation, sort_keys=True), tuple(private_tokens))
+
+
+def diagnose_submission(bridge, sb, request, *, clock=None, sleep=None):
+    """Inspect one ambiguous source review without typing or changing its state."""
+    if (set(request) != {"diagnoseSubmission", "event", "target"} or
+            request["diagnoseSubmission"] is not True):
+        raise bridge.Attention("SUBMISSION_DIAGNOSE_REQUEST_INVALID")
+    event, target = request["event"], request["target"]
+    if (not isinstance(event, dict) or not isinstance(target, dict) or
+            set(target) != {"url", "digest", "generation"} or
+            not isinstance(event.get("message"), str) or
+            not isinstance(event.get("projectId"), str) or
+            not isinstance(event.get("eventId"), str) or
+            not bridge.SAFE_ID.fullmatch(event["projectId"]) or
+            not bridge.SAFE_ID.fullmatch(event["eventId"]) or
+            event.get("eventType") != "source_review" or
+            type(target["generation"]) is not int or target["generation"] <= 0 or
+            event.get("targetGeneration") != target["generation"] or
+            not event["message"] or len(event["message"].encode("utf-8")) > 2048 or
+            bridge.normalize_message(event["message"]) != event["message"]):
+        raise bridge.Attention("SUBMISSION_DIAGNOSE_REQUEST_INVALID")
+    url = bridge.canonical_conversation_url(target["url"])
+    if url != target["url"] or bridge.digest(url) != target["digest"]:
+        raise bridge.Attention("SUBMISSION_DIAGNOSE_TARGET_CHANGED")
+    sink = bridge.CdpSink(url, ROOT / "browser-profile", 30, 20)
+    cdp = prepare_cdp_target(bridge, sb, url)
+    clock, sleep = clock or time.monotonic, sleep or time.sleep
+    deadline = clock() + 10
+    previous = None
+    while True:
+        observation, comparison = submission_diagnostic_sample(bridge, sink, cdp, event["message"])
+        available = observation["composerClass"] != "UNAVAILABLE" or observation["expectedUserCount"] is not None
+        if previous == comparison and available:
+            observation["stable"] = True
+            break
+        previous = comparison
+        remaining = deadline - clock()
+        if remaining <= 0:
+            break
+        sleep(min(.25, remaining))
+    emit({"stage": "SUBMISSION_DIAGNOSED", "projectId": event["projectId"],
+          "eventId": event["eventId"], "targetGeneration": target["generation"],
+          "targetDigest": target["digest"], "messageDigest": bridge.digest(event["message"]),
+          "observation": observation})
+
+
 def reconcile_submission(bridge, sb, event, target, *, cooperative=False):
     """Reconcile a delivery already durably SUBMITTING without another USER submit.
 
@@ -868,14 +968,18 @@ def main():
                             source_snapshot(bridge, sb, request)
                         elif request.get("bootstrap") is True:
                             bootstrap_attempt(bridge, sb, request)
+                        elif request.get("diagnoseSubmission") is True:
+                            diagnose_submission(bridge, sb, request)
                         elif request.get("reconcile") is True:
                             reconcile_submission(
                                 bridge, sb, request["event"], request["target"],
                                 cooperative=request.get("cooperative") is True,
                             )
-                        else:
+                        elif set(request) <= {"event", "target", "cooperative"}:
                             attempt(bridge, sb, request["event"], request["target"],
                                     cooperative=request.get("cooperative") is True)
+                        else:
+                            raise bridge.Attention("BROWSER_REQUEST_UNSUPPORTED")
                         # One adapter process owns exactly one browser attempt.
                         # Returning exits SeleniumBase's context immediately after
                         # SENT or successful observe-only reconciliation, so the

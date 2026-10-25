@@ -93,6 +93,43 @@ class FakeProbeSink:
 
 
 class AdapterTests(unittest.TestCase):
+    def test_submission_diagnosis_classifies_without_text_or_browser_writes(self):
+        expected = "frozen review request"
+        for actual, legacy, classification in ((expected, "frozen  review request", "EXACT"),
+                ("frozen review", "frozen review", "PREFIX"),
+                ("foreign private draft", "foreign private draft", "OTHER"), ("", "", "EMPTY")):
+            with self.subTest(classification=classification):
+                cdp=FakeCdp(); frames=[]; now=[0.0]
+                class Sink:
+                    def __init__(self, url, *_args): self.url=url
+                    def exact(self, url): return url == self.url
+                    def document_ready_state(self, _): return "complete"
+                    def composer_plain_text(self, _): return actual
+                    def legacy_composer_observation(self, _): return legacy, True
+                    def user_message_digests(self, _): return []
+                    def trusted_turn_anchor_state(self, _, message): return 0, 0
+                request={"diagnoseSubmission":True,"event":{"eventId":"review-one","projectId":"alpha",
+                    "eventType":"source_review","targetGeneration":1,"message":expected},
+                    "target":{"url":cdp.url,"digest":bridge.digest(cdp.url),"generation":1}}
+                def pause(seconds): now[0]+=seconds
+                with patch.object(bridge,"CdpSink",Sink), patch.object(adapter,"prepare_cdp_target",return_value=cdp), patch.object(adapter,"emit",side_effect=frames.append):
+                    adapter.diagnose_submission(bridge,None,request,clock=lambda:now[0],sleep=pause)
+                result=frames[0]["observation"]
+                self.assertEqual(result["composerClass"],classification)
+                self.assertTrue(result["stable"])
+                self.assertNotIn(actual if actual else "impossible sentinel",json.dumps(frames))
+                if actual and actual != expected:
+                    self.assertNotIn(bridge.digest(actual),json.dumps(frames))
+                self.assertFalse(cdp.sent);self.assertEqual(cdp.keys,[])
+
+    def test_submission_diagnosis_refuses_wrong_scope_before_browser(self):
+        bad={"diagnoseSubmission":True,"event":{"eventId":"one","projectId":"alpha",
+            "eventType":"test","targetGeneration":1,"message":"review"},
+            "target":{"url":"https://chatgpt.com/c/exact","digest":"a"*64,"generation":1}}
+        with patch.object(adapter,"prepare_cdp_target") as opened:
+            with self.assertRaises(bridge.Attention): adapter.diagnose_submission(bridge,None,bad)
+            opened.assert_not_called()
+
     def test_source_snapshot_waits_for_complete_matching_frames_without_writes(self):
         now = [0.0]
         pauses = []

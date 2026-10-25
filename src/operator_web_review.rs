@@ -4,6 +4,19 @@ use crate::delegated::autonomy_projects::resolve_registered_project_from_control
 
 /// Inspect only this already-dispatched review; never grant a replacement send.
 pub(super) fn reconcile(workspace: &Path, project: &str, event: &str) -> Result<Value, String> {
+    inspect_submitting(workspace, project, event, false)
+}
+
+pub(super) fn diagnose(workspace: &Path, project: &str, event: &str) -> Result<Value, String> {
+    inspect_submitting(workspace, project, event, true)
+}
+
+fn inspect_submitting(
+    workspace: &Path,
+    project: &str,
+    event: &str,
+    diagnostic: bool,
+) -> Result<Value, String> {
     let lease = crate::operator_facade::acquire_web_work_lease(workspace, project)?;
     let key = paired_key(workspace, project)?;
     let target =
@@ -25,13 +38,9 @@ pub(super) fn reconcile(workspace: &Path, project: &str, event: &str) -> Result<
         }
         lease.check_target(&target)
     };
-    let result = catdesk_wake::runtime::reconcile_scoped_review_guarded(
-        &store,
-        project,
-        &target,
-        event,
-        &check_pair,
-        |delivery, commit| {
+    let check_authority =
+        |delivery: &catdesk_wake::store::Delivery,
+         commit: &mut dyn FnMut() -> Result<(), String>| {
             registry.with_registration_lock(|| {
                 let scope = resolve_registered_project_from_control_root(workspace, project)
                     .map_err(|_| "WEB_REVIEW_PROJECT_UNAVAILABLE")?;
@@ -46,9 +55,34 @@ pub(super) fn reconcile(workspace: &Path, project: &str, event: &str) -> Result<
                     .verify_review_reconciliation(&delivery.event, &target)?;
                 commit()
             })
-        },
-    )?;
+        };
+    let result = if diagnostic {
+        catdesk_wake::runtime::diagnose_scoped_review_guarded(
+            &store,
+            project,
+            &target,
+            event,
+            &check_pair,
+            check_authority,
+        )
+    } else {
+        catdesk_wake::runtime::reconcile_scoped_review_guarded(
+            &store,
+            project,
+            &target,
+            event,
+            &check_pair,
+            check_authority,
+        )
+    }?;
     check_pair()?;
+    if diagnostic {
+        return Ok(
+            json!({"action":"web_review_diagnose","projectId":project,"eventId":event,
+            "targetGeneration":target.generation,"targetDigest":target.digest,
+            "diagnosis":result,"sendAttempted":false,"stateChanged":false,"workResolved":false}),
+        );
+    }
     Ok(
         json!({"action":"web_review_reconcile","projectId":project,"eventId":event,
         "target":target,"reconciliation":result,"sendAttempted":false,"workResolved":false}),

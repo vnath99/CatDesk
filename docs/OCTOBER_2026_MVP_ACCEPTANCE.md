@@ -1,3 +1,14 @@
+## October 25 C218 — composer diagnosis qualification
+
+The native getter defect is reproduced locally and the source fix reuses the
+existing DOM text reader. The new diagnostic returns metadata only, under the
+same historical-dispatch and exact-target checks; it cannot resend, clear a draft
+or create a receipt. Source qualification passed 746 tests (one ignored) and
+strict root/Wake Clippy. The development-adapter update and live diagnosis are
+pending. C217A remains unknown; visible message absence cannot prove no submission.
+No production, new review, binding or recurring-process action follows from this
+source change. Evidence: [C218](verification/C218_COMPOSER_DIAGNOSIS_2026_10_25.json).
+
 ## October 25 C217 — standing-grant live acceptance is partial
 
 | Capability | Observed result |

@@ -73,7 +73,7 @@ where
         }
         Ok(())
     };
-    let guard = || {
+    let guard = || -> Result<()> {
         owner_guard()?;
         keep_running()?;
         owner_guard()
@@ -85,24 +85,7 @@ where
     }
     let _owner = store.host_lock()?;
     guard()?;
-    let delivery = store
-        .delivery(event)?
-        .ok_or("SCOPED_RECONCILE_DELIVERY_MISSING")?;
-    delivery.event.validate()?;
-    if delivery.phase != Phase::Submitting
-        || delivery.receipt.is_some()
-        || delivery.event.event_id != event
-        || delivery.event.project_id != project
-        || delivery.event.event_type != "source_review"
-        || delivery.target != *target
-        || delivery.event.target_generation != target.generation
-        || delivery.message_digest != crate::protocol::digest(&delivery.event.message)
-        || delivery.event.audit_references.len() != 1
-        || !delivery.event.audit_references[0].starts_with("catdesk-review-v1:")
-        || delivery.event.audit_references[0] == "catdesk-review-v1:"
-    {
-        return Err("SCOPED_RECONCILE_DELIVERY_INVALID".into());
-    }
+    let delivery = submitting_delivery(store, project, target, event)?;
     let unchanged = || -> Result<()> {
         if store.config()?.targets.get(project) != Some(target)
             || store.delivery(event)?.as_ref() != Some(&delivery)
@@ -142,6 +125,248 @@ where
         "hostStarted":false,"schedulerStarted":false,"desiredStateChanged":false,
         "diagnostic":{"phase":"COMPLETE","elapsedMillis":started.elapsed().as_millis(),
         "budgetMillis":maximum.as_millis()}}))
+}
+
+fn submitting_delivery(
+    store: &Store,
+    project: &str,
+    target: &Target,
+    event: &str,
+) -> Result<Delivery> {
+    let delivery = store
+        .delivery(event)?
+        .ok_or("SCOPED_RECONCILE_DELIVERY_MISSING")?;
+    delivery.event.validate()?;
+    if delivery.phase != Phase::Submitting
+        || delivery.receipt.is_some()
+        || delivery.event.event_id != event
+        || delivery.event.project_id != project
+        || delivery.event.event_type != "source_review"
+        || delivery.target != *target
+        || delivery.event.target_generation != target.generation
+        || delivery.message_digest != crate::protocol::digest(&delivery.event.message)
+        || delivery.event.audit_references.len() != 1
+        || !delivery.event.audit_references[0].starts_with("catdesk-review-v1:")
+        || delivery.event.audit_references[0] == "catdesk-review-v1:"
+    {
+        return Err("SCOPED_RECONCILE_DELIVERY_INVALID".into());
+    }
+    Ok(delivery)
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SubmissionObservation {
+    composer_class: String,
+    composer_bytes: u64,
+    legacy_available: bool,
+    readers_agree: Option<bool>,
+    legacy_matches_expected: Option<bool>,
+    expected_user_count: Option<u64>,
+    last_user_matches: Option<bool>,
+    trusted_matches: Option<u64>,
+    turns_after: Option<u64>,
+    stable: bool,
+    coverage: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SubmissionDiagnosis {
+    stage: String,
+    project_id: String,
+    event_id: String,
+    target_generation: u64,
+    target_digest: String,
+    message_digest: String,
+    observation: SubmissionObservation,
+}
+
+fn diagnosis_frame(value: Value, delivery: &Delivery) -> Result<SubmissionObservation> {
+    let parsed: SubmissionDiagnosis =
+        serde_json::from_value(value).map_err(|_| "SCOPED_DIAGNOSE_FRAME_INVALID")?;
+    let view = parsed.observation;
+    if parsed.stage != "SUBMISSION_DIAGNOSED"
+        || parsed.project_id != delivery.event.project_id
+        || parsed.event_id != delivery.event.event_id
+        || parsed.target_generation != delivery.target.generation
+        || parsed.target_digest != delivery.target.digest
+        || parsed.message_digest != delivery.message_digest
+        || !matches!(
+            view.composer_class.as_str(),
+            "EXACT" | "PREFIX" | "OTHER" | "EMPTY" | "UNAVAILABLE"
+        )
+        || view.composer_bytes > 16 * 1024
+        || view.coverage != "VISIBLE_BOUNDED_ONLY"
+        || view.expected_user_count.is_some_and(|n| n > 512)
+        || view.trusted_matches.is_some_and(|n| n > 512)
+        || view.turns_after.is_some_and(|n| n > 1024)
+        || [
+            view.readers_agree.is_some(),
+            view.legacy_matches_expected.is_some(),
+        ]
+        .iter()
+        .any(|present| *present != view.legacy_available)
+        || (view.composer_class == "UNAVAILABLE"
+            && (view.composer_bytes != 0 || view.legacy_available))
+        || [
+            view.last_user_matches.is_some(),
+            view.trusted_matches.is_some(),
+            view.turns_after.is_some(),
+        ]
+        .iter()
+        .any(|present| *present != view.expected_user_count.is_some())
+        || (view.last_user_matches == Some(true) && view.expected_user_count == Some(0))
+    {
+        return Err("SCOPED_DIAGNOSE_FRAME_INVALID".into());
+    }
+    Ok(view)
+}
+
+fn require_diagnosis_adapter(bytes: &[u8]) -> Result<()> {
+    if !bytes
+        .windows(b"def diagnose_submission(".len())
+        .any(|p| p == b"def diagnose_submission(")
+    {
+        return Err("SCOPED_DIAGNOSE_PACKAGE_UNSUPPORTED".into());
+    }
+    Ok(())
+}
+
+/// Metadata-only inspection. The historical grant is checked twice; no commit
+/// closure is ever passed anything but a no-op and no store writer is called.
+pub fn diagnose_scoped_review_guarded<F>(
+    store: &Store,
+    project: &str,
+    target: &Target,
+    event: &str,
+    keep_running: &dyn Fn() -> Result<()>,
+    with_authority: F,
+) -> Result<Value>
+where
+    F: FnMut(&Delivery, &mut dyn FnMut() -> Result<()>) -> Result<()>,
+{
+    diagnose_with_adapter(
+        store,
+        project,
+        target,
+        event,
+        keep_running,
+        with_authority,
+        Duration::from_secs(90),
+        |deadline, guard| {
+            let installed = installed_bootstrap_directory(store)?;
+            // Old adapters fall through unknown requests to their sender.
+            // Reject them before starting a browser, not after sending a frame.
+            require_diagnosis_adapter(
+                &std::fs::read(installed.join("adapter.py"))
+                    .map_err(|_| "BROWSER_ADAPTER_UNAVAILABLE")?,
+            )?;
+            Adapter::spawn_from_installed_guarded(
+                store.root(),
+                &installed,
+                deadline.saturating_duration_since(Instant::now()),
+                guard,
+            )
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn diagnose_with_adapter<A, F>(
+    store: &Store,
+    project: &str,
+    target: &Target,
+    event: &str,
+    keep_running: &dyn Fn() -> Result<()>,
+    mut with_authority: F,
+    maximum: Duration,
+    connect: impl FnOnce(Instant, &dyn Fn() -> Result<()>) -> Result<A>,
+) -> Result<Value>
+where
+    A: SubmissionAdapter,
+    F: FnMut(&Delivery, &mut dyn FnMut() -> Result<()>) -> Result<()>,
+{
+    let started = Instant::now();
+    let deadline = started + maximum;
+    let guard = || -> Result<()> {
+        if Instant::now() >= deadline {
+            return Err("SCOPED_DIAGNOSE_TIMEOUT".into());
+        }
+        if desired(store)? != "STOPPED" {
+            return Err("SCOPED_RECONCILE_HOST_NOT_STOPPED".into());
+        }
+        keep_running()?;
+        if Instant::now() >= deadline {
+            return Err("SCOPED_DIAGNOSE_TIMEOUT".into());
+        }
+        Ok(())
+    };
+    guard()?;
+    target.validate()?;
+    if !crate::protocol::valid_id(project) || !crate::protocol::valid_id(event) {
+        return Err("SCOPED_RECONCILE_ARGUMENTS_INVALID".into());
+    }
+    let _owner = store.host_lock()?;
+    let delivery = submitting_delivery(store, project, target, event)?;
+    let unchanged = || -> Result<()> {
+        if store.config()?.targets.get(project) != Some(target)
+            || store.delivery(event)?.as_ref() != Some(&delivery)
+        {
+            return Err("SCOPED_RECONCILE_SCOPE_CHANGED".into());
+        }
+        Ok(())
+    };
+    unchanged()?;
+    with_authority(&delivery, &mut || Ok(()))?;
+    guard()?;
+    let mut adapter = connect(deadline, &guard)?;
+    let observed = (|| {
+        guard()?;
+        adapter.send(
+            json!({"diagnoseSubmission":true,"event":delivery.event,"target":delivery.target}),
+        )?;
+        loop {
+            guard()?;
+            let frame = adapter.receive(
+                deadline
+                    .saturating_duration_since(Instant::now())
+                    .min(Duration::from_millis(250)),
+            );
+            guard()?;
+            match frame {
+                Ok(Ok(value)) => match value.get("stage").and_then(Value::as_str) {
+                    Some("SUBMISSION_DIAGNOSED") => return diagnosis_frame(value, &delivery),
+                    Some(
+                        "CDP_REUSE_BEGIN" | "CDP_REUSE_DONE" | "CDP_ACTIVATE_BEGIN"
+                        | "CDP_ACTIVATE_DONE",
+                    ) => {}
+                    Some("ATTENTION") => return Err("SCOPED_DIAGNOSE_UNAVAILABLE".into()),
+                    _ => return Err("SCOPED_DIAGNOSE_FRAME_INVALID".into()),
+                },
+                Ok(Err(_)) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    return Err("SCOPED_RECONCILE_ADAPTER_FAILED".into());
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+            }
+        }
+    })();
+    adapter.finish(
+        deadline
+            .saturating_duration_since(Instant::now())
+            .min(Duration::from_secs(5)),
+    );
+    drop(adapter);
+    let observation = observed?;
+    guard()?;
+    unchanged()?;
+    with_authority(&delivery, &mut || Ok(()))?;
+    guard()?;
+    Ok(
+        json!({"observation":observation,"browserReadOnly":true,"stateChanged":false,
+        "receiptCreated":false,"sendAttempted":false,"diagnostic":{"phase":"COMPLETE",
+        "elapsedMillis":started.elapsed().as_millis(),"budgetMillis":maximum.as_millis()}}),
+    )
 }
 
 fn read_receipt<A: SubmissionAdapter>(
@@ -474,5 +699,135 @@ mod tests {
             assert!(finished.get());
             preserved(&store, &d, &control);
         }
+    }
+
+    fn diagnosis(delivery: &Delivery) -> Value {
+        json!({"stage":"SUBMISSION_DIAGNOSED","projectId":delivery.event.project_id,
+            "eventId":delivery.event.event_id,"targetGeneration":delivery.target.generation,
+            "targetDigest":delivery.target.digest,"messageDigest":delivery.message_digest,
+            "observation":{"composerClass":"OTHER","composerBytes":23,"legacyAvailable":true,
+                "readersAgree":false,"legacyMatchesExpected":false,"expectedUserCount":0,
+                "lastUserMatches":false,"trustedMatches":0,"turnsAfter":0,
+                "stable":true,"coverage":"VISIBLE_BOUNDED_ONLY"}})
+    }
+
+    #[test]
+    fn diagnosis_returns_only_metadata_and_keeps_original_unknown_state() {
+        let (store, d, _) = fixture();
+        let control = std::fs::read(store.root().join("control.json")).unwrap();
+        let queued = store.events().unwrap();
+        let fake = reader(vec![diagnosis(&d)]);
+        let requests = fake.requests.clone();
+        let checks = Cell::new(0);
+        let result = diagnose_with_adapter(
+            &store,
+            "alpha",
+            &d.target,
+            &d.event.event_id,
+            &|| Ok(()),
+            |_, commit| {
+                checks.set(checks.get() + 1);
+                commit()
+            },
+            Duration::from_secs(1),
+            |_, _| Ok(fake),
+        )
+        .unwrap();
+        assert_eq!(checks.get(), 2);
+        assert_eq!(result["stateChanged"], false);
+        assert_eq!(result["receiptCreated"], false);
+        assert_eq!(result["observation"]["composerClass"], "OTHER");
+        assert_eq!(requests.borrow().len(), 1);
+        assert_eq!(
+            requests.borrow()[0],
+            json!({"diagnoseSubmission":true,"event":d.event,"target":d.target})
+        );
+        preserved(&store, &d, &control);
+        assert_eq!(store.events().unwrap(), queued);
+    }
+
+    #[test]
+    fn diagnosis_rejects_old_adapter_foreign_frames_and_unbounded_or_private_fields() {
+        assert_eq!(
+            require_diagnosis_adapter(b"def reconcile_submission(): pass").unwrap_err(),
+            "SCOPED_DIAGNOSE_PACKAGE_UNSUPPORTED"
+        );
+        require_diagnosis_adapter(b"def diagnose_submission(bridge, sb, request): pass").unwrap();
+        let (store, d, _) = fixture();
+        let control = std::fs::read(store.root().join("control.json")).unwrap();
+        for kind in ["scope", "private", "count", "submit"] {
+            let mut frame = diagnosis(&d);
+            match kind {
+                "scope" => frame["projectId"] = json!("beta"),
+                "private" => frame["observation"]["rawText"] = json!("private draft"),
+                "count" => frame["observation"]["composerBytes"] = json!(16385),
+                _ => frame = json!({"stage":"BEFORE_SUBMIT"}),
+            }
+            let fake = reader(vec![frame]);
+            let requests = fake.requests.clone();
+            let result = diagnose_with_adapter(
+                &store,
+                "alpha",
+                &d.target,
+                &d.event.event_id,
+                &|| Ok(()),
+                |_, commit| commit(),
+                Duration::from_secs(1),
+                |_, _| Ok(fake),
+            );
+            assert_eq!(result.unwrap_err(), "SCOPED_DIAGNOSE_FRAME_INVALID");
+            assert!(requests.borrow().iter().all(|v| v.get("submit").is_none()));
+            preserved(&store, &d, &control);
+        }
+    }
+
+    #[test]
+    fn diagnosis_scope_cancellation_and_cleanup_timeout_never_write_state() {
+        let (store, d, _) = fixture();
+        let control = std::fs::read(store.root().join("control.json")).unwrap();
+        let wrong = Target::new(2, "https://chatgpt.com/c/wrong".into()).unwrap();
+        assert!(
+            diagnose_with_adapter::<Reader, _>(
+                &store,
+                "alpha",
+                &wrong,
+                &d.event.event_id,
+                &|| Ok(()),
+                |_, _| Ok(()),
+                Duration::from_secs(1),
+                |_, _| panic!("wrong scope opened browser")
+            )
+            .is_err()
+        );
+        assert!(
+            diagnose_with_adapter::<Reader, _>(
+                &store,
+                "alpha",
+                &d.target,
+                &d.event.event_id,
+                &|| Err("CANCELLED".into()),
+                |_, _| Ok(()),
+                Duration::from_secs(1),
+                |_, _| panic!("cancelled browser")
+            )
+            .is_err()
+        );
+        let mut fake = reader(vec![diagnosis(&d)]);
+        fake.cleanup_delay = Duration::from_millis(20);
+        assert_eq!(
+            diagnose_with_adapter(
+                &store,
+                "alpha",
+                &d.target,
+                &d.event.event_id,
+                &|| Ok(()),
+                |_, commit| commit(),
+                Duration::from_millis(10),
+                |_, _| Ok(fake)
+            )
+            .unwrap_err(),
+            "SCOPED_DIAGNOSE_TIMEOUT"
+        );
+        preserved(&store, &d, &control);
     }
 }

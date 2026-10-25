@@ -270,7 +270,9 @@ class AttemptSink:
     def readiness_reason(self, cdp):
         return None
 
-    def visible_message_snapshot(self, cdp):
+    def visible_message_snapshot(self, cdp, *, max_message_bytes=4096):
+        if max_message_bytes not in (4096, 8192):
+            raise ValueError("unsupported private snapshot message budget")
         cdp.timeline.append("snapshot")
         coverage = {
             "selectorTier": "AUTHOR_ROLE", "visibleRoleCount": 1, "countOverflow": False,

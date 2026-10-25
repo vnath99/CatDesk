@@ -1,3 +1,16 @@
+## October 25 C218 — diagnose the preserved composer without replay
+
+A local fixture using the installed SeleniumBase methods reproduced a real
+getter incompatibility and false mismatch from fragmented DOM text. This does
+not yet establish the cause of C217A. New source reuses the existing DOM text-data
+reader and adds a metadata-only `review diagnose` command for the already
+dispatched event. It changes no draft, receipt, grant, timer or binding.
+Unsupported adapter versions are refused before browser launch. Source tests
+passed: 746 tests, one ignored, and strict root/Wake Clippy. Existing passing
+Python results were retained after hash verification while the remaining checks
+ran. Development-package qualification is next; C217A remains unknown.
+See [C218 evidence](docs/verification/C218_COMPOSER_DIAGNOSIS_2026_10_25.json).
+
 ## October 25 C217 — reusable grant passed; first send outcome unknown
 
 One durable two-message grant was created in the existing project ledger and both

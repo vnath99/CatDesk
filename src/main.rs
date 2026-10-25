@@ -2666,6 +2666,10 @@ fn operator_web_error_code(error: &str) -> &str {
             | "SCOPED_RECONCILE_RECEIPT_UNPROVEN"
             | "SCOPED_RECONCILE_SCOPE_CHANGED"
             | "SCOPED_RECONCILE_TIMEOUT"
+            | "SCOPED_DIAGNOSE_FRAME_INVALID"
+            | "SCOPED_DIAGNOSE_PACKAGE_UNSUPPORTED"
+            | "SCOPED_DIAGNOSE_TIMEOUT"
+            | "SCOPED_DIAGNOSE_UNAVAILABLE"
     ) {
         return code;
     }
@@ -3839,6 +3843,10 @@ mod tests {
             "SCOPED_RECONCILE_RECEIPT_UNPROVEN",
             "SCOPED_RECONCILE_SCOPE_CHANGED",
             "SCOPED_RECONCILE_TIMEOUT",
+            "SCOPED_DIAGNOSE_FRAME_INVALID",
+            "SCOPED_DIAGNOSE_PACKAGE_UNSUPPORTED",
+            "SCOPED_DIAGNOSE_TIMEOUT",
+            "SCOPED_DIAGNOSE_UNAVAILABLE",
         ] {
             assert_eq!(operator_web_error_code(code), code);
             assert_eq!(

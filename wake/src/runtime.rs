@@ -26,7 +26,7 @@ mod review_reconcile;
 #[path = "runtime_scoped_review.rs"]
 mod scoped_review;
 pub(crate) use response::validate_observation as validate_response_observation;
-pub use review_reconcile::reconcile_scoped_review_guarded;
+pub use review_reconcile::{diagnose_scoped_review_guarded, reconcile_scoped_review_guarded};
 pub use scoped_review::run_scoped_review;
 #[path = "runtime_snapshot.rs"]
 mod snapshot;

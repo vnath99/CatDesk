@@ -1,3 +1,21 @@
+## October 25 C218 — qualify diagnosis before inspecting the saved draft
+
+C217A remains `SUBMITTING`; B remains unsent. A native-library fixture reproduced
+a composer getter defect, and source now uses the existing DOM text-data reader.
+Qualify the new metadata-only `review diagnose` path, publish reviewed source and
+build the normal development package before selecting its adapter through the
+existing stopped update procedure. Preserve the unknown event, all project
+bindings, profile identity, and retained working versions. Never pass the new
+request to v77: capability checks must refuse it before launch.
+
+The diagnostic does not create a receipt or prove non-delivery. Keep source,
+development live evidence and installed production acceptance distinct. See
+[C218 evidence](../verification/C218_COMPOSER_DIAGNOSIS_2026_10_25.json).
+Source qualification passed 746 tests (one ignored), strict root/Wake Clippy and
+bounded cleanup. Publish the reviewed code and build its exact normal release
+before using the supported stopped development update; retain v77 and all
+pending-review state. Live diagnosis is not yet demonstrated.
+
 ## October 25 C217 — preserve the first grant dispatch and continue recovery source work
 
 The two-message standing grant exists and both requests passed live preflight.

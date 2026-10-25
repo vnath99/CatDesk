@@ -1,3 +1,28 @@
+## October 25 C218 — native getter regression and read-only diagnosis
+
+The installed SeleniumBase `get_attribute` accepts two arguments. The prior
+composer reader passed an unsupported timeout keyword, caught the exception and
+fell back to `get_text`, whose DOM text-node joining can insert spaces. A pure
+local fixture reproduced the incompatibility and fragmented-text mismatch using
+the installed implementations; no browser/profile was accessed. This is a source
+defect, not proof of the original live failure's cause.
+
+New source uses the existing bounded DOM text-data reader and a signature-correct
+fallback for reduced adapters. `review diagnose` reuses historical dispatch,
+exact project/target, stopped-host and bounded browser ownership checks. It
+returns fixed classifications/counts/reader agreement only and changes no state.
+New adapter capability is checked before startup; old adapters cannot accidentally
+receive an unknown request that falls through to sending. Source and development
+qualification remain separate from production and multi-project acceptance.
+Qualification passed 746 tests and one ignored test: 258 Python, 434 Wake,
+29 work/grant, 24 operator and one error-code test, plus strict root/Wake Clippy.
+Two outdated test doubles were corrected to the existing API contracts. The
+three unchanged passing Python suites were reused with verified source hashes;
+the corrected remaining suite and Rust/lint checks ran separately. Both prior
+failed runs remain recorded. No browser/profile or runtime action was taken by
+source qualification. Next is a normal development-package build and selection.
+Evidence: [C218](verification/C218_COMPOSER_DIAGNOSIS_2026_10_25.json).
+
 ## October 25 C217 — first real standing-grant qualification
 
 At 18:48:38–18:48:56 UTC, the qualified C216 controller created one exact

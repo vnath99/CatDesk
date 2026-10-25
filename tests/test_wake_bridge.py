@@ -492,6 +492,8 @@ class WakeBridgeTests(unittest.TestCase):
                 return selector == fallback
 
             def evaluate(self, script):
+                if "return composerText(visible[0])" in script:
+                    return "fallback text"
                 case.assertIn("#prompt-textarea", script)
                 case.assertIn("div.ProseMirror[contenteditable=\"true\"]", script)
                 return ["ready", True]
@@ -901,6 +903,7 @@ class WakeBridgeTests(unittest.TestCase):
             def is_element_visible(self, _selector): return False
             def evaluate(self, script):
                 if script == "document.readyState": return "complete"
+                if "return composerText(visible[0])" in script: return getattr(self, "composer", "")
                 if "#prompt-textarea" in script: return ["ready", True]
                 raise AssertionError("unexpected fixed CDP evaluation")
         class SB:
@@ -1703,6 +1706,7 @@ class WakeBridgeTests(unittest.TestCase):
                 self.composer = text
             def evaluate(self, script):
                 if script == "document.readyState": return "complete"
+                if "return composerText(visible[0])" in script: return self.composer
                 if "#prompt-textarea" in script: return ["ready", self.composer == ""]
                 if "const selectorTiers" in script:
                     return ["ready", int(message in self.messages), 0]
@@ -2557,6 +2561,7 @@ class WakeBridgeTests(unittest.TestCase):
                 if any(char in text for char in "\r\n\t"):
                     raise AssertionError("message typing would submit a USER turn")
             def evaluate(self, script):
+                if "return composerText(visible[0])" in script: return getattr(self, "composer", "")
                 if "#prompt-textarea" in script: return ["ready", True]
                 if "const selectorTiers" in script:
                     return ["ready", int(message in self.messages), 0]
@@ -2656,6 +2661,7 @@ class WakeBridgeTests(unittest.TestCase):
             def send_keys(self, _selector, text, timeout): timeline.append("type"); self.composer = text
             def press_keys(self, *_args, **_kwargs): raise AssertionError("human-speed message typing is forbidden")
             def evaluate(self, script):
+                if "return composerText(visible[0])" in script: return getattr(self, "composer", "")
                 if "#prompt-textarea" in script: return ["ready", True]
                 if "const selectorTiers" in script:
                     return ["ready", int(message in self.messages), 0]
@@ -2711,6 +2717,7 @@ class WakeBridgeTests(unittest.TestCase):
             def get_attribute(self, *_args, **_kwargs): return self.composer
             def get_text(self, *_args, **_kwargs): return self.composer
             def evaluate(self, script):
+                if "return composerText(visible[0])" in script: return self.composer
                 if "#prompt-textarea" in script: return ["ready", self.composer == ""]
                 if "data-message-author-role" in script: return list(self.messages)
                 raise AssertionError("unexpected fixed CDP evaluation")
@@ -2816,7 +2823,7 @@ class WakeBridgeTests(unittest.TestCase):
                 return selector == wake_bridge.EDITOR
             def get_current_url(self):
                 return "https://chatgpt.com/c/review-one"
-            def get_attribute(self, _selector, _name, timeout):
+            def get_attribute(self, _selector, _name):
                 return self.composer
             def get_text(self, _selector, timeout):
                 return self.composer
@@ -2825,6 +2832,8 @@ class WakeBridgeTests(unittest.TestCase):
             def press_keys(self, *_args, **_kwargs):
                 raise AssertionError("human-speed message typing is forbidden")
             def evaluate(self, script):
+                if "const composerText = root" in script:
+                    return self.composer
                 if "#prompt-textarea" in script:
                     return ["ready", True]
                 if "const expected =" in script and "conversation-turn-" in script:
@@ -2923,6 +2932,7 @@ class WakeBridgeTests(unittest.TestCase):
                 self.composer = ""
                 self.messages.append(message)
             def evaluate(self, script):
+                if "return composerText(visible[0])" in script: return getattr(self, "composer", "")
                 if "#prompt-textarea" in script: return ["ready", True]
                 if "const selectorTiers" in script:
                     return ["ready", int(message in self.messages), 0]

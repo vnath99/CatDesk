@@ -1,3 +1,21 @@
+## October 25 C218 — metadata-only pending-review diagnosis
+
+New source command; qualify the matching controller and adapter before use:
+
+```text
+<qualified-controller> operator web review diagnose --project-id <id> --event-id <existing-submitting-id>
+```
+
+It requires an already dispatched `source_review`, current paired target and
+stopped host. Its 90-second browser/cleanup budget returns only draft classes,
+bounded visible-message counts and reader-agreement flags. It never types,
+focuses, clicks, clears, creates a receipt or changes work state. A missing or
+different visible message does not authorize a resend. Unsupported adapters are
+refused before browser launch; use the existing development package update, not
+a profile replacement or production promotion, to qualify the new adapter.
+Source qualification passed 746 tests (one ignored) and strict linting. Matching
+development-package selection and a live diagnosis remain separate requirements.
+
 ## October 25 C217 — do not replay the unknown scoped review
 
 The first standing-grant dispatch is recorded at `SUBMITTING` with

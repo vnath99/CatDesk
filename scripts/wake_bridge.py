@@ -519,13 +519,50 @@ class CdpSink:
         raise Attention("EDITOR_SELECTOR")
 
     def text(self, cdp: Any) -> str:
-        selector = self.editor_selector(cdp)
-        for method, args in (("get_attribute", (selector, "value")), ("get_text", (selector,))):
-            try:
-                value = getattr(cdp, method)(*args, timeout=2)
-                if isinstance(value, str) and value.strip(): return value.strip()
-            except Exception: pass
-        return ""
+        # Read text data, not layout-generated spaces around inline links.
+        # A real DOM reader must fail closed when the editor is ambiguous.
+        if callable(getattr(cdp, "evaluate", None)):
+            return self.composer_plain_text(cdp).strip()
+        return self.legacy_composer_text(cdp)
+
+    def legacy_composer_text(self, cdp: Any) -> str:
+        """Signature-correct legacy/layout read for reduced adapters."""
+        return self.legacy_composer_observation(cdp)[0]
+
+    def legacy_composer_observation(self, cdp: Any) -> tuple[str, bool]:
+        try: selector = self.editor_selector(cdp)
+        except Exception: return "", False
+        # SeleniumBase get_attribute accepts exactly selector and attribute.
+        try:
+            value = cdp.get_attribute(selector, "value")
+            if isinstance(value, str) and value.strip(): return value.strip(), True
+        except Exception: pass
+        try:
+            value = cdp.get_text(selector, timeout=2)
+            if isinstance(value, str): return value.strip(), True
+        except Exception: pass
+        return "", False
+
+    def composer_plain_text(self, cdp: Any) -> str:
+        """Read bounded composer text data without changing editor state."""
+        script = f"""(() => {{
+            {COMPOSER_TEXT_READER}
+            const visible = Array.from(document.querySelectorAll(
+                '#prompt-textarea, div.ProseMirror[contenteditable="true"], [contenteditable="true"][data-lexical-editor="true"]'
+            )).filter(element => {{
+                const style = window.getComputedStyle(element);
+                return element.getClientRects().length > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+            }});
+            if (visible.length !== 1) return null;
+            return composerText(visible[0]);
+        }})()"""
+        try:
+            observed = CdpSink.cdp_value(cdp.evaluate(script))
+        except Exception as error:
+            raise Attention("BOOTSTRAP_DRAFT_UNREADABLE") from error
+        if not isinstance(observed, str) or len(observed.encode('utf-8')) > MAX_USER_MESSAGE_CHARS:
+            raise Attention("BOOTSTRAP_DRAFT_UNREADABLE")
+        return observed
     @staticmethod
     def post_submit_visible_any(cdp: Any, selectors: tuple[str, ...]) -> bool:
         """Check fixed post-submit selectors through one bounded DOM evaluation."""
@@ -3005,27 +3042,6 @@ class NewConversationSink(CdpSink):
             self.check_typed_home(cdp, message)
         except Exception as error:
             raise Attention(f"{failure}_POST_VERIFY") from error
-
-    def composer_plain_text(self, cdp: Any) -> str:
-        """Read bounded composer text data rather than layout/decorative text."""
-        script = f"""(() => {{
-            {COMPOSER_TEXT_READER}
-            const visible = Array.from(document.querySelectorAll(
-                '#prompt-textarea, div.ProseMirror[contenteditable="true"], [contenteditable="true"][data-lexical-editor="true"]'
-            )).filter(element => {{
-                const style = window.getComputedStyle(element);
-                return element.getClientRects().length > 0 && style.visibility !== 'hidden' && style.display !== 'none';
-            }});
-            if (visible.length !== 1) return null;
-            return composerText(visible[0]);
-        }})()"""
-        try:
-            observed = CdpSink.cdp_value(cdp.evaluate(script))
-        except Exception as error:
-            raise Attention("BOOTSTRAP_DRAFT_UNREADABLE") from error
-        if not isinstance(observed, str) or len(observed.encode('utf-8')) > MAX_USER_MESSAGE_CHARS:
-            raise Attention("BOOTSTRAP_DRAFT_UNREADABLE")
-        return observed
 
     def normalize_owned_home_draft(self, cdp: Any, message: str) -> bool:
         """Remove known link formatting without changing owned text data.
