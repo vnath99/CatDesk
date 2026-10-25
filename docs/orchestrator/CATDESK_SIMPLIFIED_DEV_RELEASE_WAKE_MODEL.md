@@ -1,3 +1,25 @@
+## October 25 C189 — real direct admission works; one Web send awaits automatic approval
+
+The qualified controller advertised the direct mode against the real canonical
+workspace. Read-only supervisor probing exited naturally with listener cleanup.
+A new review contract then validated, was approved and claimed once, without a
+native thread. This is local operator initialization, **not ChatGPT Web execution**.
+All 594 older session states remain byte exact. All values/keys of 558 historical
+accounting records are retained; normal serialization added only null requested
+models and empty native-profile arrays. Original bytes are archived. The new
+claim accounts for one added record. Its first audit stop was reconciled without
+repeating the claim or inventing historical native-turn proof.
+
+Only canonical autonomous Wake was set to `MANUAL_OFF` for bounded testing.
+All 361 pinned files and independent project bindings remain exact. No browser
+or message was launched. Automatic approval review blocked the generated
+publication script pending approval for this exact new message and destination;
+the frozen payload remains unchanged. This adds no application approval framework.
+Production is unpromoted, genuine Web review/producer authority and installed
+rollback remain pending, and actual two-conversation Web coding remains open.
+The goal stays active. Evidence:
+`docs/verification/C189_LIVE_DIRECT_ADMISSION_2026_10_25.json`.
+
 ## October 25 C181 — direct controller built and qualified; protected promotion pending
 
 Published source `061051fe9e6e4493ab0ccf24c58b41cbe81b74a6` now has a separate

@@ -130,6 +130,28 @@ installed rollback and actual two-conversation Web coding remain open. No new
 operator action or date hold is identified; the goal remains active.
 Evidence: `docs/verification/C181_DIRECT_CONTROLLER_QUALIFICATION_2026_10_25.json`.
 
+## October 25 C189 — real direct admission works; one Web send awaits automatic approval
+
+The qualified controller advertised the direct mode against the real canonical
+workspace. Read-only supervisor probing exited naturally with listener cleanup.
+A new review contract then validated, was approved and claimed once, without a
+native thread. This is local operator initialization, **not ChatGPT Web execution**.
+All 594 older session states remain byte exact. All values/keys of 558 historical
+accounting records are retained; normal serialization added only null requested
+models and empty native-profile arrays. Original bytes are archived. The new
+claim accounts for one added record. Its first audit stop was reconciled without
+repeating the claim or inventing historical native-turn proof.
+
+Only canonical autonomous Wake was set to `MANUAL_OFF` for bounded testing.
+All 361 pinned files and independent project bindings remain exact. No browser
+or message was launched. Automatic approval review blocked the generated
+publication script pending approval for this exact new message and destination;
+the frozen payload remains unchanged. This adds no application approval framework.
+Production is unpromoted, genuine Web review/producer authority and installed
+rollback remain pending, and actual two-conversation Web coding remains open.
+The goal stays active. Evidence:
+`docs/verification/C189_LIVE_DIRECT_ADMISSION_2026_10_25.json`.
+
 ## Three different release scopes
 
 | Scope | Authority and owner | What it does not establish |
@@ -183,6 +205,33 @@ failed native turn, an inconclusive report or pre-existing output as verified wo
 The isolated Sol worker's host-authority guard remains enforced. Ordinary native
 Codex CLI review is a separate lane; an external review report alone does not
 automatically become a producer attestation or promotion authorization.
+
+#### Explicit direct Web review admission
+
+Use the existing supervisor MCP tools in the intended workspace. The following
+are tool names and argument objects, not additional operator CLI subcommands.
+
+| Tool | Required arguments and successful evidence |
+| --- | --- |
+| `autonomy_runtime_capabilities` | `{}`; confirm direct mode support before creating work. |
+| `autonomy_contract_create` | `{contract: <complete contract>}`; retain the returned contract hash. The direct mode is `chatgpt_web_direct_autonomous`, with provider `chatgpt-web`, model `conversation-selected`, routine provider/model `none`, and no paid/cloud fallback. |
+| `autonomy_contract_validate` | `{sessionId}`; require `valid: true` and the exact contract hash. |
+| `autonomy_session_status` | `{sessionId}`; read the current state/version before each mutation. |
+| `autonomy_contract_approve` | `{sessionId, expectedStateVersion, idempotencyKey, approvalId, decisionHash}`; the decision hash must equal the validated contract hash. |
+| `autonomy_session_claim_direct_work` | `{sessionId, expectedStateVersion, idempotencyKey}`; establish the task's baseline, queue and accounting ownership before genuine Web work. Inspect status after any ambiguous outcome; do not create a second task or repeat execution. |
+| `autonomy_session_finalize_direct_work` | `{sessionId, expectedStateVersion, idempotencyKey}`; use only after genuine completed work and attributable declared outputs. This runs verification; a request returning successfully alone does not prove completion. |
+| `autonomy_review_inbox_list` | Optional `projectId`; locate the actual completed record and verify its project, session, review and snapshot evidence. |
+| `autonomy_review_inbox_ack` | `{recordId}`; acknowledge only the exact acceptable completed record. This is not approval to bypass producer or promotion gates. |
+
+`allowedPaths` must contain existing absolute workspace directories. It is not a
+list of relative output filenames. `forbiddenPaths` also uses existing absolute
+paths. `completionArtifactIds` instead identifies normalized workspace-relative
+output files. An absent declared output must remain absent until genuine work
+produces it. Set explicit command, Git, lease and turn budgets. Never extend an
+expired nonrenewable lease by editing its durable files. A local operator's claim
+is task initialization; it does not establish that a ChatGPT Web client performed
+MCP coding. A completed source review is likewise distinct from installed health
+or two-project Web execution acceptance.
 
 ### 3. Build separately through the reviewed producer
 
