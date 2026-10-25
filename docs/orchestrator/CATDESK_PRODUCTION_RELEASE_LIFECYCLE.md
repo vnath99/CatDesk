@@ -77,6 +77,35 @@ reconciliation, installed rollback and actual two-conversation Web coding remain
 open; the October 27 date deferral stays superseded and the goal stays active.
 Evidence: `docs/verification/C134_CORRECTED_CONTROLLER_QUALIFICATION_2026_10_24.json`.
 
+## C151 — explicit ChatGPT Web work contracts; production admission still pending
+
+Implemented the explicit `chatgpt_web_direct_autonomous` contract using the existing
+session, verifier, review inbox, immutable snapshot and reviewed-build producer.
+Its exact provider tuple is `chatgpt-web` / `conversation-selected` with routine
+provider/model `none`; paid/cloud fallback remains forbidden. The actual Web model
+is not inferred. Native contracts, Sol isolation/profile gates and existing native
+writer ownership remain unchanged.
+
+Direct work requires exact approval, a pre-edit baseline and explicit verification. Fresh verification requires task-specific queue and accounting ownership; a planner wait cannot complete an unclaimed task, even without output files.
+Lease expiry, approval drift, dependent tasks, task-turn budgets and planner replies
+are checked. An interrupted gated claim reuses its immutable baseline and existing accounting/queue claim. Accounting is idempotent for the same direct task; native turn counting is preserved. Repairs retain the original claim. Non-CatDesk
+projects retain checkpoint hashes without CatDesk build inputs; CatDesk DAGs create
+their existing release snapshot at final completion. No second authority store exists. Direct transitions share the existing session lock; Windows retains an exclusive delete-on-close handle, with an actual abrupt-exit fixture proving release without stale-path recovery. Exact accounting identity collisions are refused. Interrupted verification returns to explicit retry using its original claimed task.
+
+The current 183 controller/contract/supervisor/state/accounting/native-restart tests, strict lint
+and format passed, followed by limited independent native source review. The earlier
+full root suite and integrations passed before the final controller/accounting pending-intent guards; those final guards and their regression assertions passed the current focused qualification. Failed runs and review findings
+remain recorded. Fixture completion/ACK/producer PREPARE is source evidence only.
+
+Next: build and qualify this controller, obtain actual fresh ChatGPT Web work and
+its response after claim, then use the original ACK/snapshot/producer/release-pair
+chain. A native reviewer report or coordinator copy cannot become Web execution.
+Production is still stopped and unpromoted; installed rollback and two-conversation
+Web coding remain open. v77/v76, 361 state/history files and all project/native
+bindings remain preserved. No browser/Wake/recurring/external runtime was started.
+No new operator action or date hold is identified. The goal remains active.
+Evidence recorded 2026-10-25T04:41:18.5413838+00:00: `docs/verification/C151_EXPLICIT_DIRECT_CHATGPT_SOURCE_2026_10_25.json`.
+
 ## Three different release scopes
 
 | Scope | Authority and owner | What it does not establish |

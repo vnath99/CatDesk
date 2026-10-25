@@ -98,6 +98,198 @@ impl<V: AutonomousVerifierV1>
 pub(crate) const MAX_TASK_OUTPUT_BYTES: u64 = 16 * 1024 * 1024;
 const DIRECT_CHATGPT_EXECUTOR_ID: &str = "chatgpt-direct";
 
+pub(crate) fn direct_work_continuation_allowed(
+    contract: &super::autonomous_contract::AutonomousDevelopmentContractV1,
+    snapshot: &super::autonomy_state::AutonomousSessionSnapshotV1,
+    queue: &AutonomousQueueV1,
+) -> bool {
+    contract.is_direct_chatgpt()
+        && snapshot.state == AutonomousSessionStateV1::Queued
+        && contract.task_graph.len() > 1
+        && snapshot.provider_turn_count > 0
+        && snapshot.provider_turn_count < contract.autonomy_lease.maximum_provider_turns
+        && snapshot.provider_thread_id.is_none()
+        && snapshot.provider_handle_id.is_none()
+        && snapshot.provider_route == AutonomousProviderRouteV1::WaitingForChatgpt
+        && !snapshot.codex_turn_profile_violation
+        && !snapshot.cancellation_requested
+        && snapshot.current_task_id.as_ref().is_some_and(|previous| {
+            queue.tasks.iter().any(|task| {
+                task.task_id == *previous
+                    && task.state == AutonomousQueueTaskStateV1::CompletedVerified
+            })
+        })
+        && queue
+            .tasks
+            .iter()
+            .all(|task| task.state != AutonomousQueueTaskStateV1::WorkerRunning)
+        && queue.next_ready_task().is_some()
+}
+
+pub(crate) fn direct_planner_reply_allows_claim(
+    contract: &super::autonomous_contract::AutonomousDevelopmentContractV1,
+    snapshot: &super::autonomy_state::AutonomousSessionSnapshotV1,
+    queue: &AutonomousQueueV1,
+    store: &AutonomousStateStoreV1,
+    session_id: &str,
+) -> bool {
+    let Some(task) = queue.next_ready_task() else {
+        return false;
+    };
+    contract.is_direct_chatgpt()
+        && snapshot.state == AutonomousSessionStateV1::Queued
+        && snapshot.current_task_id.as_deref() == Some(task.task_id.as_str())
+        && snapshot.provider_thread_id.is_none()
+        && snapshot.provider_handle_id.is_none()
+        && snapshot.provider_route == AutonomousProviderRouteV1::WaitingForChatgpt
+        && !snapshot.cancellation_requested
+        && !snapshot.codex_turn_profile_violation
+        && snapshot.provider_turn_count < contract.autonomy_lease.maximum_provider_turns
+        && queue
+            .tasks
+            .iter()
+            .all(|task| task.state != AutonomousQueueTaskStateV1::WorkerRunning)
+        && contract
+            .task_graph
+            .iter()
+            .any(|spec| spec.task_id == task.task_id && spec.planner_gate.is_some())
+        && store
+            .planner_gate_satisfied(session_id, &task.task_id)
+            .unwrap_or(false)
+        && store
+            .load_escalation(session_id)
+            .ok()
+            .is_some_and(|packet| {
+                packet.reason == "planned_architecture_decision_required"
+                    && store
+                        .load_planner_reply(session_id)
+                        .ok()
+                        .is_some_and(|reply| {
+                            !reply.consumed && reply.escalation_id == packet.escalation_id
+                        })
+            })
+}
+
+pub(crate) fn direct_task_is_claimed(
+    contract: &super::autonomous_contract::AutonomousDevelopmentContractV1,
+    snapshot: &super::autonomy_state::AutonomousSessionSnapshotV1,
+    store: &AutonomousStateStoreV1,
+    session_id: &str,
+) -> Result<bool, RuntimeError> {
+    let Some(task_id) = snapshot.current_task_id.as_deref() else {
+        return Ok(false);
+    };
+    let queue = store.load_queue(session_id).map_err(RuntimeError::from)?;
+    if !queue.tasks.iter().any(|task| {
+        task.task_id == task_id
+            && matches!(
+                task.state,
+                AutonomousQueueTaskStateV1::WorkerRunning
+                    | AutonomousQueueTaskStateV1::Ready
+                    | AutonomousQueueTaskStateV1::Verifying
+            )
+    }) {
+        return Ok(false);
+    }
+    if contract
+        .task_graph
+        .iter()
+        .any(|task| task.task_id == task_id && task.planner_gate.is_some())
+        && !store
+            .planner_gate_satisfied(session_id, task_id)
+            .map_err(RuntimeError::from)?
+    {
+        return Ok(false);
+    }
+    let records = store
+        .execution_accounting_store()
+        .map_err(RuntimeError::from)?
+        .list(Some(session_id))?;
+    Ok(records.iter().any(|record| {
+        record.project_id == contract.project_id
+            && record.task_id == task_id
+            && record.provider_id == DIRECT_CHATGPT_EXECUTOR_ID
+            && record.ended_at_unix_millis.is_none()
+    }))
+}
+
+pub(crate) fn pending_direct_claim_task(
+    contract: &super::autonomous_contract::AutonomousDevelopmentContractV1,
+    snapshot: &super::autonomy_state::AutonomousSessionSnapshotV1,
+    queue: &AutonomousQueueV1,
+    store: &AutonomousStateStoreV1,
+    session_id: &str,
+) -> Option<String> {
+    if (!contract.is_direct_chatgpt()
+        && (contract.provider_policy.primary_model == SOL_MEDIUM_MODEL
+            || snapshot.provider_turn_count != 0
+            || snapshot.current_task_id.is_some()))
+        || snapshot.state != AutonomousSessionStateV1::Queued
+        || snapshot.provider_thread_id.is_some()
+        || snapshot.provider_handle_id.is_some()
+    {
+        return None;
+    }
+    let running = queue
+        .tasks
+        .iter()
+        .filter(|task| task.state == AutonomousQueueTaskStateV1::WorkerRunning)
+        .collect::<Vec<_>>();
+    if running.len() != 1 {
+        return None;
+    }
+    let task = running[0];
+    if !task.depends_on.iter().all(|id| {
+        queue.tasks.iter().any(|prior| {
+            prior.task_id == *id && prior.state == AutonomousQueueTaskStateV1::CompletedVerified
+        })
+    }) {
+        return None;
+    }
+    let previous_valid = match snapshot.current_task_id.as_deref() {
+        None => snapshot.provider_turn_count == 0,
+        Some(id) if id == task.task_id => {
+            contract
+                .task_graph
+                .iter()
+                .any(|spec| spec.task_id == id && spec.planner_gate.is_some())
+                && store.planner_gate_satisfied(session_id, id).ok() == Some(true)
+                && store
+                    .load_escalation(session_id)
+                    .ok()
+                    .is_some_and(|packet| {
+                        packet.reason == "planned_architecture_decision_required"
+                            && store
+                                .load_planner_reply(session_id)
+                                .ok()
+                                .is_some_and(|reply| {
+                                    !reply.consumed && reply.escalation_id == packet.escalation_id
+                                })
+                    })
+        }
+        Some(id) => queue.tasks.iter().any(|prior| {
+            prior.task_id == id && prior.state == AutonomousQueueTaskStateV1::CompletedVerified
+        }),
+    };
+    if !previous_valid {
+        return None;
+    }
+    let records = store
+        .execution_accounting_store()
+        .ok()?
+        .list(Some(session_id))
+        .ok()?;
+    records
+        .iter()
+        .any(|record| {
+            record.project_id == contract.project_id
+                && record.task_id == task.task_id
+                && record.provider_id == DIRECT_CHATGPT_EXECUTOR_ID
+                && record.ended_at_unix_millis.is_none()
+        })
+        .then(|| task.task_id.clone())
+}
+
 /// Durable restart decision shared by the runtime preflight and controller.
 ///
 /// A persisted provider-handle id is not itself a liveness proof: after a
@@ -286,6 +478,15 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
         &mut self,
         now_unix: u64,
     ) -> Result<AutonomousControllerOutcomeV1, RuntimeError> {
+        let _direct_lock = if self.policy.contract().is_direct_chatgpt() {
+            Some(
+                self.store
+                    .acquire_lock(&self.session_id, "direct-controller")
+                    .map_err(RuntimeError::from)?,
+            )
+        } else {
+            None
+        };
         if self.cancel_requested {
             return self.stop(
                 AutonomousSessionStateV1::Cancelled,
@@ -401,6 +602,126 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
                 }
             }
         }
+        if self.policy.contract().is_direct_chatgpt() {
+            // Preserve cancellation and passed-checkpoint recovery above.
+            // Otherwise only explicit claim/finalize advances direct work:
+            // never select a native provider, recover its writer or fallback.
+            if !self.policy.contract().autonomy_lease.valid_at(now_unix) {
+                return self.stop(AutonomousSessionStateV1::LeaseExpired, "lease_expired");
+            }
+            if matches!(
+                snapshot.state,
+                AutonomousSessionStateV1::Verifying
+                    | AutonomousSessionStateV1::RecoveringAfterRestart
+            ) {
+                if !self.completion_approval_matches(&snapshot)
+                    || !direct_task_is_claimed(
+                        self.policy.contract(),
+                        &snapshot,
+                        &self.store,
+                        &self.session_id,
+                    )?
+                {
+                    return Err(RuntimeError::Validation(
+                        "interrupted direct verification has no exact claim".into(),
+                    ));
+                }
+                self.set_current_task_state(AutonomousQueueTaskStateV1::Ready)?;
+                return self.stop(
+                    AutonomousSessionStateV1::WaitingForChatgpt,
+                    "direct_verification_recovered_without_reexecuting_work",
+                );
+            }
+            if matches!(
+                snapshot.state,
+                AutonomousSessionStateV1::Queued | AutonomousSessionStateV1::WaitingForChatgpt
+            ) && snapshot.active
+                && snapshot.approved_contract_hash.as_deref() == Some(self.policy.contract_hash())
+                && snapshot.provider_turn_count
+                    < self.policy.contract().autonomy_lease.maximum_provider_turns
+                && !self.policy.contract().task_graph.is_empty()
+            {
+                let (queue, _) = self.load_exact_graph_materialization()?;
+                let interrupted_selection =
+                    queue.next_ready_task().is_some_and(|task| {
+                        snapshot.current_task_id.as_deref() == Some(task.task_id.as_str())
+                            && snapshot.provider_thread_id.is_none()
+                            && snapshot.provider_handle_id.is_none()
+                            && self.policy.contract().task_graph.iter().any(|spec| {
+                                spec.task_id == task.task_id && spec.planner_gate.is_some()
+                            })
+                            && matches!(
+                                self.store
+                                    .load_task_output_baseline(&self.session_id, &task.task_id),
+                                Ok(None)
+                            )
+                            && self
+                                .store
+                                .execution_accounting_store()
+                                .ok()
+                                .and_then(|store| store.list(Some(&self.session_id)).ok())
+                                .is_some_and(|records| {
+                                    records.iter().all(|record| record.task_id != task.task_id)
+                                })
+                    });
+                let eligible = (snapshot.current_task_id.is_none()
+                    && snapshot.provider_turn_count == 0)
+                    || direct_work_continuation_allowed(self.policy.contract(), &snapshot, &queue)
+                    || interrupted_selection;
+                if eligible {
+                    if let Some(task) = queue.next_ready_task() {
+                        if self
+                            .policy
+                            .contract()
+                            .task_graph
+                            .iter()
+                            .any(|spec| spec.task_id == task.task_id && spec.planner_gate.is_some())
+                            && !self
+                                .store
+                                .planner_gate_satisfied(&self.session_id, &task.task_id)
+                                .map_err(RuntimeError::from)?
+                        {
+                            if snapshot.state == AutonomousSessionStateV1::WaitingForChatgpt
+                                && self
+                                    .store
+                                    .load_escalation(&self.session_id)
+                                    .ok()
+                                    .is_some_and(|packet| {
+                                        packet.reason == "planned_architecture_decision_required"
+                                    })
+                            {
+                                // Repair only the notification after a crash
+                                // following the durable waiting transition.
+                                // Existing inbox replay preserves its identity.
+                                self.store
+                                    .emit_review_inbox_record(
+                                        &self.session_id,
+                                        &self.policy.contract().project_id,
+                                        AutonomousSessionStateV1::WaitingForChatgpt,
+                                        "chatgpt_decision_required",
+                                        "artifacts/escalation.json",
+                                        now_unix,
+                                    )
+                                    .map_err(RuntimeError::from)?;
+                            } else {
+                                snapshot.current_task_id = Some(task.task_id.clone());
+                                self.store
+                                    .save_session(&snapshot)
+                                    .map_err(RuntimeError::from)?;
+                                return self.escalate("planned_architecture_decision_required");
+                            }
+                        }
+                    }
+                }
+            }
+            return Ok(AutonomousControllerOutcomeV1 {
+                state: snapshot.state,
+                provider_events: 0,
+                verification: None,
+                authoritative_diff: None,
+                final_review: None,
+            });
+        }
         if snapshot.state == AutonomousSessionStateV1::WaitingForChatgpt {
             // Only the locked, supported reply path may requeue a waiting
             // session. Gate artifacts are never themselves a launch permit.
@@ -500,6 +821,43 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
         // Re-load and re-check immediately before task selection. The first
         // check above protects stale recovery; this one protects the launch
         // boundary and supplies only contract-approved task instructions.
+        let native_launch_lock = self
+            .store
+            .acquire_lock(&self.session_id, "native-launch")
+            .map_err(RuntimeError::from)?;
+        let current = self
+            .store
+            .load_session(&self.session_id)
+            .map_err(RuntimeError::from)?;
+        if current.state != snapshot.state
+            || current.provider_turn_count != snapshot.provider_turn_count
+            || current.current_task_id != snapshot.current_task_id
+            || current.approved_contract_hash != snapshot.approved_contract_hash
+            || current.provider_thread_id != snapshot.provider_thread_id
+            || current.provider_handle_id != snapshot.provider_handle_id
+            || current.cancellation_requested
+            || current.codex_turn_profile_violation
+        {
+            return Err(RuntimeError::Validation(
+                "native launch ownership changed; reobserve session".into(),
+            ));
+        }
+        snapshot = current;
+        if self
+            .store
+            .execution_accounting_store()
+            .map_err(RuntimeError::from)?
+            .list(Some(&self.session_id))?
+            .iter()
+            .any(|record| {
+                record.provider_id == DIRECT_CHATGPT_EXECUTOR_ID
+                    && record.ended_at_unix_millis.is_none()
+            })
+        {
+            return Err(RuntimeError::Validation(
+                "native admission cannot take over an unresolved direct claim".into(),
+            ));
+        }
         let graph_materialization = if self.policy.contract().task_graph.is_empty() {
             None
         } else {
@@ -788,6 +1146,7 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
             .insert(handle.handle_id.clone(), handle.clone());
         self.last_handle = Some(handle.clone());
         self.persist_handle(&handle, 0)?;
+        drop(native_launch_lock);
         let batch = self.provider.poll_events(&handle, 0).await?;
         self.finish_turn(batch, now_unix).await
     }
@@ -1138,6 +1497,10 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
         &mut self,
         now_unix: u64,
     ) -> Result<AutonomousControllerOutcomeV1, RuntimeError> {
+        let _lock = self
+            .store
+            .acquire_lock(&self.session_id, "direct-claim")
+            .map_err(RuntimeError::from)?;
         if self.policy.contract().provider_policy.primary_model == SOL_MEDIUM_MODEL {
             return Err(RuntimeError::Validation(
                 "Sol/medium contract requires a Codex CLI turn before review".into(),
@@ -1149,8 +1512,12 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
             .map_err(RuntimeError::from)?;
         if snapshot.state != AutonomousSessionStateV1::Queued
             || !snapshot.active
-            || snapshot.current_task_id.is_some()
-            || snapshot.provider_turn_count != 0
+            || snapshot.cancellation_requested
+            || snapshot.codex_turn_profile_violation
+            || snapshot.provider_thread_id.is_some()
+            || snapshot.provider_handle_id.is_some()
+            || snapshot.expected_codex_thread_id.is_some()
+            || snapshot.codex_continuity.is_some()
             || snapshot.approved_contract_hash.as_deref() != Some(self.policy.contract_hash())
         {
             return Err(RuntimeError::Validation(
@@ -1160,6 +1527,13 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
         if !self.policy.contract().autonomy_lease.valid_at(now_unix) {
             return Err(RuntimeError::Validation(
                 "direct ChatGPT claim requires a valid autonomy lease".into(),
+            ));
+        }
+        if snapshot.provider_turn_count
+            >= self.policy.contract().autonomy_lease.maximum_provider_turns
+        {
+            return Err(RuntimeError::Validation(
+                "direct ChatGPT task-turn budget is exhausted".into(),
             ));
         }
         let graph_materialization = if self.policy.contract().task_graph.is_empty() {
@@ -1174,9 +1548,62 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
                 .load_queue(&self.session_id)
                 .map_err(RuntimeError::from)?,
         };
-        let task = queue.next_ready_task().ok_or_else(|| {
-            RuntimeError::Validation("no dependency-satisfied autonomous task is ready".into())
-        })?;
+        let fresh = snapshot.current_task_id.is_none() && snapshot.provider_turn_count == 0;
+        let pending = pending_direct_claim_task(
+            self.policy.contract(),
+            &snapshot,
+            &queue,
+            &self.store,
+            &self.session_id,
+        );
+        if pending.is_none()
+            && queue
+                .tasks
+                .iter()
+                .any(|task| task.state == AutonomousQueueTaskStateV1::WorkerRunning)
+        {
+            return Err(RuntimeError::Validation(
+                "direct claim has unresolved task ownership".into(),
+            ));
+        }
+        let continuation =
+            direct_work_continuation_allowed(self.policy.contract(), &snapshot, &queue);
+        let planner_rearmed = direct_planner_reply_allows_claim(
+            self.policy.contract(),
+            &snapshot,
+            &queue,
+            &self.store,
+            &self.session_id,
+        );
+        if !fresh && !continuation && !planner_rearmed && pending.is_none() {
+            return Err(RuntimeError::Validation(
+                "direct ChatGPT claim requires a fresh session or verified predecessor task".into(),
+            ));
+        }
+        if continuation
+            && self
+                .store
+                .load_passed_verification_checkpoint(&self.session_id)
+                .map_err(RuntimeError::from)?
+                .is_some()
+        {
+            return Err(RuntimeError::Validation(
+                "direct ChatGPT predecessor checkpoint still requires finalization".into(),
+            ));
+        }
+        let task = pending
+            .as_ref()
+            .and_then(|id| queue.tasks.iter().find(|task| task.task_id == *id))
+            .or_else(|| queue.next_ready_task())
+            .ok_or_else(|| {
+                RuntimeError::Validation("no dependency-satisfied autonomous task is ready".into())
+            })?;
+        let consume_planner_reply = self
+            .policy
+            .contract()
+            .task_graph
+            .iter()
+            .any(|spec| spec.task_id == task.task_id && spec.planner_gate.is_some());
         if self
             .policy
             .contract()
@@ -1200,6 +1627,24 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
         // baseline after ownership begins fails closed in attribution checks.
         self.capture_task_output_baseline(&task.task_id)?;
 
+        // Commit existing task accounting and queue ownership before exposing
+        // WAITING work. These writes can be resumed idempotently if the atomic
+        // session write has not happened. The turn is counted by that write.
+        self.store
+            .execution_accounting_store()
+            .map_err(RuntimeError::from)?
+            .record_task_started(
+                &self.policy.contract().project_id,
+                &task.task_id,
+                &self.session_id,
+                None,
+                DIRECT_CHATGPT_EXECUTOR_ID,
+                None,
+                None,
+                controller_now_millis(),
+            )?;
+        self.set_task_state(&task.task_id, AutonomousQueueTaskStateV1::WorkerRunning)?;
+
         snapshot.current_task_id = Some(task.task_id.clone());
         snapshot.provider_thread_id = None;
         snapshot.provider_handle_id = None;
@@ -1214,19 +1659,11 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
         self.store
             .save_session(&snapshot)
             .map_err(RuntimeError::from)?;
-        self.store
-            .execution_accounting_store()
-            .map_err(RuntimeError::from)?
-            .record_task_started(
-                &self.policy.contract().project_id,
-                &task.task_id,
-                &self.session_id,
-                None,
-                DIRECT_CHATGPT_EXECUTOR_ID,
-                None,
-                None,
-                controller_now_millis(),
-            )?;
+        if consume_planner_reply {
+            self.store
+                .mark_planner_reply_consumed(&self.session_id)
+                .map_err(RuntimeError::from)?;
+        }
         self.store
             .execution_accounting_store()
             .map_err(RuntimeError::from)?
@@ -1236,10 +1673,6 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
                 ActivityEvidenceV1::ChatgptExactTargetGeneratingObservation,
                 controller_now_millis(),
             )?;
-        self.set_task_state(
-            &task.task_id,
-            super::autonomy_state::AutonomousQueueTaskStateV1::WorkerRunning,
-        )?;
         self.store
             .append_event(
                 &self.session_id,
@@ -1265,6 +1698,10 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
         &mut self,
         now_unix: u64,
     ) -> Result<AutonomousControllerOutcomeV1, RuntimeError> {
+        let _lock = self
+            .store
+            .acquire_lock(&self.session_id, "direct-finalize")
+            .map_err(RuntimeError::from)?;
         if self.policy.contract().provider_policy.primary_model == SOL_MEDIUM_MODEL {
             return Err(RuntimeError::Validation(
                 "Sol/medium contract requires a Codex CLI turn before review".into(),
@@ -1274,6 +1711,11 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
             .store
             .load_session(&self.session_id)
             .map_err(RuntimeError::from)?;
+        if !self.completion_approval_matches(&snapshot) {
+            return Err(RuntimeError::Validation(
+                "direct ChatGPT approval binding changed".into(),
+            ));
+        }
         if snapshot.state != AutonomousSessionStateV1::WaitingForChatgpt
             || snapshot.current_task_id.is_none()
             || snapshot.provider_turn_count == 0
@@ -1284,6 +1726,30 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
             return Err(RuntimeError::Validation(
                 "direct ChatGPT finalization requires one already-started WAITING_FOR_CHATGPT task"
                     .into(),
+            ));
+        }
+        if snapshot.cancellation_requested {
+            return self.stop(
+                AutonomousSessionStateV1::Cancelled,
+                "cancellation_requested",
+            );
+        }
+
+        let checkpoint = self
+            .store
+            .load_passed_verification_checkpoint(&self.session_id)
+            .map_err(RuntimeError::from)?;
+        if self.policy.contract().is_direct_chatgpt()
+            && checkpoint.is_none()
+            && !direct_task_is_claimed(
+                self.policy.contract(),
+                &snapshot,
+                &self.store,
+                &self.session_id,
+            )?
+        {
+            return Err(RuntimeError::Validation(
+                "direct ChatGPT fresh verification requires this task's durable claim".into(),
             ));
         }
 
@@ -1299,11 +1765,7 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
                 controller_now_millis(),
             )?;
 
-        if let Some(checkpoint) = self
-            .store
-            .load_passed_verification_checkpoint(&self.session_id)
-            .map_err(RuntimeError::from)?
-        {
+        if let Some(checkpoint) = checkpoint {
             if checkpoint.provider_id != DIRECT_CHATGPT_EXECUTOR_ID {
                 return Err(RuntimeError::Validation(
                     "direct ChatGPT finalization found a checkpoint owned by another executor"
@@ -1316,6 +1778,11 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
                 0,
                 DIRECT_CHATGPT_EXECUTOR_ID,
             );
+        }
+        // An existing passed checkpoint may finish local recovery after its
+        // lease. Fresh verification may not begin after direct work expires.
+        if !self.policy.contract().autonomy_lease.valid_at(now_unix) {
+            return self.stop(AutonomousSessionStateV1::LeaseExpired, "lease_expired");
         }
 
         self.transition(
@@ -1451,6 +1918,26 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
         })
     }
 
+    fn completion_approval_matches(
+        &self,
+        snapshot: &super::autonomy_state::AutonomousSessionSnapshotV1,
+    ) -> bool {
+        match snapshot.approved_contract_hash.as_deref() {
+            Some(hash) => hash == self.policy.contract_hash(),
+            // Preserve legacy provider takeovers whose approved policy did
+            // not require start approval. The new direct lane always binds
+            // an explicit approval, even if its lease flag is optional.
+            None => {
+                !self.policy.contract().is_direct_chatgpt()
+                    && !self
+                        .policy
+                        .contract()
+                        .autonomy_lease
+                        .start_approval_required
+            }
+        }
+    }
+
     fn finalize_passed_verification(
         &mut self,
         checkpoint: AutonomousPassedVerificationCheckpointV1,
@@ -1463,6 +1950,7 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
             .load_session(&self.session_id)
             .map_err(RuntimeError::from)?;
         if checkpoint.session_id != self.session_id
+            || !self.completion_approval_matches(&snapshot)
             || checkpoint.project_id != self.policy.contract().project_id
             || checkpoint.approved_contract_hash != self.policy.contract_hash()
             || snapshot.current_task_id.as_deref() != Some(checkpoint.logical_task_id.as_str())
@@ -1496,11 +1984,30 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
                     "passed_verification_output_mismatched",
                 );
             }
-            if create_or_validate_reviewed_source_snapshot(
-                &self.policy.contract().workspace,
-                expected,
-            )
-            .is_err()
+            let direct_release_snapshot = if self.policy.contract().is_direct_chatgpt() {
+                self.policy.contract().project_id == "catdesk"
+                    && (self.policy.contract().task_graph.is_empty()
+                        || self
+                            .load_exact_graph_materialization()?
+                            .0
+                            .tasks
+                            .iter()
+                            .filter(|task| task.task_id != checkpoint.logical_task_id)
+                            .all(|task| {
+                                task.state == AutonomousQueueTaskStateV1::CompletedVerified
+                            }))
+            } else {
+                true
+            };
+            // Other direct projects retain immutable output expectations in
+            // their checkpoints, without depending on CatDesk build inputs.
+            // A CatDesk DAG commits its release snapshot at the final task.
+            if direct_release_snapshot
+                && create_or_validate_reviewed_source_snapshot(
+                    &self.policy.contract().workspace,
+                    expected,
+                )
+                .is_err()
             {
                 return self.post_verification_finalization_failure(
                     "reviewed_source_snapshot_unavailable",
@@ -1532,6 +2039,10 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
                     "post_verification_accounting_unavailable",
                 );
             }
+            let outcome = self.stop(
+                AutonomousSessionStateV1::Queued,
+                "task_verified_next_task_queued",
+            )?;
             if self
                 .store
                 .clear_passed_verification_checkpoint(&self.session_id)
@@ -1541,10 +2052,7 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
                     "passed_verification_checkpoint_unavailable",
                 );
             }
-            return self.stop(
-                AutonomousSessionStateV1::Queued,
-                "task_verified_next_task_queued",
-            );
+            return Ok(outcome);
         }
 
         let final_review = match self
@@ -1846,6 +2354,25 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
             .store
             .load_session(&self.session_id)
             .map_err(RuntimeError::from)?;
+        // Selecting a direct task for a planner decision is not a launch.
+        // The exact public reply may rearm that still-ready task. Baselines
+        // already written before a claim interruption remain immutable and
+        // are reused; missing/corrupt authority is still checked by capture.
+        if self.policy.contract().is_direct_chatgpt() {
+            let queue = self
+                .store
+                .load_queue(&self.session_id)
+                .map_err(RuntimeError::from)?;
+            if direct_planner_reply_allows_claim(
+                self.policy.contract(),
+                &snapshot,
+                &queue,
+                &self.store,
+                &self.session_id,
+            ) {
+                return Ok(false);
+            }
+        }
         Ok(
             snapshot.current_task_id.as_deref() == Some(task_id)
                 && snapshot.provider_turn_count > 0,
@@ -4614,6 +5141,17 @@ mod tests {
             .save_contract("session-1", &contract)
             .expect("gated contract");
         controller.policy = AutonomousPolicyEngineV1::new(contract).expect("gated policy");
+        // This fixture adds the gate before execution; approve that exact
+        // constructed contract rather than retaining the earlier graph hash.
+        let mut approved = controller
+            .store
+            .load_session("session-1")
+            .expect("gated state");
+        approved.approved_contract_hash = Some(controller.policy.contract_hash().into());
+        controller
+            .store
+            .save_session(&approved)
+            .expect("gated approval");
 
         assert_eq!(
             controller
@@ -4745,6 +5283,1071 @@ mod tests {
                 .provider_turn_count,
             0
         );
+    }
+
+    fn explicit_direct_policy(
+        controller: &mut AutonomousControllerV1<FakeWorkerProviderV1, Verifier>,
+    ) {
+        // Unlike isolated controller tests, these cross the public runtime
+        // and supervisor APIs, which resolve the actual product store path.
+        let store = AutonomousStateStoreV1::open(
+            controller
+                .policy
+                .contract()
+                .workspace
+                .join(".catdesk/autonomy"),
+        )
+        .unwrap();
+        store
+            .create_session(
+                "session-1",
+                AutonomousQueueV1::new(vec![AutonomousQueueTaskV1 {
+                    task_id: "work".into(),
+                    priority: 1,
+                    depends_on: vec![],
+                    state: AutonomousQueueTaskStateV1::Ready,
+                }])
+                .unwrap(),
+            )
+            .unwrap();
+        controller.store = store;
+        let mut direct = controller.policy.contract().clone();
+        direct.task_id = "work".into();
+        direct.mode = "chatgpt_web_direct_autonomous".into();
+        direct.provider_policy.primary_provider = "chatgpt-web".into();
+        direct.provider_policy.primary_model = "conversation-selected".into();
+        direct.provider_policy.routine_provider = "none".into();
+        direct.provider_policy.routine_model = "none".into();
+        controller.policy = AutonomousPolicyEngineV1::new(direct).unwrap();
+        controller
+            .store
+            .save_contract("session-1", controller.policy.contract())
+            .unwrap();
+        let mut snapshot = controller.store.load_session("session-1").unwrap();
+        snapshot.state = AutonomousSessionStateV1::Queued;
+        snapshot.active = true;
+        snapshot.approved_contract_hash = Some(controller.policy.contract_hash().into());
+        snapshot.provider_route = AutonomousProviderRouteV1::WaitingForChatgpt;
+        controller.store.save_session(&snapshot).unwrap();
+    }
+
+    #[tokio::test]
+    async fn explicit_direct_tick_never_runs_provider_and_keeps_lease_and_cancellation() {
+        let mut controller = setup(VerificationStatusV1::Passed, "direct fixture diff");
+        explicit_direct_policy(&mut controller);
+        let before = controller.store.load_session("session-1").unwrap();
+        let outcome = controller.run_once(10).await.unwrap();
+        assert_eq!(outcome.state, AutonomousSessionStateV1::Queued);
+        assert_eq!(outcome.provider_events, 0);
+        assert_eq!(controller.store.load_session("session-1").unwrap(), before);
+        assert!(
+            controller
+                .store
+                .load_task_output_baseline("session-1", "work")
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            controller.run_once(101).await.unwrap().state,
+            AutonomousSessionStateV1::LeaseExpired
+        );
+
+        let mut cancelled = setup(VerificationStatusV1::Passed, "direct fixture diff");
+        explicit_direct_policy(&mut cancelled);
+        let mut snapshot = cancelled.store.load_session("session-1").unwrap();
+        snapshot.cancellation_requested = true;
+        cancelled.store.save_session(&snapshot).unwrap();
+        assert_eq!(
+            cancelled.run_once(10).await.unwrap().state,
+            AutonomousSessionStateV1::Cancelled
+        );
+    }
+
+    #[tokio::test]
+    async fn explicit_direct_claimed_work_expires_without_a_passed_checkpoint() {
+        let mut tick = setup(VerificationStatusV1::Passed, "direct expiry fixture");
+        explicit_direct_policy(&mut tick);
+        tick.claim_direct_chatgpt_work(10).unwrap();
+        assert_eq!(
+            tick.run_once(101).await.unwrap().state,
+            AutonomousSessionStateV1::LeaseExpired
+        );
+        let mut finalize = setup(VerificationStatusV1::Passed, "direct expiry fixture");
+        explicit_direct_policy(&mut finalize);
+        finalize.claim_direct_chatgpt_work(10).unwrap();
+        assert_eq!(
+            finalize.finalize_direct_chatgpt_work(101).unwrap().state,
+            AutonomousSessionStateV1::LeaseExpired
+        );
+        assert!(
+            finalize
+                .store
+                .load_passed_verification_checkpoint("session-1")
+                .unwrap()
+                .is_none()
+        );
+        assert!(finalize.store.all_review_inbox().unwrap().is_empty());
+
+        let mut checkpointed = setup(VerificationStatusV1::Passed, "direct passed fixture");
+        explicit_direct_policy(&mut checkpointed);
+        checkpointed.claim_direct_chatgpt_work(10).unwrap();
+        checkpointed.verifier.final_review = false;
+        checkpointed.finalize_direct_chatgpt_work(11).unwrap();
+        assert!(
+            checkpointed
+                .store
+                .load_passed_verification_checkpoint("session-1")
+                .unwrap()
+                .is_some()
+        );
+        checkpointed.verifier.final_review = true;
+        assert_eq!(
+            checkpointed
+                .finalize_direct_chatgpt_work(101)
+                .unwrap()
+                .state,
+            AutonomousSessionStateV1::CompletedVerified
+        );
+    }
+
+    #[test]
+    fn explicit_direct_finalization_refuses_approval_drift_even_without_outputs() {
+        let mut controller = setup(VerificationStatusV1::Passed, "direct approval fixture");
+        explicit_direct_policy(&mut controller);
+        controller.claim_direct_chatgpt_work(10).unwrap();
+        let before = controller.store.load_session("session-1").unwrap();
+        let mut changed = controller.policy.contract().clone();
+        changed.objective = "unapproved replacement objective".into();
+        controller.policy = AutonomousPolicyEngineV1::new(changed).unwrap();
+        assert!(controller.finalize_direct_chatgpt_work(11).is_err());
+        assert_eq!(controller.store.load_session("session-1").unwrap(), before);
+        assert!(controller.store.all_review_inbox().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn explicit_direct_checkpoint_cannot_finalize_after_approval_is_removed() {
+        let mut controller = setup(
+            VerificationStatusV1::Passed,
+            "direct checkpoint approval fixture",
+        );
+        explicit_direct_policy(&mut controller);
+        controller.claim_direct_chatgpt_work(10).unwrap();
+        controller.verifier.final_review = false;
+        controller.finalize_direct_chatgpt_work(11).unwrap();
+        assert!(
+            controller
+                .store
+                .load_passed_verification_checkpoint("session-1")
+                .unwrap()
+                .is_some()
+        );
+        let mut snapshot = controller.store.load_session("session-1").unwrap();
+        snapshot.approved_contract_hash = None;
+        controller.store.save_session(&snapshot).unwrap();
+        controller.verifier.final_review = true;
+        assert!(controller.finalize_direct_chatgpt_work(12).is_err());
+        assert_ne!(
+            controller.run_once(12).await.unwrap().state,
+            AutonomousSessionStateV1::CompletedVerified
+        );
+        assert!(controller.store.all_review_inbox().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn explicit_direct_graph_claims_fresh_task_baselines_and_enforces_remaining_budget() {
+        for (project_id, maximum_turns, gated) in [
+            ("web-project", 2, false),
+            ("web-project", 8, false),
+            ("catdesk", 8, false),
+            ("web-project", 8, true),
+        ] {
+            let mut controller = graph_controller();
+            let mut direct = controller.policy.contract().clone();
+            direct.mode = "chatgpt_web_direct_autonomous".into();
+            direct.project_id = project_id.into();
+            direct.provider_policy.primary_provider = "chatgpt-web".into();
+            direct.provider_policy.primary_model = "conversation-selected".into();
+            direct.provider_policy.routine_provider = "none".into();
+            direct.provider_policy.routine_model = "none".into();
+            direct.autonomy_lease.maximum_provider_turns = maximum_turns;
+            let mut plan = controller.store.load_plan_queue("session-1").unwrap();
+            for (task, planned) in direct.task_graph.iter_mut().zip(&mut plan.tasks) {
+                if gated {
+                    task.planner_gate = Some(format!("choose the bounded {} design", task.task_id));
+                }
+                task.completion_artifact_ids = vec![format!("src/{}.txt", task.task_id)];
+                planned.completion_artifact_ids = task.completion_artifact_ids.clone();
+                planned.preferred_worker_policy = "chatgpt-direct".into();
+            }
+            let root = direct.workspace.clone();
+            let queue = controller.store.load_queue("session-1").unwrap();
+            let store = AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).unwrap();
+            store.create_session("session-1", queue).unwrap();
+            controller.store = store;
+            if project_id == "catdesk" {
+                std::fs::create_dir_all(root.join("wake/src")).unwrap();
+                std::fs::write(
+                    root.join("Cargo.toml"),
+                    "[package]\nname='catdesk'\nversion='0.1.0'\nedition='2024'\n",
+                )
+                .unwrap();
+                std::fs::write(root.join("Cargo.lock"), "version = 4\n").unwrap();
+                std::fs::write(root.join("src/main.rs"), "fn main() {}\n").unwrap();
+                std::fs::write(
+                    root.join("wake/Cargo.toml"),
+                    "[package]\nname='catdesk-wake'\nversion='1.0.0'\nedition='2024'\n",
+                )
+                .unwrap();
+                std::fs::write(
+                    root.join("wake/src/lib.rs"),
+                    "pub const FIXTURE: bool = true;\n",
+                )
+                .unwrap();
+            }
+            controller.policy = AutonomousPolicyEngineV1::new(direct).unwrap();
+            controller
+                .store
+                .save_contract("session-1", controller.policy.contract())
+                .unwrap();
+            controller
+                .store
+                .write_plan_queue("session-1", &plan)
+                .unwrap();
+            let mut approved = controller.store.load_session("session-1").unwrap();
+            approved.approved_contract_hash = Some(controller.policy.contract_hash().into());
+            approved.provider_route = AutonomousProviderRouteV1::WaitingForChatgpt;
+            approved.state = AutonomousSessionStateV1::Queued;
+            approved.active = true;
+            controller.store.save_session(&approved).unwrap();
+            for (index, task_id) in ["a", "b", "c", "d"].into_iter().enumerate() {
+                let before = controller.store.load_session("session-1").unwrap();
+                let request = serde_json::json!({"sessionId":"session-1","expectedStateVersion":before.last_event_sequence,"idempotencyKey":format!("direct-claim-{task_id}")});
+                if index as u32 == maximum_turns {
+                    assert!(
+                        crate::delegated::autonomy_supervisor::handle_tool(
+                            "autonomy_session_claim_direct_work",
+                            request,
+                            &root
+                        )
+                        .is_err()
+                    );
+                    assert!(
+                        controller
+                            .claim_direct_chatgpt_work(10 + index as u64)
+                            .is_err()
+                    );
+                    assert_eq!(controller.store.load_session("session-1").unwrap(), before);
+                    break;
+                }
+                if gated {
+                    assert!(
+                        controller
+                            .claim_direct_chatgpt_work(10 + 2 * index as u64)
+                            .is_err()
+                    );
+                    // Persist just the selection, as if the process stopped
+                    // before writing its escalation/waiting transition.
+                    let mut selected = controller.store.load_session("session-1").unwrap();
+                    selected.current_task_id = Some(task_id.into());
+                    controller.store.save_session(&selected).unwrap();
+                    assert_eq!(
+                        controller
+                            .run_once(10 + 2 * index as u64)
+                            .await
+                            .unwrap()
+                            .state,
+                        AutonomousSessionStateV1::WaitingForChatgpt
+                    );
+                    let waiting = controller.store.load_session("session-1").unwrap();
+                    let escalation = controller.store.load_escalation("session-1").unwrap();
+                    assert_eq!(waiting.current_task_id.as_deref(), Some(task_id));
+                    assert_eq!(waiting.provider_turn_count, index as u32);
+                    assert!(
+                        controller
+                            .store
+                            .load_task_output_baseline("session-1", task_id)
+                            .unwrap()
+                            .is_none()
+                    );
+                    assert_eq!(
+                        controller
+                            .run_once(10 + 2 * index as u64)
+                            .await
+                            .unwrap()
+                            .state,
+                        waiting.state
+                    );
+                    assert_eq!(
+                        controller
+                            .store
+                            .load_escalation("session-1")
+                            .unwrap()
+                            .escalation_id,
+                        escalation.escalation_id
+                    );
+                    crate::delegated::autonomy_supervisor::handle_tool(
+                        "autonomy_session_reply",
+                        serde_json::json!({"sessionId":"session-1","expectedStateVersion":waiting.last_event_sequence,"idempotencyKey":format!("reply-{task_id}"),"escalationId":escalation.escalation_id,"decisionHash":format!("decision-{task_id}"),"decision":"use the bounded approved design","constraints":["preserve project ownership"]}),
+                        &root,
+                    ).unwrap();
+                }
+                let before = controller.store.load_session("session-1").unwrap();
+                let request = serde_json::json!({"sessionId":"session-1","expectedStateVersion":before.last_event_sequence,"idempotencyKey":format!("direct-claim-{task_id}")});
+                let interrupted_baseline = if gated {
+                    // Simulate interruption after immutable baseline persistence
+                    // but before direct ownership or reply consumption.
+                    controller.capture_task_output_baseline(task_id).unwrap();
+                    let captured = controller
+                        .store
+                        .load_task_output_baseline("session-1", task_id)
+                        .unwrap();
+                    if index >= 1 {
+                        controller
+                            .store
+                            .execution_accounting_store()
+                            .unwrap()
+                            .record_task_started(
+                                project_id,
+                                task_id,
+                                "session-1",
+                                None,
+                                DIRECT_CHATGPT_EXECUTOR_ID,
+                                None,
+                                None,
+                                controller_now_millis(),
+                            )
+                            .unwrap();
+                    }
+                    if index >= 2 {
+                        controller
+                            .set_task_state(task_id, AutonomousQueueTaskStateV1::WorkerRunning)
+                            .unwrap();
+                    }
+                    assert!(
+                        !controller
+                            .store
+                            .load_planner_reply("session-1")
+                            .unwrap()
+                            .consumed
+                    );
+                    captured
+                } else {
+                    None
+                };
+                crate::delegated::autonomy_supervisor::handle_tool(
+                    "autonomy_session_claim_direct_work",
+                    request,
+                    &root,
+                )
+                .unwrap();
+                controller
+                    .claim_direct_chatgpt_work(10 + 2 * index as u64)
+                    .unwrap();
+                if gated {
+                    assert!(
+                        controller
+                            .store
+                            .load_planner_reply("session-1")
+                            .unwrap()
+                            .consumed
+                    );
+                    assert!(
+                        controller
+                            .claim_direct_chatgpt_work(10 + 2 * index as u64)
+                            .is_err()
+                    );
+                    let accounting = controller
+                        .store
+                        .execution_accounting_store()
+                        .unwrap()
+                        .list(Some("session-1"))
+                        .unwrap();
+                    assert_eq!(
+                        accounting
+                            .iter()
+                            .find(|record| record.task_id == task_id)
+                            .unwrap()
+                            .provider_turns,
+                        1
+                    );
+                }
+                let baseline = controller
+                    .store
+                    .load_task_output_baseline("session-1", task_id)
+                    .unwrap()
+                    .unwrap();
+                if let Some(original) = interrupted_baseline {
+                    assert_eq!(baseline, original);
+                }
+                assert_eq!(baseline.observations[0].state, "ABSENT");
+                std::fs::write(
+                    controller
+                        .policy
+                        .contract()
+                        .workspace
+                        .join(format!("src/{task_id}.txt")),
+                    format!("claimed direct output {task_id}"),
+                )
+                .unwrap();
+                let result = controller
+                    .finalize_direct_chatgpt_work(11 + 2 * index as u64)
+                    .unwrap();
+                assert_eq!(
+                    result.state,
+                    if task_id == "d" {
+                        AutonomousSessionStateV1::CompletedVerified
+                    } else {
+                        AutonomousSessionStateV1::Queued
+                    }
+                );
+            }
+            assert_eq!(
+                controller
+                    .store
+                    .load_session("session-1")
+                    .unwrap()
+                    .provider_turn_count,
+                maximum_turns.min(4)
+            );
+            if maximum_turns == 8 {
+                let inbox = controller.store.all_review_inbox().unwrap();
+                assert_eq!(inbox.len(), if gated { 5 } else { 1 });
+                assert_eq!(inbox.iter().filter(|record| record.state == AutonomousSessionStateV1::CompletedVerified).count(), 1);
+                assert_eq!(
+                    controller
+                        .policy
+                        .contract()
+                        .workspace
+                        .join(".catdesk/reviewed-source-snapshots/session-1")
+                        .exists(),
+                    project_id == "catdesk",
+                    "only the final CatDesk task requires its production snapshot"
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn explicit_direct_gated_task_without_outputs_cannot_finalize_before_its_claim() {
+        let mut controller = graph_controller();
+        let mut direct = controller.policy.contract().clone();
+        direct.mode = "chatgpt_web_direct_autonomous".into();
+        direct.project_id = "web-project".into();
+        direct.provider_policy.primary_provider = "chatgpt-web".into();
+        direct.provider_policy.primary_model = "conversation-selected".into();
+        direct.provider_policy.routine_provider = "none".into();
+        direct.provider_policy.routine_model = "none".into();
+        direct.task_graph[1].planner_gate = Some("choose B design".into());
+        assert!(
+            direct
+                .task_graph
+                .iter()
+                .all(|task| task.completion_artifact_ids.is_empty())
+        );
+        let root = direct.workspace.clone();
+        let queue = controller.store.load_queue("session-1").unwrap();
+        let plan = controller.store.load_plan_queue("session-1").unwrap();
+        let store = AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).unwrap();
+        store.create_session("session-1", queue).unwrap();
+        store.write_plan_queue("session-1", &plan).unwrap();
+        controller.store = store;
+        controller.policy = AutonomousPolicyEngineV1::new(direct).unwrap();
+        controller
+            .store
+            .save_contract("session-1", controller.policy.contract())
+            .unwrap();
+        let mut snapshot = controller.store.load_session("session-1").unwrap();
+        snapshot.state = AutonomousSessionStateV1::Queued;
+        snapshot.active = true;
+        snapshot.approved_contract_hash = Some(controller.policy.contract_hash().into());
+        snapshot.provider_route = AutonomousProviderRouteV1::WaitingForChatgpt;
+        controller.store.save_session(&snapshot).unwrap();
+        controller.claim_direct_chatgpt_work(10).unwrap();
+        controller.finalize_direct_chatgpt_work(11).unwrap();
+        controller.run_once(12).await.unwrap();
+        let before = controller.store.load_session("session-1").unwrap();
+        assert_eq!(before.current_task_id.as_deref(), Some("b"));
+        assert_eq!(before.provider_turn_count, 1);
+        assert!(
+            !controller
+                .store
+                .planner_gate_satisfied("session-1", "b")
+                .unwrap()
+        );
+        assert!(crate::delegated::autonomy_supervisor::handle_tool(
+            "autonomy_session_finalize_direct_work",
+            serde_json::json!({"sessionId":"session-1","expectedStateVersion":before.last_event_sequence,"idempotencyKey":"unclaimed-finalize"}), &root
+        ).is_err());
+        assert!(controller.finalize_direct_chatgpt_work(13).is_err());
+        assert_eq!(controller.store.load_session("session-1").unwrap(), before);
+        let queue = controller.store.load_queue("session-1").unwrap();
+        assert_eq!(
+            queue
+                .tasks
+                .iter()
+                .find(|task| task.task_id == "b")
+                .unwrap()
+                .state,
+            AutonomousQueueTaskStateV1::Ready
+        );
+        assert!(
+            controller
+                .store
+                .load_passed_verification_checkpoint("session-1")
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn explicit_direct_verification_repair_retains_the_same_claim() {
+        let mut controller = setup(VerificationStatusV1::Failed, "direct repair diff");
+        explicit_direct_policy(&mut controller);
+        let mut contract = controller.policy.contract().clone();
+        contract.project_id = "web-project".into();
+        controller.policy = AutonomousPolicyEngineV1::new(contract).unwrap();
+        controller
+            .store
+            .save_contract("session-1", controller.policy.contract())
+            .unwrap();
+        let mut snapshot = controller.store.load_session("session-1").unwrap();
+        snapshot.approved_contract_hash = Some(controller.policy.contract_hash().into());
+        controller.store.save_session(&snapshot).unwrap();
+        controller.claim_direct_chatgpt_work(10).unwrap();
+        assert_eq!(
+            controller.finalize_direct_chatgpt_work(11).unwrap().state,
+            AutonomousSessionStateV1::WaitingForChatgpt
+        );
+        let waiting = controller.store.load_session("session-1").unwrap();
+        crate::delegated::autonomy_supervisor::handle_tool("autonomy_session_finalize_direct_work", serde_json::json!({"sessionId":"session-1","expectedStateVersion":waiting.last_event_sequence,"idempotencyKey":"repair-finalize"}), &controller.policy.contract().workspace).unwrap();
+        controller.verifier.statuses = vec![VerificationStatusV1::Passed];
+        assert_eq!(
+            controller.finalize_direct_chatgpt_work(12).unwrap().state,
+            AutonomousSessionStateV1::CompletedVerified
+        );
+        assert_eq!(
+            controller
+                .store
+                .load_session("session-1")
+                .unwrap()
+                .provider_turn_count,
+            1
+        );
+        let records = controller
+            .store
+            .execution_accounting_store()
+            .unwrap()
+            .list(Some("session-1"))
+            .unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].provider_turns, 1);
+    }
+
+    #[test]
+    fn explicit_direct_concurrent_claims_expose_work_once() {
+        let mut first = setup(VerificationStatusV1::Passed, "direct diff");
+        explicit_direct_policy(&mut first);
+        let mut second = AutonomousControllerV1::new(
+            first.policy.clone(),
+            first.store.clone(),
+            FakeWorkerProviderV1::new(FakeProvider::new(Vec::new())),
+            Verifier {
+                statuses: vec![VerificationStatusV1::Passed],
+                diff: "direct diff".into(),
+                final_review: true,
+            },
+            "session-1".into(),
+        );
+        let barrier = std::sync::Barrier::new(2);
+        let (a, b) = std::thread::scope(|scope| {
+            let other = scope.spawn(|| {
+                barrier.wait();
+                second.claim_direct_chatgpt_work(10).is_ok()
+            });
+            barrier.wait();
+            let result = first.claim_direct_chatgpt_work(10).is_ok();
+            (result, other.join().unwrap())
+        });
+        assert_ne!(a, b);
+        assert_eq!(
+            first
+                .store
+                .load_session("session-1")
+                .unwrap()
+                .provider_turn_count,
+            1
+        );
+        let records = first
+            .store
+            .execution_accounting_store()
+            .unwrap()
+            .list(Some("session-1"))
+            .unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].provider_turns, 1);
+    }
+
+    #[tokio::test]
+    async fn explicit_direct_verifier_error_recovers_without_reexecuting_work() {
+        struct ErrorOnce(bool);
+        impl AutonomousVerifierV1 for ErrorOnce {
+            fn verify(&mut self) -> Result<(VerificationSummaryV1, String), RuntimeError> {
+                if self.0 {
+                    self.0 = false;
+                    return Err(RuntimeError::Provider(
+                        "synthetic interrupted verifier".into(),
+                    ));
+                }
+                Ok((
+                    VerificationSummaryV1 {
+                        status: VerificationStatusV1::Passed,
+                        command: "fixture".into(),
+                        summary: "passed".into(),
+                    },
+                    "direct diff".into(),
+                ))
+            }
+            fn final_review(
+                &mut self,
+                _: &VerificationSummaryV1,
+                _: &str,
+            ) -> Result<String, RuntimeError> {
+                Ok("fixture independent verifier review".into())
+            }
+        }
+        let mut initial = setup(VerificationStatusV1::Passed, "direct diff");
+        explicit_direct_policy(&mut initial);
+        let mut contract = initial.policy.contract().clone();
+        contract.project_id = "web-project".into();
+        let policy = AutonomousPolicyEngineV1::new(contract).unwrap();
+        initial
+            .store
+            .save_contract("session-1", policy.contract())
+            .unwrap();
+        let mut snapshot = initial.store.load_session("session-1").unwrap();
+        snapshot.approved_contract_hash = Some(policy.contract_hash().into());
+        initial.store.save_session(&snapshot).unwrap();
+        let mut controller = AutonomousControllerV1::new(
+            policy,
+            initial.store.clone(),
+            FakeWorkerProviderV1::new(FakeProvider::new(Vec::new())),
+            ErrorOnce(true),
+            "session-1".into(),
+        );
+        controller.claim_direct_chatgpt_work(10).unwrap();
+        assert!(controller.finalize_direct_chatgpt_work(11).is_err());
+        assert_eq!(
+            controller.store.load_session("session-1").unwrap().state,
+            AutonomousSessionStateV1::Verifying
+        );
+        assert_eq!(
+            controller.run_once(12).await.unwrap().state,
+            AutonomousSessionStateV1::WaitingForChatgpt
+        );
+        assert_eq!(
+            controller.finalize_direct_chatgpt_work(13).unwrap().state,
+            AutonomousSessionStateV1::CompletedVerified
+        );
+        assert_eq!(
+            controller
+                .store
+                .load_session("session-1")
+                .unwrap()
+                .provider_turn_count,
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn explicit_direct_next_task_checkpoint_replays_after_queued_is_durable() {
+        let mut controller = graph_controller();
+        let mut contract = controller.policy.contract().clone();
+        contract.mode = "chatgpt_web_direct_autonomous".into();
+        contract.project_id = "web-project".into();
+        contract.provider_policy.primary_provider = "chatgpt-web".into();
+        contract.provider_policy.primary_model = "conversation-selected".into();
+        contract.provider_policy.routine_provider = "none".into();
+        contract.provider_policy.routine_model = "none".into();
+        controller.policy = AutonomousPolicyEngineV1::new(contract).unwrap();
+        controller
+            .store
+            .save_contract("session-1", controller.policy.contract())
+            .unwrap();
+        let mut snapshot = controller.store.load_session("session-1").unwrap();
+        snapshot.approved_contract_hash = Some(controller.policy.contract_hash().into());
+        snapshot.provider_route = AutonomousProviderRouteV1::WaitingForChatgpt;
+        controller.store.save_session(&snapshot).unwrap();
+        controller.claim_direct_chatgpt_work(10).unwrap();
+        let checkpoint = controller
+            .passed_verification_checkpoint(
+                DIRECT_CHATGPT_EXECUTOR_ID,
+                VerificationSummaryV1 {
+                    status: VerificationStatusV1::Passed,
+                    command: "fixture".into(),
+                    summary: "passed".into(),
+                },
+                "direct diff".into(),
+                None,
+                None,
+            )
+            .unwrap();
+        controller
+            .store
+            .write_passed_verification_checkpoint("session-1", &checkpoint)
+            .unwrap();
+        assert!(controller.mark_task_completed().unwrap());
+        controller
+            .store
+            .execution_accounting_store()
+            .unwrap()
+            .finish_task("session-1", Some("verified"), None, controller_now_millis())
+            .unwrap();
+        controller
+            .transition(
+                AutonomousSessionStateV1::Queued,
+                "fixture_interruption_before_checkpoint_retirement",
+            )
+            .unwrap();
+        assert_eq!(
+            controller.run_once(11).await.unwrap().state,
+            AutonomousSessionStateV1::Queued
+        );
+        assert!(
+            controller
+                .store
+                .load_passed_verification_checkpoint("session-1")
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            controller
+                .store
+                .load_session("session-1")
+                .unwrap()
+                .provider_turn_count,
+            1
+        );
+        controller.claim_direct_chatgpt_work(12).unwrap();
+        assert_eq!(
+            controller
+                .store
+                .load_session("session-1")
+                .unwrap()
+                .current_task_id
+                .as_deref(),
+            Some("b")
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn explicit_direct_completion_reaches_existing_source_snapshot_and_build_preflight() {
+        let mut controller = setup(
+            VerificationStatusV1::Passed,
+            "diff --git direct review fixture",
+        );
+        explicit_direct_policy(&mut controller);
+        let root = controller.policy.contract().workspace.clone();
+        std::fs::create_dir_all(root.join("wake/src")).unwrap();
+        std::fs::write(
+            root.join("Cargo.toml"),
+            "[package]\nname='catdesk'\nversion='0.1.0'\nedition='2024'\n",
+        )
+        .unwrap();
+        std::fs::write(root.join("Cargo.lock"), "version = 4\n").unwrap();
+        std::fs::write(root.join("src/main.rs"), "fn main() {}\n").unwrap();
+        std::fs::write(
+            root.join("wake/Cargo.toml"),
+            "[package]\nname='catdesk-wake'\nversion='1.0.0'\nedition='2024'\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("wake/src/lib.rs"),
+            "pub const FIXTURE: bool = true;\n",
+        )
+        .unwrap();
+        let mut direct = controller.policy.contract().clone();
+        direct.completion_artifact_ids = vec!["src/direct-review.txt".into()];
+        controller.policy = AutonomousPolicyEngineV1::new(direct).unwrap();
+        controller
+            .store
+            .save_contract("session-1", controller.policy.contract())
+            .unwrap();
+        let mut approved = controller.store.load_session("session-1").unwrap();
+        approved.approved_contract_hash = Some(controller.policy.contract_hash().into());
+        controller.store.save_session(&approved).unwrap();
+        controller.claim_direct_chatgpt_work(10).unwrap();
+        std::fs::write(root.join("src/direct-review.txt"), "Synthetic direct-review test output created after its claim; no real Web acceptance.\n").unwrap();
+        let done = controller.finalize_direct_chatgpt_work(11).unwrap();
+        assert_eq!(
+            done.state,
+            AutonomousSessionStateV1::CompletedVerified,
+            "{:?}",
+            controller.store.load_escalation("session-1")
+        );
+        let inbox = controller.store.all_review_inbox().unwrap();
+        assert_eq!(inbox.len(), 1);
+        let record_id = &inbox[0].record_id;
+        crate::delegated::autonomy_supervisor::handle_tool(
+            "autonomy_review_inbox_ack",
+            serde_json::json!({"recordId":record_id}),
+            &root,
+        )
+        .unwrap();
+        let prepared = crate::delegated::autonomy_supervisor::handle_tool(
+            "catdesk_reviewed_build",
+            serde_json::json!({"action":"PREPARE","recordId":record_id}),
+            &root,
+        )
+        .unwrap();
+        assert_eq!(prepared["state"], "PREPARED");
+        assert!(
+            prepared["confirmationToken"]
+                .as_str()
+                .is_some_and(|token| !token.is_empty())
+        );
+        assert_eq!(
+            controller
+                .store
+                .load_session("session-1")
+                .unwrap()
+                .provider_thread_id,
+            None
+        );
+        assert!(
+            controller
+                .store
+                .load_passed_verification_checkpoint("session-1")
+                .unwrap()
+                .unwrap()
+                .codex_turn_profile
+                .is_none()
+        );
+        assert!(
+            !root.join("target/release/catdesk.exe").exists(),
+            "PREPARE must never build or promote"
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn explicit_direct_runtime_tick_does_not_claim_native_writer_or_discover_provider() {
+        let mut controller = setup(VerificationStatusV1::Passed, "direct runtime fixture");
+        explicit_direct_policy(&mut controller);
+        let root = controller.policy.contract().workspace.clone();
+        let git = |args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .args(args)
+                .current_dir(&root)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "fixture Git failed");
+            String::from_utf8(output.stdout).unwrap().trim().to_string()
+        };
+        git(&["init", "-q", "-b", "direct-test"]);
+        git(&[
+            "remote",
+            "add",
+            "origin",
+            "https://example.invalid/repo.git",
+        ]);
+        git(&[
+            "-c",
+            "user.name=fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "fixture",
+        ]);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let mut direct = controller.policy.contract().clone();
+        direct.base_commit = git(&["rev-parse", "HEAD"]);
+        direct.feature_branch = "direct-test".into();
+        direct.autonomy_lease.issued_at_unix = now;
+        direct.autonomy_lease.expires_at_unix = now + 100;
+        controller.policy = AutonomousPolicyEngineV1::new(direct.clone()).unwrap();
+        controller
+            .store
+            .save_contract("session-1", &direct)
+            .unwrap();
+        let mut before = controller.store.load_session("session-1").unwrap();
+        before.approved_contract_hash = Some(controller.policy.contract_hash().into());
+        controller.store.save_session(&before).unwrap();
+        let native_writer =
+            crate::delegated::autonomy_runtime::acquire_project_writer_lock(&root).unwrap();
+        let idle = crate::delegated::autonomy_runtime::start_or_tick(&root, "session-1")
+            .await
+            .unwrap();
+        assert_eq!(idle.state, AutonomousSessionStateV1::Queued);
+        assert_eq!(idle.provider_events, 0);
+        assert_eq!(controller.store.load_session("session-1").unwrap(), before);
+        direct.objective = "changed after approval".into();
+        controller
+            .store
+            .save_contract("session-1", &direct)
+            .unwrap();
+        assert!(
+            crate::delegated::autonomy_runtime::start_or_tick(&root, "session-1")
+                .await
+                .is_err()
+        );
+        drop(native_writer);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn legacy_direct_interrupted_claim_recovers_only_its_direct_accounting_intent() {
+        for provider in [DIRECT_CHATGPT_EXECUTOR_ID, "codex-cli"] {
+            let mut controller = setup(VerificationStatusV1::Passed, "direct diff");
+            assert!(!controller.policy.contract().is_direct_chatgpt());
+            assert_ne!(
+                controller.policy.contract().provider_policy.primary_model,
+                SOL_MEDIUM_MODEL
+            );
+            let mut snapshot = controller.store.load_session("session-1").unwrap();
+            snapshot.state = AutonomousSessionStateV1::Queued;
+            snapshot.active = true;
+            snapshot.approved_contract_hash = Some(controller.policy.contract_hash().into());
+            controller.store.save_session(&snapshot).unwrap();
+            controller.capture_task_output_baseline("work").unwrap();
+            controller
+                .store
+                .execution_accounting_store()
+                .unwrap()
+                .record_task_started(
+                    "catdesk",
+                    "work",
+                    "session-1",
+                    None,
+                    provider,
+                    None,
+                    None,
+                    controller_now_millis(),
+                )
+                .unwrap();
+            if provider == DIRECT_CHATGPT_EXECUTOR_ID {
+                let before = controller.store.load_session("session-1").unwrap();
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap();
+                assert!(runtime.block_on(controller.run_once(10)).is_err());
+                assert_eq!(controller.store.load_session("session-1").unwrap(), before);
+            }
+            controller
+                .set_task_state("work", AutonomousQueueTaskStateV1::WorkerRunning)
+                .unwrap();
+            let result = controller.claim_direct_chatgpt_work(10);
+            assert_eq!(
+                result.is_ok(),
+                provider == DIRECT_CHATGPT_EXECUTOR_ID,
+                "{result:?}"
+            );
+            assert_eq!(
+                controller
+                    .store
+                    .load_session("session-1")
+                    .unwrap()
+                    .provider_turn_count,
+                u32::from(provider == DIRECT_CHATGPT_EXECUTOR_ID)
+            );
+            let records = controller
+                .store
+                .execution_accounting_store()
+                .unwrap()
+                .list(Some("session-1"))
+                .unwrap();
+            assert_eq!(records.len(), 1);
+            assert_eq!(records[0].provider_turns, 1);
+            assert_eq!(records[0].provider_id, provider);
+        }
+    }
+
+    #[test]
+    fn native_launch_and_direct_claim_cannot_both_own_one_task() {
+        let mut native = setup(VerificationStatusV1::Passed, "native fixture diff");
+        let mut snapshot = native.store.load_session("session-1").unwrap();
+        snapshot.state = AutonomousSessionStateV1::Queued;
+        snapshot.active = true;
+        snapshot.approved_contract_hash = Some(native.policy.contract_hash().into());
+        native.store.save_session(&snapshot).unwrap();
+        let mut direct = AutonomousControllerV1::new(
+            native.policy.clone(),
+            native.store.clone(),
+            FakeWorkerProviderV1::new(FakeProvider::new(Vec::new())),
+            Verifier {
+                statuses: vec![VerificationStatusV1::Passed],
+                diff: "fixture diff".into(),
+                final_review: true,
+            },
+            "session-1".into(),
+        );
+        let barrier = std::sync::Barrier::new(2);
+        std::thread::scope(|scope| {
+            let other = scope.spawn(|| {
+                barrier.wait();
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap()
+                    .block_on(native.run_once(10))
+            });
+            barrier.wait();
+            let claim = direct.claim_direct_chatgpt_work(10);
+            let tick = other.join().unwrap();
+            assert!(claim.is_ok() || tick.is_ok());
+        });
+        let snapshot = direct.store.load_session("session-1").unwrap();
+        assert_eq!(snapshot.provider_turn_count, 1);
+        let records = direct
+            .store
+            .execution_accounting_store()
+            .unwrap()
+            .list(Some("session-1"))
+            .unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].provider_turns, 1);
+    }
+
+    #[test]
+    fn fresh_direct_claim_preserves_existing_native_bindings_without_partial_writes() {
+        for binding in ["thread", "handle", "expected-thread"] {
+            let mut controller = setup(VerificationStatusV1::Passed, "fixture diff");
+            let mut snapshot = controller.store.load_session("session-1").unwrap();
+            snapshot.state = AutonomousSessionStateV1::Queued;
+            snapshot.active = true;
+            snapshot.approved_contract_hash = Some(controller.policy.contract_hash().into());
+            match binding {
+                "thread" => snapshot.provider_thread_id = Some("preserved-thread".into()),
+                "handle" => snapshot.provider_handle_id = Some("preserved-handle".into()),
+                _ => snapshot.expected_codex_thread_id = Some("preserved-thread".into()),
+            }
+            controller.store.save_session(&snapshot).unwrap();
+            assert!(controller.claim_direct_chatgpt_work(10).is_err());
+            assert_eq!(
+                controller.store.load_session("session-1").unwrap(),
+                snapshot
+            );
+            assert_eq!(
+                controller.store.load_queue("session-1").unwrap().tasks[0].state,
+                AutonomousQueueTaskStateV1::Ready
+            );
+            assert!(
+                controller
+                    .store
+                    .execution_accounting_store()
+                    .unwrap()
+                    .list(Some("session-1"))
+                    .unwrap()
+                    .is_empty()
+            );
+        }
     }
 
     #[test]

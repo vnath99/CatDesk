@@ -718,7 +718,10 @@ pub struct AutonomousStateStoreV1 {
 
 #[derive(Debug)]
 pub struct AutonomousSessionLockV1 {
+    #[cfg(not(windows))]
     path: PathBuf,
+    #[cfg(windows)]
+    file: Option<File>,
     owner_id: String,
     released: bool,
 }
@@ -1879,6 +1882,7 @@ impl AutonomousStateStoreV1 {
             "review-{}-{}-{}",
             session_id, snapshot.last_event_sequence, next_action
         );
+        let _inbox_lock = self.acquire_inbox_mutation_lock()?;
         let path = self.root.join("review-inbox.json");
         let mut records: Vec<AutonomousReviewInboxRecordV1> = if path.exists() {
             read_json(&path)?
@@ -1960,6 +1964,7 @@ impl AutonomousStateStoreV1 {
         }
         let next_action = "independent_final_review";
         let record_id = format!("review-{compatibility_session_id}");
+        let _inbox_lock = self.acquire_inbox_mutation_lock()?;
         let path = self.root.join("review-inbox.json");
         let mut records: Vec<AutonomousReviewInboxRecordV1> = if path.exists() {
             read_json(&path)?
@@ -2176,6 +2181,7 @@ impl AutonomousStateStoreV1 {
         record_id: &str,
     ) -> Result<AutonomousReviewInboxRecordV1, AutonomyStateError> {
         validate_slug(record_id, "review inbox record id").map_err(validation_error)?;
+        let _inbox_lock = self.acquire_inbox_mutation_lock()?;
         let path = self.root.join("review-inbox.json");
         let mut records: Vec<AutonomousReviewInboxRecordV1> = read_json(&path)?;
         let record = records
@@ -2204,6 +2210,13 @@ impl AutonomousStateStoreV1 {
             .join("session.lock");
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            // Retain one exclusive OS handle. Process exit releases this lock
+            // without guessing whether an old pathname owner is dead.
+            options.read(true).share_mode(0).custom_flags(0x04000000);
+        }
         let mut file = options.open(&path).map_err(|error| {
             if error.kind() == std::io::ErrorKind::AlreadyExists {
                 AutonomyStateError::LockHeld(session_id.into())
@@ -2215,7 +2228,10 @@ impl AutonomousStateStoreV1 {
         file.write_all(b"\n").map_err(io_error)?;
         file.sync_data().map_err(io_error)?;
         Ok(AutonomousSessionLockV1 {
+            #[cfg(not(windows))]
             path,
+            #[cfg(windows)]
+            file: Some(file),
             owner_id: owner_id.into(),
             released: false,
         })
@@ -2340,6 +2356,20 @@ impl AutonomousStateStoreV1 {
         Ok(file)
     }
 
+    fn acquire_inbox_mutation_lock(&self) -> Result<File, AutonomyStateError> {
+        // Only the shared inbox read/modify/replace is serialized. Session
+        // work and unrelated project resources retain independent ownership.
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(self.root.join("review-inbox-mutation.lock"))
+            .map_err(io_error)?;
+        file.lock().map_err(io_error)?;
+        Ok(file)
+    }
+
     fn session_dir(&self, session_id: &str) -> Result<PathBuf, AutonomyStateError> {
         validate_slug(session_id, "autonomous session id").map_err(validation_error)?;
         Ok(self.root.join(session_id))
@@ -2355,13 +2385,32 @@ impl AutonomousSessionLockV1 {
         if self.released {
             return Ok(());
         }
+        #[cfg(not(windows))]
         let owner = fs::read_to_string(&self.path).map_err(io_error)?;
+        #[cfg(windows)]
+        let owner = {
+            let mut file = self
+                .file
+                .as_ref()
+                .ok_or_else(|| {
+                    AutonomyStateError::Validation("autonomous lock handle missing".into())
+                })?
+                .try_clone()
+                .map_err(io_error)?;
+            std::io::Seek::rewind(&mut file).map_err(io_error)?;
+            let mut text = String::new();
+            std::io::Read::read_to_string(&mut file, &mut text).map_err(io_error)?;
+            text
+        };
         if owner.trim() != self.owner_id {
             return Err(AutonomyStateError::LockOwnership(
                 "autonomous lock content did not match owner".into(),
             ));
         }
+        #[cfg(not(windows))]
         fs::remove_file(&self.path).map_err(io_error)?;
+        #[cfg(windows)]
+        drop(self.file.take());
         self.released = true;
         Ok(())
     }
@@ -4339,6 +4388,110 @@ mod tests {
         store
             .acquire_lock("session-one", "owner-b")
             .expect("second owner");
+    }
+
+    #[test]
+    fn shared_inbox_concurrent_session_delegated_and_ack_writes_preserve_all_records() {
+        let (root, store) = store("parallel-inbox");
+        let mut seeds = Vec::new();
+        for index in 0..8 {
+            store
+                .create_session(&format!("session-{index}"), queue())
+                .unwrap();
+            seeds.push(
+                store
+                    .emit_delegated_review_inbox_record(
+                        &format!("seed-{index}"),
+                        "project",
+                        "review/seed",
+                        1,
+                    )
+                    .unwrap()
+                    .record_id,
+            );
+        }
+        let barrier = std::sync::Barrier::new(24);
+        std::thread::scope(|scope| {
+            for (index, seed) in seeds.iter().enumerate() {
+                let store = &store;
+                let barrier = &barrier;
+                scope.spawn(move || {
+                    barrier.wait();
+                    store.acknowledge_review_inbox(seed).unwrap();
+                });
+                scope.spawn(move || {
+                    barrier.wait();
+                    store
+                        .emit_delegated_review_inbox_record(
+                            &format!("new-{index}"),
+                            "project",
+                            "review/new",
+                            2,
+                        )
+                        .unwrap();
+                });
+                scope.spawn(move || {
+                    barrier.wait();
+                    store
+                        .emit_review_inbox_record(
+                            &format!("session-{index}"),
+                            "project",
+                            AutonomousSessionStateV1::WaitingForChatgpt,
+                            "chatgpt_decision_required",
+                            "review/decision",
+                            2,
+                        )
+                        .unwrap();
+                });
+            }
+        });
+        let records = store.all_review_inbox().unwrap();
+        assert_eq!(records.len(), 24);
+        for seed in seeds {
+            assert!(
+                !records
+                    .iter()
+                    .find(|record| record.record_id == seed)
+                    .unwrap()
+                    .unread
+            );
+        }
+        assert_eq!(records.iter().filter(|record| record.unread).count(), 16);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn session_lock_abrupt_exit_fixture() {
+        let Some(root) = std::env::var_os("CATDESK_TEST_LOCK_CRASH_ROOT") else {
+            return;
+        };
+        let store = AutonomousStateStoreV1::open(PathBuf::from(root)).unwrap();
+        let _lock = store
+            .acquire_lock("session-one", "abrupt-exit-fixture")
+            .unwrap();
+        std::process::exit(0); // Intentionally bypass Drop to test OS lifetime.
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn session_lock_releases_on_process_exit_without_pathname_recovery() {
+        let (root, store) = store("abrupt-lock");
+        store.create_session("session-one", queue()).unwrap();
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "delegated::autonomy_state::tests::session_lock_abrupt_exit_fixture",
+            ])
+            .env("CATDESK_TEST_LOCK_CRASH_ROOT", &store.root)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let _lock = store
+            .acquire_lock("session-one", "after-abrupt-exit")
+            .unwrap();
+        drop(_lock);
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

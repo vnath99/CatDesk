@@ -2593,6 +2593,12 @@ impl AutonomousSupervisorV1 {
                 let _ = self.store.remove_unapproved_session(&session_id);
                 return Err("autonomous routine-provider route could not be persisted".into());
             }
+        } else if contract.is_direct_chatgpt() {
+            snapshot.provider_route = AutonomousProviderRouteV1::WaitingForChatgpt;
+            if self.store.save_session(&snapshot).is_err() {
+                let _ = self.store.remove_unapproved_session(&session_id);
+                return Err("direct ChatGPT route could not be persisted".into());
+            }
         }
         if self.store.save_contract(&session_id, &contract).is_err() {
             let _ = self.store.remove_unapproved_session(&session_id);
@@ -2627,14 +2633,21 @@ impl AutonomousSupervisorV1 {
                                         .verification_policy
                                         .profile
                                         .clone(),
-                                    preferred_worker_policy:
-                                        "codex-preferred-local-qwen-continuation".into(),
+                                    preferred_worker_policy: if contract.is_direct_chatgpt() {
+                                        "chatgpt-direct".into()
+                                    } else {
+                                        "codex-preferred-local-qwen-continuation".into()
+                                    },
                                     escalation_conditions: vec![
                                         "architecture ambiguity".into(),
                                         "scope expansion".into(),
                                     ],
                                     completion_artifact_ids: completion_artifact_ids.clone(),
-                                    provider_provenance: vec!["codex-cli".into()],
+                                    provider_provenance: vec![if contract.is_direct_chatgpt() {
+                                        "chatgpt-web".into()
+                                    } else {
+                                        "codex-cli".into()
+                                    }],
                                 }
                             },
                         )
@@ -2912,17 +2925,52 @@ impl AutonomousSupervisorV1 {
         expected: u64,
         key: &str,
     ) -> Result<Value, String> {
+        let policy = self.load_policy(session_id)?;
+        self.validate_graph_materialization(session_id, &policy)?;
         self.mutate(
             session_id,
             expected,
             key,
             "direct_work_claim_requested",
             |snapshot| {
+                let fresh = snapshot.current_task_id.is_none() && snapshot.provider_turn_count == 0;
+                let continuation = if fresh {
+                    false
+                } else {
+                    let queue = self
+                        .store
+                        .load_queue(session_id)
+                        .map_err(|_| "direct work queue is unavailable")?;
+                    super::autonomous_controller::direct_work_continuation_allowed(
+                        policy.contract(),
+                        snapshot,
+                        &queue,
+                    ) || super::autonomous_controller::direct_planner_reply_allows_claim(
+                        policy.contract(),
+                        snapshot,
+                        &queue,
+                        &self.store,
+                        session_id,
+                    ) || super::autonomous_controller::pending_direct_claim_task(
+                        policy.contract(),
+                        snapshot,
+                        &queue,
+                        &self.store,
+                        session_id,
+                    )
+                    .is_some()
+                };
                 if snapshot.state != AutonomousSessionStateV1::Queued
                     || !snapshot.active
-                    || snapshot.current_task_id.is_some()
-                    || snapshot.provider_turn_count != 0
+                    || snapshot.provider_thread_id.is_some()
+                    || snapshot.provider_handle_id.is_some()
+                    || snapshot.expected_codex_thread_id.is_some()
+                    || snapshot.codex_continuity.is_some()
+                    || (!fresh && !continuation)
                     || snapshot.approved_contract_hash.is_none()
+                    || (policy.contract().is_direct_chatgpt()
+                        && snapshot.approved_contract_hash.as_deref()
+                            != Some(policy.contract_hash()))
                 {
                     return Err(
                         "direct work claim requires one approved, never-started QUEUED session"
@@ -2940,6 +2988,7 @@ impl AutonomousSupervisorV1 {
         expected: u64,
         key: &str,
     ) -> Result<Value, String> {
+        let policy = self.load_policy(session_id)?;
         self.mutate(
             session_id,
             expected,
@@ -2955,6 +3004,11 @@ impl AutonomousSupervisorV1 {
                         "direct work finalization requires one already-started WAITING_FOR_CHATGPT task"
                             .into(),
                     );
+                }
+                if policy.contract().is_direct_chatgpt()
+                    && self.store.load_passed_verification_checkpoint(session_id).map_err(|_| "direct checkpoint unavailable")?.is_none()
+                    && !super::autonomous_controller::direct_task_is_claimed(policy.contract(), snapshot, &self.store, session_id).map_err(|_| "direct claim unavailable")? {
+                    return Err("direct work finalization requires this task's durable claim".into());
                 }
                 Ok(())
             },
@@ -4391,6 +4445,49 @@ mod tests {
             completion_artifact_ids: Vec::new(),
             task_graph: Vec::new(),
         }
+    }
+
+    #[test]
+    fn direct_contract_create_reports_direct_route_without_native_profile() {
+        let root = std::env::temp_dir().join(format!("catdesk-direct-route-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        let mut direct = contract(&root);
+        direct.mode = "chatgpt_web_direct_autonomous".into();
+        direct.provider_policy.primary_provider = "chatgpt-web".into();
+        direct.provider_policy.primary_model = "conversation-selected".into();
+        direct.provider_policy.routine_provider = "none".into();
+        direct.provider_policy.routine_model = "none".into();
+        handle_tool(
+            "autonomy_contract_create",
+            json!({"contract":direct}),
+            &root,
+        )
+        .unwrap();
+        let store = AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).unwrap();
+        let snapshot = store.load_session("session-1").unwrap();
+        let plan = store.load_plan_queue("session-1").unwrap();
+        assert!(
+            plan.tasks
+                .iter()
+                .all(|task| task.provider_provenance == ["chatgpt-web"])
+        );
+        assert_eq!(
+            snapshot.provider_route,
+            AutonomousProviderRouteV1::WaitingForChatgpt
+        );
+        assert_eq!(snapshot.provider_turn_count, 0);
+        assert!(snapshot.provider_thread_id.is_none());
+        // Fresh sessions enable durable tracking infrastructure even when
+        // no native turn occurs; that bit is not evidence of a model turn.
+        assert!(snapshot.codex_turn_profile_tracking_started);
+        assert!(
+            store
+                .load_passed_verification_checkpoint("session-1")
+                .unwrap()
+                .is_none()
+        );
+        assert!(store.all_review_inbox().unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

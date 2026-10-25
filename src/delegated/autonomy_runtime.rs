@@ -3416,6 +3416,39 @@ pub async fn start_or_tick(
     let workspace = workspace.canonicalize().map_err(|_| {
         RuntimeError::Validation("autonomous workspace canonicalization failed".into())
     })?;
+    let store = AutonomousStateStoreV1::open(workspace.join(".catdesk").join("autonomy"))
+        .map_err(RuntimeError::from)?;
+    // Select the new lane only from a valid direct contract. Missing or
+    // malformed legacy contracts must still reach the original native writer
+    // recovery path, which preserves uncertain-child ownership markers.
+    if let Some(contract) = store
+        .load_contract(session_id)
+        .ok()
+        .filter(|contract| contract.is_direct_chatgpt())
+    {
+        let policy = AutonomousPolicyEngineV1::new(contract).map_err(|_| {
+            RuntimeError::Validation("persisted direct ChatGPT contract rejected".into())
+        })?;
+        let snapshot = store.load_session(session_id).map_err(RuntimeError::from)?;
+        if snapshot
+            .approved_contract_hash
+            .as_deref()
+            .is_some_and(|hash| hash != policy.contract_hash())
+        {
+            return Err(RuntimeError::Validation(
+                "direct ChatGPT approval binding changed".into(),
+            ));
+        }
+        // Return before native writer acquisition, executable discovery or
+        // native provider construction. Reuse the finalization-only provider
+        // used by explicit direct work: it is never invoked. The ordinary
+        // controller retains cancellation, lease and passed-checkpoint recovery.
+        let verifier = ContractVerifierV1::new(policy.clone())?;
+        let provider = FakeWorkerProviderV1::new(FakeProvider::new(Vec::new()));
+        let mut controller =
+            AutonomousControllerV1::new(policy, store, provider, verifier, session_id.into());
+        return controller.run_once(now_unix()).await;
+    }
     let key = format!("{}:{session_id}", workspace.to_string_lossy());
     let entry = controller_entry(&key).await;
     let mut entry = entry.lock().await;
