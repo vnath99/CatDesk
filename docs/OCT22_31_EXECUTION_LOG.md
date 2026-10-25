@@ -31,7 +31,17 @@ ignored): 431 Wake, 29 work/grant, 23 operator and one error-redaction test.
 Strict root/Wake Clippy and bounded cleanup passed. An initial type-inference
 error was fixed; a subsequent sandbox fixture-access failure is retained
 alongside the successful run with required temporary-directory access. These
-are source/fixture results; live reconciliation is the next separate gate.
+are source/fixture results.
+
+Published source `52116f04d9ac64feb96b958fcfbfa7fb1e8ce049` matched the remote
+branch. Its separately built controller inspected the existing event once at
+19:01:34–19:03:07 UTC, within the 120-second outer bound. The command returned
+`SCOPED_RECONCILE_RECEIPT_UNPROVEN`; it did not time out or establish a receipt.
+Every captured metadata/log byte, original submission witness, grant and profile
+identity was preserved. Cleanup exited 0 with no remaining test owner. No new
+message, timer, resolution, producer or production action occurred. A remains
+unknown and B unsent; the next diagnosis concerns the preserved composer/message
+evidence, without replay. CI and installed acceptance remain unverified.
 Evidence: [C217](verification/C217_SCOPED_REVIEW_LIVE_2026_10_25.json).
 
 ## October 25 C216 — one snapshot budget and local diagnostics

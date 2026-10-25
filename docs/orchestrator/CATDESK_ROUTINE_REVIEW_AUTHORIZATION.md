@@ -25,6 +25,7 @@ versions do not gain these commands merely because source tests pass.
 <controller> operator web review run --project-id <id> --input-file <review.json>
 <controller> operator web review resume --project-id <id> --input-file <review.json>
 <controller> operator web review revoke --project-id <id> --input-file <revoke.json>
+<controller> operator web review reconcile --project-id <id> --event-id <existing-submitting-id>
 ```
 
 Grant input is `{projectId, authorization}`. `authorization` contains `grantId`,
@@ -69,6 +70,23 @@ permission to retry. Use existing read-only review observation and supported
 reconciliation; retain predecessor history. A confirmed pre-submit failure is
 also held for an explicit decision, not automatically resubmitted. Completed
 response observation and work resolution remain separate from authorization.
+
+The explicit `reconcile` command handles one existing `SUBMITTING` source-review
+event with the host stopped. It checks the current paired target, exact event
+and message, and original consumed grant under the existing registry lock. An
+expired or revoked grant may prove historical dispatch; it never grants another
+send. The existing cooperative adapter reads for an exact persisted receipt,
+without typing, pressing Enter, clicking Send or invoking response retry. Its
+90-second browser/cleanup budget is absolute. A negative or unavailable read
+retains the unknown outcome; `SCOPED_RECONCILE_RECEIPT_UNPROVEN` does not prove
+that the message was never submitted.
+
+Only positive receipt evidence permits the existing timer and `SENT` transition.
+If no timer existed, its start is the newly verified receipt time; the original
+submission-start witness remains unchanged. An I/O failure during these existing
+multi-file writes may retain partial positive evidence, which must be inspected
+without rollback or resend. Reconciliation does not verify a response, resolve
+work, refund a grant or establish production acceptance.
 
 Compatibility: scoped events use the dedicated `source_review` event type,
 which old Wake hosts reject instead of treating it as unrestricted work. New

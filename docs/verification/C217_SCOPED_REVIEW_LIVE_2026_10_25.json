@@ -33,14 +33,13 @@
   },
   "checkpoint": "C217",
   "branch": "codex/web-rollover-oct17",
-  "recordedUtc": "2026-10-25T18:59:12.3547518+00:00",
+  "recordedUtc": "2026-10-25T19:03:37.6708599+00:00",
   "testedSourceCommit": "b21b89d496ceead70a657fb8ff098741b28bddc8",
   "limitations": [
-    "A typing-confirmation failure does not prove that no browser submission occurred.",
-    "Do not resend, refund, run the second request or clear the first journal.",
-    "Source send path is identical in selected v77 and current source; cause remains unproven.",
-    "Existing sent-only readers cannot inspect this SUBMITTING event; bounded explicit reconciliation is the next source task.",
-    "This is development-runtime testing, not production or two-conversation coding acceptance."
+    "The first send outcome remains unknown; no second request or resend is authorized by missing receipt evidence.",
+    "The typing-confirmation cause remains unproven; no preserved draft was cleared or overwritten.",
+    "Live reconciliation preserved uncertainty; positive receipt recovery is source-fixture tested only.",
+    "The production outside-Job launch-owner barrier and separate connector dependency remain; no production acceptance is implied."
   ],
   "authorization": {
     "eligibleFrozenRequests": 2,
@@ -126,5 +125,47 @@
       }
     },
     "boundedOwnerExit": 0
+  },
+  "publication": {
+    "installedPromotion": false,
+    "exactRemoteShaVerified": true,
+    "branch": "codex/web-rollover-oct17",
+    "ci": "UNVERIFIED",
+    "sourceCommit": "52116f04d9ac64feb96b958fcfbfa7fb1e8ce049"
+  },
+  "controllerBuild": {
+    "startedUtc": "2026-10-25T19:00:09.0370815+00:00",
+    "canonicalChanged": false,
+    "maximumSeconds": 240,
+    "artifactSha256": "f1b206d374a2dfd90d1a2eaca636c187893ac9849937b98feb039be12afb7a37",
+    "selectedPackagesChanged": false,
+    "sourceCommit": "52116f04d9ac64feb96b958fcfbfa7fb1e8ce049",
+    "producerAttestation": false,
+    "cargoExitCode": 0,
+    "finishedUtc": "2026-10-25T19:01:05.8899018+00:00",
+    "sourcePinCount": 1376
+  },
+  "liveReconciliation": {
+    "allStateAndLogsPreserved": true,
+    "maximumOuterSeconds": 120,
+    "outerVerificationSha256": "44c2c8f43c0f79f63fb99ec34fa97480ccedda3061c639b7ab5e8cf31e4ef1ef",
+    "messagesSent": 0,
+    "startedUtc": "2026-10-25T19:01:34.3363343+00:00",
+    "outcome": "UNKNOWN_SUBMISSION_PRESERVED",
+    "originalProtectedFiles": 477,
+    "positiveReceiptRecovered": false,
+    "finishedUtc": "2026-10-25T19:03:07.6015322+00:00",
+    "productionActions": 0,
+    "workResolved": false,
+    "commandExitCode": 2,
+    "resultSha256": "457b6ce0c54dffc0cb7d3f41dbaa52b563a1f9c4bea4acf314db0269260e4c34",
+    "grantAndLedgerUnchanged": true,
+    "commandTimedOut": false,
+    "timerCreated": false,
+    "browserBudgetSeconds": 90,
+    "errorCode": "SCOPED_RECONCILE_RECEIPT_UNPROVEN",
+    "testOwnersRemaining": 0,
+    "commandSha256": "6d012b0951d9f3d003d193762e291a5b8fe33a115aac1330cdd29a2c787f98b3",
+    "profileIdentityPreserved": true
   }
 }

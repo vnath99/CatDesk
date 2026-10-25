@@ -15,9 +15,15 @@ recurring automation. See [C217 evidence](../verification/C217_SCOPED_REVIEW_LIV
 The production outside-Job owner barrier remains independent. Prior private
 promotion wrappers now have stale ledger pins and must not be run unchanged.
 The six-file reconciliation source passed 484 tests (one ignored), strict
-root/Wake Clippy and bounded cleanup. Publish reviewed source, build a separate
-immutable controller from that exact commit, then perform one bounded read-only
-reconciliation. Do not resend A or start B before its outcome is established.
+root/Wake Clippy and bounded cleanup. Source
+`52116f04d9ac64feb96b958fcfbfa7fb1e8ce049` was published with exact remote readback
+and built separately. Its one bounded live reconciliation returned
+`SCOPED_RECONCILE_RECEIPT_UNPROVEN`, preserving every captured state/log byte and
+leaving no test owners. Do not rerun that inspection without new evidence, resend
+A, or start B before the outcome is established. Next eligible work is bounded
+read-only diagnosis of the preserved composer/message evidence. No operator
+action is required for that source task; production still needs its supported
+outside-Job owner. Do not rewrite the original unknown-send evidence.
 
 ## October 25 C216 — existing C212 response verified without replay
 

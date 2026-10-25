@@ -14,8 +14,11 @@ reconciliation are separate evidence gates. A negative or unavailable observatio
 retain uncertainty; it cannot authorize a resend. Evidence:
 [C217](verification/C217_SCOPED_REVIEW_LIVE_2026_10_25.json).
 Source qualification: 484 tests passed, one ignored; strict root/Wake Clippy and
-bounded cleanup passed. Live recovery, installed production and two-project
-Web coding remain unproven by these fixtures.
+bounded cleanup passed. One actual reconciliation using the published-source
+controller returned `SCOPED_RECONCILE_RECEIPT_UNPROVEN`; all state/log bytes and
+the original submission witness remained unchanged, with zero test owners.
+Safe unknown-outcome preservation is demonstrated; positive delivery recovery,
+installed production and two-project Web coding remain unproven.
 
 ## October 25 C216 — bounded existing-response verification passed
 

@@ -21,7 +21,12 @@ historical grant, and uses the existing receipt reader. Its 90-second browser
 and cleanup budget cannot be extended by progress. It never types or grants a
 retry; only positive receipt evidence permits the existing timer/SENT transition.
 Source qualification passed 484 tests (one ignored), strict root/Wake Clippy and
-bounded cleanup. Live reconciliation and installed acceptance remain pending.
+bounded cleanup. Published source `52116f04d9ac64feb96b958fcfbfa7fb1e8ce049`
+was built separately and inspected the existing attempt once at 19:01:34–19:03:07
+UTC. It returned `SCOPED_RECONCILE_RECEIPT_UNPROVEN`, preserving every state/log
+byte and leaving zero test owners. This proves safe bounded observation of the
+unknown outcome, not successful delivery recovery. Do not repeat the inspection
+without new evidence or resend the review. Installed acceptance remains open.
 
 ## October 25 C216 — bounded snapshot diagnosis
 

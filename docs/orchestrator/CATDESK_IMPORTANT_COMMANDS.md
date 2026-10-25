@@ -20,7 +20,10 @@ timer using the verified receipt time. It preserves the original submission-star
 witness. Response verification and work resolution remain separate. A positive
 commit I/O failure may retain partial receipt state; inspect it without replay.
 The source passed 484 tests (one ignored) and strict root/Wake Clippy. This is
-not installed or live acceptance; use the reviewed immutable controller only.
+not installed acceptance; use the reviewed immutable controller only. The first
+live C217A reconciliation completed with `SCOPED_RECONCILE_RECEIPT_UNPROVEN` and
+all state/log bytes unchanged. Do not repeat it without new evidence. The
+original unknown send, grant reservation and second unsent request remain intact.
 
 ## October 25 C216 — explicit review reads have one total deadline
 
