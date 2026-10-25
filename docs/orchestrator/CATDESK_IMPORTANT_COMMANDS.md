@@ -1,3 +1,23 @@
+## October 25 C220/C221 — diagnose the actual owner before another attempt
+
+A manually opened PowerShell can still belong to a Windows Job. Line 19 of the
+frozen private wrapper rejects either a failed membership query or any Job;
+reaching it proves the PowerShell 7 requirement already passed. Its rejection
+occurs before CatDesk preflight, controller launch or audit-directory creation.
+The current rejection was confirmed with unchanged protected state.
+
+The private read-only owner diagnostic separates API failure, actual membership
+and wrapper identity. The current-Job inspector must be invoked directly in
+the existing manual shell to describe that process. Neither invokes CatDesk.
+Do not call `release-pair prepare` a read-only ownership probe: it writes
+preflight evidence. Do not keep trying different terminals without evidence.
+
+Actual manual metadata permits silent child departure, while the measured tool
+Job does not. Qualification must inspect an ordinary child's actual membership
+and lifetime; parent flags alone grant no promotion authority. The reviewed
+wrapper and native controller/worker guards remain unchanged. See
+[C220/C221 evidence](../verification/C221_WINDOWS_JOB_OWNER_DIAGNOSIS_2026_10_25.json).
+
 ## October 25 C219 — use the reconciled recovery handoff
 
 Use the reviewed private `promote-c208-after-c218.ps1` wrapper, SHA-256

@@ -1,3 +1,21 @@
+## October 25 C220/C221 — actual Windows ownership diagnosis
+
+The operator's line-19 refusal preceded CatDesk process launch and state writes.
+Readback matched all 486 preserved files, the candidate and its five authority
+files; no promotion transaction or audit directory appeared. PowerShell 7.6.5
+and the frozen wrapper identity were confirmed. The later successful API query
+identified actual Job membership, rather than a version or API failure.
+
+Retained-handle queries matched five real process identities and closed every
+query handle. The manual shell's immediate Job has flags `0x1800`, no
+kill-on-close, silent departure permitted and 382 listed members. The tool
+child's immediate Job has flags `0x2800`, kill-on-close and three members.
+These are different measured contexts; neither ancestry nor an immediate-Job
+snapshot identifies every outer owner. No guard has been relaxed. Next is a
+bounded ordinary-child inheritance test in the same manual shell, without
+special creation flags or Job changes. Evidence:
+[C220/C221](verification/C221_WINDOWS_JOB_OWNER_DIAGNOSIS_2026_10_25.json).
+
 ## October 25 C219 — executable recovery handoff reconciled
 
 The supported connector status call failed before a CatDesk response and

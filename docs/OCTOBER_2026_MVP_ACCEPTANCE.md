@@ -1,3 +1,13 @@
+## October 25 C220/C221 — Windows evidence, no production acceptance
+
+Actual retained-handle process queries and operator-provided current-Job API
+results distinguish the manual shell's permissive immediate Job from the tool
+child's kill-on-close Job. Protected-state preservation passed all 486 pins.
+Full outer ownership and an eligible persistent controller are still unproved;
+the bounded ordinary-child test is pending. No promotion, native authentication,
+trusted predecessor rollback or two-conversation Web coding result follows from
+these diagnostics. See [C220/C221](verification/C221_WINDOWS_JOB_OWNER_DIAGNOSIS_2026_10_25.json).
+
 ## October 25 C219 — recovery readiness is separate from installed acceptance
 
 | Requirement | Evidence and remaining gate |

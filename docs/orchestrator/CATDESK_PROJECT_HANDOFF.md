@@ -1,3 +1,20 @@
+## October 25 C221 — qualify the measured operator context
+
+The operator is present and ran both read-only checks. PowerShell/version and
+wrapper identity passed; the manual process is actually Job-contained.
+Its immediate Job reports `0x1800`, silent departure permitted, no kill-on-close
+and 382 members. The measured tool child reports `0x2800`, kill-on-close and
+three members. All 486 protected pins and C208 authority remain unchanged;
+promotion has not run. Do not repeat the old unqualified terminal advice.
+
+The next executable test is one bounded ordinary `Process.Start` child from
+the same manual shell. Require actual membership queries, identity, natural
+exit and closed output; no special breakaway flags or Job mutation. A positive
+child result could support an unchanged-wrapper launch path. A contained or
+uncertain child remains ineligible. Do not replace the native ownership gate
+with a check of immediate flags alone. Evidence:
+[C220/C221](../verification/C221_WINDOWS_JOB_OWNER_DIAGNOSIS_2026_10_25.json).
+
 ## October 25 C219 — next action requires the supported production owner
 
 The reviewed private `promote-c208-after-c218.ps1` handoff is ready, with 486
