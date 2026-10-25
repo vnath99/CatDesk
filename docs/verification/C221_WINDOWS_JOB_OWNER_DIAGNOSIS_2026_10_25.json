@@ -58,10 +58,34 @@
     "The measured silent-departure policy warrants a bounded ordinary-child inheritance test, not a guard waiver.",
     "No parent override, explicit breakaway flag, Job mutation, new release candidate or production action has been used."
   ],
-  "actualChildQualification": "PENDING",
+  "actualChildQualification": "TOOL_CONTAINED_CONTROL_PASSED_OPERATOR_RESULT_PENDING",
   "nativeOrWrapperGuardChanged": false,
   "productionActions": 0,
   "browserWakeRecurringStarts": 0,
   "installedAcceptance": false,
-  "sourceTestsRepeated": false
+  "sourceTestsRepeated": false,
+  "toolChildControl": {
+    "membershipSamples": 2,
+    "jobChanges": 0,
+    "stderrClosed": true,
+    "stdoutClosed": true,
+    "scope": "ACTUAL_WINDOWS_ORDINARY_DOTNET_CHILD_NOT_PRODUCTION",
+    "childUncontainedAtBothSamples": false,
+    "exactChildIdentityVerified": true,
+    "naturalExit": true,
+    "catdeskCommands": 0,
+    "elapsedMilliseconds": 1788,
+    "evidenceSha256": "432c77f6dd2c86605fc06bc72026ff1f74143fefabcc5f93ef62c9409829062a",
+    "inJobAtBothSamples": true
+  },
+  "postPromotionLimitsFromSource": {
+    "slotAOperationalVerifiedIsTrustedRollback": false,
+    "publicStartRecoverCanStartWakeAndGui": true,
+    "scope": "EXACT_C208_SOURCE_REVIEW_NOT_INSTALLED_TEST",
+    "sourceCommit": "409513a1c1f81f74f873bd4b3dca825458ef29a8",
+    "ordinaryNativeBearerAuthIncludesC209Change": false,
+    "headlessBearerTestsProveOrdinaryNativeAuth": false,
+    "publicStartRecoverIsBackendOnly": false,
+    "trustedPreviousVersionExists": false
+  }
 }

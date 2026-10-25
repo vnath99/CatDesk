@@ -8,6 +8,17 @@ the bounded ordinary-child test is pending. No promotion, native authentication,
 trusted predecessor rollback or two-conversation Web coding result follows from
 these diagnostics. See [C220/C221](verification/C221_WINDOWS_JOB_OWNER_DIAGNOSIS_2026_10_25.json).
 
+The real tool-side child control passed in 1.788 seconds: contained at both
+samples, exact process identity, natural exit and closed output. It grants no
+promotion eligibility. The corresponding manual-shell result is pending.
+
+Exact C208 source review also identifies limits for subsequent installed tests:
+headless bearer checks do not prove ordinary native MCP authentication, which
+lacks the newer C209 change; reconstruction creates the first trusted current
+release, with no trusted predecessor for version rollback; and public
+`start`/`recover` can start WakeHost and the GUI. Do not stop a restored working
+daemon until an eligible restart path exists or relabel these gaps as passing.
+
 ## October 25 C219 — recovery readiness is separate from installed acceptance
 
 | Requirement | Evidence and remaining gate |

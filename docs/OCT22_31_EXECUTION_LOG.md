@@ -16,6 +16,11 @@ bounded ordinary-child inheritance test in the same manual shell, without
 special creation flags or Job changes. Evidence:
 [C220/C221](verification/C221_WINDOWS_JOB_OWNER_DIAGNOSIS_2026_10_25.json).
 
+The actual tool-side inheritance control completed in 1.788 seconds. Both child
+membership samples remained contained, exact identity and natural exit were
+verified, and both output streams closed. No Job changed or CatDesk command ran.
+The same bounded probe's operator-side result remains required.
+
 ## October 25 C219 — executable recovery handoff reconciled
 
 The supported connector status call failed before a CatDesk response and
