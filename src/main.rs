@@ -1609,6 +1609,7 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
         let mut app = state.lock().await;
         app.mode = options.mode;
         app.tool_mode = options.tool_mode;
+        app.mcp_auth_token = Some(options.auth_token.clone());
         if let Some(path) = options.mcp_path.as_deref() {
             app.mcp_slug = slug_from_mcp_path(path).map_err(std::io::Error::other)?;
         }
@@ -3650,6 +3651,117 @@ fn render_toast(f: &mut Frame, palette: theme::Palette, msg: &str, pos: (u16, u1
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn native_mcp_auth_validates_explicit_values_without_downgrading() {
+        assert_eq!(
+            super::native_mcp_auth_value(Err(std::env::VarError::NotPresent)).unwrap(),
+            None
+        );
+        for value in [
+            String::new(),
+            "short".into(),
+            format!("{}\n", "x".repeat(24)),
+            format!("{}\0", "x".repeat(24)),
+            "é".repeat(12),
+        ] {
+            assert_eq!(
+                super::native_mcp_auth_value(Ok(value)).unwrap_err(),
+                "NATIVE_MCP_AUTH_TOKEN_INVALID"
+            );
+        }
+        assert!(
+            super::native_mcp_auth_value(Err(std::env::VarError::NotUnicode("fixture".into())))
+                .is_err()
+        );
+        assert_eq!(
+            super::native_mcp_auth_value(Ok("x".repeat(24))).unwrap(),
+            Some("x".repeat(24))
+        );
+        assert!(super::native_mcp_auth_value(Ok("x".repeat(4097))).is_ok());
+    }
+
+    #[tokio::test]
+    async fn native_mcp_auth_is_process_only_and_invalid_reconfiguration_preserves_it() {
+        let root =
+            std::env::temp_dir().join(format!("native-auth-private-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let config = root.join("config.toml");
+        let state = std::sync::Arc::new(tokio::sync::Mutex::new(
+            crate::state::AppState::new_for_test(
+                3217,
+                root.to_string_lossy().into(),
+                config.clone(),
+            )
+            .unwrap(),
+        ));
+        let token = "native-fixture-private-auth-000000";
+        super::configure_native_mcp_auth(&state, Ok(token.into()))
+            .await
+            .unwrap();
+        assert!(
+            super::configure_native_mcp_auth(&state, Ok(String::new()))
+                .await
+                .is_err()
+        );
+        let app = state.lock().await;
+        assert_eq!(app.mcp_auth_token.as_deref(), Some(token));
+        app.persist_state().unwrap();
+        assert!(!std::fs::read_to_string(&config).unwrap().contains(token));
+        let status = app.transport_status_payload();
+        assert!(!status.to_string().contains(token));
+        assert_eq!(status["localMcpAuth"], "BEARER_REQUIRED");
+        drop(app);
+        super::configure_native_mcp_auth(&state, Err(std::env::VarError::NotPresent))
+            .await
+            .unwrap();
+        assert!(state.lock().await.mcp_auth_token.is_none());
+        assert_eq!(
+            state.lock().await.transport_status_payload()["localMcpAuth"],
+            "LEGACY_NO_BEARER"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn native_mcp_auth_readiness_uses_the_configured_listener_token() {
+        let root =
+            std::env::temp_dir().join(format!("native-auth-readiness-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let mut app = crate::state::AppState::new_isolated_fixture(
+            0,
+            root.to_string_lossy().into(),
+            root.join("inert.toml"),
+        )
+        .unwrap();
+        app.mode = crate::state::Mode::Computer;
+        app.tool_mode = crate::state::ToolMode::SupervisorOnly;
+        app.mcp_slug = "native-auth".into();
+        app.tunnel_config.mode = crate::tunnel::TunnelMode::ExternalTunnel;
+        app.tunnel_config.remote_self_check = false;
+        let state = std::sync::Arc::new(tokio::sync::Mutex::new(app));
+        super::configure_native_mcp_auth(&state, Ok("native-readiness-token-000000".into()))
+            .await
+            .unwrap();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let router =
+            super::native_mcp_router(state.clone(), None, "/native-auth/mcp".into(), tx).await;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        state.lock().await.port = listener.local_addr().unwrap().port();
+        let (stop, stopped) = tokio::sync::oneshot::channel();
+        let task = tokio::spawn(async move {
+            axum::serve(listener, router)
+                .with_graceful_shutdown(async {
+                    let _ = stopped.await;
+                })
+                .await
+                .unwrap();
+        });
+        super::refresh_transport_health(state.clone()).await;
+        assert_eq!(state.lock().await.transport_health.local_mcp, "READY");
+        stop.send(()).unwrap();
+        task.await.unwrap();
+        std::fs::remove_dir_all(root).unwrap();
+    }
     #[cfg(windows)]
     use super::fail_owned_candidate_after_health_check;
     #[cfg(windows)]
@@ -5792,10 +5904,47 @@ async fn ensure_selected_browser_remote_debugging(
 
 // ── Start services ──────────────────────────────────────────
 
+fn native_mcp_auth_value(
+    value: Result<String, std::env::VarError>,
+) -> Result<Option<String>, &'static str> {
+    match value {
+        Ok(token) if server::valid_mcp_auth_token(&token) => Ok(Some(token)),
+        Err(std::env::VarError::NotPresent) => Ok(None),
+        _ => Err("NATIVE_MCP_AUTH_TOKEN_INVALID"),
+    }
+}
+
+pub(crate) async fn configure_native_mcp_auth(
+    state: &SharedState,
+    value: Result<String, std::env::VarError>,
+) -> Result<(), &'static str> {
+    let token = native_mcp_auth_value(value)?;
+    state.lock().await.mcp_auth_token = token;
+    Ok(())
+}
+
+pub(crate) async fn native_mcp_router(
+    state: SharedState,
+    devtools: Option<Arc<Mutex<DevtoolsBridge>>>,
+    path: String,
+    events: UnboundedSender<ServerUiEvent>,
+) -> axum::Router {
+    let token = state.lock().await.mcp_auth_token.clone();
+    server::router(state, devtools, path, events, token)
+}
+
 async fn start_services(
     state: SharedState,
     ui_events: UnboundedSender<ServerUiEvent>,
 ) -> Option<Arc<Mutex<DevtoolsBridge>>> {
+    // Resolve once before starting browser/server/transport work. An explicitly
+    // invalid credential cannot silently become the legacy unauthenticated mode.
+    if let Err(reason) =
+        configure_native_mcp_auth(&state, std::env::var("CATDESK_MCP_AUTH_TOKEN")).await
+    {
+        state.lock().await.log("ERROR", reason.into());
+        return None;
+    }
     let (mode, mut detected_browsers, mut selected_browser) = {
         let app = state.lock().await;
         (
@@ -5934,13 +6083,13 @@ async fn start_services(
         let app = state.lock().await;
         (app.mcp_path(), app.mcp_bind_host.clone(), app.port)
     };
-    let router = server::router(
+    let router = native_mcp_router(
         state.clone(),
         devtools_bridge.clone(),
         mcp_path.clone(),
         ui_events,
-        None,
-    );
+    )
+    .await;
     let bind_identity = format!("{bind_host}:{bind_port}");
     let listener = match tokio::net::TcpListener::bind(&bind_identity).await {
         Ok(l) => l,
@@ -6066,6 +6215,7 @@ async fn refresh_transport_health(state: SharedState) {
         remote_mcp_url,
         tunnel_mode,
         current_health,
+        mcp_auth_token,
     ) = {
         let app = state.lock().await;
         (
@@ -6076,6 +6226,7 @@ async fn refresh_transport_health(state: SharedState) {
             app.public_mcp_url(),
             app.tunnel_config.mode,
             app.transport_health.clone(),
+            app.mcp_auth_token.clone(),
         )
     };
     let local_endpoint = format!("{}{}", loopback_http_origin(&bind_host, port), mcp_path);
@@ -6085,7 +6236,7 @@ async fn refresh_transport_health(state: SharedState) {
 
     match crate::tunnel::run_mcp_endpoint_self_check(
         &local_endpoint,
-        None,
+        mcp_auth_token.as_deref(),
         crate::tunnel::MCP_SELF_CHECK_TIMEOUT,
         false,
     )

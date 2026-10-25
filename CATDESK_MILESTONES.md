@@ -1,3 +1,25 @@
+## October 25 C209 — native authentication and bounded compiler-helper cleanup
+
+The current source adds an optional process-only native MCP bearer, authenticated
+local readiness probes and redacted authentication status. An invalid configured
+token refuses service startup; an absent token preserves legacy ordinary MCP behavior
+but cannot enable central project-task dispatch. The reviewed producer now
+handles an exact retained MSVC helper inside its own Job after successful Cargo
+exit, without relaxing final process, stream or attestation checks. Independent
+static review passed; source qualification passed.
+
+These changes are not in C208's attested `409513a` candidate. Production remains
+unpromoted, and newer source still needs its own genuine review and release.
+Normal, PTY and Node REPL shells are Job-contained; the already authorized owner
+launch needs an execution context outside that Job. A fresh MCP probe failed
+before reaching the backend, so it provides no new HTTP 429 evidence. Upstream
+client help supports static MCP/discovery headers; the current runtime connection
+has not been qualified. Installed health, rollback and two-project Web coding
+remain open.
+
+Validation: 144 source tests passed (8 manual tests ignored), with strict Clippy and bounded Job cleanup passing. Counts: native auth 5, project dispatch 6, bearer 1, headless 16, reviewed build 116. These are source/fixture results, not installed acceptance. Evidence: `docs/verification/C209_NATIVE_AUTH_AND_COMPILER_HELPER_2026_10_25.json`.
+
+
 ## October 25 C208 — genuine build attested; production promotion pending
 
 The supported producer reached `BUILD_ATTESTED`; the authoritative result and

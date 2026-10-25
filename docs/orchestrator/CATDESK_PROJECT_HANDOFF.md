@@ -1,3 +1,26 @@
+## October 25 C209 — finish source qualification without conflating releases
+
+Current source adds optional process-only native MCP authentication and exact-Job
+compiler-helper cleanup. Independent static review passed; source test results
+are pending. A configured native token must contain at least 24 visible ASCII
+characters; invalid values refuse service startup rather than falling back.
+Local readiness uses the token, remote checks do not, and status exposes only
+the authentication mode. The helper path retains final quiescence/attestation
+gates and never authorizes arbitrary process cleanup.
+
+Preserve C208's attested `409513a` candidate as a distinct release: it does not
+contain this source or C207 disposition-aware admission. Production is still
+unpromoted. The existing owner launch is authorized but requires a context outside
+the Windows Job; normal, PTY and Node REPL shells are contained. Do not request
+duplicate approval or bypass ownership. Current client help confirms upstream
+static MCP/discovery headers, not a verified runtime connection. The latest MCP
+probe failed before backend contact and says nothing new about historical 429.
+After eligible promotion, prove installed identity, local/remote authentication,
+rollback and meaningful independent Web tasks without replaying completed work.
+
+Validation: 144 source tests passed (8 manual tests ignored), with strict Clippy and bounded Job cleanup passing. Counts: native auth 5, project dispatch 6, bearer 1, headless 16, reviewed build 116. These are source/fixture results, not installed acceptance. Evidence: `docs/verification/C209_NATIVE_AUTH_AND_COMPILER_HELPER_2026_10_25.json`.
+
+
 ## October 25 C208 — promote the attested candidate through the existing owner
 
 The genuine producer result is `BUILD_ATTESTED`. Candidate SHA-256 is
@@ -6,6 +29,12 @@ its source is C196's `409513a` snapshot, distinct from the `83a2d98` controller.
 Two 12-second candidate runs passed authentication and natural cleanup. The
 orphaned MSVC helper and stale-PID monitor were reconciled separately without
 fabricating authority or stopping unrelated processes.
+
+Preserve C207's completed disposition, but do not expect this `409513a` candidate
+to honor it: its admission code still refuses the original CatDesk quarantine.
+Other projects can proceed independently if their own admission and authenticated
+routes are ready. The newer disposition-aware source needs its own genuine
+review and deployment; candidate promotion alone does not install that behavior.
 
 The guarded promotion script is checked but not run. Normal and PTY tool
 sessions are both contained; UI terminal automation is not permitted. The one

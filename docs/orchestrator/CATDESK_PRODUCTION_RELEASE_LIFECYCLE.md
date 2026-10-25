@@ -7,6 +7,36 @@ ownership, independent review and producer gates remain in force. No recurring
 automation, external tunnel replacement or browser-profile change follows from
 this authorization.
 
+## October 25 C209 — new source requires its own qualification and release
+
+Independent static review passed for optional process-only native MCP bearer
+authentication and exact-Job MSVC helper cleanup. Source qualification passed.
+Configured native tokens require at least 24 visible ASCII characters; invalid
+values refuse service startup, absent values retain legacy ordinary MCP and
+leave central project-task dispatch closed. Local probes use the bearer while
+remote probes do not; redacted status exposes only the mode. Persistent config,
+external-runtime ownership and legacy headless parsing remain unchanged.
+
+Helper cleanup validates the pinned image and every retained Job member after
+successful Cargo exit, handles a proved natural-exit race, then retains the
+existing zero-process, completed-stream and attestation gates. It is not general
+orphan cleanup or new release authority. Neither source change is contained in
+the C208 `409513a` candidate, and that candidate also lacks C207's disposition
+admission. Do not claim those behaviors installed without genuine new review
+and release.
+
+Production remains unpromoted. Normal, PTY and Node REPL shells are all inside a
+Windows Job; the existing approved lifecycle owner requires an outside-Job launch.
+This is an execution limitation, not a request for renewed approval. A current
+MCP probe failed before backend contact, providing no new HTTP 429 evidence.
+Installed client help confirms static MCP/discovery-header support; current
+runtime ingress remains unverified. Qualify installed authentication, startup,
+rollback and independent Web tasks after eligible promotion without changing
+external ownership or recurring-automation state.
+
+Validation: 144 source tests passed (8 manual tests ignored), with strict Clippy and bounded Job cleanup passing. Counts: native auth 5, project dispatch 6, bearer 1, headless 16, reviewed build 116. These are source/fixture results, not installed acceptance. Evidence: `docs/verification/C209_NATIVE_AUTH_AND_COMPILER_HELPER_2026_10_25.json`.
+
+
 ## October 25 C208 — genuine candidate ready for guarded owner launch
 
 Supported `reviewed-build result` reports `BUILD_ATTESTED`, with candidate
@@ -16,6 +46,13 @@ and attestation digest
 Two 12-second candidate runs passed 401/401/200 authentication checks and
 natural cleanup. This is qualification of the reviewed `409513a` snapshot,
 not installation of controller source `83a2d98` or protected production acceptance.
+
+C207's live disposition and original context remain durably preserved. This
+exact `409513a` candidate does not read those disposition receipts: it still
+refuses the original CatDesk quarantine with `WEB_WORK_ROLLOVER_PENDING`.
+Other projects remain independently eligible when their own admission and
+authenticated routing checks pass. Deploying the newer admission behavior
+requires a genuine review and release of that source; C196 does not cover it.
 
 Promotion remains unexecuted. The checked supported release-owner command
 requires one operator launch from normal PowerShell 7 outside a Windows Job;

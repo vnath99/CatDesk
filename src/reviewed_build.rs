@@ -5507,6 +5507,7 @@ pub fn run_reviewed_build_worker(
             &cargo_home,
             &rustc_pin.evidence.absolute_path,
         )?;
+        let native_helper = pin_msvc_helper_for_configured_cargo(&command)?;
         // The job is allocated before process creation.  Windows starts Cargo
         // suspended, attaches its process to the job, then resumes it through
         // the process handle.  Cargo cannot execute a build script before the
@@ -5532,7 +5533,27 @@ pub fn run_reviewed_build_worker(
         // primitive fail closed before a build can become authority.
         job.assign(&child)?;
         job.resume(&child)?;
-        let status = wait_for_owned_build_exit(&mut child, &job, &stderr_reader, BUILD_TIMEOUT)?;
+        let mut helper_cleanup = Vec::new();
+        let waited = wait_for_owned_build_exit_with_helper(
+            &mut child,
+            &job,
+            &stderr_reader,
+            BUILD_TIMEOUT,
+            native_helper.as_ref(),
+            &mut helper_cleanup,
+        );
+        if !helper_cleanup.is_empty() {
+            // Audit only: this file grants no build, candidate or release authority.
+            let bytes = serde_json::to_vec(&helper_cleanup)
+                .map_err(|_| "REVIEWED_BUILD_PROCESS_UNAVAILABLE")?;
+            write_new_regular_in(
+                &target_guard,
+                "native-helper-cleanup.json",
+                &bytes,
+                "reviewed build native helper cleanup",
+            )?;
+        }
+        let status = waited?;
         // The deadline covers root exit, whole-Job quiescence and pipe EOF.
         // Joining is safe only after is_finished; neither root exit nor EOF
         // alone admits release bytes while compiler descendants can run.
@@ -6666,23 +6687,136 @@ fn require_trusted_final_link_handoff() -> Result<(), String> {
 #[cfg(windows)]
 struct BuildJob(*mut c_void);
 
+#[cfg(windows)]
+struct PinnedMsvcHelper {
+    directory: ProtectedDirectoryGuard,
+    image: fs::File,
+    path: PathBuf,
+    identity: String,
+    sha256: String,
+}
+
+#[cfg(not(windows))]
+type PinnedMsvcHelper = ();
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeHelperCleanup {
+    process_id: u32,
+    creation_time: u64,
+    image_sha256: String,
+    role: &'static str,
+    termination_requested_at_unix: u64,
+    exit_confirmed: bool,
+}
+
+#[cfg(windows)]
+fn pin_msvc_helper_directory(directory: &Path) -> Result<Option<PinnedMsvcHelper>, String> {
+    let path = directory.join("VCTIP.EXE");
+    if !path
+        .try_exists()
+        .map_err(|_| "REVIEWED_BUILD_TOOLCHAIN_UNAVAILABLE")?
+    {
+        return Ok(None);
+    }
+    let directory = ProtectedDirectoryGuard::acquire(directory, "reviewed MSVC helper directory")?;
+    let mut image = open_relative_regular_file(&directory, "VCTIP.EXE", "reviewed MSVC helper")?;
+    let evidence = evidence_from_open_regular(&mut image, "reviewed MSVC helper")?;
+    Ok(Some(PinnedMsvcHelper {
+        directory,
+        image,
+        path,
+        identity: evidence.identity,
+        sha256: evidence.sha256,
+    }))
+}
+
+#[cfg(windows)]
+fn pin_msvc_helper_for_configured_cargo(
+    command: &Command,
+) -> Result<Option<PinnedMsvcHelper>, String> {
+    // CC was just supplied by the fixed-root toolchain resolver, not inherited
+    // from the environment. Keep its exact sibling image pinned before launch.
+    let compiler = command
+        .get_envs()
+        .find_map(|(name, value)| (name == "CC").then_some(value).flatten().map(PathBuf::from))
+        .ok_or("REVIEWED_BUILD_TOOLCHAIN_UNAVAILABLE")?;
+    let directory = compiler
+        .parent()
+        .ok_or("REVIEWED_BUILD_TOOLCHAIN_UNAVAILABLE")?;
+    require_reviewed_toolchain_file(&compiler)?;
+    pin_msvc_helper_directory(directory)
+}
+
+#[cfg(not(windows))]
+fn pin_msvc_helper_for_configured_cargo(
+    _command: &Command,
+) -> Result<Option<PinnedMsvcHelper>, String> {
+    Ok(None)
+}
+
+#[cfg(windows)]
+fn request_known_helper_stop(process: *mut c_void) -> Result<bool, String> {
+    unsafe extern "system" {
+        fn TerminateProcess(process: *mut c_void, code: u32) -> i32;
+        fn WaitForSingleObject(handle: *mut c_void, milliseconds: u32) -> u32;
+    }
+    if unsafe { TerminateProcess(process, 0) } != 0 {
+        return Ok(true);
+    }
+    // The already-validated, retained process may have exited naturally after
+    // its preceding liveness check. Only its signaled handle proves that race.
+    if unsafe { WaitForSingleObject(process, 0) } == 0 {
+        Ok(false)
+    } else {
+        Err("REVIEWED_BUILD_HELPER_STOP_FAILED".into())
+    }
+}
+
+#[cfg(all(test, windows))]
 fn wait_for_owned_build_exit(
     child: &mut std::process::Child,
     job: &BuildJob,
     stderr: &std::thread::JoinHandle<std::io::Result<BoundedCargoStderr>>,
     budget: Duration,
 ) -> Result<std::process::ExitStatus, String> {
+    wait_for_owned_build_exit_with_helper(child, job, stderr, budget, None, &mut Vec::new())
+}
+
+fn wait_for_owned_build_exit_with_helper(
+    child: &mut std::process::Child,
+    job: &BuildJob,
+    stderr: &std::thread::JoinHandle<std::io::Result<BoundedCargoStderr>>,
+    budget: Duration,
+    helper: Option<&PinnedMsvcHelper>,
+    cleanup_evidence: &mut Vec<NativeHelperCleanup>,
+) -> Result<std::process::ExitStatus, String> {
     let started = std::time::Instant::now();
     let mut status = None;
+    let mut exited_at = None;
+    let mut helper_checked = false;
     loop {
         if status.is_none() {
             status = child.try_wait().map_err(|_| "REVIEWED_BUILD_FAILED")?;
+            if status.is_some() {
+                exited_at = Some(std::time::Instant::now());
+            }
         }
         if let Some(exited) = status
             && job.active_processes()? == 0
             && stderr.is_finished()
         {
             return Ok(exited);
+        }
+        if status.is_some_and(|value| value.success())
+            && !helper_checked
+            && exited_at.is_some_and(|at| at.elapsed() >= Duration::from_secs(1))
+            && let Some(helper) = helper
+        {
+            helper_checked = true;
+            // All survivors must be the one pinned auxiliary image. Unknown
+            // or mixed membership leaves the ordinary timeout path intact.
+            job.stop_only_pinned_helper(helper, cleanup_evidence)?;
         }
         if started.elapsed() >= budget {
             job.terminate()?;
@@ -6827,6 +6961,158 @@ impl BuildJob {
         }
         Ok(accounting.active_processes)
     }
+    fn stop_only_pinned_helper(
+        &self,
+        helper: &PinnedMsvcHelper,
+        evidence: &mut Vec<NativeHelperCleanup>,
+    ) -> Result<(), String> {
+        use std::os::windows::io::OwnedHandle;
+        #[repr(C)]
+        struct ProcessIds {
+            assigned: u32,
+            listed: u32,
+            ids: [usize; 128],
+        }
+        #[repr(C)]
+        #[derive(Default)]
+        struct FileTime {
+            low: u32,
+            high: u32,
+        }
+        unsafe extern "system" {
+            fn QueryInformationJobObject(
+                job: *mut c_void,
+                class: i32,
+                information: *mut c_void,
+                length: u32,
+                returned: *mut u32,
+            ) -> i32;
+            fn OpenProcess(access: u32, inherit: i32, process_id: u32) -> *mut c_void;
+            fn IsProcessInJob(process: *mut c_void, job: *mut c_void, result: *mut i32) -> i32;
+            fn QueryFullProcessImageNameW(
+                process: *mut c_void,
+                flags: u32,
+                name: *mut u16,
+                size: *mut u32,
+            ) -> i32;
+            fn GetProcessTimes(
+                process: *mut c_void,
+                created: *mut FileTime,
+                exited: *mut FileTime,
+                kernel: *mut FileTime,
+                user: *mut FileTime,
+            ) -> i32;
+            fn WaitForSingleObject(handle: *mut c_void, milliseconds: u32) -> u32;
+        }
+        helper
+            .directory
+            .assert_stable("reviewed MSVC helper directory")?;
+        if opened_regular_identity(&helper.image, "reviewed MSVC helper")? != helper.identity {
+            return Err("REVIEWED_BUILD_HELPER_IDENTITY_CHANGED".into());
+        }
+        let mut members: ProcessIds = unsafe { std::mem::zeroed() };
+        if unsafe {
+            QueryInformationJobObject(
+                self.0,
+                3,
+                (&mut members as *mut ProcessIds).cast(),
+                std::mem::size_of::<ProcessIds>() as u32,
+                std::ptr::null_mut(),
+            )
+        } == 0
+            || members.listed > 128
+            || members.assigned != members.listed
+        {
+            return Ok(()); // Incomplete membership never authorizes termination.
+        }
+        let expected = crate::command::normalize_windows_verbatim_path(helper.path.clone());
+        let mut verified = Vec::new();
+        for &pid in &members.ids[..members.listed as usize] {
+            let Ok(pid) = u32::try_from(pid) else {
+                return Ok(());
+            };
+            // Retaining a kernel handle binds identity across PID reuse.
+            let raw = unsafe { OpenProcess(0x0010_0000 | 0x1000 | 1, 0, pid) };
+            if raw.is_null() {
+                return Ok(());
+            }
+            let handle = unsafe { OwnedHandle::from_raw_handle(raw) };
+            if unsafe { WaitForSingleObject(raw, 0) } == 0 {
+                continue;
+            }
+            let mut member = 0;
+            let mut name = [0u16; 1024];
+            let mut size = name.len() as u32;
+            if unsafe { IsProcessInJob(raw, self.0, &mut member) } == 0
+                || member == 0
+                || unsafe { QueryFullProcessImageNameW(raw, 0, name.as_mut_ptr(), &mut size) } == 0
+            {
+                return Ok(());
+            }
+            let actual = crate::command::normalize_windows_verbatim_path(PathBuf::from(
+                OsString::from_wide(&name[..size as usize]),
+            ));
+            if !actual
+                .to_string_lossy()
+                .eq_ignore_ascii_case(&expected.to_string_lossy())
+            {
+                return Ok(()); // Mixed or unknown writers: stop none of them.
+            }
+            let mut created = FileTime::default();
+            let mut exited = FileTime::default();
+            let mut kernel = FileTime::default();
+            let mut user = FileTime::default();
+            if unsafe { GetProcessTimes(raw, &mut created, &mut exited, &mut kernel, &mut user) }
+                == 0
+            {
+                return Ok(());
+            }
+            verified.push((
+                handle,
+                pid,
+                (u64::from(created.high) << 32) | u64::from(created.low),
+            ));
+        }
+        // Validate the complete snapshot before mutating any member. New or
+        // unknown members still prevent the normal zero-Job/EOF completion gate.
+        let cleanup_started = std::time::Instant::now();
+        for (handle, pid, created) in verified {
+            let raw = handle.as_raw_handle().cast();
+            let mut member = 0;
+            if unsafe { IsProcessInJob(raw, self.0, &mut member) } == 0 || member == 0 {
+                return Err("REVIEWED_BUILD_HELPER_MEMBERSHIP_CHANGED".into());
+            }
+            if unsafe { WaitForSingleObject(raw, 0) } == 0 {
+                continue;
+            }
+            if !request_known_helper_stop(raw)? {
+                continue;
+            }
+            evidence.push(NativeHelperCleanup {
+                process_id: pid,
+                creation_time: created,
+                image_sha256: helper.sha256.clone(),
+                role: "MSVC_VCTIP",
+                termination_requested_at_unix: SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+                exit_confirmed: false,
+            });
+            let remaining = Duration::from_secs(5).saturating_sub(cleanup_started.elapsed());
+            if unsafe {
+                WaitForSingleObject(raw, remaining.as_millis().min(u128::from(u32::MAX)) as u32)
+            } != 0
+            {
+                return Err("REVIEWED_BUILD_HELPER_EXIT_UNPROVEN".into());
+            }
+            evidence
+                .last_mut()
+                .expect("recorded helper stop")
+                .exit_confirmed = true;
+        }
+        Ok(())
+    }
     fn resume(&self, child: &std::process::Child) -> Result<(), String> {
         unsafe extern "system" {
             fn NtResumeProcess(process: *mut c_void) -> i32;
@@ -6896,6 +7182,13 @@ impl BuildJob {
         Err("REVIEWED_BUILD_PROCESS_UNAVAILABLE".into())
     }
     fn terminate(&self) -> Result<(), String> {
+        Ok(())
+    }
+    fn stop_only_pinned_helper(
+        &self,
+        _helper: &PinnedMsvcHelper,
+        _evidence: &mut Vec<NativeHelperCleanup>,
+    ) -> Result<(), String> {
         Ok(())
     }
     fn active_processes(&self) -> Result<u32, String> {
@@ -9544,6 +9837,218 @@ mod tests {
         if std::env::var("CATDESK_BUILD_DESCENDANT_FIXTURE").as_deref() == Ok("1") {
             std::thread::sleep(Duration::from_secs(30));
         }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn producer_failure_exit_fixture() {
+        if std::env::var("CATDESK_BUILD_FAILURE_FIXTURE").as_deref() == Ok("1") {
+            std::process::exit(17);
+        }
+    }
+
+    #[cfg(windows)]
+    fn pinned_helper_fixture() -> (PathBuf, PinnedMsvcHelper) {
+        let root = std::env::temp_dir().join(format!("catdesk-msvc-helper-{}", Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        fs::copy(std::env::current_exe().unwrap(), root.join("VCTIP.EXE")).unwrap();
+        let helper = pin_msvc_helper_directory(&root).unwrap().unwrap();
+        (root, helper)
+    }
+
+    #[cfg(windows)]
+    fn start_waiting_helper_fixture(path: &Path, job: &BuildJob) -> std::process::Child {
+        let child = Command::new(path)
+            .args([
+                "--exact",
+                "reviewed_build::tests::producer_descendant_wait_fixture",
+            ])
+            .env("CATDESK_BUILD_DESCENDANT_FIXTURE", "1")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .creation_flags(CREATE_SUSPENDED)
+            .spawn()
+            .unwrap();
+        job.assign(&child).unwrap();
+        job.resume(&child).unwrap();
+        child
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_helper_cleanup_after_success_keeps_zero_job_and_eof_required() {
+        let (root, helper) = pinned_helper_fixture();
+        let job = BuildJob::new().unwrap();
+        let mut auxiliary = start_waiting_helper_fixture(&helper.path, &job);
+        let mut cargo = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "reviewed_build::tests::producer_root_exit_fixture",
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .creation_flags(CREATE_SUSPENDED)
+            .spawn()
+            .unwrap();
+        job.assign(&cargo).unwrap();
+        let stderr = cargo.stderr.take().unwrap();
+        let reader = std::thread::spawn(move || read_bounded_cargo_stderr(stderr));
+        job.resume(&cargo).unwrap();
+        let mut evidence = Vec::new();
+        let exit = wait_for_owned_build_exit_with_helper(
+            &mut cargo,
+            &job,
+            &reader,
+            Duration::from_secs(5),
+            Some(&helper),
+            &mut evidence,
+        )
+        .unwrap();
+        assert!(exit.success());
+        assert_eq!(job.active_processes().unwrap(), 0);
+        assert!(reader.is_finished());
+        reader.join().unwrap().unwrap();
+        auxiliary.wait().unwrap();
+        assert_eq!(evidence.len(), 1);
+        assert_eq!(evidence[0].process_id, auxiliary.id());
+        assert!(evidence[0].exit_confirmed);
+        assert_eq!(evidence[0].image_sha256, helper.sha256);
+        drop(helper);
+        drop(job);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_helper_cleanup_refuses_mixed_wrong_path_and_outside_job_processes() {
+        let (root, helper) = pinned_helper_fixture();
+        let (other_root, other_helper) = pinned_helper_fixture();
+        let job = BuildJob::new().unwrap();
+        let outside_job = BuildJob::new().unwrap();
+        let mut known = start_waiting_helper_fixture(&helper.path, &job);
+        let mut wrong_path = start_waiting_helper_fixture(&other_helper.path, &job);
+        let mut outside = start_waiting_helper_fixture(&helper.path, &outside_job);
+        let mut evidence = Vec::new();
+        job.stop_only_pinned_helper(&helper, &mut evidence).unwrap();
+        assert!(evidence.is_empty());
+        assert!(known.try_wait().unwrap().is_none());
+        assert!(wrong_path.try_wait().unwrap().is_none());
+        assert!(outside.try_wait().unwrap().is_none());
+        // Once the unknown writer exits, only the in-Job helper may be stopped.
+        wrong_path.kill().unwrap();
+        wrong_path.wait().unwrap();
+        job.stop_only_pinned_helper(&helper, &mut evidence).unwrap();
+        known.wait().unwrap();
+        assert_eq!(evidence.len(), 1);
+        assert!(outside.try_wait().unwrap().is_none());
+        job.terminate().unwrap();
+        outside_job.terminate().unwrap();
+        known.wait().unwrap();
+        wrong_path.wait().unwrap();
+        outside.wait().unwrap();
+        drop(helper);
+        drop(other_helper);
+        drop(job);
+        drop(outside_job);
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_dir_all(other_root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_helper_cleanup_does_not_run_after_cargo_failure() {
+        let (root, helper) = pinned_helper_fixture();
+        let job = BuildJob::new().unwrap();
+        let mut auxiliary = start_waiting_helper_fixture(&helper.path, &job);
+        let mut cargo = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "reviewed_build::tests::producer_failure_exit_fixture",
+            ])
+            .env("CATDESK_BUILD_FAILURE_FIXTURE", "1")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .creation_flags(CREATE_SUSPENDED)
+            .spawn()
+            .unwrap();
+        job.assign(&cargo).unwrap();
+        let stderr = cargo.stderr.take().unwrap();
+        let reader = std::thread::spawn(move || read_bounded_cargo_stderr(stderr));
+        job.resume(&cargo).unwrap();
+        let mut evidence = Vec::new();
+        assert_eq!(
+            wait_for_owned_build_exit_with_helper(
+                &mut cargo,
+                &job,
+                &reader,
+                Duration::from_secs(2),
+                Some(&helper),
+                &mut evidence
+            )
+            .unwrap_err(),
+            "REVIEWED_BUILD_TIMEOUT"
+        );
+        assert!(evidence.is_empty());
+        assert_eq!(cargo.wait().unwrap().code(), Some(17));
+        auxiliary.wait().unwrap();
+        reader.join().unwrap().unwrap();
+        drop(helper);
+        drop(job);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_helper_pin_denies_same_name_replacement() {
+        let (root, helper) = pinned_helper_fixture();
+        assert!(fs::rename(&helper.path, root.join("moved.exe")).is_err());
+        assert_eq!(
+            opened_regular_identity(&helper.image, "pinned helper").unwrap(),
+            helper.identity
+        );
+        drop(helper);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_helper_termination_failure_accepts_only_confirmed_exit() {
+        use std::os::windows::io::OwnedHandle;
+        unsafe extern "system" {
+            fn OpenProcess(access: u32, inherit: i32, process_id: u32) -> *mut c_void;
+        }
+        // An already-exited retained handle deterministically exercises the
+        // same state as a natural exit after the cleanup liveness check.
+        let mut ended = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "reviewed_build::tests::producer_root_exit_fixture",
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        assert!(ended.wait().unwrap().success());
+        assert!(!request_known_helper_stop(ended.as_raw_handle().cast()).unwrap());
+
+        let job = BuildJob::new().unwrap();
+        let mut live = start_waiting_helper_fixture(&std::env::current_exe().unwrap(), &job);
+        // No PROCESS_TERMINATE right: termination fails while the process is
+        // genuinely alive. A failure alone must never count as quiescence.
+        let raw = unsafe { OpenProcess(0x0010_0000 | 0x1000, 0, live.id()) };
+        assert!(!raw.is_null());
+        let restricted = unsafe { OwnedHandle::from_raw_handle(raw) };
+        assert_eq!(
+            request_known_helper_stop(restricted.as_raw_handle().cast()).unwrap_err(),
+            "REVIEWED_BUILD_HELPER_STOP_FAILED"
+        );
+        assert!(live.try_wait().unwrap().is_none());
+        job.terminate().unwrap();
+        live.wait().unwrap();
     }
 
     #[cfg(windows)]

@@ -1,3 +1,31 @@
+## October 25 C209 — native MCP authentication and qualification limits
+
+In the new source, provide `CATDESK_MCP_AUTH_TOKEN` only in the approved native
+daemon's process environment, through its supported lifecycle owner. The value
+must contain at least 24 visible ASCII characters. An explicitly invalid value
+refuses service startup before browser/listener/transport work; absence preserves
+legacy ordinary MCP and keeps central project-task dispatch unavailable. Do not
+store, echo or include the token in commands, logs or evidence. Existing headless
+argument validation is unchanged.
+
+Use the existing `catdesk_transport_status` tool to inspect redacted
+`localMcpAuth`: `BEARER_REQUIRED` or `LEGACY_NO_BEARER`. Local readiness probes
+use the configured bearer; remote checks do not send it. Missing/wrong bearer
+requests must be rejected and valid requests independently verified after
+deployment. Installed upstream client help documents static MCP/discovery
+headers; it does not prove the current runtime connection forwards the required
+header. Configure no external owner as an undocumented side effect.
+
+Independent static review passed for this source and exact-Job compiler-helper
+cleanup; source qualification passed. Neither change is in C208's `409513a`
+candidate. Production remains unpromoted. Normal, PTY and Node REPL shells are
+Job-contained; the already authorized owner launch requires an outside-Job
+execution context. The latest connector probe failed before backend contact,
+not with a fresh HTTP 429. Preserve current ownership and completed deliveries.
+
+Validation: 144 source tests passed (8 manual tests ignored), with strict Clippy and bounded Job cleanup passing. Counts: native auth 5, project dispatch 6, bearer 1, headless 16, reviewed build 116. These are source/fixture results, not installed acceptance. Evidence: `docs/verification/C209_NATIVE_AUTH_AND_COMPILER_HELPER_2026_10_25.json`.
+
+
 ## October 25 C208 — attested candidate; exact promotion launcher pending
 
 Use the prepared private operator command for the existing `release-pair

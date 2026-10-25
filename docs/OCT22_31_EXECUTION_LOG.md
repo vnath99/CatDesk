@@ -1,3 +1,25 @@
+## October 25 C209 — source corrections; installed execution remains separate
+
+Independent static review covered exact-Job MSVC helper cleanup and native MCP
+authentication. Cleanup retains process/image identity, validates all Job members
+before stopping any helper, accepts a proved natural-exit race and still requires
+zero remaining Job processes and stream completion. Native auth is process-only,
+rejects invalid/non-ASCII configured tokens before service startup, authenticates
+local probes and keeps remote probes free of the local bearer. Source qualification passed; an initial test-only compile error was corrected before the
+replacement bounded batch.
+
+The fresh MCP probe failed at transport-send before backend contact; it did not
+return a new HTTP 429. Normal, PTY and Node REPL local shells were all confirmed
+Job-contained. Existing promotion authorization remains valid; the outside-Job
+launch is an execution limitation. Installed client help confirms static
+MCP/discovery-header support, while the current runtime connection remains
+unverified. No configuration, owner or production state changed. The C208
+candidate remains the reviewed `409513a` snapshot; this newer source is not
+installed and requires genuine review/release.
+
+Validation: 144 source tests passed (8 manual tests ignored), with strict Clippy and bounded Job cleanup passing. Counts: native auth 5, project dispatch 6, bearer 1, headless 16, reviewed build 116. These are source/fixture results, not installed acceptance. Evidence: `docs/verification/C209_NATIVE_AUTH_AND_COMPILER_HELPER_2026_10_25.json`.
+
+
 ## October 25 C208 — attested candidate and bounded authentication qualification
 
 | UTC checkpoint | Actual result |

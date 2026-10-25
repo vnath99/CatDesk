@@ -1,3 +1,26 @@
+## October 25 C209 — keep authentication and cleanup within existing owners
+
+Current source gives the native MCP listener an optional process-only bearer.
+Invalid configuration fails before services start; missing configuration keeps
+legacy ordinary MCP but cannot enable central project-task dispatch. Local
+health checks authenticate with that same value, remote checks do not receive
+it, and status reports only the mode. No persistent credential registry or new
+transport owner is introduced.
+
+The reviewed producer handles only its pinned MSVC helper inside the exact Job,
+after successful Cargo exit and full member validation. Retained process handles
+prevent PID reuse from changing cleanup targets; a proved natural exit is
+accepted. Final Job emptiness, stream completion and release-authority checks
+remain unchanged. Both source changes passed independent static review and
+source tests. A real producer run of this new code remains pending. C208's
+attested `409513a` candidate remains separate and production is unpromoted.
+The outside-Job owner-launch limitation is not new approval debt.
+Upstream static-header support is documented, but current runtime ingress,
+installed health, rollback and real two-project Web operation remain unproved.
+
+Validation: 144 source tests passed (8 manual tests ignored), with strict Clippy and bounded Job cleanup passing. Counts: native auth 5, project dispatch 6, bearer 1, headless 16, reviewed build 116. These are source/fixture results, not installed acceptance. Evidence: `docs/verification/C209_NATIVE_AUTH_AND_COMPILER_HELPER_2026_10_25.json`.
+
+
 ## October 25 C208 — build authority recovered; installation remains separate
 
 The existing producer, with its ownership gate intact, naturally attested the

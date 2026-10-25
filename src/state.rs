@@ -768,6 +768,8 @@ pub struct AppState {
     pub transport_identity: TransportIdentityConfig,
     pub transport_health: TransportHealthSnapshot,
     pub server_running: bool,
+    // Process-only listener credential. Never included in AppConfig or status.
+    pub(crate) mcp_auth_token: Option<String>,
     pub web_auto_cancel: Option<Arc<AtomicBool>>,
     pub web_auto_tasks: Vec<tokio::task::JoinHandle<()>>,
     pub ngrok_running: bool,
@@ -1253,6 +1255,7 @@ impl AppState {
                 config.tunnel.remote_self_check,
             ),
             server_running: false,
+            mcp_auth_token: None,
             web_auto_cancel: None,
             web_auto_tasks: Vec::new(),
             ngrok_running: false,
@@ -1459,6 +1462,11 @@ impl AppState {
             },
             "transportHealth": self.transport_health.health.as_str(),
             "localMcp": self.transport_health.local_mcp.clone(),
+            "localMcpAuth": if self.mcp_auth_token.as_deref().is_some_and(crate::server::valid_mcp_auth_token) {
+                "BEARER_REQUIRED"
+            } else {
+                "LEGACY_NO_BEARER"
+            },
             "remoteCheckEnabled": self.tunnel_config.remote_self_check,
             "lastCheckedAt": self.transport_health.last_checked_at.clone(),
             "installationFingerprint": crate::tunnel::connection_fingerprint(&self.installation_id),

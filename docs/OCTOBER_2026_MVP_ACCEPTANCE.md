@@ -1,3 +1,19 @@
+## October 25 C209 — source readiness is not installed acceptance
+
+| Capability | Current evidence and limit |
+| --- | --- |
+| Native MCP bearer | Independent static review passed for optional process-only authentication, invalid-value refusal, redacted status and local authenticated probes. Source qualification passed; no installed qualification. |
+| Producer helper cleanup | Independent static review passed for pinned helper/process identity, exact-Job membership and natural-exit handling. Final quiescence and authority gates remain intact; source qualification passed. |
+| Runtime ingress | Upstream installed client help supports static MCP/discovery headers; current runtime connection and forwarding are unverified. Fresh MCP probe failed before backend contact, with no new HTTP 429 result. |
+| Promotion execution | Already authorized, but normal/PTY/Node REPL shells are Job-contained. The supported owner requires an outside-Job launch; production remains unpromoted. |
+| Release and Web acceptance | C208 candidate `409513a` lacks these new changes and C207 disposition-aware admission. New source needs genuine review/release. Installed health, rollback and two independent Web coding conversations remain OPEN. |
+
+Existing project bindings, histories and native ownership remain preserved. No
+browser, Wake or external runtime was started for this source review.
+
+Validation: 144 source tests passed (8 manual tests ignored), with strict Clippy and bounded Job cleanup passing. Counts: native auth 5, project dispatch 6, bearer 1, headless 16, reviewed build 116. These are source/fixture results, not installed acceptance. Evidence: `docs/verification/C209_NATIVE_AUTH_AND_COMPILER_HELPER_2026_10_25.json`.
+
+
 ## October 25 C208 — candidate qualified, installed acceptance still open
 
 | Capability | Actual evidence |
@@ -6,6 +22,7 @@
 | Candidate authentication/lifecycle | Two bounded 12-second starts: missing/wrong auth 401, valid auth 200, ten tools, natural exits and no surviving listeners. |
 | Cleanup | Exact orphaned MSVC helper stopped after compiler exit; product gate unchanged. Stale-PID monitor reconciled separately; unrelated processes untouched. |
 | Production promotion | One checked operator launch outside the app's Windows Job is REQUIRED; normal/PTY tool sessions are contained, and UI terminal automation is not permitted. Nothing invoked or promoted. Controller `83a2d98` is not the candidate's source. |
+| CatDesk disposition admission | C207 receipts and original context are preserved. Candidate `409513a` still refuses that quarantine; deploying newer admission behavior requires its own genuine source review. Other projects remain independently eligible under their own routing/ownership gates. |
 | Installed / multi-project Web | OPEN: production startup, intended ingress, rollback and two actual Web coding conversations remain unproved. |
 
 The candidate checks preserved 461 state files and five authority files. No

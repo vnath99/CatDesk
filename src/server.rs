@@ -279,6 +279,14 @@ pub(crate) fn mcp_authorized(headers: &HeaderMap, expected_token: Option<&str>) 
         .is_some_and(|actual| actual == expected_token)
 }
 
+pub(crate) fn valid_mcp_auth_token(token: &str) -> bool {
+    token.len() >= 24 && token.bytes().all(|value| value.is_ascii_graphic())
+}
+
+fn central_dispatch_authenticated(token: Option<&str>) -> bool {
+    token.is_some_and(valid_mcp_auth_token)
+}
+
 fn request_id(req: &Value) -> String {
     req.get("id").map_or("-".into(), |v| match v {
         Value::String(s) => s.clone(),
@@ -916,6 +924,66 @@ mod tests {
     use std::sync::Arc;
     use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::sync::{Mutex, mpsc::unbounded_channel};
+
+    #[tokio::test]
+    async fn native_mcp_auth_absent_hides_central_tools_and_refuses_direct_and_cached_calls() {
+        let root = unique_temp_path("native-auth-absent");
+        std::fs::create_dir_all(&root).unwrap();
+        let mut app = AppState::new_isolated_fixture(
+            0,
+            root.to_string_lossy().into(),
+            root.join("inert.toml"),
+        )
+        .unwrap();
+        app.mode = Mode::Computer;
+        app.tool_mode = ToolMode::SupervisorOnly;
+        let (tx, _rx) = unbounded_channel();
+        let state = ServerState {
+            app: Arc::new(Mutex::new(app)),
+            devtools: None,
+            ui_events: tx,
+            mcp_auth_token: None,
+            fixture_snapshot: None,
+        };
+        let list = post_mcp(
+            State(state.clone()),
+            HeaderMap::new(),
+            Bytes::from(
+                serde_json::to_vec(
+                    &json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}),
+                )
+                .unwrap(),
+            ),
+        )
+        .await;
+        assert_eq!(list.status(), StatusCode::OK);
+        let list: Value =
+            serde_json::from_slice(&to_bytes(list.into_body(), usize::MAX).await.unwrap()).unwrap();
+        assert!(
+            !list["result"]["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|tool| tool["name"] == crate::web_task_dispatch::TOOL)
+        );
+        for (name, arguments) in [
+            (crate::web_task_dispatch::TOOL, json!({})),
+            ("run_command", json!({"command":"CATDESK_WEB_TASK={}"})),
+        ] {
+            let response = post_mcp(
+                State(state.clone()),
+                HeaderMap::new(),
+                tool_call_body(name, arguments),
+            )
+            .await;
+            let value: Value =
+                serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                    .unwrap();
+            assert_eq!(value["error"]["message"], "WEB_TASK_CENTRAL_AUTH_REQUIRED");
+        }
+        assert!(!root.join(".catdesk/project-mcp-tasks").exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[cfg(windows)]
     #[tokio::test]
@@ -2159,11 +2227,7 @@ async fn post_mcp(
         && (req.params.get("name").and_then(Value::as_str) == Some(crate::web_task_dispatch::TOOL)
             || crate::web_task_dispatch::is_cached_call(&req))
     {
-        let response = if s
-            .mcp_auth_token
-            .as_deref()
-            .is_some_and(|token| token.len() >= 24)
-        {
+        let response = if central_dispatch_authenticated(s.mcp_auth_token.as_deref()) {
             if !mode.computer_enabled() || !tool_mode.supervisor_tools_enabled() {
                 mcp::JsonRpcResponse::error(
                     req.id.clone(),
@@ -2203,6 +2267,7 @@ async fn post_mcp(
         if req.method == "tools/list"
             && mode.computer_enabled()
             && tool_mode.supervisor_tools_enabled()
+            && central_dispatch_authenticated(s.mcp_auth_token.as_deref())
             && let Some(tools) = resp
                 .result
                 .as_mut()

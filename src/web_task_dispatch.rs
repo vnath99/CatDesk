@@ -725,13 +725,11 @@ mod tests {
         app.tool_mode = crate::state::ToolMode::SupervisorOnly;
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let token = "c47-central-http-fixture-token-000000";
-        let router = crate::server::router(
-            Arc::new(tokio::sync::Mutex::new(app)),
-            None,
-            "/central/mcp".into(),
-            tx,
-            Some(token.into()),
-        );
+        let state = Arc::new(tokio::sync::Mutex::new(app));
+        crate::configure_native_mcp_auth(&state, Ok(token.into()))
+            .await
+            .unwrap();
+        let router = crate::native_mcp_router(state, None, "/central/mcp".into(), tx).await;
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}/central/mcp", listener.local_addr().unwrap());
         let (stop, stopped) = tokio::sync::oneshot::channel();
@@ -773,6 +771,19 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(unauthorized.status(), reqwest::StatusCode::UNAUTHORIZED);
+        let wrong = client
+            .post(&url)
+            .bearer_auth("wrong-fixture-token")
+            .json(&transport(request(
+                &alpha,
+                "wrong-auth",
+                "read",
+                json!({"path":"src/lib.rs"}),
+            )))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(wrong.status(), reqwest::StatusCode::UNAUTHORIZED);
         assert!(
             !alpha
                 .control
