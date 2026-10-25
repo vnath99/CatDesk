@@ -1,20 +1,42 @@
-## October 25 C218 — qualify diagnosis before inspecting the saved draft
+## October 25 C218 — preserve the diagnosed unknown submission
 
-C217A remains `SUBMITTING`; B remains unsent. A native-library fixture reproduced
-a composer getter defect, and source now uses the existing DOM text-data reader.
-Qualify the new metadata-only `review diagnose` path, publish reviewed source and
-build the normal development package before selecting its adapter through the
-existing stopped update procedure. Preserve the unknown event, all project
-bindings, profile identity, and retained working versions. Never pass the new
-request to v77: capability checks must refuse it before launch.
+Normal release source `c56d3b4d17ad0070742b4e2d5888a2c20a85633b` was published
+with exact remote readback, built separately and selected through the stopped
+development-package command. The prior verified package remains intact. A
+six-second backend qualification verified the actual selected image, HTTP 200
+with authentication, HTTP 401 without it, 79 distinct MCP tools and normal parent
+and child exit. Local verification was recorded only after those checks.
 
-The diagnostic does not create a receipt or prove non-delivery. Keep source,
-development live evidence and installed production acceptance distinct. See
-[C218 evidence](../verification/C218_COMPOSER_DIAGNOSIS_2026_10_25.json).
-Source qualification passed 746 tests (one ignored), strict root/Wake Clippy and
-bounded cleanup. Publish the reviewed code and build its exact normal release
-before using the supported stopped development update; retain v77 and all
-pending-review state. Live diagnosis is not yet demonstrated.
+At 19:35:56–19:36:14 UTC, one read-only browser diagnosis completed in 16.875
+seconds. The exact pending 1,315-byte draft remains present; the corrected DOM
+reader matches it while the legacy reader disagrees. No matching USER message
+was observed in the bounded visible history. This supports the reader defect
+but does not prove the original submission failed. C217A remains unknown, with
+its dispatch consumed; do not resend it or start B. No receipt, timer, ledger or
+binding changed. All 480 selected-state baseline files and profile identity
+were preserved, both Wake controls stayed stopped, and no test owner remained.
+
+Two test-helper mistakes are preserved in the audit: a command-alias collision
+before selection, then a switch/process variable collision after selection and
+brief backend startup. The corrected continuation ran health checks only; it
+did not repeat selection. Source qualification remains 746 passing tests, one
+ignored test and strict root/Wake Clippy. Exact-source remote CI has no observed
+run and is not accepted. Development health is not protected production or
+two-conversation Web coding acceptance. No production action occurred.
+
+The next review-state action, if needed, is the existing blocked-status report;
+it must retain OPEN ownership and all submission evidence. There is no supported
+review abandonment transition that can reuse the rollover-only C207 procedure.
+Do not repeat the successful diagnosis without new evidence. The production
+release-pair repair still requires its supported owner outside a Windows Job;
+current tool processes cannot supply that owner. Preserve the C208 candidate
+and do not run old promotion wrappers whose state pins are stale.
+
+Once approved runtime ingress is available, use the existing project-scoped MCP
+tools for two real independent coding conversations. A focused source review
+found the required immutable workspace routing already implemented; another
+router or authorization framework would duplicate completed work.
+Evidence: [C218](../verification/C218_COMPOSER_DIAGNOSIS_2026_10_25.json).
 
 ## October 25 C217 — preserve the first grant dispatch and continue recovery source work
 

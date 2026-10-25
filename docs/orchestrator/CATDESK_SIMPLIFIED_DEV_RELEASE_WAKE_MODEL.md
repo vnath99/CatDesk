@@ -1,3 +1,13 @@
+## October 25 C218 — locally verified development package is selected
+
+The normal release from source `c56d3b4d17ad0070742b4e2d5888a2c20a85633b`
+passed a six-second selected-image health check (authenticated 200, unauthorized
+401, 79 tools and normal exit). Existing stopped-package selection and local
+verification commands retained the previous verified version and all project
+state. This does not create reviewed-promotion or production recovery authority.
+One metadata-only browser diagnosis passed without sending or changing state.
+The pending review remains unknown, and protected production remains unpromoted.
+
 ## October 25 C215 — review consent stays separate from release evidence
 
 Routine read-only review sends can use the user's standing scoped authorization

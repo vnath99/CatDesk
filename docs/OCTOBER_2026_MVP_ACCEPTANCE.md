@@ -1,13 +1,18 @@
-## October 25 C218 — composer diagnosis qualification
+## October 25 C218 — source, development and live evidence remain distinct
 
-The native getter defect is reproduced locally and the source fix reuses the
-existing DOM text reader. The new diagnostic returns metadata only, under the
-same historical-dispatch and exact-target checks; it cannot resend, clear a draft
-or create a receipt. Source qualification passed 746 tests (one ignored) and
-strict root/Wake Clippy. The development-adapter update and live diagnosis are
-pending. C217A remains unknown; visible message absence cannot prove no submission.
-No production, new review, binding or recurring-process action follows from this
-source change. Evidence: [C218](verification/C218_COMPOSER_DIAGNOSIS_2026_10_25.json).
+| Capability | Actual evidence |
+| --- | --- |
+| Composer fix and metadata-only diagnosis | Source PASS: 746 tests, one ignored, strict root/Wake Clippy. |
+| Selected development backend | PASS: exact image checked, authenticated 200, unauthorized 401, 79 tools, bounded normal exit; previous verified package retained. |
+| Pending-review browser inspection | PASS: exact draft and reader disagreement observed in 16.875 seconds; no state change or send; 480 baseline files preserved and zero test owners. |
+| Original review delivery | UNKNOWN: no matching USER message in bounded visible history; no receipt, retry or second request. |
+| Exact-source remote CI | No run observed; not accepted. |
+| Protected production and two Web coding conversations | OPEN: development health does not establish either. |
+
+The two helper failures and their health-only recovery remain recorded. Source
+`c56d3b4d17ad0070742b4e2d5888a2c20a85633b` has verified remote readback. No
+production, binding, recurring-process or native-session change occurred.
+Evidence: [C218](verification/C218_COMPOSER_DIAGNOSIS_2026_10_25.json).
 
 ## October 25 C217 — standing-grant live acceptance is partial
 

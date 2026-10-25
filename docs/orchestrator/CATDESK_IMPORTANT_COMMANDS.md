@@ -13,8 +13,11 @@ focuses, clicks, clears, creates a receipt or changes work state. A missing or
 different visible message does not authorize a resend. Unsupported adapters are
 refused before browser launch; use the existing development package update, not
 a profile replacement or production promotion, to qualify the new adapter.
-Source qualification passed 746 tests (one ignored) and strict linting. Matching
-development-package selection and a live diagnosis remain separate requirements.
+Source qualification passed 746 tests (one ignored) and strict linting. The
+matching package passed selected-development health and one read-only diagnosis
+on October 25. Do not rerun that completed diagnosis without new evidence.
+The original review remains unknown; exact draft presence and bounded visible
+message absence do not authorize retry or abandonment.
 
 ## October 25 C217 — do not replay the unknown scoped review
 

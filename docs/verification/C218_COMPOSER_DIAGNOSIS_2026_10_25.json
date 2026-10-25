@@ -118,8 +118,53 @@
     "status": "PASS",
     "distinctPassed": 746
   },
-  "developmentPackage": "UNCHANGED_PENDING_QUALIFICATION",
-  "liveDiagnosis": "PENDING_QUALIFIED_ADAPTER",
+  "developmentPackage": {
+    "testOwnersRemaining": 0,
+    "sourceCiAccepted": false,
+    "qualificationEvidenceSha256": "902cc80155e0e833506f90aa980529b08b7afc8e6caaa7aa258c9d54ff33312b",
+    "health": {
+      "durationLimitSeconds": 6,
+      "actualSelectedChildImageVerified": true,
+      "unauthenticatedHttp": 401,
+      "authenticatedHttp": 200,
+      "normalParentAndChildExit": true,
+      "uniqueTools": 79
+    },
+    "verificationAuthority": "LOCAL_OPERATOR_PROVIDED_NOT_PRODUCTION",
+    "protectedFiles": 480,
+    "status": "SELECTED_AND_LOCALLY_VERIFIED",
+    "packageId": "1.0.0-dev.85-dfca7464dcb9c1b1b690afff0e511bd2735c81d0d7e4a0903debe43a15541093",
+    "previousVerifiedPackageRetained": true,
+    "unchangedProtectedFiles": 478,
+    "expectedSelectionPointersChanged": 2
+  },
+  "liveDiagnosis": {
+    "startedUtc": "2026-10-25T19:35:56.6798502+00:00",
+    "ledgerChanged": false,
+    "elapsedMillis": 16875,
+    "metadataLogsAndPackageBytesPreserved": true,
+    "status": "PASS_READ_ONLY_UNKNOWN_PRESERVED",
+    "observation": {
+      "composerBytes": 1315,
+      "composerClass": "EXACT",
+      "coverage": "VISIBLE_BOUNDED_ONLY",
+      "expectedUserCount": 0,
+      "lastUserMatches": false,
+      "legacyAvailable": true,
+      "legacyMatchesExpected": false,
+      "readersAgree": false,
+      "stable": true,
+      "trustedMatches": 0,
+      "turnsAfter": 0
+    },
+    "finishedUtc": "2026-10-25T19:36:14.9143030+00:00",
+    "budgetMillis": 90000,
+    "evidenceSha256": "e0b84b2bab75b90c932497416105402e35a5a828867ae87ea8ca2368b63aee9e",
+    "messagesSent": 0,
+    "receiptsCreated": 0,
+    "baselineFiles": 480,
+    "testOwnersRemaining": 0
+  },
   "productionActions": 0,
   "limitations": [
     "A local regression does not establish the original live typing failure's cause.",
@@ -127,5 +172,34 @@
     "C217A remains unknown; no resend, refund, second review or draft deletion is implied.",
     "Development qualification is separate from installed production and two-conversation coding acceptance."
   ],
-  "recordedUtc": "2026-10-25T19:21:56.5344206+00:00"
+  "recordedUtc": "2026-10-25T19:37:03.7394816+00:00",
+  "sourceCommit": "c56d3b4d17ad0070742b4e2d5888a2c20a85633b",
+  "sourceRemoteReadback": "c56d3b4d17ad0070742b4e2d5888a2c20a85633b",
+  "exactSourceCi": "NO_RUN_OBSERVED_NOT_ACCEPTED",
+  "normalBuild": {
+    "finishedUtc": "2026-10-25T19:31:32.5814570Z",
+    "sourceCommit": "c56d3b4d17ad0070742b4e2d5888a2c20a85633b",
+    "profile": "NORMAL_RELEASE_APP_AND_HOST_NO_DEV_DEPENDENCIES",
+    "status": "PASS",
+    "appSha256": "f1a7763be55633700634313d0765710dc4fe9993fc5b54facdb751908663f358",
+    "startedUtc": "2026-10-25T19:22:55.0655291Z",
+    "wakeHostSha256": "83ccd1e6588b1d85072cf6f82e60dd50e95f7a31c5b0b387d0dd14f89681377e"
+  },
+  "harnessFailures": [
+    {
+      "runtimeChanges": 0,
+      "stage": "BEFORE_SELECTION",
+      "cause": "Short helper name collided with built-in PowerShell alias",
+      "originalEvidenceRetained": true
+    },
+    {
+      "originalEvidenceRetained": true,
+      "cleanupVerified": true,
+      "cause": "Case-insensitive switch/process variable collision",
+      "selectionSucceeded": true,
+      "stage": "AFTER_SELECTION_BEFORE_HTTP_CHECK",
+      "resolution": "Separate health-only continuation; selection not repeated",
+      "briefBackendStart": true
+    }
+  ]
 }
