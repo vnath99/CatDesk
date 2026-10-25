@@ -3163,12 +3163,12 @@ mod tests {
                 sha256: None,
             }],
         };
-        let authorization = ReviewedPromotionAuthorizationV1 {
+        let mut authorization = ReviewedPromotionAuthorizationV1 {
             schema_version: 1,
             generation: 1,
             authorization_id: "c".repeat(32),
             expires_at_unix: now_unix() + 120,
-            candidate_relative_path: "candidate.exe".into(),
+            candidate_relative_path: "build/candidate.exe".into(),
             candidate_sha256: "d".repeat(64),
             prior_canonical_sha256: "e".repeat(64),
             promotion_script_sha256: "f".repeat(64),
@@ -3189,8 +3189,18 @@ mod tests {
             rustc_sha256: "c".repeat(64),
             snapshot_expected: expected,
         };
-        let input = root.join("rust-serialized-authorization.json");
-        fs::write(&input, serde_json::to_vec(&authorization).unwrap()).unwrap();
+        let control = root.join(".catdesk/promotion-control");
+        fs::create_dir_all(&control).unwrap();
+        fs::create_dir(root.join("build")).unwrap();
+        let candidate = root.join("build/candidate.exe");
+        fs::write(&candidate, b"inert wire fixture candidate").unwrap();
+        authorization.candidate_sha256 = sha256_file(&candidate).unwrap();
+        let input = control.join("authorization.json");
+        fs::write(
+            root.join("recovery.ps1"),
+            include_bytes!("../scripts/catdesk-release-recovery.ps1"),
+        )
+        .unwrap();
         let source = base64::engine::general_purpose::STANDARD.encode(include_bytes!(
             "../scripts/promote-reviewed-catdesk-build.ps1"
         ));
@@ -3198,33 +3208,84 @@ mod tests {
         fs::write(&driver, format!(r#"
 param([string]$InputPath,[string]$Mode)
 $ErrorActionPreference='Stop'
-$source=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{source}'))
-$tokens=$null;$errors=$null
-$ast=[Management.Automation.Language.Parser]::ParseInput($source,[ref]$tokens,[ref]$errors)
-if($errors.Count){{throw 'source parse failed'}}
-$defs=@($ast.FindAll({{param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Assert-PromotionAuthorizationRecord'}},$true))
-if($defs.Count -ne 1){{throw 'consumer missing'}}
-Invoke-Expression $defs[0].Extent.Text
+$library=Join-Path $PSScriptRoot 'consumer-library.ps1'
+if($Mode -eq 'prepare-library'){{
+ $source=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{source}'))
+ $tokens=$null;$errors=$null
+ $ast=[Management.Automation.Language.Parser]::ParseInput($source,[ref]$tokens,[ref]$errors)
+ if($errors.Count){{throw 'source parse failed'}}
+ $defs=@($ast.FindAll({{param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst]}},$true))
+ $bodies=($defs|ForEach-Object{{$_.Extent.Text}}) -join "`n"
+ [IO.File]::WriteAllText($library,$bodies,[Text.UTF8Encoding]::new($false))
+ return
+}}
+. $library
+. (Join-Path $PSScriptRoot 'recovery.ps1')
+$script:PromotionSeams=@{{}}
+function Get-FileHash {{ throw 'optional hashing cmdlet must not be required' }}
 $record=Get-Content -LiteralPath $InputPath -Raw|ConvertFrom-Json
+$candidate=Join-Path $PSScriptRoot 'build/candidate.exe'
+$expectedHash=Get-PromotionHash $candidate
 switch($Mode){{
  'legacy' {{ foreach($name in @('buildAttestationSha256','buildAttemptId','snapshotId','snapshotAuthorityDigest','snapshotManifestDigest','buildPolicySha256','cargoSha256','rustcSha256','snapshotExpected')){{$record.PSObject.Properties.Remove($name)}} }}
  'bad-hash' {{ $record.cargoSha256='unknown' }}
  'wrong-session' {{ $record.snapshotExpected.session_id='other-session' }}
  'wrong-output' {{ $record.snapshotExpected.current_outputs[0].artifactId='other/report.md' }}
+ 'wrong-path' {{ $record.candidateRelativePath='other/candidate.exe' }}
  'extra' {{ $record|Add-Member -NotePropertyName callerOverride -NotePropertyValue $true }}
 }}
-Assert-PromotionAuthorizationRecord $record
-'ACTUAL_RUST_SCHEMA_ACCEPTED'
+$record|ConvertTo-Json -Depth 12 -Compress|Set-Content -LiteralPath $InputPath -Encoding utf8
+$actualRelative=Get-WorkspaceRelativePath $PSScriptRoot $candidate 'wire fixture candidate'
+Write-Output ('WIRE_NESTED_PATH_MATCH='+($record.candidateRelativePath -ceq $actualRelative))
+$accepted=Get-ProtectedPromotionAuthorization $PSScriptRoot ('c'*32) ('3'*32) $candidate $expectedHash ('e'*64)
+if($accepted.candidateRelativePath -cne 'build/candidate.exe'){{throw 'wrong wire candidate accepted'}}
+'ACTUAL_RUST_AUTHORIZATION_CONSUMED'
 "#)).unwrap();
         let powershell = crate::operator_facade::trusted_windows_powershell(&root).unwrap();
+        let prepared = Command::new(&powershell)
+            .args([
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+            ])
+            .arg(&driver)
+            .arg(&input)
+            .arg("prepare-library")
+            .output()
+            .unwrap();
+        assert!(
+            prepared.status.success(),
+            "fixture library: {}",
+            String::from_utf8_lossy(&prepared.stderr)
+        );
+        authorization.promotion_script_sha256 =
+            sha256_file(&root.join("consumer-library.ps1")).unwrap();
+        fs::write(
+            control.join("claim.json"),
+            serde_json::to_vec(&ReviewedPromotionClaimV1 {
+                schema_version: 1,
+                authorization_id: authorization.authorization_id.clone(),
+                claim_id: authorization.claim_id.clone(),
+                transaction_id: authorization.transaction_id.clone(),
+                candidate_relative_path: authorization.candidate_relative_path.clone(),
+                state: "CLAIMED_PENDING".into(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
         for mode in [
             "valid",
             "legacy",
             "bad-hash",
             "wrong-session",
             "wrong-output",
+            "wrong-path",
             "extra",
         ] {
+            fs::write(&input, serde_json::to_vec(&authorization).unwrap()).unwrap();
             let output = Command::new(&powershell)
                 .args([
                     "-NoLogo",
@@ -3242,7 +3303,8 @@ Assert-PromotionAuthorizationRecord $record
             assert_eq!(
                 output.status.success(),
                 mode == "valid",
-                "wire mode {mode}: {}",
+                "wire mode {mode}: stdout={} stderr={}",
+                String::from_utf8_lossy(&output.stdout),
                 String::from_utf8_lossy(&output.stderr)
             );
         }

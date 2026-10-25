@@ -7,6 +7,28 @@ ownership, independent review and producer gates remain in force. No recurring
 automation, external tunnel replacement or browser-profile change follows from
 this authorization.
 
+## October 24 EDT C118 — complete promotion path and resumed-owner evidence
+
+Fixed the two C117 findings: nested candidate paths now use the Rust producer's
+forward-slash representation, and Phase1 resume retains the verified timestamp,
+image path and hash needed by actual handback. The full consumer regression also
+exposed an unavailable hashing cmdlet in the fixed native interpreter; promotion
+now delegates to the existing shared helper using streaming framework SHA256.
+
+18 canonical Rust tests, strict Clippy/format and both Windows PowerShell release
+fixture suites passed. The expanded wire test uses an actual Rust authorization
+and claim, a nested candidate, real script identity and no authorization seam.
+It forces the optional hash cmdlet unavailable. Resumed metadata failed before
+the fix and passes with complete identity afterward. Initial failures and fixture
+loader corrections remain recorded; no isolated wire-path RED claim is made.
+
+Production remains unchanged. Fresh independent review, the fixed normal controller
+build and a genuine reviewed producer/snapshot chain are next; no October27 hold
+remains. All 306 runtime and 55 historical files are exact, v77/v76 and native
+sessions preserved. Source/fixture results do not establish installed rollback,
+connector availability or actual Web coding. Evidence:
+`docs/verification/C118_PROMOTION_INTEROPERABILITY_2026_10_24.json`.
+
 ## Three different release scopes
 
 | Scope | Authority and owner | What it does not establish |

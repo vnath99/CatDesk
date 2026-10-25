@@ -139,6 +139,25 @@ try {
     Require ((Hash $fixture.Canonical) -eq $before -and -not (Test-Path -LiteralPath (Join-Path $workspace '.catdesk\promotion-recovery'))) 'plan mode makes no binary or backup mutation'
     Require (($plan | ConvertTo-Json -Compress) -notmatch '(?i)secret|token|https?://|route|tunnel-client|catdesk-reviewed\.exe') 'plan output remains compact and redacted'
 
+    # A resumed Phase 1 must supply the same complete, freshly verified process
+    # identity consumed by the real restart helper, not a PID-only projection.
+    $fixture = Reset-Fixture $workspace
+    $completed = [DateTimeOffset]::UtcNow
+    Write-NativePhase1Evidence $fixture @{ completedAtUnix = $completed.ToUnixTimeSeconds() }
+    $fresh = New-CandidateListener $fixture $completed.AddSeconds(-10)
+    $calls = [Collections.Generic.List[string]]::new()
+    $seams = New-ResumeSeams $calls @($fresh)
+    $expectedStart = $fresh.ProcessStartedAtUtc
+    $expectedPath = $fresh.BuildPath
+    $expectedHash = $fresh.BuildHash
+    $seams.RestartHandoff = {
+        param($root, $from, $target, $hash, $port, $timeout)
+        [void]$calls.Add('resumed-owner-handoff')
+        return $from.Pid -eq 42 -and [string]$from.ProcessStartedAtUtc -ceq $expectedStart -and [string]$from.BuildPath -ceq $expectedPath -and [string]$from.BuildHash -ceq $expectedHash
+    }.GetNewClosure()
+    $resumedComplete = & $promoter -BuildPath $fixture.Candidate -Workspace $workspace -Execute -TestSeams $seams | ConvertFrom-Json
+    Require ($resumedComplete.state -eq 'PROMOTED_CANONICAL_READY' -and $calls.Count -eq 1 -and (Hash $fixture.Canonical) -eq $expectedHash) 'resumed promotion retains complete fresh listener identity and performs one handback'
+
     # T-0132: validation is a read-only view of the existing T-0127 Phase-1
     # proof. All validation outcomes must leave both the listener and release
     # mutation paths untouched.

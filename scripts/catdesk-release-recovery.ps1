@@ -10,7 +10,17 @@ $script:CatDeskReleaseRecoveryMaxBinaryBytes = 128MB
 $script:CatDeskReleaseRecoverySlots = @('slot-a', 'slot-b')
 
 function Get-CatDeskRecoverySha256([string]$Path) {
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+    # The fixed Windows PowerShell worker may inherit a Core-only module path.
+    # Hash through the framework directly, retaining the existing helper/API.
+    $stream = [IO.File]::OpenRead($Path)
+    $sha = $null
+    try {
+        $sha = [Security.Cryptography.SHA256]::Create()
+        return ([BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '')).ToLowerInvariant()
+    } finally {
+        if ($null -ne $sha) { $sha.Dispose() }
+        $stream.Dispose()
+    }
 }
 
 function Resolve-CatDeskRecoveryRoot([string]$Root) {

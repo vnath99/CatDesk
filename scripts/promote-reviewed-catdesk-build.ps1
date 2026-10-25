@@ -34,7 +34,7 @@ function Invoke-PromotionSeam {
 }
 
 function Get-PromotionHash([string]$Path) {
-    (Get-FileHash -LiteralPath $Path -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+    Get-CatDeskRecoverySha256 $Path
 }
 
 function Get-ContainedRegularFile([string]$Root, [string]$Path, [string]$Label) {
@@ -107,7 +107,9 @@ function Get-WorkspaceRelativePath([string]$Root, [string]$Path, [string]$Label)
     if (-not $resolvedPath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
         throw "$Label is outside the approved workspace"
     }
-    return $resolvedPath.Substring($prefix.Length)
+    # The native authorization serializes a workspace-relative forward-slash
+    # path. Keep newly written transactions in that same representation.
+    return $resolvedPath.Substring($prefix.Length).Replace('\', '/')
 }
 
 function Get-PromotionTransaction([string]$Root) {
@@ -435,7 +437,15 @@ function Get-ProvenPhase1Resume([string]$Root, [string]$Candidate, [string]$Cand
         if ($listener.BuildHash -isnot [string] -or -not $listener.BuildHash.Equals($CandidateHash, [StringComparison]::Ordinal)) { return [pscustomobject]@{ State = 'UNSAFE'; Listener = $null } }
         if (-not (Test-Phase1ProcessContinuity -Record $handoff.Record -Listener $listener)) { return [pscustomobject]@{ State = 'UNSAFE'; Listener = $null } }
     }
-    return [pscustomobject]@{ State = 'PROVEN'; Listener = [pscustomobject]@{ Pid = [int]$ownerPids[0] } }
+    # Handback consumes exact process-instance and image identity, not merely
+    # a PID. Return the fresh listener that passed every continuity check.
+    $fresh = $listeners[0]
+    return [pscustomobject]@{ State = 'PROVEN'; Listener = [pscustomobject]@{
+        Pid = [int]$fresh.Pid
+        ProcessStartedAtUtc = [string]$fresh.ProcessStartedAtUtc
+        BuildPath = [string]$fresh.BuildPath
+        BuildHash = [string]$fresh.BuildHash
+    } }
 }
 
 function Invoke-PromotionHandoff([string]$Root, $From, [string]$TargetPath, [string]$TargetHash) {
