@@ -11,6 +11,8 @@ use std::{
 };
 
 static TEMP: AtomicU64 = AtomicU64::new(0);
+#[path = "store_reobserve.rs"]
+mod reobserve;
 const MAX_FILE: u64 = 1024 * 1024;
 pub const MANUAL_TURN_PREFIX: &str = "manual-turn-";
 const MAX_SOURCE_PROGRESS_ITEMS: usize = 100_000;
@@ -109,7 +111,7 @@ pub enum Phase {
     Stale,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Delivery {
     pub schema_version: u32,
@@ -156,7 +158,7 @@ pub enum ResponseState {
     Complete,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TurnTimer {
     pub schema_version: u32,

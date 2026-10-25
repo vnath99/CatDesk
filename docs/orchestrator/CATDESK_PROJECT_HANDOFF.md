@@ -1,9 +1,29 @@
+## October 25 C210 — qualify one-shot review observation before live use
+
+Current source adds `operator web review reobserve --project-id <id> --event-id
+<id>`. Qualify its source tests and independent review before one bounded live
+attempt: the host must be stopped, and the existing `SENT` receipt must match the
+current paired target and message. The command observes for at most 90 seconds
+without sending, scheduling or rebinding. It preserves original timer/history
+evidence, leaves the automatic 90-minute limit unchanged and does nothing for an
+already completed timer. Run separate work resolution only with fresh completion
+proof; reobservation alone does not complete the work ledger.
+
+C196's underlying observer failure remains unknown and its old budget expired.
+The observer functions are unchanged; report this as an evidence-gathering path
+until live results establish more. Source tests and review passed; live qualification is pending. Preserve C209's published source qualification and C208's distinct
+candidate; no production promotion or replay occurred in this source increment.
+
+Source qualification: 408 Wake tests passed (1 ignored), including the 10 new recovery fixtures; 20 operator tests passed. Both strict Clippy checks and bounded cleanup passed. The initial zero-match operator filter was not accepted; the corrected module ran all 20 tests. Live qualification remains pending. Evidence: `docs/verification/C210_BOUNDED_SENT_REVIEW_REOBSERVATION_2026_10_25.json`.
+
+
 ## October 25 C209 — finish source qualification without conflating releases
 
 Current source adds optional process-only native MCP authentication and exact-Job
-compiler-helper cleanup. Independent static review passed; source test results
-are pending. A configured native token must contain at least 24 visible ASCII
-characters; invalid values refuse service startup rather than falling back.
+compiler-helper cleanup. Independent static review and source qualification
+passed: 144 tests and strict Clippy. A configured native token requires at least
+24 visible ASCII characters; invalid values refuse service startup rather than
+falling back.
 Local readiness uses the token, remote checks do not, and status exposes only
 the authentication mode. The helper path retains final quiescence/attestation
 gates and never authorizes arbitrary process cleanup.

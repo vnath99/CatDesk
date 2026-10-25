@@ -16,8 +16,12 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[path = "runtime_reobserve.rs"]
+mod reobserve;
 #[path = "runtime_response.rs"]
 mod response;
+pub use reobserve::reobserve_sent_response_guarded;
+pub(crate) use response::validate_observation as validate_response_observation;
 #[path = "runtime_scheduler.rs"]
 mod scheduler;
 use response::observe_sent_response;

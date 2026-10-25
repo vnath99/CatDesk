@@ -1,3 +1,22 @@
+## October 25 C210 — bounded observation of an already-sent review
+
+Current source adds `operator web review reobserve --project-id <id> --event-id
+<id>` for one existing `SENT` review under stopped-host ownership. It checks the
+exact receipt, current paired target and message identity, then allows at most
+90 seconds of observation without sending, scheduling or rebinding. Original
+timer/history/log evidence is retained; the automatic 90-minute limit is unchanged.
+A completed timer is a no-op. Work resolution remains a separate operation and
+requires fresh completion proof.
+
+Source tests and independent review passed; live qualification is pending. The original
+C196 observation failure remains unknown; its old timer budget expired. The
+underlying observer functions are unchanged, so this path enables evidence
+gathering rather than proving an observer fix. C209 qualification and C208's
+attested-candidate boundary remain unchanged; production is still unpromoted.
+
+Source qualification: 408 Wake tests passed (1 ignored), including the 10 new recovery fixtures; 20 operator tests passed. Both strict Clippy checks and bounded cleanup passed. The initial zero-match operator filter was not accepted; the corrected module ran all 20 tests. Live qualification remains pending. Evidence: `docs/verification/C210_BOUNDED_SENT_REVIEW_REOBSERVATION_2026_10_25.json`.
+
+
 ## October 25 C209 — native authentication and bounded compiler-helper cleanup
 
 The current source adds an optional process-only native MCP bearer, authenticated

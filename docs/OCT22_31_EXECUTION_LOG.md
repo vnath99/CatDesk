@@ -1,3 +1,22 @@
+## October 25 C210 — explicit review reobservation prepared
+
+The new source command `operator web review reobserve --project-id <id>
+--event-id <id>` observes one exact existing `SENT` delivery for at most 90 seconds.
+It requires stopped-host ownership and current paired target/message identity;
+it neither sends nor starts a scheduler or changes a binding. It preserves the
+original timer start and prior timer/history/log evidence. Completed timers are
+no-ops; the automatic 90-minute limit is unchanged. Separate work resolution
+still needs fresh completion proof.
+
+Tests and independent source review passed; live execution is pending. C196's original
+observation failure is still unknown, and its old automatic budget expired.
+Existing observer functions have not changed. This increment provides a bounded
+way to gather evidence, not evidence that the observer now succeeds. No live
+action or production promotion is recorded here.
+
+Source qualification: 408 Wake tests passed (1 ignored), including the 10 new recovery fixtures; 20 operator tests passed. Both strict Clippy checks and bounded cleanup passed. The initial zero-match operator filter was not accepted; the corrected module ran all 20 tests. Live qualification remains pending. Evidence: `docs/verification/C210_BOUNDED_SENT_REVIEW_REOBSERVATION_2026_10_25.json`.
+
+
 ## October 25 C209 — source corrections; installed execution remains separate
 
 Independent static review covered exact-Job MSVC helper cleanup and native MCP

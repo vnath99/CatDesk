@@ -22,6 +22,8 @@ mod auto;
 mod observe;
 #[path = "operator_web_retirement.rs"]
 mod retirement;
+#[path = "operator_web_review.rs"]
+mod review;
 #[path = "operator_web_rollover.rs"]
 mod rollover;
 
@@ -81,6 +83,10 @@ pub(crate) enum WebAction {
         project_id: String,
     },
     ReviewRead {
+        project_id: String,
+        event_id: String,
+    },
+    ReviewReobserve {
         project_id: String,
         event_id: String,
     },
@@ -363,17 +369,24 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         ("context", "capture") if options.is_empty() => Ok(WebAction::ContextCapture {
             project_id: project_id.into(),
         }),
-        ("review", "read") => {
+        ("review", "read" | "reobserve") => {
             let event_id = options
                 .remove("--event-id")
                 .ok_or("WEB_USAGE: --event-id is required")?;
             if !catdesk_wake::protocol::valid_id(event_id) || !options.is_empty() {
                 return Err("WEB_USAGE: invalid review event or unexpected option".into());
             }
-            Ok(WebAction::ReviewRead {
-                project_id: project_id.into(),
-                event_id: event_id.into(),
-            })
+            if verb == "reobserve" {
+                Ok(WebAction::ReviewReobserve {
+                    project_id: project_id.into(),
+                    event_id: event_id.into(),
+                })
+            } else {
+                Ok(WebAction::ReviewRead {
+                    project_id: project_id.into(),
+                    event_id: event_id.into(),
+                })
+            }
         }
         ("context", "configure" | "observe") => {
             let input_file = PathBuf::from(
@@ -1227,6 +1240,10 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             project_id,
             event_id,
         } => read_review(&workspace, &project_id, &event_id),
+        WebAction::ReviewReobserve {
+            project_id,
+            event_id,
+        } => review::reobserve(&workspace, &project_id, &event_id),
         WebAction::WorkRequest {
             project_id,
             input_file,
@@ -1593,6 +1610,32 @@ mod tests {
         assert!(parse(&valid[..6]).is_err());
         let mut invalid = valid;
         invalid.extend(args(&["--submit", "true"]));
+        assert!(parse(&invalid).is_err());
+    }
+
+    #[test]
+    fn review_reobserve_accepts_only_one_project_and_existing_event() {
+        let valid = args(&[
+            "operator",
+            "web",
+            "review",
+            "reobserve",
+            "--project-id",
+            "alpha",
+            "--event-id",
+            "review-one",
+        ]);
+        assert!(matches!(
+            parse(&valid),
+            Ok(WebAction::ReviewReobserve { .. })
+        ));
+        for extra in ["--url", "--message", "--send", "--max-runtime-seconds"] {
+            let mut invalid = valid.clone();
+            invalid.extend(args(&[extra, "override"]));
+            assert!(parse(&invalid).is_err());
+        }
+        let mut invalid = valid;
+        *invalid.last_mut().unwrap() = "../event".into();
         assert!(parse(&invalid).is_err());
     }
 

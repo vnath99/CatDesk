@@ -11,6 +11,12 @@ use std::{
 };
 
 fn apply_observation(store: &Store, delivery: &Delivery, value: &Value) -> Result<bool> {
+    let complete = validate_observation(delivery, value)?;
+    store.record_response_probe(&delivery.event.event_id, &delivery.target, complete)?;
+    Ok(complete)
+}
+
+pub(crate) fn validate_observation(delivery: &Delivery, value: &Value) -> Result<bool> {
     let receipt = delivery
         .receipt
         .as_ref()
@@ -28,9 +34,7 @@ fn apply_observation(store: &Store, delivery: &Delivery, value: &Value) -> Resul
     {
         return Err("RESPONSE_PROBE_SCOPE_INVALID".into());
     }
-    let complete = stage == Some("RESPONSE_COMPLETE");
-    store.record_response_probe(&delivery.event.event_id, &delivery.target, complete)?;
-    Ok(complete)
+    Ok(stage == Some("RESPONSE_COMPLETE"))
 }
 
 pub(super) fn observe_sent_response(
@@ -40,6 +44,34 @@ pub(super) fn observe_sent_response(
     status: &mut Status,
     deadline: Instant,
 ) -> Result<bool> {
+    let value = read_sent_response(store, adapter, delivery, deadline, &mut || {
+        persist_live_status(store, status)?;
+        if desired(store)? != "RUNNING" {
+            return Err("HOST_PAUSED_DURING_RESPONSE_PROBE".into());
+        }
+        Ok(())
+    })?;
+    let complete = apply_observation(store, delivery, &value)?;
+    status.browser = if complete {
+        "RESPONSE_COMPLETED"
+    } else {
+        "RESPONSE_PENDING"
+    }
+    .into();
+    status.submission = "SENT".into();
+    status.login = "READY".into();
+    status.attention = None;
+    Ok(complete)
+}
+
+pub(super) fn read_sent_response(
+    store: &Store,
+    adapter: &mut Adapter,
+    delivery: &Delivery,
+    deadline: Instant,
+    keep_running: &mut dyn FnMut() -> Result<()>,
+) -> Result<Value> {
+    keep_running()?;
     if Instant::now() >= deadline {
         return Err("RESPONSE_PROBE_TIMEOUT".into());
     }
@@ -54,27 +86,15 @@ pub(super) fn observe_sent_response(
         .ok_or("RESPONSE_PROBE_RECEIPT_REQUIRED")?;
     adapter.send(json!({"observeResponse":true,"event":delivery.event,"target":delivery.target,"receipt":receipt}))?;
     loop {
-        persist_live_status(store, status)?;
-        if desired(store)? != "RUNNING" {
-            return Err("HOST_PAUSED_DURING_RESPONSE_PROBE".into());
-        }
+        keep_running()?;
         if Instant::now() >= deadline {
             return Err("RESPONSE_PROBE_TIMEOUT".into());
         }
         match adapter.output.recv_timeout(Duration::from_millis(250)) {
             Ok(Ok(value)) => match value.get("stage").and_then(Value::as_str) {
                 Some("RESPONSE_PENDING" | "RESPONSE_COMPLETE") => {
-                    let complete = apply_observation(store, delivery, &value)?;
-                    status.browser = if complete {
-                        "RESPONSE_COMPLETED"
-                    } else {
-                        "RESPONSE_PENDING"
-                    }
-                    .into();
-                    status.submission = "SENT".into();
-                    status.login = "READY".into();
-                    status.attention = None;
-                    return Ok(complete);
+                    keep_running()?;
+                    return Ok(value);
                 }
                 Some(
                     "CDP_REUSE_BEGIN" | "CDP_REUSE_DONE" | "CDP_ACTIVATE_BEGIN"

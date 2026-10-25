@@ -1,3 +1,19 @@
+## October 25 C210 — reobservation is not completed review acceptance
+
+| Capability | Current evidence and limit |
+| --- | --- |
+| Explicit reobservation | Implemented for one exact existing `SENT` event, stopped host, current paired target/message and a 90-second observation budget. Source tests and independent review passed; live qualification is pending. |
+| No replay | No sender, scheduler or binding operation; a completed timer is a no-op. Original start time and prior timer/history/log evidence are retained, without extending the automatic 90-minute limit. |
+| Work completion | Separate `work resolve` still requires actual fresh completion proof; invoking reobservation does not resolve work. |
+| Observer reliability | OPEN: C196's underlying observation failure remains unknown; its old budget expired and observer functions are unchanged. A new evidence-gathering path is not an observer-fix demonstration. |
+
+C209's source qualification and C208's distinct attested candidate remain as
+recorded below. Production promotion and real two-conversation coding acceptance
+are still open.
+
+Source qualification: 408 Wake tests passed (1 ignored), including the 10 new recovery fixtures; 20 operator tests passed. Both strict Clippy checks and bounded cleanup passed. The initial zero-match operator filter was not accepted; the corrected module ran all 20 tests. Live qualification remains pending. Evidence: `docs/verification/C210_BOUNDED_SENT_REVIEW_REOBSERVATION_2026_10_25.json`.
+
+
 ## October 25 C209 — source readiness is not installed acceptance
 
 | Capability | Current evidence and limit |

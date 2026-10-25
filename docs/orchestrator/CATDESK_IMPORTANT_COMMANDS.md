@@ -1,3 +1,28 @@
+## October 25 C210 — explicit bounded review reobservation
+
+New source command; Source tests and independent review passed; live qualification is pending. Use a qualified controller from the matching revision:
+
+```text
+<qualified-controller> operator web review reobserve --project-id <id> --event-id <existing-sent-event>
+```
+
+The host must be stopped. The command verifies the exact existing `SENT` receipt,
+current registry/Wake target and message identity, then observes for at most
+90 seconds. It has no sender, scheduler or binding operation. A completed timer
+returns a no-op without opening the browser. The original timer start and prior
+timer/history/log evidence are retained; the automatic 90-minute observation
+limit is not reset or extended.
+
+This does not run `operator web work resolve`. That separate operation requires
+actual fresh completion proof. The underlying C196 observation failure remains
+unknown, its old timer budget expired, and the observer functions are unchanged.
+Do not describe this new evidence-gathering command as a proved observer fix or
+replay a completed delivery. C209 qualification and C208 candidate/installation
+boundaries remain unchanged.
+
+Source qualification: 408 Wake tests passed (1 ignored), including the 10 new recovery fixtures; 20 operator tests passed. Both strict Clippy checks and bounded cleanup passed. The initial zero-match operator filter was not accepted; the corrected module ran all 20 tests. Live qualification remains pending. Evidence: `docs/verification/C210_BOUNDED_SENT_REVIEW_REOBSERVATION_2026_10_25.json`.
+
+
 ## October 25 C209 — native MCP authentication and qualification limits
 
 In the new source, provide `CATDESK_MCP_AUTH_TOKEN` only in the approved native
