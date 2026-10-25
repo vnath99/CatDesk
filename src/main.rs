@@ -2645,6 +2645,17 @@ async fn run_native_daemon() -> Result<(), Box<dyn std::error::Error>> {
 fn operator_web_error_code(error: &str) -> &str {
     const REFUSED: &str = "WEB_OPERATION_REFUSED";
     let code = error.split_once(':').map_or(error, |(code, _)| code);
+    // These fixed browser-state codes do not fit the normal component-prefix
+    // vocabulary. Preserve them without disclosing arbitrary adapter errors.
+    if matches!(
+        code,
+        "CHATGPT_NOT_IDLE"
+            | "EDITOR_SELECTOR"
+            | "CAPTCHA_OR_SECURITY_CHECK"
+            | "SELENIUMBASE_IMPORT_FAILED"
+    ) {
+        return code;
+    }
     if code.len() < 5
         || code.len() > 64
         || !code.contains('_')
@@ -3688,6 +3699,10 @@ mod tests {
             "LOGIN_OR_PROFILE_REQUIRED",
             "COOPERATIVE_HOST_PROTOCOL_REQUIRED",
             "HOST_EXECUTABLE_HASH_MISMATCH",
+            "CHATGPT_NOT_IDLE",
+            "EDITOR_SELECTOR",
+            "CAPTCHA_OR_SECURITY_CHECK",
+            "SELENIUMBASE_IMPORT_FAILED",
         ] {
             assert_eq!(operator_web_error_code(code), code);
             assert_eq!(
@@ -3704,6 +3719,8 @@ mod tests {
             "WEB_SCOPE\nprivate path",
             "RESPONSE_PRIVATE\nsecret",
             "LOGIN_OR_PROFILE_REQUIRED private profile text",
+            "CHATGPT_NOT_IDLE_SECRET",
+            "CAPTCHA_OR_SECURITY_CHECK_EXTRA",
         ] {
             assert_eq!(operator_web_error_code(untrusted), "WEB_OPERATION_REFUSED");
         }

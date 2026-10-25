@@ -85,6 +85,17 @@ const user = el('div', {'data-content-search-unit-key':'fallback-turn-0:0:user'}
     el('div', {class:'turn-action-controls'}, '', [button(options.userCopy || 'Copy message')]),
   ]),
 ]);
+if (options.userInlineLink) {
+  const body = user.children[0].children[0];
+  body.text = '';
+  body.children = [el('p', {}, '', [
+    el('span', {}, options.userPrefix || 'Review source at '),
+    el('a', {href:options.userLink || 'https://example.test/compare'},
+      options.userLink || 'https://example.test/compare'),
+    el('span', {}, options.userSuffix || ' without editing it.'),
+  ])];
+  body.children[0].parentElement = body;
+}
 if (options.userMultipleMarkers) {
   user.attrs['data-message-author-role'] = 'user';
   user.children[0].attrs.class = 'group/user-message';
@@ -327,6 +338,40 @@ class CurrentDomTests(unittest.TestCase):
                 self.assertNotIn("Copy", message["text"])
         diagnostic = self.sink.visible_message_snapshot(CurrentDom(controlsOnly=True))["messages"][-1]
         self.assertFalse(diagnostic["bodyTextObserved"])
+
+    def test_explicit_source_read_retains_review_larger_than_context_excerpt(self):
+        answer = "R" * 4375
+        cdp = CurrentDom(answer=answer)
+        context = self.sink.visible_message_snapshot(cdp)
+        self.assertFalse(context["messages"][-1]["textComplete"])
+        observed = self.sink.visible_message_snapshot(cdp, max_message_bytes=8192)
+        self.assertEqual(observed["messages"][-1]["text"], answer)
+        self.assertTrue(observed["messages"][-1]["textComplete"])
+        self.assertTrue(observed["messages"][-1]["revisionComplete"])
+        self.assertEqual(observed["messages"][0]["text"], "exact wake message")
+        payload = {"stage": "SOURCE_SNAPSHOT", "projectId": "alpha",
+                   "sourceGeneration": 1, "sourceDigest": "a" * 64, "snapshot": observed}
+        self.assertLessEqual(len(json.dumps(payload, separators=(",", ":")).encode()) + 1, 8192)
+
+    def test_inline_user_link_is_read_as_one_complete_message(self):
+        cdp = CurrentDom(userInlineLink=True, userLink="https://example.test/compare",
+                         userPrefix="Review source at ", userSuffix=" without editing it.")
+        expected = "Review source at https://example.test/compare without editing it."
+        observed = self.sink.visible_message_snapshot(cdp, max_message_bytes=8192)
+        self.assertEqual(observed["messages"][0]["text"], expected)
+        self.assertTrue(observed["messages"][0]["textComplete"])
+        self.assertEqual(self.sink.user_message_digests(cdp), [bridge.digest(expected)])
+
+    def test_explicit_source_read_budget_stays_bounded(self):
+        for limit in (0, 4095, 8193, True):
+            with self.subTest(limit=limit), self.assertRaises(ValueError):
+                self.sink.visible_message_snapshot(CurrentDom(), max_message_bytes=limit)
+        observed = self.sink.visible_message_snapshot(CurrentDom(answer="R" * 8193), max_message_bytes=8192)
+        self.assertFalse(observed["messages"][-1]["textComplete"])
+        self.assertIsNone(observed["messages"][-1]["revisionHash"])
+        unicode = self.sink.visible_message_snapshot(CurrentDom(answer="😀" * 2200), max_message_bytes=8192)
+        self.assertFalse(unicode["messages"][-1]["textComplete"])
+        self.assertLessEqual(len(unicode["messages"][-1]["text"].encode()), 8192)
 
     def test_current_user_receipt_and_following_assistant_anchor(self):
         self.assertEqual(self.sink.user_message_digests(CurrentDom()), [bridge.digest("exact wake message")])

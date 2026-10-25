@@ -5917,11 +5917,13 @@ fn configure_exact_worker_cargo_command(
     )
 }
 
-// This runner is intentionally compiled only into unit tests. It has no MCP,
-// CLI, environment, path, attempt, target, toolchain, or classification input.
-// The ignored test below is the sole manual trigger and uses the compile-time
-// workspace root. It is not a reviewed-build retry and never writes control
-// records, a candidate, or an attestation.
+// These helpers are compiled only into unit tests, with ignored manual triggers
+// and no MCP/CLI, command, toolchain, target, attempt or classification override.
+// The fixed linker diagnostic uses the compile-time workspace. Only the active
+// unclassified diagnostic permits an explicit existing local control root via
+// its ignored test; it revalidates that root's terminal and snapshot authority.
+// Neither diagnostic retries a reviewed build or writes control records, a
+// candidate, or an attestation.
 #[cfg(all(test, windows))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct FixedV5HostLinkerDiagnosticOutcome {
@@ -6292,30 +6294,31 @@ fn fixed_short_cargo_diagnostic_root(workspace: &Path) -> Result<ProtectedDirect
 }
 
 #[cfg(all(test, windows))]
-fn run_active_unclassified_cargo_diagnostic() -> Result<FixedV5HostLinkerDiagnosticOutcome, String>
-{
-    // Host-only diagnostic reproduction, NEVER an attestation or release build.
-    // Refuse any other generation, review or classified failure.
-    const EXACT_REVIEW: &str = "review-adc-t0462r1-wake-stop-recovery-diagnose-gateway-20261010-6-independent_final_review";
-    let workspace = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let control = existing_control_root(workspace)?;
-    let attempt: ReviewedBuildAttemptV1 = control_read_json(&control, "attempt.json")?;
-    let active = read_active_pointer(&control.base_guard)?;
-    if active.active_attempt_id != attempt.build_attempt_id
-        || active.active_attempt_digest != attempt.attempt_digest
-        || attempt.review_record_id != EXACT_REVIEW
+fn validate_active_unclassified_cargo_diagnostic_audit(
+    attempt: &ReviewedBuildAttemptV1,
+    audit: &ReviewedBuildTerminalAuditV1,
+) -> Result<(), String> {
+    let refused = "REVIEWED_BUILD_CARGO_REPRODUCTION_GATE_REFUSED";
+    let diagnostic = audit.result.failure_diagnostic.as_ref().ok_or(refused)?;
+    if audit.schema_version != 1
+        || audit.attempt != *attempt
+        || digest_attempt(attempt)
+            .map(|digest| digest != attempt.attempt_digest)
+            .unwrap_or(true)
+        || !valid_claim(&audit.claim, attempt)
+        || !valid_owner_proof(&audit.owner, &audit.claim)
+        || audit.result.schema_version != RESULT_SCHEMA_VERSION
+        || audit.result.build_attempt_id != attempt.build_attempt_id
+        || audit.result.owner_id != audit.claim.owner_id
+        || attempt.snapshot_expected.project_id != "catdesk"
+        || attempt.review_session_id != attempt.snapshot_expected.session_id
+        || attempt.review_record_id.is_empty()
+        || !valid_sha256(&attempt.review_authority_sha256)
         || attempt.policy != fixed_policy()
-    {
-        return Err("REVIEWED_BUILD_CARGO_REPRODUCTION_GATE_REFUSED".into());
-    }
-    let audit = terminal_failure_audit(&control, &attempt)
-        .map_err(|_| "REVIEWED_BUILD_CARGO_REPRODUCTION_GATE_REFUSED".to_string())?;
-    let diagnostic = audit
-        .result
-        .failure_diagnostic
-        .as_ref()
-        .ok_or("REVIEWED_BUILD_CARGO_REPRODUCTION_GATE_REFUSED")?;
-    if audit.result.failure_code.as_deref() != Some("REVIEWED_BUILD_FAILED")
+        || audit.result.state != "BUILD_FAILED_OR_AMBIGUOUS"
+        || audit.result.attestation_digest.is_some()
+        || audit.result.failure_code.as_deref() != Some("REVIEWED_BUILD_FAILED")
+        || diagnostic.schema_version != 1
         || diagnostic.phase != "CARGO_BUILD"
         || diagnostic.exit_code != Some(101)
         || diagnostic.classification != "CARGO_EXIT_NONZERO"
@@ -6323,8 +6326,56 @@ fn run_active_unclassified_cargo_diagnostic() -> Result<FixedV5HostLinkerDiagnos
         || diagnostic.captured_stderr_length != MAX_CARGO_FAILURE_DIAGNOSTIC_BYTES
         || !valid_sha256(&diagnostic.captured_stderr_sha256)
     {
+        return Err(refused.into());
+    }
+    Ok(())
+}
+
+/// Only the ignored host diagnostic reads this selector. It selects an existing
+/// local control root, never a command, toolchain, source tree or Cargo option.
+/// The runner independently verifies its active terminal audit and committed
+/// reviewed snapshot before creating any disposable diagnostic output.
+#[cfg(all(test, windows))]
+fn manual_cargo_diagnostic_workspace(value: Option<&std::ffi::OsStr>) -> Result<PathBuf, String> {
+    let workspace = value
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+    let mut components = workspace.components();
+    if !matches!(
+        components.next(),
+        Some(std::path::Component::Prefix(prefix))
+            if matches!(prefix.kind(), std::path::Prefix::Disk(_) | std::path::Prefix::VerbatimDisk(_))
+    ) || !workspace.is_absolute()
+        || components.any(|part| {
+            matches!(
+                part,
+                std::path::Component::ParentDir | std::path::Component::CurDir
+            )
+        })
+        || !workspace.is_dir()
+    {
+        return Err("REVIEWED_BUILD_CARGO_DIAGNOSTIC_WORKSPACE_REFUSED".into());
+    }
+    Ok(workspace)
+}
+
+#[cfg(all(test, windows))]
+fn run_active_unclassified_cargo_diagnostic(
+    workspace: &Path,
+) -> Result<FixedV5HostLinkerDiagnosticOutcome, String> {
+    // Host-only diagnostic reproduction, NEVER an attestation or release build.
+    // Only the current independently validated CatDesk terminal failure qualifies.
+    let control = existing_control_root(workspace)?;
+    let attempt: ReviewedBuildAttemptV1 = control_read_json(&control, "attempt.json")?;
+    let active = read_active_pointer(&control.base_guard)?;
+    if active.active_attempt_id != attempt.build_attempt_id
+        || active.active_attempt_digest != attempt.attempt_digest
+    {
         return Err("REVIEWED_BUILD_CARGO_REPRODUCTION_GATE_REFUSED".into());
     }
+    let audit = terminal_failure_audit(&control, &attempt)
+        .map_err(|_| "REVIEWED_BUILD_CARGO_REPRODUCTION_GATE_REFUSED".to_string())?;
+    validate_active_unclassified_cargo_diagnostic_audit(&attempt, &audit)?;
     let snapshot = validate_attempt(
         workspace,
         &attempt,
@@ -6370,22 +6421,9 @@ fn run_active_unclassified_cargo_diagnostic() -> Result<FixedV5HostLinkerDiagnos
     let reader = std::thread::spawn(move || read_bounded_cargo_stderr(stderr));
     job.assign(&child)?;
     job.resume(&child)?;
-    let started = std::time::Instant::now();
-    let exit = loop {
-        if let Some(status) = child
-            .try_wait()
-            .map_err(|_| "REVIEWED_BUILD_CARGO_REPRODUCTION_UNAVAILABLE".to_string())?
-        {
-            break status;
-        }
-        if started.elapsed() > Duration::from_secs(95) {
-            let _ = child.kill();
-            let _ = job.terminate();
-            let _ = child.wait();
-            return Err("REVIEWED_BUILD_CARGO_REPRODUCTION_TIMEOUT".into());
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    };
+    // The existing worker wait bounds the root, all Job descendants and pipe
+    // EOF together. Root exit alone must not leave a diagnostic reader hanging.
+    let exit = wait_for_owned_build_exit(&mut child, &job, &reader, Duration::from_secs(95))?;
     let captured = reader
         .join()
         .ok()
@@ -11507,14 +11545,156 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    #[ignore = "manual disposable reproduction of exact T-0462 unclassified Cargo failure"]
+    #[ignore = "manual disposable reproduction of the verified active CatDesk Cargo failure"]
     fn active_unclassified_cargo_diagnostic_is_manual_only() {
-        let outcome =
-            run_active_unclassified_cargo_diagnostic().expect("bounded cargo reproduction");
+        let selected = std::env::var_os("CATDESK_REVIEWED_DIAGNOSTIC_WORKSPACE");
+        let workspace = manual_cargo_diagnostic_workspace(selected.as_deref())
+            .expect("existing local diagnostic workspace");
+        let outcome = run_active_unclassified_cargo_diagnostic(&workspace)
+            .expect("bounded cargo reproduction");
         println!(
             "ACTIVE_UNCLASSIFIED_CARGO_REPRODUCTION {}",
             fixed_v5_host_linker_diagnostic_summary_line(&outcome)
         );
+    }
+
+    #[cfg(windows)]
+    fn active_unclassified_cargo_diagnostic_fixture()
+    -> (ReviewedBuildAttemptV1, ReviewedBuildTerminalAuditV1) {
+        let (mut attempt, mut audit) = fixed_v5_linker_diagnostic_audit_fixture();
+        attempt.snapshot_expected.project_id = "catdesk".into();
+        attempt.attempt_digest = digest_attempt(&attempt).unwrap();
+        audit.attempt = attempt.clone();
+        audit.result.failure_diagnostic = Some(summarize_cargo_failure(
+            Some(101),
+            read_bounded_cargo_stderr(std::io::Cursor::new(vec![
+                b'x';
+                MAX_CARGO_FAILURE_DIAGNOSTIC_BYTES
+                    + 1
+            ]))
+            .unwrap(),
+        ));
+        (attempt, audit)
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn active_unclassified_cargo_diagnostic_requires_exact_terminal_authority() {
+        let (attempt, audit) = active_unclassified_cargo_diagnostic_fixture();
+        let before = audit.clone();
+        assert!(validate_active_unclassified_cargo_diagnostic_audit(&attempt, &audit).is_ok());
+
+        let mut wrong = audit.clone();
+        wrong.owner.owner_id = "f".repeat(32);
+        assert!(validate_active_unclassified_cargo_diagnostic_audit(&attempt, &wrong).is_err());
+        let mut wrong = audit.clone();
+        wrong.result.attestation_digest = Some("a".repeat(64));
+        assert!(validate_active_unclassified_cargo_diagnostic_audit(&attempt, &wrong).is_err());
+        let mut wrong = audit.clone();
+        wrong.result.state = "BUILD_RUNNING".into();
+        assert!(validate_active_unclassified_cargo_diagnostic_audit(&attempt, &wrong).is_err());
+        let mut wrong = audit.clone();
+        wrong.attempt.snapshot_manifest_digest = "9".repeat(64);
+        assert!(validate_active_unclassified_cargo_diagnostic_audit(&attempt, &wrong).is_err());
+        for change in ["project", "session", "policy", "review", "digest"] {
+            let mut other = attempt.clone();
+            match change {
+                "project" => other.snapshot_expected.project_id = "other-project".into(),
+                "session" => other.review_session_id = "other-session".into(),
+                "policy" => other.policy.version = LEGACY_BUILD_POLICY_V4_VERSION.into(),
+                "review" => other.review_authority_sha256 = "invalid".into(),
+                "digest" => other.snapshot_manifest_digest = "8".repeat(64),
+                _ => unreachable!(),
+            }
+            if change != "digest" {
+                other.attempt_digest = digest_attempt(&other).unwrap();
+            }
+            let mut wrong = audit.clone();
+            wrong.attempt = other.clone();
+            assert!(
+                validate_active_unclassified_cargo_diagnostic_audit(&other, &wrong).is_err(),
+                "{change}"
+            );
+        }
+        assert_eq!(
+            audit, before,
+            "diagnostic validation cannot mutate authority"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn active_unclassified_cargo_diagnostic_requires_truncated_unclassified_failure() {
+        let (attempt, audit) = active_unclassified_cargo_diagnostic_fixture();
+        for change in ["code", "phase", "classified", "short", "complete", "hash"] {
+            let mut wrong = audit.clone();
+            let diagnostic = wrong.result.failure_diagnostic.as_mut().unwrap();
+            match change {
+                "code" => diagnostic.exit_code = Some(1),
+                "phase" => diagnostic.phase = "START".into(),
+                "classified" => diagnostic.classification = "CARGO_LINK_FAILED".into(),
+                "short" => diagnostic.captured_stderr_length -= 1,
+                "complete" => diagnostic.stderr_truncated = false,
+                "hash" => diagnostic.captured_stderr_sha256 = "invalid".into(),
+                _ => unreachable!(),
+            }
+            assert!(
+                validate_active_unclassified_cargo_diagnostic_audit(&attempt, &wrong).is_err(),
+                "{change}"
+            );
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn active_unclassified_cargo_diagnostic_workspace_selection_is_local_and_explicit() {
+        let default = manual_cargo_diagnostic_workspace(None).unwrap();
+        assert_eq!(default, PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+        assert_eq!(
+            manual_cargo_diagnostic_workspace(Some(default.as_os_str())).unwrap(),
+            default
+        );
+        for bad in [
+            "",
+            ".",
+            "..",
+            r"relative\workspace",
+            r"\\server\share\workspace",
+            r"C:\missing-catdesk-diagnostic-workspace",
+        ] {
+            assert!(manual_cargo_diagnostic_workspace(Some(std::ffi::OsStr::new(bad))).is_err());
+        }
+        let source = include_str!("reviewed_build.rs");
+        let start = source
+            .find("fn run_active_unclassified_cargo_diagnostic(")
+            .unwrap();
+        let end = start
+            + source[start..]
+                .find("fn run_fixed_v5_host_linker_diagnostic()")
+                .unwrap();
+        let runner = &source[start..end];
+        for required in [
+            "terminal_failure_audit(",
+            "validate_active_unclassified_cargo_diagnostic_audit(",
+            "validate_attempt(",
+            "configure_exact_worker_cargo_command(",
+            "ensure_exact_active_pointer(",
+            "wait_for_owned_build_exit(",
+            "Duration::from_secs(95)",
+        ] {
+            assert!(runner.contains(required), "missing {required}");
+        }
+        for forbidden in [
+            "EXACT_REVIEW",
+            "std::env::",
+            "control_create_json(",
+            "atomic_json(",
+            "attestation.json",
+            "Command::new(\"",
+            "--release",
+        ] {
+            assert!(!runner.contains(forbidden), "unexpected {forbidden}");
+        }
     }
 
     #[cfg(windows)]

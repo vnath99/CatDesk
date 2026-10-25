@@ -168,6 +168,7 @@ pub(super) fn source_task_anchor(
         return Ok(Some(event_id.into()));
     }
     if let Some(intent) = &pressure.rollover_intent
+        && intent.status == "REQUESTED"
         && intent.key == *key
         && valid_id(&intent.source_task_id)
     {

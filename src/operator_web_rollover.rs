@@ -27,6 +27,9 @@ mod admission;
 #[path = "web_task_handoff.rs"]
 mod task_handoff;
 
+#[path = "operator_web_quarantine.rs"]
+mod disposition;
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(super) enum GitStateBasis {
@@ -369,6 +372,7 @@ pub(crate) struct WorkLease {
     _store: ProjectStore,
     approved_target: Option<Target>,
     approved_source_task_id: Option<String>,
+    fenced_source_task_id: Option<String>,
 }
 
 impl WorkLease {
@@ -395,6 +399,9 @@ impl WorkLease {
         current: &Target,
         event_id: &str,
     ) -> Result<(), String> {
+        if self.fenced_source_task_id.as_deref() == Some(event_id) {
+            return Err("WEB_WORK_ABANDONED_SOURCE_TASK".into());
+        }
         self.check_target(current)?;
         if original != current
             && (self.approved_target.as_ref() != Some(current)
@@ -519,6 +526,12 @@ fn acquire_web_project_lease(
         Some(record) if record.phase == Phase::ContinuationQueued => {
             Some(completed_target(&store, record)?)
         }
+        Some(record)
+            if record.phase == Phase::Quarantined
+                && disposition::completed(&store, record)?.is_some() =>
+        {
+            Some(record.source.clone())
+        }
         _ => return Err("WEB_WORK_ROLLOVER_PENDING".into()),
     };
     // A new context intent can precede its handoff file, including after a
@@ -548,7 +561,8 @@ fn acquire_web_project_lease(
     };
     match (active.as_ref(), approved_target.as_ref()) {
         (Some(record), Some(current))
-            if record.context_meter_status == ContextMeterStatus::RetryRequired =>
+            if record.phase == Phase::ContinuationQueued
+                && record.context_meter_status == ContextMeterStatus::RetryRequired =>
         {
             if !completed_retry_context_allows_work(pressure.as_ref(), record, current) {
                 return Err("WEB_WORK_ROLLOVER_PENDING".into());
@@ -556,7 +570,10 @@ fn acquire_web_project_lease(
         }
         _ if pressure
             .as_ref()
-            .is_some_and(|value| value.rollover_intent.is_some()) =>
+            .is_some_and(|value| value.rollover_intent.is_some())
+            && !active.as_ref().is_some_and(|record| {
+                disposition::context_allows_new_work(&store, record, pressure.as_ref()) == Ok(true)
+            }) =>
         {
             return Err("WEB_WORK_ROLLOVER_PENDING".into());
         }
@@ -566,9 +583,16 @@ fn acquire_web_project_lease(
         _store: store,
         // completed_target has already verified the exact continuation proof,
         // including this source-task identity. Never infer it from a URL alone.
-        approved_source_task_id: approved_target
+        approved_source_task_id: approved_target.as_ref().and_then(|_| {
+            active
+                .as_ref()
+                .filter(|record| record.phase == Phase::ContinuationQueued)
+                .map(|record| record.source_task_id.clone())
+        }),
+        fenced_source_task_id: active
             .as_ref()
-            .and_then(|_| active.as_ref().map(|record| record.source_task_id.clone())),
+            .filter(|record| record.phase == Phase::Quarantined)
+            .map(|record| record.source_task_id.clone()),
         approved_target,
     })
 }
@@ -1346,7 +1370,20 @@ pub(super) fn auto_stage(
                     AutoStage::SubmissionUnknown
                 });
             }
-            Phase::Quarantined => return Ok(AutoStage::Quarantined),
+            Phase::Quarantined => {
+                if disposition::completed(&store, &record)?.is_some() {
+                    return Ok(
+                        if store.handoff_request()?.is_some_and(|request| {
+                            request.intent_id != record.intent_id && request.source == *current
+                        }) {
+                            AutoStage::CollectHandoff
+                        } else {
+                            AutoStage::Observe
+                        },
+                    );
+                }
+                return Ok(AutoStage::Quarantined);
+            }
             Phase::Prepared | Phase::ResponsePending | Phase::Created | Phase::Bound => {
                 return Ok(AutoStage::Execute);
             }
@@ -1697,6 +1734,11 @@ fn status_from_store(store: &ProjectStore, project: &str) -> Result<Value, Strin
         Some(record) => summary(record),
         None => json!({"projectId":project,"phase":"NONE"}),
     };
+    if let Some(record) = &active
+        && let Some(disposition) = disposition::status(store, record)?
+    {
+        result["operatorDisposition"] = disposition;
+    }
     if let Some(request) = store.handoff_request()? {
         let mut request_summary = handoff_request_summary(&request);
         let collected = active.as_ref().is_some_and(|record| {
@@ -1809,12 +1851,16 @@ pub(super) fn request_handoff_guarded(
     let active = store.active()?;
     if let Some(active) = &active
         && (active.phase != Phase::ContinuationQueued || active.source == source)
+        && disposition::completed(&store, active)?.is_none()
     {
         return Err("WEB_ROLLOVER_EXISTING_INTENT_REQUIRES_RESUME".into());
     }
     let registered = registered_project(workspace, project)?;
     let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
     let wake = Store::open(&root)?;
+    if let Some(previous) = &active {
+        disposition::validate_new_source_task(&store, previous, &wake, source_task_id)?;
+    }
     catdesk_wake::development_runtime::validate_selected_target_isolation(
         workspace,
         wake.root(),
@@ -1925,6 +1971,15 @@ fn saved_current_handoff_request(
     let Some(previous) = store.handoff_request()? else {
         return Ok(None);
     };
+    if let Some(active) = store.active()?
+        && active.intent_id == previous.intent_id
+        && disposition::completed(store, &active)?.is_some()
+    {
+        if previous.source_task_id == source_task_id {
+            return Err("WEB_HANDOFF_ABANDONED_SOURCE_TASK".into());
+        }
+        return Ok(None);
+    }
     if previous.source != *source {
         return Ok(None);
     }
@@ -1947,6 +2002,12 @@ pub(super) fn resume_saved_handoff_request_guarded(
     let request = store
         .handoff_request()?
         .ok_or("WEB_HANDOFF_REQUEST_REQUIRED")?;
+    if let Some(active) = store.active()?
+        && active.intent_id == request.intent_id
+        && disposition::completed(&store, &active)?.is_some()
+    {
+        return Err("WEB_HANDOFF_ABANDONED_SOURCE_TASK".into());
+    }
     if paired(workspace, project)? != request.source {
         return Err("WEB_HANDOFF_SOURCE_CHANGED".into());
     }
@@ -2076,6 +2137,9 @@ pub(super) fn collect_handoff_guarded(
         && existing.intent_id == request.intent_id
         && existing.source == request.source
     {
+        if disposition::completed(&store, &existing)?.is_some() {
+            return Err("WEB_HANDOFF_ABANDONED_SOURCE_TASK".into());
+        }
         return Ok(summary(&existing));
     }
     if paired(workspace, project)? != request.source {
@@ -2269,8 +2333,21 @@ fn prepare_with_request(
     let store = ProjectStore::open(workspace, project)?;
     let source = paired(workspace, project)?;
     if let Some(previous) = store.active()? {
-        if previous.phase != Phase::ContinuationQueued || previous.source == source {
+        if (previous.phase != Phase::ContinuationQueued || previous.source == source)
+            && disposition::completed(&store, &previous)?.is_none()
+        {
             return Err("WEB_ROLLOVER_EXISTING_INTENT_REQUIRES_RESUME".into());
+        }
+        if disposition::completed(&store, &previous)?.is_some() {
+            let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
+                workspace,
+            )?)?;
+            disposition::validate_new_source_task(
+                &store,
+                &previous,
+                &wake,
+                &handoff.source_task_id,
+            )?;
         }
     }
     let meter = WebContextStore::open_nonblocking(workspace.join(".catdesk/web-context"))?;
@@ -2920,6 +2997,34 @@ pub(super) fn quarantine(
     let store = ProjectStore::open_existing(workspace, project)?;
     let current = paired(workspace, project)?;
     quarantine_record(&store, expected_intent, observed_url, &current)
+}
+
+pub(super) fn prepare_quarantine_disposition(
+    workspace: &Path,
+    project: &str,
+    intent: &str,
+    resolution: &str,
+    acknowledgement: &str,
+) -> Result<Value, String> {
+    disposition::prepare(workspace, project, intent, resolution, acknowledgement)
+}
+
+pub(super) fn confirm_quarantine_disposition(
+    workspace: &Path,
+    project: &str,
+    intent: &str,
+    resolution: &str,
+    token: &str,
+    acknowledgement: &str,
+) -> Result<Value, String> {
+    disposition::confirm(
+        workspace,
+        project,
+        intent,
+        resolution,
+        token,
+        acknowledgement,
+    )
 }
 
 /// Read only the saved intent's home draft. The exact intent and source are
@@ -3662,7 +3767,7 @@ mod tests {
         (control, dev_root)
     }
     #[cfg(windows)]
-    fn paired_handoff_fixture() -> (PathBuf, PathBuf, PathBuf, Target, Target) {
+    pub(super) fn paired_handoff_fixture() -> (PathBuf, PathBuf, PathBuf, Target, Target) {
         let parent = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("target")
             .join(format!("web-handoff-paired-{}", uuid::Uuid::new_v4()));
@@ -6942,6 +7047,7 @@ mod tests {
             _store: completed_store,
             approved_target: Some(current.clone()),
             approved_source_task_id: Some(record.source_task_id.clone()),
+            fenced_source_task_id: None,
         };
         approved.check_target(&current).unwrap();
         assert_eq!(

@@ -1,3 +1,20 @@
+## October 25 C206 — separate review recovery, producer health and installation
+
+The genuine C196 source review and local ACK/snapshot chain completed. Its
+normal Wake observer/work ledger did not: they remain `ATTENTION` / `OPEN`.
+The supported reviewed producer then failed with Cargo 101 and no attestation.
+None of these outcomes changes the installed executable or establishes rollback.
+
+This source increment provides explicit operator disposition of an unknown
+rollover while preserving its journal and unknown outcome, plus an 8,192-byte
+explicit source-snapshot read. Ordinary 4,096-byte context excerpts and overall
+wire limits remain unchanged. These are source-tested changes; the live
+quarantine, bindings, native sessions and recurring-automation state remain
+unchanged. Diagnose the producer failure before another confirmed attempt.
+The bounded reproduction has not launched Cargo; preparation failures do not
+establish the producer failure's cause.
+See `docs/verification/C206_REVIEW_RECOVERY_AND_BUILD_DIAGNOSIS_2026_10_25.json`.
+
 ## October 25 C197 — review approved; actual project admission blocks delivery
 
 The user approved C184's frozen message and exact destination. Its nonrenewable

@@ -452,6 +452,81 @@ impl Store {
         self.source_progress_fingerprint_locked(project, source, witness_event_id)
     }
 
+    /// Validate a completed source and hold the existing queue transaction
+    /// lock across a short local disposition commit. No external operation or
+    /// caller-supplied quiescence assertion participates in this proof.
+    pub fn with_quiescent_source<T>(
+        &self,
+        project: &str,
+        source: &Target,
+        witness_event_id: &str,
+        source_task_id: &str,
+        forbidden_event_ids: &[&str],
+        action: impl FnOnce(&str, &str) -> Result<T>,
+    ) -> Result<T> {
+        if !valid_id(project) || !valid_id(witness_event_id) {
+            return Err("CONFIG_SOURCE_WITNESS_INVALID".into());
+        }
+        if !valid_id(source_task_id) || forbidden_event_ids.iter().any(|id| !valid_id(id)) {
+            return Err("CONFIG_SOURCE_WITNESS_INVALID".into());
+        }
+        source.validate()?;
+        let _lock = self.read_lock()?;
+        let config = self.read_config()?;
+        if config.targets.get(project) != Some(source) {
+            return Err("CONFIG_SOURCE_WITNESS_TARGET_MISMATCH".into());
+        }
+        for id in forbidden_event_ids {
+            if self.read_delivery(id)?.is_some()
+                || self.read_timer(id)?.is_some()
+                || self
+                    .event_path(id)
+                    .try_exists()
+                    .map_err(|_| "QUEUE_UNAVAILABLE")?
+                || self
+                    .archive_path(id)
+                    .try_exists()
+                    .map_err(|_| "QUEUE_UNAVAILABLE")?
+            {
+                return Err("CONFIG_QUARANTINE_CONTINUATION_ALREADY_RECORDED".into());
+            }
+        }
+        self.require_project_quiescent_locked(project, &config)?;
+        self.ensure_no_source_progress_locked(project, source, witness_event_id)?;
+        let task = self
+            .read_delivery(source_task_id)?
+            .ok_or("CONFIG_SOURCE_TASK_COMPLETION_REQUIRED")?;
+        let timer = self
+            .read_timer(source_task_id)?
+            .ok_or("CONFIG_SOURCE_TASK_COMPLETION_REQUIRED")?;
+        if task.event.project_id != project
+            || task.target != *source
+            || task.phase != Phase::Sent
+            || task.receipt.as_ref().is_none_or(|receipt| {
+                receipt.event_id != source_task_id
+                    || receipt.target_generation != source.generation
+                    || receipt.target_digest != source.digest
+                    || receipt.message_digest != task.message_digest
+                    || receipt.evidence != "EXACT_USER_MESSAGE_APPENDED"
+            })
+            || timer.project_id != project
+            || timer.target_generation != source.generation
+            || timer.target_digest != source.digest
+            || timer.response_state != ResponseState::Complete
+            || timer.completed_utc.is_none()
+        {
+            return Err("CONFIG_SOURCE_TASK_COMPLETION_REQUIRED".into());
+        }
+        let task_proof = digest(
+            &serde_json::to_string(&(task, timer))
+                .map_err(|_| "CONFIG_SOURCE_TASK_COMPLETION_REQUIRED")?,
+        );
+        action(
+            &self.source_progress_fingerprint_locked(project, source, witness_event_id)?,
+            &task_proof,
+        )
+    }
+
     /// Compensate a staged automatic rollover only if no work has entered its
     /// new Wake generation. The read and target change share the Store lock
     /// with event producers, so a new event cannot be orphaned by rollback.
@@ -2921,6 +2996,77 @@ mod submission_reconciliation_tests {
             )
             .unwrap();
         assert_eq!(destination.generation, source.generation + 1);
+    }
+
+    #[test]
+    fn quarantine_disposition_guard_retains_queue_lock_and_ignores_sibling_work() {
+        let (_base, store, witness, lease) = fixture("disposition-source-lock");
+        let source = completed_witness(&store, &witness, &lease);
+        store
+            .set_target("sibling", 0, "https://chatgpt.com/c/sibling")
+            .unwrap();
+        store
+            .produce(
+                "sibling-work",
+                "sibling",
+                "review_ready",
+                "independent work",
+            )
+            .unwrap();
+        let config_before = fs::read(store.root.join("config.json")).unwrap();
+        let result = store
+            .with_quiescent_source(
+                "catdesk",
+                &source,
+                &witness.event_id,
+                &witness.event_id,
+                &[],
+                |fingerprint, task_proof| {
+                    assert_eq!(fingerprint.len(), 64);
+                    assert_eq!(task_proof.len(), 64);
+                    let competing = OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .open(store.root.join("transaction.lock"))
+                        .unwrap();
+                    assert!(competing.try_lock().is_err());
+                    Ok("local-journal-only")
+                },
+            )
+            .unwrap();
+        assert_eq!(result, "local-journal-only");
+        assert_eq!(
+            fs::read(store.root.join("config.json")).unwrap(),
+            config_before
+        );
+        assert_eq!(
+            store
+                .with_quiescent_source(
+                    "catdesk",
+                    &source,
+                    &witness.event_id,
+                    &witness.event_id,
+                    &[&witness.event_id],
+                    |_, _| Ok(())
+                )
+                .unwrap_err(),
+            "CONFIG_QUARANTINE_CONTINUATION_ALREADY_RECORDED"
+        );
+        store
+            .produce("own-new-work", "catdesk", "review_ready", "new own work")
+            .unwrap();
+        assert!(
+            store
+                .with_quiescent_source(
+                    "catdesk",
+                    &source,
+                    &witness.event_id,
+                    &witness.event_id,
+                    &[],
+                    |_, _| -> Result<()> { panic!("busy project must not commit") }
+                )
+                .is_err()
+        );
     }
 
     #[test]

@@ -1485,6 +1485,13 @@ pub(crate) fn browser_session_lock(root: &Path, wait: Duration) -> Result<File> 
     browser_session_lock_guarded(root, wait, &|| Ok(()))
 }
 
+/// Hold the existing browser/composer lock for a bounded local metadata
+/// transition. This starts no adapter and proves only current lock ownership,
+/// never that an earlier external submission failed or did not occur.
+pub fn acquire_browser_quiescence(store: &Store) -> Result<File> {
+    browser_session_lock(store.root(), Duration::ZERO)
+}
+
 fn browser_session_lock_guarded(
     root: &Path,
     wait: Duration,
@@ -3934,7 +3941,7 @@ mod bootstrap_runtime_tests {
             "BROWSER_SESSION_BUSY"
         );
         drop(first);
-        browser_session_lock(store.root(), Duration::ZERO).expect("released lock");
+        drop(acquire_browser_quiescence(&store).expect("released lock without adapter launch"));
         drop(store);
         std::fs::remove_dir_all(root).expect("remove fixture");
     }

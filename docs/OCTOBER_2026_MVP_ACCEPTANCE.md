@@ -1,3 +1,18 @@
+## October 25 C206 — acceptance scope after the recovered review
+
+| Capability | Evidence and remaining limit |
+| --- | --- |
+| Independent source review | LIVE PASS: one C196 send, exact USER digest and complete browser response independently verified. Applies to the frozen source comparison only. |
+| Local review admission | PASS: completed contract, committed snapshot and acknowledged inbox record. |
+| Normal Web review workflow | PARTIAL: normal reader refused; observer remains `ATTENTION` and Wake2 work ledger `OPEN`. Do not resend or report normal reconciliation complete. |
+| Reviewed producer | Admitted and confirmed once; FAILED with Cargo 101, no attestation. Diagnostic preparation has not launched Cargo or established a cause. |
+| Quarantine disposition / larger explicit snapshot | SOURCE TESTED only; original live quarantine unchanged, no installed qualification. |
+| Production / parallel Web coding | OPEN: installed startup, authenticated MCP, trusted rollback and two independent Web coding conversations are not proved. |
+
+The external connector's historical HTTP 429 is separate from the local producer
+failure. Existing project/native ownership and completed canaries remain
+preserved. See `docs/verification/C206_REVIEW_RECOVERY_AND_BUILD_DIAGNOSIS_2026_10_25.json`.
+
 ## October 25 C197 — review approved; actual project admission blocks delivery
 
 The user approved C184's frozen message and exact destination. Its nonrenewable

@@ -1,3 +1,18 @@
+## October 25 C206 — genuine review recovered; producer failed safely
+
+C196 was sent once and its complete **source-review PASS** was independently
+verified in the browser. The CatDesk contract reached `COMPLETED_VERIFIED`, with
+a committed source snapshot and acknowledged review. The normal observer remains
+`ATTENTION`, and Wake2's Web work ledger remains `OPEN`; the normal workflow is
+not fully reconciled. This is not two-conversation Web coding acceptance.
+
+The supported producer accepted that review and was confirmed once, then ended
+with Cargo exit 101 and no attestation. Production remains unchanged. Source
+work adds guarded quarantine disposition and an 8,192-byte explicit snapshot
+read; neither is installed/live-qualified here. The original quarantine remains
+unresolved. Diagnostic preparation has not launched Cargo, and no build root
+cause is claimed. See `docs/verification/C206_REVIEW_RECOVERY_AND_BUILD_DIAGNOSIS_2026_10_25.json`.
+
 ## October 25 C197 — review approved; actual project admission blocks delivery
 
 The user approved C184's frozen message and exact destination. Its nonrenewable

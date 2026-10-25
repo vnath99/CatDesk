@@ -7,6 +7,18 @@ ownership, independent review and producer gates remain in force. No recurring
 automation, external tunnel replacement or browser-profile change follows from
 this authorization.
 
+## October 25 C206 — review admitted; producer failed before promotion
+
+A genuine C196 source-review PASS was independently read after one delivery.
+The local completed contract, immutable snapshot and review ACK are verified;
+the normal Wake observer/work ledger remain `ATTENTION` / `OPEN`. The producer
+accepted the review and was confirmed once, then failed with Cargo exit 101.
+There is no attestation and no promotion. Preserve the terminal attempt and
+inspect its bounded diagnosis before considering another build. The old
+quarantine, canonical executable/fingerprint and project bindings remain intact.
+Diagnostic preparation has not launched Cargo or identified the root cause.
+See `docs/verification/C206_REVIEW_RECOVERY_AND_BUILD_DIAGNOSIS_2026_10_25.json`.
+
 ## October 24 EDT C118 — complete promotion path and resumed-owner evidence
 
 Fixed the two C117 findings: nested candidate paths now use the Rust producer's

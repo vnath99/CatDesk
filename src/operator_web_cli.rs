@@ -153,6 +153,19 @@ pub(crate) enum WebAction {
         expected_intent_id: String,
         observed_conversation_url: String,
     },
+    RolloverDispositionPrepare {
+        project_id: String,
+        expected_intent_id: String,
+        resolution_id: String,
+        acknowledgement: String,
+    },
+    RolloverDispositionConfirm {
+        project_id: String,
+        expected_intent_id: String,
+        resolution_id: String,
+        acknowledgement: String,
+        confirmation_token: String,
+    },
     AutoTick {
         project_id: String,
     },
@@ -449,6 +462,53 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                 Ok(WebAction::RolloverArchiveDraft {
                     project_id: project_id.into(),
                     expected_intent_id: expected_intent_id.into(),
+                })
+            }
+        }
+        ("rollover", "disposition-prepare" | "disposition-confirm") => {
+            let intent = options
+                .remove("--expected-intent-id")
+                .ok_or("WEB_USAGE: --expected-intent-id is required")?;
+            let resolution = options
+                .remove("--resolution-id")
+                .ok_or("WEB_USAGE: --resolution-id is required")?;
+            let acknowledgement = options
+                .remove("--acknowledge-unknown")
+                .ok_or("WEB_USAGE: --acknowledge-unknown is required")?;
+            let token = if verb == "disposition-confirm" {
+                Some(
+                    options
+                        .remove("--confirmation-token")
+                        .ok_or("WEB_USAGE: --confirmation-token is required")?,
+                )
+            } else {
+                None
+            };
+            if !catdesk_wake::protocol::valid_id(intent)
+                || !catdesk_wake::protocol::valid_id(resolution)
+                || acknowledgement != "ABANDONED_UNKNOWN_NO_REPLAY"
+                || token.is_some_and(|value| !catdesk_wake::protocol::valid_id(value))
+                || !options.is_empty()
+            {
+                return Err(
+                    "WEB_USAGE: exact quarantine disposition acknowledgement and identity required"
+                        .into(),
+                );
+            }
+            if let Some(token) = token {
+                Ok(WebAction::RolloverDispositionConfirm {
+                    project_id: project_id.into(),
+                    expected_intent_id: intent.into(),
+                    resolution_id: resolution.into(),
+                    acknowledgement: acknowledgement.into(),
+                    confirmation_token: token.into(),
+                })
+            } else {
+                Ok(WebAction::RolloverDispositionPrepare {
+                    project_id: project_id.into(),
+                    expected_intent_id: intent.into(),
+                    resolution_id: resolution.into(),
+                    acknowledgement: acknowledgement.into(),
                 })
             }
         }
@@ -986,7 +1046,7 @@ fn registry_rollover_projection(raw: &Value) -> Value {
             _ => json!({"status":"UNAVAILABLE","liveOwnerVerified":false}),
         }
     });
-    json!({
+    let mut projection = json!({
         "status":if phase == "NONE" && raw.get("handoffRequest").is_none() {"NO_ROLLOVER"} else {"DURABLE_SNAPSHOT"},
         "phase":phase,
         "targetGeneration":target_generation,
@@ -1000,7 +1060,27 @@ fn registry_rollover_projection(raw: &Value) -> Value {
         "continuationProofStatus":continuation_proof,
         "automation":automation,
         "creationAdmission":creation_admission,
-    })
+    });
+    if let Some(disposition) = raw.get("operatorDisposition") {
+        projection["operatorDisposition"] = if disposition.get("status").and_then(Value::as_str)
+            == Some("ABANDONED_UNKNOWN_NO_REPLAY")
+            && disposition
+                .get("resolutionId")
+                .and_then(Value::as_str)
+                .is_some_and(catdesk_wake::protocol::valid_id)
+            && disposition.get("providerOutcome").and_then(Value::as_str) == Some("UNKNOWN")
+            && disposition
+                .get("complete")
+                .and_then(Value::as_bool)
+                .is_some()
+        {
+            json!({"status":"ABANDONED_UNKNOWN_NO_REPLAY","resolutionId":disposition["resolutionId"],
+                "complete":disposition["complete"],"providerOutcome":"UNKNOWN","replayAllowed":false})
+        } else {
+            json!({"status":"UNAVAILABLE_OR_CHANGED","replayAllowed":false})
+        };
+    }
+    projection
 }
 
 pub(crate) fn read_status(workspace: &Path) -> Result<Value, String> {
@@ -1278,6 +1358,32 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             &expected_intent_id,
             &observed_conversation_url,
         ),
+        WebAction::RolloverDispositionPrepare {
+            project_id,
+            expected_intent_id,
+            resolution_id,
+            acknowledgement,
+        } => rollover::prepare_quarantine_disposition(
+            &workspace,
+            &project_id,
+            &expected_intent_id,
+            &resolution_id,
+            &acknowledgement,
+        ),
+        WebAction::RolloverDispositionConfirm {
+            project_id,
+            expected_intent_id,
+            resolution_id,
+            acknowledgement,
+            confirmation_token,
+        } => rollover::confirm_quarantine_disposition(
+            &workspace,
+            &project_id,
+            &expected_intent_id,
+            &resolution_id,
+            &confirmation_token,
+            &acknowledgement,
+        ),
         WebAction::AutoTick { project_id } => auto::tick_project(&workspace, &project_id),
     }
 }
@@ -1287,6 +1393,62 @@ mod tests {
     use super::*;
     fn args(values: &[&str]) -> Vec<String> {
         values.iter().map(|v| (*v).into()).collect()
+    }
+
+    #[test]
+    fn quarantine_disposition_cli_requires_explicit_unknown_ack_and_exact_identity() {
+        let prepare = args(&[
+            "operator",
+            "web",
+            "rollover",
+            "disposition-prepare",
+            "--project-id",
+            "alpha",
+            "--expected-intent-id",
+            "intent-a",
+            "--resolution-id",
+            "resolution-a",
+            "--acknowledge-unknown",
+            "ABANDONED_UNKNOWN_NO_REPLAY",
+        ]);
+        assert!(matches!(
+            parse(&prepare).unwrap(),
+            WebAction::RolloverDispositionPrepare { .. }
+        ));
+        let mut missing = prepare.clone();
+        missing.truncate(missing.len() - 2);
+        assert!(parse(&missing).is_err());
+        let mut wrong = prepare.clone();
+        *wrong.last_mut().unwrap() = "FAILED".into();
+        assert!(parse(&wrong).is_err());
+        let mut confirm = prepare;
+        confirm[3] = "disposition-confirm".into();
+        assert!(parse(&confirm).is_err());
+        confirm.extend(args(&["--confirmation-token", "confirmed-token"]));
+        assert!(matches!(
+            parse(&confirm).unwrap(),
+            WebAction::RolloverDispositionConfirm { .. }
+        ));
+        confirm.extend(args(&["--force", "true"]));
+        assert!(parse(&confirm).is_err());
+    }
+
+    #[test]
+    fn quarantine_disposition_status_keeps_unknown_and_redacts_private_authority() {
+        let raw = json!({"phase":"QUARANTINED","operatorDisposition":{
+            "status":"ABANDONED_UNKNOWN_NO_REPLAY","resolutionId":"resolution-a",
+            "complete":true,"providerOutcome":"UNKNOWN","confirmationToken":"private-token",
+            "originalJournalPreserved":true}});
+        let status = registry_rollover_projection(&raw);
+        assert_eq!(status["phase"], "QUARANTINED");
+        assert_eq!(
+            status["operatorDisposition"]["status"],
+            "ABANDONED_UNKNOWN_NO_REPLAY"
+        );
+        assert_eq!(status["operatorDisposition"]["complete"], true);
+        assert_eq!(status["operatorDisposition"]["providerOutcome"], "UNKNOWN");
+        assert!(!status.to_string().contains("private-token"));
+        assert_eq!(status["continuationProved"], false);
     }
 
     #[test]

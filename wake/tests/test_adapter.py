@@ -160,6 +160,39 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(original["coverage"]["textIncomplete"], 0)
         self.assertFalse(cdp.sent)
 
+    def test_explicit_source_read_preserves_bounded_long_review_and_user(self):
+        cdp = FakeCdp()
+        answer = json.dumps({"marker": "SYNTHETIC_REVIEW", "assessment": "r" * 4300})
+        budgets = []
+        class Sink:
+            def __init__(self, url, *_args):
+                self.url, self.ui_timeout = url, 1
+            def exact(self, url): return url == self.url
+            def wait_for_page_readiness(self, _sb, current): return current
+            def wait_for_idle(self, _cdp, _timeout): pass
+            def readiness_reason(self, _cdp): return None
+            def visible_message_snapshot(self, _cdp, *, max_message_bytes):
+                budgets.append(max_message_bytes)
+                messages = [{"role": role, "text": text, "textComplete": True,
+                             "revisionComplete": True, "identityBasis": "UNIT_KEY"}
+                            for role, text in (("USER", "bounded source review"), ("ASSISTANT", answer))]
+                return {"messages": messages, "truncated": False,
+                        "coverage": {"visibleRoleCount": 2, "returned": 2}}
+        source = {"url": cdp.url, "digest": bridge.digest(cdp.url), "generation": 1}
+        with patch.object(bridge, "NewConversationSink", Sink), \
+                patch.object(adapter, "prepare_cdp_target", return_value=cdp), \
+                patch.object(adapter, "emit") as emit:
+            adapter.source_snapshot(bridge, object(),
+                                    {"snapshot": True, "projectId": "alpha", "source": source})
+        payload = emit.call_args.args[0]
+        self.assertEqual(budgets, [8192, 8192])
+        self.assertEqual([item["text"] for item in payload["snapshot"]["messages"]],
+                         ["bounded source review", answer])
+        self.assertTrue(all(item["textComplete"] for item in payload["snapshot"]["messages"]))
+        self.assertLessEqual(len(json.dumps(payload, separators=(",", ":")).encode()) + 1, 8192)
+        self.assertFalse(cdp.sent)
+        self.assertEqual(cdp.keys, [])
+
     def test_fresh_document_probe_waits_within_one_browser_and_requires_stability(self):
         now = [0.0]
         sleeps = []

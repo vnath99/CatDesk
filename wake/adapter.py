@@ -631,7 +631,8 @@ def bootstrap_quarantine_inspect(bridge, sb, request):
           "responseState": stage, "observationOnly": True})
 
 
-def bounded_source_snapshot(bridge, sink, cdp, *, timeout=10, clock=None, sleep=None):
+def bounded_source_snapshot(bridge, sink, cdp, *, timeout=10, clock=None, sleep=None,
+                            max_message_bytes=None):
     """Wait in one document for matching complete final message frames.
 
     A still-incomplete snapshot remains explicitly incomplete at the deadline;
@@ -644,7 +645,8 @@ def bounded_source_snapshot(bridge, sink, cdp, *, timeout=10, clock=None, sleep=
     while True:
         if not sink.exact(cdp.get_current_url()):
             raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
-        snapshot = sink.visible_message_snapshot(cdp)
+        snapshot = (sink.visible_message_snapshot(cdp) if max_message_bytes is None else
+                    sink.visible_message_snapshot(cdp, max_message_bytes=max_message_bytes))
         if not sink.exact(cdp.get_current_url()):
             raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
         messages = snapshot["messages"]
@@ -692,7 +694,7 @@ def source_snapshot(bridge, sb, request):
     sink.wait_for_idle(cdp, sink.ui_timeout)
     if not sink.exact(cdp.get_current_url()) or sink.readiness_reason(cdp) is not None:
         raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
-    snapshot = bounded_source_snapshot(bridge, sink, cdp)
+    snapshot = bounded_source_snapshot(bridge, sink, cdp, max_message_bytes=8192)
     if (snapshot["messages"] and snapshot["messages"][-1]["role"] == "ASSISTANT" and
             not snapshot["messages"][-1]["textComplete"]):
         snapshot["bodyDiagnostics"] = sink.message_body_diagnostics(cdp)

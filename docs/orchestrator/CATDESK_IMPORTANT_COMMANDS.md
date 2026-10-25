@@ -1,3 +1,60 @@
+## October 25 C206 — review recovery and guarded next commands
+
+C196 was delivered once and independently read as a complete source-review PASS.
+The local review contract, source snapshot and inbox ACK completed. The normal
+Wake observer remains `ATTENTION` and Wake2 work ledger `OPEN`; do not resend.
+The supported producer failed with Cargo 101 and no attestation. Production and
+the original quarantine remain unchanged. Current evidence:
+`docs/verification/C206_REVIEW_RECOVERY_AND_BUILD_DIAGNOSIS_2026_10_25.json`.
+
+### Unknown-rollover disposition — source-qualified, not yet applied live
+
+Use a controller independently built and qualified from the revision containing
+these commands. An older selected package is not assumed to support them.
+
+```text
+<qualified-controller> operator web rollover disposition-prepare --project-id <project> --expected-intent-id <quarantined-intent> --resolution-id <stable-resolution> --acknowledge-unknown ABANDONED_UNKNOWN_NO_REPLAY
+<qualified-controller> operator web rollover disposition-confirm --project-id <project> --expected-intent-id <quarantined-intent> --resolution-id <same-resolution> --confirmation-token <returned-token> --acknowledge-unknown ABANDONED_UNKNOWN_NO_REPLAY
+```
+
+Prepare requires the exact unknown quarantine, unchanged paired source target,
+completed source-task and handoff evidence, an available project writer/browser
+lock, and no managed native binding, unresolved task journal, own-project work or
+continuation. Own-project delivery responses must already be complete.
+It returns `PREFLIGHT_READY` with pinned evidence and a ten-minute token.
+Confirmation rechecks those gates before recording disposition, updating the
+context marker and recording completion. Changed evidence, a busy owner or a
+previous continuation refuses. An expired unstarted preparation requires a new
+resolution ID; an already-started exact transaction uses its existing recovery
+path. Do not edit the token, journal or context files.
+
+Success reports `ABANDONED_UNKNOWN_NO_REPLAY`: the provider outcome remains
+**unknown**. It preserves original journal/handoff bytes, creates no provider
+receipt, sends nothing and changes no binding. The old task/intent stays fenced.
+New work still uses normal admission, and another rollover needs a fresh
+completed task and distinct stable intent. This does not resolve arbitrary
+drafts, authorize a resend or grant production-release authority.
+
+### Review reads and producer failure
+
+The existing `operator web review read --project-id <project> --event-id <event>`
+remains read-only. The source fix permits an 8,192-byte message for explicit
+source reads; ordinary context excerpts remain 4,096 bytes and total/wire caps
+remain unchanged. Oversized or incomplete content still cannot prove a complete
+response. This fixed source is not yet installed, and the C201 refusal's exact
+cause was not proved solely by the reproduced size gap.
+
+Use `operator reviewed-build result` to inspect the active producer attempt.
+For C205 the result is terminal Cargo 101 with no attestation. Preserve it;
+do not repeat confirmation or promote a disposable diagnostic output. The
+ignored, host-only diagnostic in `src/reviewed_build.rs` checks the exact current
+terminal authority and reproduces it in disposable paths without writing release
+authority. No diagnostic Cargo process has launched yet: one preparation found
+the legitimate C205 pointer advance, and a later wrapper hit its bound while
+scanning historical cache. Preserve those results and narrow that wrapper;
+neither preparation failure establishes a Cargo root cause. Installed startup
+and rollback remain open.
+
 ## October 25 C197 — review approved; actual project admission blocks delivery
 
 The user approved C184's frozen message and exact destination. Its nonrenewable

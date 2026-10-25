@@ -1,3 +1,20 @@
+## October 25 C206 — continue from the failed producer, preserve sent work
+
+C196's one sent review has an independently verified complete source PASS.
+The local CatDesk contract, source snapshot and review acknowledgment are
+complete. Wake2's normal observer is still `ATTENTION` and its work ledger is
+`OPEN`; preserve these records and do not resend. The original CatDesk quarantine
+is also preserved and unresolved.
+
+The next release blocker is the supported producer's Cargo 101 failure with no
+attestation. Diagnostic preparation has not launched Cargo: preserve the failed
+attempt and finish narrowing the bounded wrapper before drawing conclusions or
+confirming another build. A diagnostic artifact is not a release.
+Requalify this increment independently: C196 reviewed the earlier frozen
+`409513a1c1f81f74f873bd4b3dca825458ef29a8` comparison, not these new changes.
+Production promotion, installed recovery and two-project Web coding remain open.
+See `docs/verification/C206_REVIEW_RECOVERY_AND_BUILD_DIAGNOSIS_2026_10_25.json`.
+
 ## October 25 C197 — review approved; actual project admission blocks delivery
 
 The user approved C184's frozen message and exact destination. Its nonrenewable

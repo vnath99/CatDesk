@@ -1,3 +1,28 @@
+## October 25 C206 — review evidence recovered; build failure isolated
+
+| UTC checkpoint | Actual result |
+| --- | --- |
+| 15:49 | One C196 delivery has an exact USER receipt; the bounded host exited with observer `ATTENTION`. No resend. |
+| 15:53 | Independent browser read matched the full USER paragraph digest and the complete 4,375-byte source-review PASS. The normal reader refusal remains recorded. |
+| 15:57 | Durable `COMPLETED_VERIFIED` state, source snapshot and review acknowledgment verified after a timed-out finalization response; no duplicate finalization. |
+| 16:01 | The supported producer's one confirmed attempt ended `BUILD_FAILED_OR_AMBIGUOUS`, Cargo 101, with no attestation and no remaining producer processes. |
+
+The review covers implementation `061051fe9e6e4493ab0ccf24c58b41cbe81b74a6`
+through documentation head `409513a1c1f81f74f873bd4b3dca825458ef29a8`.
+It does not review this new source increment. Normal Web-work reconciliation,
+installed startup/rollback and two-project Web coding remain open. Quarantine,
+bindings and native work were preserved. Source batches passed separately:
+90 initial quarantine Rust tests; two public prepare/confirm tests in 7.69 seconds
+with strict test-target Clippy; 28 current-DOM and 29 adapter Python tests plus
+two final wire/UTF-8 assertions; seven diagnostic gate tests. The manual
+diagnostic reproduction was excluded from those source tests. Two later
+diagnostic preparations launched no Cargo process: the first found a legitimate
+producer-pointer advance; the second was stopped within the monitoring budget
+while scanning historical cache. Neither launched Cargo or identified its failure.
+The private harness is being narrowed without changing release authority.
+Current evidence:
+`docs/verification/C206_REVIEW_RECOVERY_AND_BUILD_DIAGNOSIS_2026_10_25.json`.
+
 ## October 25 C197 — review approved; actual project admission blocks delivery
 
 The user approved C184's frozen message and exact destination. Its nonrenewable

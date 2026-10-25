@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C206_REVIEW_RECOVERY_AND_BUILD_DIAGNOSIS",
+  "recordedUtc": "2026-10-25T16:12:15.5768268+00:00",
+  "source": {
+    "branch": "codex/web-rollover-oct17",
+    "priorPublishedHead": "08ed04e95cc4fc7cc0cb594e1549824b017f2d18",
+    "reviewedDocumentationHead": "409513a1c1f81f74f873bd4b3dca825458ef29a8",
+    "reviewedImplementationCommit": "061051fe9e6e4493ab0ccf24c58b41cbe81b74a6",
+    "currentIncrement": "UNCOMMITTED_SOURCE_AND_DOCUMENTATION",
+    "reviewDoesNotCoverNewIncrement": true
+  },
+  "review": {
+    "marker": "C196",
+    "delivery": "ONE_EXACT_USER_MESSAGE_APPENDED",
+    "messageSentCount": 1,
+    "normalObserver": "ATTENTION_RETAINED",
+    "normalReader": "REFUSED_RETAINED",
+    "independentVerification": "EXACT_TARGET_FULL_USER_PARAGRAPH_DIGEST_AND_COMPLETE_BROWSER_RESPONSE",
+    "responseBytes": 4375,
+    "responseSha256": "e408fdf9bdf983f755a9e399389df25994fd68a3df5208f9dd2397ed7b01333b",
+    "verdict": "PASS_SOURCE_SCOPE_ONLY",
+    "localContract": "COMPLETED_VERIFIED",
+    "sourceSnapshot": "COMMITTED_AND_VALIDATED_BY_PRODUCER_PREPARE",
+    "reviewInbox": "ACKNOWLEDGED",
+    "wakeWebWorkLedger": "OPEN",
+    "wakeResponseTimer": "ATTENTION",
+    "normalWorkflowFullyReconciled": false,
+    "parallelWebCodingProved": false
+  },
+  "producer": {
+    "prepare": "PREPARED_FROM_GENUINE_ACKNOWLEDGED_REVIEW",
+    "confirmedOnce": true,
+    "terminalState": "BUILD_FAILED_OR_AMBIGUOUS",
+    "failureCode": "REVIEWED_BUILD_FAILED",
+    "phase": "CARGO_BUILD",
+    "exitCode": 101,
+    "classification": "CARGO_EXIT_NONZERO",
+    "capturedStderrBytes": 4096,
+    "stderrTruncated": true,
+    "attestationExists": false,
+    "processesRemaining": 0,
+    "confirmationRepeated": false,
+    "diagnostic": "NOT_LAUNCHED_PREPARATION_WRAPPER_BEING_NARROWED",
+    "rootCause": "NOT_ESTABLISHED",
+    "diagnosticPreparations": [
+      {
+        "reason": "KNOWN_AUTHORIZED_PRODUCER_POINTER_ADVANCE",
+        "cargoLaunched": false,
+        "priorEvidencePreserved": true,
+        "outcome": "PRESPAWN_REFUSED"
+      },
+      {
+        "reason": "HISTORICAL_CACHE_SCAN",
+        "compilerLaunched": false,
+        "cargoLaunched": false,
+        "releaseAuthorityChanged": false,
+        "outcome": "STOPPED_WITHIN_BUDGET_BEFORE_CARGO_HISTORICAL_CACHE_SCAN"
+      }
+    ]
+  },
+  "implementation": {
+    "quarantineDisposition": "SOURCE_IMPLEMENTED_NOT_APPLIED_TO_LIVE_QUARANTINE",
+    "dispositionClassification": "ABANDONED_UNKNOWN_NO_REPLAY",
+    "originalJournalPreserved": true,
+    "dispositionCreatesReceipt": false,
+    "dispositionChangesBinding": false,
+    "explicitSnapshotReadMessageBudgetBytes": 8192,
+    "ordinaryContextExcerptBudgetBytes": 4096,
+    "totalSnapshotAndWireBudgets": "UNCHANGED",
+    "snapshotSourceCauseLimit": "REPRODUCED_SIZE_GAP_NOT_PROOF_OF_ALL_C201_REFUSAL_CAUSES",
+    "diagnosticRunner": "MANUAL_IGNORED_TEST_ONLY_CURRENT_TERMINAL_AUTHORITY_NO_ATTESTATION_WRITES"
+  },
+  "verification": {
+    "initialQuarantineRustTests": 90,
+    "initialQuarantineClippy": "PASS",
+    "publicPrepareConfirmRustTests": 2,
+    "publicPrepareConfirmSeconds": 7.69,
+    "publicPrepareConfirmClippy": "PASS_STRICT_TEST_TARGETS",
+    "pythonCurrentDomTests": 28,
+    "pythonAdapterTests": 29,
+    "additionalFinalPythonAssertions": 2,
+    "producerDiagnosticSourceTests": {
+      "totalPassed": 7,
+      "ignoredManualTests": 2,
+      "existingDiagnosticTests": 4,
+      "liveReproductionExecuted": false,
+      "newGateTests": 3,
+      "failures": 0
+    },
+    "producerDiagnosticLiveRun": "NOT_LAUNCHED",
+    "legacyPythonSuite": "120_SECOND_TIMEOUT_NOT_QUALIFIED_NOT_REPEATED",
+    "currentExactShaCi": "NOT_YET_AVAILABLE_FOR_UNCOMMITTED_INCREMENT",
+    "evidenceDigests": {
+      "publicPathResult": "80660e32e523df5ea2a61da400fcabb48e2f9a4d5790f2a8ee852e9eb76fd625",
+      "snapshotSourceResult": "1f1f9ffd9e273117d51ee191795b5593ba5b118ddb42490714aa8cd6db587c63",
+      "diagnosticSourceResult": "71972b4fbe11fe3e30287e337e46f8ff2344081ba7d4d73a493fc4ee2e96c5f1"
+    }
+  },
+  "preservation": {
+    "canonicalExecutableSha256": "9a8f4ebf6ea57cbb61efaa12e8afa54d18b8db7374b9884067325bc84565568c",
+    "canonicalPromoted": false,
+    "fingerprintRewritten": false,
+    "pinnedStateFiles": 361,
+    "unexpectedPinnedMutations": 0,
+    "existingNativeSessionsChanged": false,
+    "projectBindingsChanged": false,
+    "oldCanariesReplayed": false,
+    "oldQuarantineResolved": false,
+    "externalSecureMcpChanged": false,
+    "recurringAutomationEnabled": false
+  },
+  "acceptance": {
+    "installedStartup": "OPEN",
+    "installedAuthenticatedMcp": "OPEN",
+    "trustedRollback": "OPEN",
+    "twoIndependentWebCodingConversations": "OPEN",
+    "connector": "HISTORICAL_429_SEPARATE_FROM_PRODUCER_FAILURE",
+    "goal": "ACTIVE",
+    "next": "Narrow the bounded private diagnostic wrapper and diagnose the retained producer failure; do not infer a Cargo cause from preparation failures. Reconcile the existing sent review without resending, then requalify source and use supported producer/promotion gates."
+  },
+  "publication": {
+    "status": "SOURCE_CHECKPOINT_PENDING_ROOT_COMMIT",
+    "remoteReadback": "REQUIRED_AFTER_PARENT_PUBLICATION"
+  }
+}

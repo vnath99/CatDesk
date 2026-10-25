@@ -2445,13 +2445,19 @@ class NewConversationSink(CdpSink):
             raise Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
         return {"status": "OBSERVED", **value}
 
-    def visible_message_snapshot(self, cdp: Any) -> dict[str, Any]:
+    def visible_message_snapshot(self, cdp: Any, *, max_message_bytes: int = 4096) -> dict[str, Any]:
         """Return bounded private text and qualified identities for visible role units.
 
         DOM keys stay inside this process. A hash is an observation aid, not a
         claim that ChatGPT will preserve that key across a future document.
         """
+        # Context observation keeps its existing small excerpts. An explicit
+        # private source read may retain the same 8 KiB total window in one
+        # message, matching the review reader's existing body limit.
+        if type(max_message_bytes) is not int or max_message_bytes not in {4096, 8192}:
+            raise ValueError("unsupported private snapshot message budget")
         script = """(() => {
+            const messageLimit = __CATDESK_SNAPSHOT_MESSAGE_BYTES__;
             const visible = element => {
                 const style = window.getComputedStyle(element);
                 return element.getClientRects().length > 0 &&
@@ -2524,7 +2530,7 @@ class NewConversationSink(CdpSink):
                 // An empty mounted Markdown shell is not a complete response.
                 // Preserve uncertainty for context estimation and handoff reads.
                 const bodyProven = completeBody && Boolean(text.trim());
-                let excerpt = text.slice(-4096);
+                let excerpt = text.slice(-messageLimit);
                 // JavaScript slices UTF-16 units. A tail can begin with half
                 // of an emoji; omit that half before Python's UTF-8 encoding.
                 const firstUnit = excerpt.charCodeAt(0);
@@ -2542,7 +2548,7 @@ class NewConversationSink(CdpSink):
             const unique = rows.filter(row => row !== null);
             return [tier, Math.min(unique.length, 1024), unique.length > 1024,
                 Math.min(nested.size, 1024), Math.min(keyedCollapsed, 1024), unique.slice(-16)];
-        })()"""
+        })()""".replace("__CATDESK_SNAPSHOT_MESSAGE_BYTES__", str(max_message_bytes))
         try:
             value = CdpSink.cdp_value(cdp.evaluate(script))
         except Exception as error:
@@ -2561,15 +2567,15 @@ class NewConversationSink(CdpSink):
         for item in reversed(value[5]):
             if (not isinstance(item, list) or len(item) != 7 or
                     item[0] not in {"user", "assistant"} or
-                    not isinstance(item[1], str) or len(item[1]) > 4096 or
+                    not isinstance(item[1], str) or len(item[1]) > max_message_bytes or
                     not isinstance(item[2], bool) or
                     not isinstance(item[3], int) or isinstance(item[3], bool) or not 0 <= item[3] <= 1000000 or
                     any(key is not None and (not isinstance(key, str) or not 0 < len(key) <= 256)
                         for key in item[4:])):
                 raise Attention("SOURCE_SNAPSHOT_QUERY_FAILED")
             text_bytes = item[1].encode("utf-8")
-            clipped = text_bytes[:min(4096, remaining)].decode("utf-8", errors="ignore")
-            complete_body = item[2] and item[3] <= 4096
+            clipped = text_bytes[:min(max_message_bytes, remaining)].decode("utf-8", errors="ignore")
+            complete_body = item[2] and item[3] <= max_message_bytes
             text_complete = complete_body and len(text_bytes) == len(clipped.encode("utf-8"))
             if not text_complete:
                 truncated = True
