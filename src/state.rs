@@ -1166,6 +1166,37 @@ impl AppState {
         Ok(state)
     }
 
+    /// Local-backend recovery consumes the already initialized endpoint exactly
+    /// as the public lifecycle probe read it. Unlike ordinary startup, it must
+    /// not promote a pending route or initialize/migrate the configuration.
+    pub(crate) fn new_backend_only(
+        port: u16,
+        workspace_root: String,
+        config_path: PathBuf,
+    ) -> std::io::Result<Self> {
+        if !fs::metadata(&config_path)?.is_file() {
+            return Err(std::io::Error::other(
+                "backend-only startup requires an existing configuration file",
+            ));
+        }
+        let config = AppConfig::load_from_path(&config_path)?;
+        if config.identity.installation_id.is_none() || config.mcp.route_id.is_none() {
+            return Err(std::io::Error::other(
+                "backend-only startup requires initialized installation identity and current MCP route",
+            ));
+        }
+        let mut state = Self::from_prepared_config(
+            port,
+            workspace_root,
+            config_path,
+            false,
+            config,
+            Vec::new(),
+        )?;
+        state.headless_launch_settings_ephemeral = true;
+        Ok(state)
+    }
+
     #[cfg(test)]
     pub(crate) fn new_for_test(
         port: u16,
@@ -1990,6 +2021,75 @@ toolCallCount = 7
 
         let _ = std::fs::remove_file(config_path);
         let _ = std::fs::remove_dir(workspace);
+    }
+
+    #[test]
+    fn backend_only_keeps_pending_route_and_persisted_launch_settings() {
+        let (workspace, config_path) = temp_config_workspace("catdesk-backend-only-config");
+        let mut configured = AppConfig {
+            mode: Mode::Browser,
+            ..AppConfig::default()
+        };
+        configured.identity.installation_id = Some("backend-only-fixture-installation".into());
+        configured.mcp.route_id = Some("oldrouteoldrouteoldroute12".into());
+        configured.mcp.route_rotation.pending_route_id = Some("newroutenewroutenewroute12".into());
+        configured.mcp.route_rotation.restart_required = true;
+        configured.save_to_path(&config_path).unwrap();
+        let before = fs::read(&config_path).unwrap();
+        let mut app = AppState::new_backend_only(
+            0,
+            workspace.to_string_lossy().into_owned(),
+            config_path.clone(),
+        )
+        .unwrap();
+        assert!(app.mode == Mode::Browser);
+        assert_eq!(app.mcp_path(), "/oldrouteoldrouteoldroute12/mcp");
+        assert_eq!(fs::read(&config_path).unwrap(), before);
+        assert!(!workspace.join("config.toml.pre-t0025b-backup").exists());
+        assert!(!app.fixture_config_in_memory);
+
+        app.mode = Mode::Computer;
+        app.port = 49152;
+        app.tool_mode = ToolMode::ReadOnly;
+        app.record_turn_usage(2, 3);
+        app.persist_state().unwrap();
+        configured.usage_totals.accumulate(2, 3, 1);
+        assert_eq!(
+            serde_json::to_value(AppConfig::load_from_path(&config_path).unwrap()).unwrap(),
+            serde_json::to_value(configured).unwrap(),
+            "normal accounting may persist totals without promoting routes or changing UI defaults"
+        );
+        assert!(temp_config_files(&workspace).is_empty());
+        assert!(!workspace.join("config.toml.pre-t0025b-backup").exists());
+        fs::remove_file(config_path).unwrap();
+        fs::remove_dir(workspace).unwrap();
+    }
+
+    #[test]
+    fn backend_only_refuses_uninitialized_config_without_writing_it() {
+        let (workspace, config_path) = temp_config_workspace("catdesk-backend-only-uninitialized");
+        let construct = || {
+            AppState::new_backend_only(
+                0,
+                workspace.to_string_lossy().into_owned(),
+                config_path.clone(),
+            )
+        };
+        assert!(construct().is_err());
+        assert!(!config_path.exists());
+        let mut configured = AppConfig::default();
+        configured.save_to_path(&config_path).unwrap();
+        let before = fs::read(&config_path).unwrap();
+        assert!(construct().is_err());
+        assert_eq!(fs::read(&config_path).unwrap(), before);
+        configured.identity.installation_id = Some("backend-only-fixture-installation".into());
+        configured.save_to_path(&config_path).unwrap();
+        let before = fs::read(&config_path).unwrap();
+        assert!(construct().is_err());
+        assert_eq!(fs::read(&config_path).unwrap(), before);
+        assert!(!workspace.join("config.toml.pre-t0025b-backup").exists());
+        fs::remove_file(config_path).unwrap();
+        fs::remove_dir(workspace).unwrap();
     }
 
     #[test]

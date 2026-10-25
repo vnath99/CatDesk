@@ -1,3 +1,24 @@
+## October 25 C222 — opt-in backend-only lifecycle source
+
+New source adds `-BackendOnly` to public `start` and `recover` operations for a
+qualified matching release. Existing canonical fingerprint checks and any
+required reviewed recovery/LKG validation run first. A new launch requires the exact native
+`--catdesk-daemon --backend-only --check-support` capability response before
+starting the local listener; refusal never falls back to full startup. This
+path omits automatic GUI, Wake, browser, scheduler and external tunnel startup.
+It preserves the initialized current route, pending route and saved UI mode.
+Process-only bearer readiness is limited to the exact validated loopback endpoint.
+
+Source qualification passed: ten Rust tests, both PowerShell suites, formatting
+and strict root Clippy. The actual retained C208 executable safely rejected the
+capability query once, before startup; its artifacts and authority were preserved.
+This creates no new
+candidate or release authority, changes neither C208 nor the selected C218
+package, and establishes no installed acceptance. C208's reviewed `409513a`
+source lacks the capability; the refusal test proves compatibility, not installed support. The
+existing owner guards remain unchanged and the manual-child qualification
+remains pending. See [C222 evidence](docs/verification/C222_BACKEND_ONLY_LIFECYCLE_2026_10_25.json).
+
 ## October 25 C219 — recovery handoff qualified; production owner required
 
 The reviewed private promotion wrapper now preserves the verified C218 state:

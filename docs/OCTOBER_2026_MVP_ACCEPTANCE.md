@@ -1,3 +1,20 @@
+## October 25 C222 — source qualification and actual old-image refusal
+
+| Capability | Actual result |
+| --- | --- |
+| Opt-in backend-only lifecycle | Source PASS: ten Rust tests, both PowerShell suites, formatting and strict root Clippy. |
+| Authenticated local MCP and preserved configuration | Ephemeral fixture PASS: 401 without bearer, 200 with bearer, current/pending routes and saved launch settings preserved; no automatic workers. |
+| Retained C208 executable compatibility | Actual Windows PASS: one exact capability query safely refused, natural exit 2 in 289 ms; eight artifact/authority pins and process snapshots preserved. |
+| Conditional promotion owner launcher | Static review and actual tool-side negative control PASS; positive manual-child qualification PENDING. No guard waiver. |
+| Bounded cleanup | PASS: zero remaining owners in the final test scope, no port-3200 listener, no promotion execution intent; unrelated processes untouched. |
+| Installed production, previous-version rollback and two independent Web coding conversations | OPEN. C208 and the selected C218 package do not contain this new source behavior. |
+
+No new release candidate or protected-state change occurred. Four failed attempts
+are retained, including an access-denied sandbox run whose cause was established
+by paired read-only native queries. The successful fixture rerun used authorized
+filesystem access with the existing kill-on-close test Job intact. Evidence:
+[C222](verification/C222_BACKEND_ONLY_LIFECYCLE_2026_10_25.json).
+
 ## October 25 C220/C221 — Windows evidence, no production acceptance
 
 Actual retained-handle process queries and operator-provided current-Job API

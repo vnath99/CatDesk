@@ -1,3 +1,43 @@
+## October 25 C222 — backend-only start/recover requires a qualified new release
+
+**Source-only commands; not installed support in C208 or the selected C218 package.**
+
+```powershell
+.\catdesk.ps1 start -BackendOnly -ReadyTimeoutSeconds 60
+.\catdesk.ps1 recover -BackendOnly -ReadyTimeoutSeconds 60
+```
+
+Use the exact intended workspace and verified build identity as in the existing
+public lifecycle. Canonical executable/fingerprint checks remain mandatory;
+repairs retain their existing reviewed recovery/LKG requirements. When a launch is needed, the verified executable must
+first accept the closed `--catdesk-daemon --backend-only --check-support` tuple
+and return the fixed `LOCAL_BACKEND_ONLY` capability without loading state or
+starting services. An unsupported image returns
+`LOCAL_MCP_BACKEND_ONLY_UNSUPPORTED`; there is no full-start fallback. C208's
+`409513a` source predates this tuple. Its actual executable rejected the exact
+query once with exit 2, without startup or artifact changes.
+
+Successful local readiness returns `LOCAL_BACKEND_READY`. The local convergence
+window is capped at 60 seconds after the existing integrity/recovery checks;
+this is not a whole-operation deadline, and an in-flight probe may finish within
+its own finite timeout after that window. This mode omits automatic GUI, Wake,
+browser, scheduler and tunnel startup. Existing-listener readiness does not
+qualify those other layers. Startup requires an initialized configuration and
+current route, preserves pending route/UI settings, and does not initialize or
+promote a route. Normal authorized MCP work and accounting retain their scope.
+
+If `CATDESK_MCP_AUTH_TOKEN` is already present in the process environment, local
+readiness validates it and sends it only to the exact validated `127.0.0.1`
+endpoint. Never place credentials in command arguments or audit output. This
+does not change external Secure MCP authentication or ownership. Full startup
+without `-BackendOnly` retains its existing behavior.
+
+Source qualification passed: ten Rust tests, both PowerShell suites, formatting
+and strict root Clippy. Release and installed tests remain open.
+No candidate, protected installation, selected C218 package or owner guard has
+changed. The C221 manual-child qualification is still pending; this source flag
+does not remove that gate.
+
 ## October 25 C220/C221 — diagnose the actual owner before another attempt
 
 A manually opened PowerShell can still belong to a Windows Job. Line 19 of the

@@ -1369,13 +1369,27 @@ fn parse_native_daemon_mode(args: &[String]) -> Result<bool, String> {
             daemon_reload::DAEMON_MODE_FLAG
         ));
     }
-    if count == 1 && args.len() != 1 {
+    let backend_only = matches!(args, [daemon, backend] if daemon == daemon_reload::DAEMON_MODE_FLAG && backend == "--backend-only")
+        || matches!(args, [daemon, backend, check] if daemon == daemon_reload::DAEMON_MODE_FLAG && backend == "--backend-only" && check == "--check-support");
+    if count == 0
+        && args
+            .iter()
+            .any(|arg| matches!(arg.as_str(), "--backend-only" | "--check-support"))
+    {
+        return Err("backend-only options require the closed native daemon invocation".into());
+    }
+    if count == 1 && args.len() != 1 && !backend_only {
         return Err(format!(
             "{} does not accept additional command-line arguments",
             daemon_reload::DAEMON_MODE_FLAG
         ));
     }
     Ok(count == 1)
+}
+
+fn native_backend_only_support() -> serde_json::Value {
+    serde_json::json!({"schemaVersion":1,"mode":"LOCAL_BACKEND_ONLY","supported":true,
+        "stateCreated":false,"servicesStarted":false})
 }
 
 fn next_arg(args: &[String], index: &mut usize, option: &str) -> Result<String, String> {
@@ -2594,14 +2608,28 @@ async fn run_reviewed_candidate_mcp(
     Ok(())
 }
 
-async fn run_native_daemon() -> Result<(), Box<dyn std::error::Error>> {
+async fn run_native_daemon(backend_only: bool) -> Result<(), Box<dyn std::error::Error>> {
     let port = crate::control_plane_supervisor::FIXED_LOCAL_BACKEND_PORT;
     let workspace_root = match std::env::var("WORKSPACE_ROOT") {
         Ok(path) => path,
         Err(_) => std::env::current_dir()?.to_string_lossy().into_owned(),
     };
-    binagotchy_cli::launch_associated(std::path::Path::new(&workspace_root));
-    let state: SharedState = Arc::new(Mutex::new(AppState::new(port, workspace_root)?));
+    if !backend_only {
+        binagotchy_cli::launch_associated(std::path::Path::new(&workspace_root));
+    }
+    let app = if backend_only {
+        let config = match std::env::var_os("CATDESK_BACKEND_CONFIG_PATH") {
+            Some(path) if !path.is_empty() => PathBuf::from(path),
+            Some(_) => {
+                return Err(std::io::Error::other("backend-only config path is empty").into());
+            }
+            None => state::app_config_path()?,
+        };
+        AppState::new_backend_only(port, workspace_root, config)?
+    } else {
+        AppState::new(port, workspace_root)?
+    };
+    let state: SharedState = Arc::new(Mutex::new(app));
     {
         let mut app = state.lock().await;
         if app.port != crate::control_plane_supervisor::FIXED_LOCAL_BACKEND_PORT
@@ -2614,11 +2642,19 @@ async fn run_native_daemon() -> Result<(), Box<dyn std::error::Error>> {
         }
         app.mode = Mode::Computer;
         app.log("INFO", "Native headless daemon mode".into());
-        app.persist_state_with_log();
+        if !backend_only {
+            app.persist_state_with_log();
+        }
     }
 
     let (ui_event_tx, mut ui_event_rx) = unbounded_channel();
-    let _devtools = start_services(state.clone(), ui_event_tx).await;
+    let _devtools = start_services_scoped(
+        state.clone(),
+        ui_event_tx,
+        backend_only,
+        std::env::var("CATDESK_MCP_AUTH_TOKEN"),
+    )
+    .await;
     if !state.lock().await.server_running {
         return Err(
             std::io::Error::other("native CatDesk daemon failed to start local MCP").into(),
@@ -3001,7 +3037,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     match parse_native_daemon_mode(&args) {
-        Ok(true) => return run_native_daemon().await,
+        Ok(true) => {
+            // The exact support query must finish before state/profile loading,
+            // companion launch, MCP binding, or any transport/worker startup.
+            if args.last().is_some_and(|arg| arg == "--check-support") {
+                println!("{}", native_backend_only_support());
+                return Ok(());
+            }
+            return run_native_daemon(args.iter().any(|arg| arg == "--backend-only")).await;
+        }
         Ok(false) => {}
         Err(error) => {
             eprintln!("CatDesk: {error}");
@@ -4265,6 +4309,202 @@ mod tests {
             ])
             .is_err()
         );
+    }
+
+    #[test]
+    fn native_backend_only_and_support_query_have_closed_argument_sets() {
+        let valid = |items: &[&str]| items.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        assert_eq!(
+            parse_native_daemon_mode(&valid(&["--catdesk-daemon", "--backend-only"])),
+            Ok(true)
+        );
+        assert_eq!(
+            parse_native_daemon_mode(&valid(&[
+                "--catdesk-daemon",
+                "--backend-only",
+                "--check-support"
+            ])),
+            Ok(true)
+        );
+        for args in [
+            &["--backend-only"][..],
+            &["--check-support"][..],
+            &["--catdesk-daemon", "--check-support"][..],
+            &[
+                "--catdesk-daemon",
+                "--backend-only",
+                "--workspace",
+                "override",
+            ][..],
+            &["--backend-only", "--catdesk-daemon"][..],
+        ] {
+            assert!(parse_native_daemon_mode(&valid(args)).is_err());
+        }
+        let support = super::native_backend_only_support();
+        assert_eq!(support["mode"], "LOCAL_BACKEND_ONLY");
+        assert_eq!(support["supported"], true);
+        assert_eq!(support["stateCreated"], false);
+        assert_eq!(support["servicesStarted"], false);
+    }
+
+    #[tokio::test]
+    async fn native_backend_only_serves_authenticated_mcp_without_automatic_workers() {
+        use crate::delegated::autonomy_projects::{
+            AutonomousProjectRegistryStoreV1, AutonomousProjectV1,
+        };
+        use crate::delegated::autonomy_state::{
+            AutonomousQueueTaskStateV1, AutonomousQueueTaskV1, AutonomousQueueV1,
+            AutonomousSessionStateV1, AutonomousStateStoreV1,
+        };
+        let root =
+            std::env::temp_dir().join(format!("backend-only-source-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(root.join(".catdesk/autonomy")).unwrap();
+        let registry =
+            AutonomousProjectRegistryStoreV1::open(root.join(".catdesk/projects")).unwrap();
+        registry.initialize(1, 1).unwrap();
+        let target = "https://chatgpt.com/c/backend-only-fixture";
+        registry
+            .register_project(AutonomousProjectV1 {
+                project_id: "catdesk".into(),
+                workspace: root.canonicalize().unwrap(),
+                git_identity: "fixture-catdesk".into(),
+                verification_profile: "rust_full".into(),
+                codex_thread_id: None,
+                chatgpt_target_url: Some(target.into()),
+                chatgpt_target_sha256: Some(
+                    crate::delegated::autonomy_projects::project_chat_target_digest(target),
+                ),
+                chatgpt_target_history: vec![],
+            })
+            .unwrap();
+        // Use the real durable active-waiting session/review format consumed by
+        // rehydrate_persisted_waiting_wakes, as its existing restart fixture does.
+        let autonomy = AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).unwrap();
+        autonomy
+            .create_session(
+                "backend-waiting",
+                AutonomousQueueV1::new(vec![AutonomousQueueTaskV1 {
+                    task_id: "waiting-task".into(),
+                    priority: 1,
+                    depends_on: vec![],
+                    state: AutonomousQueueTaskStateV1::WaitingForChatgpt,
+                }])
+                .unwrap(),
+            )
+            .unwrap();
+        let mut waiting = autonomy.load_session("backend-waiting").unwrap();
+        waiting.state = AutonomousSessionStateV1::WaitingForChatgpt;
+        waiting.active = true;
+        autonomy.save_session(&waiting).unwrap();
+        autonomy
+            .emit_review_inbox_record(
+                "backend-waiting",
+                "catdesk",
+                AutonomousSessionStateV1::WaitingForChatgpt,
+                "chatgpt_decision_required",
+                "artifacts/restart-wake-review.json",
+                10,
+            )
+            .unwrap();
+        let session_before =
+            serde_json::to_value(autonomy.load_session("backend-waiting").unwrap()).unwrap();
+        let inbox_before = serde_json::to_value(autonomy.all_review_inbox().unwrap()).unwrap();
+        let config = root.join("config.toml");
+        let mut configured = crate::state::AppConfig {
+            mode: super::Mode::Browser,
+            ..crate::state::AppConfig::default()
+        };
+        configured.identity.installation_id = Some("backend-only-fixture-installation".into());
+        configured.mcp.route_id = Some("oldrouteoldrouteoldroute12".into());
+        configured.mcp.route_rotation.pending_route_id = Some("newroutenewroutenewroute12".into());
+        configured.mcp.route_rotation.restart_required = true;
+        configured.tunnel.mode = crate::tunnel::TunnelMode::ManagedStableNgrok;
+        configured.tunnel.ngrok_domain = Some("example.ngrok-free.app".into());
+        std::fs::write(&config, toml::to_string_pretty(&configured).unwrap()).unwrap();
+        let before = std::fs::read(&config).unwrap();
+        let app =
+            super::AppState::new_backend_only(0, root.to_string_lossy().into(), config.clone())
+                .unwrap();
+        // A browser UI setting must not turn this explicit core scope into a
+        // DevTools/browser launch. Even a regression into the full transport
+        // branch stays on a deliberately unavailable, nonlaunching test mode.
+        assert!(app.mode == super::Mode::Browser);
+        assert_eq!(app.mcp_path(), "/oldrouteoldrouteoldroute12/mcp");
+        assert_eq!(std::fs::read(&config).unwrap(), before);
+        let state = std::sync::Arc::new(tokio::sync::Mutex::new(app));
+        let (events, _receiver) = tokio::sync::mpsc::unbounded_channel();
+        let token = "backend-only-source-fixture-auth";
+        assert!(
+            super::start_services_scoped(state.clone(), events, true, Ok(token.into()))
+                .await
+                .is_none()
+        );
+        let (port, path) = {
+            let app = state.lock().await;
+            (app.port, app.mcp_path())
+        };
+        assert_eq!(path, "/oldrouteoldrouteoldroute12/mcp");
+        assert_eq!(std::fs::read(&config).unwrap(), before);
+        assert!(!root.join("config.toml.pre-t0025b-backup").exists());
+        let uri = format!("http://127.0.0.1:{port}{path}");
+        let rpc = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}});
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(2))
+            .build()
+            .unwrap();
+        assert_eq!(
+            client.post(&uri).json(&rpc).send().await.unwrap().status(),
+            reqwest::StatusCode::UNAUTHORIZED
+        );
+        let response = client
+            .post(&uri)
+            .bearer_auth(token)
+            .json(&rpc)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert!(
+            body["result"]["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|tool| tool["name"] == "catdesk_instruction")
+        );
+        tokio::task::yield_now().await;
+        let handle = {
+            let mut app = state.lock().await;
+            assert!(app.server_running);
+            assert!(app.mode == super::Mode::Computer);
+            assert!(app.web_auto_cancel.is_none());
+            assert!(app.web_auto_tasks.is_empty());
+            assert!(!app.devtools_running);
+            assert!(!app.ngrok_running);
+            app.server_running = false;
+            app.server_handle.take().unwrap()
+        };
+        handle.abort();
+        let _ = handle.await;
+        assert_eq!(
+            serde_json::to_value(autonomy.load_session("backend-waiting").unwrap()).unwrap(),
+            session_before
+        );
+        assert_eq!(
+            serde_json::to_value(autonomy.all_review_inbox().unwrap()).unwrap(),
+            inbox_before
+        );
+        // Request accounting may persist totals through the normal config
+        // snapshot; current/pending routes and saved launch settings must stay.
+        let saved: crate::state::AppConfig =
+            toml::from_str(&std::fs::read_to_string(&config).unwrap()).unwrap();
+        configured.usage_totals = saved.usage_totals.clone();
+        assert_eq!(
+            serde_json::to_value(saved).unwrap(),
+            serde_json::to_value(configured).unwrap()
+        );
+        assert!(!root.join(".catdesk/web-context").exists());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
@@ -5972,11 +6212,27 @@ async fn start_services(
     state: SharedState,
     ui_events: UnboundedSender<ServerUiEvent>,
 ) -> Option<Arc<Mutex<DevtoolsBridge>>> {
+    start_services_scoped(
+        state,
+        ui_events,
+        false,
+        std::env::var("CATDESK_MCP_AUTH_TOKEN"),
+    )
+    .await
+}
+
+async fn start_services_scoped(
+    state: SharedState,
+    ui_events: UnboundedSender<ServerUiEvent>,
+    backend_only: bool,
+    auth: Result<String, std::env::VarError>,
+) -> Option<Arc<Mutex<DevtoolsBridge>>> {
+    if backend_only {
+        state.lock().await.mode = Mode::Computer;
+    }
     // Resolve once before starting browser/server/transport work. An explicitly
     // invalid credential cannot silently become the legacy unauthenticated mode.
-    if let Err(reason) =
-        configure_native_mcp_auth(&state, std::env::var("CATDESK_MCP_AUTH_TOKEN")).await
-    {
+    if let Err(reason) = configure_native_mcp_auth(&state, auth).await {
         state.lock().await.log("ERROR", reason.into());
         return None;
     }
@@ -6205,6 +6461,17 @@ async fn start_services(
             "INFO",
             format!("MCP Server started on {}", safe_bind_identity(&local_addr)),
         );
+    }
+
+    if backend_only {
+        // The same authenticated router and fixed-listener ownership above are
+        // retained. Transport/Wake rehydration and automatic workers are opt-in
+        // through the unchanged full startup path, never this local-only mode.
+        state.lock().await.log(
+            "INFO",
+            "Local backend only; external runtime, Wake and automatic workers not started".into(),
+        );
+        return devtools_bridge;
     }
 
     // Start ngrok

@@ -26,9 +26,10 @@ $wakeRepairPath=Join-Path $PSScriptRoot "repair_wake_bridge_environment.ps1";$wa
 # T-0354: wake-repair Python/venv/pip children may themselves spawn descendants. Recovery must never return from a timed-out repair while descendant mutation continues.
 $containedTypeNode=$wakeRepairAst.Find({param($n)$n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Initialize-WakeRepairContainedProcessType'},$true);if($null -eq $containedTypeNode){throw "missing wake-repair descendant containment type"};$containedTypeSource=$containedTypeNode.Extent.Text;if($containedTypeSource -notmatch 'JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE'){throw "wake-repair containment lost kill-on-job-close policy"};if($containedTypeSource -notmatch 'AssignProcessToJobObject'){throw "wake-repair containment lost process-tree assignment"};if($containedTypeSource -notmatch 'CloseHandle\(job\)'){throw "wake-repair containment lost job-close termination boundary"};$invokeNativeNode=$wakeRepairAst.Find({param($n)$n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Invoke-NativeQuiet'},$true);if($null -eq $invokeNativeNode){throw "missing bounded wake native invocation"};$invokeNativeSource=$invokeNativeNode.Extent.Text;if($invokeNativeSource -notmatch 'WakeRepairContainedProcess'){throw "wake native invocation bypassed descendant containment"};$convertNativeNode=$wakeRepairAst.Find({param($n)$n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'ConvertTo-NativeArgument'},$true);if($null -eq $convertNativeNode){throw "missing wake native argument encoder"};.([scriptblock]::Create($convertNativeNode.Extent.Text));.([scriptblock]::Create($containedTypeNode.Extent.Text));.([scriptblock]::Create($invokeNativeNode.Extent.Text));$marker=Join-Path ([IO.Path]::GetTempPath()) ("catdesk-t0354-descendant-"+[Guid]::NewGuid().ToString("N")+'.txt');$currentPowerShell=(Get-Process -Id $PID).Path;$childScript="Start-Sleep -Milliseconds 900; [IO.File]::WriteAllText('"+$marker.Replace("'","''")+"','escaped')";$childEncoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($childScript));$parentScript="Start-Process -FilePath '"+$currentPowerShell.Replace("'","''")+"' -ArgumentList '-NoProfile','-NonInteractive','-EncodedCommand','"+$childEncoded+"' -WindowStyle Hidden; Start-Sleep -Seconds 30";$parentEncoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($parentScript));$timedOut=$false;try{$null=Invoke-NativeQuiet -Executable $currentPowerShell -Arguments @('-NoProfile','-NonInteractive','-EncodedCommand',$parentEncoded) -TimeoutMilliseconds 250}catch{if($_.Exception.Message -notmatch 'contained process tree was killed'){throw};$timedOut=$true};if(-not $timedOut){throw "wake-repair descendant containment fixture did not hit timeout"};Start-Sleep -Milliseconds 1200;if(Test-Path -LiteralPath $marker){Remove-Item -LiteralPath $marker -Force -ErrorAction SilentlyContinue;throw "wake-repair descendant escaped timeout containment"}
 $releaseRecoveryPath=Join-Path $PSScriptRoot "catdesk-release-recovery.ps1";$releaseRecoverySource=Get-Content -LiteralPath $releaseRecoveryPath -Raw;$rrTokens=$null;$rrErrors=$null;$null=[System.Management.Automation.Language.Parser]::ParseInput($releaseRecoverySource,[ref]$rrTokens,[ref]$rrErrors);if($rrErrors.Count){throw "release recovery helper did not parse"};. $releaseRecoveryPath
-foreach($name in @("Resolve-TrustedBootstrapHelperPath","Get-RemainingReadinessMilliseconds","ConvertTo-NativeCommandLineArgument","Initialize-BoundedNativeProcessType","Invoke-BoundedTunnelClient","Invoke-BoundedCodexProbe","Resolve-TrustedCurrentUserCodexCommand","Resolve-TrustedWindowsCommandPromptPath","Resolve-TrustedWindowsPowerShellPath","Invoke-BoundedRecoveryHelper","Invoke-BoundedWindowsInventoryProbe","Invoke-SilentLoopbackHttp","Get-VerifiedBuildFingerprint","Get-CanonicalCatDeskIdentity","Read-OfficialRuntimeProcessMode","Get-ConfiguredRuntimeAlias","Find-TunnelClient","Get-ConfiguredLocalMcp","Get-LoopbackCatDeskListener","Test-CatDeskPinnedProcessMatchesRecoveryIdentity","Get-CatDeskListenerProcessInstanceForRecovery","Test-CatDeskListenerStillMatchesRecoveryCandidate","Stop-CatDeskListenerProcessForRecovery","Get-CatDeskDaemonProcessCandidates","Get-CatDeskDaemonProcessInstanceForRecovery","Stop-StaleCanonicalCatDeskDaemonForRecovery","Test-CodexOnDemandPrerequisites","Test-WakeBridgeRuntime","Invoke-WakeBridgeRuntimeRepair","Invoke-OrderedOfficialRuntimeMigration","New-LocalMcpReadinessResult","Get-LocalMcpReadiness","Test-LocalMcpReadiness","Get-AuthoritativeRuntimeBase","New-OfficialRuntimeVerificationResult","Get-OfficialRuntimeVerification","Test-OfficialRuntimeVerified","Wait-FullStackReadiness","Get-RedactedReadinessFailureGate","Save-RedactedRecoveryEvidence","Invoke-InterruptedPromotionPairRecovery","Get-CanonicalReleaseRecoveryAssessment","Stop-CanonicalPathCatDeskForReleaseRepair","Repair-CanonicalReleaseForRecovery","Test-CatDeskInteractiveDesktop","Resolve-VerifiedInstalledWakeHost","Start-CatDeskWakeHost","Start-CatDeskBinagotchyGui","Invoke-CanonicalStackBootstrap")){$node=$ast.Find({param($n)$n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name},$true);if($null -eq $node){throw "missing $name"};.([scriptblock]::Create($node.Extent.Text))}
+foreach($name in @("Resolve-TrustedBootstrapHelperPath","Get-RemainingReadinessMilliseconds","ConvertTo-NativeCommandLineArgument","Initialize-BoundedNativeProcessType","Invoke-BoundedTunnelClient","Invoke-BoundedCodexProbe","Resolve-TrustedCurrentUserCodexCommand","Resolve-TrustedWindowsCommandPromptPath","Resolve-TrustedWindowsPowerShellPath","Invoke-BoundedRecoveryHelper","Invoke-BoundedWindowsInventoryProbe","Invoke-SilentLoopbackHttp","Get-VerifiedBuildFingerprint","Get-CanonicalCatDeskIdentity","Read-OfficialRuntimeProcessMode","Get-ConfiguredRuntimeAlias","Find-TunnelClient","Get-ConfiguredLocalMcp","Get-LoopbackCatDeskListener","Test-CatDeskPinnedProcessMatchesRecoveryIdentity","Get-CatDeskListenerProcessInstanceForRecovery","Test-CatDeskListenerStillMatchesRecoveryCandidate","Stop-CatDeskListenerProcessForRecovery","Get-CatDeskDaemonProcessCandidates","Get-CatDeskDaemonProcessInstanceForRecovery","Stop-StaleCanonicalCatDeskDaemonForRecovery","Test-CodexOnDemandPrerequisites","Test-WakeBridgeRuntime","Invoke-WakeBridgeRuntimeRepair","Invoke-OrderedOfficialRuntimeMigration","New-LocalMcpReadinessResult","Get-LocalMcpProbeHeaders","Get-LocalMcpReadiness","Test-LocalMcpReadiness","Get-AuthoritativeRuntimeBase","New-OfficialRuntimeVerificationResult","Get-OfficialRuntimeVerification","Test-OfficialRuntimeVerified","Wait-FullStackReadiness","Get-RedactedReadinessFailureGate","Save-RedactedRecoveryEvidence","Invoke-InterruptedPromotionPairRecovery","Get-CanonicalReleaseRecoveryAssessment","Stop-CanonicalPathCatDeskForReleaseRepair","Repair-CanonicalReleaseForRecovery","Test-CatDeskInteractiveDesktop","Resolve-VerifiedInstalledWakeHost","Start-CatDeskWakeHost","Start-CatDeskBinagotchyGui","Test-BackendOnlySupport","Start-BackendOnlyDaemon","Get-BackendOnlyUtcNow","Invoke-BackendOnlyBootstrap","Invoke-CanonicalStackBootstrap")){$node=$ast.Find({param($n)$n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name},$true);if($null -eq $node){throw "missing $name"};.([scriptblock]::Create($node.Extent.Text))}
 $dispatch=$ast.Find({param($n)$n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq "Invoke-BootstrapSeam"},$true);.([scriptblock]::Create($dispatch.Extent.Text));$script:BootstrapSeams=@{};$script:MaxMcpReplyBytes=1048576;$script:MaxTunnelClientOutputBytes=1048576;$script:MaxTunnelClientCommandMilliseconds=30000;$script:MaxCodexProbeOutputBytes=65536;$script:MaxCodexProbeMilliseconds=5000;$script:MaxRecoveryHelperOutputBytes=65536;$script:MaxWakeRuntimeProbeMilliseconds=5000;$script:MaxWakeRepairMilliseconds=1500000;$script:MaxOfficialMigrationMilliseconds=30000;$script:MaxInterruptedPromotionRecoveryMilliseconds=30000;$script:MaxWindowsInventoryProbeMilliseconds=5000;$script:MaxWindowsInventoryProbeOutputBytes=65536;$script:WindowsInventoryProbeHelperPath=Join-Path $PSScriptRoot 'query-catdesk-windows-inventory.ps1'
 $root=Join-Path ([IO.Path]::GetTempPath()) ("catdesk-t0052-r2-"+[Guid]::NewGuid().ToString("N"));New-Item -ItemType Directory -Path $root|Out-Null
+$hadOuterNativeAuth=Test-Path Env:CATDESK_MCP_AUTH_TOKEN;$savedOuterNativeAuth=[Environment]::GetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN','Process');Remove-Item Env:CATDESK_MCP_AUTH_TOKEN -ErrorAction SilentlyContinue
 $hadTunnelRef=Test-Path Env:CATDESK_OPENAI_TUNNEL_ID;$priorTunnelRef=$env:CATDESK_OPENAI_TUNNEL_ID;$hadControlRef=Test-Path Env:CONTROL_PLANE_API_KEY;$priorControlRef=$env:CONTROL_PLANE_API_KEY;$hadCodexExecutable=Test-Path Env:CATDESK_CODEX_CLI_EXECUTABLE;$priorCodexExecutable=$env:CATDESK_CODEX_CLI_EXECUTABLE
 try {
   $codexShim=Join-Path $root "codex-test.cmd";[IO.File]::WriteAllText($codexShim,"@echo off`r`necho Logged in using ChatGPT 1>&2`r`nexit /b 0`r`n")
@@ -159,6 +160,41 @@ try {
   if(-not(Test-LocalMcpReadiness -LocalMcp $local -Canonical ([pscustomobject]@{}))){throw "large healthy MCP tool catalog was rejected"}
   $script:BootstrapSeams["LocalMcpHttp"]={param($uri,$json)throw "The operation has timed out"};$localTimeout=Get-LocalMcpReadiness -LocalMcp $local -Canonical ([pscustomobject]@{});if($localTimeout.Ready -or $localTimeout.Gate -ne 'LOCAL_MCP_RESPONSE_TIMEOUT'){throw "local MCP response timeout was not classified distinctly"}
   $script:BootstrapSeams.Remove("LocalMcpHttp")
+  # Use no sockets: the exact loopback auth header reaches only the HTTP seam.
+  $hadNativeAuth=Test-Path Env:CATDESK_MCP_AUTH_TOKEN;$savedNativeAuth=[Environment]::GetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN','Process')
+  $script:authRequests=[Collections.Generic.List[object]]::new()
+  function Invoke-WebRequest {
+    param($Uri,$Method,$ContentType,$Body,$Headers,[switch]$UseBasicParsing,$MaximumRedirection,$TimeoutSec)
+    if($MaximumRedirection -ne 0){throw 'fixture redirect policy changed'}
+    [void]$script:authRequests.Add(@{uri=$Uri;headers=$Headers.Clone()})
+    if($Method -eq 'Post' -and $Body -match 'initialize'){return [pscustomobject]@{StatusCode=200;Content='{"result":{"serverInfo":{}}}'}}
+    [pscustomobject]@{StatusCode=200;Content='{"result":{"tools":[{"name":"catdesk_instruction"},{"name":"delegated_run_list"}]}}'}
+  }
+  try {
+    $authLocal=[pscustomobject]@{Port=43123;Uri=('http://127.0.0.1:43123/'+('a'*24)+'/mcp')}
+    $fixtureToken='private-source-auth-fixture-000000'
+    [Environment]::SetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN',$fixtureToken,'Process')
+    $authorized=Get-LocalMcpReadiness -LocalMcp $authLocal -Canonical ([pscustomobject]@{})
+    if(-not $authorized.Ready -or $script:authRequests.Count -ne 2){throw 'authorized native MCP readiness did not converge'}
+    foreach($request in $script:authRequests){if($request.uri -cne $authLocal.Uri -or $request.headers.Authorization -cne ('Bearer '+$fixtureToken)){throw 'native auth did not stay on the exact local endpoint'}}
+    if(($authorized|ConvertTo-Json -Compress) -match [regex]::Escape($fixtureToken)){throw 'native auth leaked into readiness output'}
+    foreach($invalid in @('', 'short',(('x'*24)+"`n"),(('x'*24)+' '),('é'*24))){
+      [Environment]::SetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN',$invalid,'Process')
+      $refused=Get-LocalMcpReadiness -LocalMcp $authLocal -Canonical ([pscustomobject]@{})
+      if($refused.Ready -or $refused.Gate -cne 'LOCAL_MCP_AUTH_TOKEN_INVALID' -or $script:authRequests.Count -ne 2){throw 'invalid native auth reached HTTP or downgraded'}
+    }
+    [Environment]::SetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN',$fixtureToken,'Process')
+    $remote=[pscustomobject]@{Port=43123;Uri=('http://example.invalid:43123/'+('a'*24)+'/mcp')}
+    $refused=Get-LocalMcpReadiness -LocalMcp $remote -Canonical ([pscustomobject]@{})
+    if($refused.Gate -cne 'LOCAL_MCP_AUTH_SCOPE_INVALID' -or $script:authRequests.Count -ne 2){throw 'native auth escaped loopback scope'}
+    [void](Invoke-SilentLoopbackHttp -Uri 'http://127.0.0.1:4411/healthz')
+    if($script:authRequests[2].headers.Count -ne 0){throw 'native MCP auth attached to official runtime health'}
+    Remove-Item Env:CATDESK_MCP_AUTH_TOKEN -ErrorAction SilentlyContinue
+    if(-not (Get-LocalMcpReadiness -LocalMcp $authLocal -Canonical ([pscustomobject]@{})).Ready -or $script:authRequests[3].headers.Count -ne 0){throw 'absent native token changed legacy local probes'}
+  } finally {
+    Remove-Item Function:\Invoke-WebRequest
+    if($hadNativeAuth){[Environment]::SetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN',$savedNativeAuth,'Process')}else{Remove-Item Env:CATDESK_MCP_AUTH_TOKEN -ErrorAction SilentlyContinue}
+  }
   $script:runtimeCalls=0;$script:BootstrapSeams["RuntimeStatus"]={param($r,$t)$script:runtimeCalls++;if($script:runtimeCalls -eq 1){throw "transient unavailable"};[pscustomobject]@{processRunning=$true;healthOk=$true;isReady=$true;healthUrl="http://127.0.0.1:4411"}}
   $script:BootstrapSeams["RuntimeHttp"]={param($uri)[pscustomobject]@{StatusCode=200}}
   $transient=Get-OfficialRuntimeVerification $root 5;if($transient.Verified -or $transient.Gate -ne 'RUNTIME_STATUS_TRANSIENT'){throw "transient status failure was not classified"};if(-not(Test-OfficialRuntimeVerified $root 5)){throw "normalized runtime fields rejected"}
@@ -317,7 +353,62 @@ try {
   # A WakeHost start error after core convergence has the same partial result.
   function Start-CatDeskWakeHost { param($Root) throw 'fixture WakeHost start failed' }
   $script:actions.Clear();$script:wakeReady=$true;$script:fakeListener=New-FakeListener -Pid 47 -MatchesCanonical $true;$wakeStartFailed=(Invoke-CanonicalStackBootstrap|Out-String);if($wakeStartFailed -notmatch '"State":"CORE_CONNECTED_WAKE_PENDING"' -or $wakeStartFailed -notmatch '"Gate":"WAKE_RUNTIME_NOT_READY"' -or $script:actions.Count -ne 0){throw "WakeHost start failure did not preserve healthy core and partial result"}
+  # Backend-only fixtures use existing ownership seams, never a real process.
+  $BackendOnly=$true;$Mode='recover';$Execute=$true;$ReadyTimeoutSeconds=180
+  function Find-TunnelClient { throw 'backend-only touched external client' }
+  function Test-CodexOnDemandPrerequisites { throw 'backend-only touched native project prerequisites' }
+  function Test-WakeBridgeRuntime { throw 'backend-only inspected Wake' }
+  function Invoke-WakeBridgeRuntimeRepair { throw 'backend-only repaired Wake' }
+  function Start-CatDeskWakeHost { throw 'backend-only started Wake' }
+  function Start-CatDeskBinagotchyGui { throw 'backend-only started GUI' }
+  function Invoke-OrderedOfficialRuntimeMigration { throw 'backend-only changed runtime ownership' }
+  $script:BootstrapSeams['DaemonProcesses']={param($canonical) @()}
+  $script:BootstrapSeams['BackendOnlySupport']={param($canonical,$timeout)
+    if($timeout -lt 1 -or $timeout -gt 5000){throw 'backend support probe escaped its bound'}
+    [void]$script:actions.Add('support')
+    '{"schemaVersion":1,"mode":"LOCAL_BACKEND_ONLY","supported":true,"stateCreated":false,"servicesStarted":false}'
+  }
+  $script:BootstrapSeams['BackendOnlyStart']={param($canonical,$root,$config)
+    [void]$script:actions.Add('backend-start')
+    if($root -cne $Workspace -or $config -cne $ConfigPath){throw 'backend child workspace/config changed'}
+    [pscustomobject]@{Id=88;Handle=[IntPtr]8}
+  }
+  $script:backendExpected=$null
+  $script:BootstrapSeams['LocalMcp']={param($endpoint,$identity,$expected)
+    $script:backendExpected=$expected;New-LocalMcpReadinessResult -Ready $true -Gate 'READY'
+  }
+  $script:actions.Clear();$script:fakeListener=$null
+  $backendStarted=Invoke-CanonicalStackBootstrap|ConvertFrom-Json
+  if($backendStarted.State -cne 'LOCAL_BACKEND_READY' -or ([string]::Join(',',$script:actions)) -cne 'support,backend-start' -or $script:backendExpected.Id -ne 88){throw 'backend-only did not start exactly one scoped daemon and bind readiness to it'}
+  $script:actions.Clear();$script:fakeListener=New-FakeListener -Pid 42 -MatchesCanonical $true
+  $backendAlready=Invoke-CanonicalStackBootstrap|ConvertFrom-Json
+  if($backendAlready.State -cne 'LOCAL_BACKEND_READY' -or $script:actions.Count){throw 'backend-only restarted an already ready canonical daemon'}
+  $script:BootstrapSeams['LocalMcp']={param($endpoint,$identity,$expected) New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_RESPONSE_TIMEOUT'}
+  $backendTimedOut=Invoke-CanonicalStackBootstrap|ConvertFrom-Json
+  if($backendTimedOut.Gate -cne 'LOCAL_MCP_RESPONSE_TIMEOUT' -or $script:actions.Count){throw 'backend-only weakened timeout owner/restart policy'}
+  $script:fakeListener=New-FakeListener -Pid 43 -MatchesCanonical $false
+  $foreignBackend=Invoke-CanonicalStackBootstrap|ConvertFrom-Json
+  if($foreignBackend.Gate -cne 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH' -or $script:actions.Count){throw 'backend-only changed a foreign listener'}
+  $script:fakeListener=$null
+  $script:BootstrapSeams['BackendOnlySupport']={param($canonical,$timeout) '{"supported":true}'}
+  $unsupportedBackend=Invoke-CanonicalStackBootstrap|ConvertFrom-Json
+  if($unsupportedBackend.Gate -cne 'LOCAL_MCP_BACKEND_ONLY_UNSUPPORTED' -or $script:actions.Count){throw 'unsupported image reached backend start or stale-daemon mutation'}
+  $script:BootstrapSeams['BackendOnlySupport']={param($canonical,$timeout)
+    [void]$script:actions.Add('support')
+    '{"schemaVersion":1,"mode":"LOCAL_BACKEND_ONLY","supported":true,"stateCreated":false,"servicesStarted":false}'
+  }
+  $script:backendTime=[DateTime]::UtcNow;$script:backendTimeCalls=0
+  $script:BootstrapSeams['BackendOnlyUtcNow']={
+    $script:backendTimeCalls++;if($script:backendTimeCalls -le 2){$script:backendTime}else{$script:backendTime.AddSeconds(61)}
+  }
+  $expiredBackend=Invoke-CanonicalStackBootstrap|ConvertFrom-Json
+  if($expiredBackend.State -cne 'TRANSPORT_VERIFICATION_FAILED' -or ([string]::Join(',',$script:actions)) -cne 'support'){throw 'backend-only did not cap convergence at 60s or started after its deadline'}
+  $script:BootstrapSeams.Remove('BackendOnlyUtcNow');$script:actions.Clear()
+  function Get-CanonicalCatDeskIdentity { param($Root,$ExpectedHash,$FingerprintPath) throw 'fixture canonical pair mismatch' }
+  function Repair-CanonicalReleaseForRecovery { param($Root,$Config,$ExpectedHash) throw 'LKG_AUTHORITY_MISSING' }
+  $missingAuthority=Invoke-CanonicalStackBootstrap|ConvertFrom-Json
+  if($missingAuthority.State -cne 'LKG_AUTHORITY_MISSING' -or $script:actions.Count){throw 'backend-only bypassed trusted release recovery authority'}
   $assessmentNode=$ast.Find({param($n)$n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-CanonicalReleaseRecoveryAssessment'},$true);if($null -eq $assessmentNode){throw 'missing read-only recovery assessment'};$assessmentSource=$assessmentNode.Extent.Text;if($assessmentSource -match 'Start-Process|Stop-Process|Invoke-InterruptedPromotionPairRecovery|Invoke-OrderedOfficialRuntimeMigration|Test-OfficialRuntimeVerified'){throw 'read-only recovery assessment acquired daemon or tunnel authority'}
   if($source -match [regex]::Escape($route)){throw "test route leaked into bootstrap source"};foreach($required in @("--catdesk-daemon","--catdesk-binagotchy-cli","Start-CatDeskBinagotchyGui","catdesk_instruction","delegated_run_list","Get-VerifiedBuildFingerprint","healthz","readyz","Get-OfficialRuntimeVerification","Get-RedactedReadinessFailureGate","Save-RedactedRecoveryEvidence","Invoke-BoundedTunnelClient","Invoke-BoundedCodexProbe","Initialize-BoundedNativeProcessType","Invoke-SilentLoopbackHttp","ConvertTo-NativeCommandLineArgument","process.Kill()")){if($source -notmatch [regex]::Escape($required)){throw "missing $required"}};if($source -match "& \$clientPath runtimes status"){throw "unbounded runtime status remains"};if($source -match '& \$codex\.Source'){throw "unbounded Codex prerequisite probe remains"};if($source -match "--auto-start-computer"){throw "legacy TUI launch remains"}
-} finally {if($hadTunnelRef){$env:CATDESK_OPENAI_TUNNEL_ID=$priorTunnelRef}else{Remove-Item Env:CATDESK_OPENAI_TUNNEL_ID -ErrorAction SilentlyContinue};if($hadControlRef){$env:CONTROL_PLANE_API_KEY=$priorControlRef}else{Remove-Item Env:CONTROL_PLANE_API_KEY -ErrorAction SilentlyContinue};if($hadCodexExecutable){$env:CATDESK_CODEX_CLI_EXECUTABLE=$priorCodexExecutable}else{Remove-Item Env:CATDESK_CODEX_CLI_EXECUTABLE -ErrorAction SilentlyContinue};Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue}
+} finally {if($hadOuterNativeAuth){[Environment]::SetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN',$savedOuterNativeAuth,'Process')}else{Remove-Item Env:CATDESK_MCP_AUTH_TOKEN -ErrorAction SilentlyContinue};if($hadTunnelRef){$env:CATDESK_OPENAI_TUNNEL_ID=$priorTunnelRef}else{Remove-Item Env:CATDESK_OPENAI_TUNNEL_ID -ErrorAction SilentlyContinue};if($hadControlRef){$env:CONTROL_PLANE_API_KEY=$priorControlRef}else{Remove-Item Env:CONTROL_PLANE_API_KEY -ErrorAction SilentlyContinue};if($hadCodexExecutable){$env:CATDESK_CODEX_CLI_EXECUTABLE=$priorCodexExecutable}else{Remove-Item Env:CATDESK_CODEX_CLI_EXECUTABLE -ErrorAction SilentlyContinue};Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue}
 Write-Output "canonical bootstrap behavioral tests passed"

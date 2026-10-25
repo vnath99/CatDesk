@@ -1,4 +1,33 @@
 # CatDesk — Comprehensive handoff to Codex Desktop
+
+## Current source note — October 25 C222
+
+The October 22–31 goal and current acceptance/development records supersede the
+dated priorities below. Production promotion remains separate from source work;
+the C221 ordinary-child qualification in the existing manual shell is pending.
+Do not relax the unchanged wrapper or native ownership guards, repeat ambiguous
+reviews, restart recurring automation or disturb other project sessions.
+
+New source adds opt-in public `start`/`recover -BackendOnly`, preserving existing
+canonical fingerprint and reviewed recovery/LKG gates. A new launch first needs
+the fixed native capability response to the closed
+`--catdesk-daemon --backend-only --check-support` tuple. Unsupported images are
+refused without full-start fallback. The scoped mode omits automatic GUI, Wake,
+browser, scheduler and external tunnel startup; it preserves initialized current
+and pending routes and saved UI settings. Valid process-only bearer readiness
+is restricted to the exact approved loopback endpoint. It does not change
+external Secure MCP ownership or authentication.
+
+Source qualification passed: ten Rust tests, both PowerShell suites, formatting
+and strict root Clippy. This source increment creates no
+release candidate or production authority and changes neither C208 nor the
+selected C218 development package. C208's reviewed `409513a` source lacks this
+capability; its actual executable safely refused the exact query once before
+startup. Installed startup/restart tests remain open. Read
+[the command reference](CATDESK_IMPORTANT_COMMANDS.md) before
+using a subsequently qualified matching release. Preserve source, development
+runtime and installed/live acceptance as separate evidence.
+
 **Date:** 2026-10-14  
 **Authority:** Operator-requested transfer of day-to-day CatDesk implementation to Codex Desktop. This document is an engineering handoff, **not** authority to modify protected production installations or bypass security controls.  
 **Source repository:** https://github.com/vnath99/CatDesk  

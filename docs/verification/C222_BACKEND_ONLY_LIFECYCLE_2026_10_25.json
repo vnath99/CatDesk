@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C222",
+  "sourceParent": "464e497c469a53a45b43cd06d24caae50b81ba6c",
+  "branch": "codex/web-rollover-oct17",
+  "status": "SOURCE_QUALIFIED_NOT_INSTALLED",
+  "implementation": {
+    "publicLifecycle": "Opt-in start/recover -BackendOnly reuses canonical identity and reviewed recovery/LKG gates.",
+    "nativeCapability": [
+      "--catdesk-daemon",
+      "--backend-only",
+      "--check-support"
+    ],
+    "capabilityBeforeStateOrServices": true,
+    "unsupportedImageFullStartupFallback": false,
+    "configuration": "Existing initialized configuration and current route required; pending route and saved UI settings preserved; normal authorized MCP usage accounting retained.",
+    "readinessAuth": "Existing process-only bearer, when present, is validated and used only for the exact validated loopback endpoint.",
+    "automaticServicesSuppressed": [
+      "GUI",
+      "browser and DevTools",
+      "Wake rehydration",
+      "Web automatic workers and scheduler",
+      "external transport"
+    ],
+    "localConvergenceBudgetSeconds": 60,
+    "inFlightProbeMayFinishAfterBudget": true,
+    "wholeProcedureDeadlineClaimed": false,
+    "productionGuardChanges": 0
+  },
+  "qualification": {
+    "status": "PASS",
+    "startedUtc": "2026-10-25T21:45:10.4885362+00:00",
+    "finishedUtc": "2026-10-25T21:45:37.5393734+00:00",
+    "maximumSeconds": 600,
+    "rustTestsPassed": 10,
+    "rustTestsFailed": 0,
+    "powershellSuitesPassed": 2,
+    "powershellEvidenceReusedOnlyAfterUnchangedInputAndLogHashes": true,
+    "steps": [
+      {
+        "name": "backend_only",
+        "passed": 4,
+        "logSha256": "b3579ec093e5e69c6b98c4b46b5b9411de6f7e1de4d11f3f952647a8710a20ef"
+      },
+      {
+        "name": "native_mcp_auth_",
+        "passed": 5,
+        "logSha256": "367f51096ca003a4bd9633cb52c3208b1f4c168156c9f3e31be72f7d1436ed85"
+      },
+      {
+        "name": "native_daemon_compatibility",
+        "passed": 1,
+        "logSha256": "d82260477cb04ebc0ca7568a738e3ad5e4c401732a405dbd25aa5197ba41fa57"
+      },
+      {
+        "name": "powershell_lifecycle",
+        "logSha256": "3ea79f3f05d93eca7652b5084284cb09acb77725374a7ffafd590ac1e0108147"
+      },
+      {
+        "name": "powershell_bootstrap",
+        "logSha256": "b3776baca320adcbaa3dcb289c24f34f5934779b219de9949ba56f80efcbc622"
+      },
+      {
+        "name": "format",
+        "exitCode": 0
+      },
+      {
+        "name": "strict_root_clippy",
+        "exitCode": 0,
+        "logSha256": "c70554d7a984316cbaeda825fd6c5b0065a7dc989aaabc57432c73e7053d2ca5"
+      }
+    ],
+    "resultSha256": "309b9773e7f03893719c368dd8352b953112e27cabb2d93928f70360201a1af1",
+    "containmentSha256": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "timeout": false,
+    "terminationFailure": false,
+    "independentStaticReview": "PASS"
+  },
+  "retainedFailedRuns": [
+    {
+      "cause": "PowerShell fixture modeled an absent environment variable as an explicit empty value; corrected fixture semantics.",
+      "resultSha256": "06e959b96373948fd6ae6fd26840060a3cadb66c849667382555ba17276d0999"
+    },
+    {
+      "cause": "New equality assertions required Debug on an existing enum; corrected test assertions only.",
+      "resultSha256": "31958d88144080a92bd9a652add6faa2fc429d6077a63ede47f0cd1309478920"
+    },
+    {
+      "cause": "Strict Clippy rejected two test initializer styles; corrected without lint suppression.",
+      "resultSha256": "0f1fd3e4435311ce07135c22f2f94814f343eec11cd336efe94e6c0aafa948b3"
+    },
+    {
+      "cause": "A sandboxed rerun could not canonicalize the profile ancestor. Paired read-only native handle observations confirmed error 5 under the sandbox and success with authorized access; no ACL or source guard changes.",
+      "resultSha256": "1feaaf9f4b644ab68f1a781f6467e19cc2986861f6b982e6cf371c5cfcae828a"
+    }
+  ],
+  "failedRunAccounting": "Four retained failed attempts. The unchanged final harness's inherited priorFailedRuns=3 omits the additional sandboxed attempt; this explicit roster is authoritative.",
+  "pathAccessDiagnosis": {
+    "probeSha256": "6efc752e4690729ffeb1100868d7f570b0d2c17a732060114e8ce0797a66d8cb",
+    "defaultResultSha256": "ecf111e6e35c96fa8dd8d8dd1b63680dfc8b4b6458e237dd975b0f2cc42b9037",
+    "authorizedResultSha256": "2c2ed331f94691f82d6894d044838bfa2802a9c983d54ffc53b82eda4734c6fc",
+    "allNativeHandlesClosed": true,
+    "aclChanges": 0,
+    "jobGuardChanges": 0
+  },
+  "actualOldArtifactCompatibility": {
+    "status": "PASS_REFUSAL_ONLY",
+    "candidateSource": "409513a1c1f81f74f873bd4b3dca825458ef29a8",
+    "candidateSha256": "91eea19e6e030e80900d43114f800c3642f5cc063ef2c969b83eb20d2c28d14b",
+    "invocations": 1,
+    "exitCode": 2,
+    "naturalExit": true,
+    "elapsedMilliseconds": 289,
+    "stdoutEmpty": true,
+    "stderr": "CatDesk: --catdesk-daemon does not accept additional command-line arguments",
+    "emptyFixturePreserved": true,
+    "protectedArtifactAndAuthorityPinsMatched": 8,
+    "processSnapshotsUnchanged": true,
+    "port3200AbsentBeforeAndAfter": true,
+    "resultSha256": "8daa64e619b59c6b835007dbc9ee63dfef8ec839145df2ca9a4d25060796a86f",
+    "installedSupportProven": false
+  },
+  "conditionalOwnerLauncher": {
+    "sha256": "ff5d5a7a902afac096e1657a66d7d08d70456c3161c3e38bda50b5155d3aeb8d",
+    "staticReview": "PASS",
+    "toolNegativeControl": "PASS_CONTAINED_CHILD_REFUSED_BEFORE_PRODUCT_PREFLIGHT",
+    "negativeEvidenceSha256": "4635c32c10f6892ca68a132c95be5d8c11c15870d3cf08080e3952e2e058c29d",
+    "manualChildInheritance": "PENDING_OPERATOR_RESULT",
+    "positiveWrapperQualification": false,
+    "executeAttempted": false,
+    "existingWrapperAndNativeGuardsUnchanged": true
+  },
+  "finalCleanup": {
+    "scope": "EXACT_FINAL_FIXTURE_RUN_AND_SOURCE_TEST_IMAGE_PREFIX",
+    "remainingTestOwnedProcesses": 0,
+    "port3200Listeners": 0,
+    "promotionExecuteIntentPresent": false,
+    "unrelatedProcessesStopped": 0,
+    "evidenceSha256": "d6fa70545d519d731e3a06249f383fd183fde984408d90299b586b5bdc0158e0"
+  },
+  "limitations": [
+    "No new release candidate built or selected; C208 and the selected C218 package remain unchanged.",
+    "No production promotion, installed backend-only startup/restart, trusted previous-version rollback or two-project Web coding acceptance.",
+    "No browser, Wake, connector retry, recurring automation, binding or native-session changes.",
+    "The manual immediate-Job flags do not establish its creator or the full outer chain. The pending ordinary-child test must establish actual eligibility before the unchanged guarded wrapper can proceed.",
+    "C208 headless health is not proof of newer native bearer authentication, and its first trusted release has no trusted predecessor version.",
+    "Exact-source remote CI is not accepted without a verified run."
+  ]
+}

@@ -1,3 +1,36 @@
+## October 25 C222 — local backend startup separated in source
+
+The public lifecycle now has an opt-in `-BackendOnly` path. It retains canonical
+identity and reviewed recovery/LKG gates, requires the verified image's closed
+capability response, and uses the existing local MCP readiness checks. It omits
+automatic browser, Wake, scheduler, GUI and external transport startup. Loading
+the initialized configuration preserves both current and pending routes and
+saved UI settings; normal authorized MCP accounting remains enabled.
+
+At 21:45:10–21:45:37 UTC, source qualification passed ten Rust tests, formatting
+and strict root Clippy. Two prior passing PowerShell suites were reused only
+after their four source inputs and captured logs matched. Four earlier failures
+are retained: environment-presence fixture semantics, enum assertion formatting,
+test initializer lint, and sandbox ancestor access. Paired read-only Windows
+handle queries confirmed the last cause without changing ACLs or source guards.
+The final composite explicitly corrects the inherited harness failure counter.
+
+One separate Windows invocation of the retained C208 image exited naturally in
+289 ms with the exact unsupported-arguments refusal. The empty fixture stayed
+empty, all eight artifact/authority pins matched, process snapshots were unchanged
+and port 3200 stayed closed. This proves safe old-image refusal only.
+
+The conditional ordinary-child owner launcher also passed static review and its
+tool-side negative control: a contained child was refused before product
+preflight. Its positive manual-shell qualification remains pending. The frozen
+wrapper and native ownership guards are unchanged. No production promotion,
+release candidate, package selection, browser/Wake start, connector retry,
+binding change or native-session action occurred. Installed startup, rollback
+and real two-Web coding acceptance remain open. Final scoped process inventory
+found zero remaining test owners, no listener on 3200 and no promotion execution
+intent. No unrelated process was stopped. Evidence:
+[C222](verification/C222_BACKEND_ONLY_LIFECYCLE_2026_10_25.json).
+
 ## October 25 C220/C221 — actual Windows ownership diagnosis
 
 The operator's line-19 refusal preceded CatDesk process launch and state writes.

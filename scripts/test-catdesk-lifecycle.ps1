@@ -32,12 +32,13 @@ function Invoke-FixtureFacade(
     [string]$FixtureConfigPath = 'C:\fixture\config.toml',
     [string]$FixtureExpectedBuildSha256 = '',
     [string]$FixtureFingerprintPath = 'C:\fixture\catdesk.exe.sha256',
-    [int]$FixtureReadyTimeoutSeconds = 180
+    [int]$FixtureReadyTimeoutSeconds = 180,
+    [switch]$FixtureBackendOnly
 ) {
     $prior = Get-Location
     try {
         Set-Location ([IO.Path]::GetTempPath())
-        return & $facade -Command $Command -AutostartAction $AutostartAction -WakeTerminalTaskId $WakeTerminalTaskId -Workspace $FixtureWorkspace -ConfigPath $FixtureConfigPath -ExpectedBuildSha256 $FixtureExpectedBuildSha256 -BuildFingerprintPath $FixtureFingerprintPath -ReadyTimeoutSeconds $FixtureReadyTimeoutSeconds -TestSeams $Seams
+        return & $facade -Command $Command -AutostartAction $AutostartAction -WakeTerminalTaskId $WakeTerminalTaskId -Workspace $FixtureWorkspace -ConfigPath $FixtureConfigPath -ExpectedBuildSha256 $FixtureExpectedBuildSha256 -BuildFingerprintPath $FixtureFingerprintPath -ReadyTimeoutSeconds $FixtureReadyTimeoutSeconds -BackendOnly:$FixtureBackendOnly -TestSeams $Seams
     } finally {
         Set-Location $prior
     }
@@ -144,6 +145,27 @@ try {
     [void](Invoke-FixtureFacade -Command 'recover' -Seams $base)
     Require (([string]::Join(',', $actions)) -eq 'recover:start,recover:recover') 'start and recover route only through canonical recovery'
     Require ($actions -notcontains 'compile') 'normal recovery never compiles'
+
+    $actions.Clear()
+    $backend = $base.Clone()
+    $backend.Recovery = { param($engine,$root,$config,$expected,$manifest,$timeout,$command,$backendOnly)
+        Require ([bool]$backendOnly) 'backend-only flag survives helper import and recovery dispatch'
+        [void]$actions.Add("backend:$command")
+        '{"State":"LOCAL_BACKEND_READY"}'
+    }
+    foreach ($command in @('start','recover')) {
+        $localOnly = Invoke-FixtureFacade -Command $command -Seams $backend -FixtureBackendOnly | ConvertFrom-Json
+        Require ($localOnly.state -ceq 'LOCAL_BACKEND_READY' -and $localOnly.detail -match 'LOCAL_BACKEND_ONLY') 'backend-only readiness has an explicit limited scope'
+    }
+    Require (([string]::Join(',', $actions)) -ceq 'backend:start,backend:recover') 'backend-only calls no other lifecycle layer'
+    $actions.Clear()
+    $wrongScope = Invoke-FixtureFacade -Command 'wake' -Seams $backend -FixtureBackendOnly | ConvertFrom-Json
+    Require ($wrongScope.state -ceq 'ACTION_REQUIRED' -and $actions.Count -eq 0) 'backend-only cannot authorize unrelated lifecycle commands'
+    $falseFull = Invoke-FixtureFacade -Command 'start' -Seams $base -FixtureBackendOnly | ConvertFrom-Json
+    Require ($falseFull.state -ceq 'TRANSPORT_VERIFICATION_FAILED') 'backend-only refuses a full-stack result masquerading as scoped evidence'
+    $withoutOptIn = Invoke-FixtureFacade -Command 'start' -Seams $backend | ConvertFrom-Json
+    Require ($withoutOptIn.state -ceq 'ACTION_REQUIRED') 'backend flag cannot be silently enabled by a recovery result'
+    $actions.Clear()
 
     $redactedRecovery = $base.Clone()
     $redactedRecovery.Recovery = { param($engine, $root, $config, $expected, $manifest, $timeout, $command) 'https://example.invalid/route_fixture?token=credential_fixture' }

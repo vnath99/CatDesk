@@ -1,3 +1,32 @@
+## October 25 C222 — reuse the lifecycle for an opt-in local backend
+
+The new source `-BackendOnly` option on public `start` and `recover` separates
+local backend startup from automatic GUI, Wake, browser, scheduler and external
+tunnel startup. It reuses canonical executable/fingerprint checks, reviewed
+recovery/LKG authority and the existing local readiness/owner checks. It adds
+no release store, supervisor, tunnel owner or alternate promotion mechanism.
+The unflagged full lifecycle keeps its existing behavior.
+
+Before a new launch, the verified native image must return the fixed capability
+for `--catdesk-daemon --backend-only --check-support`. This exact tuple exits
+before loading configuration or starting services; unsupported executables are
+refused rather than launched in full mode. Backend startup reads the existing
+initialized configuration and current route, uses ephemeral launch settings,
+and preserves pending route and saved UI mode. Ordinary authorized MCP work and
+usage accounting are not converted into read-only operations. A process-only
+bearer, when configured, is validated and used only for the exact approved local
+readiness endpoint; external authentication is unchanged.
+
+Source qualification passed: ten Rust tests, both PowerShell suites, formatting
+and strict root Clippy. No new candidate or production release
+has been created, and neither C208 nor the selected C218 runtime has acquired
+this source behavior. C208's reviewed `409513a` source lacks the new tuple;
+the actual old executable safely refused the query once. Installed startup/restart
+remain untested. Source tests
+cannot establish a trusted previous production release or rollback acceptance.
+The C221 manual-child result remains pending and every existing ownership
+guard stays intact.
+
 ## October 25 C219 — recovery needs independent serving-process ownership
 
 The outside-Job requirement protects the promoted daemon from an unrelated
