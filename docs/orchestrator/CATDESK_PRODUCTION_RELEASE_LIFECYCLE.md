@@ -106,6 +106,30 @@ bindings remain preserved. No browser/Wake/recurring/external runtime was starte
 No new operator action or date hold is identified. The goal remains active.
 Evidence recorded 2026-10-25T04:41:18.5413838+00:00: `docs/verification/C151_EXPLICIT_DIRECT_CHATGPT_SOURCE_2026_10_25.json`.
 
+## October 25 C181 — direct controller built and qualified; protected promotion pending
+
+Published source `061051fe9e6e4493ab0ccf24c58b41cbe81b74a6` now has a separate
+normal release controller, SHA-256
+`701221a979e73e95c81a7853bec661add68ba814c0ac68919c1e357c49254a7a`.
+The locked offline app build finished within its 600-second bound. Two twelve-second
+read-only loopback starts passed missing/wrong auth 401, valid auth 200 with ten
+tools, natural exit and listener cleanup. This is an actual normal executable
+qualification, **not producer attestation, installed startup or Web coding proof**.
+
+Canonical source/docs fast-forwarded to that commit. The installed executable and
+fingerprint, ten preserved untracked files, all 361 pinned state/history files,
+v77/v76 and project/native bindings remain exact. No browser, WakeHost, recurring
+automation, external Secure MCP owner or existing native session was started.
+Exact-source GitHub Actions/check counts remain zero: remote CI is unverified.
+
+The explicit direct lane is implemented and source-reviewed. Next: actual fresh
+ChatGPT Web review and verified response after an approved direct claim, followed
+by the existing completion/ACK/snapshot/producer/release-pair chain. Native source
+review JSON is not Web work. Production remains stopped and unpromoted; trusted
+installed rollback and actual two-conversation Web coding remain open. No new
+operator action or date hold is identified; the goal remains active.
+Evidence: `docs/verification/C181_DIRECT_CONTROLLER_QUALIFICATION_2026_10_25.json`.
+
 ## Three different release scopes
 
 | Scope | Authority and owner | What it does not establish |
