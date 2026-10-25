@@ -1,5 +1,20 @@
 # CatDesk — Comprehensive handoff to Codex Desktop
 
+## Current ownership note — October 25 C223
+
+The manual ordinary-child probe completed with Job membership at both samples;
+the conditional C208 launcher is ineligible. Keep the frozen wrapper and native
+serving guards intact. The existing tasks/protected supervisor are absent and
+the Run entry provides no release-pair action. No creator or full Job chain has
+been established; do not repeat terminal probes or enable speculative tracing.
+
+An exact-source normal debug image passed actual capability and missing-config
+entry checks with bounded cleanup and eight protected pins preserved. It is not
+a release candidate or installed acceptance. Source assessment of a fully owned,
+stopped recovery outcome must preserve genuine review, qualification, quiescence
+and interruption authority; no new recovery command is currently supported.
+See [C223](../verification/C223_NATIVE_ENTRY_AND_OWNER_ELIGIBILITY_2026_10_25.json).
+
 ## Current source note — October 25 C222
 
 The October 22–31 goal and current acceptance/development records supersede the

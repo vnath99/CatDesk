@@ -1,3 +1,41 @@
+## October 25 C223 — normal image qualified; ordinary owner route refused
+
+The operator's 21:55:39–21:55:40 UTC result matched the frozen diagnostic and
+PowerShell identities. Its ordinary child remained in a Job at both samples,
+despite permissive immediate flags, and exited normally with verified cleanup.
+The conditional wrapper launcher is therefore ineligible. No creator, identical
+Job object or complete outer chain can be inferred from these observations.
+
+One named-Job provider query succeeded with zero associations; it omits unnamed
+Jobs. Read-only installed event metadata and a separate classic-kernel source
+check established no concrete assignment-caller capture. No trace was started.
+Native Task Scheduler COM confirmed both documented tasks absent; the protected
+supervisor installation is absent. The existing Run entry supports public
+status/recovery and has no release-pair action or qualified independent lifetime.
+
+An ordinary offline debug build from exact clean source
+`9d674271f36292aacdb7417ffdf5e1f72733e151` finished in 55.383 seconds. Its copied,
+hashed diagnostic image passed two actual Windows checks at 22:05:12 UTC:
+the exact capability tuple returned its fixed JSON and exited in 367 ms; an
+explicit missing configuration was refused before state startup in 37 ms.
+Both processes exited naturally, the workspace stayed empty, the short probe
+window's process/port snapshots matched, and all eight checked C208 authority
+and canonical artifact pins were preserved. This is neither a release candidate
+nor an installed backend or Web acceptance result.
+
+The first runner invocation failed before its attempt marker or any build/probe
+because PATH returned three Git executables. Its script and failure evidence are
+retained; the reviewed correction selects the effective first application.
+The corrected one-shot test completed within its existing owned Job, without
+timeout or termination failure. Source and lockfile stayed unchanged.
+
+Production, bindings, native sessions, browser/Wake and recurring automation
+were untouched. No additional terminal retry is justified by these results.
+The detached serving worker still requires an independent owner. A bounded,
+fully owned repair/qualification path is being assessed in source; it is not an
+existing command or permission to bypass the serving guard. Evidence:
+[C223](verification/C223_NATIVE_ENTRY_AND_OWNER_ELIGIBILITY_2026_10_25.json).
+
 ## October 25 C222 — local backend startup separated in source
 
 The public lifecycle now has an opt-in `-BackendOnly` path. It retains canonical

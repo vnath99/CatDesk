@@ -1,3 +1,15 @@
+## October 25 C223 — ordinary-child launcher is ineligible
+
+The completed manual-shell probe reported Job membership at both child samples.
+Do not run the conditional C208 owner launcher or retry another terminal on the
+basis of permissive immediate flags. The original wrapper/native serving guards
+remain unchanged; no eligible production execution owner has been established.
+
+The newly linked normal debug image passed the pure capability query and an
+explicit missing-config refusal in an empty workspace. It is a diagnostic image,
+not a release candidate or installed support. No healthy daemon was launched.
+See [C223 evidence](../verification/C223_NATIVE_ENTRY_AND_OWNER_ELIGIBILITY_2026_10_25.json).
+
 ## October 25 C222 — backend-only start/recover requires a qualified new release
 
 **Source-only commands; not installed support in C208 or the selected C218 package.**

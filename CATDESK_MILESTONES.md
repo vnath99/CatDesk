@@ -1,3 +1,12 @@
+## October 25 C223 — normal executable boundary qualification
+
+The matched debug image passed the actual pure capability query and safe
+missing-config refusal. Eight protected artifact/authority pins, the empty
+fixture and short probe-window process state were preserved. The operator's
+ordinary child remained in a Job, so the conditional production launcher is
+ineligible. No release, production backend or parallel Web acceptance follows.
+See [C223](docs/verification/C223_NATIVE_ENTRY_AND_OWNER_ELIGIBILITY_2026_10_25.json).
+
 ## October 25 C222 — opt-in backend-only lifecycle source
 
 New source adds `-BackendOnly` to public `start` and `recover` operations for a

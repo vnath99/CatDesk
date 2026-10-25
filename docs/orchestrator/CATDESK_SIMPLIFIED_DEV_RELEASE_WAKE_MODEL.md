@@ -1,3 +1,17 @@
+## October 25 C223 — compiled checks and lifetime limits
+
+The new normal debug image has passed actual capability and pre-state
+missing-config checks. It has no release authority and has not been selected or
+installed. The manual ordinary-child result is now negative: that launcher is
+ineligible, and the legacy detached serving worker's ownership guard remains
+intact. No existing alternate supervisor qualified for release-pair work.
+
+Assessing a bounded repair that ends stopped requires a distinct honest receipt,
+actual owned qualification/quiescence and supported interruption recovery; it
+cannot reuse legacy live-serving proof or leave a staged transaction as success.
+There is no such supported command yet. Preserve the frozen C208 artifact and
+all existing release authority. See the current execution log and C223 evidence.
+
 ## October 25 C222 — reuse the lifecycle for an opt-in local backend
 
 The new source `-BackendOnly` option on public `start` and `recover` separates

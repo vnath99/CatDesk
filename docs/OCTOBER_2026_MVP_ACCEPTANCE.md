@@ -1,3 +1,19 @@
+## October 25 C223 — compiled boundary proof, production owner still open
+
+| Requirement | Actual evidence |
+| --- | --- |
+| Matching normal image entry point | PASS: ordinary debug image from exact clean `9d67427`; fixed capability response, natural exit 0 in 367 ms. |
+| Missing initialized configuration | PASS: explicit missing fixture config refused before state startup, natural exit 1 in 37 ms; empty workspace preserved. |
+| Artifact and process preservation | PASS: eight C208/canonical pins, source/lockfile and short probe-window process/port snapshots; bounded Job completed without timeout or cleanup failure. |
+| Ordinary manual-child production owner | INELIGIBLE: operator API samples report Job membership at entry and before exit. No promotion attempted. |
+| Existing alternate lifecycle owner | None qualified: both documented tasks and protected supervisor installation absent; Run entry has no release-pair action. |
+| Installed backend, previous-version rollback, connector and parallel Web coding | OPEN. No new release candidate, package selection or production start. |
+
+Named-Job and event metadata did not establish the Job creator or outer chain.
+They do not authorize a guard waiver, trace or another terminal retry. The
+compiled diagnostic image carries no reviewed release authority. Evidence:
+[C223](verification/C223_NATIVE_ENTRY_AND_OWNER_ELIGIBILITY_2026_10_25.json).
+
 ## October 25 C222 — source qualification and actual old-image refusal
 
 | Capability | Actual result |
