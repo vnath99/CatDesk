@@ -24,8 +24,9 @@ ignored test and strict root/Wake Clippy. Exact-source remote CI has no observed
 run and is not accepted. Development health is not protected production or
 two-conversation Web coding acceptance. No production action occurred.
 
-The next review-state action, if needed, is the existing blocked-status report;
-it must retain OPEN ownership and all submission evidence. There is no supported
+At 19:38:46–19:38:47 UTC, the existing coordinator recorded
+`SUBMISSION_OUTCOME_UNKNOWN`, changing only this review's reported status.
+OPEN ownership and all submission evidence remain intact. There is no supported
 review abandonment transition that can reuse the rollover-only C207 procedure.
 Do not repeat the successful diagnosis without new evidence. The production
 release-pair repair still requires its supported owner outside a Windows Job;

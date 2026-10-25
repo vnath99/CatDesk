@@ -201,5 +201,17 @@
       "resolution": "Separate health-only continuation; selection not repeated",
       "briefBackendStart": true
     }
-  ]
+  ],
+  "blockedStatusReport": {
+    "finishedUtc": "2026-10-25T19:38:47.9201047+00:00",
+    "messagesSent": 0,
+    "status": "SUBMISSION_OUTCOME_UNKNOWN",
+    "productionActions": 0,
+    "resultSha256": "0081c6388e55adba404999a8866cc7dc1d378479cafec8c64941fd0ae3d8aa20",
+    "testOwnersRemaining": 0,
+    "startedUtc": "2026-10-25T19:38:46.3433029+00:00",
+    "ownershipReleased": false,
+    "otherProtectedFilesUnchanged": 479,
+    "onlyReportedStatusChanged": true
+  }
 }

@@ -29,6 +29,12 @@ ignored test and strict root/Wake Clippy. Exact-source remote CI has no observed
 run and is not accepted. Development health is not protected production or
 two-conversation Web coding acceptance. No production action occurred.
 
+At 19:38:46–19:38:47 UTC, the supported coordinator status command recorded
+`SUBMISSION_OUTCOME_UNKNOWN`. Only the review's reported status changed; OPEN
+ownership, delivery evidence and the other 479 protected files were preserved.
+No message, browser, production or native-session action occurred, and cleanup
+found no test owners. The prior successful diagnosis is not to be repeated.
+
 Evidence: [C218](verification/C218_COMPOSER_DIAGNOSIS_2026_10_25.json).
 
 ## October 25 C217 — first real standing-grant qualification
