@@ -217,6 +217,33 @@ fn preflight(
 }
 
 impl WorkLedger {
+    /// Historical dispatch is recovery evidence even after expiry/revocation.
+    /// This read grants no new submission and must run under the registry lock.
+    pub(crate) fn verify_review_reconciliation(
+        &self,
+        event: &protocol::Event,
+        target: &Target,
+    ) -> Result<(), String> {
+        event.validate()?;
+        let state = self.load()?;
+        let record = state
+            .records
+            .iter()
+            .find(|record| record.event_id == event.event_id)
+            .ok_or("WEB_REVIEW_RECONCILE_RECORD_MISSING")?;
+        if event.project_id != self.project_id
+            || event.event_type != "source_review"
+            || event.target_generation != target.generation
+            || record.phase != "OPEN"
+            || record.target != *target
+            || record.message_sha256 != protocol::digest(&event.message)
+            || !self.review_dispatch_recorded(record, &event.audit_references)?
+        {
+            return Err("WEB_REVIEW_RECONCILE_DISPATCH_REQUIRED".into());
+        }
+        Ok(())
+    }
+
     /// Retrospective dispatch evidence for the caller's source_review event.
     /// The caller still verifies the Wake SENT receipt and response; this is
     /// neither send permission nor proof of native task completion. Revocation
@@ -1037,6 +1064,77 @@ mod tests {
                 .review_dispatch_recorded(&forged, &references)
                 .unwrap()
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn reconciliation_requires_exact_consumed_dispatch_even_after_grant_expiry() {
+        let (root, ledger, mut request) = fixture("alpha");
+        let event = protocol::Event {
+            schema_version: 1,
+            event_id: request.messages[0].event_id.clone(),
+            project_id: "alpha".into(),
+            event_type: "source_review".into(),
+            created_utc: 100,
+            message: "frozen review".into(),
+            target_generation: request.target.generation,
+            audit_references: vec![format!("catdesk-review-v1:{}", request.grant_id)],
+        };
+        request.messages[0].message_sha256 = protocol::digest(&event.message);
+        ledger.authorize_review(request.clone(), 100).unwrap();
+        let permit = ledger
+            .reserve_review(
+                &request.grant_id,
+                &request.messages[0],
+                &request.target,
+                101,
+            )
+            .unwrap();
+        ledger
+            .prepare(
+                &permit.request_id,
+                &permit.event_id,
+                &permit.message_sha256,
+                &permit.target,
+            )
+            .unwrap();
+        assert!(
+            ledger
+                .verify_review_reconciliation(&event, &request.target)
+                .is_err()
+        );
+        ledger.mark_review_dispatch_started(&permit, 102).unwrap();
+        ledger.revoke_review(&request.grant_id, 250).unwrap();
+        let before = fs::read(&ledger.path).unwrap();
+        ledger
+            .verify_review_reconciliation(&event, &request.target)
+            .unwrap();
+        assert!(
+            ledger
+                .check_review(
+                    &request.grant_id,
+                    &request.messages[0],
+                    &request.target,
+                    251
+                )
+                .is_err()
+        );
+        for field in ["message", "project", "audit", "target"] {
+            let mut changed = event.clone();
+            let mut target = request.target.clone();
+            match field {
+                "message" => changed.message.push_str(" changed"),
+                "project" => changed.project_id = "beta".into(),
+                "audit" => changed.audit_references = vec!["catdesk-review-v1:other".into()],
+                _ => target = Target::new(2, "https://chatgpt.com/c/other".into()).unwrap(),
+            }
+            assert!(
+                ledger
+                    .verify_review_reconciliation(&changed, &target)
+                    .is_err()
+            );
+        }
+        assert_eq!(fs::read(&ledger.path).unwrap(), before);
         fs::remove_dir_all(root).unwrap();
     }
 

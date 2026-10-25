@@ -2654,6 +2654,18 @@ fn operator_web_error_code(error: &str) -> &str {
             | "EDITOR_SELECTOR"
             | "CAPTCHA_OR_SECURITY_CHECK"
             | "SELENIUMBASE_IMPORT_FAILED"
+            | "TYPING_NOT_CONFIRMED"
+            | "SCOPED_RECONCILE_ADAPTER_FAILED"
+            | "SCOPED_RECONCILE_ARGUMENTS_INVALID"
+            | "SCOPED_RECONCILE_DELIVERY_INVALID"
+            | "SCOPED_RECONCILE_DELIVERY_MISSING"
+            | "SCOPED_RECONCILE_FRAME_INVALID"
+            | "SCOPED_RECONCILE_HOST_NOT_STOPPED"
+            | "SCOPED_RECONCILE_PACKAGE_UNSUPPORTED"
+            | "SCOPED_RECONCILE_RECEIPT_INVALID"
+            | "SCOPED_RECONCILE_RECEIPT_UNPROVEN"
+            | "SCOPED_RECONCILE_SCOPE_CHANGED"
+            | "SCOPED_RECONCILE_TIMEOUT"
     ) {
         return code;
     }
@@ -3815,6 +3827,18 @@ mod tests {
             "EDITOR_SELECTOR",
             "CAPTCHA_OR_SECURITY_CHECK",
             "SELENIUMBASE_IMPORT_FAILED",
+            "TYPING_NOT_CONFIRMED",
+            "SCOPED_RECONCILE_ADAPTER_FAILED",
+            "SCOPED_RECONCILE_ARGUMENTS_INVALID",
+            "SCOPED_RECONCILE_DELIVERY_INVALID",
+            "SCOPED_RECONCILE_DELIVERY_MISSING",
+            "SCOPED_RECONCILE_FRAME_INVALID",
+            "SCOPED_RECONCILE_HOST_NOT_STOPPED",
+            "SCOPED_RECONCILE_PACKAGE_UNSUPPORTED",
+            "SCOPED_RECONCILE_RECEIPT_INVALID",
+            "SCOPED_RECONCILE_RECEIPT_UNPROVEN",
+            "SCOPED_RECONCILE_SCOPE_CHANGED",
+            "SCOPED_RECONCILE_TIMEOUT",
         ] {
             assert_eq!(operator_web_error_code(code), code);
             assert_eq!(
@@ -3833,6 +3857,9 @@ mod tests {
             "LOGIN_OR_PROFILE_REQUIRED private profile text",
             "CHATGPT_NOT_IDLE_SECRET",
             "CAPTCHA_OR_SECURITY_CHECK_EXTRA",
+            "TYPING_NOT_CONFIRMED_SECRET",
+            "SCOPED_RECONCILE_PRIVATE_TOKEN",
+            "SCOPED_RECONCILE_RECEIPT_UNPROVEN\nprivate message",
         ] {
             assert_eq!(operator_web_error_code(untrusted), "WEB_OPERATION_REFUSED");
         }

@@ -2,6 +2,59 @@
 use super::*;
 use crate::delegated::autonomy_projects::resolve_registered_project_from_control_root;
 
+/// Inspect only this already-dispatched review; never grant a replacement send.
+pub(super) fn reconcile(workspace: &Path, project: &str, event: &str) -> Result<Value, String> {
+    let lease = crate::operator_facade::acquire_web_work_lease(workspace, project)?;
+    let key = paired_key(workspace, project)?;
+    let target =
+        catdesk_wake::protocol::Target::new(key.target_generation, key.conversation_url.clone())?;
+    lease.check_target(&target)?;
+    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
+    let store = catdesk_wake::store::Store::open(&root)?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        workspace,
+        store.root(),
+        &target.url,
+    )?;
+    let registry =
+        AutonomousProjectRegistryStoreV1::open_read_only(workspace.join(".catdesk/projects"))
+            .map_err(|_| "WEB_REVIEW_REGISTRY_UNAVAILABLE")?;
+    let check_pair = || {
+        if paired_key(workspace, project)? != key {
+            return Err("WEB_REVIEW_TARGET_CHANGED".into());
+        }
+        lease.check_target(&target)
+    };
+    let result = catdesk_wake::runtime::reconcile_scoped_review_guarded(
+        &store,
+        project,
+        &target,
+        event,
+        &check_pair,
+        |delivery, commit| {
+            registry.with_registration_lock(|| {
+                let scope = resolve_registered_project_from_control_root(workspace, project)
+                    .map_err(|_| "WEB_REVIEW_PROJECT_UNAVAILABLE")?;
+                if scope.project.chatgpt_target_url.as_deref() != Some(target.url.as_str())
+                    || scope.project.chatgpt_target_sha256.as_deref()
+                        != Some(target.digest.as_str())
+                {
+                    return Err("WEB_REVIEW_TARGET_CHANGED".into());
+                }
+                lease.check_target(&target)?;
+                crate::web_work_state::WorkLedger::open(workspace, project)?
+                    .verify_review_reconciliation(&delivery.event, &target)?;
+                commit()
+            })
+        },
+    )?;
+    check_pair()?;
+    Ok(
+        json!({"action":"web_review_reconcile","projectId":project,"eventId":event,
+        "target":target,"reconciliation":result,"sendAttempted":false,"workResolved":false}),
+    )
+}
+
 pub(super) fn reobserve(workspace: &Path, project: &str, event: &str) -> Result<Value, String> {
     let lease = crate::operator_facade::acquire_web_work_lease(workspace, project)?;
     let key = paired_key(workspace, project)?;

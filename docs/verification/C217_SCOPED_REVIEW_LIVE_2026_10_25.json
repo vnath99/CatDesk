@@ -1,0 +1,130 @@
+{
+  "evidenceSha256": {
+    "command": "9efd28b259ad4872e031a068ea14915ba8739f3bdb6737806338c2e5ccbfba5a",
+    "derived477Baseline": "cb2dff0caf1a3dc4eec53de2391c246e9250b4ec9599300aa1dda2183fc5f27c",
+    "sendResult": "a1690af2a61ca2a2c7630642d1ad8abdb49022f597b632fbb1b3230761cb244b",
+    "outerVerification": "5512de8c5449baf138115952d1eb4be98402569d65e8057c78bab6b59c0436e9"
+  },
+  "schemaVersion": 1,
+  "live": {
+    "outcome": "UNKNOWN_SUBMISSION",
+    "preservedOtherFiles": 476,
+    "reason": "TYPING_NOT_CONFIRMED",
+    "productionActions": 0,
+    "bindingsPreserved": true,
+    "authorizedLedgerChanged": true,
+    "dispatchConsumed": true,
+    "maximumOuterSeconds": 180,
+    "startedUtc": "2026-10-25T18:49:54.9878883+00:00",
+    "nativeSessionActions": 0,
+    "commandTimedOut": false,
+    "testOwnersRemaining": 0,
+    "profileIdentityPreserved": true,
+    "newSubmissionWitnesses": 1,
+    "phase": "SUBMITTING",
+    "commandExitCode": 2,
+    "noReplay": true,
+    "exactReceiptVerified": false,
+    "secondRequestStarted": false,
+    "finishedUtc": "2026-10-25T18:51:09.9015478+00:00",
+    "newEventFiles": 2,
+    "timerCreated": false,
+    "responseVerified": false
+  },
+  "checkpoint": "C217",
+  "branch": "codex/web-rollover-oct17",
+  "recordedUtc": "2026-10-25T18:59:12.3547518+00:00",
+  "testedSourceCommit": "b21b89d496ceead70a657fb8ff098741b28bddc8",
+  "limitations": [
+    "A typing-confirmation failure does not prove that no browser submission occurred.",
+    "Do not resend, refund, run the second request or clear the first journal.",
+    "Source send path is identical in selected v77 and current source; cause remains unproven.",
+    "Existing sent-only readers cannot inspect this SUBMITTING event; bounded explicit reconciliation is the next source task.",
+    "This is development-runtime testing, not production or two-conversation coding acceptance."
+  ],
+  "authorization": {
+    "eligibleFrozenRequests": 2,
+    "maxExecutionSeconds": 160,
+    "browserStartsDuringAuthorization": 0,
+    "preservedOtherFiles": 476,
+    "standingHumanScope": true,
+    "preflight": "PASS",
+    "existingProjectLedger": true,
+    "maxMessages": 2,
+    "grantCreated": true
+  },
+  "implementation": {
+    "expiredOrRevokedHistoricalDispatchReadable": true,
+    "newSubmissionsAllowed": false,
+    "browserBudgetSeconds": 90,
+    "responseReadOrWorkResolution": false,
+    "mode": "EXPLICIT_STOPPED_HOST_SINGLE_EVENT",
+    "unknownOutcomePreserved": true,
+    "command": "operator web review reconcile --project-id <id> --event-id <id>",
+    "originalSubmissionWitnessPreserved": true,
+    "positiveCommitIoFailureCanRetainPartialEvidence": true,
+    "newTimerUsesVerifiedReceiptTime": true,
+    "existingAdapterAndReceiptStateMachine": true
+  },
+  "sourceQualification": {
+    "independentStaticReview": "PASS",
+    "finishedUtc": "2026-10-25T18:58:57.1197499+00:00",
+    "ignored": 1,
+    "sourceParent": "c2174ca5bcab617e268bce552f3fe1242cb7b7f9",
+    "maximumSeconds": 600,
+    "installedAcceptance": false,
+    "priorFailedRuns": [
+      "Initial new closure failed compilation; corrected explicit Result type.",
+      "Sandbox fixture paths were denied; same six-file suite rerun with necessary temporary-directory access."
+    ],
+    "sourcePins": [
+      {
+        "path": "src/main.rs",
+        "sha256": "c7c19c478dc97a62118e517ba4a9e701fddf9b955408870a24cb473703918f08"
+      },
+      {
+        "path": "src/operator_web_cli.rs",
+        "sha256": "8bc014b406c83b8de23d81c2a47ae16e0193144f7f5a63a1b763b756008a5fcb"
+      },
+      {
+        "path": "src/operator_web_review.rs",
+        "sha256": "984b7a2e6a2b360d179497933e5f5c824ad486df045e8dcef29a483e8e1a06c2"
+      },
+      {
+        "path": "src/web_review_authorization.rs",
+        "sha256": "016a90d2c34e1c61d8b0c2485201a6097819e781b50525096b26c0fce4cd0f35"
+      },
+      {
+        "path": "wake/src/runtime.rs",
+        "sha256": "a06c251c333496d85c3ab446dbca4693bd9e25b67832d676ecf00b5e52ad4934"
+      },
+      {
+        "path": "wake/src/runtime_review_reconcile.rs",
+        "sha256": "4e87e11b4a445558348b5221a5bf54fc4b52ed6d9d0720c8b42dde2e3781cd81"
+      }
+    ],
+    "strictClippy": "ROOT_AND_WAKE_PASS",
+    "startedUtc": "2026-10-25T18:56:45.4906215+00:00",
+    "distinctPassed": 484,
+    "type": "SOURCE_FIXTURES_ONLY",
+    "counts": {
+      "operator-web": {
+        "ignored": 0,
+        "passed": 23
+      },
+      "web-work-and-grants": {
+        "ignored": 0,
+        "passed": 29
+      },
+      "wake-all": {
+        "ignored": 1,
+        "passed": 431
+      },
+      "error-codes": {
+        "ignored": 0,
+        "passed": 1
+      }
+    },
+    "boundedOwnerExit": 0
+  }
+}

@@ -1,3 +1,28 @@
+## October 25 C217 — reusable grant passed; first send outcome unknown
+
+One durable two-message grant was created in the existing project ledger and both
+frozen, distinct newer-source reviews passed preflight. No discretionary approval
+loop or package replacement was needed. The first live attempt reached its
+recorded dispatch boundary, then stopped with `TYPING_NOT_CONFIRMED` and no exact
+receipt. Its state remains `SUBMITTING`; do not classify it as sent or failed,
+resend it, refund its reservation, clear its journal, or start the second request.
+
+Cleanup passed, all 476 other original state files remained exact, and project
+bindings/native sessions were preserved. Existing sent-only readers cannot
+inspect this case. New source adds a bounded explicit read-only wrapper around
+existing submission reconciliation; qualification and live inspection remain
+separate gates. No recurring host is needed.
+See [C217 evidence](docs/verification/C217_SCOPED_REVIEW_LIVE_2026_10_25.json).
+Full grant reuse, production and two-project Web coding remain open.
+
+The new `operator web review reconcile` path admits only an existing dispatched
+`source_review` in `SUBMITTING`, rechecks the exact project/target/message and
+historical grant, and uses the existing receipt reader. Its 90-second browser
+and cleanup budget cannot be extended by progress. It never types or grants a
+retry; only positive receipt evidence permits the existing timer/SENT transition.
+Source qualification passed 484 tests (one ignored), strict root/Wake Clippy and
+bounded cleanup. Live reconciliation and installed acceptance remain pending.
+
 ## October 25 C216 — bounded snapshot diagnosis
 
 Source qualification passed: 427 Wake tests (including eight new deadline tests),

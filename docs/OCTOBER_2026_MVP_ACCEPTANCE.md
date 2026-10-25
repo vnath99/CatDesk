@@ -1,3 +1,22 @@
+## October 25 C217 — standing-grant live acceptance is partial
+
+| Capability | Observed result |
+| --- | --- |
+| Durable reusable consent | PASS: one exact two-message grant in the existing ledger; both frozen requests returned eligible without starting a browser. |
+| First grant-based review | UNKNOWN: dispatch consumed, then `TYPING_NOT_CONFIRMED`; `SUBMITTING` retained with no exact receipt or timer. No resend. |
+| Second review under the grant | NOT RUN: preserve it until the first outcome is safely resolved. |
+| Preservation and cleanup | PASS: 476 other state pins, project bindings and native ownership preserved; both Wake controls stopped and zero test owners. |
+| Installed production / parallel Web coding | OPEN: these results do not establish either capability. |
+
+Source now supports bounded, explicit read-only reconciliation of the existing
+attempt using the existing adapter receipt checks. Qualification and actual
+reconciliation are separate evidence gates. A negative or unavailable observation must
+retain uncertainty; it cannot authorize a resend. Evidence:
+[C217](verification/C217_SCOPED_REVIEW_LIVE_2026_10_25.json).
+Source qualification: 484 tests passed, one ignored; strict root/Wake Clippy and
+bounded cleanup passed. Live recovery, installed production and two-project
+Web coding remain unproven by these fixtures.
+
 ## October 25 C216 — bounded existing-response verification passed
 
 Source qualification passed: 427 Wake tests (including eight new deadline tests),

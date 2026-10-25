@@ -90,6 +90,10 @@ pub(crate) enum WebAction {
         project_id: String,
         event_id: String,
     },
+    ReviewReconcile {
+        project_id: String,
+        event_id: String,
+    },
     ReviewAuthorization {
         project_id: String,
         operation: String,
@@ -387,14 +391,19 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         ("context", "capture") if options.is_empty() => Ok(WebAction::ContextCapture {
             project_id: project_id.into(),
         }),
-        ("review", "read" | "reobserve") => {
+        ("review", "read" | "reobserve" | "reconcile") => {
             let event_id = options
                 .remove("--event-id")
                 .ok_or("WEB_USAGE: --event-id is required")?;
             if !catdesk_wake::protocol::valid_id(event_id) || !options.is_empty() {
                 return Err("WEB_USAGE: invalid review event or unexpected option".into());
             }
-            if verb == "reobserve" {
+            if verb == "reconcile" {
+                Ok(WebAction::ReviewReconcile {
+                    project_id: project_id.into(),
+                    event_id: event_id.into(),
+                })
+            } else if verb == "reobserve" {
                 Ok(WebAction::ReviewReobserve {
                     project_id: project_id.into(),
                     event_id: event_id.into(),
@@ -1298,6 +1307,10 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             project_id,
             event_id,
         } => review::reobserve(&workspace, &project_id, &event_id),
+        WebAction::ReviewReconcile {
+            project_id,
+            event_id,
+        } => review::reconcile(&workspace, &project_id, &event_id),
         WebAction::ReviewAuthorization {
             project_id,
             operation,
@@ -1816,6 +1829,36 @@ mod tests {
         let mut invalid = valid;
         *invalid.last_mut().unwrap() = "../event".into();
         assert!(parse(&invalid).is_err());
+    }
+
+    #[test]
+    fn review_reconcile_has_only_existing_project_event_inputs() {
+        let valid = args(&[
+            "operator",
+            "web",
+            "review",
+            "reconcile",
+            "--project-id",
+            "alpha",
+            "--event-id",
+            "review-one",
+        ]);
+        assert!(matches!(
+            parse(&valid),
+            Ok(WebAction::ReviewReconcile { .. })
+        ));
+        assert!(parse(&valid[..6]).is_err());
+        for flag in [
+            "--url",
+            "--message",
+            "--submit",
+            "--force",
+            "--max-runtime-seconds",
+        ] {
+            let mut invalid = valid.clone();
+            invalid.extend(args(&[flag, "override"]));
+            assert!(parse(&invalid).is_err());
+        }
     }
 
     #[test]

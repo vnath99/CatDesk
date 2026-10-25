@@ -1,3 +1,24 @@
+## October 25 C217 — preserve the first grant dispatch and continue recovery source work
+
+The two-message standing grant exists and both requests passed live preflight.
+The first attempt stopped at `SUBMITTING` with `TYPING_NOT_CONFIRMED`, no exact
+receipt and no timer. Its dispatch is consumed. Do not run it again or run the
+second request while this outcome is unknown. C212 remains completed and must
+not be reused as a new review request. All project bindings, native owners and
+476 other state pins survived; cleanup left no test-owned processes.
+
+Existing read/reobserve commands require `SENT`. New source adds a bounded
+stopped-host wrapper for the existing read-only submission reconciler. Qualify
+the source and immutable controller before one monitored inspection of the
+existing C217A event. It never types, resends, clears uncertainty or starts
+recurring automation. See [C217 evidence](../verification/C217_SCOPED_REVIEW_LIVE_2026_10_25.json).
+The production outside-Job owner barrier remains independent. Prior private
+promotion wrappers now have stale ledger pins and must not be run unchanged.
+The six-file reconciliation source passed 484 tests (one ignored), strict
+root/Wake Clippy and bounded cleanup. Publish reviewed source, build a separate
+immutable controller from that exact commit, then perform one bounded read-only
+reconciliation. Do not resend A or start B before its outcome is established.
+
 ## October 25 C216 — existing C212 response verified without replay
 
 Source qualification passed: 427 Wake tests (including eight new deadline tests),

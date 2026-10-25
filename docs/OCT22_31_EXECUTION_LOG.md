@@ -1,3 +1,39 @@
+## October 25 C217 — first real standing-grant qualification
+
+At 18:48:38–18:48:56 UTC, the qualified C216 controller created one exact
+two-message grant and returned `ELIGIBLE` for both requests. Their scopes are
+distinct C215 authorization/dispatch and C216 snapshot reviews at public commit
+`b21b89d496ceead70a657fb8ff098741b28bddc8`. The existing ledger gained only the
+authorized grant; 476 other protected files, logs and profile identity stayed
+unchanged. No browser, message, native task or production action occurred.
+
+At 18:49:54–18:51:09 UTC, the first bounded attempt consumed its dispatch and
+exited 2 with `TYPING_NOT_CONFIRMED`. The command did not time out. Its durable
+state is `SUBMITTING`, with no exact receipt or response timer. This is an
+unknown outcome, not a confirmed failed submission. The second request was not
+started; no retry, refund or journal reset occurred. Two expected event files
+and one submission witness were added; the other 476 state files stayed exact.
+Both Wake controls remained stopped and no test-owned process remained.
+
+The selected and current adapter send paths are identical. The error does not
+identify which composer read failed or establish why. Existing local readers
+require `SENT`. New source exposes existing read-only reconciliation for this
+single stopped-host event without a sender or scheduler. Historical consumed
+grant identity remains required even if the grant has expired or been revoked;
+it grants no new send. Cleanup completes before positive receipt commit. An I/O
+error during the existing multi-file positive commit may retain partial receipt
+evidence, which must be inspected rather than rolled back or resent. A recovered
+timer created when none existed uses the verified receipt time; the original
+submission-start witness remains unchanged. Fixed error codes are exposed through
+the existing redaction filter, without accepting an arbitrary new error prefix.
+At 18:56:45–18:58:57 UTC, the six-file qualification passed 484 tests (one
+ignored): 431 Wake, 29 work/grant, 23 operator and one error-redaction test.
+Strict root/Wake Clippy and bounded cleanup passed. An initial type-inference
+error was fixed; a subsequent sandbox fixture-access failure is retained
+alongside the successful run with required temporary-directory access. These
+are source/fixture results; live reconciliation is the next separate gate.
+Evidence: [C217](verification/C217_SCOPED_REVIEW_LIVE_2026_10_25.json).
+
 ## October 25 C216 — one snapshot budget and local diagnostics
 
 Source qualification passed: 427 Wake tests (including eight new deadline tests),

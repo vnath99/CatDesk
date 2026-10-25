@@ -1,3 +1,27 @@
+## October 25 C217 — do not replay the unknown scoped review
+
+The first standing-grant dispatch is recorded at `SUBMITTING` with
+`TYPING_NOT_CONFIRMED` and no receipt. `review run`, `resume`, sent-only `read`
+and `reobserve` do not resolve that uncertainty. Preserve its event, grant,
+drafts and journal; do not use a generic retry or recurring host as a workaround.
+New source adds the following explicit wrapper around existing read-only
+reconciliation. Use only a matching qualified controller; source availability
+alone is not installed qualification.
+
+```text
+<qualified-controller> operator web review reconcile --project-id <id> --event-id <existing-submitting-id>
+```
+
+The host must be stopped. Exact historical grant dispatch, current paired target
+and message identity are required. The command has a 90-second browser/cleanup
+budget, never types or submits, and leaves an unproven outcome unchanged. Positive
+receipt proof may advance only that delivery to `SENT` and create its passive
+timer using the verified receipt time. It preserves the original submission-start
+witness. Response verification and work resolution remain separate. A positive
+commit I/O failure may retain partial receipt state; inspect it without replay.
+The source passed 484 tests (one ignored) and strict root/Wake Clippy. This is
+not installed or live acceptance; use the reviewed immutable controller only.
+
 ## October 25 C216 — explicit review reads have one total deadline
 
 With a qualified C216 controller, `operator web review read --project-id <id>
