@@ -51,7 +51,8 @@ use crate::reviewed_source_snapshot::{
     validate_committed_snapshot, write_new_regular_in,
 };
 use crate::windows_protected_fs::{
-    ProtectedDirectoryGuard, read_optional_relative_regular, validate_protected_component,
+    DeleteOnCloseRegularLock, ProtectedDirectoryGuard, create_delete_on_close_regular_lock,
+    read_optional_relative_regular, validate_protected_component,
     write_unique_regular_for_atomic_replace,
 };
 
@@ -5085,6 +5086,24 @@ impl std::ops::Deref for BuildControlRoot {
     }
 }
 
+// One existing crash-safe filesystem lock coordinates only this workspace's
+// short producer admission transitions. Independent project execution and the
+// owned build itself do not hold it. Re-resolve the active generation AFTER
+// acquisition so a waiter cannot claim a superseded generation.
+fn admitted_control_root(
+    workspace: &Path,
+) -> Result<(BuildControlRoot, DeleteOnCloseRegularLock), String> {
+    let initial = control_root(workspace)?;
+    let lock = create_delete_on_close_regular_lock(
+        &initial.base_guard,
+        "admission.lock",
+        "reviewed build admission",
+    )
+    .map_err(|_| "REVIEWED_BUILD_ADMISSION_BUSY".to_string())?;
+    let current = control_root(workspace)?;
+    Ok((current, lock))
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReviewedBuildPublicOutcomeV1 {
     pub state: &'static str,
@@ -5169,7 +5188,7 @@ pub fn prepare_reviewed_build(
         .map_err(|_| "REVIEWED_SOURCE_SNAPSHOT_REQUIRED".to_string())?;
     let policy = fixed_policy();
     let (cargo, rustc) = trusted_toolchain()?;
-    let control = control_root(workspace)?;
+    let (control, _admission) = admitted_control_root(workspace)?;
     let mut attempt = ReviewedBuildAttemptV1 {
         schema_version: ATTEMPT_SCHEMA_VERSION,
         build_attempt_id: Uuid::new_v4().simple().to_string(),
@@ -5246,7 +5265,7 @@ pub fn confirm_reviewed_build(
     confirmation_token: &str,
     spawn: impl FnOnce(&ReviewedBuildAttemptV1, &str) -> Result<(), String>,
 ) -> Result<ReviewedBuildPublicOutcomeV1, String> {
-    let control = control_root(workspace)?;
+    let (control, _admission) = admitted_control_root(workspace)?;
     let attempt: ReviewedBuildAttemptV1 = control_read_json(&control, "attempt.json")?;
     if attempt.confirmation_token != confirmation_token {
         return Err("REVIEWED_BUILD_CONFIRMATION_UNAVAILABLE".into());
@@ -5506,47 +5525,25 @@ pub fn run_reviewed_build_worker(
         // is retained and it is reduced to a redacted classification/digest
         // below, so diagnostic capture cannot change Cargo pipe behavior or
         // persist paths, credentials, or raw compiler output.
-        let mut stderr_reader = Some(std::thread::spawn(move || {
-            read_bounded_cargo_stderr(stderr)
-        }));
+        let stderr_reader = std::thread::spawn(move || read_bounded_cargo_stderr(stderr));
         // Kill-on-close binds Cargo and all inherited compiler/linker/build
         // script descendants to this closed worker, rather than trusting a
         // single Cargo PID.  Platforms without this reviewed ownership
         // primitive fail closed before a build can become authority.
         job.assign(&child)?;
         job.resume(&child)?;
-        let started = std::time::Instant::now();
-        loop {
-            if let Some(status) = child
-                .try_wait()
-                .map_err(|_| "REVIEWED_BUILD_FAILED".to_string())?
-            {
-                if !status.success() {
-                    let captured_stderr = stderr_reader
-                        .take()
-                        .and_then(|reader| reader.join().ok())
-                        .and_then(Result::ok)
-                        .unwrap_or_default();
-                    failure_diagnostic =
-                        Some(summarize_cargo_failure(status.code(), captured_stderr));
-                    return Err("REVIEWED_BUILD_FAILED".into());
-                }
-                break;
-            }
-            if started.elapsed() > BUILD_TIMEOUT {
-                let _ = child.kill();
-                let _ = job.terminate();
-                let _ = child.wait();
-                return Err("REVIEWED_BUILD_TIMEOUT".into());
-            }
-            std::thread::sleep(Duration::from_millis(50));
+        let status = wait_for_owned_build_exit(&mut child, &job, &stderr_reader, BUILD_TIMEOUT)?;
+        // The deadline covers root exit, whole-Job quiescence and pipe EOF.
+        // Joining is safe only after is_finished; neither root exit nor EOF
+        // alone admits release bytes while compiler descendants can run.
+        let captured_stderr = stderr_reader
+            .join()
+            .map_err(|_| "REVIEWED_BUILD_FAILED")?
+            .map_err(|_| "REVIEWED_BUILD_FAILED")?;
+        if !status.success() {
+            failure_diagnostic = Some(summarize_cargo_failure(status.code(), captured_stderr));
+            return Err("REVIEWED_BUILD_FAILED".into());
         }
-        // The child has exited successfully; complete the drain before moving
-        // to tool remeasurement.  Success retains no diagnostic material.
-        let _ = stderr_reader
-            .take()
-            .and_then(|reader| reader.join().ok())
-            .and_then(Result::ok);
         // Revalidate the exact pinned tool evidence after all compiler children exit.
         if cargo_pin.evidence != attempt.cargo
             || rustc_pin.evidence != attempt.rustc
@@ -6532,6 +6529,45 @@ fn require_trusted_final_link_handoff() -> Result<(), String> {
 #[cfg(windows)]
 struct BuildJob(*mut c_void);
 
+fn wait_for_owned_build_exit(
+    child: &mut std::process::Child,
+    job: &BuildJob,
+    stderr: &std::thread::JoinHandle<std::io::Result<BoundedCargoStderr>>,
+    budget: Duration,
+) -> Result<std::process::ExitStatus, String> {
+    let started = std::time::Instant::now();
+    let mut status = None;
+    loop {
+        if status.is_none() {
+            status = child.try_wait().map_err(|_| "REVIEWED_BUILD_FAILED")?;
+        }
+        if let Some(exited) = status
+            && job.active_processes()? == 0
+            && stderr.is_finished()
+        {
+            return Ok(exited);
+        }
+        if started.elapsed() >= budget {
+            job.terminate()?;
+            let cleanup = std::time::Instant::now();
+            while cleanup.elapsed() < Duration::from_secs(5) {
+                if child
+                    .try_wait()
+                    .map_err(|_| "REVIEWED_BUILD_FAILED")?
+                    .is_some()
+                    && job.active_processes()? == 0
+                    && stderr.is_finished()
+                {
+                    return Err("REVIEWED_BUILD_TIMEOUT".into());
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            return Err("REVIEWED_BUILD_PROCESS_QUIESCENCE_UNPROVEN".into());
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
 #[cfg(windows)]
 impl BuildJob {
     fn new() -> Result<Self, String> {
@@ -6617,6 +6653,43 @@ impl BuildJob {
         }
         Ok(())
     }
+    fn active_processes(&self) -> Result<u32, String> {
+        #[repr(C)]
+        #[derive(Default)]
+        struct Accounting {
+            total_user_time: i64,
+            total_kernel_time: i64,
+            this_period_user_time: i64,
+            this_period_kernel_time: i64,
+            total_page_fault_count: u32,
+            total_processes: u32,
+            active_processes: u32,
+            total_terminated_processes: u32,
+        }
+        unsafe extern "system" {
+            fn QueryInformationJobObject(
+                job: *mut c_void,
+                class: i32,
+                information: *mut c_void,
+                length: u32,
+                returned: *mut u32,
+            ) -> i32;
+        }
+        let mut accounting = Accounting::default();
+        if unsafe {
+            QueryInformationJobObject(
+                self.0,
+                1, // JobObjectBasicAccountingInformation
+                (&mut accounting as *mut Accounting).cast(),
+                std::mem::size_of::<Accounting>() as u32,
+                std::ptr::null_mut(),
+            )
+        } == 0
+        {
+            return Err("REVIEWED_BUILD_PROCESS_UNAVAILABLE".into());
+        }
+        Ok(accounting.active_processes)
+    }
     fn resume(&self, child: &std::process::Child) -> Result<(), String> {
         unsafe extern "system" {
             fn NtResumeProcess(process: *mut c_void) -> i32;
@@ -6687,6 +6760,9 @@ impl BuildJob {
     }
     fn terminate(&self) -> Result<(), String> {
         Ok(())
+    }
+    fn active_processes(&self) -> Result<u32, String> {
+        Err("REVIEWED_BUILD_PROCESS_UNAVAILABLE".into())
     }
     fn resume(&self, _child: &std::process::Child) -> Result<(), String> {
         Err("REVIEWED_BUILD_PROCESS_UNAVAILABLE".into())
@@ -9259,6 +9335,128 @@ mod tests {
         let attempt = test_attempt();
         control_create_json(&control, "attempt.json", &attempt).unwrap();
         (root, control, attempt)
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn admission_excludes_confirmation_across_unclaimed_supersession() {
+        let (root, initial, prior) = unclaimed_prepared_control_fixture();
+        let (control, admission) = admitted_control_root(&root).unwrap();
+        assert!(unclaimed_prepared_attempt(&control, &prior).unwrap());
+        // This is exactly the old check/activation gap. A concurrent public
+        // CONFIRM must not reserve or spawn the previously selected attempt.
+        let concurrent_root = root.clone();
+        let token = prior.confirmation_token.clone();
+        let refused = std::thread::spawn(move || {
+            confirm_reviewed_build(&concurrent_root, &token, |_, _| {
+                panic!("busy admission must never spawn the old worker")
+            })
+            .unwrap_err()
+        })
+        .join()
+        .unwrap();
+        assert_eq!(refused, "REVIEWED_BUILD_ADMISSION_BUSY");
+        assert!(unclaimed_prepared_attempt(&control, &prior).unwrap());
+        let fresh = fresh_attempt_for_authority(&prior, 'b', 'c', "fresh-acknowledged-review");
+        prepare_unclaimed_prepared_supersession(&control, &prior, fresh.clone()).unwrap();
+        drop(admission);
+        // Delete-on-close release needs no stale-file deletion, and a new
+        // admission resolves the new pointer rather than retaining the old one.
+        let (selected, next_admission) = admitted_control_root(&root).unwrap();
+        let observed: ReviewedBuildAttemptV1 =
+            control_read_json(&selected, "attempt.json").unwrap();
+        assert_eq!(observed.build_attempt_id, fresh.build_attempt_id);
+        drop(next_admission);
+        drop(selected);
+        drop(control);
+        drop(initial);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    // Deliberately exit this fixture root before its descendant. The calling
+    // test owns the entire Job and proves termination and pipe EOF afterward.
+    #[allow(clippy::zombie_processes)]
+    fn producer_root_exit_fixture() {
+        if std::env::var("CATDESK_BUILD_ROOT_FIXTURE").as_deref() != Ok("1") {
+            return;
+        }
+        let stderr = if std::env::var("CATDESK_BUILD_PIPE_FIXTURE").as_deref() == Ok("1") {
+            Stdio::inherit()
+        } else {
+            Stdio::null()
+        };
+        let _child = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "reviewed_build::tests::producer_descendant_wait_fixture",
+                "--nocapture",
+            ])
+            .env("CATDESK_BUILD_DESCENDANT_FIXTURE", "1")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(stderr)
+            .spawn()
+            .unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn producer_descendant_wait_fixture() {
+        if std::env::var("CATDESK_BUILD_DESCENDANT_FIXTURE").as_deref() == Ok("1") {
+            std::thread::sleep(Duration::from_secs(30));
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn producer_deadline_covers_descendants_with_and_without_inherited_stderr() {
+        for inherited_pipe in [false, true] {
+            let mut child = Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "reviewed_build::tests::producer_root_exit_fixture",
+                    "--nocapture",
+                ])
+                .env("CATDESK_BUILD_ROOT_FIXTURE", "1")
+                .env(
+                    "CATDESK_BUILD_PIPE_FIXTURE",
+                    if inherited_pipe { "1" } else { "0" },
+                )
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped())
+                .creation_flags(CREATE_SUSPENDED)
+                .spawn()
+                .unwrap();
+            let job = BuildJob::new().unwrap();
+            job.assign(&child).unwrap();
+            let stderr = child.stderr.take().unwrap();
+            let reader = std::thread::spawn(move || read_bounded_cargo_stderr(stderr));
+            job.resume(&child).unwrap();
+            let root_budget = std::time::Instant::now();
+            while child.try_wait().unwrap().is_none()
+                && root_budget.elapsed() < Duration::from_secs(5)
+            {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert!(child.try_wait().unwrap().unwrap().success());
+            assert!(
+                job.active_processes().unwrap() > 0,
+                "root exit must leave a real descendant"
+            );
+            let started = std::time::Instant::now();
+            assert_eq!(
+                wait_for_owned_build_exit(&mut child, &job, &reader, Duration::from_millis(200))
+                    .unwrap_err(),
+                "REVIEWED_BUILD_TIMEOUT"
+            );
+            assert!(started.elapsed() < Duration::from_secs(6));
+            assert_eq!(job.active_processes().unwrap(), 0);
+            assert!(reader.is_finished());
+            reader.join().unwrap().unwrap();
+        }
     }
 
     #[cfg(windows)]

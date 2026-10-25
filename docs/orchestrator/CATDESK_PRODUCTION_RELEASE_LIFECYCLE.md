@@ -29,6 +29,32 @@ sessions preserved. Source/fixture results do not establish installed rollback,
 connector availability or actual Web coding. Evidence:
 `docs/verification/C118_PROMOTION_INTEROPERABILITY_2026_10_24.json`.
 
+## October 24 EDT C130 — producer gates fixed; parallel target-read regression resolved
+
+Independent source review exposed three producer defects. Snapshot creation and
+replay now check overlapping completion hashes; PREPARE/CONFIRM reuse the existing
+crash-safe admission lock; output admission waits for root exit, whole-Job exit
+and bounded stderr completion. Two snapshot regressions failed before the fix.
+The full Rust suite also exposed Git probes held under the shared Wake-target
+lock. Status probes now run outside that lock, with exact prepared-root checking
+and paired binding readback retained. A delayed-project regression reproduced the
+old sibling failure. The four-file follow-up source review passed its stated scope.
+
+The complete local Rust commands, strict Clippy and format passed. Earlier failed
+runs remain in the audit. A separate controller from published base `5fb1529`
+passed two short read-only MCP starts (401/401/200, natural exit and cleanup),
+but predates these fixes and is held. None of this is installed production proof.
+All 306 development and 55 historical files remain exact; v77/v76, five project
+bindings and native sessions are preserved. No recurring automation was activated.
+
+Production remains stopped and unpromoted. Next: rebuild the corrected controller,
+establish the genuine current completed-review/snapshot/producer chain, then use
+the existing guarded release-pair route. This external review is not producer
+authority; Sol gates remain enforced. No date hold or new operator action is
+identified. Connector 429 and official runtime remain separate, unchanged
+dependencies. Installed rollback and actual two-conversation Web coding remain
+open. Evidence: `docs/verification/C130_PRODUCER_AND_PARALLEL_TARGET_FIXES_2026_10_24.json`.
+
 ## Three different release scopes
 
 | Scope | Authority and owner | What it does not establish |

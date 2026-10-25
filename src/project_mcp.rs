@@ -1225,6 +1225,34 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn slow_project_identity_preparation_does_not_block_sibling_target_readback() {
+        let (control, _wake, _alpha, _beta) = fixture().await;
+        let (started, observed) = std::sync::mpsc::channel();
+        let (release, released) = std::sync::mpsc::channel();
+        let alpha_root = control.clone();
+        let alpha = std::thread::spawn(move || {
+            mcp::project_target_status_with_preparation(&alpha_root, "alpha", || {
+                started.send(()).unwrap();
+                // A bounded stand-in for an in-flight metadata probe. No
+                // lock cleanup or operator action can release this early.
+                released.recv_timeout(Duration::from_secs(10)).unwrap();
+            })
+        });
+        observed.recv_timeout(Duration::from_secs(5)).unwrap();
+        let beta_root = control.clone();
+        let beta = tokio::task::spawn_blocking(move || {
+            mcp::operator_read_project_web_target_status(&beta_root, "beta")
+        })
+        .await
+        .unwrap();
+        release.send(()).unwrap();
+        let alpha = alpha.join().unwrap();
+        // Always join/release the delayed reader before checking outcomes.
+        assert_eq!(beta.unwrap().unwrap().project_id, "beta");
+        assert_eq!(alpha.unwrap().unwrap().project_id, "alpha");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn project_mcp_connections_route_independently_and_follow_only_paired_rollover() {
         let (control, wake, alpha, beta) = fixture().await;
         let a = OwnedServer::start(alpha.clone(), ALPHA_TOKEN).await;
@@ -1365,8 +1393,14 @@ mod tests {
             resumed,
             beta_progress,
         ) = observations.unwrap();
-        assert_eq!(ar["result"]["structuredContent"]["text"], "alpha");
-        assert_eq!(br["result"]["structuredContent"]["text"], "beta");
+        assert_eq!(
+            ar["result"]["structuredContent"]["text"], "alpha",
+            "alpha response: {ar}"
+        );
+        assert_eq!(
+            br["result"]["structuredContent"]["text"], "beta",
+            "beta response: {br}"
+        );
         assert_eq!(auth, reqwest::StatusCode::UNAUTHORIZED);
         assert_eq!(
             scope["error"]["message"],

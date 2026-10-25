@@ -143,6 +143,10 @@ fn wake_target_lock(workspace: &Path) -> Result<Arc<StdMutex<()>>, String> {
     } else {
         workspace.to_path_buf()
     };
+    wake_target_lock_at_root(&root)
+}
+
+fn wake_target_lock_at_root(root: &Path) -> Result<Arc<StdMutex<()>>, String> {
     let key = match root.canonicalize() {
         Ok(key) => key,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => root
@@ -4073,7 +4077,23 @@ pub(crate) fn operator_read_project_web_target_status(
     control_workspace: &Path,
     project_id: &str,
 ) -> Result<Option<ProjectWebTargetV1>, DesignatedChatTargetErrorV1> {
-    let lock = wake_target_lock(control_workspace)
+    project_target_status_with_preparation(control_workspace, project_id, || {})
+}
+
+pub(crate) fn project_target_status_with_preparation(
+    control_workspace: &Path,
+    project_id: &str,
+    before_preparation: impl FnOnce(),
+) -> Result<Option<ProjectWebTargetV1>, DesignatedChatTargetErrorV1> {
+    // Git identity probes are independent work and can take longer than the
+    // bounded paired-state lock wait. Never hold that shared lock across them.
+    before_preparation();
+    let (control_workspace, wake_store) = project_web_store(control_workspace, project_id)?;
+    let prepared_root = wake_store
+        .root()
+        .canonicalize()
+        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    let lock = wake_target_lock_at_root(&prepared_root)
         .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(250);
     let _guard = loop {
@@ -4085,7 +4105,18 @@ pub(crate) fn operator_read_project_web_target_status(
             Err(_) => return Err(DesignatedChatTargetErrorV1::Unavailable),
         }
     };
-    let (control_workspace, wake_store) = project_web_store(control_workspace, project_id)?;
+    // Lock the exact prepared authority, then refuse a concurrent selection
+    // change. The registry/Wake URL, digest, generation and history readback
+    // remains inside the existing shared binding critical section.
+    let selected_root = crate::wake_protocol_client::wake_root_for_workspace(&control_workspace)
+        .and_then(|root| {
+            root.canonicalize()
+                .map_err(|_| "WAKE_TARGET_ROOT_UNAVAILABLE".into())
+        })
+        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    if selected_root != prepared_root {
+        return Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch);
+    }
     paired_project_target_readback_locked(&control_workspace, &wake_store, project_id)
 }
 
