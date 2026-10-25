@@ -1,3 +1,17 @@
+## October 25 C208 — candidate qualified, installed acceptance still open
+
+| Capability | Actual evidence |
+| --- | --- |
+| Reviewed build | `BUILD_ATTESTED` and independent product-result/candidate readback; C196 snapshot `409513a`. |
+| Candidate authentication/lifecycle | Two bounded 12-second starts: missing/wrong auth 401, valid auth 200, ten tools, natural exits and no surviving listeners. |
+| Cleanup | Exact orphaned MSVC helper stopped after compiler exit; product gate unchanged. Stale-PID monitor reconciled separately; unrelated processes untouched. |
+| Production promotion | One checked operator launch outside the app's Windows Job is REQUIRED; normal/PTY tool sessions are contained, and UI terminal automation is not permitted. Nothing invoked or promoted. Controller `83a2d98` is not the candidate's source. |
+| Installed / multi-project Web | OPEN: production startup, intended ingress, rollback and two actual Web coding conversations remain unproved. |
+
+The candidate checks preserved 461 state files and five authority files. No
+browser, Wake or external runtime was started. Evidence:
+`docs/verification/C208_ATTESTED_CANDIDATE_AND_PROMOTION_PREFLIGHT_2026_10_25.json`.
+
 ## October 25 C207 — compatibility correction remains separate from live acceptance
 
 | Capability | Current evidence and limit |

@@ -7,6 +7,28 @@ ownership, independent review and producer gates remain in force. No recurring
 automation, external tunnel replacement or browser-profile change follows from
 this authorization.
 
+## October 25 C208 — genuine candidate ready for guarded owner launch
+
+Supported `reviewed-build result` reports `BUILD_ATTESTED`, with candidate
+SHA-256 `91eea19e6e030e80900d43114f800c3642f5cc063ef2c969b83eb20d2c28d14b`
+and attestation digest
+`63799ca89e6de6b5e2de22e2479b3ae4b0341c34048c2530e3282c835c8cc156`.
+Two 12-second candidate runs passed 401/401/200 authentication checks and
+natural cleanup. This is qualification of the reviewed `409513a` snapshot,
+not installation of controller source `83a2d98` or protected production acceptance.
+
+Promotion remains unexecuted. The checked supported release-owner command
+requires one operator launch from normal PowerShell 7 outside a Windows Job;
+normal and PTY tool sessions are both contained. UI terminal automation is not
+permitted, and no invocation or preflight has occurred. This is an execution
+context requirement, not a new approval gate. It withholds two external-runtime
+credential references only from that process tree; stored configuration and
+credentials remain untouched. Direct daemon launch avoids the full recovery
+script's Wake-start side effect. Verify installed identity, expected runtime
+ownership, ingress and trusted rollback after promotion; preserve prior release
+evidence. Do not call the stale monitor's failure a failed product attestation.
+`docs/verification/C208_ATTESTED_CANDIDATE_AND_PROMOTION_PREFLIGHT_2026_10_25.json`.
+
 ## October 25 C207 — bounded diagnostics do not establish a release
 
 Two disposable diagnostics passed `ring` without a complete Cargo result. One

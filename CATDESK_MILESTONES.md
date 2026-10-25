@@ -1,3 +1,20 @@
+## October 25 C208 — genuine build attested; production promotion pending
+
+The supported producer reached `BUILD_ATTESTED`; the authoritative result and
+candidate hash were independently read back. Both 12-second candidate starts
+passed 401/401/200 authentication checks, natural exit and listener cleanup.
+Production is still unpromoted. The candidate is from C196's reviewed
+`409513a` snapshot; the `83a2d98` controller is a different source revision.
+
+One exact orphaned MSVC helper was stopped after Cargo/rustc exited. The product
+owner then attested naturally, with its gate unchanged. A monitor's stale PID
+bookkeeping was reconciled after product verification; unrelated Node/Chrome
+processes were untouched. Both normal and PTY tool sessions are inside a Windows
+Job. The checked promotion command therefore requires one operator launch from
+a normal PowerShell 7 window outside that Job; it has not run. Installed health, rollback,
+Secure MCP and two-conversation Web coding remain open. Evidence:
+`docs/verification/C208_ATTESTED_CANDIDATE_AND_PROMOTION_PREFLIGHT_2026_10_25.json`.
+
 ## October 25 C207 — compatible quarantine disposition and bounded build diagnosis
 
 The compatible disposition passed 112 focused source tests and both strict

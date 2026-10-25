@@ -1,3 +1,19 @@
+## October 25 C208 — build authority recovered; installation remains separate
+
+The existing producer, with its ownership gate intact, naturally attested the
+candidate after exact orphaned compiler-helper cleanup. Independent product
+readback and two bounded candidate authentication/lifecycle runs passed. The
+stale-PID monitor was stopped separately; unrelated processes were preserved.
+
+The candidate is built from reviewed snapshot `409513a`; the `83a2d98` controller
+supplied the build fix but is not the candidate source. No production promotion
+has occurred. Normal and PTY tool sessions are inside a Windows Job; UI terminal
+automation is not permitted. One checked command requires operator execution in
+a normal PowerShell 7 window outside that Job. The launcher withholds external-runtime credential references only
+for its process tree. It enables no recurring browser/Wake work. Installed
+health, rollback, Secure MCP and actual two-conversation coding remain open.
+`docs/verification/C208_ATTESTED_CANDIDATE_AND_PROMOTION_PREFLIGHT_2026_10_25.json`.
+
 ## October 25 C207 — preserve reader compatibility and release boundaries
 
 Disposition now leaves the original `REQUESTED` context ledger unchanged for

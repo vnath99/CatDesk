@@ -1,3 +1,20 @@
+## October 25 C208 — attested candidate and bounded authentication qualification
+
+| UTC checkpoint | Actual result |
+| --- | --- |
+| 16:57:12 | Exact signed orphaned MSVC helper stopped after Cargo/rustc exit; no release-authority write. |
+| 16:58:05–16:58:57 | Product result proved `BUILD_ATTESTED`; stale-PID monitor stopped separately, unrelated processes preserved. |
+| 16:59:12–16:59:39 | Two 12-second candidate starts passed 401/401/200 checks, natural exit and listener cleanup; 461 state and five authority files stayed exact. |
+
+Candidate SHA-256 `91eea19e6e030e80900d43114f800c3642f5cc063ef2c969b83eb20d2c28d14b`
+belongs to the reviewed `409513a` snapshot, not controller source `83a2d98`.
+No promotion or installed acceptance occurred. Normal and PTY tool sessions were
+both confirmed inside a Windows Job. One checked operator command was requested
+for a normal PowerShell 7 window outside it; no invocation or promotion preflight
+has occurred. UI terminal automation is not permitted. No browser, Wake or external runtime was
+started by candidate qualification. Evidence:
+`docs/verification/C208_ATTESTED_CANDIDATE_AND_PROMOTION_PREFLIGHT_2026_10_25.json`.
+
 ## October 25 C207 — disposition compatibility and current-state validation
 
 | UTC checkpoint | Actual result |

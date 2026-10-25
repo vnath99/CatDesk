@@ -1,3 +1,27 @@
+## October 25 C208 — attested candidate; exact promotion launcher pending
+
+Use the prepared private operator command for the existing `release-pair
+prepare`, `release-pair confirm` and `release-pair result` chain after verifying
+the candidate and launch context. One checked operator command has been
+requested for a normal PowerShell 7 window outside the Windows Job. Both normal
+and PTY tool sessions are contained, and UI terminal automation is not permitted.
+This is a launch-environment barrier, not another release approval. No invocation,
+promotion preflight or promotion has run. Do not use Job breakaway, a replacement
+tunnel or a scheduler workaround. The checked script SHA-256 is
+`aedf037cf8354d1087f05be4e66db4429ac863a355c0c9e2948c47a7a4306640`.
+
+The launcher omits `CONTROL_PLANE_API_KEY` and `CATDESK_OPENAI_TUNNEL_ID` only
+from its child environment. It does not read or change their global/store values.
+This blocks external-runtime connect/reattach while leaving local MCP startup
+independent. Direct release-owner daemon launch does not run full-stack recovery's
+Wake start. Current MANUAL_OFF/STOPPED states and absent canonical Web context
+leave browser work disabled; an idle coordination timer is not Web acceptance.
+
+The candidate is genuinely attested and passed two 12-second 401/401/200 tests.
+It contains reviewed snapshot `409513a`, not controller revision `83a2d98`.
+Installed ingress, rollback and real two-project Web coding remain open.
+`docs/verification/C208_ATTESTED_CANDIDATE_AND_PROMOTION_PREFLIGHT_2026_10_25.json`.
+
 ## October 25 C207 — disposition compatibility and current command limits
 
 The compatible rebuilt controller passed its bounded CLI check and completed

@@ -1,3 +1,22 @@
+## October 25 C208 — promote the attested candidate through the existing owner
+
+The genuine producer result is `BUILD_ATTESTED`. Candidate SHA-256 is
+`91eea19e6e030e80900d43114f800c3642f5cc063ef2c969b83eb20d2c28d14b`;
+its source is C196's `409513a` snapshot, distinct from the `83a2d98` controller.
+Two 12-second candidate runs passed authentication and natural cleanup. The
+orphaned MSVC helper and stale-PID monitor were reconciled separately without
+fabricating authority or stopping unrelated processes.
+
+The guarded promotion script is checked but not run. Normal and PTY tool
+sessions are both contained; UI terminal automation is not permitted. The one
+requested operator action is to run the prepared command in a normal PowerShell
+7 window outside the Windows Job. Do not bypass the owner gate. Process-only omission of the
+two external-runtime credential references preserves that owner's control and
+changes no stored/global credentials. Production remains unpromoted; verify
+installed identity, lifecycle, intended ingress, rollback and actual independent
+Web tasks afterward. Evidence:
+`docs/verification/C208_ATTESTED_CANDIDATE_AND_PROMOTION_PREFLIGHT_2026_10_25.json`.
+
 ## October 25 C207 — qualify the producer fix; preserve completed disposition
 
 The compatible controller completed bounded disposition prepare/confirm after
