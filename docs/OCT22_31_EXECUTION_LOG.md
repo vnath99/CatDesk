@@ -1,3 +1,25 @@
+## October 25 C219 — executable recovery handoff reconciled
+
+The supported connector status call failed before a CatDesk response and
+returned no HTTP status. It was not retried or labeled a new 429. Source review
+confirmed why an outer Windows Job cannot own the long-lived promoted daemon,
+and why ordinary MCP promotion refuses the mismatched canonical pair.
+
+The refreshed private wrapper changes only preservation predicates, retaining
+C208's candidate, independent review/producer authority and release-pair flow.
+A read-only qualification at 19:49:17–19:49:19 UTC passed 486 file checks without
+launching CatDesk or performing product preflight. The original reader failure
+(lost script directory during extracted evaluation) is retained with zero
+product actions; its corrected copy captures an explicit root. Prefix/suffix
+comparison boundaries are recorded precisely in private provenance.
+
+The remaining execution prerequisite is the supported outside-Job process owner,
+not new discretionary consent. Four independent native project chats had active
+turns at 19:43 UTC, with no error or attention flag; none was interrupted. No
+new product source defect was found that justified duplicating existing routing
+or authorization mechanisms. Production, connector and real two-Web coding
+acceptance remain unproved. Evidence: [C219](verification/C219_PRODUCTION_OWNER_HANDOFF_2026_10_25.json).
+
 ## October 25 C218 — composer fix qualified and inspected live
 
 The installed SeleniumBase attribute getter rejects the prior timeout keyword;

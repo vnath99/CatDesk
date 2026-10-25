@@ -1,3 +1,23 @@
+## October 25 C219 — next action requires the supported production owner
+
+The reviewed private `promote-c208-after-c218.ps1` handoff is ready, with 486
+current-state preservation predicates qualified read-only. Its SHA-256 is
+`75ea14fba91bf0e7e3004d15f416159c03b2d83472affbbdd003bac8a561da1a`.
+Run it only from an ordinary PowerShell 7 outside Windows Jobs, using `-Execute`.
+The exact local command is in the private audit. Existing promotion consent
+already covers it; the missing prerequisite is execution ownership. This tool
+environment cannot supply that owner. Product preflight has not run and may
+identify further genuine gates. Never rerun after an ambiguous result.
+
+Candidate source remains the C208 reviewed snapshot `409513a`; it does not
+silently become newer development source. After repair, qualify installed
+identity, startup/authentication, restart and rollback. Keep independently owned
+Secure MCP and any transport/429 issue separate, then use existing scoped tools
+for actual two-conversation Web coding. Do not replay completed browser canaries
+or the unknown C217A review. Four other native project chats were active at
+19:43 UTC and have not been interrupted. No new routing framework is needed.
+See [C219 evidence](../verification/C219_PRODUCTION_OWNER_HANDOFF_2026_10_25.json).
+
 ## October 25 C218 — preserve the diagnosed unknown submission
 
 Normal release source `c56d3b4d17ad0070742b4e2d5888a2c20a85633b` was published

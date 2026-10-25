@@ -1,3 +1,15 @@
+## October 25 C219 — recovery handoff qualified; production owner required
+
+The reviewed private promotion wrapper now preserves the verified C218 state:
+480 existing files plus six selected-package files. Its read-only preservation
+qualification passed all 486 checks. No product preflight or promotion ran.
+C196/C208 remain the release authority; newer development health does not
+replace it. The outside-Job owner requirement protects the serving daemon's
+lifetime and remains unchanged. Ordinary MCP promotion cannot repair the
+current mismatched pair. All four other native project chats had active turns
+at 19:43 UTC and were left untouched. Installed and two-Web acceptance remain
+open. See [C219 evidence](docs/verification/C219_PRODUCTION_OWNER_HANDOFF_2026_10_25.json).
+
 ## October 25 C218 — development health and read-only diagnosis passed
 
 Normal release source `c56d3b4d17ad0070742b4e2d5888a2c20a85633b` was published

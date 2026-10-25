@@ -1,3 +1,16 @@
+## October 25 C219 — recovery readiness is separate from installed acceptance
+
+| Requirement | Evidence and remaining gate |
+| --- | --- |
+| Preserve current state during authorized repair | Reviewed private wrapper and 486 passing read-only file predicates. |
+| Production repair | NOT RUN: existing release-pair route requires an owner outside Windows Jobs. |
+| Connector | One transport-send failure before a CatDesk response; no HTTP status or fresh 429 established. |
+| Independent native project work | Four actual in-progress app turns at 19:43 UTC; no interference. This is not Web coding acceptance. |
+| Installed startup, restart, rollback and two Web coding conversations | OPEN pending supported recovery and working ingress. |
+
+No source test or synthetic fixture is being substituted for these live gates.
+See [C219 evidence](verification/C219_PRODUCTION_OWNER_HANDOFF_2026_10_25.json).
+
 ## October 25 C218 — source, development and live evidence remain distinct
 
 | Capability | Actual evidence |

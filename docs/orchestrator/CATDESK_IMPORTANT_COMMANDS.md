@@ -1,3 +1,23 @@
+## October 25 C219 — use the reconciled recovery handoff
+
+Use the reviewed private `promote-c208-after-c218.ps1` wrapper, SHA-256
+`75ea14fba91bf0e7e3004d15f416159c03b2d83472affbbdd003bac8a561da1a`,
+from an ordinary PowerShell 7 process outside Codex/test Windows Jobs. Its exact
+local path is retained in the private audit. Do not run older wrappers against
+stale project/review pins. The current wrapper preserves 486 paths and retains
+all original production authority and lifecycle checks.
+
+The wrapper runs the existing `operator release-pair prepare`, one fresh
+`confirm`, then durable `result` procedure. It does not restart external Secure
+MCP or browser/Wake automation. On an error or ambiguous confirmation, preserve
+the run and inspect the durable result; do not rerun the wrapper blindly.
+
+Only the preservation predicates were executed during C219 qualification; the
+actual wrapper and product preflight remain unexecuted. The outside-Job check
+protects daemon lifetime after private-Job release. Ordinary MCP promotion
+requires a valid canonical pair and cannot replace this divergent-pair repair.
+See [C219 evidence](../verification/C219_PRODUCTION_OWNER_HANDOFF_2026_10_25.json).
+
 ## October 25 C218 — metadata-only pending-review diagnosis
 
 New source command; qualify the matching controller and adapter before use:

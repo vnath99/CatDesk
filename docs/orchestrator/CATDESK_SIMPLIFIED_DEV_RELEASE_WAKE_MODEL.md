@@ -1,3 +1,18 @@
+## October 25 C219 — recovery needs independent serving-process ownership
+
+The outside-Job requirement protects the promoted daemon from an unrelated
+outer owner's termination. Creating a nested Job would not remove that outer
+ownership. Keep the existing gate and use the supported outside-Job operator
+process for the divergent-pair repair. Ordinary MCP promotion first checks the
+canonical executable/fingerprint pair and cannot repair the current mismatch.
+
+The refreshed private wrapper preserves 486 current-state paths and retains
+C196/C208 authority. Its preservation-only qualification passed; production
+preflight, installation and serving health have not run. The C218 development
+package remains locally qualified, with its previous verified version retained.
+Restoring a valid pair removes this particular ordinary-promotion mismatch
+gate; later releases still require the existing review and producer evidence.
+
 ## October 25 C218 — locally verified development package is selected
 
 The normal release from source `c56d3b4d17ad0070742b4e2d5888a2c20a85633b`
