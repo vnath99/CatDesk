@@ -15,6 +15,10 @@ by paired read-only native queries. The successful fixture rerun used authorized
 filesystem access with the existing kill-on-close test Job intact. Evidence:
 [C222](verification/C222_BACKEND_ONLY_LIFECYCLE_2026_10_25.json).
 
+Source commit `c7ab664946b43b019c39262d89598a3c355fb77e` has exact remote
+readback. No Actions run was observed for it; this does not add CI or installed
+acceptance.
+
 ## October 25 C220/C221 — Windows evidence, no production acceptance
 
 Actual retained-handle process queries and operator-provided current-Job API

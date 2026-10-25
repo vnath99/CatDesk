@@ -31,6 +31,12 @@ found zero remaining test owners, no listener on 3200 and no promotion execution
 intent. No unrelated process was stopped. Evidence:
 [C222](verification/C222_BACKEND_ONLY_LIFECYCLE_2026_10_25.json).
 
+Reviewed source and sanitized evidence were published as
+`c7ab664946b43b019c39262d89598a3c355fb77e` on `codex/web-rollover-oct17`.
+The remote branch readback matched exactly at 21:50:10 UTC. One read-only
+Actions query at 21:50:35 UTC found no run for that source commit; remote CI is
+not accepted. No workflow was dispatched or repository setting changed.
+
 ## October 25 C220/C221 — actual Windows ownership diagnosis
 
 The operator's line-19 refusal preceded CatDesk process launch and state writes.

@@ -4,6 +4,13 @@
   "sourceParent": "464e497c469a53a45b43cd06d24caae50b81ba6c",
   "branch": "codex/web-rollover-oct17",
   "status": "SOURCE_QUALIFIED_NOT_INSTALLED",
+  "publication": {
+    "sourceCommit": "c7ab664946b43b019c39262d89598a3c355fb77e",
+    "remoteReadback": "c7ab664946b43b019c39262d89598a3c355fb77e",
+    "verifiedUtc": "2026-10-25T21:50:10.6057165+00:00",
+    "exactSourceCi": "NO_RUN_OBSERVED_NOT_ACCEPTED",
+    "ciObservedUtc": "2026-10-25T21:50:35.8974458+00:00"
+  },
   "implementation": {
     "publicLifecycle": "Opt-in start/recover -BackendOnly reuses canonical identity and reviewed recovery/LKG gates.",
     "nativeCapability": [
