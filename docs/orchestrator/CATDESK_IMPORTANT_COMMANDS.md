@@ -1,3 +1,13 @@
+## October 25 C216 — explicit review reads have one total deadline
+
+With a qualified C216 controller, `operator web review read --project-id <id>
+--event-id <existing-sent-id>` shares a 90-second budget across preflight, browser
+startup, snapshot and cleanup. Unverified local output includes `diagnostic.phase`,
+`elapsedMillis` and `budgetMillis` plus an allowlisted reason. It never resends or
+updates the timer. `COMPLETE` describes snapshot I/O only; require `eventVerified`
+for the actual exact USER/ASSISTANT review. MCP continues to reject unverified
+content and strips local diagnostics. No new command or browser profile is needed.
+
 ## October 25 C215 — bounded routine-review commands
 
 See [routine source review authorization](CATDESK_ROUTINE_REVIEW_AUTHORIZATION.md)

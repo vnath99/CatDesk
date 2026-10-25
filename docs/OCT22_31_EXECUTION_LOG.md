@@ -1,3 +1,20 @@
+## October 25 C216 — one snapshot budget and local diagnostics
+
+Source qualification passed: 427 Wake tests (including eight new deadline tests),
+22 operator tests and five context-control tests; one existing test ignored.
+Strict root/Wake Clippy and bounded cleanup passed. Live diagnosis is pending.
+Evidence: [C216 source results](verification/C216_SNAPSHOT_DEADLINE_2026_10_25.json).
+
+Read-only inspection established an additive timeout: browser locking/startup
+could finish before a separate 180-second frame deadline began. This explained
+why an outer 90-second caller could exit without a native diagnostic; it did not
+establish C212's browser stall cause. The replacement shares a single deadline
+through startup and cleanup, retains existing scope/receipt checks, and adds a
+content-free last-phase report. Generic snapshot callers retain raw error semantics
+and a total 180-second budget; explicit review reads use 90 seconds. Failed reports
+cannot become MCP review text or completion evidence. No state/log writer or
+resend path was added. Qualification and one read-only live diagnosis follow.
+
 ## October 25 C215 — standing routine-review authorization
 
 Reviewed C215 source was published as

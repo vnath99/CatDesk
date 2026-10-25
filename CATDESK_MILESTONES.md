@@ -1,3 +1,17 @@
+## October 25 C216 — bounded snapshot diagnosis
+
+Source qualification passed: 427 Wake tests (including eight new deadline tests),
+22 operator tests and five context-control tests; one existing test ignored.
+Strict root/Wake Clippy and bounded cleanup passed. Live diagnosis is pending.
+Evidence: [C216 source results](docs/verification/C216_SNAPSHOT_DEADLINE_2026_10_25.json).
+
+The snapshot reader now shares one deadline across ownership checks, browser
+startup, frame capture and cleanup. Existing raw snapshot APIs retain their
+signatures and use a 180-second total budget; explicit review reads use 90 seconds
+from entry. A failed local read returns only a fixed phase, elapsed/budget values
+and an allowlisted reason, with no response text or review authority. Source qualification passed as recorded above. C212 remains delivered once with its body unverified;
+no replay or production promotion follows from this implementation.
+
 ## October 25 C215 — reusable review scope, MVP still incomplete
 
 C215 source qualification passed 449 tests (one ignored) and strict root/Wake

@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C216",
+  "recordedUtc": "2026-10-25T18:30:47.0420531+00:00",
+  "sourceParent": "ef092cf29d844050c0b70e5e142260990d19622c",
+  "branch": "codex/web-rollover-oct17",
+  "implementation": [
+    "Single total deadline for snapshot ownership, browser startup, frame read and cleanup.",
+    "Raw APIs preserve signature/error semantics with 180-second total budget; diagnosed local review reads use 90 seconds.",
+    "Fixed phase/elapsed/budget and finite error allowlist; no text forwarded on failures, no new state writer or sender.",
+    "Exact receipt/target/message verification and MCP unverified-content refusal preserved."
+  ],
+  "qualification": {
+    "finishedUtc": "2026-10-25T14:30:24.060934-04:00",
+    "maximumSeconds": 600,
+    "startedUtc": "2026-10-25T14:27:08.4441787-04:00",
+    "formatAndDiff": "PASS",
+    "counts": {
+      "web-context": {
+        "ignored": 0,
+        "passed": 5
+      },
+      "wake-all": {
+        "ignored": 1,
+        "passed": 427
+      },
+      "snapshot-focused": {
+        "ignored": 0,
+        "passed": 8
+      },
+      "operator-web": {
+        "ignored": 0,
+        "passed": 22
+      }
+    },
+    "strictClippy": "ROOT_AND_WAKE_PASS",
+    "type": "SOURCE_FIXTURES_ONLY",
+    "independentStaticReview": "PASS_TWO_REVIEWERS",
+    "ownerExit": 0,
+    "sourcePins": [
+      {
+        "path": "src/operator_web_cli.rs",
+        "sha256": "f34ae0eb292b526ccf24aeff7dfb3c47d677093039831164b66560b64d873e0e"
+      },
+      {
+        "path": "wake/src/runtime.rs",
+        "sha256": "6974f07b70614561e556b4ea1ac5841de64336bc19deed228097ab72ab2c620c"
+      },
+      {
+        "path": "wake/src/runtime_snapshot.rs",
+        "sha256": "df4f87bba2d3ec50d1aded623a0def4873cb2b50808bf61449bec1d7c9ce42c9"
+      }
+    ],
+    "timeout": false,
+    "focusedSubsetIncludedInWakeAll": true
+  },
+  "live": {
+    "messagesSent": 0,
+    "request": "EXISTING_C212_SENT_DELIVERY",
+    "productionPromoted": false,
+    "status": "PENDING_PINNED_CONTROLLER_BUILD_AND_SINGLE_READ",
+    "bodyVerified": false
+  },
+  "limitations": [
+    "No installed/runtime acceptance follows from source fixtures.",
+    "Last observed CDP phase does not prove a particular UI stall cause.",
+    "Existing 8192-byte snapshot frame and selected legacy text truncation limits remain unchanged.",
+    "Existing production outside-Job owner requirement remains."
+  ],
+  "publication": "PENDING"
+}

@@ -1,3 +1,19 @@
+## October 25 C216 — qualify the shared snapshot deadline next
+
+Source qualification passed: 427 Wake tests (including eight new deadline tests),
+22 operator tests and five context-control tests; one existing test ignored.
+Strict root/Wake Clippy and bounded cleanup passed. Live diagnosis is pending.
+Evidence: [C216 source results](../verification/C216_SNAPSHOT_DEADLINE_2026_10_25.json).
+
+Source now provides a 90-second diagnosed review read and 180-second generic
+snapshot budget, including startup and cleanup. Fixed phases distinguish owner,
+package, browser lock, adapter initialization and snapshot activity without
+publishing message bodies on failure. Do not infer the exact UI stall from a
+coarse phase. Build a new immutable development
+controller from the clean published commit, then perform one monitored read of
+C212's existing SENT event. Preserve its failed reads, timer, ledger and all project
+bindings. No resend, acknowledgment, producer or production promotion is implied.
+
 ## October 25 C215 — apply the standing read-only review instruction
 
 Published source checkpoint: `63e7ebc2c473919e7c7ff6f171ed8ec0081d5b09`; exact remote verified. CI remains unverified.

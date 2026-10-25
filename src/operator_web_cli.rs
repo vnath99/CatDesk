@@ -807,6 +807,41 @@ pub(super) fn read_review_guarded(
     expected: Option<(u64, &str)>,
     keep_running: &dyn Fn() -> Result<(), String>,
 ) -> Result<Value, String> {
+    read_review_using(
+        workspace,
+        project,
+        event_id,
+        expected,
+        keep_running,
+        catdesk_wake::runtime::diagnosed_sent_snapshot,
+    )
+}
+
+fn read_review_using<F>(
+    workspace: &Path,
+    project: &str,
+    event_id: &str,
+    expected: Option<(u64, &str)>,
+    keep_running: &dyn Fn() -> Result<(), String>,
+    snapshotter: F,
+) -> Result<Value, String>
+where
+    F: FnOnce(
+        &catdesk_wake::store::Store,
+        &str,
+        &catdesk_wake::protocol::Target,
+        &str,
+        &dyn Fn() -> Result<(), String>,
+    ) -> catdesk_wake::runtime::SnapshotReadReport,
+{
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(90);
+    let keep_running = || {
+        keep_running()?;
+        if std::time::Instant::now() >= deadline {
+            return Err("WEB_REVIEW_READ_TIMEOUT".into());
+        }
+        Ok(())
+    };
     keep_running()?;
     let key = paired_key(workspace, project)?;
     if expected.is_some_and(|(generation, digest)| {
@@ -845,29 +880,30 @@ pub(super) fn read_review_guarded(
         &target.url,
     )?;
     keep_running()?;
-    let snapshot = catdesk_wake::runtime::snapshot_sent_conversation_guarded(
-        &wake,
-        project,
-        &target,
-        event_id,
-        keep_running,
-    )?;
-    keep_running()?;
+    let report = snapshotter(&wake, project, &target, event_id, &keep_running);
     if paired_key(workspace, project)? != key {
         return Err("WEB_REVIEW_TARGET_CHANGED".into());
     }
+    if let Some(reason) = report.failure {
+        return Ok(json!({"action":"web_review_read", "projectId":project,
+            "eventId":event_id,"target":target,"readOnly":true,"eventVerified":false,
+            "status":"UNVERIFIED_EVENT_SNAPSHOT","reason":reason,
+            "diagnostic":report.diagnostic,"sendAttempted":false}));
+    }
+    keep_running()?;
+    let snapshot = report.snapshot.ok_or("WEB_REVIEW_SNAPSHOT_INVALID")?;
     match review_text(&snapshot, &receipt.message_digest) {
         Ok(text) => Ok(
             json!({"action":"web_review_read", "projectId":project,"eventId":event_id,
             "target":target,"readOnly":true,"response":text,"eventVerified":true,
-            "sendAttempted":false}),
+            "diagnostic":report.diagnostic,"sendAttempted":false}),
         ),
         // Explicit local reads may expose this bounded private excerpt for
         // diagnosis. It is never a status endpoint or verified event response.
         Err(reason) => Ok(json!({"action":"web_review_read", "projectId":project,
             "eventId":event_id,"target":target,"readOnly":true,"eventVerified":false,
             "status":"UNVERIFIED_EVENT_SNAPSHOT","reason":reason,
-            "snapshot":snapshot,"sendAttempted":false})),
+            "snapshot":snapshot,"diagnostic":report.diagnostic,"sendAttempted":false})),
     }
 }
 
@@ -1437,6 +1473,122 @@ mod tests {
     use super::*;
     fn args(values: &[&str]) -> Vec<String> {
         values.iter().map(|v| (*v).into()).collect()
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn diagnosed_review_read_preserves_sent_evidence_and_never_promotes_timeout_text() {
+        use catdesk_wake::{
+            runtime::{SnapshotDiagnostic, SnapshotReadPhase, SnapshotReadReport},
+            store::{Phase, Receipt, now},
+        };
+        let (control, _, wake, _, event) = crate::web_work::tests::assignment_fixture_for("alpha");
+        wake.publish(&event).unwrap();
+        let owner = wake.host_lock().unwrap();
+        let delivery = wake.claim(&event, &owner).unwrap();
+        wake.transition(
+            &event.event_id,
+            owner.owner(),
+            Phase::Submitting,
+            None,
+            None,
+        )
+        .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: event.event_id.clone(),
+            target_generation: delivery.target.generation,
+            target_digest: delivery.target.digest.clone(),
+            message_digest: delivery.message_digest.clone(),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        wake.record_exact_receipt_timer(&event.event_id, &receipt)
+            .unwrap();
+        wake.transition(
+            &event.event_id,
+            owner.owner(),
+            Phase::Sent,
+            Some(receipt),
+            None,
+        )
+        .unwrap();
+        drop(owner);
+        let paths = [
+            wake.root().join("config.json"),
+            wake.root().join("control.json"),
+            wake.root()
+                .join(format!("deliveries/{}.json", event.event_id)),
+            wake.root().join(format!("turns/{}.json", event.event_id)),
+            control.join(".catdesk/projects/projects.json"),
+            control.join(".catdesk/web-work/alpha.json"),
+        ];
+        let before: Vec<_> = paths.iter().map(|p| std::fs::read(p).unwrap()).collect();
+        let result = read_review_using(
+            &control,
+            "alpha",
+            &event.event_id,
+            None,
+            &|| Ok(()),
+            |_, project, target, id, guard| {
+                assert_eq!(project, "alpha");
+                assert_eq!(id, event.event_id);
+                assert_eq!(target, &delivery.target);
+                guard().unwrap();
+                SnapshotReadReport {
+                    snapshot: Some(json!({"private":"never forward failure text"})),
+                    failure: Some("SOURCE_SNAPSHOT_TIMEOUT".into()),
+                    diagnostic: SnapshotDiagnostic {
+                        phase: SnapshotReadPhase::AdapterReadyWait,
+                        elapsed_millis: 90000,
+                        budget_millis: 90000,
+                    },
+                }
+            },
+        )
+        .unwrap();
+        assert_eq!(result["eventVerified"], false);
+        assert_eq!(result["reason"], "SOURCE_SNAPSHOT_TIMEOUT");
+        assert_eq!(result["diagnostic"]["phase"], "ADAPTER_READY_WAIT");
+        assert!(result.get("response").is_none() && result.get("snapshot").is_none());
+        assert!(!result.to_string().contains("never forward"));
+        let snapshot = json!({"messages":[
+            {"role":"USER","text":event.message,"textComplete":true},
+            {"role":"ASSISTANT","text":"Verified review body.","textComplete":true}
+        ]});
+        let success = read_review_using(
+            &control,
+            "alpha",
+            &event.event_id,
+            None,
+            &|| Ok(()),
+            |_, _, _, _, _| SnapshotReadReport {
+                snapshot: Some(snapshot),
+                failure: None,
+                diagnostic: SnapshotDiagnostic {
+                    phase: SnapshotReadPhase::Complete,
+                    elapsed_millis: 10,
+                    budget_millis: 90000,
+                },
+            },
+        )
+        .unwrap();
+        assert_eq!(success["eventVerified"], true);
+        assert_eq!(success["response"], "Verified review body.");
+        assert!(
+            read_review_using(
+                &control,
+                "alpha",
+                &event.event_id,
+                Some((delivery.target.generation + 1, &delivery.target.digest)),
+                &|| Ok(()),
+                |_, _, _, _, _| panic!("wrong target must refuse before any reader")
+            )
+            .is_err()
+        );
+        for (path, original) in paths.iter().zip(before) {
+            assert_eq!(std::fs::read(path).unwrap(), original);
+        }
     }
 
     #[test]

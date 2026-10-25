@@ -25,6 +25,11 @@ pub use reobserve::reobserve_sent_response_guarded;
 mod scoped_review;
 pub(crate) use response::validate_observation as validate_response_observation;
 pub use scoped_review::run_scoped_review;
+#[path = "runtime_snapshot.rs"]
+mod snapshot;
+pub use snapshot::{
+    SnapshotDiagnostic, SnapshotReadPhase, SnapshotReadReport, diagnosed_sent_snapshot,
+};
 #[path = "runtime_scheduler.rs"]
 mod scheduler;
 use response::observe_sent_response;
@@ -1566,6 +1571,13 @@ struct Adapter {
     _browser_session_lock: File,
 }
 
+#[derive(Clone, Copy)]
+enum AdapterStartPhase {
+    BrowserLock,
+    AdapterStart,
+    AdapterReadyWait,
+}
+
 fn guarded_browser_receive(
     output: &Receiver<Result<serde_json::Value>>,
     keep_running: &dyn Fn() -> Result<()>,
@@ -1637,9 +1649,20 @@ impl Adapter {
         wait: Duration,
         keep_running: &dyn Fn() -> Result<()>,
     ) -> Result<Self> {
+        Self::spawn_from_installed_monitored(root, installed, wait, keep_running, &|_| {})
+    }
+
+    fn spawn_from_installed_monitored(
+        root: &Path,
+        installed: &Path,
+        wait: Duration,
+        keep_running: &dyn Fn() -> Result<()>,
+        phase: &dyn Fn(AdapterStartPhase),
+    ) -> Result<Self> {
         keep_running()?;
         let (adapter_path, _wake_bridge_path) =
             verify_installed_browser_artifacts(root, installed)?;
+        phase(AdapterStartPhase::BrowserLock);
         let browser_session_lock = browser_session_lock_guarded(root, wait, keep_running)?;
         let interpreter = root.join("runtime/python.exe");
         if !interpreter.is_file() {
@@ -1661,6 +1684,7 @@ impl Adapter {
                     .map_err(|_| "BROWSER_LOG_UNAVAILABLE")?,
             ));
         hidden(&mut command);
+        phase(AdapterStartPhase::AdapterStart);
         keep_running()?;
         let mut child = command
             .spawn()
@@ -1703,6 +1727,7 @@ impl Adapter {
             _browser_session_lock: browser_session_lock,
         };
         adapter.send(serde_json::json!({"initialize":true}))?;
+        phase(AdapterStartPhase::AdapterReadyWait);
         let deadline = Instant::now() + Duration::from_secs(90);
         loop {
             if Instant::now() >= deadline {
@@ -3186,69 +3211,7 @@ fn snapshot_conversation_inner(
     delivered_review: Option<&str>,
     keep_running: &dyn Fn() -> Result<()>,
 ) -> Result<serde_json::Value> {
-    keep_running()?;
-    source.validate()?;
-    if !crate::protocol::valid_id(project_id) {
-        return Err("SOURCE_SNAPSHOT_REQUEST_INVALID".into());
-    }
-    let _owner = browser_owner_guard(store)?;
-    ensure_source_snapshot_available(store, project_id, source, delivered_review)?;
-    let installed = installed_bootstrap_directory(store)?;
-    let adapter_bytes =
-        std::fs::read(installed.join("adapter.py")).map_err(|_| "BROWSER_ADAPTER_UNAVAILABLE")?;
-    let bridge_bytes = std::fs::read(installed.join("wake_bridge.py"))
-        .map_err(|_| "BROWSER_PRIMITIVES_UNAVAILABLE")?;
-    if !adapter_bytes
-        .windows(b"def source_snapshot(".len())
-        .any(|v| v == b"def source_snapshot(")
-        || !bridge_bytes
-            .windows(b"roleTurnHash".len())
-            .any(|v| v == b"roleTurnHash")
-    {
-        return Err("SOURCE_SNAPSHOT_INSTALLED_PACKAGE_UNSUPPORTED".into());
-    }
-    let mut adapter = Adapter::spawn_from_installed_guarded(
-        store.root(),
-        &installed,
-        Duration::from_secs(30),
-        keep_running,
-    )?;
-    keep_running()?;
-    adapter.send(serde_json::json!({"snapshot":true,"projectId":project_id,"source":source}))?;
-    let deadline = Instant::now() + Duration::from_secs(180);
-    loop {
-        if Instant::now() >= deadline {
-            return Err("SOURCE_SNAPSHOT_TIMEOUT".into());
-        }
-        match guarded_browser_receive(&adapter.output, keep_running)? {
-            Ok(Ok(value)) => match value.get("stage").and_then(|v| v.as_str()) {
-                Some("SOURCE_SNAPSHOT") => {
-                    ensure_source_snapshot_available(store, project_id, source, delivered_review)?;
-                    let snapshot = source_snapshot_payload(value, project_id, source)?;
-                    let _ = adapter.allow_graceful_exit(Duration::from_secs(5));
-                    return Ok(snapshot);
-                }
-                Some(
-                    "CDP_REUSE_BEGIN" | "CDP_REUSE_DONE" | "CDP_ACTIVATE_BEGIN"
-                    | "CDP_ACTIVATE_DONE",
-                ) => {}
-                Some("ATTENTION") => {
-                    return Err(value
-                        .get("reason")
-                        .and_then(|v| v.as_str())
-                        .filter(|v| crate::protocol::valid_id(v))
-                        .unwrap_or("SOURCE_SNAPSHOT_ATTENTION")
-                        .into());
-                }
-                _ => return Err("SOURCE_SNAPSHOT_PROTOCOL_INVALID".into()),
-            },
-            Ok(Err(error)) => return Err(error),
-            Err(mpsc::RecvTimeoutError::Disconnected) => {
-                return Err("BROWSER_ADAPTER_EXITED".into());
-            }
-            Err(mpsc::RecvTimeoutError::Timeout) => {}
-        }
-    }
+    snapshot::snapshot_result(store, project_id, source, delivered_review, keep_running)
 }
 
 #[cfg(test)]

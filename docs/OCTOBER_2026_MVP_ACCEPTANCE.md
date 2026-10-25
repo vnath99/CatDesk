@@ -1,3 +1,15 @@
+## October 25 C216 — snapshot verification remains an open live gate
+
+Source qualification passed: 427 Wake tests (including eight new deadline tests),
+22 operator tests and five context-control tests; one existing test ignored.
+Strict root/Wake Clippy and bounded cleanup passed. Live diagnosis is pending.
+Evidence: [C216 source results](verification/C216_SNAPSHOT_DEADLINE_2026_10_25.json).
+
+Implemented shared deadlines and fixed local snapshot diagnostics; source qualification passed as recorded above. The eight focused timing/redaction fixtures passed.
+This does not establish a verified C212 assistant response, installed production
+operation or two-project Web coding. Existing C215 delivery, preserved 477 records
+and no-resend constraints remain authoritative until new live evidence is recorded.
+
 ## October 25 C215 — routine review consent acceptance
 
 C215 result: **SOURCE PASS**, 449 tests/one ignored and both strict Clippy checks.
