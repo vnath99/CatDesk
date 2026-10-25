@@ -492,7 +492,7 @@ impl Store {
             }
         }
         self.require_project_quiescent_locked(project, &config)?;
-        self.ensure_no_source_progress_locked(project, source, witness_event_id)?;
+        self.completed_source_witness_locked(project, source, witness_event_id)?;
         let task = self
             .read_delivery(source_task_id)?
             .ok_or("CONFIG_SOURCE_TASK_COMPLETION_REQUIRED")?;
@@ -522,7 +522,11 @@ impl Store {
                 .map_err(|_| "CONFIG_SOURCE_TASK_COMPLETION_REQUIRED")?,
         );
         action(
-            &self.source_progress_fingerprint_locked(project, source, witness_event_id)?,
+            &self.quiescent_source_progress_fingerprint_locked(
+                project,
+                source,
+                witness_event_id,
+            )?,
             &task_proof,
         )
     }
@@ -824,12 +828,12 @@ impl Store {
         Ok(target)
     }
 
-    fn ensure_no_source_progress_locked(
+    fn completed_source_witness_locked(
         &self,
         project: &str,
         source: &Target,
         witness_event_id: &str,
-    ) -> Result<()> {
+    ) -> Result<u64> {
         let witness = self
             .read_delivery(witness_event_id)?
             .ok_or("CONFIG_SOURCE_WITNESS_MISSING")?;
@@ -856,9 +860,18 @@ impl Store {
         {
             return Err("CONFIG_SOURCE_WITNESS_INCOMPLETE".into());
         }
-        let completed = timer
+        timer
             .completed_utc
-            .ok_or("CONFIG_SOURCE_WITNESS_INCOMPLETE")?;
+            .ok_or("CONFIG_SOURCE_WITNESS_INCOMPLETE".into())
+    }
+
+    fn ensure_no_source_progress_locked(
+        &self,
+        project: &str,
+        source: &Target,
+        witness_event_id: &str,
+    ) -> Result<()> {
+        let completed = self.completed_source_witness_locked(project, source, witness_event_id)?;
         for entry in fs::read_dir(self.root.join("queue")).map_err(|_| "QUEUE_UNAVAILABLE")? {
             let path = entry.map_err(|_| "QUEUE_UNAVAILABLE")?.path();
             if path.extension().and_then(|value| value.to_str()) != Some("json") {
@@ -919,6 +932,54 @@ impl Store {
             }
         }
         Ok(())
+    }
+
+    /// An unknown-attempt disposition neither moves a target nor replays its
+    /// old handoff. Later completed work is retained and pinned, not forbidden.
+    /// Hold the queue lock while measuring and comparing this current state.
+    fn quiescent_source_progress_fingerprint_locked(
+        &self,
+        project: &str,
+        source: &Target,
+        witness_event_id: &str,
+    ) -> Result<String> {
+        let identity =
+            self.source_progress_fingerprint_locked(project, source, witness_event_id)?;
+        let mut facts = BTreeMap::new();
+        for child in ["queue", "archive", "deliveries", "turns"] {
+            for entry in fs::read_dir(self.root.join(child))
+                .map_err(|_| "CONFIG_SOURCE_FINGERPRINT_UNAVAILABLE")?
+            {
+                let path = entry
+                    .map_err(|_| "CONFIG_SOURCE_FINGERPRINT_UNAVAILABLE")?
+                    .path();
+                if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                    continue;
+                }
+                let value: serde_json::Value = read(&path)?;
+                let owner = if child == "deliveries" {
+                    &value["event"]["projectId"]
+                } else {
+                    &value["projectId"]
+                };
+                if owner.as_str() != Some(project) {
+                    continue;
+                }
+                let filename = path
+                    .file_name()
+                    .and_then(|value| value.to_str())
+                    .ok_or("CONFIG_SOURCE_FINGERPRINT_UNAVAILABLE")?;
+                let canonical = serde_json::to_string(&value)
+                    .map_err(|_| "CONFIG_SOURCE_FINGERPRINT_UNAVAILABLE")?;
+                facts.insert(format!("{child}/{filename}"), digest(&canonical));
+                if facts.len() > MAX_SOURCE_PROGRESS_ITEMS {
+                    return Err("CONFIG_SOURCE_FINGERPRINT_CAPACITY".into());
+                }
+            }
+        }
+        let canonical = serde_json::to_string(&(identity, facts))
+            .map_err(|_| "CONFIG_SOURCE_FINGERPRINT_UNAVAILABLE")?;
+        Ok(digest(&canonical))
     }
 
     fn source_progress_fingerprint_locked(

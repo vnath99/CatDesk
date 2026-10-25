@@ -1,3 +1,25 @@
+## October 25 C207 — qualify the producer fix; preserve completed disposition
+
+The compatible controller completed bounded disposition prepare/confirm after
+112 tests and both strict Clippy checks passed. The result is
+`ABANDONED_UNKNOWN_NO_REPLAY`: all 452 pins and original `REQUESTED` context bytes
+are preserved; no browser, host, message or binding change occurred. New/legacy
+journal reads and legacy context decoding passed. Source admission tests pass;
+actual new Web task execution remains open. Do not repeat the disposition.
+
+Current-state comparison addresses the earlier refusal caused by four completed
+source events after the old handoff; ordinary rebinding keeps its existing guard.
+Two diagnostics passed `ring` without a complete Cargo result. One supported
+producer retry was confirmed and failed again with Cargo 101 in 37 seconds,
+no attestation and no remaining workers. A later exact-worker replay exposed
+`ring` / MSVC `C1083 SOURCE_FILE` in 35.14 seconds; ordinary paths compiled Ring.
+The source fix normalizes five external values using the existing helper,
+preserving canonical identities and closed V5 policy. Its 110 tests and strict
+Clippy passed. Build the fixed controller and requalify the producer. Preserve
+C196's review, journals, bindings and native sessions. Production promotion and
+two-project Web coding stay open; no unchanged retry is planned.
+Evidence: `docs/verification/C207_COMPATIBLE_QUARANTINE_AND_BUILD_DIAGNOSIS_2026_10_25.json`.
+
 ## October 25 C206 — continue from the failed producer, preserve sent work
 
 C196's one sent review has an independently verified complete source PASS.

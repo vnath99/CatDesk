@@ -193,16 +193,6 @@ pub struct RolloverIntent {
     pub trigger_reason: String,
 }
 
-impl RolloverIntent {
-    /// A retained operator disposition is not a provider outcome. Keeping the
-    /// marker in the original intent preserves uncertainty across restarts.
-    pub(crate) fn abandonment_resolution_id(&self) -> Option<&str> {
-        self.status
-            .strip_prefix("ABANDONED_UNKNOWN_NO_REPLAY:")
-            .filter(|id| valid_identifier(id).is_ok())
-    }
-}
-
 fn observed_pressure_reason() -> String {
     "OBSERVED_PRESSURE".into()
 }
@@ -728,36 +718,15 @@ impl WebContextStore {
         if !self.rollover_due_locked(&project, &status)? || !quiescent {
             return Ok(None);
         }
-        let abandoned = if let Some(existing) = &ledger.rollover_intent {
-            if existing.status == "REQUESTED" {
-                return Ok(Some(existing.clone()));
-            }
-            let resolution = existing
-                .abandonment_resolution_id()
-                .ok_or("WEB_CONTEXT_ROLLOVER_DISPOSITION_INVALID")?;
-            if existing.source_task_id == source_task_id {
-                return Err("WEB_CONTEXT_ABANDONED_TASK_REPLAY_FORBIDDEN".into());
-            }
-            Some((existing.intent_id.clone(), resolution.to_owned()))
-        } else {
-            None
-        };
+        if let Some(existing) = &ledger.rollover_intent {
+            return Ok(Some(existing.clone()));
+        }
         let intent = RolloverIntent {
             intent_id: sha256(
-                match &abandoned {
-                    Some((prior, resolution)) => format!(
-                        "WEB_CONTEXT_ROLLOVER_AFTER_DISPOSITION_V1\0{}\0{}\0{}\0{}\0{}",
-                        key.project_id,
-                        key.conversation_url,
-                        key.target_generation,
-                        prior,
-                        resolution
-                    ),
-                    None => format!(
-                        "WEB_CONTEXT_ROLLOVER_V1\0{}\0{}\0{}",
-                        key.project_id, key.conversation_url, key.target_generation
-                    ),
-                }
+                format!(
+                    "WEB_CONTEXT_ROLLOVER_V1\0{}\0{}\0{}",
+                    key.project_id, key.conversation_url, key.target_generation
+                )
                 .as_bytes(),
             ),
             key: key.clone(),
@@ -779,20 +748,31 @@ impl WebContextStore {
         Ok(Some(intent))
     }
 
-    /// Called only after the rollover owner has durably journaled an exact
-    /// operator disposition. The caller preserves `expected` in that journal.
-    /// Neither the original context evidence nor the unknown provider outcome
-    /// is replaced with a success/failure assertion.
-    pub(crate) fn abandon_rollover_intent(
+    /// The rollover owner calls this only after validating a completed durable
+    /// disposition and a fresh completed task. The old REQUESTED ledger stays
+    /// readable by prior releases until this actual successor is requested.
+    /// Original intent bytes remain in the immutable disposition evidence.
+    pub(crate) fn request_successor_after_disposition(
         &self,
         key: &ConversationKey,
         expected: &RolloverIntent,
         resolution_id: &str,
-    ) -> Result<(), String> {
+        source_task_id: &str,
+        quiescent: bool,
+        now_unix: u64,
+    ) -> Result<Option<RolloverIntent>, String> {
         key.validate()?;
         valid_identifier(resolution_id)?;
-        if expected.key != *key || expected.status != "REQUESTED" {
+        valid_identifier(source_task_id)?;
+        if expected.key != *key
+            || expected.status != "REQUESTED"
+            || expected.target_sha256 != key.target_sha256()
+            || now_unix == 0
+        {
             return Err("WEB_CONTEXT_ROLLOVER_DISPOSITION_INVALID".into());
+        }
+        if source_task_id == expected.source_task_id {
+            return Err("WEB_CONTEXT_ABANDONED_TASK_REPLAY_FORBIDDEN".into());
         }
         let _lock = self.lock()?;
         let project = self.read_project(&key.project_id)?;
@@ -800,16 +780,50 @@ impl WebContextStore {
             return Err("WEB_CONTEXT_TARGET_CAS_CONFLICT".into());
         }
         let mut ledger = self.read_ledger(key)?;
-        let mut resolved = expected.clone();
-        resolved.status = format!("ABANDONED_UNKNOWN_NO_REPLAY:{resolution_id}");
-        if ledger.rollover_intent.as_ref() == Some(&resolved) {
-            return Ok(());
+        let status = pressure_status(&project, &ledger);
+        if !self.rollover_due_locked(&project, &status)? || !quiescent {
+            return Ok(None);
+        }
+        let next_id = sha256(
+            format!(
+                "WEB_CONTEXT_ROLLOVER_AFTER_DISPOSITION_V1\0{}\0{}\0{}\0{}\0{}",
+                key.project_id,
+                key.conversation_url,
+                key.target_generation,
+                expected.intent_id,
+                resolution_id
+            )
+            .as_bytes(),
+        );
+        if let Some(existing) = &ledger.rollover_intent
+            && existing.intent_id == next_id
+            && existing.source_task_id == source_task_id
+        {
+            return Ok(Some(existing.clone()));
         }
         if ledger.rollover_intent.as_ref() != Some(expected) {
             return Err("WEB_CONTEXT_ROLLOVER_DISPOSITION_CHANGED".into());
         }
-        ledger.rollover_intent = Some(resolved);
-        self.write_ledger(&ledger)
+        let next = RolloverIntent {
+            intent_id: next_id,
+            key: key.clone(),
+            target_sha256: key.target_sha256(),
+            source_task_id: source_task_id.into(),
+            estimated_upper_tokens: status.estimated_upper_tokens,
+            trigger_tokens: status.trigger_tokens,
+            requested_at_unix: now_unix,
+            quiescence_evidence: "CALLER_OBSERVED_ADVISORY".into(),
+            status: "REQUESTED".into(),
+            trigger_reason: if status.near_capacity {
+                "OBSERVED_PRESSURE"
+            } else {
+                "INCOMPLETE_HISTORY_GUARD"
+            }
+            .into(),
+        };
+        ledger.rollover_intent = Some(next.clone());
+        self.write_ledger(&ledger)?;
+        Ok(Some(next))
     }
 
     fn rollover_due_locked(
@@ -990,8 +1004,7 @@ impl WebContextStore {
             || ledger.rollover_intent.as_ref().is_some_and(|intent| {
                 intent.key != *key
                     || intent.target_sha256 != key.target_sha256()
-                    || (intent.status != "REQUESTED"
-                        && intent.abandonment_resolution_id().is_none())
+                    || intent.status != "REQUESTED"
                     || !matches!(
                         intent.trigger_reason.as_str(),
                         "OBSERVED_PRESSURE" | "INCOMPLETE_HISTORY_GUARD"

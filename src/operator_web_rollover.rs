@@ -1247,6 +1247,74 @@ fn paired(workspace: &Path, project: &str) -> Result<Target, String> {
     Target::new(target.generation, target.url)
 }
 
+fn request_handoff_context(
+    workspace: &Path,
+    store: &ProjectStore,
+    meter: &WebContextStore,
+    project: &str,
+    source: &Target,
+    source_task: &str,
+) -> Result<Option<crate::web_conversation_context::RolloverIntent>, String> {
+    if let Some(previous) = store.active()?
+        && disposition::completed(store, &previous)?.is_some()
+    {
+        if previous.source != *source {
+            return Err("WEB_QUARANTINE_SOURCE_CHANGED".into());
+        }
+        let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
+            workspace,
+        )?)?;
+        return disposition::request_successor_context(
+            store,
+            &previous,
+            meter,
+            &wake,
+            source_task,
+            now(),
+        );
+    }
+    meter.request_rollover_if_due(
+        &key(project, source),
+        &source.digest,
+        source_task,
+        true,
+        now(),
+    )
+}
+
+/// Existing context intents stay REQUESTED for old readers. Do not let their
+/// historical task, or any pre-disposition task, become an automatic anchor.
+pub(super) fn source_task_after_disposition(
+    workspace: &Path,
+    wake: &Store,
+    project: &str,
+    source: &Target,
+    task: &str,
+) -> Result<bool, String> {
+    let root = workspace.join(".catdesk/web-rollovers").join(project);
+    if !root
+        .try_exists()
+        .map_err(|_| "WEB_ROLLOVER_STATE_UNAVAILABLE")?
+    {
+        return Ok(true);
+    }
+    let store = ProjectStore::open_existing(workspace, project)?;
+    let Some(previous) = store.active()? else {
+        return Ok(true);
+    };
+    if disposition::completed(&store, &previous)?.is_none() {
+        return Ok(true);
+    }
+    if previous.source != *source {
+        return Err("WEB_QUARANTINE_SOURCE_CHANGED".into());
+    }
+    match disposition::validate_new_source_task(&store, &previous, wake, task) {
+        Ok(()) => Ok(true),
+        Err(error) if error == "WEB_QUARANTINE_NEW_COMPLETED_TASK_REQUIRED" => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
 fn confirm_request_enabled(workspace: &Path, record: &Record) -> Result<(), String> {
     let meter = WebContextStore::open_nonblocking(workspace.join(".catdesk/web-context"))?;
     let intent = meter
@@ -1913,9 +1981,9 @@ pub(super) fn request_handoff_guarded(
             Err("WEB_HANDOFF_SOURCE_CHANGED".into())
         }
     })?;
-    let intent = meter
-        .request_rollover_if_due(&source_key, &source.digest, source_task_id, true, now())?
-        .ok_or("WEB_ROLLOVER_NOT_DUE_OR_DISABLED")?;
+    let intent =
+        request_handoff_context(workspace, &store, &meter, project, &source, source_task_id)?
+            .ok_or("WEB_ROLLOVER_NOT_DUE_OR_DISABLED")?;
     if intent.source_task_id != source_task_id {
         return Err("WEB_HANDOFF_TASK_CHANGED".into());
     }
@@ -2353,15 +2421,15 @@ fn prepare_with_request(
     let meter = WebContextStore::open_nonblocking(workspace.join(".catdesk/web-context"))?;
     // This is advisory scheduling only. The browser independently proves idle
     // before its submission callback, which rereads the paired authority.
-    let intent = meter
-        .request_rollover_if_due(
-            &key(project, &source),
-            &source.digest,
-            &handoff.source_task_id,
-            true,
-            now(),
-        )?
-        .ok_or("WEB_ROLLOVER_NOT_DUE_OR_DISABLED")?;
+    let intent = request_handoff_context(
+        workspace,
+        &store,
+        &meter,
+        project,
+        &source,
+        &handoff.source_task_id,
+    )?
+    .ok_or("WEB_ROLLOVER_NOT_DUE_OR_DISABLED")?;
     if intent.source_task_id != handoff.source_task_id {
         return Err("WEB_ROLLOVER_TASK_CHANGED".into());
     }

@@ -1,3 +1,23 @@
+## October 25 C207 — disposition compatibility and current command limits
+
+The compatible rebuilt controller passed its bounded CLI check and completed
+live disposition prepare/confirm after 112 source tests and both strict Clippy
+checks. The completed local disposition preserves all 452 pins and original
+`REQUESTED` bytes. Do not repeat it. New/legacy journal reads and legacy context
+decoding passed; actual new Web task execution is unproved. The earlier refusal
+found four completed source events after the old handoff. Current-state disposition
+checks address that case without relaxing ordinary rebinding.
+
+Two bounded diagnostics passed `ring` without a complete Cargo result. One
+supported producer retry was confirmed and failed again with Cargo 101 in
+37 seconds, no attestation and zero workers. The later exact replay exposed
+`ring` / MSVC `C1083 SOURCE_FILE` in producer paths; ordinary paths compiled Ring.
+The source fix normalizes five external values with the existing helper,
+preserving canonical identities and closed V5 policy. Its 110 tests and strict
+Clippy passed. Fixed-controller and producer requalification are pending; do not
+retry unchanged or promote diagnostic output.
+Evidence: `docs/verification/C207_COMPATIBLE_QUARANTINE_AND_BUILD_DIAGNOSIS_2026_10_25.json`.
+
 ## October 25 C206 — review recovery and guarded next commands
 
 C196 was delivered once and independently read as a complete source-review PASS.
@@ -7,7 +27,7 @@ The supported producer failed with Cargo 101 and no attestation. Production and
 the original quarantine remain unchanged. Current evidence:
 `docs/verification/C206_REVIEW_RECOVERY_AND_BUILD_DIAGNOSIS_2026_10_25.json`.
 
-### Unknown-rollover disposition — source-qualified, not yet applied live
+### Unknown-rollover disposition — use exact state and qualified controller
 
 Use a controller independently built and qualified from the revision containing
 these commands. An older selected package is not assumed to support them.
@@ -22,10 +42,11 @@ completed source-task and handoff evidence, an available project writer/browser
 lock, and no managed native binding, unresolved task journal, own-project work or
 continuation. Own-project delivery responses must already be complete.
 It returns `PREFLIGHT_READY` with pinned evidence and a ten-minute token.
-Confirmation rechecks those gates before recording disposition, updating the
-context marker and recording completion. Changed evidence, a busy owner or a
-previous continuation refuses. An expired unstarted preparation requires a new
-resolution ID; an already-started exact transaction uses its existing recovery
+Confirmation rechecks those gates, leaves the original `REQUESTED` context ledger
+byte-for-byte unchanged, and records immutable disposition/completion receipts.
+Those receipts and the exact saved intent gate admission. Changed evidence,
+a busy owner or a previous continuation refuses. An expired unstarted preparation
+requires a new resolution ID; an already-started exact transaction uses its existing recovery
 path. Do not edit the token, journal or context files.
 
 Success reports `ABANDONED_UNKNOWN_NO_REPLAY`: the provider outcome remains
@@ -34,6 +55,14 @@ receipt, sends nothing and changes no binding. The old task/intent stays fenced.
 New work still uses normal admission, and another rollover needs a fresh
 completed task and distinct stable intent. This does not resolve arbitrary
 drafts, authorize a resend or grant production-release authority.
+
+Later completed work does not by itself prevent disposition. Preparation pins
+the current own-project queue, archive, delivery and timer content; confirmation
+must observe the same quiescent state. New work or changed content requires a
+fresh preparation under a new resolution ID. A fresh rollover requires a
+completed source event created after disposition, the exact saved predecessor
+intent and the normal target/browser checks. It writes a new `REQUESTED` intent;
+it never rewrites the old outcome as success or failure.
 
 ### Review reads and producer failure
 
@@ -49,11 +78,12 @@ For C205 the result is terminal Cargo 101 with no attestation. Preserve it;
 do not repeat confirmation or promote a disposable diagnostic output. The
 ignored, host-only diagnostic in `src/reviewed_build.rs` checks the exact current
 terminal authority and reproduces it in disposable paths without writing release
-authority. No diagnostic Cargo process has launched yet: one preparation found
-the legitimate C205 pointer advance, and a later wrapper hit its bound while
-scanning historical cache. Preserve those results and narrow that wrapper;
-neither preparation failure establishes a Cargo root cause. Installed startup
-and rollback remain open.
+authority. The initial C206 preparation failures launched no Cargo process;
+later bounded diagnostics and the exact-worker replay are recorded in C207.
+The latter exposed `ring` / MSVC `C1083 SOURCE_FILE` in the producer paths.
+The source correction is qualified; build its controller and requalify the
+producer before another justified retry. Installed startup and
+rollback remain open; diagnostics are not release attestation.
 
 ## October 25 C197 — review approved; actual project admission blocks delivery
 

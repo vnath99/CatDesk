@@ -1,3 +1,18 @@
+## October 25 C207 — compatibility correction remains separate from live acceptance
+
+| Capability | Current evidence and limit |
+| --- | --- |
+| Original live quarantine | Initial preparation refused after later completed work. Compatible bounded prepare/confirm then completed `ABANDONED_UNKNOWN_NO_REPLAY`; the original record and unknown provider outcome remain preserved. |
+| Compatible disposition | 112 tests and both strict Clippy checks passed. Live confirm preserved 452 pins and original `REQUESTED` bytes; new/legacy journal and legacy context reads passed. Zero browser/host/message/binding changes. Actual new Web task execution is unproved. |
+| Ordinary rollover | Its no-progress-after-handoff guard remains in force; the disposition correction does not relax target binding. |
+| Producer diagnosis | One confirmed retry failed with Cargo 101 in 37 seconds, no attestation and zero workers. Exact replay exposed `ring` / MSVC `C1083 SOURCE_FILE`; ordinary-path diagnostics compiled Ring. |
+| Native-path source fix | Five external values normalized using the existing helper; canonical identities and closed V5 policy preserved. 110 tests and strict Clippy passed. Fixed-controller and producer requalification are pending. |
+| Installed / parallel Web operation | OPEN: no production promotion, installed recovery, trusted rollback or two-conversation coding acceptance follows from these results. |
+
+The genuine C196 review remains preserved with normal observer `ATTENTION` and
+Web-work ledger `OPEN`. The historical connector 429 is a separate dependency.
+Evidence: `docs/verification/C207_COMPATIBLE_QUARANTINE_AND_BUILD_DIAGNOSIS_2026_10_25.json`.
+
 ## October 25 C206 — acceptance scope after the recovered review
 
 | Capability | Evidence and remaining limit |

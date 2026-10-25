@@ -165,19 +165,41 @@ pub(super) fn source_task_anchor(
         {
             return Ok(None);
         }
-        return Ok(Some(event_id.into()));
+        return Ok(rollover::source_task_after_disposition(
+            workspace, wake, project, source, event_id,
+        )?
+        .then(|| event_id.into()));
     }
     if let Some(intent) = &pressure.rollover_intent
         && intent.status == "REQUESTED"
         && intent.key == *key
         && valid_id(&intent.source_task_id)
+        && rollover::source_task_after_disposition(
+            workspace,
+            wake,
+            project,
+            source,
+            &intent.source_task_id,
+        )?
     {
         return Ok(Some(intent.source_task_id.clone()));
     }
-    if let Some(task_id) = completed_task_anchor(wake, project, source)? {
+    if let Some(task_id) = completed_task_anchor(wake, project, source)?
+        && rollover::source_task_after_disposition(workspace, wake, project, source, &task_id)?
+    {
         return Ok(Some(task_id));
     }
-    rollover::completed_continuation_task_anchor(workspace, wake, project, source)
+    let task = rollover::completed_continuation_task_anchor(workspace, wake, project, source)?;
+    match task {
+        Some(task)
+            if rollover::source_task_after_disposition(
+                workspace, wake, project, source, &task,
+            )? =>
+        {
+            Ok(Some(task))
+        }
+        _ => Ok(None),
+    }
 }
 
 fn is_pending_handoff(reason: &str) -> bool {

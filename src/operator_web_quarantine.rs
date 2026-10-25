@@ -254,15 +254,13 @@ pub(super) fn context_allows_new_work(
     record: &Record,
     pressure: Option<&PressureStatus>,
 ) -> Result<bool, String> {
-    let Some(id) = completed(store, record)? else {
+    if completed(store, record)?.is_none() {
         return Ok(false);
-    };
+    }
+    let saved = matching_disposition(store, record)?.ok_or("WEB_QUARANTINE_DISPOSITION_CHANGED")?;
     Ok(pressure.is_some_and(|value| {
         value.key == key(&record.project_id, &record.source)
-            && value.rollover_intent.as_ref().is_some_and(|intent| {
-                intent.intent_id == record.intent_id
-                    && intent.abandonment_resolution_id() == Some(id.as_str())
-            })
+            && value.rollover_intent.as_ref() == Some(&saved.prepared.evidence.context_intent)
     }))
 }
 
@@ -309,6 +307,27 @@ pub(super) fn validate_new_source_task(
         return Err("WEB_QUARANTINE_NEW_COMPLETED_TASK_REQUIRED".into());
     }
     Ok(())
+}
+
+pub(super) fn request_successor_context(
+    store: &ProjectStore,
+    record: &Record,
+    meter: &WebContextStore,
+    wake: &Store,
+    source_task: &str,
+    now_unix: u64,
+) -> Result<Option<RolloverIntent>, String> {
+    let resolution = completed(store, record)?.ok_or("WEB_QUARANTINE_COMPLETION_UNPROVEN")?;
+    let saved = matching_disposition(store, record)?.ok_or("WEB_QUARANTINE_DISPOSITION_CHANGED")?;
+    validate_new_source_task(store, record, wake, source_task)?;
+    meter.request_successor_after_disposition(
+        &key(&record.project_id, &record.source),
+        &saved.prepared.evidence.context_intent,
+        &resolution,
+        source_task,
+        true,
+        now_unix,
+    )
 }
 
 fn native_quiescent(workspace: &Path, registered: &AutonomousProjectV1) -> Result<(), String> {
@@ -535,7 +554,7 @@ pub(super) fn prepare(
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum CommitCheckpoint {
     DispositionRecorded,
-    ContextRecorded,
+    ContextVerified,
 }
 
 fn finish(
@@ -563,13 +582,17 @@ fn finish(
     // This durable record precedes every admission change. A crash here leaves
     // an explicit pending disposition, not permission to execute or replay.
     checkpoint(CommitCheckpoint::DispositionRecorded)?;
-    let meter = WebContextStore::open_nonblocking(workspace.join(".catdesk/web-context"))?;
-    meter.abandon_rollover_intent(
-        &key(&record.project_id, &record.source),
-        &prepared.evidence.context_intent,
-        &prepared.resolution_id,
-    )?;
-    checkpoint(CommitCheckpoint::ContextRecorded)?;
+    // Keep the original REQUESTED ledger byte-for-byte for older readers.
+    // The separate immutable completion receipt is the admission boundary.
+    let pressure = WebContextStore::open_read_only(workspace.join(".catdesk/web-context"))?
+        .active_pressure(&record.project_id)?
+        .ok_or("WEB_QUARANTINE_CONTEXT_REQUIRED")?;
+    if pressure.key != key(&record.project_id, &record.source)
+        || pressure.rollover_intent.as_ref() != Some(&prepared.evidence.context_intent)
+    {
+        return Err("WEB_QUARANTINE_CONTEXT_CHANGED".into());
+    }
+    checkpoint(CommitCheckpoint::ContextVerified)?;
     let completion = Completion {
         schema_version: 1,
         status: ACKNOWLEDGEMENT.into(),
@@ -650,13 +673,7 @@ pub(super) fn confirm(
                 already_started,
                 now(),
             )?;
-            let mut observed =
-                evidence(workspace, store, record, registered, progress, task_proof)?;
-            if already_started
-                && observed.context_intent.abandonment_resolution_id() == Some(resolution)
-            {
-                observed.context_intent.status = "REQUESTED".into();
-            }
+            let observed = evidence(workspace, store, record, registered, progress, task_proof)?;
             if observed != prepared.evidence {
                 return Err("WEB_QUARANTINE_PREFLIGHT_CHANGED".into());
             }
@@ -669,6 +686,34 @@ pub(super) fn confirm(
 mod tests {
     use super::*;
     use crate::web_conversation_context::{ContextPressurePolicy, VisibleSourceKind};
+
+    fn context_path(root: &Path, project: &str, source: &Target) -> PathBuf {
+        root.join(".catdesk/web-context/conversations")
+            .join(format!(
+                "{}.json",
+                sha(format!("{}\0{}\0{}", project, source.url, source.generation).as_bytes())
+            ))
+    }
+
+    fn assert_legacy_context_readable(root: &Path, project: &str, source: &Target) {
+        // 9c81bc2/409513a accept only REQUESTED in the existing ledger schema.
+        #[derive(Deserialize)]
+        enum LegacyStatus {
+            #[serde(rename = "REQUESTED")]
+            Requested,
+        }
+        let value: Value =
+            serde_json::from_slice(&fs::read(context_path(root, project, source)).unwrap())
+                .unwrap();
+        let _: LegacyStatus =
+            serde_json::from_value(value["rolloverIntent"]["status"].clone()).unwrap();
+        assert!(serde_json::from_value::<LegacyStatus>(json!(ACKNOWLEDGEMENT)).is_err());
+        let pressure = WebContextStore::open_read_only(root.join(".catdesk/web-context"))
+            .unwrap()
+            .pressure(&key(project, source))
+            .unwrap();
+        assert_eq!(pressure.rollover_intent.unwrap().status, "REQUESTED");
+    }
 
     fn fixture() -> (PathBuf, Record, Prepared) {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -812,9 +857,14 @@ mod tests {
 
     #[cfg(windows)]
     fn public_fixture() -> (PathBuf, PathBuf, PathBuf, Record) {
-        let (parent, control, wake_root, source, _) = super::super::tests::paired_handoff_fixture();
+        let (parent, control, wake_root, source, beta) =
+            super::super::tests::paired_handoff_fixture();
         let registered = registered_project(&control, "alpha").unwrap();
         let (record, _) = fixture_record(&control, source, &registered.workspace);
+        WebContextStore::open(control.join(".catdesk/web-context"))
+            .unwrap()
+            .bind_observed_target(key("beta", &beta), None)
+            .unwrap();
         let wake = Store::open(&wake_root).unwrap();
         complete_fixture_event(&wake, &record.source, &record.source_task_id, "source task");
         // Source and handoff have separate completed turns. The real source
@@ -839,6 +889,8 @@ mod tests {
             project_dir.join("active.json"),
             wake_root.join("config.json"),
             control.join(".catdesk/projects/projects.json"),
+            context_path(&control, "alpha", &record.source),
+            context_path(&control, "beta", &paired(&control, "beta").unwrap()),
         ];
         let preserved: Vec<_> = preserved_paths
             .iter()
@@ -963,6 +1015,7 @@ mod tests {
         for (path, bytes) in preserved_paths.iter().zip(&preserved) {
             assert_eq!(&fs::read(path).unwrap(), bytes);
         }
+        assert_legacy_context_readable(&control, "alpha", &record.source);
         let store = ProjectStore::open_existing(&control, "alpha").unwrap();
         assert_eq!(
             completed(&store, &record).unwrap().as_deref(),
@@ -989,6 +1042,21 @@ mod tests {
             "WEB_ROLLOVER_QUARANTINED_NO_REPLAY"
         );
 
+        let meter = WebContextStore::open(control.join(".catdesk/web-context")).unwrap();
+        let source = key("alpha", &record.source);
+        assert_eq!(
+            super::super::super::auto::source_task_anchor(
+                &control,
+                &wake,
+                "alpha",
+                &record.source,
+                &source,
+                &meter.pressure(&source).unwrap()
+            )
+            .unwrap(),
+            None
+        );
+
         std::thread::sleep(std::time::Duration::from_millis(1100));
         complete_fixture_event(
             &wake,
@@ -999,32 +1067,45 @@ mod tests {
         let store = ProjectStore::open_existing(&control, "alpha").unwrap();
         validate_new_source_task(&store, &record, &wake, "fresh-completed-source").unwrap();
         drop(store);
-        let meter = WebContextStore::open(control.join(".catdesk/web-context")).unwrap();
-        let source = key("alpha", &record.source);
-        let next = meter
-            .request_rollover_if_due(
+        assert_eq!(
+            super::super::super::auto::source_task_anchor(
+                &control,
+                &wake,
+                "alpha",
+                &record.source,
                 &source,
-                &record.source.digest,
-                "fresh-completed-source",
-                true,
-                now(),
+                &meter.pressure(&source).unwrap()
             )
-            .unwrap()
-            .unwrap();
+            .unwrap(),
+            Some("fresh-completed-source".into())
+        );
+        let store = ProjectStore::open_existing(&control, "alpha").unwrap();
+        let next = request_successor_context(
+            &store,
+            &record,
+            &meter,
+            &wake,
+            "fresh-completed-source",
+            now(),
+        )
+        .unwrap()
+        .unwrap();
         assert_ne!(next.intent_id, record.intent_id);
         assert_eq!(
-            meter
-                .request_rollover_if_due(
-                    &source,
-                    &record.source.digest,
-                    "fresh-completed-source",
-                    true,
-                    now()
-                )
-                .unwrap()
-                .unwrap(),
+            request_successor_context(
+                &store,
+                &record,
+                &meter,
+                &wake,
+                "fresh-completed-source",
+                now()
+            )
+            .unwrap()
+            .unwrap(),
             next
         );
+        drop(store);
+        assert_legacy_context_readable(&control, "alpha", &record.source);
         assert_eq!(
             acquire_web_work_lease(&control, "alpha").err().unwrap(),
             "WEB_WORK_ROLLOVER_PENDING"
@@ -1074,6 +1155,99 @@ mod tests {
             acquire_web_work_lease(&control, "alpha").err().unwrap(),
             "WEB_WORK_ROLLOVER_PENDING"
         );
+        fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn quarantine_disposition_public_current_quiescence_preserves_later_completed_history() {
+        let (parent, control, wake_root, record) = public_fixture();
+        let wake = Store::open(&wake_root).unwrap();
+        complete_fixture_event(
+            &wake,
+            &record.source,
+            "later-completed-review",
+            "later independent review",
+        );
+        // The old guard remains appropriate for rebinding/replaying a handoff.
+        assert_eq!(
+            wake.source_progress_fingerprint(
+                "alpha",
+                &record.source,
+                record.handoff_event_id.as_deref().unwrap()
+            )
+            .unwrap_err(),
+            "BOOTSTRAP_SOURCE_PROGRESS_AFTER_HANDOFF"
+        );
+        let context_before = fs::read(context_path(&control, "alpha", &record.source)).unwrap();
+        let prepared = prepare(
+            &control,
+            "alpha",
+            &record.intent_id,
+            "current-quiescence",
+            ACKNOWLEDGEMENT,
+        )
+        .unwrap();
+        let token = prepared["confirmationToken"].as_str().unwrap();
+        let later_path = wake_root.join("deliveries/later-completed-review.json");
+        let later_before = fs::read(&later_path).unwrap();
+        let mut changed: Delivery = read_checked(&later_path).unwrap();
+        changed.updated_utc += 1;
+        atomic(&later_path, &changed).unwrap();
+        assert_eq!(
+            confirm(
+                &control,
+                "alpha",
+                &record.intent_id,
+                "current-quiescence",
+                token,
+                ACKNOWLEDGEMENT
+            )
+            .unwrap_err(),
+            "WEB_QUARANTINE_PREFLIGHT_CHANGED"
+        );
+        fs::write(&later_path, &later_before).unwrap();
+        complete_fixture_event(
+            &wake,
+            &record.source,
+            "new-completed-review",
+            "new progress after preflight",
+        );
+        assert_eq!(
+            confirm(
+                &control,
+                "alpha",
+                &record.intent_id,
+                "current-quiescence",
+                token,
+                ACKNOWLEDGEMENT
+            )
+            .unwrap_err(),
+            "WEB_QUARANTINE_PREFLIGHT_CHANGED"
+        );
+        let refreshed = prepare(
+            &control,
+            "alpha",
+            &record.intent_id,
+            "refreshed-quiescence",
+            ACKNOWLEDGEMENT,
+        )
+        .unwrap();
+        confirm(
+            &control,
+            "alpha",
+            &record.intent_id,
+            "refreshed-quiescence",
+            refreshed["confirmationToken"].as_str().unwrap(),
+            ACKNOWLEDGEMENT,
+        )
+        .unwrap();
+        assert_eq!(fs::read(&later_path).unwrap(), later_before);
+        assert_eq!(
+            fs::read(context_path(&control, "alpha", &record.source)).unwrap(),
+            context_before
+        );
+        assert_legacy_context_readable(&control, "alpha", &record.source);
         fs::remove_dir_all(parent).unwrap();
     }
 
@@ -1153,14 +1327,22 @@ mod tests {
         let source = key("alpha", &record.source);
         assert_eq!(
             meter
-                .request_rollover_if_due(&source, &record.source.digest, "source-task", true, 200)
+                .request_successor_after_disposition(
+                    &source,
+                    &prepared.evidence.context_intent,
+                    &prepared.resolution_id,
+                    "source-task",
+                    true,
+                    200
+                )
                 .unwrap_err(),
             "WEB_CONTEXT_ABANDONED_TASK_REPLAY_FORBIDDEN"
         );
         let next = meter
-            .request_rollover_if_due(
+            .request_successor_after_disposition(
                 &source,
-                &record.source.digest,
+                &prepared.evidence.context_intent,
+                &prepared.resolution_id,
                 "new-completed-task",
                 true,
                 200,
@@ -1170,9 +1352,10 @@ mod tests {
         assert_ne!(next.intent_id, record.intent_id);
         assert_eq!(
             meter
-                .request_rollover_if_due(
+                .request_successor_after_disposition(
                     &source,
-                    &record.source.digest,
+                    &prepared.evidence.context_intent,
+                    &prepared.resolution_id,
                     "new-completed-task",
                     true,
                     201
@@ -1202,11 +1385,11 @@ mod tests {
     }
 
     #[test]
-    fn quarantine_disposition_context_write_alone_never_grants_admission() {
+    fn quarantine_disposition_context_verification_alone_never_grants_admission() {
         let (root, record, prepared) = fixture();
         let store = ProjectStore::open_existing(&root, "alpha").unwrap();
         let error = finish(&root, &store, &record, &prepared, |phase| {
-            if phase == CommitCheckpoint::ContextRecorded {
+            if phase == CommitCheckpoint::ContextVerified {
                 Err("INTERRUPTED_AFTER_CONTEXT".into())
             } else {
                 Ok(())

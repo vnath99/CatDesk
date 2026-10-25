@@ -7,6 +7,26 @@ ownership, independent review and producer gates remain in force. No recurring
 automation, external tunnel replacement or browser-profile change follows from
 this authorization.
 
+## October 25 C207 — bounded diagnostics do not establish a release
+
+Two disposable diagnostics passed `ring` without a complete Cargo result. One
+supported producer retry was confirmed and failed again with Cargo 101 in
+37 seconds, no attestation and zero remaining workers. Later exact replay exposed
+`ring` / MSVC `C1083 SOURCE_FILE` in producer paths; ordinary paths compiled Ring.
+The source fix normalizes five external values with the existing helper and
+preserves canonical identities and the closed V5 policy. Its 110 tests and strict
+Clippy passed; fixed-controller and producer requalification remain pending.
+The canonical executable/fingerprint are unchanged, with no promotion or
+installed startup/rollback acceptance.
+
+The separate compatible disposition passed 112 tests and both strict Clippy
+checks. Its rebuilt controller completed bounded live prepare/confirm, preserving
+all 452 pins and original `REQUESTED` bytes without browser/host/message/binding
+changes. New/legacy journal reads and legacy context decoding passed; actual new
+Web task execution remains unproved. This local recovery grants no release
+authority and does not relax ordinary rollover's guard.
+Evidence: `docs/verification/C207_COMPATIBLE_QUARANTINE_AND_BUILD_DIAGNOSIS_2026_10_25.json`.
+
 ## October 25 C206 — review admitted; producer failed before promotion
 
 A genuine C196 source-review PASS was independently read after one delivery.

@@ -5875,13 +5875,20 @@ fn apply_exact_worker_cargo_command(
     if attempt.policy != fixed_policy() {
         return Err("REVIEWED_BUILD_EVIDENCE_DRIFTED".into());
     }
+    // Cargo forwards these paths to native tools such as MSVC, which reject
+    // verbatim-prefixed source filenames. Normalize only their command/env
+    // representation; the caller's pinned paths and identity checks stay intact.
+    let tool_source = crate::command::normalize_windows_verbatim_path(source.to_path_buf());
+    let tool_target = crate::command::normalize_windows_verbatim_path(target.to_path_buf());
+    let tool_temp = crate::command::normalize_windows_verbatim_path(temp.to_path_buf());
+    let tool_cargo_home = crate::command::normalize_windows_verbatim_path(cargo_home.to_path_buf());
     command
         .args(&attempt.policy.argv)
-        .current_dir(source)
+        .current_dir(tool_source)
         .env_clear()
-        .env("CARGO_TARGET_DIR", target)
+        .env("CARGO_TARGET_DIR", tool_target)
         .env("RUSTC", rustc)
-        .env("CARGO_HOME", cargo_home)
+        .env("CARGO_HOME", tool_cargo_home)
         .env("PATH", &toolchain.path)
         .env("CC", &toolchain.cc)
         .env("AR", &toolchain.ar)
@@ -5890,8 +5897,8 @@ fn apply_exact_worker_cargo_command(
         .env("INCLUDE", &toolchain.include)
         .env("SystemDrive", os_system_drive()?)
         .env("SystemRoot", os_system_root()?)
-        .env("TEMP", temp)
-        .env("TMP", temp)
+        .env("TEMP", &tool_temp)
+        .env("TMP", tool_temp)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
@@ -6115,6 +6122,14 @@ fn fixed_v5_host_linker_diagnostic_outcome(
     if exit_code.is_none_or(|code| code == 0) {
         return Err("REVIEWED_BUILD_HOST_LINKER_DIAGNOSTIC_UNEXPECTED_SUCCESS".into());
     }
+    Ok(fixed_cargo_diagnostic_details(exit_code, captured_stderr))
+}
+
+#[cfg(all(test, windows))]
+fn fixed_cargo_diagnostic_details(
+    exit_code: Option<i32>,
+    captured_stderr: BoundedCargoStderr,
+) -> FixedV5HostLinkerDiagnosticOutcome {
     let linker_error_codes = captured_stderr.diagnostic_linker_error_codes.clone();
     let cargo_failure_signals = captured_stderr.diagnostic_cargo_failure_signals.clone();
     let custom_build_crate = captured_stderr.diagnostic_custom_build_crate.clone();
@@ -6132,7 +6147,7 @@ fn fixed_v5_host_linker_diagnostic_outcome(
         "CARGO_LINK_OUT_OF_MEMORY" => "LINK_OUT_OF_MEMORY",
         _ => "OTHER_LINKER_EXIT",
     };
-    Ok(FixedV5HostLinkerDiagnosticOutcome {
+    FixedV5HostLinkerDiagnosticOutcome {
         classification,
         cargo_classification: diagnostic.classification.clone(),
         cargo_failure_signals,
@@ -6147,7 +6162,7 @@ fn fixed_v5_host_linker_diagnostic_outcome(
         captured_stderr_sha256: diagnostic.captured_stderr_sha256,
         captured_stderr_length: diagnostic.captured_stderr_length,
         stderr_truncated: diagnostic.stderr_truncated,
-    })
+    }
 }
 
 #[cfg(all(test, windows))]
@@ -6281,16 +6296,74 @@ fn run_fixed_v5_cargo_cache_seed_diagnostic() -> Result<FixedV5CargoCacheSeedDia
 }
 
 #[cfg(all(test, windows))]
-fn fixed_short_cargo_diagnostic_root(workspace: &Path) -> Result<ProtectedDirectoryGuard, String> {
-    // Diagnostic-only workspace path: no reviewed build/promotion authority.
-    // Keep the registry source path short enough for native MSVC include lookup.
-    let mut root = ProtectedDirectoryGuard::acquire(workspace, "short cargo diagnostic workspace")?;
-    root.descend_or_create("target-verify", "short cargo diagnostic root")?;
-    root.descend_or_create("sc", "short cargo diagnostic root")?;
+const WORKER_DIAGNOSTIC_SOURCE_PADDING: &str = "source-path-length-padding";
+
+#[cfg(all(test, windows))]
+fn fixed_worker_shaped_cargo_diagnostic_root(
+    workspace: &Path,
+) -> Result<ProtectedDirectoryGuard, String> {
+    // Disposable, non-authority sibling of rb. Its equal-length name and full
+    // nonce preserve native tool path lengths without touching worker outputs.
+    let mut root = ProtectedDirectoryGuard::acquire(workspace, "cargo diagnostic workspace")?;
+    root.descend_or_create("target-verify", "cargo diagnostic root")?;
+    root.descend_or_create("rl", "cargo diagnostic root")?;
     let nonce = Uuid::new_v4().simple().to_string();
-    root.create_child(&nonce[..8], "short cargo diagnostic root")?;
-    root.assert_stable("short cargo diagnostic root")?;
+    root.create_child(&nonce, "cargo diagnostic root")?;
+    root.assert_stable("cargo diagnostic root")?;
     Ok(root)
+}
+
+#[cfg(all(test, windows))]
+fn validate_worker_shaped_cargo_diagnostic_paths(
+    workspace: &Path,
+    attempt: &str,
+    paths: [&Path; 4],
+) -> Result<[usize; 4], String> {
+    let worker_output = workspace.join("target-verify/rb").join(attempt);
+    let expected = [
+        workspace
+            .join(".catdesk/reviewed-build-control/generations")
+            .join(attempt)
+            .join("source"),
+        worker_output.join("target"),
+        worker_output.join("cargo-home"),
+        worker_output.join("target/tmp"),
+    ];
+    let mut lengths = [0; 4];
+    for (index, (actual, expected)) in paths.into_iter().zip(expected).enumerate() {
+        let actual = actual.as_os_str().encode_wide().collect::<Vec<_>>();
+        let expected = expected.as_os_str().encode_wide().collect::<Vec<_>>();
+        if actual.len() != expected.len()
+            || actual
+                .iter()
+                .filter(|unit| **unit == u16::from(b' '))
+                .count()
+                != expected
+                    .iter()
+                    .filter(|unit| **unit == u16::from(b' '))
+                    .count()
+        {
+            return Err("REVIEWED_BUILD_CARGO_DIAGNOSTIC_PATH_SHAPE_MISMATCH".into());
+        }
+        lengths[index] = actual.len();
+    }
+    Ok(lengths)
+}
+
+#[cfg(all(test, windows))]
+fn partial_cargo_diagnostic_summary(error: &str, captured: BoundedCargoStderr) -> String {
+    let wait_outcome = if error == "REVIEWED_BUILD_TIMEOUT" {
+        "TIMED_OUT"
+    } else {
+        "FAILED"
+    };
+    // None is deliberate: terminating a timed-out build does not establish its
+    // natural exit status. Preserve only fixed signals from the observed stream.
+    let details = fixed_cargo_diagnostic_details(None, captured);
+    format!(
+        "ACTIVE_UNCLASSIFIED_CARGO_PARTIAL exitCode=UNAVAILABLE waitOutcome={wait_outcome} {}",
+        fixed_v5_host_linker_diagnostic_summary_line(&details)
+    )
 }
 
 #[cfg(all(test, windows))]
@@ -6383,18 +6456,31 @@ fn run_active_unclassified_cargo_diagnostic(
         &attempt.review_authority_sha256,
         &attempt.snapshot_expected,
     )?;
-    let mut diagnostic_root = fixed_short_cargo_diagnostic_root(workspace)?;
+    let mut diagnostic_root = fixed_worker_shaped_cargo_diagnostic_root(workspace)?;
     let mut source_guard = diagnostic_root.try_clone("cargo reproduction source")?;
+    source_guard.create_child(
+        WORKER_DIAGNOSTIC_SOURCE_PADDING,
+        "cargo reproduction source",
+    )?;
     source_guard.create_child("source", "cargo reproduction source")?;
     materialize_snapshot_into(&snapshot, &mut source_guard)?;
     let source = source_guard.path().to_path_buf();
     let mut target_guard = diagnostic_root.try_clone("cargo reproduction target")?;
     target_guard.create_child("target", "cargo reproduction target")?;
     let target = target_guard.path().to_path_buf();
-    let mut temp_guard = diagnostic_root.try_clone("cargo reproduction temp")?;
+    let mut temp_guard = target_guard.try_clone("cargo reproduction temp")?;
     temp_guard.create_child("tmp", "cargo reproduction temp")?;
     let temp = temp_guard.path().to_path_buf();
     let cargo_home = seed_isolated_cargo_home_into(&mut diagnostic_root, &source)?;
+    let lengths = validate_worker_shaped_cargo_diagnostic_paths(
+        workspace,
+        &attempt.build_attempt_id,
+        [&source, &target, &cargo_home, &temp],
+    )?;
+    println!(
+        "ACTIVE_CARGO_PATH_SHAPE sourceUnits={} targetUnits={} cargoHomeUnits={} tempUnits={}",
+        lengths[0], lengths[1], lengths[2], lengths[3]
+    );
     let cargo_pin = open_attested_tool(&attempt.cargo, "cargo")?;
     let rustc_pin = open_attested_tool(&attempt.rustc, "rustc")?;
     let mut command = Command::new(&cargo_pin.evidence.absolute_path);
@@ -6423,7 +6509,20 @@ fn run_active_unclassified_cargo_diagnostic(
     job.resume(&child)?;
     // The existing worker wait bounds the root, all Job descendants and pipe
     // EOF together. Root exit alone must not leave a diagnostic reader hanging.
-    let exit = wait_for_owned_build_exit(&mut child, &job, &reader, Duration::from_secs(95))?;
+    let exit = match wait_for_owned_build_exit(&mut child, &job, &reader, Duration::from_secs(95)) {
+        Ok(exit) => exit,
+        Err(error) => {
+            // Never block on an unproven reader. The worker wait has attempted
+            // cleanup; independently confirm both the Job and pipe are done.
+            if job.active_processes().is_ok_and(|count| count == 0)
+                && reader.is_finished()
+                && let Ok(Ok(captured)) = reader.join()
+            {
+                println!("{}", partial_cargo_diagnostic_summary(&error, captured));
+            }
+            return Err(error);
+        }
+    };
     let captured = reader
         .join()
         .ok()
@@ -10675,7 +10774,8 @@ mod tests {
         assert!(worker.contains("configure_exact_worker_cargo_command("));
         assert!(worker.contains("&cargo_home,"));
         assert!(command_body.contains(".env_clear()"));
-        assert!(command_body.contains(".env(\"CARGO_HOME\", cargo_home)"));
+        assert!(command_body.contains("normalize_windows_verbatim_path(cargo_home.to_path_buf())"));
+        assert!(command_body.contains(".env(\"CARGO_HOME\", tool_cargo_home)"));
         assert!(!worker.contains(".env(\"CARGO_HOME\", profile.join"));
         assert!(!command_body.contains(".env(\"CARGO_HOME\", profile.join"));
 
@@ -11435,6 +11535,125 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn worker_native_paths_make_normal_and_verbatim_commands_equivalent() {
+        let attempt = test_attempt();
+        let original = attempt.clone();
+        let toolchain = test_windows_toolchain_environment();
+        let rustc = r"\\?\C:\trusted tools\rustc.exe";
+        for base in [r"C:\fixture", r"C:\fixture with spaces"] {
+            let normal = PathBuf::from(base);
+            let verbatim = PathBuf::from(format!(r"\\?\{base}"));
+            let mut commands = Vec::new();
+            for root in [&normal, &verbatim] {
+                let mut command = Command::new("not-executed-cargo.exe");
+                apply_exact_worker_cargo_command(
+                    &mut command,
+                    &attempt,
+                    &root.join("source"),
+                    &root.join("target"),
+                    &root.join("target").join("tmp"),
+                    &root.join("cargo-home"),
+                    rustc,
+                    &toolchain,
+                )
+                .unwrap();
+                let environment = command
+                    .get_envs()
+                    .map(|(name, value)| (name.to_os_string(), value.map(OsString::from)))
+                    .collect::<std::collections::BTreeMap<_, _>>();
+                assert_eq!(
+                    environment.get(std::ffi::OsStr::new("RUSTC")),
+                    Some(&Some(OsString::from(rustc)))
+                );
+                assert_eq!(
+                    environment.get(std::ffi::OsStr::new("CARGO_TARGET_DIR")),
+                    Some(&Some(normal.join("target").into_os_string()))
+                );
+                assert_eq!(
+                    environment.get(std::ffi::OsStr::new("CARGO_HOME")),
+                    Some(&Some(normal.join("cargo-home").into_os_string()))
+                );
+                assert_eq!(
+                    environment.get(std::ffi::OsStr::new("TEMP")),
+                    Some(&Some(normal.join("target").join("tmp").into_os_string()))
+                );
+                assert_eq!(
+                    environment.get(std::ffi::OsStr::new("TMP")),
+                    environment.get(std::ffi::OsStr::new("TEMP"))
+                );
+                assert_eq!(
+                    command.get_current_dir(),
+                    Some(normal.join("source").as_path())
+                );
+                commands.push((
+                    environment,
+                    command.get_args().map(OsString::from).collect::<Vec<_>>(),
+                ));
+            }
+            assert_eq!(commands[0], commands[1]);
+        }
+        assert_eq!(attempt, original);
+        assert_eq!(
+            attempt.policy,
+            fixed_policy(),
+            "representation normalization cannot change policy authority"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn worker_native_paths_preserve_pinned_identity_and_authority() {
+        let root = std::env::temp_dir().join(format!("catdesk native paths {}", Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        let sentinel = root.join("authority-sentinel.json");
+        fs::write(&sentinel, b"unchanged original authority").unwrap();
+        let canonical = fs::canonicalize(&root).unwrap();
+        let canonical_before = canonical.clone();
+        let guard = ProtectedDirectoryGuard::acquire(&canonical, "native path fixture").unwrap();
+        let original = fs::File::open(canonical.join("authority-sentinel.json")).unwrap();
+        let identity = opened_regular_identity(&original, "native path sentinel").unwrap();
+        let attempt = test_attempt();
+        let before = attempt.clone();
+        let mut command = Command::new("not-executed-cargo.exe");
+        apply_exact_worker_cargo_command(
+            &mut command,
+            &attempt,
+            &canonical,
+            &canonical.join("target"),
+            &canonical.join("target").join("tmp"),
+            &canonical.join("cargo-home"),
+            r"\\?\C:\trusted\rustc.exe",
+            &test_windows_toolchain_environment(),
+        )
+        .unwrap();
+        let native_source = command.get_current_dir().unwrap();
+        assert!(!native_source.to_string_lossy().starts_with(r"\\?\"));
+        let reopened = fs::File::open(native_source.join("authority-sentinel.json")).unwrap();
+        assert_eq!(
+            opened_regular_identity(&reopened, "native path sentinel").unwrap(),
+            identity
+        );
+        guard.assert_stable("native path fixture").unwrap();
+        assert_eq!(guard.path(), canonical_before);
+        assert_eq!(canonical, canonical_before);
+        assert_eq!(attempt, before);
+        assert_eq!(
+            fs::read(&sentinel).unwrap(),
+            b"unchanged original authority"
+        );
+        assert_eq!(
+            fs::read_dir(&root).unwrap().count(),
+            1,
+            "command preparation must create no files"
+        );
+        drop(reopened);
+        drop(original);
+        drop(guard);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn fixed_v5_cargo_cache_seed_diagnostic_vocabulary_and_components_are_closed() {
         let package = LockedRegistryCrate {
             name: "serde".into(),
@@ -11695,6 +11914,108 @@ mod tests {
         ] {
             assert!(!runner.contains(forbidden), "unexpected {forbidden}");
         }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn active_unclassified_cargo_diagnostic_paths_match_worker_without_authority_writes() {
+        let root = std::env::temp_dir().join(format!("catdesk-path-shape-{}", Uuid::new_v4()));
+        let attempt = "a".repeat(32);
+        let authority = root
+            .join(".catdesk/reviewed-build-control/generations")
+            .join(&attempt);
+        fs::create_dir_all(&authority).unwrap();
+        let sentinel = authority.join("result.json");
+        fs::write(&sentinel, b"original terminal authority").unwrap();
+        let disposable = fixed_worker_shaped_cargo_diagnostic_root(&root).unwrap();
+        assert_eq!(WORKER_DIAGNOSTIC_SOURCE_PADDING.len(), 26);
+        assert_eq!(disposable.path().file_name().unwrap().len(), 32);
+        assert_eq!(
+            disposable.path().parent().unwrap().file_name().unwrap(),
+            "rl"
+        );
+        assert!(!disposable.path().starts_with(&authority));
+        let mut source = disposable.try_clone("fixture source").unwrap();
+        source
+            .create_child(WORKER_DIAGNOSTIC_SOURCE_PADDING, "fixture source")
+            .unwrap();
+        source.create_child("source", "fixture source").unwrap();
+        let mut target = disposable.try_clone("fixture target").unwrap();
+        target.create_child("target", "fixture target").unwrap();
+        let mut temp = target.try_clone("fixture temp").unwrap();
+        temp.create_child("tmp", "fixture temp").unwrap();
+        let mut cargo_home = disposable.try_clone("fixture cargo home").unwrap();
+        cargo_home
+            .create_child("cargo-home", "fixture cargo home")
+            .unwrap();
+        let paths = [source.path(), target.path(), cargo_home.path(), temp.path()];
+        assert!(validate_worker_shaped_cargo_diagnostic_paths(&root, &attempt, paths).is_ok());
+        assert_eq!(temp.path(), target.path().join("tmp"));
+        assert!(
+            validate_worker_shaped_cargo_diagnostic_paths(
+                &root,
+                &attempt,
+                [
+                    source.path(),
+                    target.path(),
+                    cargo_home.path(),
+                    disposable.path()
+                ]
+            )
+            .is_err()
+        );
+        assert_eq!(fs::read(&sentinel).unwrap(), b"original terminal authority");
+        assert_eq!(fs::read_dir(&authority).unwrap().count(), 1);
+        assert!(!disposable.path().join("attestation.json").exists());
+
+        // A sanitized 59-unit workspace prefix reproduces the observed worker's
+        // exact dimensions without embedding a person's machine path.
+        let workspace = PathBuf::from(format!(r"C:\fixture\{}", "x".repeat(48)));
+        assert_eq!(workspace.as_os_str().encode_wide().count(), 59);
+        let base = workspace.join("target-verify/rl").join("b".repeat(32));
+        let source_path = base.join(WORKER_DIAGNOSTIC_SOURCE_PADDING).join("source");
+        let target_path = base.join("target");
+        let cargo_path = base.join("cargo-home");
+        let temp_path = target_path.join("tmp");
+        assert_eq!(
+            validate_worker_shaped_cargo_diagnostic_paths(
+                &workspace,
+                &attempt,
+                [&source_path, &target_path, &cargo_path, &temp_path]
+            )
+            .unwrap(),
+            [143, 116, 120, 120]
+        );
+        drop(cargo_home);
+        drop(temp);
+        drop(target);
+        drop(source);
+        drop(disposable);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn active_unclassified_cargo_diagnostic_timeout_retains_only_partial_fixed_signals() {
+        let mut stderr = vec![b'x'; MAX_CARGO_FAILURE_DIAGNOSTIC_BYTES + 12];
+        stderr.extend_from_slice(b"\nerror: failed to run custom build command for `ring v0.17.14`\nerror occurred in cc-rs: C:\\private\\compiler.c: fatal error C1083: Cannot open include file: 'prefix_symbols.h': No such file or directory\n");
+        let capture = || read_bounded_cargo_stderr(std::io::Cursor::new(stderr.clone())).unwrap();
+        let summary = partial_cargo_diagnostic_summary("REVIEWED_BUILD_TIMEOUT", capture());
+        assert!(summary.starts_with(
+            "ACTIVE_UNCLASSIFIED_CARGO_PARTIAL exitCode=UNAVAILABLE waitOutcome=TIMED_OUT "
+        ));
+        assert!(summary.contains("CUSTOM_BUILD_COMMAND_FAILED"));
+        assert!(summary.contains("customBuildCrate=Some(\"ring\")"));
+        assert!(summary.contains("MSVC_C1083"));
+        assert!(summary.contains("stderrTruncated=true"));
+        for forbidden in ["C:\\private", "compiler.c", "exitCode=101", "SUCCESS"] {
+            assert!(!summary.contains(forbidden), "leaked {forbidden}");
+        }
+        assert!(
+            partial_cargo_diagnostic_summary("private failure detail", capture())
+                .contains("waitOutcome=FAILED")
+        );
+        assert!(fixed_v5_host_linker_diagnostic_outcome(None, capture()).is_err());
     }
 
     #[cfg(windows)]

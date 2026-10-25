@@ -1,3 +1,26 @@
+## October 25 C207 — compatible quarantine disposition and bounded build diagnosis
+
+The compatible disposition passed 112 focused source tests and both strict
+Clippy checks. Its rebuilt controller completed bounded live prepare/confirm:
+`ABANDONED_UNKNOWN_NO_REPLAY`, with all 452 pins and original `REQUESTED` context
+bytes preserved. No browser, host, message or binding change occurred. The
+provider outcome remains unknown. New/legacy journal reads and legacy context
+decoding passed; actual Web task execution remains unproved.
+
+The earlier refusal correctly detected completed work after the old handoff.
+Disposition now checks current quiescence and project event content; ordinary
+rebinding retains its no-progress guard. Two compiler diagnostics passed `ring`
+but ended without a complete Cargo result. One supported producer retry was
+confirmed and failed again with Cargo 101 in 37 seconds, no attestation and no
+remaining workers. A later exact-producer replay exposed `ring` / MSVC
+`C1083 SOURCE_FILE` in 35.14 seconds; ordinary-path diagnostics compiled Ring.
+The source fix normalizes five external path values with the existing helper,
+preserving canonical identities and the closed V5 policy. Its 110 tests and
+strict Clippy passed. Fixed-controller and producer requalification remain
+pending; no unchanged retry is planned.
+Production promotion and two-project Web coding remain open. See
+`docs/verification/C207_COMPATIBLE_QUARANTINE_AND_BUILD_DIAGNOSIS_2026_10_25.json`.
+
 ## October 25 C206 — genuine review recovered; producer failed safely
 
 C196 was sent once and its complete **source-review PASS** was independently

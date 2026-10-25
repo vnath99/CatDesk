@@ -1,3 +1,27 @@
+## October 25 C207 — disposition compatibility and current-state validation
+
+| UTC checkpoint | Actual result |
+| --- | --- |
+| 16:26:31 | 112 focused tests and strict root/Wake Clippy passed. |
+| 16:27:47 | Compatible normal debug controller built; source provenance pinned. |
+| 16:30:41–16:31:18 | One supported producer retry was confirmed; terminal Cargo 101, no attestation, zero workers. |
+| 16:32:00 | Bounded live disposition completed `ABANDONED_UNKNOWN_NO_REPLAY`; all 452 pins and original/context bytes preserved, zero browser/host/message/binding changes. |
+| 16:34:52 | Exact producer replay exposed `ring` / MSVC `C1083 SOURCE_FILE`; diagnostic only, no authority writes. |
+| 16:35:27–16:36:15 | New/legacy journal reads and actual legacy context decoding passed; state/receipts unchanged and zero owners remained. |
+| 16:40:09 | Native-path source fix: 110 tests passed, zero failed, eight ignored; strict Clippy passed in 22.08 seconds. |
+
+The initial refusal found four completed source events and an empty queue.
+Disposition now compares current quiescent state, while ordinary rebinding
+retains its no-progress guard. Two disposable diagnostics passed `ring`; the
+latest compiled the helper before its 95-second limit. The later exact replay
+identified the Windows verbatim-path boundary at the native compiler; ordinary
+paths compiled Ring. The source fix normalizes five external values with the
+existing helper while preserving canonical identities and the closed V5 policy.
+Fixed-controller and producer requalification remain pending. Source admission
+tests pass, but actual new Web task execution and
+installed/parallel Web acceptance remain open.
+Evidence: `docs/verification/C207_COMPATIBLE_QUARANTINE_AND_BUILD_DIAGNOSIS_2026_10_25.json`.
+
 ## October 25 C206 — review evidence recovered; build failure isolated
 
 | UTC checkpoint | Actual result |

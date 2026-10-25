@@ -1,3 +1,25 @@
+## October 25 C207 — preserve reader compatibility and release boundaries
+
+Disposition now leaves the original `REQUESTED` context ledger unchanged for
+existing readers. Matching immutable disposition/completion receipts authorize
+new work; a later rollover needs a fresh completed source task and distinct
+stable intent. After 112 tests and both strict Clippy checks, the rebuilt
+controller completed live prepare/confirm while preserving all 452 pins and
+original context bytes. New/legacy journal reads and legacy context decoding
+passed. No browser, host, message or binding changed; ordinary target binding
+retains its guard. Actual new Web task execution remains open.
+
+Two bounded diagnostics passed `ring` without a complete Cargo result. One
+confirmed supported producer retry failed again with Cargo 101 in 37 seconds,
+no attestation and zero workers. Later exact replay exposed `ring` / MSVC
+`C1083 SOURCE_FILE` in producer paths; ordinary paths compiled Ring. The source
+fix normalizes five external values using the existing helper, preserving
+canonical identities and closed V5 policy. Its 110 tests and strict Clippy passed;
+fixed-controller and producer requalification remain pending. Diagnostic,
+source-qualified, producer-attested and installed states remain separate;
+production promotion and two-project Web coding are open.
+Evidence: `docs/verification/C207_COMPATIBLE_QUARANTINE_AND_BUILD_DIAGNOSIS_2026_10_25.json`.
+
 ## October 25 C206 — separate review recovery, producer health and installation
 
 The genuine C196 source review and local ACK/snapshot chain completed. Its
