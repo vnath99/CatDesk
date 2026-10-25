@@ -2,15 +2,22 @@
 
 Source qualification passed: 427 Wake tests (including eight new deadline tests),
 22 operator tests and five context-control tests; one existing test ignored.
-Strict root/Wake Clippy and bounded cleanup passed. Live diagnosis is pending.
+Strict root/Wake Clippy and bounded cleanup passed. One bounded live read also passed.
 Evidence: [C216 source results](docs/verification/C216_SNAPSHOT_DEADLINE_2026_10_25.json).
 
 The snapshot reader now shares one deadline across ownership checks, browser
 startup, frame capture and cleanup. Existing raw snapshot APIs retain their
 signatures and use a 180-second total budget; explicit review reads use 90 seconds
 from entry. A failed local read returns only a fixed phase, elapsed/budget values
-and an allowlisted reason, with no response text or review authority. Source qualification passed as recorded above. C212 remains delivered once with its body unverified;
-no replay or production promotion follows from this implementation.
+and an allowlisted reason, with no response text or review authority. One live
+read using the immutable controller from `b21b89d496ceead70a657fb8ff098741b28bddc8`
+verified C212's existing response in 35.132 seconds. Its PASS covers `a999b01`
+only; all 15 source-path claims were checked. The 477 state pins, profile and
+cleanup checks passed, with no resend. Timer/coordinator closure is separate;
+production promotion and two-project Web coding remain open. Subsequent bounded
+reobservation and separate coordinator closure also passed: timer `COMPLETE`,
+review record `CLOSED`, `taskCompletionVerified: false`. Only two expected files
+changed; 475 other pins and histories remain exact, with zero test owners.
 
 ## October 25 C215 — reusable review scope, MVP still incomplete
 

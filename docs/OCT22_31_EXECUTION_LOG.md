@@ -2,7 +2,7 @@
 
 Source qualification passed: 427 Wake tests (including eight new deadline tests),
 22 operator tests and five context-control tests; one existing test ignored.
-Strict root/Wake Clippy and bounded cleanup passed. Live diagnosis is pending.
+Strict root/Wake Clippy and bounded cleanup passed. One bounded live read also passed.
 Evidence: [C216 source results](verification/C216_SNAPSHOT_DEADLINE_2026_10_25.json).
 
 Read-only inspection established an additive timeout: browser locking/startup
@@ -13,7 +13,28 @@ through startup and cleanup, retains existing scope/receipt checks, and adds a
 content-free last-phase report. Generic snapshot callers retain raw error semantics
 and a total 180-second budget; explicit review reads use 90 seconds. Failed reports
 cannot become MCP review text or completion evidence. No state/log writer or
-resend path was added. Qualification and one read-only live diagnosis follow.
+resend path was added.
+
+Published source `b21b89d496ceead70a657fb8ff098741b28bddc8` matched its remote
+branch. A separate immutable debug controller was built from that clean source;
+it is not an installed release or producer attestation. At 18:36:27–18:37:08 UTC,
+one read of the existing C212 delivery returned a verified response with diagnostic
+`COMPLETE`, 35,132 ms of a 90,000 ms budget. The response gives a substantive PASS
+for `a999b01fa88782ecc4e7a47494385b95a4f7e1f3`; its schema, exact source range and
+15 inspected paths were checked. This does not review the C215/C216 source.
+All 477 protected state records, delivery, timer, ledger and profile identity stayed
+unchanged; no test-owned process remained. No message, native claim, ACK, producer
+or promotion occurred. Both prior failed reads remain preserved; successful
+retrieval does not establish their cause or an automatic-observer repair.
+
+At 18:44:58–18:45:36 UTC, one supported read-only reobservation completed the
+timer and the separate resolver closed the review coordinator record. The
+initial sandbox attempt stopped on denied process-inventory access before a
+single-use marker or browser action; the authorized unsandboxed attempt exited
+0 within 180 seconds. Only two expected state files changed, retaining all 475
+other pins, original baseline, delivery and history. Two immutable observation
+logs were added; no test-owned process remained. No send, native ACK, producer
+or production action occurred. `taskCompletionVerified` remains false.
 
 ## October 25 C215 — standing routine-review authorization
 

@@ -1,18 +1,33 @@
-## October 25 C216 — qualify the shared snapshot deadline next
+## October 25 C216 — existing C212 response verified without replay
 
 Source qualification passed: 427 Wake tests (including eight new deadline tests),
 22 operator tests and five context-control tests; one existing test ignored.
-Strict root/Wake Clippy and bounded cleanup passed. Live diagnosis is pending.
+Strict root/Wake Clippy and bounded cleanup passed. One bounded live read also passed.
 Evidence: [C216 source results](../verification/C216_SNAPSHOT_DEADLINE_2026_10_25.json).
 
 Source now provides a 90-second diagnosed review read and 180-second generic
 snapshot budget, including startup and cleanup. Fixed phases distinguish owner,
 package, browser lock, adapter initialization and snapshot activity without
 publishing message bodies on failure. Do not infer the exact UI stall from a
-coarse phase. Build a new immutable development
-controller from the clean published commit, then perform one monitored read of
-C212's existing SENT event. Preserve its failed reads, timer, ledger and all project
-bindings. No resend, acknowledgment, producer or production promotion is implied.
+coarse phase. The immutable controller built from published commit
+`b21b89d496ceead70a657fb8ff098741b28bddc8` verified C212's existing exact
+USER/ASSISTANT pair in 35.132 seconds on October 25. Its substantive PASS covers
+public source `a999b01fa88782ecc4e7a47494385b95a4f7e1f3`, with all 15 reported
+source paths checked. It does not review newer source or create build authority.
+All 477 state pins and profile identity were preserved, and no test owner remained.
+No message was resent. Preserve both earlier failed reads; their cause remains unknown.
+The timer/coordinator closure is a separate supported operation, not a native
+task acknowledgment. The older promotion wrapper's baseline must be refreshed
+after any authorized timer/ledger transition; do not run it against stale pins.
+
+At 18:44:58–18:45:36 UTC, the supported bounded reobservation produced fresh
+completion evidence, and the separate resolver closed C212's review coordinator
+record. Only the timer's completion fields and ledger's phase/outcome/summary
+changed; the other 475 pins remained exact. Two immutable observation records
+were added; no test owner remained. The original 477-file baseline and the
+derived transition manifest are retained. Do not replay C212. Next eligible work
+is live qualification of two distinct newer-source reviews under the standing
+authorization. Production still needs an existing supported outside-Job owner.
 
 ## October 25 C215 — apply the standing read-only review instruction
 

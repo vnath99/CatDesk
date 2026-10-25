@@ -8,6 +8,18 @@ updates the timer. `COMPLETE` describes snapshot I/O only; require `eventVerifie
 for the actual exact USER/ASSISTANT review. MCP continues to reject unverified
 content and strips local diagnostics. No new command or browser profile is needed.
 
+The first live C216 read passed for C212's existing delivery in 35.132 seconds;
+do not repeat that completed read or resend the request. It verified the exact
+review body, not a coding task or release. Use supported `review reobserve` and
+then `work resolve` only for an outstanding timer/coordinator record with exact
+fresh evidence. Preserve the original failure and delivery history. Older private
+promotion wrappers contain earlier state hashes and must not be executed after
+authorized ledger/timer changes without a reviewed baseline reconciliation.
+The C212 reobservation and coordinator closure have now both completed; do not
+execute them again. Use the retained derived 477-file preservation manifest for
+subsequent checks; the original baseline remains immutable. No native task ACK
+or release authority was created.
+
 ## October 25 C215 — bounded routine-review commands
 
 See [routine source review authorization](CATDESK_ROUTINE_REVIEW_AUTHORIZATION.md)

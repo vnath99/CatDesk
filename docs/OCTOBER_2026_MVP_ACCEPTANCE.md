@@ -1,14 +1,25 @@
-## October 25 C216 — snapshot verification remains an open live gate
+## October 25 C216 — bounded existing-response verification passed
 
 Source qualification passed: 427 Wake tests (including eight new deadline tests),
 22 operator tests and five context-control tests; one existing test ignored.
-Strict root/Wake Clippy and bounded cleanup passed. Live diagnosis is pending.
+Strict root/Wake Clippy and bounded cleanup passed. One bounded live read also passed.
 Evidence: [C216 source results](verification/C216_SNAPSHOT_DEADLINE_2026_10_25.json).
 
 Implemented shared deadlines and fixed local snapshot diagnostics; source qualification passed as recorded above. The eight focused timing/redaction fixtures passed.
-This does not establish a verified C212 assistant response, installed production
-operation or two-project Web coding. Existing C215 delivery, preserved 477 records
-and no-resend constraints remain authoritative until new live evidence is recorded.
+The C216 controller verified C212's exact existing USER/ASSISTANT pair in 35.132
+seconds under its 90-second budget. The substantive PASS is limited to public
+source `a999b01fa88782ecc4e7a47494385b95a4f7e1f3`; all 15 path claims were checked.
+All 477 state pins and profile identity were preserved, with zero remaining test
+owners and zero sends. This establishes bounded response retrieval, not installed
+production, newer-source review, automatic-observer reliability or two-project
+Web coding. Timer completion and local coordinator closure remain separate from
+native task acknowledgment and release authority. The subsequent bounded
+reobservation and separate coordinator closure passed at 18:44:58–18:45:36 UTC:
+timer `COMPLETE`, record `CLOSED` / `completed`, `taskCompletionVerified: false`.
+Only the two expected state files changed, with 475 other pins exact, two new
+immutable observation logs and zero remaining test owners. C212 requires no
+further delivery, read, reobservation or closure. Production and independent Web
+coding acceptance remain open.
 
 ## October 25 C215 — routine review consent acceptance
 
