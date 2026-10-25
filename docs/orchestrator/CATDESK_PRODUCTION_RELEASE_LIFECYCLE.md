@@ -152,6 +152,35 @@ rollback remain pending, and actual two-conversation Web coding remains open.
 The goal stays active. Evidence:
 `docs/verification/C189_LIVE_DIRECT_ADMISSION_2026_10_25.json`.
 
+## October 25 C197 — review approved; actual project admission blocks delivery
+
+The user approved C184's frozen message and exact destination. Its nonrenewable
+lease had expired, so supported MCP cancellation and a fresh successor preserved
+the old contract/history. The claim committed before a ten-second local HTTP
+timeout. Durable status, queue, baseline and accounting proved that commitment;
+it was not replayed. Supported supersession was recorded. All 594 earlier session
+files remain exact, with 559 prior accounting records preserved. The fresh bounded
+controller readback exited naturally and released its listener.
+
+The approved review remains **unsent**. The qualified application actually refused
+publication with `WEB_WORK_ROLLOVER_PENDING`, exit 2, empty queue and no state drift.
+CatDesk retains its original October 18 quarantine. One read-only inspection using
+the existing authenticated profile returned `RESPONSE_EXPECTED_USER_NOT_FOUND`;
+it produced no recovery authority. The quarantine, original binding and unknown
+outcome remain preserved. This attempt did not contact the external connector and
+is not a new HTTP 429. No WakeHost or recurring worker was started. Browser cleanup
+passed with zero test owners; all 361 pinned files remain exact.
+
+Private preparation now checks routing and unresolved rollover state before claim
+mutations, retaining the normal publisher's admission guard. A distinct frozen
+public-source review for Wake2's existing conversation passed metadata checks only.
+Its different message/destination require separate approval; C184 approval is not
+reused. Nothing was sent there, and native Wake2 work and all project bindings
+remain unchanged. No product code changed. Production remains unpromoted; genuine
+review, producer authority, installed health, trusted rollback and two-project Web
+coding remain open. The goal remains active. Evidence:
+`docs/verification/C197_ACTUAL_REVIEW_ROUTE_REFUSAL_2026_10_25.json`.
+
 ## Three different release scopes
 
 | Scope | Authority and owner | What it does not establish |
