@@ -1,3 +1,25 @@
+## October 24 EDT C134 — corrected controller built and qualified; production admission open
+
+The corrected normal-release controller is built from published source
+`3f272767c96b4113902a547efea804b76cd46eae`. SHA-256:
+`86f00f6e333a8988171fb30f2a1c09547c746586d339fc340a6785664acbb7cc`.
+Both twelve-second read-only loopback starts passed: missing/wrong auth 401,
+valid auth 200 with ten tools, natural exit and listener cleanup. All 361 pinned
+development/history files remain exact; v77/v76 and project/native ownership stay
+preserved. No browser, Wake, recurring automation or external runtime was started.
+
+This is a qualified separate controller, **not a producer-attested or installed
+production release**. The concrete admission gap is the legacy completed-review
+path's deliberate Sol OS-isolation refusal. Native queue operator decisions and
+external source-review JSON cannot replace its acknowledged review/snapshot chain.
+Resolve that integration through reviewed source work; do not switch models,
+fabricate legacy records, rewrite checksums or relabel a development predecessor
+as trusted canonical rollback authority. No new operator action is identified.
+Remote source CI remains unverified (zero exact-SHA runs/checks). Production
+reconciliation, installed rollback and actual two-conversation Web coding remain
+open; the October 27 date deferral stays superseded and the goal stays active.
+Evidence: `docs/verification/C134_CORRECTED_CONTROLLER_QUALIFICATION_2026_10_24.json`.
+
 ## October 24 EDT C130 — producer gates fixed; parallel target-read regression resolved
 
 Independent source review exposed three producer defects. Snapshot creation and
