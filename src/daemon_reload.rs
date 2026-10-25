@@ -1537,6 +1537,7 @@ pub fn run_release_pair_reconcile_worker(
     let mut staged = false;
     let mut released = false;
     let mut owned: Option<OwnedCandidateChild> = None;
+    let mut spawn_quiescence_proven = true;
     let mut owner_pid = None;
     let outcome = (|| -> Result<&'static str, String> {
         validate_release_pair_fixed_inputs(&workspace, &authorized)?;
@@ -1580,7 +1581,10 @@ pub fn run_release_pair_reconcile_worker(
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
-        let candidate = OwnedCandidateChild::spawn(&mut command)?;
+        let candidate = OwnedCandidateChild::spawn_classified(&mut command).map_err(|failure| {
+            spawn_quiescence_proven = failure.quiescence_proven();
+            failure.message()
+        })?;
         owner_pid = Some(candidate.pid());
         owned = Some(candidate);
         let child = owned.as_mut().ok_or("candidate owner is unavailable")?;
@@ -1669,7 +1673,7 @@ pub fn run_release_pair_reconcile_worker(
         Err(_) if !released => {
             let quiescent = match owned.as_mut() {
                 Some(child) => child.terminate_tree_and_confirm_quiescent().is_ok(),
-                None => {
+                None if spawn_quiescence_proven => {
                     prove_release_pair_empty_listener().is_ok()
                         && run_release_pair_phase(
                             &workspace,
@@ -1681,6 +1685,7 @@ pub fn run_release_pair_reconcile_worker(
                         )
                         .is_ok()
                 }
+                None => false,
             };
             if quiescent
                 && staged
@@ -3132,6 +3137,118 @@ mod tests {
             recovery_helper_sha256: "7".repeat(64),
             powershell_sha256: "8".repeat(64),
         }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn powershell_accepts_actual_rust_promotion_schema_and_rejects_stale_or_changed_proofs() {
+        use crate::reviewed_source_snapshot::{
+            ReviewedSourceBaselineObservationV1, ReviewedSourceCurrentOutputV1,
+        };
+        use base64::Engine as _;
+        let root = temp_workspace("promotion-wire-schema");
+        let expected = ReviewedSourceSnapshotExpectedV1 {
+            session_id: "fixture-session".into(),
+            project_id: "catdesk".into(),
+            approved_contract_hash: "a".repeat(64),
+            logical_task_id: "fixture-task".into(),
+            completion_artifact_ids: vec!["review/report.md".into()],
+            current_outputs: vec![ReviewedSourceCurrentOutputV1 {
+                artifact_id: "review/report.md".into(),
+                sha256: "b".repeat(64),
+            }],
+            baseline_observations: vec![ReviewedSourceBaselineObservationV1 {
+                artifact_id: "review/report.md".into(),
+                state: "ABSENT".into(),
+                sha256: None,
+            }],
+        };
+        let authorization = ReviewedPromotionAuthorizationV1 {
+            schema_version: 1,
+            generation: 1,
+            authorization_id: "c".repeat(32),
+            expires_at_unix: now_unix() + 120,
+            candidate_relative_path: "candidate.exe".into(),
+            candidate_sha256: "d".repeat(64),
+            prior_canonical_sha256: "e".repeat(64),
+            promotion_script_sha256: "f".repeat(64),
+            trusted_powershell_path: "fixture-interpreter".into(),
+            trusted_powershell_sha256: "1".repeat(64),
+            review_session_id: "fixture-session".into(),
+            review_record_id: "fixture-review".into(),
+            review_record_sha256: "2".repeat(64),
+            transaction_id: "3".repeat(32),
+            claim_id: "4".repeat(32),
+            build_attestation_sha256: "5".repeat(64),
+            build_attempt_id: "6".repeat(32),
+            snapshot_id: "7".repeat(64),
+            snapshot_authority_digest: "8".repeat(64),
+            snapshot_manifest_digest: "9".repeat(64),
+            build_policy_sha256: "a".repeat(64),
+            cargo_sha256: "b".repeat(64),
+            rustc_sha256: "c".repeat(64),
+            snapshot_expected: expected,
+        };
+        let input = root.join("rust-serialized-authorization.json");
+        fs::write(&input, serde_json::to_vec(&authorization).unwrap()).unwrap();
+        let source = base64::engine::general_purpose::STANDARD.encode(include_bytes!(
+            "../scripts/promote-reviewed-catdesk-build.ps1"
+        ));
+        let driver = root.join("validate-fixture.ps1");
+        fs::write(&driver, format!(r#"
+param([string]$InputPath,[string]$Mode)
+$ErrorActionPreference='Stop'
+$source=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{source}'))
+$tokens=$null;$errors=$null
+$ast=[Management.Automation.Language.Parser]::ParseInput($source,[ref]$tokens,[ref]$errors)
+if($errors.Count){{throw 'source parse failed'}}
+$defs=@($ast.FindAll({{param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Assert-PromotionAuthorizationRecord'}},$true))
+if($defs.Count -ne 1){{throw 'consumer missing'}}
+Invoke-Expression $defs[0].Extent.Text
+$record=Get-Content -LiteralPath $InputPath -Raw|ConvertFrom-Json
+switch($Mode){{
+ 'legacy' {{ foreach($name in @('buildAttestationSha256','buildAttemptId','snapshotId','snapshotAuthorityDigest','snapshotManifestDigest','buildPolicySha256','cargoSha256','rustcSha256','snapshotExpected')){{$record.PSObject.Properties.Remove($name)}} }}
+ 'bad-hash' {{ $record.cargoSha256='unknown' }}
+ 'wrong-session' {{ $record.snapshotExpected.session_id='other-session' }}
+ 'wrong-output' {{ $record.snapshotExpected.current_outputs[0].artifactId='other/report.md' }}
+ 'extra' {{ $record|Add-Member -NotePropertyName callerOverride -NotePropertyValue $true }}
+}}
+Assert-PromotionAuthorizationRecord $record
+'ACTUAL_RUST_SCHEMA_ACCEPTED'
+"#)).unwrap();
+        let powershell = crate::operator_facade::trusted_windows_powershell(&root).unwrap();
+        for mode in [
+            "valid",
+            "legacy",
+            "bad-hash",
+            "wrong-session",
+            "wrong-output",
+            "extra",
+        ] {
+            let output = Command::new(&powershell)
+                .args([
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                ])
+                .arg(&driver)
+                .arg(&input)
+                .arg(mode)
+                .output()
+                .unwrap();
+            assert_eq!(
+                output.status.success(),
+                mode == "valid",
+                "wire mode {mode}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        let resolved = root.canonicalize().unwrap();
+        assert!(resolved.starts_with(std::env::temp_dir().canonicalize().unwrap()));
+        fs::remove_dir_all(resolved).unwrap();
     }
 
     #[test]

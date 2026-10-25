@@ -1,0 +1,212 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C115_C116_AUTHORIZED_PRODUCTION_PREPARATION_AND_REVIEW_BLOCKER_FIXES",
+  "recordedUtc": "2026-10-25T01:20:24.6210000+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "sourceBaseCommit": "af2ad2ee4d2c44f3df58f8b87c2df849df7127a2",
+  "testedSource": "FOUR_MODIFIED_PRODUCT_FILES_BOUND_BY_SOURCE_PINS_PENDING_PUBLICATION",
+  "sourcePins": [
+    {
+      "sha256": "585b7910343760f905e21eb5ec028691ce07a3c7b478633529fe637485e9eea1",
+      "path": "src/operator_development_backend.rs"
+    },
+    {
+      "sha256": "79b36774509921761b0d09326823e903cd50293f08602df372b720b1e6eb433d",
+      "path": "src/reviewed_candidate_owner.rs"
+    },
+    {
+      "sha256": "333df1364c50d2b9f74052f4888259688918883e2dd9757b3ffedf7b1a4efe0c",
+      "path": "src/daemon_reload.rs"
+    },
+    {
+      "sha256": "63f10964b0900d3099420120d299bdf11dec754cbfbc72a30522ec54cb5792e0",
+      "path": "scripts/promote-reviewed-catdesk-build.ps1"
+    }
+  ],
+  "branch": "codex/web-rollover-oct17",
+  "qualification": "SOURCE_AND_DISPOSABLE_NATIVE_FIXTURES_NOT_PRODUCTION_PROMOTION",
+  "authorization": "OCT27_DEFERRAL_SUPERSEDED_OPERATOR_AUTHORIZED_SUPPORTED_QUALIFIED_PROMOTION_NOW",
+  "preparation": {
+    "untrackedFilesPreserved": 10,
+    "normalCandidateSource": "9c81bc2a788d8621622381b3ccdbbdb0623da3ec",
+    "canonicalImageChanged": false,
+    "candidateProducerAttested": false,
+    "candidateBytes": 35155968,
+    "candidateDisposition": "HOLD_KNOWN_REVIEW_BLOCKERS_NEW_FIXED_SOURCE_REQUIRES_FRESH_REVIEW_AND_BUILD",
+    "canonicalSourceFastForward": "5cedbb78ea5e6af90fd8aa1f2b3282aebd551548_TO_af2ad2ee4d2c44f3df58f8b87c2df849df7127a2",
+    "separateNormalCandidateSha256": "4f9f881da0d7b2eed6946dd42c3820bc5d4eaa480f9edaeab05d8ebdc3031c47",
+    "trackedSourceFilesAdvanced": 176
+  },
+  "independentReview": {
+    "productionAuthorityCreated": false,
+    "existingSessionResumes": 0,
+    "reducedScope": "200_ALLOWLISTED_PUBLIC_GIT_OBJECTS_NO_CANONICAL_UNTRACKED_RUNTIME_OR_BROWSER_DATA",
+    "fileReadAttempt": "INCONCLUSIVE_EXECUTION_POLICY_DENIED_READS_NO_APPROVAL",
+    "manifestSha256": "f96a225167a72f5661957a18aa004348dad138f112f23a460ed25db882a250a9",
+    "normalNativeExit": true,
+    "requestedModel": "gpt-6.1-sol",
+    "followupReviewOfFixes": "PENDING",
+    "maximumSeconds": 180,
+    "inlineSeconds": 61.5327374,
+    "inlineResult": {
+      "limitations": [
+        "Reviewed only the supplied text; no tools, file reads, execution, or policy changes.",
+        "Source hashes, runtime behavior, and CI acceptance were not independently verified.",
+        "Source snapshot, independent review resolution, producer attestation, and omitted invocation-runner implementations require separate review."
+      ],
+      "inspectedPaths": [
+        "src/daemon_reload.rs",
+        "src/reviewed_candidate_owner.rs",
+        "scripts/reconcile-reviewed-catdesk-release-pair.ps1",
+        "scripts/promote-reviewed-catdesk-build.ps1",
+        "scripts/catdesk-release-recovery.ps1"
+      ],
+      "sourceCommit": "af2ad2ee4d2c44f3df58f8b87c2df849df7127a2",
+      "sourceReviewVerdict": "BLOCKED",
+      "approvedForProtectedBuild": false,
+      "recommendation": "Fix the promotion authorization schema mismatch and preserve whole-tree quiescence requirements across spawn setup failures, then repeat source review. Complete the remaining review stages before protected-build approval.",
+      "findings": [
+        {
+          "description": "The PowerShell authorization validator accepts exactly 15 properties, but ReviewedPromotionAuthorizationV1 in src/daemon_reload.rs serializes additional attestation, snapshot, toolchain, and snapshotExpected properties. Consequently, authorization produced by the supplied Rust implementation always fails this field-count check, preventing normal reviewed promotion. Update the consumer schema and validate the added bindings.",
+          "severity": "HIGH",
+          "line": 163,
+          "path": "scripts/promote-reviewed-catdesk-build.ps1"
+        },
+        {
+          "description": "After candidate code has resumed, a Job-membership verification failure terminates the Job and waits only for the root child before returning an error. It never proves that Job active_processes reached zero. The reconciliation caller receives no OwnedCandidateChild, takes its owned=None cleanup branch, and can authorize rollback using only an empty listener and absence of canonical catdesk processes. A differently named descendant can still be terminating while original release bytes are restored. Preserve ownership on this failure path or require complete Job-accounting quiescence before allowing rollback.",
+          "severity": "HIGH",
+          "line": 299,
+          "path": "src/reviewed_candidate_owner.rs"
+        }
+      ]
+    },
+    "inlinePayloadSha256": "c5259359b59202d6bd161fa9aec02532af917f8e060445595c16e2fec7121e5e",
+    "requestedEffort": "medium",
+    "firstCanonicalWorkspaceInvocation": "REJECTED_BY_AUTOMATIC_APPROVAL_BEFORE_EXECUTION_UNTRACKED_EGRESS_RISK",
+    "inlineStage": "FIVE_PUBLIC_SOURCE_FILES_SUPPLIED_DIRECTLY_NO_TOOLS_OR_PERMISSION_CHANGE",
+    "nativeCliVersion": "0.163.0"
+  },
+  "implementation": {
+    "newTrustFramework": false,
+    "developmentBackend": "RETAINS_CONSERVATIVE_UNPROVEN_OWNER_REFUSAL",
+    "jobStartup": "MEMBERSHIP_CHECK_BEFORE_RESUME_WHOLE_JOB_DRAIN_ON_SETUP_FAILURE_TYPED_UNPROVEN_OWNER",
+    "promotionAuthorization": "CURRENT_24_FIELD_RUST_SCHEMA_CONSUMED_WITH_PRODUCER_HASH_AND_SNAPSHOT_OUTPUT_BINDING_CHECKS_8192_BYTE_BOUND",
+    "reconciliation": "NO_EMPTY_OWNER_ROLLBACK_WITHOUT_SPAWN_QUIESCENCE_PROOF",
+    "legacyRetired": 0
+  },
+  "verification": {
+    "steps": [
+      {
+        "seconds": 58.2471789,
+        "name": "canonical-release-and-wire-schema",
+        "summaries": [
+          "test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 1682 filtered out; finished in 2.98s"
+        ],
+        "exitCode": 0,
+        "logSha256": "6990b312ae909cf6bde16512bb816ee81a57ca800635e8d6a79380412bc31a88"
+      },
+      {
+        "seconds": 1.462071,
+        "name": "native-whole-tree-owner",
+        "summaries": [
+          "test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 1689 filtered out; finished in 0.80s"
+        ],
+        "exitCode": 0,
+        "logSha256": "0921e0a3b6cd7d09d4e97555b34bbd64a68a53abff45f18ab241a374a1f1468b"
+      },
+      {
+        "seconds": 0.9462586,
+        "name": "existing-bounded-backend",
+        "summaries": [
+          "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 1696 filtered out; finished in 0.30s"
+        ],
+        "exitCode": 0,
+        "logSha256": "7850ce1e80fe62457b357522aced6c956ae8b47db5242908af72b0732f78ad9c"
+      },
+      {
+        "seconds": 1.6219007,
+        "name": "source-snapshot-authority",
+        "summaries": [
+          "test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 1674 filtered out; finished in 1.00s"
+        ],
+        "exitCode": 0,
+        "logSha256": "65c8fd5d97d375229cd5e6967ed869724067be3ff21ae7f6fe086d5761c068fd"
+      },
+      {
+        "seconds": 18.9762809,
+        "name": "strict-root-clippy",
+        "summaries": [],
+        "exitCode": 0,
+        "logSha256": "bcfea43cef5f9047e180648d8ef186b9c818876cf33c4994a5d29c897ec5285c"
+      },
+      {
+        "seconds": 3.1172387,
+        "name": "root-format",
+        "summaries": [],
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "sourceFrozen": true,
+    "installedRollback": "NOT_TESTED",
+    "rustJobMaximumSeconds": 600,
+    "actualRustSerializerToWindowsPowerShell": "VALID_CURRENT_SCHEMA_ACCEPTED_LEGACY_MISSING_BAD_HASH_WRONG_SESSION_WRONG_OUTPUT_AND_EXTRA_FIELDS_REFUSED",
+    "newNormalReleaseBuild": "NOT_YET_RUN",
+    "rustTestsPassed": 59,
+    "initialHarness": "POWERSHELL7_TIMESTAMP_COERCION_FAILED_RELEASE_MARKER_COMPARISON_RETAINED_NOT_PRODUCTION_FAILURE",
+    "powershellInterpreter": "FIXED_WINDOWS_POWERSHELL_5",
+    "format": "PASS",
+    "strictClippy": "PASS_WORKSPACE_ALL_TARGETS_ALL_FEATURES",
+    "actualReconciliationPrepare": "NOT_RUN_NO_FRESH_REVIEW_OR_ATTESTED_FIXED_CANDIDATE",
+    "ordinaryProductionPlan": {
+      "schemaVersion": 1,
+      "command": "promote-reviewed-catdesk-build",
+      "state": "OPERATOR_ATTENTION_INVALID",
+      "candidateValidated": false,
+      "canonicalReleaseValidated": false,
+      "promotionRequired": false,
+      "tunnelAction": "NONE"
+    },
+    "rustIgnored": 0,
+    "powershellFixtureSuites": [
+      {
+        "seconds": 1.5590645,
+        "logSha256": "c68347acfc360c1b365e88c54d12a1ce44ff44cc465b1eb853943effc12d39a9",
+        "exitCode": 0,
+        "sourceSha256": "ad9e5e7f9b8bd25f27d64ccd3986705cc3e43a977b9faf8729ea3dc37b2dc2de",
+        "name": "scripts/test-reconcile-reviewed-catdesk-release-pair.ps1"
+      },
+      {
+        "seconds": 4.6782423,
+        "logSha256": "554737e9489b54469a8ee8a7fbee0b0bf32099a1b772d77159e8c9f624f293dd",
+        "exitCode": 0,
+        "sourceSha256": "6b04a63c25e746e0c252c94a2966ef2b1ae97995134eb818869f031b14e4e3a9",
+        "name": "scripts/test-promote-reviewed-catdesk-build.ps1"
+      }
+    ],
+    "nativeDescendant": "REAL_RESUMED_CHILD_CREATED_DESCENDANT_THEN_INJECTED_RESUME_ERROR_ENTIRE_JOB_DRAIN_AND_RETAINED_DESCENDANT_HANDLE_EXIT_PROVED",
+    "powershellMaximumSeconds": 180
+  },
+  "preservation": {
+    "projectBindingChanges": 0,
+    "nativeSessionActions": 0,
+    "developmentV77V76": "UNCHANGED",
+    "canonicalSidecarFileSha256": "c030e9f10275432743e5fd07987ebf9425ca44b1fa3d516ca2ff4f417afdb58c",
+    "productionPromotionExecuted": false,
+    "browserWakeStarts": 0,
+    "canonicalBinarySha256": "9a8f4ebf6ea57cbb61efaa12e8afa54d18b8db7374b9884067325bc84565568c",
+    "externalRuntimeActions": 0,
+    "runtimeRecordsExact": 306,
+    "historicalAuthorityFilesExact": 55,
+    "canonicalPairChanged": false,
+    "completedCanariesReplayed": 0
+  },
+  "acceptance": {
+    "productionBackend": "NOT_RESTORED",
+    "fullOctoberMilestone": "OPEN",
+    "protectedRollback": "OPEN_NO_EXISTING_TRUSTED_PRODUCTION_PREDECESSOR_ESTABLISHED",
+    "actualWebCodingBC": "OPEN",
+    "remoteCi": "UNVERIFIED"
+  },
+  "nextTask": "Obtain focused follow-up independent review of the two fixes and complete review of source snapshot/producer admission. Use only a genuine supported completed-review/snapshot chain; then run the reviewed producer for the fixed source, qualify that exact candidate and execute the existing release-pair prepare/confirm/result route when every gate passes. No date deferral remains. Keep production, external connector and actual Web acceptance separate."
+}

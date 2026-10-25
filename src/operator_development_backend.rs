@@ -391,7 +391,7 @@ fn attempt_backend(
             false,
             match failure {
                 SpawnFailure::NoChildCreated => ExitProof::NoChildCreated,
-                SpawnFailure::Owner(_) => ExitProof::Unproven,
+                SpawnFailure::Owner(_) | SpawnFailure::UnprovenOwner(_) => ExitProof::Unproven,
             },
         )
     })?;

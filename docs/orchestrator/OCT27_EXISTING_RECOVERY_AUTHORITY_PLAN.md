@@ -1,4 +1,25 @@
-# October 27 recovery plan: reconcile existing authority
+## October 24 EDT C115/C116 — production authorized now; two release blockers fixed
+
+The operator superseded the October 27 deferral. Canonical source fast-forwarded
+to published `af2ad2e` without changing its executable/sidecar or ten untracked
+files; the checksum-verified normal candidate was staged separately. A bounded
+independent public-source review identified a stale PowerShell authorization schema
+and unproven whole-Job cleanup after spawn setup failure. Both are fixed in source.
+The candidate is held; the corrected source needs fresh review and producer build.
+
+59 targeted Rust tests, strict Clippy/format and both release PowerShell fixture
+suites passed. New regressions use actual Rust serialization and a real resumed
+child/descendant. Production was not promoted, installed rollback was not tested,
+and actual Web coding remains open. All 306 runtime and 55 historical records
+remain exact; no Wake/browser/tunnel or other native-session action occurred.
+The old ordinary plan correctly refuses this divergent pair. The supported route
+is reviewed release-pair reconciliation once its real gates pass, with no date hold.
+
+Complete commands, parameters, prerequisites, failure states and rollback limits:
+`docs/orchestrator/CATDESK_PRODUCTION_RELEASE_LIFECYCLE.md`.
+Evidence: `docs/verification/C116_PRODUCTION_REVIEW_BLOCKER_FIXES_2026_10_24.json`.
+
+# Supported production recovery: existing authority and current authorization
 
 Observed October 24, 2026. Classification: **READ_ONLY_HOST_HISTORY**.
 Recovery, protected deployment and actual parallel Web coding remain unaccepted.
@@ -82,10 +103,9 @@ The last official Secure MCP status was stopped, and the connector returned
 HTTP 429. Those are separate observations. Local port-3200 restoration neither
 proves external runtime recovery nor guarantees that HTTP 429 will disappear.
 
-## October 27: minimum operator boundary
+## Current execution boundary — October 24 authorization
 
-No automatic action is scheduled. Before October 27, perform no startup, recovery,
-promotion, signing/rotation, autostart enablement or external-runtime action.
+The operator has superseded the October 27 deferral. Qualified bounded promotion/recovery is authorized now; all evidence and ownership gates remain. No recurring activation or external tunnel change is implied.
 
 1. **Review the existing authority disposition.** Supply any independently preserved
    producer attestation / reviewed-promotion chain through the existing verifier.

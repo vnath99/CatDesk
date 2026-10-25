@@ -1,3 +1,24 @@
+## October 24 EDT C115/C116 — production authorized now; two release blockers fixed
+
+The operator superseded the October 27 deferral. Canonical source fast-forwarded
+to published `af2ad2e` without changing its executable/sidecar or ten untracked
+files; the checksum-verified normal candidate was staged separately. A bounded
+independent public-source review identified a stale PowerShell authorization schema
+and unproven whole-Job cleanup after spawn setup failure. Both are fixed in source.
+The candidate is held; the corrected source needs fresh review and producer build.
+
+59 targeted Rust tests, strict Clippy/format and both release PowerShell fixture
+suites passed. New regressions use actual Rust serialization and a real resumed
+child/descendant. Production was not promoted, installed rollback was not tested,
+and actual Web coding remains open. All 306 runtime and 55 historical records
+remain exact; no Wake/browser/tunnel or other native-session action occurred.
+The old ordinary plan correctly refuses this divergent pair. The supported route
+is reviewed release-pair reconciliation once its real gates pass, with no date hold.
+
+Complete commands, parameters, prerequisites, failure states and rollback limits:
+`docs/orchestrator/CATDESK_PRODUCTION_RELEASE_LIFECYCLE.md`.
+Evidence: `docs/verification/C116_PRODUCTION_REVIEW_BLOCKER_FIXES_2026_10_24.json`.
+
 ## October 24 EDT C111 — selected development current/previous and actual MCP health
 
 The existing isolated development runtime now selects the normal C109 package

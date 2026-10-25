@@ -148,6 +148,41 @@ function Write-PromotionTransaction([string]$Root, [string]$PriorHash, [string]$
     return (Get-PromotionTransaction $Root)
 }
 
+function Assert-PromotionAuthorizationRecord($Record) {
+    # Match the current Rust ReviewedPromotionAuthorizationV1 producer. Full
+    # snapshot/producer remeasurement remains in the native reviewed worker;
+    # this consumer must retain, rather than discard, those exact bindings.
+    $required = @('schemaVersion','generation','authorizationId','expiresAtUnix','candidateRelativePath','candidateSha256','priorCanonicalSha256','promotionScriptSha256','trustedPowershellPath','trustedPowershellSha256','reviewSessionId','reviewRecordId','reviewRecordSha256','transactionId','claimId','buildAttestationSha256','buildAttemptId','snapshotId','snapshotAuthorityDigest','snapshotManifestDigest','buildPolicySha256','cargoSha256','rustcSha256','snapshotExpected')
+    $names = @($Record.PSObject.Properties.Name)
+    if ($names.Count -ne $required.Count -or @($names | Where-Object { $_ -notin $required }).Count -ne 0) { throw 'invalid' }
+    foreach ($name in @('buildAttestationSha256','snapshotId','snapshotAuthorityDigest','snapshotManifestDigest','buildPolicySha256','cargoSha256','rustcSha256')) {
+        if ([string]$Record.$name -cnotmatch '^[a-f0-9]{64}$') { throw 'invalid' }
+    }
+    if ([string]$Record.buildAttemptId -cnotmatch '^[a-f0-9]{32}$' -or [string]$Record.claimId -cnotmatch '^[a-f0-9]{32}$') { throw 'invalid' }
+    $expected = $Record.snapshotExpected
+    $fields = @('session_id','project_id','approved_contract_hash','logical_task_id','completion_artifact_ids','current_outputs','baseline_observations')
+    $actual = @($expected.PSObject.Properties.Name)
+    if ($actual.Count -ne $fields.Count -or @($actual | Where-Object { $_ -notin $fields }).Count -ne 0 -or [string]$expected.session_id -cne [string]$Record.reviewSessionId -or [string]$expected.project_id -cne 'catdesk' -or [string]$expected.approved_contract_hash -cnotmatch '^[a-f0-9]{64}$' -or [string]$expected.logical_task_id -cnotmatch '^[A-Za-z0-9_-]{1,128}$') { throw 'invalid' }
+    $ids = @($expected.completion_artifact_ids)
+    $outputs = @($expected.current_outputs)
+    $baselines = @($expected.baseline_observations)
+    if ($ids.Count -lt 1 -or $outputs.Count -ne $ids.Count -or $baselines.Count -ne $ids.Count) { throw 'invalid' }
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($id in $ids) {
+        if ($id -isnot [string] -or -not $id -or [IO.Path]::IsPathRooted($id) -or $id -match '(^|[\\/])\.\.([\\/]|$)|[\x00-\x1f]' -or -not $seen.Add($id)) { throw 'invalid' }
+        $output = @($outputs | Where-Object { [string]$_.artifactId -ceq $id })
+        $baseline = @($baselines | Where-Object { [string]$_.artifactId -ceq $id })
+        if ($output.Count -ne 1 -or $baseline.Count -ne 1) { throw 'invalid' }
+        $output = $output[0]; $baseline = $baseline[0]
+        if (@($output.PSObject.Properties.Name).Count -ne 2 -or @($output.PSObject.Properties.Name | Where-Object { $_ -notin @('artifactId','sha256') }).Count -ne 0 -or [string]$output.sha256 -cnotmatch '^[a-f0-9]{64}$' -or @($baseline.PSObject.Properties.Name).Count -ne 3 -or @($baseline.PSObject.Properties.Name | Where-Object { $_ -notin @('artifactId','state','sha256') }).Count -ne 0) { throw 'invalid' }
+        if ([string]$baseline.state -ceq 'ABSENT') {
+            if ($null -ne $baseline.sha256) { throw 'invalid' }
+        } elseif ([string]$baseline.state -ceq 'PRESENT_SHA256') {
+            if ([string]$baseline.sha256 -cnotmatch '^[a-f0-9]{64}$' -or [string]$baseline.sha256 -ceq [string]$output.sha256) { throw 'invalid' }
+        } else { throw 'invalid' }
+    }
+}
+
 function Get-ProtectedPromotionAuthorization([string]$Root, [string]$Token, [string]$TransactionId, [string]$Candidate, [string]$CandidateHash, [string]$PriorHash) {
     $seamed = Invoke-PromotionSeam -Name 'ProtectedAuthorization' -Arguments @($Root, $Token, $TransactionId, $Candidate, $CandidateHash, $PriorHash) -Default { param($ignoredRoot, $ignoredToken, $ignoredTransaction, $ignoredCandidate, $ignoredCandidateHash, $ignoredPriorHash) $null }
     if ($null -ne $seamed) { return $seamed }
@@ -156,11 +191,9 @@ function Get-ProtectedPromotionAuthorization([string]$Root, [string]$Token, [str
     try {
         $path = Assert-CatDeskRecoveryContainedPath -Root $Root -Path $path -Label 'reviewed promotion authorization'
         $item = Get-Item -LiteralPath $path -Force -ErrorAction Stop
-        if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.Length -lt 1 -or $item.Length -gt 4096) { throw 'invalid' }
+        if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.Length -lt 1 -or $item.Length -gt 8192) { throw 'invalid' }
         $record = [IO.File]::ReadAllText($path) | ConvertFrom-Json -ErrorAction Stop
-        $required = @('schemaVersion','generation','authorizationId','expiresAtUnix','candidateRelativePath','candidateSha256','priorCanonicalSha256','promotionScriptSha256','trustedPowershellPath','trustedPowershellSha256','reviewSessionId','reviewRecordId','reviewRecordSha256','transactionId','claimId')
-        $names = @($record.PSObject.Properties.Name)
-        if ($names.Count -ne $required.Count -or @($names | Where-Object { $_ -notin $required }).Count -ne 0) { throw 'invalid' }
+        Assert-PromotionAuthorizationRecord $record
         if ($record.schemaVersion -ne 1 -or [string]$record.authorizationId -ne $Token -or [string]$record.transactionId -ne $TransactionId -or [string]$record.transactionId -notmatch '^[0-9a-f]{32}$' -or [int64]$record.generation -lt 1 -or [int64]$record.expiresAtUnix -lt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) { throw 'invalid' }
         if ([string]$record.candidateSha256 -ne $CandidateHash -or [string]$record.priorCanonicalSha256 -ne $PriorHash -or [string]$record.promotionScriptSha256 -ne (Get-PromotionHash $PSCommandPath)) { throw 'invalid' }
         if ([string]$record.candidateRelativePath -ne (Get-WorkspaceRelativePath -Root $Root -Path $Candidate -Label 'reviewed promotion candidate')) { throw 'invalid' }

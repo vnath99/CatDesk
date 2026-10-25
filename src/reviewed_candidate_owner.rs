@@ -252,14 +252,21 @@ mod windows {
         NoChildCreated,
         /// Ownership/setup failure is not authority to launch another image.
         Owner(String),
+        /// A child may have run and complete Job exit was not proved. Losing
+        /// the returned owner is never permission to restore mapped files.
+        UnprovenOwner(String),
     }
 
     impl SpawnFailure {
-        fn message(self) -> String {
+        pub(crate) fn message(self) -> String {
             match self {
                 Self::NoChildCreated => "reviewed candidate child spawn failed".into(),
-                Self::Owner(message) => message,
+                Self::Owner(message) | Self::UnprovenOwner(message) => message,
             }
+        }
+
+        pub(crate) fn quiescence_proven(&self) -> bool {
+            !matches!(self, Self::UnprovenOwner(_))
         }
     }
 
@@ -278,35 +285,66 @@ mod windows {
         }
 
         pub(crate) fn spawn_classified(command: &mut Command) -> Result<Self, SpawnFailure> {
+            Self::spawn_with_resume(command, |child| {
+                if unsafe { NtResumeProcess(child.as_raw_handle().cast()) } < 0 {
+                    Err("reviewed candidate child resume failed".into())
+                } else {
+                    Ok(())
+                }
+            })
+        }
+
+        fn spawn_with_resume(
+            command: &mut Command,
+            resume: impl FnOnce(&mut Child) -> Result<(), String>,
+        ) -> Result<Self, SpawnFailure> {
             let job = KillOnCloseJob::create().map_err(SpawnFailure::Owner)?;
             // Keep console Ctrl+C on the parent so its bounded stdin stop
             // controls the child's graceful journal/root retirement.
             command.creation_flags(CREATE_SUSPENDED | CREATE_NEW_PROCESS_GROUP);
-            let mut child = command.spawn().map_err(|_| SpawnFailure::NoChildCreated)?;
-            if let Err(error) = job.assign(&child) {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(SpawnFailure::Owner(error));
-            }
-            if unsafe { NtResumeProcess(child.as_raw_handle().cast()) } < 0 {
-                drop(job);
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(SpawnFailure::Owner(
-                    "reviewed candidate child resume failed".into(),
-                ));
-            }
-            if let Err(error) = job.contains(&child) {
-                let _ = job.terminate();
-                let _ = child.wait();
-                return Err(SpawnFailure::Owner(error));
-            }
-            Ok(Self {
+            let child = command.spawn().map_err(|_| SpawnFailure::NoChildCreated)?;
+            let mut owner = Self {
                 child: Some(child),
                 job,
                 disarmed: false,
                 released: false,
-            })
+            };
+            if let Err(error) = owner.job.assign(owner.child.as_ref().unwrap()) {
+                // Candidate user code is still suspended, so no descendant
+                // can have been created. Prove the exact root and empty Job.
+                let _ = owner.child_mut().kill();
+                let root_exited = owner
+                    .wait_until(Instant::now() + Duration::from_secs(10))
+                    .unwrap_or(false);
+                if root_exited {
+                    drop(owner.child.take());
+                }
+                return Err(
+                    if root_exited && owner.job.active_processes().ok() == Some(0) {
+                        SpawnFailure::Owner(error)
+                    } else {
+                        SpawnFailure::UnprovenOwner(error)
+                    },
+                );
+            }
+            // Verify membership before any candidate code is resumed.
+            if let Err(error) = owner.job.contains(owner.child.as_ref().unwrap()) {
+                return Err(owner.failed_startup(error));
+            }
+            if let Err(error) = resume(owner.child_mut()) {
+                // A resume failure may be partial. Retain the Job until the
+                // existing whole-tree drain proves zero active processes.
+                return Err(owner.failed_startup(error));
+            }
+            Ok(owner)
+        }
+
+        fn failed_startup(mut self, error: String) -> SpawnFailure {
+            if self.terminate_tree_and_confirm_quiescent().is_ok() {
+                SpawnFailure::Owner(error)
+            } else {
+                SpawnFailure::UnprovenOwner(error)
+            }
         }
 
         /// A reconciliation worker must not inherit a second, unrelated Job:
@@ -482,6 +520,7 @@ mod windows {
     mod tests {
         use super::OwnedCandidateChild;
         use std::io::{BufRead, BufReader, Write};
+        use std::os::windows::io::AsRawHandle;
         use std::process::{Command, Stdio};
         use std::time::Duration;
 
@@ -508,6 +547,59 @@ mod windows {
                     .unwrap(),
                 "reviewed candidate child spawn failed"
             );
+        }
+
+        #[test]
+        fn partial_resume_failure_drains_real_descendant_before_proving_quiescence() {
+            use super::SpawnFailure;
+            let mut command = Command::new(std::env::current_exe().unwrap());
+            command
+                .args([
+                    "--exact",
+                    "reviewed_candidate_owner::windows::tests::child_with_descendant",
+                    "--nocapture",
+                ])
+                .env("CATDESK_OWNER_JOB_TEST_DESCENDANT", "1")
+                .stdout(Stdio::piped());
+            let mut descendant_wait = None;
+            let failure = OwnedCandidateChild::spawn_with_resume(&mut command, |child| {
+                if unsafe { super::NtResumeProcess(child.as_raw_handle().cast()) } < 0 {
+                    return Err("fixture resume failed".into());
+                }
+                let stdout = child.stdout.take().unwrap();
+                let (tx, rx) = std::sync::mpsc::channel();
+                std::thread::spawn(move || {
+                    for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                        if let Some(pid) = line.split("DESCENDANT_PID=").nth(1) {
+                            let _ = tx.send(pid.trim().parse::<u32>().unwrap());
+                            break;
+                        }
+                    }
+                });
+                let pid = rx
+                    .recv_timeout(Duration::from_secs(5))
+                    .map_err(|_| "fixture descendant not observed")?;
+                let handle = unsafe { OpenProcess(0x0010_0000, 0, pid) };
+                if handle.is_null() {
+                    return Err("fixture descendant handle unavailable".into());
+                }
+                let handle = handle as usize;
+                descendant_wait = Some(std::thread::spawn(move || {
+                    let handle = handle as *mut std::ffi::c_void;
+                    let outcome = unsafe { WaitForSingleObject(handle, 10_000) };
+                    unsafe { CloseHandle(handle) };
+                    outcome
+                }));
+                // Exercise a failed native resume after code and a separately
+                // named descendant have actually run inside the assigned Job.
+                Err("fixture partial resume failure".into())
+            })
+            .err()
+            .expect("injected startup failure");
+            assert_eq!(descendant_wait.unwrap().join().unwrap(), 0);
+            assert!(failure.quiescence_proven());
+            assert!(matches!(failure, SpawnFailure::Owner(_)));
+            assert!(!SpawnFailure::UnprovenOwner("unknown cleanup".into()).quiescence_proven());
         }
 
         #[test]
