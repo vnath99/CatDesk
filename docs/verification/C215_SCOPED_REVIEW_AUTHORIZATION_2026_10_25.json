@@ -124,5 +124,12 @@
     "Snapshot startup has a separate budget before its read deadline and hides intermediate progress; implement one total budget and redacted diagnostic stages before another live read.",
     "Production startup, authenticated connector, rollback and real two-conversation coding acceptance remain open."
   ],
-  "publication": "PENDING_COMMIT_AND_REMOTE_READBACK"
+  "publication": {
+    "remoteSha": "63e7ebc2c473919e7c7ff6f171ed8ec0081d5b09",
+    "implementationCommit": "63e7ebc2c473919e7c7ff6f171ed8ec0081d5b09",
+    "exactCommitCi": "NO_VISIBLE_WORKFLOW_RUNS_AT_READBACK",
+    "remoteVerifiedUtc": "2026-10-25T18:21:46.9734326+00:00",
+    "branch": "refs/heads/codex/web-rollover-oct17",
+    "repositoryVisibility": "PUBLIC_UNCHANGED"
+  }
 }

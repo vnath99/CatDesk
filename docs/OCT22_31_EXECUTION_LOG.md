@@ -1,5 +1,10 @@
 ## October 25 C215 — standing routine-review authorization
 
+Reviewed C215 source was published as
+[`63e7ebc2c473919e7c7ff6f171ed8ec0081d5b09`](https://github.com/vnath99/CatDesk/commit/63e7ebc2c473919e7c7ff6f171ed8ec0081d5b09)
+on `codex/web-rollover-oct17`; exact remote SHA readback matched at
+18:21:46 UTC. No workflow runs were visible for that exact commit. Public
+visibility is unchanged, and no private runtime artifacts were included.
 The user's standing authorization replaces repeated discretionary review-send
 questions within its stated scope. The implementation extends the existing
 per-project WebWork ledger with exact frozen batches, material review keys,

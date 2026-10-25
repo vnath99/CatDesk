@@ -1,5 +1,7 @@
 ## October 25 C215 — apply the standing read-only review instruction
 
+Published source checkpoint: `63e7ebc2c473919e7c7ff6f171ed8ec0081d5b09`; exact remote verified. CI remains unverified.
+
 C215 source is verified: 449 tests/one ignored and strict Clippy passed. C212 has
 one exact delivery receipt but no verified assistant body; both bounded reads
 have finished and cleanup preserved 477 records. Do not resend it. Continue
