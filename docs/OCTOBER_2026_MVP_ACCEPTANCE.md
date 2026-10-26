@@ -1,3 +1,18 @@
+## October 25 C228 — installed foreground serving and crash cleanup LIVE PASS
+
+The new bounded action served the actual trusted installed image: natural code-0
+completion, exact readiness metadata, 401 rejection, byte-verified MCP README
+read, and deliberate controller interruption with both owned children reaped.
+Job absence, lease availability, empty listener/process inventory and protected
+state preservation passed. Two prior aborted test histories remain intact.
+
+Accepted scope is unscoped read-only local foreground serving. Native/unattended
+startup, previous different-version rollback, project writes, official Secure MCP
+and real independent ChatGPT Web coding remain OPEN. Connector HTTP 429 remains
+a separate dependency. Next: qualify project-bound serving using the current
+registry and existing scope authority.
+[Evidence](verification/C228_INSTALLED_FOREGROUND_LIVE_2026_10_25.json).
+
 ## October 25 C227 — installed foreground action SOURCE PASS
 
 The explicit bounded foreground action now reuses settled release trust,

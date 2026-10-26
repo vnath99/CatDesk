@@ -1,3 +1,11 @@
+## October 25 C228 — actual installed foreground owner LIVE PASS
+
+Natural completion, wrong-token rejection, exact MCP read and deliberate
+controller-crash cleanup passed against the trusted installed image. No release,
+binding, native-session or recurring-automation changes occurred. Qualified scope
+is bounded local read-only serving; project-bound/Web acceptance remains next.
+[Evidence](docs/verification/C228_INSTALLED_FOREGROUND_LIVE_2026_10_25.json).
+
 ## October 25 C227 — explicit bounded installed owner SOURCE PASS
 
 Added the installed-image foreground command with exact settled-release trust,

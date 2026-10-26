@@ -1,6 +1,25 @@
+## October 25 C228 — foreground action qualified against the installation
+
+The C227 controller built from `2e7260a8d76edc55ba0915c59016c5d142b85286`
+has now passed actual installed foreground qualification. Controller SHA:
+`95cb2afa04d906c5aca3655aca684a0c3284dc0b9304f475204890d2d3723d3f`.
+Installed EXE remains the separately attested `91eea19e…28d14b`; no replacement
+candidate or promotion occurred.
+
+The command below is eligible using that exact qualified immutable controller,
+canonical working directory and a valid caller-process bearer. Readiness is
+`INSTALLED_HEADLESS_READY`, and natural completion reports
+`INSTALLED_HEADLESS_EXITED`. Whole-command startup/teardown limits still apply.
+Actual natural exit, authenticated read, wrong-token refusal and exact-controller
+interruption cleanup passed. Do not replay the completed qualification sessions.
+
+This is bounded read-only operation on the known local qualification route.
+It does not restore the external connector route, establish a native daemon or
+authorize project writes. [Evidence](../verification/C228_INSTALLED_FOREGROUND_LIVE_2026_10_25.json).
+
 ## October 25 C227 — new bounded installed foreground action
 
-**Source qualified; normal controller build and live action qualification pending.**
+**C227 source qualification record; C228 above records completed build and live qualification.**
 Use a newly qualified noncanonical controller containing C227. The installed C208
 image and previous C224 controller do not implement this command.
 
@@ -34,7 +53,7 @@ Two owned 60-second starts of the installed image passed authentication,
 read-only catalogue, real README reads and natural exits, followed by empty
 listener/owner checks. Do not rerun these checks without a new concern.
 
-There is currently no public installed-image foreground serving command.
+At C226 there was no public installed-image foreground serving command; C227/C228 above implement and qualify that action.
 The existing development foreground owner remains restricted to its selected
 development package. Do not substitute canonical bytes into that selector or
 append a native-daemon flag to a headless launch. Implement an explicit installed

@@ -1,5 +1,21 @@
 # CatDesk — Comprehensive handoff to Codex Desktop
 
+## Current installed foreground note — October 25 C228
+
+Actual C227 foreground qualification passed: natural code-0 exit, exact MCP
+README read, wrong-token401 and deliberate controller interruption reaping both
+backend and lease holder. Final Jobs/listener/process inventory is empty, lease
+is available and protected state is unchanged. Controller source is
+`2e7260a8d76edc55ba0915c59016c5d142b85286`; immutable controller SHA is
+`95cb2afa04d906c5aca3655aca684a0c3284dc0b9304f475204890d2d3723d3f`.
+
+Do not replay completed promotion, restart, review, rollover or foreground tests.
+Next eligible work is project-bound serving using the current registry and
+existing scope authority. Native/unattended operation, trusted different-version
+rollback and two-Web coding remain OPEN; official connector HTTP429 is separate
+and unchanged. No operator action is required for the completed recovery/tests.
+[Evidence](../verification/C228_INSTALLED_FOREGROUND_LIVE_2026_10_25.json).
+
 ## Current source note — October 25 C227
 
 The bounded `operator installed-backend run` action is source-qualified

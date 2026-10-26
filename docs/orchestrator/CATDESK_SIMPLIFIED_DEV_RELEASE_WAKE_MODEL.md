@@ -1,3 +1,13 @@
+## October 25 C228 — installed foreground ownership LIVE PASS
+
+The separately built qualified controller now serves the existing trusted
+installed image with bounded read-only operation. Natural exit and deliberate
+controller interruption both released the lifecycle lease and reaped the owned
+tree. No installed binary upgrade, development selection, release authority,
+binding or external runtime change was required. Native/unattended operation and
+project/Web integration remain separate gates.
+[Evidence](../verification/C228_INSTALLED_FOREGROUND_LIVE_2026_10_25.json).
+
 ## October 25 C227 — installed foreground ownership implemented in source
 
 A distinct bounded operator action now serves the already trusted installed

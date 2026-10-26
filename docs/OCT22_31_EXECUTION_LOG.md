@@ -1,3 +1,32 @@
+## October 25 C228 — actual foreground operation and interruption PASS
+
+At 01:22:24–01:23:48 UTC October 26 (October 25 locally), the qualified controller
+from published source `2e7260a8d76edc55ba0915c59016c5d142b85286` served the trusted
+installed C208 image through the new action. One 90-second command completed
+naturally with code 0. A second distinct command was deliberately killed after
+readiness through its retained process handle; its backend and lease holder
+were both proven members of its controller Job and both exited while the outer
+test owner remained alive. After each run the named Job was absent, the lifecycle
+lease was available and the installed port/process inventory was empty.
+
+Actual readiness and durable metadata agreed. The natural session rejected a
+wrong token with 401 and returned the exact 24,049-byte public README through
+MCP with 200. Source, release authority/receipt/escrow, post-recovery baseline,
+11 untracked files, every project binding and native session ownership remained
+unchanged. Only seven expected files in two new runtime directories were added.
+The two earlier harness-aborted readiness histories remain preserved.
+
+Those retained failures were private-runner errors: stdout date conversion,
+then a typed `Child` parameter/loop-variable collision. Corrections preserved
+literal identities, introduced fresh intents and checked loop collisions; no
+product/source/release change or completed-run replay was needed.
+
+This qualifies bounded read-only installed foreground serving on its known local
+route. It does not qualify native/unattended serving, a different trusted rollback
+version, project writes or two-Web coding. Connector HTTP 429 was not retried.
+Exact source GitHub SHA was verified; its single Actions query found zero runs.
+[Live evidence](verification/C228_INSTALLED_FOREGROUND_LIVE_2026_10_25.json).
+
 ## October 25 C227 — bounded installed foreground action source-qualified
 
 Implemented `operator installed-backend run --max-runtime-seconds <1..180>`
