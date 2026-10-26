@@ -10,6 +10,8 @@
   "outerLimitSeconds": 180,
   "endpointLimitSeconds": 90,
   "results": {
+    "firstNamedJobAbsent": true,
+    "secondNamedJobAbsent": true,
     "durableRecoveryPhases": 3,
     "contextEventsBefore": 38,
     "firstJobQuiescent": true,
@@ -40,6 +42,7 @@
     "newBaselinePins": 2701
   },
   "evidence": {
+    "finalNamedJobCheckSha256": "3fb132e940a7a277134ce4c86445bc3a12d222adc2b55f3bb1d39275a55a434d",
     "recoveryProofSha256": "c1719a8b63ca8ed789b10a00bc9e1942a46be95d4362bc4e4f1d8a3ff80460ea",
     "buildRecordSha256": "2074b390dad7fbed76e5306cf48d809df09d92a83ec5411a8840ea7212a828ab",
     "harnessSha256": "5a6715df84f2373f59a33baef6309dbed99a216dd70d587245aa50f5b63790d0",
