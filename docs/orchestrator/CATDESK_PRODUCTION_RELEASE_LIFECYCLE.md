@@ -1,5 +1,32 @@
 # Supported production executable promotion and recovery
 
+## October 26 C245/C246 — current source and installed state
+
+C245's genuine cumulative review of committed source
+`e5a3ca9a9fc713bfba5d6b7c21f2d6e8e32780d1` is verified, acknowledged and
+retained with its exact source snapshot. Its completed transport record is also
+closed; transport completion remains caller-reported and separate from managed
+review authority. No request was resent. Build preparation stopped during
+read-only harness preflight before a product request or attempt marker.
+[C245 actual evidence](../verification/C245_CURRENT_SOURCE_REVIEW_ACKNOWLEDGED_2026_10_26.json).
+
+C246 qualifies focused source changes for an explicit local-backend-only normal
+promotion handoff and existing review-hash/timestamp compatibility. It is newer
+than the acknowledged e5 source and requires its own frozen review and producer.
+The currently installed trusted C208 does not support backend-only startup.
+Use the existing qualified controller for review and the reviewed-build producer,
+then the genuine attested new candidate as the controller for the profile's preflight;
+an arbitrary development executable is not a production candidate.
+[C246 source evidence](../verification/C246_LOCAL_PROMOTION_HANDOFF_SOURCE_2026_10_26.json).
+
+Source inspection confirms normal promotion can retain the previous trusted
+version, write the new verified release to the inactive versioned slot and
+atomically select it. The completed C224 receipt remains historical authority for
+its stored artifact; it is not cleared or replayed. This compatibility assessment
+has not yet been demonstrated by a new live slot write or different-version
+rollback. Exact-source CI, connector recovery and two actual Web coding
+conversations remain unverified; no recurring automation is enabled.
+
 Current authorization: October 24, 2026 (America/New_York). The operator has
 superseded the October 27 deferral and authorized bounded, qualified promotion,
 recovery and production lifecycle testing now. Required evidence, Windows
@@ -405,6 +432,57 @@ This uses `src/daemon_reload.rs` and the fixed
 `scripts/promote-reviewed-catdesk-build.ps1` worker. Do not invoke its internal
 `-Execute`, authorization or transaction parameters manually.
 
+**C246 local profile — source qualified, not installed in C208:** this same tool's
+`PREFLIGHT` alone accepts the optional boolean `localBackendOnly`. To request the
+bounded local handoff, use the following argument shape with actual verified
+values:
+
+```json
+{
+  "action": "PREFLIGHT",
+  "recordId": "<acknowledged-current-review-record>",
+  "buildPath": "<attested-contained-candidate>",
+  "expectedSha256": "<candidate-sha256>",
+  "localBackendOnly": true
+}
+```
+
+The resulting authorization binds that profile together with the existing exact
+source, review, candidate, interpreter and worker identities. `CONFIRM` retains
+only `action`, `buildPath`, `expectedSha256` and `confirmationToken`; a profile
+override there is rejected. `RESULT` retains only `action`. Omitting the flag
+keeps the existing full-profile contract. Do not add a new CLI or directly invoke
+the protected worker to select this mode.
+
+The local profile requires a candidate that passes the closed backend-only
+capability query before the old owner can be stopped. It also requires a readable
+initialized configuration with exactly one local MCP endpoint at `127.0.0.1:3200`,
+a valid configured route, and an already supplied process-local
+`CATDESK_MCP_AUTH_TOKEN` of at least 24 visible ASCII characters. Do not place that
+value in arguments or audit output. Unsupported candidates, invalid configuration
+or missing authentication refuse before the old process is stopped. No tunnel,
+browser, Wake or recurring scheduler activation is part of this handoff.
+
+Successful local handoff must yield the exact schema4 receipt, including matching
+workspace, candidate hash and process identity, `profile=LOCAL_BACKEND_ONLY` and
+`mcpAuthenticated=true`. The worker checks unauthorized rejection and authenticated
+MCP readiness. A legacy or mismatched-profile receipt cannot qualify it.
+
+Disk promotion completion is separate from persistent serving. The local result
+records `servingState=STOPPED_AFTER_BOUNDED_OWNER` when the bounded owner is proved
+stopped, or `UNVERIFIED` when that proof is absent. Neither value proves a running
+backend. After a supporting release is genuinely promoted and its installed
+identity is verified, start it separately through the public lifecycle:
+
+```powershell
+.\catdesk.ps1 start -BackendOnly -ReadyTimeoutSeconds 60
+```
+
+That startup still requires its normal integrity, ownership, configuration and
+authentication checks. Record installed readiness and cleanup independently;
+source tests, transient handoff readiness and successful disk selection do not
+establish unattended production health.
+
 **Already divergent canonical pair with preserved operational slot-a:** use the
 existing reconciliation CLI:
 
@@ -418,10 +496,11 @@ interpreter. Expected output is `PREFLIGHT_READY`, a fresh confirmation token an
 expiry. Changed/missing review, attestation, source, candidate, fixed input, owner
 or escrow evidence refuses. No manual checksum repair is part of this path.
 
-The ordinary PowerShell script's default plan mode is read-only but requires a
-matching old pair. On this host it returns `OPERATOR_ATTENTION_INVALID`; this
-does not invalidate the separate reconciliation route. Do not repeatedly run
-ordinary promotion against a known divergent pair.
+The ordinary PowerShell script's default plan mode is read-only and requires a
+matching old pair. The October 24 divergent-pair diagnosis returned
+`OPERATOR_ATTENTION_INVALID`; C224 subsequently restored the matching trusted
+C208 pair. Use a fresh supported preflight for the actual current pair. Preserve
+the completed reconciliation history rather than replaying that recovery.
 
 ### 6. Preserve and establish trust without inventing a predecessor
 

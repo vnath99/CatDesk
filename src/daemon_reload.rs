@@ -74,6 +74,12 @@ pub struct ReviewedPromotionAuthorizationV1 {
     pub cargo_sha256: String,
     pub rustc_sha256: String,
     pub snapshot_expected: ReviewedSourceSnapshotExpectedV1,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub local_backend_only: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -104,6 +110,8 @@ pub struct ReviewedPromotionResultV1 {
     pub authorization_generation: u64,
     pub candidate_sha256: String,
     pub transaction_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub serving_state: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -405,6 +413,29 @@ pub fn prepare_reviewed_promotion(
     review_record_sha256: &str,
     snapshot_expected: &ReviewedSourceSnapshotExpectedV1,
 ) -> Result<ReviewedPromotionPreflightV1, String> {
+    prepare_reviewed_promotion_with_profile(
+        workspace,
+        candidate,
+        expected_sha256,
+        review_session_id,
+        review_record_id,
+        review_record_sha256,
+        snapshot_expected,
+        false,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn prepare_reviewed_promotion_with_profile(
+    workspace: &Path,
+    candidate: &Path,
+    expected_sha256: &str,
+    review_session_id: &str,
+    review_record_id: &str,
+    review_record_sha256: &str,
+    snapshot_expected: &ReviewedSourceSnapshotExpectedV1,
+    local_backend_only: bool,
+) -> Result<ReviewedPromotionPreflightV1, String> {
     let workspace = canonical_directory(workspace, "reviewed promotion workspace")?;
     let candidate =
         canonical_workspace_file(&workspace, candidate, "reviewed promotion candidate")?;
@@ -492,6 +523,7 @@ pub fn prepare_reviewed_promotion(
         cargo_sha256: attestation.cargo_sha256.clone(),
         rustc_sha256: attestation.rustc_sha256.clone(),
         snapshot_expected: snapshot_expected.clone(),
+        local_backend_only,
     };
     let preflight = ReviewedPromotionPreflightV1 {
         schema_version: 1,
@@ -726,12 +758,22 @@ pub fn run_reviewed_promotion_worker(args: ReviewedPromotionWorkerArgsV1) -> Res
         Err(_) => return Err("reviewed promotion worker ownership is unavailable".into()),
     }
     thread::sleep(Duration::from_millis(1500));
-    let invocation = crate::operator_facade::reviewed_promotion_invocation(
-        &workspace,
-        &workspace.join(&args.candidate_relative_path),
-        &authorization.authorization_id,
-        &authorization.transaction_id,
-    )?;
+    let invocation = if authorization.local_backend_only {
+        crate::operator_facade::reviewed_promotion_invocation_with_profile(
+            &workspace,
+            &workspace.join(&args.candidate_relative_path),
+            &authorization.authorization_id,
+            &authorization.transaction_id,
+            true,
+        )?
+    } else {
+        crate::operator_facade::reviewed_promotion_invocation(
+            &workspace,
+            &workspace.join(&args.candidate_relative_path),
+            &authorization.authorization_id,
+            &authorization.transaction_id,
+        )?
+    };
     let result = crate::operator_facade::run_fixed_powershell_invocation_blocking(invocation)?;
     let state = if result.success
         && result.stderr.trim().is_empty()
@@ -751,6 +793,22 @@ pub fn run_reviewed_promotion_worker(args: ReviewedPromotionWorkerArgsV1) -> Res
     } else {
         "PROMOTION_FAILED_OR_AMBIGUOUS"
     };
+    // Disk promotion remains completed even if a separate owner appears on
+    // the port after the bounded helper Job closes. Never roll back through
+    // an unknown live owner, and never equate the transient handoff with a
+    // persistent service.
+    let serving_state = if authorization.local_backend_only && state == "PROMOTION_COMPLETED" {
+        Some(
+            if bounded_promotion_owner_stopped() {
+                "STOPPED_AFTER_BOUNDED_OWNER"
+            } else {
+                "UNVERIFIED"
+            }
+            .to_owned(),
+        )
+    } else {
+        None
+    };
     atomic_json_write(
         &reviewed_promotion_result_path(&workspace),
         &ReviewedPromotionResultV1 {
@@ -759,6 +817,7 @@ pub fn run_reviewed_promotion_worker(args: ReviewedPromotionWorkerArgsV1) -> Res
             authorization_generation: authorization.generation,
             candidate_sha256: authorization.candidate_sha256,
             transaction_id: authorization.transaction_id,
+            serving_state,
         },
     )?;
     if state == "PROMOTION_COMPLETED" {
@@ -788,10 +847,36 @@ pub fn reviewed_promotion_result(
             .transaction_id
             .bytes()
             .all(|byte| byte.is_ascii_hexdigit())
+        || result
+            .serving_state
+            .as_deref()
+            .is_some_and(|state| !matches!(state, "STOPPED_AFTER_BOUNDED_OWNER" | "UNVERIFIED"))
+        || (result.serving_state.is_some() && result.state != "PROMOTION_COMPLETED")
     {
         return Err("reviewed promotion result is malformed".into());
     }
     Ok(Some(result))
+}
+
+#[cfg(windows)]
+fn bounded_promotion_owner_stopped() -> bool {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        match windows_listener_owner_pids(3200) {
+            Ok(owners) if owners.is_empty() => return true,
+            Err(_) => return false,
+            _ => {}
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
+#[cfg(not(windows))]
+fn bounded_promotion_owner_stopped() -> bool {
+    false
 }
 
 fn release_pair_control_dir(workspace: &Path) -> PathBuf {
@@ -2927,6 +3012,15 @@ fn reviewed_promotion_claim_outcome(
             || result.authorization_generation != authorization.generation
             || result.candidate_sha256 != authorization.candidate_sha256
             || result.transaction_id != authorization.transaction_id
+            || (!authorization.local_backend_only && result.serving_state.is_some())
+            || (authorization.local_backend_only
+                && result.state == "PROMOTION_COMPLETED"
+                && result.serving_state.is_none())
+            || result
+                .serving_state
+                .as_deref()
+                .is_some_and(|state| !matches!(state, "STOPPED_AFTER_BOUNDED_OWNER" | "UNVERIFIED"))
+            || (result.serving_state.is_some() && result.state != "PROMOTION_COMPLETED")
             || !matches!(
                 result.state.as_str(),
                 "PROMOTION_COMPLETED" | "PROMOTION_FAILED_OR_AMBIGUOUS"
@@ -2994,6 +3088,7 @@ fn same_reviewed_promotion_evidence(
         && left.cargo_sha256 == right.cargo_sha256
         && left.rustc_sha256 == right.rustc_sha256
         && left.snapshot_expected == right.snapshot_expected
+        && left.local_backend_only == right.local_backend_only
 }
 
 fn reviewed_promotion_result_path(workspace: &Path) -> PathBuf {
@@ -3145,6 +3240,56 @@ mod tests {
         root
     }
 
+    #[test]
+    fn reviewed_promotion_serving_projection_preserves_legacy_and_refuses_false_health() {
+        let root = temp_workspace("promotion-serving-projection");
+        let control = root.join(".catdesk/promotion-control");
+        fs::create_dir_all(&control).unwrap();
+        let mut result = ReviewedPromotionResultV1 {
+            schema_version: 1,
+            state: "PROMOTION_COMPLETED".into(),
+            authorization_generation: 1,
+            candidate_sha256: "a".repeat(64),
+            transaction_id: "b".repeat(32),
+            serving_state: None,
+        };
+        assert!(
+            serde_json::to_value(&result)
+                .unwrap()
+                .get("servingState")
+                .is_none()
+        );
+        for state in [
+            None,
+            Some("STOPPED_AFTER_BOUNDED_OWNER"),
+            Some("UNVERIFIED"),
+        ] {
+            result.serving_state = state.map(str::to_owned);
+            fs::write(
+                control.join("result.json"),
+                serde_json::to_vec(&result).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(reviewed_promotion_result(&root).unwrap().unwrap(), result);
+        }
+        result.serving_state = Some("HEALTHY_PERSISTENT".into());
+        fs::write(
+            control.join("result.json"),
+            serde_json::to_vec(&result).unwrap(),
+        )
+        .unwrap();
+        assert!(reviewed_promotion_result(&root).is_err());
+        result.serving_state = Some("STOPPED_AFTER_BOUNDED_OWNER".into());
+        result.state = "PROMOTION_FAILED_OR_AMBIGUOUS".into();
+        fs::write(
+            control.join("result.json"),
+            serde_json::to_vec(&result).unwrap(),
+        )
+        .unwrap();
+        assert!(reviewed_promotion_result(&root).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
     fn sample_release_pair_authorization() -> ReleasePairReconcileAuthorizationV1 {
         ReleasePairReconcileAuthorizationV1 {
             schema_version: 1,
@@ -3217,7 +3362,20 @@ mod tests {
             cargo_sha256: "b".repeat(64),
             rustc_sha256: "c".repeat(64),
             snapshot_expected: expected,
+            local_backend_only: false,
         };
+        let legacy_wire = serde_json::to_value(&authorization).unwrap();
+        assert!(legacy_wire.get("localBackendOnly").is_none());
+        let mut local_profile = authorization.clone();
+        local_profile.local_backend_only = true;
+        assert_eq!(
+            serde_json::to_value(&local_profile).unwrap()["localBackendOnly"],
+            true
+        );
+        assert!(!same_reviewed_promotion_evidence(
+            &authorization,
+            &local_profile
+        ));
         let control = root.join(".catdesk/promotion-control");
         fs::create_dir_all(&control).unwrap();
         fs::create_dir(root.join("build")).unwrap();
@@ -3256,6 +3414,10 @@ $record=Get-Content -LiteralPath $InputPath -Raw|ConvertFrom-Json
 $candidate=Join-Path $PSScriptRoot 'build/candidate.exe'
 $expectedHash=Get-PromotionHash $candidate
 switch($Mode){{
+ 'local' {{ $script:BackendOnly=$true }}
+ 'flag-without-profile' {{ $script:BackendOnly=$true }}
+ 'malformed-current-hash' {{ $record.snapshotExpected.approved_contract_hash='fnv1a64:123' }}
+ 'malformed-profile' {{ $script:BackendOnly=$true; $record.localBackendOnly='true' }}
  'legacy' {{ foreach($name in @('buildAttestationSha256','buildAttemptId','snapshotId','snapshotAuthorityDigest','snapshotManifestDigest','buildPolicySha256','cargoSha256','rustcSha256','snapshotExpected')){{$record.PSObject.Properties.Remove($name)}} }}
  'bad-hash' {{ $record.cargoSha256='unknown' }}
  'wrong-session' {{ $record.snapshotExpected.session_id='other-session' }}
@@ -3307,6 +3469,12 @@ if($accepted.candidateRelativePath -cne 'build/candidate.exe'){{throw 'wrong wir
         .unwrap();
         for mode in [
             "valid",
+            "current-hash",
+            "malformed-current-hash",
+            "local",
+            "local-without-flag",
+            "flag-without-profile",
+            "malformed-profile",
             "legacy",
             "bad-hash",
             "wrong-session",
@@ -3314,7 +3482,14 @@ if($accepted.candidateRelativePath -cne 'build/candidate.exe'){{throw 'wrong wir
             "wrong-path",
             "extra",
         ] {
-            fs::write(&input, serde_json::to_vec(&authorization).unwrap()).unwrap();
+            let mut wire = authorization.clone();
+            if matches!(mode, "current-hash" | "malformed-current-hash") {
+                wire.snapshot_expected.approved_contract_hash = "fnv1a64:0123456789abcdef".into();
+            }
+            if matches!(mode, "local" | "local-without-flag" | "malformed-profile") {
+                wire.local_backend_only = true;
+            }
+            fs::write(&input, serde_json::to_vec(&wire).unwrap()).unwrap();
             let output = Command::new(&powershell)
                 .args([
                     "-NoLogo",
@@ -3331,7 +3506,7 @@ if($accepted.candidateRelativePath -cne 'build/candidate.exe'){{throw 'wrong wir
                 .unwrap();
             assert_eq!(
                 output.status.success(),
-                mode == "valid",
+                matches!(mode, "valid" | "current-hash" | "local"),
                 "wire mode {mode}: stdout={} stderr={}",
                 String::from_utf8_lossy(&output.stdout),
                 String::from_utf8_lossy(&output.stderr)

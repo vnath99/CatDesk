@@ -1,3 +1,42 @@
+## October 26 C246 — local promotion handoff qualified in source
+
+Normal reviewed-promotion preflight now has an explicit local-backend-only
+profile, pinned into authorization and the authenticated handoff receipt.
+Candidate capability, fixed loopback port 3200, configuration and authentication
+are checked before stopping the old owner. Review-hash and PowerShell timestamp
+compatibility corrections retain the existing integrity checks. Eight Rust
+promotion tests, both PowerShell suites under versions 5 and 7, formatting and
+strict Clippy passed. Actual read-only executable queries confirmed support in
+the qualified development image and refusal by installed C208.
+See [C246 source evidence](verification/C246_LOCAL_PROMOTION_HANDOFF_SOURCE_2026_10_26.json).
+
+This is source qualification. New material source still needs its frozen review,
+producer attestation, candidate qualification and protected promotion. A bounded
+promotion result reports serving separately; it does not establish a persistent
+backend. Use the documented public `start -BackendOnly` only after qualifying a
+supporting installed release. C208 remains installed; different-version rollback,
+actual two-project Web coding and exact-source CI remain open. The connector's
+last HTTP 429 is separate, and recurring automation remains stopped.
+
+## October 26 C245 — genuine review acknowledged and transport completed
+
+The selected development backend passed 401/200 authentication checks with 79
+tools and natural cleanup. A new cumulative public-source review of exact
+`e5a3ca9a9fc713bfba5d6b7c21f2d6e8e32780d1` passed with a verified 3,206-byte
+reply and no actionable findings. Managed verification retained 217 snapshot
+entries covering all 202 required build inputs. Finalization committed despite
+an HTTP timeout; durable inspection established completion without replay.
+The exact review was acknowledged, then its transport record was closed through
+the supported completion API. That API still reports task completion as
+caller-reported, separately from managed review acceptance. All 7,545 protected
+files passed the closure check; only the expected transport-record fields changed.
+See [C245 actual evidence](verification/C245_CURRENT_SOURCE_REVIEW_ACKNOWLEDGED_2026_10_26.json).
+
+Build preparation stopped in read-only harness preflight before any product
+request or attempt marker; the C208 producer selection stayed unchanged. No new
+candidate or production promotion followed. All five bindings, histories and
+native owners remain preserved. Do not resend the completed C245 review.
+
 ## October 26 C244 — actual review snapshot verified
 
 The C243 frame correction passed a real bounded read of the existing completed

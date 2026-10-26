@@ -1226,6 +1226,22 @@ pub(crate) fn reviewed_promotion_invocation(
     authorization_id: &str,
     transaction_id: &str,
 ) -> Result<RepairInvocation, String> {
+    reviewed_promotion_invocation_with_profile(
+        workspace,
+        candidate,
+        authorization_id,
+        transaction_id,
+        false,
+    )
+}
+
+pub(crate) fn reviewed_promotion_invocation_with_profile(
+    workspace: &Path,
+    candidate: &Path,
+    authorization_id: &str,
+    transaction_id: &str,
+    local_backend_only: bool,
+) -> Result<RepairInvocation, String> {
     if authorization_id.len() != 32
         || !authorization_id
             .bytes()
@@ -1272,26 +1288,30 @@ pub(crate) fn reviewed_promotion_invocation(
     {
         return Err("reviewed promotion candidate is unsafe".into());
     }
+    let mut args = vec![
+        "-NoLogo".into(),
+        "-NoProfile".into(),
+        "-NonInteractive".into(),
+        "-ExecutionPolicy".into(),
+        "Bypass".into(),
+        "-File".into(),
+        script.to_string_lossy().into_owned(),
+        "-BuildPath".into(),
+        candidate.to_string_lossy().into_owned(),
+        "-Workspace".into(),
+        workspace.to_string_lossy().into_owned(),
+        "-Execute".into(),
+        "-AuthorizationToken".into(),
+        authorization_id.into(),
+        "-TransactionId".into(),
+        transaction_id.into(),
+    ];
+    if local_backend_only {
+        args.push("-BackendOnly".into());
+    }
     Ok(RepairInvocation {
         program: trusted_windows_powershell(&workspace)?,
-        args: vec![
-            "-NoLogo".into(),
-            "-NoProfile".into(),
-            "-NonInteractive".into(),
-            "-ExecutionPolicy".into(),
-            "Bypass".into(),
-            "-File".into(),
-            script.to_string_lossy().into_owned(),
-            "-BuildPath".into(),
-            candidate.to_string_lossy().into_owned(),
-            "-Workspace".into(),
-            workspace.to_string_lossy().into_owned(),
-            "-Execute".into(),
-            "-AuthorizationToken".into(),
-            authorization_id.into(),
-            "-TransactionId".into(),
-            transaction_id.into(),
-        ],
+        args,
         workspace,
     })
 }
@@ -2407,6 +2427,36 @@ mod tests {
         )
         .expect("fixture repair script");
         root
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn reviewed_promotion_local_backend_profile_changes_only_fixed_switch() {
+        let root = repair_fixture("promotion-backend-profile");
+        fs::write(
+            root.join("scripts/promote-reviewed-catdesk-build.ps1"),
+            "# fixture",
+        )
+        .unwrap();
+        let candidate = root.join("candidate.exe");
+        fs::write(&candidate, b"inert candidate").unwrap();
+        let legacy =
+            reviewed_promotion_invocation(&root, &candidate, &"a".repeat(32), &"b".repeat(32))
+                .unwrap();
+        let local = reviewed_promotion_invocation_with_profile(
+            &root,
+            &candidate,
+            &"a".repeat(32),
+            &"b".repeat(32),
+            true,
+        )
+        .unwrap();
+        assert_eq!(legacy.program, local.program);
+        assert_eq!(legacy.workspace, local.workspace);
+        assert_eq!(&local.args[..local.args.len() - 1], legacy.args.as_slice());
+        assert_eq!(local.args.last().unwrap(), "-BackendOnly");
+        assert!(!legacy.args.iter().any(|arg| arg == "-BackendOnly"));
+        fs::remove_dir_all(root).unwrap();
     }
 
     fn trusted_powershell_fixture(label: &str) -> (PathBuf, PathBuf, PathBuf) {

@@ -8,6 +8,7 @@ param(
     [string]$AuthorizationToken = '',
     [string]$TransactionId = '',
     [switch]$RecoveryRollbackOnly,
+    [switch]$BackendOnly,
     [hashtable]$TestSeams = @{}
 )
 
@@ -156,6 +157,10 @@ function Assert-PromotionAuthorizationRecord($Record) {
     # this consumer must retain, rather than discard, those exact bindings.
     $required = @('schemaVersion','generation','authorizationId','expiresAtUnix','candidateRelativePath','candidateSha256','priorCanonicalSha256','promotionScriptSha256','trustedPowershellPath','trustedPowershellSha256','reviewSessionId','reviewRecordId','reviewRecordSha256','transactionId','claimId','buildAttestationSha256','buildAttemptId','snapshotId','snapshotAuthorityDigest','snapshotManifestDigest','buildPolicySha256','cargoSha256','rustcSha256','snapshotExpected')
     $names = @($Record.PSObject.Properties.Name)
+    if ($names -contains 'localBackendOnly') {
+        if ($Record.localBackendOnly -isnot [bool]) { throw 'invalid' }
+        $required += 'localBackendOnly'
+    }
     if ($names.Count -ne $required.Count -or @($names | Where-Object { $_ -notin $required }).Count -ne 0) { throw 'invalid' }
     foreach ($name in @('buildAttestationSha256','snapshotId','snapshotAuthorityDigest','snapshotManifestDigest','buildPolicySha256','cargoSha256','rustcSha256')) {
         if ([string]$Record.$name -cnotmatch '^[a-f0-9]{64}$') { throw 'invalid' }
@@ -164,7 +169,7 @@ function Assert-PromotionAuthorizationRecord($Record) {
     $expected = $Record.snapshotExpected
     $fields = @('session_id','project_id','approved_contract_hash','logical_task_id','completion_artifact_ids','current_outputs','baseline_observations')
     $actual = @($expected.PSObject.Properties.Name)
-    if ($actual.Count -ne $fields.Count -or @($actual | Where-Object { $_ -notin $fields }).Count -ne 0 -or [string]$expected.session_id -cne [string]$Record.reviewSessionId -or [string]$expected.project_id -cne 'catdesk' -or [string]$expected.approved_contract_hash -cnotmatch '^[a-f0-9]{64}$' -or [string]$expected.logical_task_id -cnotmatch '^[A-Za-z0-9_-]{1,128}$') { throw 'invalid' }
+    if ($actual.Count -ne $fields.Count -or @($actual | Where-Object { $_ -notin $fields }).Count -ne 0 -or [string]$expected.session_id -cne [string]$Record.reviewSessionId -or [string]$expected.project_id -cne 'catdesk' -or [string]$expected.approved_contract_hash -cnotmatch '^(?:[a-f0-9]{64}|fnv1a64:[a-f0-9]{16})$' -or [string]$expected.logical_task_id -cnotmatch '^[A-Za-z0-9_-]{1,128}$') { throw 'invalid' }
     $ids = @($expected.completion_artifact_ids)
     $outputs = @($expected.current_outputs)
     $baselines = @($expected.baseline_observations)
@@ -187,7 +192,11 @@ function Assert-PromotionAuthorizationRecord($Record) {
 
 function Get-ProtectedPromotionAuthorization([string]$Root, [string]$Token, [string]$TransactionId, [string]$Candidate, [string]$CandidateHash, [string]$PriorHash) {
     $seamed = Invoke-PromotionSeam -Name 'ProtectedAuthorization' -Arguments @($Root, $Token, $TransactionId, $Candidate, $CandidateHash, $PriorHash) -Default { param($ignoredRoot, $ignoredToken, $ignoredTransaction, $ignoredCandidate, $ignoredCandidateHash, $ignoredPriorHash) $null }
-    if ($null -ne $seamed) { return $seamed }
+    if ($null -ne $seamed) {
+        $localOnly = $seamed.PSObject.Properties.Name -contains 'localBackendOnly' -and $seamed.localBackendOnly -eq $true
+        if ($localOnly -ne [bool]$BackendOnly) { throw 'REVIEWED_PROMOTION_AUTHORIZATION_REQUIRED' }
+        return $seamed
+    }
     if ($Token -notmatch '^[0-9a-f]{32}$') { throw 'REVIEWED_PROMOTION_AUTHORIZATION_REQUIRED' }
     $path = Join-Path $Root '.catdesk\promotion-control\authorization.json'
     try {
@@ -196,6 +205,8 @@ function Get-ProtectedPromotionAuthorization([string]$Root, [string]$Token, [str
         if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.Length -lt 1 -or $item.Length -gt 8192) { throw 'invalid' }
         $record = [IO.File]::ReadAllText($path) | ConvertFrom-Json -ErrorAction Stop
         Assert-PromotionAuthorizationRecord $record
+        $localOnly = $record.PSObject.Properties.Name -contains 'localBackendOnly' -and $record.localBackendOnly -eq $true
+        if ($localOnly -ne [bool]$BackendOnly) { throw 'invalid' }
         if ($record.schemaVersion -ne 1 -or [string]$record.authorizationId -ne $Token -or [string]$record.transactionId -ne $TransactionId -or [string]$record.transactionId -notmatch '^[0-9a-f]{32}$' -or [int64]$record.generation -lt 1 -or [int64]$record.expiresAtUnix -lt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) { throw 'invalid' }
         if ([string]$record.candidateSha256 -ne $CandidateHash -or [string]$record.priorCanonicalSha256 -ne $PriorHash -or [string]$record.promotionScriptSha256 -ne (Get-PromotionHash $PSCommandPath)) { throw 'invalid' }
         if ([string]$record.candidateRelativePath -ne (Get-WorkspaceRelativePath -Root $Root -Path $Candidate -Label 'reviewed promotion candidate')) { throw 'invalid' }
@@ -307,7 +318,7 @@ function Get-Phase1HandoffRecord([string]$Root) {
         $stateFile = Get-ContainedRegularFile -Root $Root -Path $statePath -Label 'restart handoff evidence'
         $item = Get-Item -LiteralPath $stateFile -Force -ErrorAction Stop
         if ($item.Length -gt 4096) { throw 'restart handoff evidence is oversized' }
-        $record = Get-Content -LiteralPath $stateFile -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+        $record = ConvertFrom-CatDeskLiteralJson ([IO.File]::ReadAllText($stateFile))
         return [pscustomobject]@{ Exists = $true; Record = $record }
     } catch {
         # A pre-existing but unusable handoff record is an unsafe resume
@@ -324,6 +335,7 @@ function Test-Phase1HandoffRecord($Record, [string]$Root, [string]$Candidate, [s
     $nativeRequired = @('schemaVersion', 'status', 'completedAtUnix', 'oldPid', 'newPid', 'port', 'replacementSha256', 'stage', 'rollbackAttempted', 'rollbackReady')
     $isNative = $names.Count -eq $nativeRequired.Count -and @($names | Where-Object { $_ -notin $nativeRequired }).Count -eq 0
     if ($isNative) {
+        if ($BackendOnly) { return $false }
         if (($version -isnot [int] -and $version -isnot [long]) -or $version -ne 1) { return $false }
         if ($Record.status -isnot [string] -or $Record.stage -isnot [string]) { return $false }
         if (($Record.completedAtUnix -isnot [int] -and $Record.completedAtUnix -isnot [long]) -or $Record.completedAtUnix -lt 1) { return $false }
@@ -341,9 +353,13 @@ function Test-Phase1HandoffRecord($Record, [string]$Root, [string]$Candidate, [s
     $requiredV1 = @('schemaVersion', 'status', 'completedAtUtc', 'oldPid', 'newPid', 'mcpPort', 'oldListenerPorts', 'buildSha256', 'stage', 'recovery')
     $requiredV2 = @('schemaVersion', 'status', 'completedAtUtc', 'oldPid', 'newPid', 'mcpPort', 'oldListenerPorts', 'workspacePath', 'buildPath', 'buildSha256', 'stage', 'recovery')
     $requiredV3 = @('schemaVersion', 'status', 'completedAtUtc', 'oldPid', 'newPid', 'newProcessStartedAtUtc', 'mcpPort', 'oldListenerPorts', 'workspacePath', 'buildPath', 'buildSha256', 'stage', 'recovery')
-    $expected = if ($version -eq 1) { $requiredV1 } elseif ($version -eq 2) { $requiredV2 } elseif ($version -eq 3) { $requiredV3 } else { return $false }
+    $requiredV4 = @($requiredV3) + @('profile','mcpAuthenticated')
+    if ($BackendOnly -and $version -ne 4) { return $false }
+    if (-not $BackendOnly -and $version -eq 4) { return $false }
+    $expected = if ($version -eq 1) { $requiredV1 } elseif ($version -eq 2) { $requiredV2 } elseif ($version -eq 3) { $requiredV3 } elseif ($version -eq 4) { $requiredV4 } else { return $false }
     if ($names.Count -ne $expected.Count -or @($names | Where-Object { $_ -notin $expected }).Count -ne 0) { return $false }
     if (($version -isnot [int] -and $version -isnot [long]) -or $Record.status -isnot [string] -or $Record.stage -isnot [string] -or $Record.recovery -isnot [string]) { return $false }
+    if ($version -eq 4 -and ($Record.profile -cne 'LOCAL_BACKEND_ONLY' -or $Record.mcpAuthenticated -isnot [bool] -or -not $Record.mcpAuthenticated)) { return $false }
     if (($Record.mcpPort -isnot [int] -and $Record.mcpPort -isnot [long]) -or $null -eq $Record.oldListenerPorts -or $Record.oldListenerPorts -is [string]) { return $false }
     if ($Record.status -ne 'RECOVERED_PENDING_TRANSPORT_CHECK' -or $Record.stage -ne 'complete' -or $Record.mcpPort -ne $script:PromotionMcpPort) { return $false }
     if ($Record.buildSha256 -isnot [string] -or $Record.buildSha256 -notmatch '^[a-f0-9]{64}$' -or -not $Record.buildSha256.Equals($CandidateHash, [StringComparison]::Ordinal)) { return $false }
@@ -409,7 +425,7 @@ function Test-Phase1ProcessContinuity($Record, $Listener) {
     $leadSeconds = ($completed - $started).TotalSeconds
     $negativeTolerance = if ($isNative) { $script:Phase1ResumeProcessStartMatchToleranceSeconds } else { $script:Phase1ResumeClockSkewToleranceSeconds }
     if ($leadSeconds -lt -$negativeTolerance -or $leadSeconds -gt $script:Phase1ResumeMaximumStartLeadSeconds) { return $false }
-    if (-not $isNative -and $Record.schemaVersion -eq 3) {
+    if (-not $isNative -and $Record.schemaVersion -ge 3) {
         $recordedStart = ConvertTo-Phase1Utc $Record.newProcessStartedAtUtc
         if ($null -eq $recordedStart) { return $false }
         if ([Math]::Abs(($started - $recordedStart).TotalSeconds) -gt $script:Phase1ResumeProcessStartMatchToleranceSeconds) { return $false }
@@ -449,21 +465,24 @@ function Get-ProvenPhase1Resume([string]$Root, [string]$Candidate, [string]$Cand
 }
 
 function Invoke-PromotionHandoff([string]$Root, $From, [string]$TargetPath, [string]$TargetHash) {
-    Invoke-PromotionSeam -Name 'RestartHandoff' -Arguments @($Root, $From, $TargetPath, $TargetHash, $script:PromotionMcpPort, $script:PromotionTimeoutSeconds) -Default {
-        param($workspaceRoot, $source, $target, $hash, $port, $timeoutSeconds)
+    $arguments=@($Root, $From, $TargetPath, $TargetHash, $script:PromotionMcpPort, $script:PromotionTimeoutSeconds)
+    if ($BackendOnly) { $arguments += $true }
+    Invoke-PromotionSeam -Name 'RestartHandoff' -Arguments $arguments -Default {
+        param($workspaceRoot, $source, $target, $hash, $port, $timeoutSeconds, $localOnly = $false)
         if ($null -eq $source -or $source.Pid -lt 1 -or -not $source.ProcessStartedAtUtc -or -not $source.BuildPath -or $source.BuildHash -notmatch '^[a-f0-9]{64}$') { return $false }
         $helper = Join-Path $PSScriptRoot 'restart_catdesk_daemon.ps1'
         if (-not (Test-Path -LiteralPath $helper -PathType Leaf)) { return $false }
         $before = [DateTime]::UtcNow
-        $raw = @(& $helper -OldPid ([int]$source.Pid) -ExpectedOldProcessStartedAtUtc ([string]$source.ProcessStartedAtUtc) -ExpectedOldProcessPath ([string]$source.BuildPath) -ExpectedOldProcessSha256 ([string]$source.BuildHash) -BuildPath $target -Workspace $workspaceRoot -McpPort $port -ReadyTimeoutSeconds $timeoutSeconds -Execute 2>$null)
+        $raw = @(& $helper -OldPid ([int]$source.Pid) -ExpectedOldProcessStartedAtUtc ([string]$source.ProcessStartedAtUtc) -ExpectedOldProcessPath ([string]$source.BuildPath) -ExpectedOldProcessSha256 ([string]$source.BuildHash) -BuildPath $target -Workspace $workspaceRoot -McpPort $port -ReadyTimeoutSeconds $timeoutSeconds -BackendOnly:$localOnly -Execute 2>$null)
         if ($LASTEXITCODE -ne 0 -or $raw.Count -eq 0) { return $false }
         $statePath = Join-Path $workspaceRoot '.catdesk\restart-handoff\latest.json'
         $deadline = [DateTime]::UtcNow.AddSeconds($timeoutSeconds)
         do {
             try {
                 if (Test-Path -LiteralPath $statePath -PathType Leaf) {
-                    $state = Get-Content -LiteralPath $statePath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
-                    if ($state.status -eq 'RECOVERED_PENDING_TRANSPORT_CHECK' -and $state.completedAtUtc -and ([DateTime]$state.completedAtUtc).ToUniversalTime() -ge $before -and $state.buildSha256 -eq $hash) { return $true }
+                    $state = ConvertFrom-CatDeskLiteralJson ([IO.File]::ReadAllText($statePath))
+                    $profileMatches=if($localOnly){$state.schemaVersion -eq 4 -and $state.profile -ceq 'LOCAL_BACKEND_ONLY' -and $state.mcpAuthenticated -eq $true}else{$state.schemaVersion -le 3}
+                    if ($profileMatches -and $state.status -eq 'RECOVERED_PENDING_TRANSPORT_CHECK' -and $state.completedAtUtc -and ([DateTime]$state.completedAtUtc).ToUniversalTime() -ge $before -and $state.buildSha256 -eq $hash) { return $true }
                     if ($state.status -eq 'FAILED_OPERATOR_ATTENTION') { return $false }
                 }
             } catch { return $false }

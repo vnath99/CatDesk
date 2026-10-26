@@ -368,7 +368,7 @@ pub fn tool_schemas() -> Vec<Value> {
             }
             if *name == "catdesk_reviewed_build_promotion" {
                 input_schema = json!({"type":"object","oneOf":[
-                    {"required":["action","buildPath","expectedSha256","recordId"],"properties":{"action":{"const":"PREFLIGHT"},"buildPath":{"type":"string","minLength":1,"maxLength":4096},"expectedSha256":{"type":"string","pattern":"^[A-Fa-f0-9]{64}$"},"recordId":{"type":"string","pattern":"^[A-Za-z0-9_-]{1,128}$"}},"additionalProperties":false},
+                    {"required":["action","buildPath","expectedSha256","recordId"],"properties":{"action":{"const":"PREFLIGHT"},"buildPath":{"type":"string","minLength":1,"maxLength":4096},"expectedSha256":{"type":"string","pattern":"^[A-Fa-f0-9]{64}$"},"recordId":{"type":"string","pattern":"^[A-Za-z0-9_-]{1,128}$"},"localBackendOnly":{"type":"boolean"}},"additionalProperties":false},
                     {"required":["action","buildPath","expectedSha256","confirmationToken"],"properties":{"action":{"const":"CONFIRM"},"buildPath":{"type":"string","minLength":1,"maxLength":4096},"expectedSha256":{"type":"string","pattern":"^[A-Fa-f0-9]{64}$"},"confirmationToken":{"type":"string","minLength":1,"maxLength":256}},"additionalProperties":false},
                     {"required":["action"],"properties":{"action":{"const":"RESULT"}},"additionalProperties":false}
                 ]});
@@ -2193,6 +2193,13 @@ impl AutonomousSupervisorV1 {
             .ok_or_else(|| "reviewed promotion request is invalid".to_string())?;
         let action = required_str(args, "action")?;
         let expected_keys: &[&str] = match action {
+            "PREFLIGHT" if object.contains_key("localBackendOnly") => &[
+                "action",
+                "buildPath",
+                "expectedSha256",
+                "recordId",
+                "localBackendOnly",
+            ],
             "PREFLIGHT" => &["action", "buildPath", "expectedSha256", "recordId"],
             "CONFIRM" => &["action", "buildPath", "expectedSha256", "confirmationToken"],
             "RESULT" => &["action"],
@@ -2210,7 +2217,11 @@ impl AutonomousSupervisorV1 {
                 .map_err(|_| "reviewed promotion result is unavailable".to_string())?;
             return Ok(match result {
                 Some(result) => {
-                    json!({"state":result.state,"authorizationGeneration":result.authorization_generation,"candidateSha256":result.candidate_sha256,"tunnelAction":"none-external-tunnel-untouched"})
+                    let mut value = json!({"state":result.state,"authorizationGeneration":result.authorization_generation,"candidateSha256":result.candidate_sha256,"tunnelAction":"none-external-tunnel-untouched"});
+                    if let Some(serving_state) = result.serving_state {
+                        value["servingState"] = json!(serving_state);
+                    }
+                    value
                 }
                 None => {
                     json!({"state":"RESULT_UNAVAILABLE_OR_PENDING","tunnelAction":"none-external-tunnel-untouched"})
@@ -2221,16 +2232,35 @@ impl AutonomousSupervisorV1 {
         let expected = required_str(args, "expectedSha256")?;
         if action == "PREFLIGHT" {
             let record_id = required_str(args, "recordId")?;
+            let local_backend_only = match args.get("localBackendOnly") {
+                None => false,
+                Some(value) => value
+                    .as_bool()
+                    .ok_or("reviewed promotion profile is invalid")?,
+            };
             let review_authority = self.resolve_reviewed_promotion_review_authority(record_id)?;
-            let preflight = crate::daemon_reload::prepare_reviewed_promotion(
-                &self.workspace,
-                &candidate,
-                expected,
-                &review_authority.session_id,
-                &review_authority.record_id,
-                &review_authority.digest,
-                &review_authority.snapshot_expected,
-            )
+            let preflight = if local_backend_only {
+                crate::daemon_reload::prepare_reviewed_promotion_with_profile(
+                    &self.workspace,
+                    &candidate,
+                    expected,
+                    &review_authority.session_id,
+                    &review_authority.record_id,
+                    &review_authority.digest,
+                    &review_authority.snapshot_expected,
+                    true,
+                )
+            } else {
+                crate::daemon_reload::prepare_reviewed_promotion(
+                    &self.workspace,
+                    &candidate,
+                    expected,
+                    &review_authority.session_id,
+                    &review_authority.record_id,
+                    &review_authority.digest,
+                    &review_authority.snapshot_expected,
+                )
+            }
             .map_err(|_| "reviewed promotion preflight was rejected".to_string())?;
             return Ok(
                 json!({"state":"PREFLIGHT_READY","confirmationToken":preflight.confirmation_token,"expiresAtUnix":preflight.expires_at_unix,"candidateSha256":preflight.authorization.candidate_sha256,"tunnelAction":"none-external-tunnel-untouched"}),
@@ -6069,6 +6099,12 @@ mod tests {
             .unwrap();
         let branches = schema["inputSchema"]["oneOf"].as_array().unwrap();
         assert_eq!(branches.len(), 3);
+        assert_eq!(
+            branches[0]["properties"]["localBackendOnly"]["type"],
+            "boolean"
+        );
+        assert!(branches[1]["properties"].get("localBackendOnly").is_none());
+        assert!(branches[2]["properties"].get("localBackendOnly").is_none());
         for branch in branches {
             assert_eq!(branch["additionalProperties"], false);
             for field in branch["required"].as_array().unwrap() {
