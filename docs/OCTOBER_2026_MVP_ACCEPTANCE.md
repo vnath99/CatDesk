@@ -1,3 +1,19 @@
+## October 25 C229 — two registered-project LOCAL MCP isolation PASS
+
+Two real workspaces served concurrently through the installed engine. Exact
+project scopes, own README reads, wrong-witness/sibling-path refusal and peer
+progress passed. Each conversation's context traffic and observed token estimate
+advanced independently. Natural exits, empty endpoint/process inventory and
+configuration/registration/history preservation passed; native writers remained
+unclaimed.
+
+This advances installed multi-project runtime qualification. It does not satisfy
+the required two authenticated ChatGPT Web coding conversations, write ownership
+or unattended operation. Those remain OPEN with the separate connector HTTP429.
+Next: expose the proven launch through the bounded operator surface, preserving
+independent project execution.
+[Evidence](verification/C229_TWO_PROJECT_LOCAL_MCP_2026_10_25.json).
+
 ## October 25 C228 — installed foreground serving and crash cleanup LIVE PASS
 
 The new bounded action served the actual trusted installed image: natural code-0

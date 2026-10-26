@@ -1,3 +1,13 @@
+## October 25 C229 — existing project route reused without another release
+
+The current installed artifact already supports project-bound headless read-only
+MCP. Two real registered workspaces passed concurrent operation and independent
+context accounting using the existing approved control profile. No candidate,
+development selection, release authority, registry, binding or ownership setting
+changed. Productizing these flags should reuse that path; actual Web coding and
+write permissions still need their own live qualification.
+[Evidence](../verification/C229_TWO_PROJECT_LOCAL_MCP_2026_10_25.json).
+
 ## October 25 C228 — installed foreground ownership LIVE PASS
 
 The separately built qualified controller now serves the existing trusted

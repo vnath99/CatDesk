@@ -1,3 +1,32 @@
+## October 25 C229 — two real registered-project local MCP endpoints PASS
+
+At 01:52:51–01:53:57 UTC October 26 (October 25 locally), the existing trusted
+installed image served two real registered project workspaces concurrently.
+Distinct processes/ephemeral ports retained their exact registry generation and
+target witnesses. Initialize, project scope and each project's own README read
+passed. Wrong witness, sibling-workspace read and wrong bearer were refused;
+the peer then continued a useful read. Both 60-second endpoints exited naturally
+with code 0 inside the 180-second test boundary.
+
+Only validated MCP traffic appended to the two existing per-conversation ledgers;
+observed token estimates grew independently. Prior events, policy, coverage and
+rollover state remained intact. All 1,936 pinned files and 13 metadata trees were
+preserved; the approved shared configuration was held read-only. External source
+and HEADs were not frozen, and no native writer/task ownership was claimed.
+
+No new candidate, source feature, registry, binding or Git ownership exception
+was needed. The first local attempt completed no requests and retained its
+failure: premature image inspection and incomplete nullable cleanup. The
+continuation captured startup diagnostics and used retained-handle identity
+queries after readiness. Original cause remains unproven; its evidence was not
+discarded or relabeled.
+
+This is actual installed local project isolation and context-accounting evidence,
+not authenticated ChatGPT Web execution or project-write acceptance. Exact private
+identities, URLs, paths and README data remain only in local evidence; the public
+record uses test aliases. Connector HTTP 429 was not retried.
+[Evidence](verification/C229_TWO_PROJECT_LOCAL_MCP_2026_10_25.json).
+
 ## October 25 C228 — actual foreground operation and interruption PASS
 
 At 01:22:24–01:23:48 UTC October 26 (October 25 locally), the qualified controller

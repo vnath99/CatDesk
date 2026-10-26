@@ -1,3 +1,11 @@
+## October 25 C229 — concurrent registered-project LOCAL MCP PASS
+
+Two real project workspaces passed routed reads, scope/path/token refusal,
+independent context accounting and clean natural exits. Shared configuration,
+bindings, histories and native ownership were preserved. Actual Web coding and
+project writes remain unaccepted.
+[Evidence](docs/verification/C229_TWO_PROJECT_LOCAL_MCP_2026_10_25.json).
+
 ## October 25 C228 — actual installed foreground owner LIVE PASS
 
 Natural completion, wrong-token rejection, exact MCP read and deliberate

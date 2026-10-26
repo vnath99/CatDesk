@@ -1,5 +1,21 @@
 # CatDesk — Comprehensive handoff to Codex Desktop
 
+## Current multi-project local note — October 25 C229
+
+Two real registered workspaces passed concurrent installed project-scoped MCP:
+own reads, wrong witness/path/token refusals, peer continuation and independent
+context traffic appends. Both endpoints exited naturally; all protected metadata,
+configuration, bindings and native ownership remained intact. Source and private
+project content were not published.
+
+Next executable source task: expose the proven existing project-scoped launch
+through the bounded operator surface without a global project-work lock.
+Actual two-Web coding, project writes, native/unattended serving and trusted
+previous different-version rollback remain OPEN. Connector HTTP429 is separate
+and was not retried. Do not replay completed promotion, read/restart, review,
+foreground or rollover tests.
+[Evidence](../verification/C229_TWO_PROJECT_LOCAL_MCP_2026_10_25.json).
+
 ## Current installed foreground note — October 25 C228
 
 Actual C227 foreground qualification passed: natural code-0 exit, exact MCP

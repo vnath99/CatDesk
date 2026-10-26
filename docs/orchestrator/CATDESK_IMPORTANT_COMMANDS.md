@@ -1,3 +1,25 @@
+## October 25 C229 — existing project-scoped installed CLI qualified locally
+
+The installed engine's existing headless project mode passed two concurrent
+registered-workspace read-only endpoints. Its fixed project ID, generation and
+target SHA witness determine the workspace; no shared working-directory switch
+or registry copy is needed.
+
+This advanced path uses the current control root and its exact approved
+development configuration, `--project-id`, `--project-target-generation`,
+`--project-target-sha256`, read-only mode, loopback ephemeral ports,
+`--no-web-auto --no-ngrok`, finite lifetime and process-only bearer.
+Keep that approved configuration pinned read-only and use the established owner
+context; never add Git ownership exceptions or claim a native writer for this
+test. Private frozen command/evidence records retain the exact values.
+
+The C227 installed foreground operator action remains unscoped on its known
+local route; it does not yet expose these project-selection flags. Do not append
+unsupported arguments to it. The next source increment should reuse this proven
+headless route in that bounded operator surface. Actual Web caller and write
+acceptance remain separate.
+[Evidence](../verification/C229_TWO_PROJECT_LOCAL_MCP_2026_10_25.json).
+
 ## October 25 C228 — foreground action qualified against the installation
 
 The C227 controller built from `2e7260a8d76edc55ba0915c59016c5d142b85286`
