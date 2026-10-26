@@ -15,9 +15,10 @@ which fail the frozen report schema. Its nonrenewable managed claim also
 expired before finalization. The raw response and original contract are retained;
 no report, source integration, acknowledgment, new producer or promotion followed.
 
-Next: supported retirement of only the expired review claim, bounded development
-backend health, and a fresh scoped review of the new transport fix under standing
-authorization. Production installation, trusted different-version rollback and
+The expired claim was cancelled through the supported API; its completed Web
+work was explicitly retired. Other native files and accounting remain unchanged.
+This closure does not grant review acceptance. Next: bounded development backend
+health and a fresh scoped review of the new transport fix under standing authorization. Production installation, trusted different-version rollback and
 two independent Web coding conversations remain separate open gates. Recurring
 automation stays stopped; the connector's last HTTP 429 remains separate.
 

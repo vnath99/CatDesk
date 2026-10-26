@@ -24,7 +24,7 @@
     "responseSha256": "6bd73dd6b8b2d1d441bcfc50a99bfac78f94c11206db7ab1e39678a60f26bf1c"
   },
   "review": {
-    "managedClaim": "NONRENEWABLE_LEASE_EXPIRED_NO_FINALIZATION",
+    "managedClaim": "CANCELLED_INACTIVE_AFTER_NONRENEWABLE_LEASE_EXPIRED",
     "reviewAcknowledged": false,
     "rawResponseRewritten": false,
     "newProducerAuthority": false,
@@ -44,5 +44,18 @@
     "protectedProductionChanged": false,
     "installedNewSource": "OPEN"
   },
-  "next": "Retire only expired review claim through supported cancellation, qualify selected development backend health, then review the new five-file transport delta under existing standing authorization with a fresh realistic lease and explicit report shape."
+  "next": "Qualify selected development backend health, then review the new five-file transport delta under existing standing authorization with a fresh realistic upfront lease and explicit report shape; no C242 replay.",
+  "retirement": {
+    "webWorkPhase": "CLOSED",
+    "nativeClaimStateVersion": 5,
+    "webWorkOutcome": "retired",
+    "nativeClaimState": "CANCELLED",
+    "protectedFilesVerified": 7289,
+    "accountingUnchanged": true,
+    "nativeClaimActive": false,
+    "producerActions": 0,
+    "browserActions": 0,
+    "otherNativeFilesPreserved": 4575,
+    "taskCompletionVerified": false
+  }
 }
