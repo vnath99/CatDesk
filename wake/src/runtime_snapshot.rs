@@ -191,6 +191,7 @@ fn snapshot(
                     .min(Duration::from_secs(30)),
                 guard,
                 phase,
+                AdapterResponseBudget::SourceSnapshot,
             )
         },
     )

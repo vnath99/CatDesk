@@ -199,7 +199,11 @@ class AdapterTests(unittest.TestCase):
 
     def test_explicit_source_read_preserves_bounded_long_review_and_user(self):
         cdp = FakeCdp()
-        answer = json.dumps({"marker": "SYNTHETIC_REVIEW", "assessment": "r" * 4300})
+        review = {"marker": "SYNTHETIC_REVIEW", "findings": ["PASS"] * 120, "padding": ""}
+        review["padding"] = "r" * (6397 - len(json.dumps(review, separators=(",", ":"))))
+        answer = json.dumps(review, separators=(",", ":"))
+        user = "u" * 1413
+        self.assertEqual(len(answer.encode()), 6397)
         budgets = []
         class Sink:
             def __init__(self, url, *_args):
@@ -212,7 +216,7 @@ class AdapterTests(unittest.TestCase):
                 budgets.append(max_message_bytes)
                 messages = [{"role": role, "text": text, "textComplete": True,
                              "revisionComplete": True, "identityBasis": "UNIT_KEY"}
-                            for role, text in (("USER", "bounded source review"), ("ASSISTANT", answer))]
+                            for role, text in (("USER", user), ("ASSISTANT", answer))]
                 return {"messages": messages, "truncated": False,
                         "coverage": {"visibleRoleCount": 2, "returned": 2}}
         source = {"url": cdp.url, "digest": bridge.digest(cdp.url), "generation": 1}
@@ -224,9 +228,40 @@ class AdapterTests(unittest.TestCase):
         payload = emit.call_args.args[0]
         self.assertEqual(budgets, [8192, 8192])
         self.assertEqual([item["text"] for item in payload["snapshot"]["messages"]],
-                         ["bounded source review", answer])
+                         [user, answer])
         self.assertTrue(all(item["textComplete"] for item in payload["snapshot"]["messages"]))
-        self.assertLessEqual(len(json.dumps(payload, separators=(",", ":")).encode()) + 1, 8192)
+        frame_size = len(json.dumps(payload, separators=(",", ":")).encode()) + 1
+        self.assertGreater(frame_size, 8192)
+        self.assertLessEqual(frame_size, adapter.SOURCE_SNAPSHOT_RESPONSE_BYTES)
+        self.assertFalse(cdp.sent)
+        self.assertEqual(cdp.keys, [])
+
+    def test_private_snapshot_refuses_frame_over_cap_and_ordinary_input_stays_bounded(self):
+        cdp = FakeCdp()
+        class Sink:
+            def __init__(self, url, *_args):
+                self.url, self.ui_timeout = url, 1
+            def exact(self, url): return url == self.url
+            def wait_for_page_readiness(self, _sb, current): return current
+            def wait_for_idle(self, _cdp, _timeout): pass
+            def readiness_reason(self, _cdp): return None
+            def visible_message_snapshot(self, _cdp, *, max_message_bytes):
+                return {"messages": [{"role": "ASSISTANT", "text": "done",
+                                     "textComplete": True, "revisionComplete": True,
+                                     "identityBasis": "UNIT_KEY"}], "truncated": False,
+                        "coverage": {"visibleRoleCount": 1, "returned": 1,
+                                     "oversized": "x" * adapter.SOURCE_SNAPSHOT_RESPONSE_BYTES}}
+        source = {"url": cdp.url, "digest": bridge.digest(cdp.url), "generation": 1}
+        with patch.object(bridge, "NewConversationSink", Sink), \
+                patch.object(adapter, "prepare_cdp_target", return_value=cdp), \
+                patch.object(adapter, "emit") as emit:
+            with self.assertRaisesRegex(bridge.Attention, "SOURCE_SNAPSHOT_TOO_LARGE"):
+                adapter.source_snapshot(bridge, object(),
+                                        {"snapshot": True, "projectId": "alpha", "source": source})
+        emit.assert_not_called()
+        with patch.object(sys, "stdin", types.SimpleNamespace(buffer=io.BytesIO(b" " * 8193 + b"\n"))):
+            with self.assertRaisesRegex(ValueError, "invalid request"):
+                adapter.read_request()
         self.assertFalse(cdp.sent)
         self.assertEqual(cdp.keys, [])
 

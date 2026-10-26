@@ -1,0 +1,40 @@
+{
+  "checkpoint": "C243",
+  "date": "2026-10-26",
+  "classification": "SOURCE_QUALIFIED_NOT_INSTALLED",
+  "reviewTargetPreserved": "31e6d1e3f28badac4792442659b2a23c24c660fd",
+  "problem": "A delivered source-review reply was complete, but the 8192-byte serialized snapshot frame discarded its preceding USER witness. The 6397-byte assistant text plus 1413-byte user text fit the 8192-byte raw text budget; JSON escaping and metadata exceeded the frame budget.",
+  "change": "Only explicitly owned private SOURCE_SNAPSHOT responses receive a 65536-byte wire budget. Ordinary connections and non-snapshot frames remain capped at 8192 bytes. Existing raw-text, message-count, stable-document, exact-user-digest and target checks remain unchanged.",
+  "tests": {
+    "rustCountsOverlap": true,
+    "pythonConversation": 71,
+    "rustSnapshotDeadline": 8,
+    "rustBootstrapRuntime": 18,
+    "formatting": "PASS",
+    "rustPrivateFraming": 2,
+    "pythonAdapter": 32,
+    "filterCorrection": "Initial runtime_snapshot filter matched zero tests; corrected runtime::snapshot::tests:: ran eight passing tests.",
+    "strictWakeClippyAllTargets": "PASS",
+    "firstRun": "Two legacy fixture assertions assumed the old wire budget; corrected to use an explicit narrow test budget, retaining clipping and omission assertions. Failed evidence preserved."
+  },
+  "review": "Independent static review passed for all five changed files.",
+  "live": {
+    "delivery": "EXACT_USER_MESSAGE_APPENDED",
+    "assistantAttribution": "UNVERIFIED_WEB_REVIEW_USER_WITNESS_REQUIRED",
+    "turn": "COMPLETE_FRESH_REOBSERVATION_WITNESS",
+    "newMessagesSent": 1,
+    "newProducerAuthority": false,
+    "sourceIntegration": false,
+    "testOwnedProcessesRemaining": 0,
+    "fiveBindingsPreserved": true,
+    "productionPromotion": false,
+    "nativeFinalization": false
+  },
+  "remaining": [
+    "Build and qualify matching isolated development reader and adapter; no protected installation change.",
+    "Re-read the existing completed event once with a correct bounded snapshot; never resend it.",
+    "Accept substantive genuine review before managed report/finalization and reviewed-build production.",
+    "Different-version trusted rollback and two independent ChatGPT Web coding conversations remain open.",
+    "External connector last returned HTTP 429; no unchanged dependency retry performed."
+  ]
+}

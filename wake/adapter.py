@@ -15,6 +15,7 @@ from pathlib import Path
 CHANNEL = sys.stdout
 ROOT = Path(sys.argv[1])
 MAX_BOOTSTRAP_REQUEST_BYTES = 32 * 1024
+SOURCE_SNAPSHOT_RESPONSE_BYTES = 64 * 1024
 
 
 def emit(value):
@@ -707,9 +708,12 @@ def source_snapshot(bridge, sb, request):
         "sourceDigest": source["digest"],
         "snapshot": snapshot,
     }
-    # The parent reader has an 8192-byte line cap. JSON escapes may be much
-    # larger than the UTF-8 text budget enforced by the CDP snapshot helper.
-    while len(json.dumps(payload, separators=(",", ":")).encode("utf-8")) + 1 > 8192:
+    # The private snapshot reader has a separate wire allowance: JSON escaping
+    # and identity metadata must not consume the 8 KiB raw-text budget and
+    # discard a complete USER witness preceding a complete assistant answer.
+    # Ordinary adapter frames and all snapshot text/count bounds stay unchanged.
+    while (len(json.dumps(payload, separators=(",", ":")).encode("utf-8")) + 1 >
+           SOURCE_SNAPSHOT_RESPONSE_BYTES):
         messages = snapshot["messages"]
         snapshot["truncated"] = True
         if len(messages) > 1:

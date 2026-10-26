@@ -1023,10 +1023,13 @@ class NewConversationTests(unittest.TestCase):
         cdp = AttemptCdp("large_snapshot")
         sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
         emitted = []
+        # Keep exercising the clipping path with a deliberately smaller test
+        # allowance; the production private frame budget is now 64 KiB.
+        frame_limit = 8192
         request = {"snapshot": True, "projectId": "project-one", "source": self.request()["source"]}
         with patch.object(bridge, "NewConversationSink", AttemptSink), patch.object(
             adapter, "emit", emitted.append
-        ):
+        ), patch.object(adapter, "SOURCE_SNAPSHOT_RESPONSE_BYTES", frame_limit):
             adapter.source_snapshot(bridge, sb, request)
         self.assertEqual(cdp.sent, 0)
         self.assertTrue(emitted[-1]["snapshot"]["truncated"])
@@ -1035,7 +1038,7 @@ class NewConversationTests(unittest.TestCase):
         self.assertEqual(emitted[-1]["snapshot"]["coverage"]["textIncomplete"], 1)
         self.assertLessEqual(
             len(json.dumps(emitted[-1], separators=(",", ":")).encode("utf-8")) + 1,
-            8192,
+            frame_limit,
         )
 
     def test_incomplete_snapshot_adds_private_shape_without_promoting_text(self):
@@ -1058,10 +1061,13 @@ class NewConversationTests(unittest.TestCase):
         cdp = AttemptCdp("many_snapshot")
         sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
         emitted = []
+        # A test-only narrow budget makes omission accounting observable even
+        # though this fixture fits in the production 64 KiB frame.
+        frame_limit = 8192
         request = {"snapshot": True, "projectId": "project-one", "source": self.request()["source"]}
         with patch.object(bridge, "NewConversationSink", AttemptSink), patch.object(
             adapter, "emit", emitted.append
-        ):
+        ), patch.object(adapter, "SOURCE_SNAPSHOT_RESPONSE_BYTES", frame_limit):
             adapter.source_snapshot(bridge, sb, request)
         snapshot = emitted[-1]["snapshot"]
         self.assertTrue(snapshot["truncated"])
@@ -1069,7 +1075,7 @@ class NewConversationTests(unittest.TestCase):
         self.assertEqual(snapshot["coverage"]["returned"], len(snapshot["messages"]))
         self.assertEqual(snapshot["coverage"]["omittedBeforeWindow"], 12 - len(snapshot["messages"]))
         self.assertEqual(snapshot["coverage"]["identityMissing"], 0)
-        self.assertLessEqual(len(json.dumps(emitted[-1], separators=(",", ":")).encode("utf-8")) + 1, 8192)
+        self.assertLessEqual(len(json.dumps(emitted[-1], separators=(",", ":")).encode("utf-8")) + 1, frame_limit)
 
     def test_wrong_source_fails_before_browser_navigation(self):
         request = self.request()

@@ -1652,7 +1652,14 @@ impl Adapter {
         wait: Duration,
         keep_running: &dyn Fn() -> Result<()>,
     ) -> Result<Self> {
-        Self::spawn_from_installed_monitored(root, installed, wait, keep_running, &|_| {})
+        Self::spawn_from_installed_monitored(
+            root,
+            installed,
+            wait,
+            keep_running,
+            &|_| {},
+            AdapterResponseBudget::Ordinary,
+        )
     }
 
     fn spawn_from_installed_monitored(
@@ -1661,6 +1668,7 @@ impl Adapter {
         wait: Duration,
         keep_running: &dyn Fn() -> Result<()>,
         phase: &dyn Fn(AdapterStartPhase),
+        response_budget: AdapterResponseBudget,
     ) -> Result<Self> {
         keep_running()?;
         let (adapter_path, _wake_bridge_path) =
@@ -1708,16 +1716,14 @@ impl Adapter {
             loop {
                 let mut bytes = Vec::new();
                 // Bound a single response even if an adapter emits no newline.
-                let result = read_line_bounded(&mut reader, &mut bytes);
-                let terminal = result.is_err();
-                if tx
-                    .send(result.and_then(|_| {
-                        serde_json::from_slice(&bytes)
-                            .map_err(|_| "BROWSER_ADAPTER_RESPONSE_INVALID".into())
-                    }))
-                    .is_err()
-                    || terminal
-                {
+                let result = read_adapter_response(&mut reader, &mut bytes, response_budget);
+                // Preserve the ordinary reader's existing behavior: a JSON
+                // parse failure is reported, while framing failures end input.
+                let terminal = result
+                    .as_ref()
+                    .err()
+                    .is_some_and(|reason| reason != "BROWSER_ADAPTER_RESPONSE_INVALID");
+                if tx.send(result).is_err() || terminal {
                     break;
                 }
             }
@@ -1781,9 +1787,50 @@ fn retire_adapter(adapter: &mut Option<Adapter>) -> bool {
     exited_cleanly
 }
 
+const ORDINARY_ADAPTER_RESPONSE_BYTES: usize = 8192;
+const SOURCE_SNAPSHOT_RESPONSE_BYTES: usize = 64 * 1024;
+
+#[derive(Clone, Copy)]
+enum AdapterResponseBudget {
+    Ordinary,
+    SourceSnapshot,
+}
+
+fn read_adapter_response(
+    reader: &mut impl BufRead,
+    bytes: &mut Vec<u8>,
+    budget: AdapterResponseBudget,
+) -> Result<serde_json::Value> {
+    match budget {
+        AdapterResponseBudget::Ordinary => read_line_bounded(reader, bytes)?,
+        AdapterResponseBudget::SourceSnapshot => {
+            read_line_with_limit(reader, bytes, SOURCE_SNAPSHOT_RESPONSE_BYTES)?;
+        }
+    }
+    let value: serde_json::Value = serde_json::from_slice(bytes)
+        .map_err(|_| "BROWSER_ADAPTER_RESPONSE_INVALID".to_string())?;
+    // The larger private allowance belongs only to the snapshot frame. READY,
+    // attention and sender protocol frames retain their original bound even
+    // when they arrive on a snapshot-owned adapter connection.
+    if bytes.len() > ORDINARY_ADAPTER_RESPONSE_BYTES
+        && value.get("stage").and_then(serde_json::Value::as_str) != Some("SOURCE_SNAPSHOT")
+    {
+        return Err("BROWSER_ADAPTER_RESPONSE_TOO_LARGE".into());
+    }
+    Ok(value)
+}
+
 fn read_line_bounded(reader: &mut impl BufRead, bytes: &mut Vec<u8>) -> Result<()> {
+    read_line_with_limit(reader, bytes, ORDINARY_ADAPTER_RESPONSE_BYTES)
+}
+
+fn read_line_with_limit(
+    reader: &mut impl BufRead,
+    bytes: &mut Vec<u8>,
+    limit: usize,
+) -> Result<()> {
     use std::io::Read;
-    let mut bounded = reader.take(8193);
+    let mut bounded = reader.take((limit + 1) as u64);
     loop {
         let mut byte = [0];
         if bounded
@@ -1797,7 +1844,7 @@ fn read_line_bounded(reader: &mut impl BufRead, bytes: &mut Vec<u8>) -> Result<(
             break;
         }
         bytes.push(byte[0]);
-        if bytes.len() > 8192 {
+        if bytes.len() > limit {
             return Err("BROWSER_ADAPTER_RESPONSE_TOO_LARGE".into());
         }
     }
@@ -3757,6 +3804,56 @@ mod bootstrap_runtime_tests {
         let mut malformed = value;
         malformed["snapshot"]["messages"] = serde_json::json!(vec![serde_json::Value::Null; 17]);
         assert!(source_snapshot_payload(malformed, "alpha", &target).is_err());
+    }
+
+    #[test]
+    fn private_snapshot_frame_retains_escaped_review_and_user_witness() {
+        let mut answer = serde_json::json!({"findings":vec!["PASS"; 120],"padding":""});
+        let padding = 6397 - answer.to_string().len();
+        answer["padding"] = serde_json::json!("r".repeat(padding));
+        let answer = answer.to_string();
+        assert_eq!(answer.len(), 6397);
+        let value = serde_json::json!({"stage":"SOURCE_SNAPSHOT","snapshot":{
+            "messages":[
+                {"role":"USER","text":"u".repeat(1413),"textComplete":true},
+                {"role":"ASSISTANT","text":answer,"textComplete":true}],
+            "truncated":false,"coverage":{"returned":2}}});
+        let mut frame = serde_json::to_vec(&value).unwrap();
+        assert!(frame.len() > ORDINARY_ADAPTER_RESPONSE_BYTES);
+        assert!(frame.len() < SOURCE_SNAPSHOT_RESPONSE_BYTES);
+        frame.push(b'\n');
+        let read = |budget| {
+            read_adapter_response(&mut std::io::Cursor::new(&frame), &mut Vec::new(), budget)
+        };
+        assert_eq!(read(AdapterResponseBudget::SourceSnapshot).unwrap(), value);
+        assert_eq!(
+            read(AdapterResponseBudget::Ordinary).unwrap_err(),
+            "BROWSER_ADAPTER_RESPONSE_TOO_LARGE"
+        );
+    }
+
+    #[test]
+    fn private_snapshot_budget_does_not_expand_other_frames_or_remove_cap() {
+        for (stage, padding) in [
+            ("READY", ORDINARY_ADAPTER_RESPONSE_BYTES),
+            ("ATTENTION", ORDINARY_ADAPTER_RESPONSE_BYTES),
+            ("SOURCE_SNAPSHOT", SOURCE_SNAPSHOT_RESPONSE_BYTES),
+        ] {
+            let mut frame = serde_json::to_vec(
+                &serde_json::json!({"stage":stage,"padding":"x".repeat(padding)}),
+            )
+            .unwrap();
+            frame.push(b'\n');
+            assert_eq!(
+                read_adapter_response(
+                    &mut std::io::Cursor::new(frame),
+                    &mut Vec::new(),
+                    AdapterResponseBudget::SourceSnapshot,
+                )
+                .unwrap_err(),
+                "BROWSER_ADAPTER_RESPONSE_TOO_LARGE"
+            );
+        }
     }
 
     fn source() -> Target {

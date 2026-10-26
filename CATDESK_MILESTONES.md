@@ -1,3 +1,22 @@
+## October 26 C243 — private review snapshot frame
+
+One bounded routine review was delivered exactly once and its turn completed.
+The completed reply remains **unverified**: the old 8 KiB JSON frame trimmed
+its preceding USER witness, although both texts fit the raw text limit.
+No report finalization, new producer authority or promotion followed.
+
+Source now gives only private SOURCE_SNAPSHOT frames a bounded 64 KiB wire
+allowance. Other frames retain 8 KiB; text limits and exact USER/target checks
+remain unchanged. Qualification passed 32 adapter and 71 conversation Python
+tests, focused Rust framing/runtime/deadline checks, formatting and strict
+Wake Clippy. The initial legacy-fixture failures and zero-match filter are
+recorded with their corrections in [C243 evidence](docs/verification/C243_PRIVATE_REVIEW_SNAPSHOT_FRAME_2026_10_26.json).
+
+Next: qualify matching development artifacts and re-read the existing event
+without resending. Production, all five bindings and native owners are preserved.
+Source tests do not establish installed acceptance. Current-source managed
+review/snapshot, trusted different-version rollback and two Web coding
+conversations remain open; the connector's last HTTP 429 is separate.
 ## October 26 C240/C241 — legacy producer compatibility verified
 
 C239's bounded read-only check returned `attention`: four authentic legacy
