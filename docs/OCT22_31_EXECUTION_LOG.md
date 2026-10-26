@@ -1,3 +1,25 @@
+## October 25 C230 — independent project operator source qualification PASS
+
+Added a closed, bounded `operator installed-backend run-project` action using the
+existing registry, paired target witness and installed read-only project route.
+Each invocation validates its project before acquiring the short startup lease,
+pins the selected release under that lease, verifies authenticated child scope,
+and releases the lease before READY. Immutable release/configuration handles
+remain held while that project serves. Independent project work does not retain
+a global registry or task lease. The existing unscoped action is unchanged.
+
+Review corrected consumed-holder cleanup, configuration migration side effects,
+startup contention and canonical-pin lock ordering before qualification.
+Forty-eight tests, formatting, strict Clippy and two static reviews passed;
+ten test-owner records had no surviving matching processes. The supplemental
+project-module test run and its pre-execution harness parse correction are
+retained in the audit trail. No production or browser/Wake action occurred.
+
+The fixed controller build and real two-controller installed test are next.
+This is source evidence, not Web coding, write ownership, unattended operation
+or different-version rollback acceptance. Connector HTTP 429 remains separate.
+[Evidence](verification/C230_PROJECT_OPERATOR_SOURCE_2026_10_25.json).
+
 ## October 25 C229 — two real registered-project local MCP endpoints PASS
 
 At 01:52:51–01:53:57 UTC October 26 (October 25 locally), the existing trusted

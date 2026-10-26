@@ -190,6 +190,20 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
+    #[cfg(test)]
+    fn verify_no_migration_fixture(config: &Self) -> (bool, bool) {
+        let root =
+            std::env::temp_dir().join(format!("headless-no-migration-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        let path = root.join("config.toml");
+        let bytes = toml::to_string(config).unwrap();
+        fs::write(&path, bytes.as_bytes()).unwrap();
+        let accepted = Self::require_headless_no_migration(&path).is_ok();
+        let unchanged = fs::read(&path).unwrap() == bytes.as_bytes()
+            && fs::read_dir(&root).unwrap().count() == 1;
+        fs::remove_dir_all(&root).unwrap();
+        (accepted, unchanged)
+    }
     fn normalized(mut self) -> Self {
         self.ngrok_authtoken = self
             .ngrok_authtoken
@@ -236,6 +250,27 @@ impl AppConfig {
             .validate()
             .map_err(std::io::Error::other)?;
         Ok(config)
+    }
+
+    /// A pinned shared launch configuration must already be initialized.
+    /// Check the same typed startup rules without writing a backup or temp file.
+    pub(crate) fn require_headless_no_migration(path: &Path) -> std::io::Result<()> {
+        if !fs::metadata(path)?.is_file() {
+            return Err(std::io::Error::other(
+                "headless configuration is unavailable",
+            ));
+        }
+        let mut config = Self::load_from_path(path)?;
+        let pending = config.mcp.route_rotation.restart_required
+            || config.mcp.route_rotation.pending_route_id.is_some();
+        let identity = ensure_installation_id(&mut config.identity);
+        let route = ensure_persistent_route_if_required(&mut config.mcp, &config.tunnel);
+        if pending || identity || route {
+            return Err(std::io::Error::other(
+                "headless configuration requires initialization or migration",
+            ));
+        }
+        Ok(())
     }
 
     #[allow(dead_code)]
@@ -1724,6 +1759,41 @@ fn generate_mcp_slug() -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn headless_no_migration_accepts_initialized_bytes_without_sidefiles() {
+        let config = super::AppConfig {
+            identity: super::TransportIdentityConfig {
+                installation_id: Some("existing-installation".into()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert_eq!(
+            super::AppConfig::verify_no_migration_fixture(&config),
+            (true, true)
+        );
+    }
+
+    #[test]
+    fn headless_no_migration_refuses_pending_route_and_missing_identity_without_sidefiles() {
+        let mut config = super::AppConfig::default();
+        assert_eq!(
+            super::AppConfig::verify_no_migration_fixture(&config),
+            (false, true)
+        );
+        config.identity.installation_id = Some("existing-installation".into());
+        config.mcp.route_rotation.restart_required = true;
+        config.mcp.route_rotation.pending_route_id = Some("pending-existing-route".into());
+        assert_eq!(
+            super::AppConfig::verify_no_migration_fixture(&config),
+            (false, true)
+        );
+        config.mcp.route_rotation.restart_required = false;
+        assert_eq!(
+            super::AppConfig::verify_no_migration_fixture(&config),
+            (false, true)
+        );
+    }
     use super::*;
     use std::sync::{Mutex, MutexGuard};
 

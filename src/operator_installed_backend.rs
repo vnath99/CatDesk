@@ -27,6 +27,73 @@ const READ_TOOLS: [&str; 10] = [
     "prompt_templates_list",
     "prompt_template_read",
 ];
+const PROJECT_ROUTE: &str = "/project/mcp";
+#[path = "operator_installed_project.rs"]
+mod project;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ProjectOptions {
+    pub control: PathBuf,
+    pub selection: crate::project_mcp::Selection,
+    pub maximum_seconds: u64,
+}
+
+pub(super) fn parse_project_options(args: &[String]) -> Result<ProjectOptions, String> {
+    let usage = "installed-backend run-project requires --control-workspace <existing-root> --project-id <id> --project-target-generation <n> --project-target-sha256 <digest> --max-runtime-seconds <1..180>";
+    if args.len() != 13
+        || args[0] != "operator"
+        || args[1] != "installed-backend"
+        || args[2] != "run-project"
+        || args[3] != "--control-workspace"
+        || args[5] != "--project-id"
+        || args[7] != "--project-target-generation"
+        || args[9] != "--project-target-sha256"
+        || args[11] != "--max-runtime-seconds"
+        || args[4].len() > 4096
+        || !Path::new(&args[4]).is_absolute()
+        || !catdesk_wake::protocol::valid_id(&args[6])
+        || args[10].len() != 64
+        || !args[10]
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    {
+        return Err(usage.into());
+    }
+    let target_generation = args[8]
+        .parse::<u64>()
+        .ok()
+        .filter(|value| *value > 0)
+        .ok_or(usage)?;
+    let maximum_seconds = args[12]
+        .parse::<u64>()
+        .ok()
+        .filter(|value| (1..=180).contains(value))
+        .ok_or(usage)?;
+    Ok(ProjectOptions {
+        control: PathBuf::from(&args[4]),
+        selection: crate::project_mcp::Selection {
+            project_id: args[6].clone(),
+            target_generation,
+            target_sha256: args[10].clone(),
+        },
+        maximum_seconds,
+    })
+}
+
+pub(super) async fn run_project(
+    workspace: &Path,
+    options: ProjectOptions,
+) -> Result<Value, String> {
+    let token =
+        std::env::var("CATDESK_MCP_AUTH_TOKEN").map_err(|_| "INSTALLED_BACKEND_AUTH_REQUIRED")?;
+    if !valid_token(&token) || !(1..=180).contains(&options.maximum_seconds) {
+        return Err("INSTALLED_BACKEND_AUTH_REQUIRED".into());
+    }
+    let workspace = workspace.to_path_buf();
+    tokio::task::spawn_blocking(move || project::run_owned(&workspace, &options, &token))
+        .await
+        .map_err(|_| "INSTALLED_BACKEND_OWNER_FAILED")?
+}
 
 struct DeadlineGuard(mpsc::Sender<()>);
 impl DeadlineGuard {

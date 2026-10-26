@@ -1,3 +1,31 @@
+## October 25 C230 — project-scoped operator action (source-qualified)
+
+Build and qualify a fixed noncanonical controller containing C230 before use.
+Run from the canonical release root with an existing caller-process
+`CATDESK_MCP_AUTH_TOKEN`. Resolve all project arguments from the current paired
+registry/Wake binding; the execution workspace comes only from that registry.
+
+```powershell
+& $qualifiedProjectController operator installed-backend run-project --control-workspace $registeredControlRoot --project-id $projectId --project-target-generation $generation --project-target-sha256 $targetDigest --max-runtime-seconds 120
+```
+
+The whole-command bound is 1..180 seconds, including admission and cleanup.
+The installed child receives the remaining time minus a 30-second reserve.
+READY is `INSTALLED_PROJECT_READY`; successful completion is
+`INSTALLED_PROJECT_EXITED`. The short shared startup lease is released before
+READY, allowing another independently bounded project controller to start.
+No global task lease or registry pin remains while serving. Each endpoint uses
+its own loopback port and existing read-only scope. It does not claim a native
+writer or authenticate the caller as the project's ChatGPT conversation.
+
+Use the existing approved development control root/configuration. Migration-
+required configuration refuses without mutation. No arbitrary executable,
+configuration, workspace override or native task assignment is accepted.
+The C227 unscoped command and protected promotion guards remain unchanged.
+Live operator qualification is still pending; do not equate source tests with
+installed or Web acceptance.
+[Evidence](../verification/C230_PROJECT_OPERATOR_SOURCE_2026_10_25.json).
+
 ## October 25 C229 — existing project-scoped installed CLI qualified locally
 
 The installed engine's existing headless project mode passed two concurrent

@@ -114,6 +114,7 @@ pub(crate) enum OperatorAction {
     InstalledBackend {
         maximum_seconds: u64,
     },
+    InstalledProject(installed_backend::ProjectOptions),
     SetWakeTarget {
         conversation_url: String,
         expected_current_target_sha256: Option<String>,
@@ -228,6 +229,11 @@ pub(crate) fn parse_operator_action(
     }
     match args.get(1).map(String::as_str) {
         Some("installed-backend") => {
+            if args.get(2).map(String::as_str) == Some("run-project") {
+                return installed_backend::parse_project_options(&args)
+                    .map(OperatorAction::InstalledProject)
+                    .map(Some);
+            }
             if args.len() != 5 || args[2] != "run" || args[3] != "--max-runtime-seconds" {
                 return Err("installed-backend requires run --max-runtime-seconds <1..180>".into());
             }
@@ -870,6 +876,9 @@ pub(crate) async fn execute_operator_action(
         OperatorAction::Web(action) => web::execute(action, workspace).await,
         OperatorAction::InstalledBackend { maximum_seconds } => {
             installed_backend::run(workspace, maximum_seconds).await
+        }
+        OperatorAction::InstalledProject(options) => {
+            installed_backend::run_project(workspace, options).await
         }
         OperatorAction::Codex(action) => {
             crate::operator_codex_cli::execute_action(action, workspace).await
@@ -1780,6 +1789,49 @@ mod tests {
             ],
         ] {
             assert!(parse_operator_action(args(&values)).is_err());
+        }
+    }
+
+    #[test]
+    fn installed_project_cli_is_closed_and_requires_exact_scope() {
+        let mut args = vec![
+            "operator",
+            "installed-backend",
+            "run-project",
+            "--control-workspace",
+            "C:/control",
+            "--project-id",
+            "alpha",
+            "--project-target-generation",
+            "1",
+            "--project-target-sha256",
+            "",
+            "--max-runtime-seconds",
+            "180",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect::<Vec<_>>();
+        args[10] = "a".repeat(64);
+        assert!(matches!(
+            parse_operator_action(args.clone()),
+            Ok(Some(OperatorAction::InstalledProject(_)))
+        ));
+        for (index, value) in [
+            (4, "relative"),
+            (6, "../other"),
+            (8, "0"),
+            (10, "ABC"),
+            (12, "181"),
+        ] {
+            let mut changed = args.clone();
+            changed[index] = value.into();
+            assert!(parse_operator_action(changed).is_err());
+        }
+        for extra in ["--project-task-contract", "--executable", "--force"] {
+            let mut changed = args.clone();
+            changed.push(extra.into());
+            assert!(parse_operator_action(changed).is_err());
         }
     }
 

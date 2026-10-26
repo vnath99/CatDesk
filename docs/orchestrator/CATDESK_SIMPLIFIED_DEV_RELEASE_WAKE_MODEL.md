@@ -1,3 +1,18 @@
+## October 25 C230 — bounded per-project operator source PASS
+
+The existing registry now feeds independent `run-project` controllers. A short
+startup lease protects release selection; it is released before READY while
+immutable release/configuration pins remain. Scope, target witness, read-only
+access, finite ownership and per-project cleanup are enforced. Configuration
+requiring initialization or route migration refuses before launch.
+
+Forty-eight focused tests, formatting, strict Clippy and two reviews passed.
+Actual fixed-controller build/live qualification remains pending. Current
+installed recovery and C229 local MCP evidence are preserved. Authenticated
+Web coding, write ownership, unattended service and different-version rollback
+remain OPEN; no new connector check or browser/Wake startup was performed.
+[Evidence](../verification/C230_PROJECT_OPERATOR_SOURCE_2026_10_25.json).
+
 ## October 25 C229 — existing project route reused without another release
 
 The current installed artifact already supports project-bound headless read-only

@@ -373,14 +373,36 @@ mod windows {
     }
 
     fn dedicated_installed_backend_entry(args: &[String]) -> bool {
-        args.len() == 5
+        let unscoped = args.len() == 5
             && args[0] == "operator"
             && args[1] == "installed-backend"
             && args[2] == "run"
             && args[3] == "--max-runtime-seconds"
             && args[4]
                 .parse::<u64>()
-                .is_ok_and(|value| (1..=180).contains(&value))
+                .is_ok_and(|value| (1..=180).contains(&value));
+        let project = args.len() == 13
+            && args[0] == "operator"
+            && args[1] == "installed-backend"
+            && args[2] == "run-project"
+            && args[3] == "--control-workspace"
+            && !args[4].is_empty()
+            && args[4].len() <= 4096
+            && std::path::Path::new(&args[4]).is_absolute()
+            && args[5] == "--project-id"
+            && catdesk_wake::protocol::valid_id(&args[6])
+            && args[7] == "--project-target-generation"
+            && args[8].parse::<u64>().is_ok_and(|value| value > 0)
+            && args[9] == "--project-target-sha256"
+            && args[10].len() == 64
+            && args[10]
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            && args[11] == "--max-runtime-seconds"
+            && args[12]
+                .parse::<u64>()
+                .is_ok_and(|value| (1..=180).contains(&value));
+        unscoped || project
     }
 
     impl OwnedCandidateChild {
@@ -1029,6 +1051,38 @@ mod windows {
             }
             let mut extra = good.to_vec();
             extra.push("--force".into());
+            assert!(!super::dedicated_installed_backend_entry(&extra));
+            let mut project = [
+                "operator",
+                "installed-backend",
+                "run-project",
+                "--control-workspace",
+                "C:/control",
+                "--project-id",
+                "alpha",
+                "--project-target-generation",
+                "1",
+                "--project-target-sha256",
+                "",
+                "--max-runtime-seconds",
+                "60",
+            ]
+            .map(String::from);
+            project[10] = "a".repeat(64);
+            assert!(super::dedicated_installed_backend_entry(&project));
+            for (index, value) in [
+                (4, "relative"),
+                (6, "../foreign"),
+                (8, "0"),
+                (10, "unknown"),
+                (12, "181"),
+            ] {
+                let mut changed = project.clone();
+                changed[index] = value.into();
+                assert!(!super::dedicated_installed_backend_entry(&changed));
+            }
+            let mut extra = project.to_vec();
+            extra.push("--project-task-contract".into());
             assert!(!super::dedicated_installed_backend_entry(&extra));
         }
 
