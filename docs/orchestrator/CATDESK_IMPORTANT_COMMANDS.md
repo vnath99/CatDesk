@@ -1,3 +1,24 @@
+## October 25 C225 — completed stopped recovery; do not repeat confirmation
+
+Canonical source now contains C224. The reviewed stopped transaction completed:
+installed C208 SHA `91eea19e6e030e80900d43114f800c3642f5cc063ef2c969b83eb20d2c28d14b`,
+matching fingerprint, trusted slot B generation 2, `QUALIFIED_STOPPED` receipt,
+exact local 401/200 MCP qualification and clean exit. Preserve that transaction.
+Do not prepare/confirm it again or invoke prereceipt rollback after publication.
+
+Use the exact qualified C224 noncanonical controller with canonical working
+directory for read-only `operator release-pair result-stopped` inspection.
+Ordinary `catdesk.ps1 diagnose` remains the public diagnosis command. Source
+migration, controller build and actual helper qualification are complete for
+this operation; they are not equivalent to a continuously serving backend.
+
+The attested older installed image supports bounded `--headless-mcp` operation,
+but lacks the newer native `--backend-only` capability. Do not silently fall back
+to coupled full-native startup. A trusted previous different release is still
+absent: preserved slot A is historical `operational_verified`, not trusted
+rollback authority. Do not corrupt the installation or rewrite a fingerprint
+to demonstrate rollback. [Evidence](../verification/C225_INSTALLED_STOPPED_RECOVERY_2026_10_25.json).
+
 ## October 25 C224 — bounded reviewed repair with a stopped outcome
 
 **Source qualified; protected migration and execution have not yet run.** The

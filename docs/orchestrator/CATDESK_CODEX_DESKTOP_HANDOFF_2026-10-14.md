@@ -1,5 +1,22 @@
 # CatDesk — Comprehensive handoff to Codex Desktop
 
+## Current installed recovery note — October 25 C225
+
+Do not repeat C224 reconciliation: it completed at 00:29:59 UTC October 26
+(October 25 locally). Canonical EXE/fingerprint and trusted slot B generation 2
+match the genuine C208 artifact. Actual installed headless MCP passed 401/200,
+initialize and 102-tool listing; the owned tree stopped and all transaction Jobs
+are absent. Original escrow, slot A, bindings, histories and native sessions
+remain preserved. Published controller source: `aa5aab69d76dc7419b2f63f9179a27ed8c2b1cfd`.
+
+Next executable task is bounded installed-image restart and public lifecycle
+readiness qualification. Full native serving is still OPEN because the installed
+older artifact lacks newer backend-only capability and its persistent owner
+has not qualified. A fresh connector call returned HTTP 429; do not repeatedly
+retry it. Previous different-version rollback and genuine two-project Web coding
+remain unaccepted. No operator action is required to repeat the completed repair.
+[Evidence](../verification/C225_INSTALLED_STOPPED_RECOVERY_2026_10_25.json).
+
 ## Current implementation note — October 25 C224
 
 The new stopped-only release-pair mode is source qualified: 36 Rust cases,

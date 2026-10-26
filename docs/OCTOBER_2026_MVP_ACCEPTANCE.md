@@ -1,3 +1,18 @@
+## October 25 C225 — installed integrity and bounded MCP PASS; serving OPEN
+
+The actual canonical EXE/fingerprint pair is repaired from the existing attested
+C208 artifact. One bounded installed-image run passed exact owner/listener proof,
+401 rejection, authenticated 200 initialize/tools-list (102 tools), whole-tree
+exit and trusted stopped-release publication. Project bindings/history, native
+sessions, original escrow and slot A remain preserved. No browser/Wake/recurring
+process was started.
+
+This is installed `HEADLESS_LOCAL` acceptance with a deliberately stopped outcome.
+Persistent native startup, a trusted previous different version, failed-current
+rollback and two independent Web coding conversations remain OPEN. The fresh
+official connector probe returned HTTP 429; it is a separate dependency.
+[Actual evidence](verification/C225_INSTALLED_STOPPED_RECOVERY_2026_10_25.json).
+
 ## October 25 C224 — stopped-recovery source, no installed claim
 
 | Capability | Evidence |

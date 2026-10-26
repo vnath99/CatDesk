@@ -1,3 +1,18 @@
+## October 25 C225 — first trusted stopped production selection restored
+
+The existing release store now accepts slot B generation 2 from the genuinely
+reviewed C208 artifact, with a distinct stopped qualification/exit/receipt chain.
+The installed executable and sidecar agree; original divergent bytes and slot A
+are preserved. This repairs integrity and recovery authority without inventing
+a serving-owner receipt or changing the legacy ownership guard.
+
+Actual installed local MCP passed 401 rejection and authenticated initialize and
+tool listing, followed by complete cleanup. Persistent native serving and trusted
+previous-version rollback remain separate gates. The official connector still
+returned HTTP 429 on its single fresh probe. Development, browser/Wake bindings
+and native project sessions remain independent and unchanged.
+[Evidence](../verification/C225_INSTALLED_STOPPED_RECOVERY_2026_10_25.json).
+
 ## October 25 C224 — repair and serving have separate lifetime contracts
 
 The new source uses one existing release-pair transaction/store with an explicit

@@ -1,3 +1,33 @@
+## October 25 C225 — canonical pair restored; actual installed MCP qualified
+
+At 00:28:29–00:29:59 UTC October 26 (October 25 locally), the reviewed C224
+controller performed one supported stopped-mode reconciliation of the unchanged,
+genuinely attested C208 candidate. The installed EXE and fingerprint now agree
+at `91eea19e6e030e80900d43114f800c3642f5cc063ef2c969b83eb20d2c28d14b`.
+The existing release reader accepted slot B generation 2 and its completed
+qualification/exit/receipt chain. Original divergent bytes remain escrowed and
+slot A is preserved. No arbitrary development EXE or checksum rewrite was used.
+
+The exact installed image served loopback MCP: unauthenticated 401, authenticated
+200 initialize and tools-list with 102 tools. The owned tree then exited. Final
+inventory found zero listeners/owners and all three transaction Jobs absent.
+All 483 unaffected baseline paths, 11 untracked files and five producer records
+match; only the three intended installed-pair/selection paths changed.
+
+Canonical source was first fast-forwarded to reviewed published
+`aa5aab69d76dc7419b2f63f9179a27ed8c2b1cfd`. The controller was separately built
+from that commit. Actual canonical helpers passed five invocations; one already
+passing PS7 row was reused after an outdated runner success phrase was corrected.
+A prior migration comparison also refused before mutation because its expected
+fingerprint literal used the wrong letter case. Both refusal records remain.
+
+A single post-recovery connector probe returned HTTP 429 from the OpenAI MCP SSE
+dependency. No retry, tunnel/authentication change or external runtime restart
+followed. The backend is deliberately stopped; persistent native serving,
+different-version rollback and two-project Web coding remain OPEN. The source
+branch SHA was read back exactly; one exact-commit Actions query found zero runs,
+so CI acceptance is not claimed. [Installed evidence](verification/C225_INSTALLED_STOPPED_RECOVERY_2026_10_25.json).
+
 ## October 25 C224 — bounded stopped-recovery implementation qualified
 
 The ordinary manual owner remained in a Job, and no alternate installed owner

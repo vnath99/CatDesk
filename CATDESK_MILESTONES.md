@@ -1,3 +1,13 @@
+## October 25 C225 — installed pair and stopped release recovered
+
+PASS: canonical C208 EXE/fingerprint agreement, live local authenticated MCP
+qualification, existing trusted slot B generation 2, original escrow/history
+preservation and complete owned-process cleanup. No production serving owner or
+two-project Web acceptance is claimed. A fresh official connector check returned
+HTTP 429. Next: bounded installed restart/lifecycle checks, then resolve serving
+and connector prerequisites for real Web execution.
+[Evidence](docs/verification/C225_INSTALLED_STOPPED_RECOVERY_2026_10_25.json).
+
 ## October 25 C224 — bounded recovery source qualified
 
 Implemented stopped-only reviewed reconciliation with fresh mode authority,
