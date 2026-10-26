@@ -1,3 +1,29 @@
+## October 25 C233 — independent installed project controllers LIVE PASS
+
+The corrected controller from `cf902361718ec36304c06b1d92aabdeb979dec3f`
+passed the monitored 180-second test against the existing trusted installed
+executable. One registered project's endpoint stayed active while the second
+controller started. Each released its startup lease before READY and retained
+separate process, port, project scope and target witness. Own-workspace reads
+passed; wrong witness, sibling path and wrong bearer were refused. The peer
+continued useful work after the refusal.
+
+Both 120-second-bounded controllers exited naturally with code 0. Owned Jobs,
+listeners and installed test processes were absent afterward. All 1,936 fixed
+prior pins and 15 historical runtime files were preserved; the two context
+ledgers only appended verified MCP traffic. Six attributed runtime files were
+added. All project bindings and native sessions remain intact. C231's failed
+history remains preserved; no browser, Wake, recurring automation or promotion
+was started. The exact source's Actions query returned zero runs.
+
+This qualifies the C230 `run-project` command using the fixed C232 controller
+(SHA-256 `0226b6e04cc996c35ed8082832bf38420ff03566b98f720fe58a691b1f09ace0`).
+It is actual installed local read-only operation, not authenticated ChatGPT Web
+coding, write ownership, unattended serving or different-version rollback.
+Simultaneous startup admission remains untested. Connector HTTP 429 remains a
+separate dependency; the full October multi-project Web milestone stays OPEN.
+[Evidence](verification/C233_INDEPENDENT_PROJECT_CONTROLLERS_2026_10_25.json).
+
 ## October 25 C232 — Windows owner-probe correction PASS; live retry pending
 
 The first C231 installed controller refused before READY. Its helper failure
