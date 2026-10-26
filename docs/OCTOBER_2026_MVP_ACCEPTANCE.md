@@ -1,3 +1,28 @@
+## October 25 C235 — installed isolated task writes and verification LIVE PASS
+
+The existing trusted C208 executable completed two concurrent operator-assigned
+local tasks in separate linked worktrees of two registered projects. Each
+previewed/applied one scoped probe file, returned its actual diff and passed a
+fixed sandboxed verification command. Duplicate apply, wrong task, sibling
+read and sibling patch-preview were refused; the peer continued afterward.
+Both 120-second endpoints exited naturally within the 180-second test owner.
+New writer markers retired, locks reopened and test processes/listeners were
+absent. The test made no native-session call, original-checkout write, Wake/browser start or promotion.
+
+C234 had stopped before any tool call when its harness tried reading the
+endpoint's legitimate exclusive project lease. Its zero-call task, worktree,
+journal and pending writer marker remain quarantined. C235 uses fresh task
+identities; it exempts only the verified live endpoint's exact lease hash and
+rechecks after exit. Nineteen prior quarantine records remained unchanged.
+
+This is installed local write/command acceptance, not authenticated ChatGPT Web
+coding or delivery of a project MVP feature. The original marker exposes a
+remaining cold-task recovery gap: no supported retirement command exists. Never
+delete it or replay the task. Next is a narrow owner-proven recovery transition
+using the existing writer gate. Connector HTTP 429 remains separate and was not
+retried. The complete multi-project Web milestone remains OPEN.
+[Evidence](verification/C235_INSTALLED_TASK_WRITES_2026_10_25.json).
+
 ## October 25 C233 — independent installed project controllers LIVE PASS
 
 The corrected controller from `cf902361718ec36304c06b1d92aabdeb979dec3f`
