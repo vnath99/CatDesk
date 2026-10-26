@@ -1,5 +1,18 @@
 # CatDesk — Comprehensive handoff to Codex Desktop
 
+## Current installed test note — October 25 C226
+
+The restored installed image completed two natural 60-second headless cycles,
+401/200 authentication, exact ten-tool catalogue and byte-verified README reads.
+Cleanup and protected-state preservation passed. Do not replay completed tests.
+
+Next source increment: a supported installed-image foreground serving action,
+reusing the existing owned-child loop and trusted release reader without changing
+the development selector or detached-serving guard. Native lifecycle, unattended
+serving, trusted previous-version rollback and two-Web coding remain OPEN.
+Connector HTTP 429 is an independent dependency; do not repeatedly retry it.
+[Evidence](../verification/C226_INSTALLED_RESTART_2026_10_25.json).
+
 ## Current installed recovery note — October 25 C225
 
 Do not repeat C224 reconciliation: it completed at 00:29:59 UTC October 26
@@ -14,7 +27,7 @@ readiness qualification. Full native serving is still OPEN because the installed
 older artifact lacks newer backend-only capability and its persistent owner
 has not qualified. A fresh connector call returned HTTP 429; do not repeatedly
 retry it. Previous different-version rollback and genuine two-project Web coding
-remain unaccepted. No operator action is required to repeat the completed repair.
+remain unaccepted. No operator action is required for the completed repair.
 [Evidence](../verification/C225_INSTALLED_STOPPED_RECOVERY_2026_10_25.json).
 
 ## Current implementation note — October 25 C224

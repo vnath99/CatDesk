@@ -1,3 +1,27 @@
+## October 25 C226 — two installed restarts and real read-only MCP PASS
+
+From 00:42:11 to 00:44:16 UTC October 26 (October 25 locally), the restored
+installed image completed two independent 60-second headless runs and natural
+code-0 exits under a 180-second process bound. Each cycle rejected missing and
+wrong bearer tokens with 401, returned 200 initialize/tools-list, exposed exactly
+ten read-only tools, and returned the canonical public README with its exact
+24,049-byte SHA-256. All ten MCP requests are evidenced; raw source and tokens
+are absent from probe records. Final owner/listener inventory is empty, and all
+protected state/source/promotion evidence remains unchanged.
+
+An earlier runner wrongly expected a multi-tools catalogue entry in read-only
+mode. Its known failed local attempt and clean exit remain recorded; neither
+natural cycle was counted until the corrected test completed. A proposed public
+native-readiness probe was omitted because its owner contract requires a native
+daemon; headless readiness cannot satisfy that contract.
+
+Public foreground serving is the next concrete source gap. Reuse the existing
+owned development-backend loop for a distinct installed-image action with trusted
+release validation, without changing development selection or detached-serving
+guards. The official connector's prior fresh HTTP 429 remains independent and
+was not retried. No production mutation, browser/Wake process or Web replay
+occurred. [Evidence](verification/C226_INSTALLED_RESTART_2026_10_25.json).
+
 ## October 25 C225 — canonical pair restored; actual installed MCP qualified
 
 At 00:28:29–00:29:59 UTC October 26 (October 25 locally), the reviewed C224

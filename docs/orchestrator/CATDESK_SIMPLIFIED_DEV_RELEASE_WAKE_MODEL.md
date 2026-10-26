@@ -1,3 +1,13 @@
+## October 25 C226 — installed operation verified; foreground ownership gap
+
+The trusted installed image now has two natural bounded headless restart/read
+cycles with state preservation and complete cleanup. The remaining local gap is
+a public foreground serving action for that image. Reuse the existing retained
+child/Job owner loop with current trusted-release checks; keep the development
+selector and detached-serving contract unchanged. No new candidate is needed
+merely to demonstrate this already supported headless engine.
+[Evidence](../verification/C226_INSTALLED_RESTART_2026_10_25.json).
+
 ## October 25 C225 — first trusted stopped production selection restored
 
 The existing release store now accepts slot B generation 2 from the genuinely

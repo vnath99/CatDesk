@@ -1,3 +1,17 @@
+## October 25 C226 — installed headless checks completed
+
+Two owned 60-second starts of the installed image passed authentication,
+read-only catalogue, real README reads and natural exits, followed by empty
+listener/owner checks. Do not rerun these checks without a new concern.
+
+There is currently no public installed-image foreground serving command.
+The existing development foreground owner remains restricted to its selected
+development package. Do not substitute canonical bytes into that selector or
+append a native-daemon flag to a headless launch. Implement an explicit installed
+foreground action using the existing owned-child loop and trusted release reader.
+Native lifecycle, unattended serving and different-version rollback remain OPEN.
+[Evidence](../verification/C226_INSTALLED_RESTART_2026_10_25.json).
+
 ## October 25 C225 — completed stopped recovery; do not repeat confirmation
 
 Canonical source now contains C224. The reviewed stopped transaction completed:

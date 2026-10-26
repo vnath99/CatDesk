@@ -1,3 +1,12 @@
+## October 25 C226 — actual installed restart/read qualification PASS
+
+Two bounded natural restarts, missing/wrong-token rejection, authenticated MCP,
+exact read-only catalogue and byte-verified README reads passed; cleanup and
+preservation passed. A supported installed-image foreground serving action is
+the next source gap. Public native startup, different-version rollback and real
+two-project ChatGPT Web acceptance remain OPEN.
+[Evidence](docs/verification/C226_INSTALLED_RESTART_2026_10_25.json).
+
 ## October 25 C225 — installed pair and stopped release recovered
 
 PASS: canonical C208 EXE/fingerprint agreement, live local authenticated MCP

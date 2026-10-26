@@ -1,3 +1,16 @@
+## October 25 C226 — installed restart/read PASS; Web acceptance OPEN
+
+Two natural 60-second installed-headless cycles passed 401/200 authentication,
+the exact ten-tool read-only catalogue, a real README read with exact bytes,
+natural code-0 exits and clean state-preserving shutdown. This is actual local
+installed execution, with an unscoped canonical read; it is not two-project Web
+coding. No public native lifecycle or persistent serving acceptance is implied.
+
+Next: a supported installed-image foreground owner reusing functioning ownership
+code. Connector HTTP 429, trusted different-version rollback and actual
+two-conversation Web execution remain OPEN.
+[Evidence](verification/C226_INSTALLED_RESTART_2026_10_25.json).
+
 ## October 25 C225 — installed integrity and bounded MCP PASS; serving OPEN
 
 The actual canonical EXE/fingerprint pair is repaired from the existing attested
