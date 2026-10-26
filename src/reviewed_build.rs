@@ -135,6 +135,9 @@ const CONTROL_CHILDREN: &[&str] = &[
 ];
 const ACTIVE_GENERATION_FILE: &str = "active-generation.json";
 const RETRY_HISTORY_DIRECTORY: &str = "terminal-history";
+const SUCCESS_HISTORY_DIRECTORY: &str = "successful-history";
+const SUCCESS_AUDIT_DOMAIN: &str = "CATDESK_REVIEWED_BUILD_ATTESTED_SUCCESSION_V1";
+const MAX_REVIEWED_BUILD_GENERATIONS: usize = 4096;
 const RETRY_PLAN_DIRECTORY: &str = "retry-plans";
 const RETRY_GENERATION_DIRECTORY: &str = "generations";
 
@@ -5060,8 +5063,22 @@ struct ReviewedBuildTerminalAuditV1 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReviewedBuildSuccessAuditV1 {
+    schema_version: u8,
+    domain: String,
+    attempt: ReviewedBuildAttemptV1,
+    claim: ReviewedBuildClaimV1,
+    owner: ReviewedBuildOwnerProofV1,
+    result: ReviewedBuildResultV1,
+    attestation: ReviewedBuildAttestationV2,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ReviewedBuildRetryPlanV1 {
+    // V1 retains failed/unclaimed predecessors. V2 retains an independently
+    // revalidated successful producer; success is never a retryable failure.
     schema_version: u8,
     source_attempt_id: String,
     source_attempt_digest: String,
@@ -5127,35 +5144,71 @@ pub fn validate_producer_attestation(
     {
         return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
     }
-    let control = existing_control_root(workspace)?;
+    let candidate_attempt = candidate_attempt_id(candidate_relative_path)
+        .ok_or_else(|| "REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".to_string())?;
+    let control = reachable_producer_control(workspace, candidate_attempt)?;
     let attempt: ReviewedBuildAttemptV1 = control_read_json(&control, "attempt.json")?;
-    validate_attempt(
-        workspace,
+    if !exact_attempt_basics(
         &attempt,
         review_record_id,
         review_authority_sha256,
         expected,
-    )?;
-    let result: ReviewedBuildResultV1 = control_read_json(&control, "result.json")?;
+    ) || attempt.review_session_id != review_session_id
+    {
+        return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+    }
+    validate_historical_terminal_attempt(workspace, &attempt)?;
+    let audit = read_successful_producer(workspace, &control, &attempt)?;
+    if audit.attestation.candidate_relative_path != candidate_relative_path
+        || audit.attestation.candidate_sha256 != candidate_sha256
+    {
+        return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+    }
+    Ok(audit.attestation)
+}
+
+fn candidate_attempt_id(path: &str) -> Option<&str> {
+    let id = path
+        .strip_prefix("target/reviewed-builds/")?
+        .strip_suffix("/catdesk.exe")?;
+    (valid_attempt_id(id) && id == id.to_ascii_lowercase()).then_some(id)
+}
+
+/// Read the complete immutable producer family and re-open its exact candidate.
+/// Snapshot/tool authority is validated by the caller before this read.
+fn read_successful_producer(
+    workspace: &Path,
+    control: &BuildControlRoot,
+    attempt: &ReviewedBuildAttemptV1,
+) -> Result<ReviewedBuildSuccessAuditV1, String> {
+    let result: ReviewedBuildResultV1 = control_read_json(control, "result.json")?;
     if result.schema_version != RESULT_SCHEMA_VERSION
         || result.build_attempt_id != attempt.build_attempt_id
         || result.state != "BUILD_ATTESTED"
+        || result.failure_code.is_some()
+        || result.failure_diagnostic.is_some()
     {
         return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
     }
-    let claim: ReviewedBuildClaimV1 = control_read_json(&control, "claim.json")?;
-    if !valid_claim(&claim, &attempt)
+    let claim: ReviewedBuildClaimV1 = control_read_json(control, "claim.json")?;
+    let owner: ReviewedBuildOwnerProofV1 = control_read_json(control, "worker-owner.json")?;
+    if !valid_claim(&claim, attempt)
         || claim.owner_id != result.owner_id
-        || !control_has_valid_owner_proof(&control, &claim)?
+        || !valid_owner_proof(&owner, &claim)
     {
         return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
     }
-    let attestation: ReviewedBuildAttestationV2 = control_read_json(&control, "attestation.json")?;
+    let attestation: ReviewedBuildAttestationV2 = control_read_json(control, "attestation.json")?;
+    if candidate_attempt_id(&attestation.candidate_relative_path)
+        != Some(attempt.build_attempt_id.as_str())
+    {
+        return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+    }
     validate_attestation(
         &attestation,
-        &attempt,
-        candidate_relative_path,
-        candidate_sha256,
+        attempt,
+        &attestation.candidate_relative_path,
+        &attestation.candidate_sha256,
     )?;
     if result.attestation_digest.as_deref() != Some(attestation.attestation_digest.as_str()) {
         return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
@@ -5169,7 +5222,15 @@ pub fn validate_producer_attestation(
     {
         return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
     }
-    Ok(attestation)
+    Ok(ReviewedBuildSuccessAuditV1 {
+        schema_version: 1,
+        domain: SUCCESS_AUDIT_DOMAIN.into(),
+        attempt: attempt.clone(),
+        claim,
+        owner,
+        result,
+        attestation,
+    })
 }
 
 pub fn prepare_reviewed_build(
@@ -5213,6 +5274,26 @@ pub fn prepare_reviewed_build(
         )),
         Err(_) => {
             let existing: ReviewedBuildAttemptV1 = control_read_json(&control, "attempt.json")?;
+            if same_review_binding(&existing, &attempt)
+                && successful_producer_audit(workspace, &control, &existing).is_ok()
+            {
+                return Ok((
+                    existing.confirmation_token,
+                    ReviewedBuildPublicOutcomeV1 {
+                        state: "BUILD_ATTESTED",
+                    },
+                ));
+            }
+            if !same_review_binding(&existing, &attempt)
+                && let Some(retained) = retained_successful_binding(workspace, &attempt)?
+            {
+                return Ok((
+                    retained.confirmation_token,
+                    ReviewedBuildPublicOutcomeV1 {
+                        state: "BUILD_ATTESTED",
+                    },
+                ));
+            }
             if exact_attempt_matches(
                 &existing,
                 review_record_id,
@@ -5240,14 +5321,17 @@ pub fn prepare_reviewed_build(
                 }
             } else {
                 // A different acknowledged binding may supersede an exact
-                // active family only before any worker ownership/execution
-                // evidence exists, or after the existing fully-audited
-                // retryable terminal failure path. The prior attempt remains
-                // immutable in both cases.
+                // active family before ownership, after an audited failure,
+                // or after full successful-producer revalidation. Every
+                // predecessor remains immutable.
                 validate_historical_terminal_attempt(workspace, &existing)
                     .map_err(|_| "REVIEWED_BUILD_BINDING_IMMUTABLE".to_string())?;
                 if unclaimed_prepared_attempt(&control, &existing)? {
                     prepare_unclaimed_prepared_supersession(&control, &existing, attempt)
+                } else if !same_review_binding(&existing, &attempt)
+                    && let Ok(audit) = successful_producer_audit(workspace, &control, &existing)
+                {
+                    prepare_successful_succession(&control, &existing, audit, attempt)
                 } else {
                     terminal_failure_audit(&control, &existing)
                         .map_err(|_| "REVIEWED_BUILD_BINDING_IMMUTABLE".to_string())
@@ -7516,6 +7600,28 @@ fn terminal_failure_audit(
     })
 }
 
+fn successful_producer_audit(
+    workspace: &Path,
+    control: &BuildControlRoot,
+    attempt: &ReviewedBuildAttemptV1,
+) -> Result<ReviewedBuildSuccessAuditV1, String> {
+    validate_historical_terminal_attempt(workspace, attempt)?;
+    if attempt.review_session_id != attempt.snapshot_expected.session_id {
+        return Err("REVIEWED_BUILD_EVIDENCE_DRIFTED".into());
+    }
+    read_successful_producer(workspace, control, attempt)
+}
+
+fn same_review_binding(a: &ReviewedBuildAttemptV1, b: &ReviewedBuildAttemptV1) -> bool {
+    a.review_session_id == b.review_session_id
+        && a.review_record_id == b.review_record_id
+        && a.review_authority_sha256 == b.review_authority_sha256
+        && a.snapshot_expected == b.snapshot_expected
+        && a.snapshot_id == b.snapshot_id
+        && a.snapshot_authority_digest == b.snapshot_authority_digest
+        && a.snapshot_manifest_digest == b.snapshot_manifest_digest
+}
+
 fn unclaimed_prepared_attempt(
     control: &BuildControlRoot,
     attempt: &ReviewedBuildAttemptV1,
@@ -7564,7 +7670,7 @@ fn prepare_unclaimed_prepared_supersession(
     let mut plans = control.base_guard.try_clone("reviewed build retry plans")?;
     plans.descend_or_create(RETRY_PLAN_DIRECTORY, "reviewed build retry plans")?;
     if let Some(existing) = read_optional_retry_plan(&plans, &prior_name)? {
-        return resume_retry_plan(control, prior, &evidence_digest, existing, &fresh);
+        return resume_retry_plan(control, prior, &evidence_digest, existing, &fresh, 1);
     }
 
     let fresh_bytes = serialize_control_record(&fresh)?;
@@ -7606,7 +7712,7 @@ fn prepare_unclaimed_prepared_supersession(
         Err(_) => {
             let existing: ReviewedBuildRetryPlanV1 =
                 read_control_record(&plans, &prior_name, "reviewed build retry plans")?;
-            return resume_retry_plan(control, prior, &plan.audit_digest, existing, &fresh);
+            return resume_retry_plan(control, prior, &plan.audit_digest, existing, &fresh, 1);
         }
     }
     Ok((
@@ -7671,17 +7777,62 @@ fn prepare_terminal_retry(
     fresh: ReviewedBuildAttemptV1,
 ) -> Result<(String, ReviewedBuildPublicOutcomeV1), String> {
     let audit_bytes = serialize_control_record(&audit)?;
-    let audit_digest = sha256(&audit_bytes);
+    prepare_generation_transition(
+        control,
+        prior,
+        &audit_bytes,
+        fresh,
+        1,
+        RETRY_HISTORY_DIRECTORY,
+    )
+}
+
+fn prepare_successful_succession(
+    control: &BuildControlRoot,
+    prior: &ReviewedBuildAttemptV1,
+    audit: ReviewedBuildSuccessAuditV1,
+    fresh: ReviewedBuildAttemptV1,
+) -> Result<(String, ReviewedBuildPublicOutcomeV1), String> {
+    if audit.schema_version != 1
+        || audit.domain != SUCCESS_AUDIT_DOMAIN
+        || audit.attempt != *prior
+        || audit.result.state != "BUILD_ATTESTED"
+        || same_review_binding(prior, &fresh)
+    {
+        return Err("REVIEWED_BUILD_BINDING_IMMUTABLE".into());
+    }
+    let audit_bytes = serialize_control_record(&audit)?;
+    prepare_generation_transition(
+        control,
+        prior,
+        &audit_bytes,
+        fresh,
+        2,
+        SUCCESS_HISTORY_DIRECTORY,
+    )
+}
+
+// Both transitions share one create-once plan and atomic selection mechanism.
+// Their audit domains and plan versions remain distinct.
+fn prepare_generation_transition(
+    control: &BuildControlRoot,
+    prior: &ReviewedBuildAttemptV1,
+    audit_bytes: &[u8],
+    fresh: ReviewedBuildAttemptV1,
+    plan_version: u8,
+    history_directory: &str,
+) -> Result<(String, ReviewedBuildPublicOutcomeV1), String> {
+    let audit_digest = sha256(audit_bytes);
     let prior_name = retry_child_name(&prior.build_attempt_id)?;
 
     let mut history = control
         .base_guard
         .try_clone("reviewed build terminal history")?;
-    history.descend_or_create(RETRY_HISTORY_DIRECTORY, "reviewed build terminal history")?;
+    history.descend_or_create(history_directory, "reviewed build terminal history")?;
     write_or_validate_new_control_record(
         &history,
         &prior_name,
-        &audit_bytes,
+        audit_bytes,
         "reviewed build terminal history",
     )?;
 
@@ -7692,7 +7843,14 @@ fn prepare_terminal_retry(
     // lineage; an exact replay converges, while a competing new review record
     // cannot borrow the first lineage's confirmation token.
     if let Some(existing) = read_optional_retry_plan(&plans, &prior_name)? {
-        return resume_retry_plan(control, prior, &audit_digest, existing, &fresh);
+        return resume_retry_plan(
+            control,
+            prior,
+            &audit_digest,
+            existing,
+            &fresh,
+            plan_version,
+        );
     }
 
     let fresh_digest = fresh.attempt_digest.clone();
@@ -7721,7 +7879,7 @@ fn prepare_terminal_retry(
     }
 
     let plan = ReviewedBuildRetryPlanV1 {
-        schema_version: 1,
+        schema_version: plan_version,
         source_attempt_id: prior.build_attempt_id.clone(),
         source_attempt_digest: prior.attempt_digest.clone(),
         audit_digest,
@@ -7740,7 +7898,14 @@ fn prepare_terminal_retry(
         Err(_) => {
             let existing: ReviewedBuildRetryPlanV1 =
                 read_control_record(&plans, &prior_name, "reviewed build retry plans")?;
-            return resume_retry_plan(control, prior, &plan.audit_digest, existing, &fresh);
+            return resume_retry_plan(
+                control,
+                prior,
+                &plan.audit_digest,
+                existing,
+                &fresh,
+                plan_version,
+            );
         }
     }
     Ok((
@@ -7776,8 +7941,9 @@ fn resume_retry_plan(
     audit_digest: &str,
     plan: ReviewedBuildRetryPlanV1,
     requested: &ReviewedBuildAttemptV1,
+    expected_schema: u8,
 ) -> Result<(String, ReviewedBuildPublicOutcomeV1), String> {
-    if plan.schema_version != 1
+    if plan.schema_version != expected_schema
         || plan.source_attempt_id != prior.build_attempt_id
         || plan.source_attempt_digest != prior.attempt_digest
         || plan.audit_digest != audit_digest
@@ -7812,7 +7978,7 @@ fn retry_plan_target(
     control: &BuildControlRoot,
     plan: &ReviewedBuildRetryPlanV1,
 ) -> Result<ReviewedBuildAttemptV1, String> {
-    if plan.schema_version != 1
+    if !matches!(plan.schema_version, 1 | 2)
         || !valid_attempt_id(&plan.fresh_attempt_id)
         || !valid_attempt_id(&plan.fresh_confirmation_token)
         || !valid_sha256(&plan.fresh_attempt_digest)
@@ -8749,6 +8915,172 @@ fn existing_control_root(workspace: &Path) -> Result<BuildControlRoot, String> {
         .and_then(|_| guard.assert_stable("reviewed build control"))
         .map_err(|_| "REVIEWED_BUILD_STATE_UNAVAILABLE".to_string())?;
     resolve_active_control_root(guard)
+}
+
+/// Historical selection is not a directory lookup. Follow only the immutable
+/// predecessor plans from the original family to the current selected family,
+/// and return a retained producer only after that complete chain is proved.
+fn reachable_producer_control(
+    workspace: &Path,
+    requested_attempt: &str,
+) -> Result<BuildControlRoot, String> {
+    reachable_control_matching(workspace, |_, attempt| {
+        Ok(attempt.build_attempt_id == requested_attempt)
+    })?
+    .ok_or_else(|| "REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into())
+}
+
+fn retained_successful_binding(
+    workspace: &Path,
+    requested: &ReviewedBuildAttemptV1,
+) -> Result<Option<ReviewedBuildAttemptV1>, String> {
+    let selected = reachable_control_matching(workspace, |control, attempt| {
+        if !same_review_binding(attempt, requested) {
+            return Ok(false);
+        }
+        let result = read_optional_relative_regular(
+            &control.guard,
+            "result.json",
+            MAX_STATE_BYTES as u64,
+            "reviewed build retained result",
+        )?;
+        let Some(bytes) = result else {
+            return Ok(false);
+        };
+        let result: ReviewedBuildResultV1 = serde_json::from_slice(&bytes)
+            .map_err(|_| "REVIEWED_BUILD_STATE_UNAVAILABLE".to_string())?;
+        if result.state != "BUILD_ATTESTED" {
+            return Ok(false);
+        }
+        successful_producer_audit(workspace, control, attempt)?;
+        Ok(true)
+    })?;
+    selected
+        .map(|control| control_read_json(&control, "attempt.json"))
+        .transpose()
+}
+
+fn reachable_control_matching(
+    workspace: &Path,
+    mut matches: impl FnMut(&BuildControlRoot, &ReviewedBuildAttemptV1) -> Result<bool, String>,
+) -> Result<Option<BuildControlRoot>, String> {
+    let active = existing_control_root(workspace)?;
+    let current: ReviewedBuildAttemptV1 = control_read_json(&active, "attempt.json")?;
+    if active.guard.path() == active.base_guard.path() {
+        return Ok(matches(&active, &current)?.then_some(active));
+    }
+    let pointer = read_active_pointer(&active.base_guard)?;
+    let mut next = BuildControlRoot {
+        guard: active
+            .base_guard
+            .try_clone("reviewed build original family")?,
+        base_guard: active.base_guard.try_clone("reviewed build lineage")?,
+    };
+    let mut selected = None;
+    let mut visited = BTreeSet::new();
+    for _ in 0..MAX_REVIEWED_BUILD_GENERATIONS {
+        let attempt: ReviewedBuildAttemptV1 = control_read_json(&next, "attempt.json")?;
+        if digest_attempt(&attempt)? != attempt.attempt_digest
+            || !visited.insert(attempt.build_attempt_id.clone())
+        {
+            return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+        }
+        if matches(&next, &attempt)? {
+            if selected.is_some() {
+                return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+            }
+            selected = Some(BuildControlRoot {
+                guard: next.guard.try_clone("reviewed build retained producer")?,
+                base_guard: next
+                    .base_guard
+                    .try_clone("reviewed build retained producer")?,
+            });
+        }
+        let mut plans = next.base_guard.try_clone("reviewed build lineage plans")?;
+        plans.descend_existing(RETRY_PLAN_DIRECTORY, "reviewed build lineage plans")?;
+        let plan: ReviewedBuildRetryPlanV1 = read_control_record(
+            &plans,
+            &retry_child_name(&attempt.build_attempt_id)?,
+            "reviewed build lineage plan",
+        )?;
+        validate_predecessor_plan(workspace, &next, &attempt, &plan)?;
+        let target = retry_plan_target(&next, &plan)?;
+        if target.build_attempt_id == current.build_attempt_id {
+            if pointer.source_attempt_id != attempt.build_attempt_id
+                || pointer.source_attempt_digest != attempt.attempt_digest
+                || pointer.active_attempt_id != target.build_attempt_id
+                || pointer.active_attempt_digest != target.attempt_digest
+                || target != current
+                || read_active_pointer(&active.base_guard)? != pointer
+            {
+                return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+            }
+            if matches(&active, &target)? {
+                if selected.is_some() {
+                    return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+                }
+                selected = Some(active);
+            }
+            return Ok(selected);
+        }
+        let mut guard = next.base_guard.try_clone("reviewed build lineage family")?;
+        guard.descend_existing(RETRY_GENERATION_DIRECTORY, "reviewed build lineage family")?;
+        guard.descend_existing(&target.build_attempt_id, "reviewed build lineage family")?;
+        next = BuildControlRoot {
+            guard,
+            base_guard: next.base_guard,
+        };
+    }
+    Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into())
+}
+
+fn validate_predecessor_plan(
+    workspace: &Path,
+    control: &BuildControlRoot,
+    attempt: &ReviewedBuildAttemptV1,
+    plan: &ReviewedBuildRetryPlanV1,
+) -> Result<(), String> {
+    if plan.source_attempt_id != attempt.build_attempt_id
+        || plan.source_attempt_digest != attempt.attempt_digest
+        || plan.source_attempt_id == plan.fresh_attempt_id
+    {
+        return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+    }
+    let (history_directory, bytes) = match plan.schema_version {
+        1 if unclaimed_prepared_attempt(control, attempt)? => {
+            if unclaimed_prepared_evidence_digest(attempt)? != plan.audit_digest {
+                return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+            }
+            return Ok(());
+        }
+        1 => {
+            let audit = terminal_failure_audit(control, attempt)
+                .map_err(|_| "REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".to_string())?;
+            (RETRY_HISTORY_DIRECTORY, serialize_control_record(&audit)?)
+        }
+        2 => {
+            if same_review_binding(attempt, &retry_plan_target(control, plan)?) {
+                return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+            }
+            let audit = successful_producer_audit(workspace, control, attempt)?;
+            (SUCCESS_HISTORY_DIRECTORY, serialize_control_record(&audit)?)
+        }
+        _ => return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into()),
+    };
+    let mut history = control
+        .base_guard
+        .try_clone("reviewed build predecessor history")?;
+    history.descend_existing(history_directory, "reviewed build predecessor history")?;
+    let stored = read_relative_regular(
+        &history,
+        &retry_child_name(&attempt.build_attempt_id)?,
+        MAX_STATE_BYTES as u64,
+        "reviewed build predecessor history",
+    )?;
+    if stored != bytes || sha256(&stored) != plan.audit_digest {
+        return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+    }
+    Ok(())
 }
 
 /// Resolve the one product-owned active generation.  A missing pointer is the
@@ -10792,6 +11124,423 @@ mod tests {
         assert_eq!(created.authority_digest, replayed.authority_digest);
         assert_eq!(created.manifest_digest, replayed.manifest_digest);
         assert!(!replayed.entries.is_empty());
+    }
+
+    #[cfg(windows)]
+    fn complete_successful_fixture(
+        root: &Path,
+        control: &BuildControlRoot,
+        attempt: &ReviewedBuildAttemptV1,
+    ) {
+        let parent = candidate_parent_for_create(root, &attempt.build_attempt_id).unwrap();
+        let mut file = create_candidate_file(&parent).unwrap();
+        file.write_all(b"next-qualified-candidate").unwrap();
+        file.sync_all().unwrap();
+        let evidence = evidence_from_open_regular(&mut file, "success fixture").unwrap();
+        let mut attestation = test_attestation(attempt);
+        attestation.candidate_relative_path = format!(
+            "target/reviewed-builds/{}/catdesk.exe",
+            attempt.build_attempt_id
+        );
+        attestation.candidate_sha256 = evidence.sha256;
+        attestation.candidate_length = evidence.length;
+        attestation.candidate_identity = evidence.identity;
+        attestation.attestation_digest = digest_attestation(&attestation).unwrap();
+        let claim = ReviewedBuildClaimV1 {
+            schema_version: 1,
+            build_attempt_id: attempt.build_attempt_id.clone(),
+            owner_id: "9".repeat(32),
+            spawn_generation: 1,
+            state: "SPAWN_OWNER_RESERVED".into(),
+        };
+        let owner = ReviewedBuildOwnerProofV1 {
+            schema_version: 1,
+            build_attempt_id: attempt.build_attempt_id.clone(),
+            owner_id: claim.owner_id.clone(),
+            spawn_generation: 1,
+        };
+        let result = ReviewedBuildResultV1 {
+            schema_version: 1,
+            build_attempt_id: attempt.build_attempt_id.clone(),
+            owner_id: claim.owner_id.clone(),
+            state: "BUILD_ATTESTED".into(),
+            attestation_digest: Some(attestation.attestation_digest.clone()),
+            failure_code: None,
+            failure_diagnostic: None,
+        };
+        control_create_json(control, "claim.json", &claim).unwrap();
+        control_create_json(control, "worker-owner.json", &owner).unwrap();
+        control_create_json(control, "attestation.json", &attestation).unwrap();
+        control_create_json(control, "result.json", &result).unwrap();
+    }
+
+    #[test]
+    fn historical_producer_path_is_an_exact_attempt_not_an_arbitrary_generation() {
+        let id = "a".repeat(32);
+        assert_eq!(
+            candidate_attempt_id(&format!("target/reviewed-builds/{id}/catdesk.exe")),
+            Some(id.as_str())
+        );
+        for path in [
+            format!("target/reviewed-builds/{id}/../catdesk.exe"),
+            format!("target/reviewed-builds/{id}/other.exe"),
+            format!("target\\reviewed-builds\\{id}\\catdesk.exe"),
+            format!("target/reviewed-builds/{}/catdesk.exe", "A".repeat(32)),
+            format!("target/reviewed-builds/{id}/catdesk.exe/"),
+        ] {
+            assert!(candidate_attempt_id(&path).is_none(), "{path}");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn successful_producer_succession_preserves_and_replays_two_older_generations() {
+        let (root, expected, prior, attestation, _) = end_to_end_attestation_fixture().unwrap();
+        let control = existing_control_root(&root).unwrap();
+        let before = CONTROL_CHILDREN
+            .iter()
+            .map(|name| {
+                (
+                    *name,
+                    read_relative_regular(&control.guard, name, MAX_STATE_BYTES as u64, "fixture")
+                        .unwrap(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let (token, outcome) = prepare_reviewed_build(
+            &root,
+            &prior.review_record_id,
+            &prior.review_authority_sha256,
+            &expected,
+        )
+        .unwrap();
+        assert_eq!(token, prior.confirmation_token);
+        assert_eq!(outcome.state, "BUILD_ATTESTED");
+        let fresh = fresh_attempt_for_authority(&prior, 'b', 'c', "second-review");
+        let audit = successful_producer_audit(&root, &control, &prior).unwrap();
+        prepare_successful_succession(&control, &prior, audit.clone(), fresh.clone()).unwrap();
+        let replay = fresh_attempt_for_authority(&prior, 'd', 'e', "second-review");
+        assert_eq!(
+            prepare_successful_succession(&control, &prior, audit.clone(), replay)
+                .unwrap()
+                .0,
+            fresh.confirmation_token
+        );
+        let competing = fresh_attempt_for_authority(&prior, 'd', 'e', "competing-review");
+        assert_eq!(
+            prepare_successful_succession(&control, &prior, audit, competing).unwrap_err(),
+            "REVIEWED_BUILD_BINDING_IMMUTABLE"
+        );
+        for (name, bytes) in before {
+            assert_eq!(
+                read_relative_regular(&control.guard, name, MAX_STATE_BYTES as u64, "fixture")
+                    .unwrap(),
+                bytes
+            );
+        }
+        let active = existing_control_root(&root).unwrap();
+        complete_successful_fixture(&root, &active, &fresh);
+        let pointer_before =
+            fs::read(control.base_guard.path().join(ACTIVE_GENERATION_FILE)).unwrap();
+        let count_before = fs::read_dir(control.base_guard.path().join(RETRY_GENERATION_DIRECTORY))
+            .unwrap()
+            .count();
+        let old = prepare_reviewed_build(
+            &root,
+            &prior.review_record_id,
+            &prior.review_authority_sha256,
+            &expected,
+        )
+        .unwrap();
+        assert_eq!(old.0, prior.confirmation_token);
+        assert_eq!(old.1.state, "BUILD_ATTESTED");
+        assert_eq!(
+            fs::read(control.base_guard.path().join(ACTIVE_GENERATION_FILE)).unwrap(),
+            pointer_before
+        );
+        assert_eq!(
+            fs::read_dir(control.base_guard.path().join(RETRY_GENERATION_DIRECTORY))
+                .unwrap()
+                .count(),
+            count_before
+        );
+        assert_eq!(
+            confirm_reviewed_build(&root, &prior.confirmation_token, |_, _| panic!(
+                "old success must not spawn"
+            ))
+            .unwrap_err(),
+            "REVIEWED_BUILD_CONFIRMATION_UNAVAILABLE"
+        );
+        let third = fresh_attempt_for_authority(&fresh, 'd', 'e', "third-review");
+        let audit = successful_producer_audit(&root, &active, &fresh).unwrap();
+        prepare_successful_succession(&active, &fresh, audit, third).unwrap();
+        for old in [&prior, &fresh] {
+            let path = format!(
+                "target/reviewed-builds/{}/catdesk.exe",
+                old.build_attempt_id
+            );
+            let retained = reachable_producer_control(&root, &old.build_attempt_id).unwrap();
+            let record: ReviewedBuildAttestationV2 =
+                control_read_json(&retained, "attestation.json").unwrap();
+            assert!(
+                validate_producer_attestation(
+                    &root,
+                    &expected.session_id,
+                    &old.review_record_id,
+                    &old.review_authority_sha256,
+                    &expected,
+                    &path,
+                    &record.candidate_sha256
+                )
+                .is_ok()
+            );
+        }
+        assert_eq!(
+            validate_producer_attestation(
+                &root,
+                &expected.session_id,
+                "wrong-review",
+                &prior.review_authority_sha256,
+                &expected,
+                &attestation.candidate_relative_path,
+                &attestation.candidate_sha256
+            )
+            .unwrap_err(),
+            "REVIEWED_BUILD_ATTESTATION_UNAVAILABLE"
+        );
+        // A complete but unlinked generation is not release authority.
+        let orphan = fresh_attempt_for_authority(&prior, 'a', '8', "orphan-review");
+        let mut orphan_guard = control.base_guard.try_clone("orphan fixture").unwrap();
+        orphan_guard
+            .descend_existing(RETRY_GENERATION_DIRECTORY, "orphan fixture")
+            .unwrap();
+        orphan_guard
+            .create_child(&orphan.build_attempt_id, "orphan fixture")
+            .unwrap();
+        let orphan_control = BuildControlRoot {
+            guard: orphan_guard,
+            base_guard: control.base_guard.try_clone("orphan fixture").unwrap(),
+        };
+        control_create_json(&orphan_control, "attempt.json", &orphan).unwrap();
+        complete_successful_fixture(&root, &orphan_control, &orphan);
+        assert!(reachable_producer_control(&root, &orphan.build_attempt_id).is_err());
+        drop(orphan_control);
+        drop(active);
+        drop(control);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn successful_producer_succession_rejects_failed_or_drifted_family() {
+        let (root, _, prior, _, _) = end_to_end_attestation_fixture().unwrap();
+        let control = existing_control_root(&root).unwrap();
+        let original: ReviewedBuildResultV1 = control_read_json(&control, "result.json").unwrap();
+        let result_path = control.guard.path().join("result.json");
+        let mut mixed = original.clone();
+        mixed.failure_code = Some("BUILD_FAILED".into());
+        fs::write(&result_path, serde_json::to_vec(&mixed).unwrap()).unwrap();
+        assert!(successful_producer_audit(&root, &control, &prior).is_err());
+        for state in [
+            "BUILD_FAILED_OR_AMBIGUOUS",
+            "WORKER_OWNED_PENDING",
+            "UNKNOWN",
+        ] {
+            mixed.state = state.into();
+            fs::write(&result_path, serde_json::to_vec(&mixed).unwrap()).unwrap();
+            assert!(successful_producer_audit(&root, &control, &prior).is_err());
+        }
+        fs::write(&result_path, serde_json::to_vec(&original).unwrap()).unwrap();
+        let candidate = root.join(format!(
+            "target/reviewed-builds/{}/catdesk.exe",
+            prior.build_attempt_id
+        ));
+        fs::write(candidate, b"changed-candidate!!").unwrap();
+        assert!(successful_producer_audit(&root, &control, &prior).is_err());
+        drop(control);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn successful_producer_history_requires_exact_plan_and_audit_chain() {
+        let (root, _, prior, _, _) = end_to_end_attestation_fixture().unwrap();
+        let control = existing_control_root(&root).unwrap();
+        let fresh = fresh_attempt_for_authority(&prior, 'b', 'c', "second-review");
+        let audit = successful_producer_audit(&root, &control, &prior).unwrap();
+        prepare_successful_succession(&control, &prior, audit, fresh).unwrap();
+        let history = control
+            .base_guard
+            .path()
+            .join(SUCCESS_HISTORY_DIRECTORY)
+            .join(retry_child_name(&prior.build_attempt_id).unwrap());
+        let bytes = fs::read(&history).unwrap();
+        fs::write(&history, b"{}").unwrap();
+        assert!(reachable_producer_control(&root, &prior.build_attempt_id).is_err());
+        fs::write(&history, bytes).unwrap();
+        let plan_path = control
+            .base_guard
+            .path()
+            .join(RETRY_PLAN_DIRECTORY)
+            .join(retry_child_name(&prior.build_attempt_id).unwrap());
+        let bytes = fs::read(&plan_path).unwrap();
+        let mut plan: ReviewedBuildRetryPlanV1 = serde_json::from_slice(&bytes).unwrap();
+        plan.source_attempt_digest = "0".repeat(64);
+        fs::write(&plan_path, serde_json::to_vec(&plan).unwrap()).unwrap();
+        assert!(reachable_producer_control(&root, &prior.build_attempt_id).is_err());
+        fs::write(&plan_path, &bytes).unwrap();
+        assert!(reachable_producer_control(&root, &prior.build_attempt_id).is_ok());
+        let mut cycle: ReviewedBuildRetryPlanV1 = serde_json::from_slice(&bytes).unwrap();
+        cycle.fresh_attempt_id = prior.build_attempt_id.clone();
+        fs::write(&plan_path, serde_json::to_vec(&cycle).unwrap()).unwrap();
+        assert!(reachable_producer_control(&root, &prior.build_attempt_id).is_err());
+        fs::write(&plan_path, &bytes).unwrap();
+        fs::rename(&plan_path, plan_path.with_extension("saved")).unwrap();
+        assert!(reachable_producer_control(&root, &prior.build_attempt_id).is_err());
+        fs::rename(plan_path.with_extension("saved"), &plan_path).unwrap();
+        let pointer_path = control.base_guard.path().join(ACTIVE_GENERATION_FILE);
+        let pointer_bytes = fs::read(&pointer_path).unwrap();
+        let mut pointer: ReviewedBuildActiveGenerationV1 =
+            serde_json::from_slice(&pointer_bytes).unwrap();
+        pointer.source_attempt_digest = "0".repeat(64);
+        fs::write(&pointer_path, serde_json::to_vec(&pointer).unwrap()).unwrap();
+        assert!(reachable_producer_control(&root, &prior.build_attempt_id).is_err());
+        fs::write(pointer_path, pointer_bytes).unwrap();
+        drop(control);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn successful_producer_succession_recovers_plan_before_pointer_without_duplicate() {
+        let (root, _, prior, _, _) = end_to_end_attestation_fixture().unwrap();
+        let control = existing_control_root(&root).unwrap();
+        let fresh = fresh_attempt_for_authority(&prior, 'b', 'c', "second-review");
+        let audit = successful_producer_audit(&root, &control, &prior).unwrap();
+        let audit_bytes = serialize_control_record(&audit).unwrap();
+        let mut history = control
+            .base_guard
+            .try_clone("success crash fixture")
+            .unwrap();
+        history
+            .descend_or_create(SUCCESS_HISTORY_DIRECTORY, "success crash fixture")
+            .unwrap();
+        let name = retry_child_name(&prior.build_attempt_id).unwrap();
+        write_or_validate_new_control_record(
+            &history,
+            &name,
+            &audit_bytes,
+            "success crash fixture",
+        )
+        .unwrap();
+        let mut generation = control
+            .base_guard
+            .try_clone("success crash fixture")
+            .unwrap();
+        generation
+            .descend_or_create(RETRY_GENERATION_DIRECTORY, "success crash fixture")
+            .unwrap();
+        generation
+            .create_child(&fresh.build_attempt_id, "success crash fixture")
+            .unwrap();
+        write_or_validate_new_control_record(
+            &generation,
+            "attempt.json",
+            &serialize_control_record(&fresh).unwrap(),
+            "success crash fixture",
+        )
+        .unwrap();
+        let plan = ReviewedBuildRetryPlanV1 {
+            schema_version: 2,
+            source_attempt_id: prior.build_attempt_id.clone(),
+            source_attempt_digest: prior.attempt_digest.clone(),
+            audit_digest: sha256(&audit_bytes),
+            fresh_attempt_id: fresh.build_attempt_id.clone(),
+            fresh_attempt_digest: fresh.attempt_digest.clone(),
+            fresh_confirmation_token: fresh.confirmation_token.clone(),
+        };
+        let mut plans = control
+            .base_guard
+            .try_clone("success crash fixture")
+            .unwrap();
+        plans
+            .descend_or_create(RETRY_PLAN_DIRECTORY, "success crash fixture")
+            .unwrap();
+        write_or_validate_new_control_record(
+            &plans,
+            &name,
+            &serialize_control_record(&plan).unwrap(),
+            "success crash fixture",
+        )
+        .unwrap();
+        let selected_before: ReviewedBuildAttemptV1 =
+            control_read_json(&existing_control_root(&root).unwrap(), "attempt.json").unwrap();
+        assert_eq!(selected_before, prior);
+        let replay = fresh_attempt_for_authority(&prior, 'd', 'e', "second-review");
+        assert_eq!(
+            prepare_successful_succession(&control, &prior, audit, replay)
+                .unwrap()
+                .0,
+            fresh.confirmation_token
+        );
+        let selected_after: ReviewedBuildAttemptV1 =
+            control_read_json(&existing_control_root(&root).unwrap(), "attempt.json").unwrap();
+        assert_eq!(selected_after, fresh);
+        drop(plans);
+        drop(generation);
+        drop(history);
+        drop(control);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn successful_producer_concurrent_prepares_converge_on_one_fresh_family() {
+        let (root, expected, prior, _, _) = end_to_end_attestation_fixture().unwrap();
+        let start = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let workers = (0..2)
+            .map(|_| {
+                let root = root.clone();
+                let expected = expected.clone();
+                let digest = prior.review_authority_sha256.clone();
+                let start = start.clone();
+                std::thread::spawn(move || {
+                    start.wait();
+                    prepare_reviewed_build(&root, "second-review", &digest, &expected)
+                })
+            })
+            .collect::<Vec<_>>();
+        // An admission loser may receive BUSY rather than wait. It may only
+        // repeat preparation, never confirmation; the durable winner is reused.
+        let results = workers
+            .into_iter()
+            .map(|w| w.join().unwrap())
+            .collect::<Vec<_>>();
+        let winner = results.iter().find_map(|r| r.as_ref().ok()).unwrap();
+        for result in &results {
+            match result {
+                Ok(value) => assert_eq!(value.0, winner.0),
+                Err(error) => assert_eq!(error, "REVIEWED_BUILD_ADMISSION_BUSY"),
+            }
+        }
+        let replay = prepare_reviewed_build(
+            &root,
+            "second-review",
+            &prior.review_authority_sha256,
+            &expected,
+        )
+        .unwrap();
+        assert_eq!(replay.0, winner.0);
+        let control = existing_control_root(&root).unwrap();
+        assert!(!control.guard.path().join("claim.json").exists());
+        assert_eq!(
+            fs::read_dir(control.base_guard.path().join(RETRY_GENERATION_DIRECTORY))
+                .unwrap()
+                .count(),
+            1
+        );
+        drop(control);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[cfg(windows)]
