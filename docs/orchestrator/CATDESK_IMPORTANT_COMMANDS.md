@@ -1,3 +1,23 @@
+## October 25 C232 — Windows owner-probe correction PASS; live retry pending
+
+The first C231 installed controller refused before READY. Its helper failure
+was not retained, so the original exact cause remains unknown. The second
+project never started. Exact-owner reconciliation preserved both new history
+files and all 1,938 prior pins; the Job, installed processes and listeners were
+gone, and the lifecycle lease was available. No message or binding changed.
+
+A real Windows listener fixture then exposed an unavailable `Get-FileHash`
+command in the probe environment. The correction reuses the existing pinned
+reconciliation helper's .NET hash routine and established process-path lookup.
+It preserves PID/path/hash/start/listener checks and adds bounded sanitized
+failure diagnostics. Ten project tests, the real listener/wrong-hash fixture,
+formatting and strict Clippy passed. Legacy release helpers are unchanged.
+
+Build a fresh fixed controller before the next bounded installed test. C230's
+controller is not live-qualified. Web coding, unattended service and a trusted
+different-version rollback remain OPEN; connector HTTP 429 was not retried.
+[Evidence](../verification/C232_OWNER_PROBE_CORRECTION_2026_10_25.json).
+
 ## October 25 C230 — project-scoped operator action (source-qualified)
 
 Build and qualify a fixed noncanonical controller containing C230 before use.

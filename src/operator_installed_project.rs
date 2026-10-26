@@ -230,13 +230,46 @@ fn owner(
         .ok()
         .and_then(|url| url.port())
         .ok_or("INSTALLED_PROJECT_READY_INVALID")?;
-    let value = ps_once(
+    let hash_helper = regular(
         root,
-        format!(
-            "$ErrorActionPreference='Stop';$p=Get-Process -Id {pid};$w=Get-CimInstance Win32_Process -Filter 'ProcessId={pid}';$l=@(Get-NetTCPConnection -LocalPort {port} -State Listen);if($l.Count -ne 1 -or $l[0].OwningProcess -ne {pid} -or [IO.Path]::GetFullPath($w.ExecutablePath) -ine {} -or (Get-FileHash -LiteralPath $w.ExecutablePath -Algorithm SHA256).Hash.ToLowerInvariant() -cne '{expected}'){{throw 'project owner differs'}};[pscustomobject]@{{pid={pid};port={port};startedAtUtc=$p.StartTime.ToUniversalTime().ToString('o');imageSha256='{expected}'}}|ConvertTo-Json -Compress",
-            quote(binary)
-        ),
+        "scripts/reconcile-reviewed-catdesk-release-pair.ps1",
+        131072,
     )?;
+    let script = format!(
+        "$ErrorActionPreference='Stop';$stage='LIBRARY';try{{. {} -LibraryOnly;$stage='PROCESS';$p=Get-Process -Id {pid} -ErrorAction Stop;$stage='IMAGE_PATH';if(-not $p.Path -or [IO.Path]::GetFullPath($p.Path) -ine {}){{throw [InvalidOperationException]::new('image')}};$stage='IMAGE_HASH';if((Get-ReconcileHash $p.Path) -cne '{expected}'){{throw [InvalidOperationException]::new('hash')}};$stage='LISTENER';$l=@(Get-NetTCPConnection -LocalPort {port} -State Listen -ErrorAction Stop);if($l.Count -ne 1 -or $l[0].OwningProcess -ne {pid} -or [string]$l[0].LocalAddress -cne '127.0.0.1'){{throw [InvalidOperationException]::new('listener')}};$stage='RESULT';[pscustomobject]@{{schemaVersion=1;status='VERIFIED';proof=[pscustomobject]@{{pid={pid};port={port};startedAtUtc=$p.StartTime.ToUniversalTime().ToString('o');imageSha256='{expected}'}}}}|ConvertTo-Json -Compress}}catch{{$cause=$_.Exception;while($null -ne $cause.InnerException){{$cause=$cause.InnerException}};[pscustomobject]@{{schemaVersion=1;status='REFUSED';stage=$stage;errorType=$cause.GetType().Name;hresult=[int]$cause.HResult}}|ConvertTo-Json -Compress}}",
+        quote(&hash_helper),
+        quote(binary)
+    );
+    let mut cmd = ps_command(root, script)?;
+    cmd.stdin(Stdio::null());
+    let mut helper = OwnedCandidateChild::spawn(&mut cmd)
+        .map_err(|_| "INSTALLED_PROJECT_OWNER_HELPER_SPAWN_FAILED")?;
+    let reader = readers(&mut helper)?;
+    let response = first(&reader).map_err(|reason| {
+        if reason == "INSTALLED_BACKEND_READY_TIMEOUT" {
+            "INSTALLED_PROJECT_OWNER_HELPER_TIMEOUT".to_owned()
+        } else {
+            "INSTALLED_PROJECT_OWNER_HELPER_OUTPUT_INVALID".to_owned()
+        }
+    });
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let exited = loop {
+        match helper.child_mut().try_wait() {
+            Ok(Some(status)) => break status.success(),
+            Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(25)),
+            _ => break false,
+        }
+    };
+    helper
+        .terminate_tree_and_confirm_quiescent()
+        .map_err(|_| "INSTALLED_PROJECT_OWNER_HELPER_CLEANUP_UNPROVEN")?;
+    finish_readers(reader, "").map_err(|_| "INSTALLED_PROJECT_OWNER_HELPER_OUTPUT_INVALID")?;
+    // A timeout remains a timeout even if the helper finishes during cleanup.
+    let response = response?;
+    if !exited {
+        return Err("INSTALLED_PROJECT_OWNER_HELPER_EXIT_FAILED".into());
+    }
+    let value = owner_response(response)?;
     if value["pid"] != pid
         || value["port"] != port
         || value["imageSha256"] != expected
@@ -245,6 +278,44 @@ fn owner(
         return Err("INSTALLED_PROJECT_OWNER_UNPROVEN".into());
     }
     Ok(value)
+}
+
+fn owner_response(response: Value) -> Result<Value, String> {
+    if response["schemaVersion"] != 1 {
+        return Err("INSTALLED_PROJECT_OWNER_HELPER_OUTPUT_INVALID".into());
+    }
+    match response["status"].as_str() {
+        Some("VERIFIED") if response.as_object().is_some_and(|object| object.len() == 3) => {
+            Ok(response["proof"].clone())
+        }
+        Some("REFUSED") if response.as_object().is_some_and(|object| object.len() == 5) => {
+            let stage = response["stage"]
+                .as_str()
+                .ok_or("INSTALLED_PROJECT_OWNER_HELPER_OUTPUT_INVALID")?;
+            let kind = response["errorType"]
+                .as_str()
+                .ok_or("INSTALLED_PROJECT_OWNER_HELPER_OUTPUT_INVALID")?;
+            let hresult = response["hresult"]
+                .as_i64()
+                .and_then(|value| i32::try_from(value).ok())
+                .ok_or("INSTALLED_PROJECT_OWNER_HELPER_OUTPUT_INVALID")?;
+            if !matches!(
+                stage,
+                "LIBRARY" | "PROCESS" | "IMAGE_PATH" | "IMAGE_HASH" | "LISTENER" | "RESULT"
+            ) || kind.is_empty()
+                || kind.len() > 64
+                || !kind.bytes().all(|byte| byte.is_ascii_alphanumeric())
+            {
+                return Err("INSTALLED_PROJECT_OWNER_HELPER_OUTPUT_INVALID".into());
+            }
+            Err(format!(
+                "INSTALLED_PROJECT_OWNER_REFUSED_{stage}_{}_{:08X}",
+                kind.to_ascii_uppercase(),
+                hresult as u32
+            ))
+        }
+        _ => Err("INSTALLED_PROJECT_OWNER_HELPER_OUTPUT_INVALID".into()),
+    }
 }
 
 fn verify_pins(expected: &[(PathBuf, String)]) -> Result<(), String> {
@@ -671,6 +742,61 @@ pub(super) fn run_owned(_: &Path, _: &ProjectOptions, _: &str) -> Result<Value, 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn actual_owner_proof_accepts_owned_listener_and_reports_wrong_hash_stage() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = format!("http://{}{PROJECT_ROUTE}", listener.local_addr().unwrap());
+        let image = std::env::current_exe()
+            .unwrap()
+            .canonicalize()
+            .map(crate::command::normalize_windows_verbatim_path)
+            .unwrap();
+        let root = std::env::current_dir().unwrap();
+        let digest = hash(&image).unwrap();
+        let proof = owner(&root, &endpoint, std::process::id(), &image, &digest).unwrap();
+        assert_eq!(proof["pid"], std::process::id());
+        assert_eq!(proof["imageSha256"], digest);
+        let reason = owner(
+            &root,
+            &endpoint,
+            std::process::id(),
+            &image,
+            &"0".repeat(64),
+        )
+        .unwrap_err();
+        assert!(reason.starts_with("INSTALLED_PROJECT_OWNER_REFUSED_IMAGE_HASH_"));
+        assert!(!reason.contains(&image.to_string_lossy().to_string()));
+    }
+
+    #[test]
+    fn owner_diagnostics_reject_unbounded_or_unrecognized_fields() {
+        let value = json!({"schemaVersion":1,"status":"REFUSED","stage":"LISTENER","errorType":"Win32Exception","hresult":-2147467259i64});
+        assert!(
+            owner_response(value.clone())
+                .unwrap_err()
+                .starts_with("INSTALLED_PROJECT_OWNER_REFUSED_LISTENER_WIN32EXCEPTION_")
+        );
+        for (field, bad) in [
+            ("stage", json!("C:/private/path")),
+            ("errorType", json!("private error message")),
+            ("hresult", json!(4294967296u64)),
+        ] {
+            let mut changed = value.clone();
+            changed[field] = bad;
+            assert_eq!(
+                owner_response(changed).unwrap_err(),
+                "INSTALLED_PROJECT_OWNER_HELPER_OUTPUT_INVALID"
+            );
+        }
+        let mut extra = value;
+        extra["message"] = json!("private path");
+        assert_eq!(
+            owner_response(extra).unwrap_err(),
+            "INSTALLED_PROJECT_OWNER_HELPER_OUTPUT_INVALID"
+        );
+    }
 
     #[cfg(windows)]
     #[test]
