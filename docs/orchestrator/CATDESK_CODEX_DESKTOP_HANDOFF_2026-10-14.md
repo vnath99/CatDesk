@@ -1,3 +1,37 @@
+## October 26 C238 — successful producer succession source qualified
+
+Published source `f1f0fe24cf57581fac81fe959ef3aa384a137f4a` fixes a release-path
+gap: an attested successful build previously blocked a later reviewed binding,
+and producer replay could only read the active generation. The existing immutable
+generation/plan/atomic-pointer mechanism now preserves a validated successful
+predecessor and can replay exact reachable historical candidate authority.
+An exact already-successful review returns `BUILD_ATTESTED` without rebuilding
+or changing the active selection. No new registry or release command is added.
+
+The first suite passed 121 tests; one static guard rejected safe test-call
+syntax. Two test-only calls were retyped without weakening the guard or changing
+production code. The corrected guard, five succession rechecks, four authority
+checks, six release-pair checks, formatting and strict Clippy then passed.
+All 2,701 prior state pins matched; test owners were absent. GitHub showed zero
+Actions runs for this source; CI acceptance is not claimed. [Evidence](../verification/C238_SUCCESSFUL_BUILD_SUCCESSION_2026_10_26.json).
+
+**Migration:** before any live succession, retain the exact qualified controller
+and one release-management owner. Route all build and producer-dependent
+promotion/reconcile operations through it after cutover. C208 can still read the
+schema1 pointer but cannot replay old candidates; do not mix release writers.
+Ordinary project MCP serving and existing terminal-receipt/LKG startup checks
+remain independent. Existing PREPARE/CONFIRM/RESULT syntax is unchanged; do not
+confirm a prepare already returning `BUILD_ATTESTED`. Historical compiler
+identity checks remain strict.
+
+This is source/fixture qualification only. No live producer generation, installed
+binary, binding, native session, browser, Wake or recurring process changed.
+Fresh managed review/snapshot authority for current source is still required;
+old C196/C208 evidence cannot authorize it. Next is a bounded read-only current
+producer compatibility check using a separately built debug controller. Connector
+HTTP 429 and actual two-conversation Web coding remain open. No operator action
+is needed for that read-only development check.
+
 ## October 26 C237 — development executable cold recovery LIVE PASS
 
 The normal debug executable built from published source
