@@ -5448,6 +5448,17 @@ fn sanitized_build_failure_category(
             Some("CARGO_EXIT_NONZERO") => "CARGO_EXIT_NONZERO",
             _ => "CARGO_CLASSIFICATION_UNAVAILABLE",
         }
+    } else if phase == "CARGO_TIMEOUT" {
+        match result
+            .failure_diagnostic
+            .as_ref()
+            .map(|diagnostic| diagnostic.classification.as_str())
+        {
+            Some("ROOT_RUNNING") => "ROOT_RUNNING",
+            Some("DESCENDANTS_ACTIVE") => "DESCENDANTS_ACTIVE",
+            Some("STDERR_EOF_PENDING") => "STDERR_EOF_PENDING",
+            _ => "NOT_APPLICABLE",
+        }
     } else {
         "NOT_APPLICABLE"
     };
@@ -5618,13 +5629,15 @@ pub fn run_reviewed_build_worker(
         job.assign(&child)?;
         job.resume(&child)?;
         let mut helper_cleanup = Vec::new();
-        let waited = wait_for_owned_build_exit_with_helper(
+        let mut timeout_observation = None;
+        let waited = wait_for_owned_build_exit_with_observation(
             &mut child,
             &job,
             &stderr_reader,
             BUILD_TIMEOUT,
             native_helper.as_ref(),
             &mut helper_cleanup,
+            &mut timeout_observation,
         );
         if !helper_cleanup.is_empty() {
             // Audit only: this file grants no build, candidate or release authority.
@@ -5637,7 +5650,14 @@ pub fn run_reviewed_build_worker(
                 "reviewed build native helper cleanup",
             )?;
         }
-        let status = waited?;
+        let status = match waited {
+            Ok(status) => status,
+            Err(error) => {
+                failure_diagnostic =
+                    diagnostic_after_confirmed_timeout(&error, timeout_observation, stderr_reader);
+                return Err(error);
+            }
+        };
         // The deadline covers root exit, whole-Job quiescence and pipe EOF.
         // Joining is safe only after is_finished; neither root exit nor EOF
         // alone admits release bytes while compiler descendants can run.
@@ -6868,6 +6888,47 @@ fn wait_for_owned_build_exit(
     wait_for_owned_build_exit_with_helper(child, job, stderr, budget, None, &mut Vec::new())
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BuildWaitTimeoutPhase {
+    RootRunning,
+    DescendantsActive,
+    StderrEofPending,
+}
+
+impl BuildWaitTimeoutPhase {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::RootRunning => "ROOT_RUNNING",
+            Self::DescendantsActive => "DESCENDANTS_ACTIVE",
+            Self::StderrEofPending => "STDERR_EOF_PENDING",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct BuildWaitTimeoutObservation {
+    phase: BuildWaitTimeoutPhase,
+    root_exit_code: Option<i32>,
+}
+
+fn diagnostic_after_confirmed_timeout(
+    error: &str,
+    observation: Option<BuildWaitTimeoutObservation>,
+    reader: std::thread::JoinHandle<std::io::Result<BoundedCargoStderr>>,
+) -> Option<ReviewedBuildFailureDiagnosticV1> {
+    // The timeout return proves root exit, zero Job membership and EOF. Never
+    // join an unfinished reader or reinterpret a different failure as timeout.
+    if error != "REVIEWED_BUILD_TIMEOUT" || !reader.is_finished() {
+        return None;
+    }
+    let observation = observation?;
+    let captured = reader.join().ok()?.ok()?;
+    let mut diagnostic = summarize_cargo_failure(observation.root_exit_code, captured);
+    diagnostic.classification = observation.phase.as_str().into();
+    Some(diagnostic)
+}
+
+#[cfg(test)]
 fn wait_for_owned_build_exit_with_helper(
     child: &mut std::process::Child,
     job: &BuildJob,
@@ -6876,10 +6937,31 @@ fn wait_for_owned_build_exit_with_helper(
     helper: Option<&PinnedMsvcHelper>,
     cleanup_evidence: &mut Vec<NativeHelperCleanup>,
 ) -> Result<std::process::ExitStatus, String> {
+    wait_for_owned_build_exit_with_observation(
+        child,
+        job,
+        stderr,
+        budget,
+        helper,
+        cleanup_evidence,
+        &mut None,
+    )
+}
+
+fn wait_for_owned_build_exit_with_observation(
+    child: &mut std::process::Child,
+    job: &BuildJob,
+    stderr: &std::thread::JoinHandle<std::io::Result<BoundedCargoStderr>>,
+    budget: Duration,
+    helper: Option<&PinnedMsvcHelper>,
+    cleanup_evidence: &mut Vec<NativeHelperCleanup>,
+    timeout_observation: &mut Option<BuildWaitTimeoutObservation>,
+) -> Result<std::process::ExitStatus, String> {
     let started = std::time::Instant::now();
     let mut status = None;
     let mut exited_at = None;
-    let mut helper_checked = false;
+    let mut last_helper_check = None;
+    *timeout_observation = None;
     loop {
         if status.is_none() {
             status = child.try_wait().map_err(|_| "REVIEWED_BUILD_FAILED")?;
@@ -6887,23 +6969,25 @@ fn wait_for_owned_build_exit_with_helper(
                 exited_at = Some(std::time::Instant::now());
             }
         }
+        let active_processes = job.active_processes()?;
+        let stderr_finished = stderr.is_finished();
         if let Some(exited) = status
-            && job.active_processes()? == 0
-            && stderr.is_finished()
+            && active_processes == 0
+            && stderr_finished
         {
             return Ok(exited);
         }
-        if status.is_some_and(|value| value.success())
-            && !helper_checked
-            && exited_at.is_some_and(|at| at.elapsed() >= Duration::from_secs(1))
-            && let Some(helper) = helper
-        {
-            helper_checked = true;
-            // All survivors must be the one pinned auxiliary image. Unknown
-            // or mixed membership leaves the ordinary timeout path intact.
-            job.stop_only_pinned_helper(helper, cleanup_evidence)?;
-        }
         if started.elapsed() >= budget {
+            *timeout_observation = Some(BuildWaitTimeoutObservation {
+                phase: if status.is_none() {
+                    BuildWaitTimeoutPhase::RootRunning
+                } else if active_processes != 0 {
+                    BuildWaitTimeoutPhase::DescendantsActive
+                } else {
+                    BuildWaitTimeoutPhase::StderrEofPending
+                },
+                root_exit_code: status.and_then(|value| value.code()),
+            });
             job.terminate()?;
             let cleanup = std::time::Instant::now();
             while cleanup.elapsed() < Duration::from_secs(5) {
@@ -6920,10 +7004,22 @@ fn wait_for_owned_build_exit_with_helper(
             }
             return Err("REVIEWED_BUILD_PROCESS_QUIESCENCE_UNPROVEN".into());
         }
+        if status.is_some_and(|value| value.success())
+            && active_processes != 0
+            && exited_at.is_some_and(|at| at.elapsed() >= Duration::from_secs(1))
+            && last_helper_check
+                .is_none_or(|at: std::time::Instant| at.elapsed() >= Duration::from_millis(250))
+            && let Some(helper) = helper
+        {
+            last_helper_check = Some(std::time::Instant::now());
+            // Every retry revalidates the complete membership and exact pinned
+            // image. Mixed/unknown members are never stopped; their later exit
+            // only permits a fresh, independent check within the same deadline.
+            job.stop_only_pinned_helper(helper, cleanup_evidence)?;
+        }
         std::thread::sleep(Duration::from_millis(10));
     }
 }
-
 #[cfg(windows)]
 impl BuildJob {
     fn new() -> Result<Self, String> {
@@ -10294,6 +10390,231 @@ mod tests {
         child
     }
 
+    #[test]
+    fn timeout_diagnostic_requires_a_finished_reader_and_known_timeout() {
+        let (release, wait) = std::sync::mpsc::channel();
+        let (done, completed) = std::sync::mpsc::channel();
+        let reader = std::thread::spawn(move || {
+            wait.recv().unwrap();
+            done.send(()).unwrap();
+            Ok(BoundedCargoStderr::default())
+        });
+        assert!(!reader.is_finished());
+        assert!(
+            diagnostic_after_confirmed_timeout(
+                "REVIEWED_BUILD_TIMEOUT",
+                Some(BuildWaitTimeoutObservation {
+                    phase: BuildWaitTimeoutPhase::StderrEofPending,
+                    root_exit_code: Some(0),
+                }),
+                reader,
+            )
+            .is_none()
+        );
+        release.send(()).unwrap();
+        completed.recv_timeout(Duration::from_secs(1)).unwrap();
+        let reader = std::thread::spawn(|| Ok(BoundedCargoStderr::default()));
+        assert!(
+            diagnostic_after_confirmed_timeout(
+                "REVIEWED_BUILD_PROCESS_QUIESCENCE_UNPROVEN",
+                None,
+                reader,
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn timeout_diagnostic_preserves_measured_digest_and_fixed_projection() {
+        for phase in [
+            BuildWaitTimeoutPhase::RootRunning,
+            BuildWaitTimeoutPhase::DescendantsActive,
+            BuildWaitTimeoutPhase::StderrEofPending,
+        ] {
+            let bytes = b"private path and token must stay out of the diagnostic";
+            let reader =
+                std::thread::spawn(move || read_bounded_cargo_stderr(std::io::Cursor::new(bytes)));
+            let until = std::time::Instant::now() + Duration::from_secs(1);
+            while !reader.is_finished() && std::time::Instant::now() < until {
+                std::thread::yield_now();
+            }
+            let diagnostic = diagnostic_after_confirmed_timeout(
+                "REVIEWED_BUILD_TIMEOUT",
+                Some(BuildWaitTimeoutObservation {
+                    phase,
+                    root_exit_code: Some(0),
+                }),
+                reader,
+            )
+            .unwrap();
+            assert_eq!(diagnostic.classification, phase.as_str());
+            assert_eq!(diagnostic.exit_code, Some(0));
+            assert_eq!(diagnostic.captured_stderr_length, bytes.len());
+            assert_eq!(diagnostic.captured_stderr_sha256, sha256(bytes));
+            assert!(
+                !serde_json::to_string(&diagnostic)
+                    .unwrap()
+                    .contains("private path")
+            );
+            let result = ReviewedBuildResultV1 {
+                schema_version: 1,
+                build_attempt_id: "fixture".into(),
+                owner_id: "fixture".into(),
+                state: "BUILD_FAILED_OR_AMBIGUOUS".into(),
+                attestation_digest: None,
+                failure_code: Some("REVIEWED_BUILD_TIMEOUT".into()),
+                failure_diagnostic: Some(diagnostic),
+            };
+            assert_eq!(
+                sanitized_build_failure_category(&result),
+                ("CARGO_TIMEOUT", phase.as_str())
+            );
+            assert!(retryable_terminal_result(&result));
+            let round_trip: ReviewedBuildResultV1 =
+                serde_json::from_str(&serde_json::to_string(&result).unwrap()).unwrap();
+            assert_eq!(result, round_trip);
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_timeout_diagnostic_distinguishes_running_root_from_pending_reader() {
+        for pending_reader in [false, true] {
+            let job = BuildJob::new().unwrap();
+            let fixture = if pending_reader {
+                "reviewed_build::tests::producer_root_exit_fixture"
+            } else {
+                "reviewed_build::tests::producer_descendant_wait_fixture"
+            };
+            let mut command = Command::new(std::env::current_exe().unwrap());
+            command
+                .args(["--exact", fixture])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped())
+                .creation_flags(CREATE_SUSPENDED);
+            if !pending_reader {
+                command.env("CATDESK_BUILD_DESCENDANT_FIXTURE", "1");
+            }
+            let mut child = command.spawn().unwrap();
+            job.assign(&child).unwrap();
+            let stderr = child.stderr.take().unwrap();
+            let reader = std::thread::spawn(move || {
+                let captured = read_bounded_cargo_stderr(stderr);
+                if pending_reader {
+                    std::thread::sleep(Duration::from_millis(250));
+                }
+                captured
+            });
+            job.resume(&child).unwrap();
+            if pending_reader {
+                assert!(child.wait().unwrap().success());
+            }
+            let mut observation = None;
+            assert_eq!(
+                wait_for_owned_build_exit_with_observation(
+                    &mut child,
+                    &job,
+                    &reader,
+                    Duration::from_millis(75),
+                    None,
+                    &mut Vec::new(),
+                    &mut observation
+                )
+                .unwrap_err(),
+                "REVIEWED_BUILD_TIMEOUT"
+            );
+            assert_eq!(job.active_processes().unwrap(), 0);
+            assert!(reader.is_finished());
+            let expected = if pending_reader {
+                BuildWaitTimeoutPhase::StderrEofPending
+            } else {
+                BuildWaitTimeoutPhase::RootRunning
+            };
+            assert_eq!(observation.unwrap().phase, expected);
+            let diagnostic =
+                diagnostic_after_confirmed_timeout("REVIEWED_BUILD_TIMEOUT", observation, reader)
+                    .unwrap();
+            assert_eq!(diagnostic.classification, expected.as_str());
+            child.wait().unwrap();
+        }
+    }
+    #[cfg(windows)]
+    #[test]
+    fn producer_transient_unknown_exit_fixture() {
+        if std::env::var("CATDESK_BUILD_TRANSIENT_UNKNOWN_FIXTURE").as_deref() == Ok("1") {
+            std::thread::sleep(Duration::from_millis(2_100));
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_helper_cleanup_rechecks_after_transient_unknown_exit() {
+        let (root, helper) = pinned_helper_fixture();
+        let job = BuildJob::new().unwrap();
+        let mut known = start_waiting_helper_fixture(&helper.path, &job);
+        let mut unknown = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "reviewed_build::tests::producer_transient_unknown_exit_fixture",
+            ])
+            .env("CATDESK_BUILD_TRANSIENT_UNKNOWN_FIXTURE", "1")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .creation_flags(CREATE_SUSPENDED)
+            .spawn()
+            .unwrap();
+        job.assign(&unknown).unwrap();
+        job.resume(&unknown).unwrap();
+        let mut cargo = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "reviewed_build::tests::producer_root_exit_fixture",
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .creation_flags(CREATE_SUSPENDED)
+            .spawn()
+            .unwrap();
+        job.assign(&cargo).unwrap();
+        let stderr = cargo.stderr.take().unwrap();
+        let reader = std::thread::spawn(move || read_bounded_cargo_stderr(stderr));
+        job.resume(&cargo).unwrap();
+        let mut evidence = Vec::new();
+        let outcome = wait_for_owned_build_exit_with_helper(
+            &mut cargo,
+            &job,
+            &reader,
+            Duration::from_secs(4),
+            Some(&helper),
+            &mut evidence,
+        );
+        // Always finish this fixture's exact Job before asserting the regression.
+        // The transient process must exit naturally; only the known helper may
+        // appear in the selective-cleanup evidence.
+        job.terminate().unwrap();
+        let unknown_exit = unknown.wait().unwrap();
+        known.wait().unwrap();
+        cargo.wait().unwrap();
+        let quiescent = job.active_processes().unwrap() == 0;
+        let eof = reader.is_finished();
+        reader.join().unwrap().unwrap();
+        drop(helper);
+        drop(job);
+        fs::remove_dir_all(root).unwrap();
+        assert!(quiescent && eof);
+        assert!(unknown_exit.success(), "unknown child must exit naturally");
+        assert!(
+            outcome.is_ok(),
+            "later all-known membership must be rechecked: {outcome:?}"
+        );
+        assert!(outcome.unwrap().success());
+        assert_eq!(evidence.len(), 1);
+        assert_eq!(evidence[0].process_id, known.id());
+        assert!(evidence[0].exit_confirmed);
+    }
     #[cfg(windows)]
     #[test]
     fn native_helper_cleanup_after_success_keeps_zero_job_and_eof_required() {
@@ -10508,10 +10829,23 @@ mod tests {
                 "root exit must leave a real descendant"
             );
             let started = std::time::Instant::now();
+            let mut observation = None;
             assert_eq!(
-                wait_for_owned_build_exit(&mut child, &job, &reader, Duration::from_millis(200))
-                    .unwrap_err(),
+                wait_for_owned_build_exit_with_observation(
+                    &mut child,
+                    &job,
+                    &reader,
+                    Duration::from_millis(200),
+                    None,
+                    &mut Vec::new(),
+                    &mut observation
+                )
+                .unwrap_err(),
                 "REVIEWED_BUILD_TIMEOUT"
+            );
+            assert_eq!(
+                observation.unwrap().phase,
+                BuildWaitTimeoutPhase::DescendantsActive
             );
             assert!(started.elapsed() < Duration::from_secs(6));
             assert_eq!(job.active_processes().unwrap(), 0);
@@ -13236,7 +13570,12 @@ mod tests {
             .as_ref()
             .expect("bounded recorded cargo diagnostic");
         assert_eq!(audit.result.state, "BUILD_FAILED_OR_AMBIGUOUS");
-        assert_eq!(diagnostic.phase, phase);
+        if audit.result.failure_code.as_deref() == Some("REVIEWED_BUILD_TIMEOUT") {
+            assert_eq!(phase, "CARGO_TIMEOUT");
+            assert_eq!(diagnostic.phase, "CARGO_BUILD");
+        } else {
+            assert_eq!(diagnostic.phase, phase);
+        }
         assert_eq!(diagnostic.classification, classification);
         assert!(diagnostic.captured_stderr_length <= MAX_CARGO_FAILURE_DIAGNOSTIC_BYTES);
         println!(

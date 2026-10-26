@@ -1,7 +1,7 @@
 {
   "checkpoint": "C247",
   "date": "2026-10-26",
-  "classification": "SOURCE_QUALIFIED_NOT_NEW_REVIEW_PRODUCER_OR_INSTALLATION",
+  "classification": "GENUINE_MANAGED_SOURCE_REVIEW_ACKNOWLEDGED_PRODUCER_TIMEOUT_NO_CANDIDATE",
   "sourceParent": "d9aed85d6a45ddb1b4a1dcb0a0d5205c5870188e",
   "sourceWorkingPins": [
     {
@@ -91,13 +91,14 @@
     "recurringAutomationStarted": false
   },
   "remaining": [
-    "Freeze and genuinely review the new material source; acknowledged C246 source does not cover this fix.",
-    "Use a qualified controller containing the correction and the existing supported failed-generation succession with fresh PREPARE/CONFIRM authority. Do not replay the failed CONFIRM.",
+    "C249 source correction is qualified separately; it requires its own genuine review and a qualified controller before a fresh supported producer attempt.",
+    "Preserve the native timeout result and temporary build output; no attestation or release candidate exists for this attempt.",
+    "The original 900-second build timeout cause remains unproven; isolated C248 probes did not reproduce it.",
     "Qualify a genuine candidate, protected promotion, installed health and different-version rollback.",
-    "Exact-source GitHub CI remains unverified; last connector HTTP 429 and two actual independent ChatGPT Web coding conversations remain open."
+    "Exact-source CI remains unverified; connector HTTP 429 and two actual independent ChatGPT Web coding conversations remain open."
   ],
   "milestoneComplete": false,
-  "evidenceThroughUtc": "2026-10-26T19:54:54.6724417Z",
+  "evidenceThroughUtc": "2026-10-26T21:25:23.5232959Z",
   "branch": "codex/web-rollover-oct17",
   "sourceParentRemoteShaVerified": true,
   "c246Transport": {
@@ -111,5 +112,130 @@
     "taskCompletionVerified": false,
     "closedObservedUtc": "2026-10-26T19:54:54.6724417Z",
     "protectedFilesCheckedAtClosure": 7916
+  },
+  "sourceCommit": "98248023c8cd359476e5943d991c960354c5e168",
+  "liveProgress": {
+    "managedFinalization": {
+      "productionActions": 0,
+      "reviewRecordUnread": false,
+      "snapshotManifestSha256": "9261b7686912aa2d470c804c417a43bcdc44b9d63a61e4a2b83bf7e2a5dfe396",
+      "stateVersion": 7,
+      "snapshotEntries": 217,
+      "finalizationReplays": 0,
+      "state": "COMPLETED_VERIFIED",
+      "naturalExit": true,
+      "acknowledged": true,
+      "messagesSent": 0,
+      "reportBoundAsCurrentOutput": true,
+      "oldNativePinsPreserved": 4595,
+      "fullTrackedBuildSourceCovered": true,
+      "active": false
+    },
+    "sourceIntegration": {
+      "reportSha256": "a2b87301161e98cf351012691089ca189a0052ec4785502f21077ae251fe90c1",
+      "before": "d9aed85d6a45ddb1b4a1dcb0a0d5205c5870188e",
+      "productionActions": 0,
+      "buildCalls": 0,
+      "reportBytesFaithful": true,
+      "after": "98248023c8cd359476e5943d991c960354c5e168",
+      "trackedPathsChanged": 12,
+      "normalFastForwardVerified": true,
+      "preExistingUntrackedFilesPreserved": 13,
+      "ackCalls": 0
+    },
+    "publishedSource": {
+      "commit": "98248023c8cd359476e5943d991c960354c5e168",
+      "exactRemoteReadbackVerified": true,
+      "ciRuns": 0,
+      "ciChecks": 0,
+      "remoteSha": "98248023c8cd359476e5943d991c960354c5e168",
+      "ciAcceptance": "UNVERIFIED",
+      "repositoryVisibility": "PUBLIC_UNCHANGED",
+      "branch": "codex/web-rollover-oct17"
+    },
+    "producer": {
+      "productionPromotion": false,
+      "failureCode": "REVIEWED_BUILD_TIMEOUT",
+      "automaticRetry": false,
+      "monitorMaximumSeconds": 1020,
+      "terminalState": "BUILD_FAILED_OR_AMBIGUOUS",
+      "nativeResultValidated": true,
+      "temporaryCompiledBytesAreAuthority": false,
+      "remainingObservedOwnedProcesses": 0,
+      "candidateAuthorityCreated": false,
+      "originalC208Preserved": true,
+      "attestationProduced": false,
+      "workerMaximumSeconds": 900,
+      "original900SecondTimeoutCause": "UNPROVEN"
+    },
+    "debugController": {
+      "role": "QUALIFIED_NORMAL_DEBUG_DEVELOPMENT_CONTROLLER_ONLY",
+      "actualBuildSeconds": 25.0226591,
+      "bytes": 72426496,
+      "selectedPackageChanged": false,
+      "standaloneReadOnlyQualification": {
+        "producerScheduling": 0,
+        "productionActions": 0,
+        "serverStarts": 0,
+        "automaticRetry": false,
+        "nativeResultValidated": true,
+        "retainedFailedC246State": "BUILD_FAILED_OR_AMBIGUOUS",
+        "retainedC208FilesPreserved": true,
+        "historicalProducerReattested": false
+      },
+      "sha256": "0d7b89b29a95dc58f35e34309b6283f042c4892bd14a187cb75e94cb94f8f2cb",
+      "productionAuthorityCreated": false,
+      "browserAdapterChanged": false,
+      "hostRebuilt": false,
+      "sourceCommit": "98248023c8cd359476e5943d991c960354c5e168"
+    },
+    "actualWebReview": {
+      "schemaExceptionApplied": false,
+      "protectedFilesAtRead": 7930,
+      "materialPathsIndependentlyInspected": 2,
+      "bodySha256": "a2b87301161e98cf351012691089ca189a0052ec4785502f21077ae251fe90c1",
+      "nativeSessionsPreserved": true,
+      "reviewDidNotReproduceTests": true,
+      "bodyBytes": 5389,
+      "cumulativeC246ContextAccepted": true,
+      "turnCompleteObservedUtc": "2026-10-26T20:16:30Z",
+      "liveMcpQueries": "HTTP_429_SEPARATE_DEPENDENCY",
+      "actualLimitationCount": 25,
+      "sentUtc": "2026-10-26T20:11:45Z",
+      "actionableFindings": 0,
+      "messagesResent": 0,
+      "newMessagesSent": 1,
+      "strictFrozenSchema": "PASS",
+      "eventBoundAssistantResponseVerified": true,
+      "sourceAssessment": "ACCEPTED_STATIC_SOURCE_ONLY",
+      "testOwnersRemainingAfterRead": 0,
+      "limitationCountCap": 64,
+      "inspectedPaths": [
+        "src/windows_protected_fs.rs",
+        "src/reviewed_build.rs"
+      ],
+      "profileIdentityPreserved": true,
+      "metadataOnlyEntriesPreserved": 2
+    },
+    "transport": {
+      "outcome": "completed",
+      "productionActions": 0,
+      "wakeTimer": "COMPLETE",
+      "coordinatorRecord": "CLOSED",
+      "closedObservedUtc": "2026-10-26T21:25:23.5232959Z",
+      "browserActions": 0,
+      "authority": "CALLER_REPORTED_TRANSPORT_COMPLETION_SEPARATE_FROM_NATIVE_REVIEW",
+      "taskCompletionVerified": false,
+      "messagesSent": 0,
+      "expectedLedgerFieldsChanged": [
+        "phase",
+        "outcome",
+        "summarySha256"
+      ],
+      "outerSha256": "4d61b6c0d46483aa62f42d87a750cb3f8ea7bc912ba8835b807bc246b1b30a85",
+      "protectedFilesChecked": 8159,
+      "nativeTaskActions": 0,
+      "producerActions": 0
+    }
   }
 }

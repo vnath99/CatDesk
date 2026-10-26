@@ -1,3 +1,49 @@
+## October 26 C249 — bounded helper rechecks qualified in source
+
+A real regression reproduced the one-shot helper-cleanup defect: an unknown Job
+member exited naturally after the first check, but the remaining pinned helper
+was never reconsidered and the four-second fixture deadline expired. The red
+test exited 101; the corrected test exited 0 with verified fixture cleanup.
+Source now repeats the complete existing helper identity/membership check no more
+often than every 250 ms within the unchanged deadline. Unknown members are never
+selectively stopped. Timeout diagnostics distinguish root running, descendants
+active and stderr EOF pending, using the existing failure record only after
+confirmed cleanup and EOF; the timeout error code and authority gates stay intact.
+
+Qualification passed 130 reviewed-build tests, 14 protected-filesystem tests,
+formatting and strict Clippy, with eight manual tests ignored. This proves the
+regression correction in source; the original production-build timeout's cause
+is still unproven. A qualified controller containing this new code and genuine
+review of its new frozen source are required before a fresh supported producer
+attempt. See [C249 source evidence](verification/C249_BOUNDED_HELPER_RECHECK_AND_TIMEOUT_DIAGNOSTICS_2026_10_26.json).
+
+## October 26 C248 — actual Cargo probes did not reproduce the timeout
+
+Four isolated Cargo probes crossed version/tiny-build cases with both console
+settings. All exited naturally with code 0 in 206–406 ms, closed stderr and left
+empty owned Jobs. They created no release authority. The diagnostic overlay was
+removed and the original source restored before C249. These small probes did not
+reproduce or explain C247's full-build timeout.
+See [C248 diagnostic evidence](verification/C248_ACTUAL_CARGO_GATE_PROBES_2026_10_26.json).
+
+## October 26 C247 — managed review accepted; real producer timed out
+
+Exact public source `98248023c8cd359476e5943d991c960354c5e168` has a verified
+remote SHA readback. Its genuine 5,389-byte review passed the strict frozen schema
+without an exception, then managed finalization and acknowledgment retained a
+217-entry snapshot. The real producer subsequently returned
+`REVIEWED_BUILD_TIMEOUT` without attestation. Temporary compiled bytes are not a
+release candidate; the validated terminal failure and original C208 remain
+preserved. Web work is now `COMPLETE`/`CLOSED`, with 8,159 protected pins verified;
+transport completion remains caller-reported separately from native review.
+See [C247 actual evidence](verification/C247_MSVC_READ_ONLY_DIRECTORY_PIN_2026_10_26.json).
+
+No new executable was promoted. Keep the existing PREPARE/CONFIRM/RESULT workflow,
+using fresh qualified source and authority rather than repeating a failed CONFIRM.
+Installed health, different-version rollback and two actual independent Web coding
+conversations remain open. Exact-source CI is unverified, the connector's last
+HTTP 429 is separate, and recurring automation remains stopped.
+
 ## October 26 C247 — read-only MSVC pin qualified in source
 
 The real C246 producer terminated `BUILD_FAILED_OR_AMBIGUOUS` before Cargo:
