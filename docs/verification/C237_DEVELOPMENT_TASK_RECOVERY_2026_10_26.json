@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C237",
+  "classification": "NORMAL_DEBUG_EXECUTABLE_LOCAL_RECOVERY_CANARY",
+  "sourceCommit": "9eaa88c80cfd00432b34c37d3183c218a21b2a49",
+  "branch": "codex/web-rollover-oct17",
+  "candidateSha256": "b503a16e3776620fbffdf8b1b527f2cb317d6f00f094ce6662d4b78989db1c77",
+  "startedUtc": "2026-10-26T10:05:05.0550295Z",
+  "finishedUtc": "2026-10-26T10:06:48.5333663Z",
+  "outerLimitSeconds": 180,
+  "endpointLimitSeconds": 90,
+  "results": {
+    "durableRecoveryPhases": 3,
+    "contextEventsBefore": 38,
+    "firstJobQuiescent": true,
+    "fixedVerification": true,
+    "oldMarkerArchived": true,
+    "exactFirstOwnerExitProved": true,
+    "scopedPatch": true,
+    "firstTaskRpcCount": 0,
+    "closedOwnerReceipt": true,
+    "secondNaturalExitCode": 0,
+    "remainingCandidateProcesses": 0,
+    "taskRpcCount": 3,
+    "writerLockReopened": true,
+    "pendingWriterMarker": false,
+    "newOwnerClaim": true,
+    "contextEventsAfter": 44,
+    "sourceManagedRecovery": true,
+    "oldClaimPreserved": true,
+    "priorContextPrefixPreserved": true
+  },
+  "preservation": {
+    "nativeSessionActions": 0,
+    "sensitiveFilesMetadataOnly": 2,
+    "fixedPriorPins": 1977,
+    "legacyQuarantineUntouched": true,
+    "browserWakeRecurringStarts": 0,
+    "productionActions": 0,
+    "newBaselinePins": 2701
+  },
+  "evidence": {
+    "recoveryProofSha256": "c1719a8b63ca8ed789b10a00bc9e1942a46be95d4362bc4e4f1d8a3ff80460ea",
+    "buildRecordSha256": "2074b390dad7fbed76e5306cf48d809df09d92a83ec5411a8840ea7212a828ab",
+    "harnessSha256": "5a6715df84f2373f59a33baef6309dbed99a216dd70d587245aa50f5b63790d0",
+    "resultSha256": "e7591a60afe33118dd5fd7b90009959bbb64413cd08824e290ec82aa0efa7692",
+    "manifestSha256": "6dcd427854b4f112362f7acc2114ebc1311c8fc9b9ca8f65899dac9710486a1f",
+    "outerSha256": "5ec3f7062734950daa268d30c101bc61c6ebdfd5e96969140e40b3c8d97db894",
+    "postBaselineSha256": "4e0adb2e66034d7c36ed4bcc7c081292750f7920e68004e132faa4a847058900"
+  },
+  "preparation": {
+    "failuresBeforeLaunch": 2,
+    "reasons": [
+      "Hashtable alias changed preparation input reference.",
+      "Fixed command argv payload index corrected."
+    ],
+    "preparedCleanWorktreeReused": true,
+    "runtimeActionsBeforeCorrections": 0
+  },
+  "limits": [
+    "Development executable only; no production promotion or release authority is claimed.",
+    "This proves local source-managed cold task recovery, not an authenticated ChatGPT Web caller or a new conversation rollover.",
+    "Legacy C234 lacks an eligible owner claim and remains quarantined.",
+    "Connector HTTP429 and two independent ChatGPT Web coding conversations remain open; no connector retry or completed canary replay."
+  ],
+  "milestoneComplete": false
+}

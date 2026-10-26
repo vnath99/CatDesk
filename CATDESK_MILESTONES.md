@@ -1,3 +1,24 @@
+## October 26 C237 — development executable cold recovery LIVE PASS
+
+The normal debug executable built from published source
+`9eaa88c80cfd00432b34c37d3183c218a21b2a49` passed the 180-second local
+canary. A new isolated task reached READY with zero calls and was terminated
+through its retained process handle. Restarting the same assignment performed
+source-managed recovery, preserved the old claim, archived its marker and
+recorded all three recovery phases before creating a new owner claim.
+The recovered task applied one assigned probe and passed its fixed verification
+with zero model calls. It then exited naturally; its Job, process and pending
+marker were absent, and the writer lock reopened. [Evidence](docs/verification/C237_DEVELOPMENT_TASK_RECOVERY_2026_10_26.json).
+
+All 1,977 fixed prior pins remained unchanged; the one permitted context ledger
+preserved its prior events and appended attributable MCP traffic. Native
+sessions, original workspaces, legacy quarantine, installed C208 and all
+bindings remained intact. No browser, Wake, recurring job or promotion ran.
+Two preparation errors were corrected before any task launched. The completed
+canary must not be replayed. This advances development-runtime recovery only;
+installed qualification and genuine two-conversation ChatGPT Web coding remain
+open. The last connector result remains HTTP 429 and was not polled again.
+
 ## October 26 C236 — zero-call task recovery source qualified
 
 Published source `922b8056651f1ec6aa78bd9844aea306d69c9e99` adds cold recovery
