@@ -9077,10 +9077,61 @@ fn validate_predecessor_plan(
         MAX_STATE_BYTES as u64,
         "reviewed build predecessor history",
     )?;
-    if stored != bytes || sha256(&stored) != plan.audit_digest {
+    if sha256(&stored) != plan.audit_digest {
+        return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+    }
+    if stored != bytes
+        && !(plan.schema_version == 1 && legacy_terminal_audit_omission_matches(&stored, &bytes))
+    {
         return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
     }
     Ok(())
+}
+
+/// Early V1 terminal results predate the optional diagnostic field. Preserve
+/// their original bytes/digest; accept only its omission when today's exact
+/// reconstructed value is null. Typed parsing rejects duplicate known fields,
+/// and complete JSON equality also rejects unknown fields at every depth.
+fn legacy_terminal_audit_omission_matches(stored: &[u8], expected: &[u8]) -> bool {
+    let Ok(actual_audit) = serde_json::from_slice::<ReviewedBuildTerminalAuditV1>(stored) else {
+        return false;
+    };
+    let Ok(expected_audit) = serde_json::from_slice::<ReviewedBuildTerminalAuditV1>(expected)
+    else {
+        return false;
+    };
+    if actual_audit != expected_audit
+        || expected_audit.schema_version != 1
+        || !retryable_terminal_result(&expected_audit.result)
+        || expected_audit.result.failure_diagnostic.is_some()
+    {
+        return false;
+    }
+    let Ok(actual_json) = serde_json::from_slice::<serde_json::Value>(stored) else {
+        return false;
+    };
+    let Ok(mut expected_json) = serde_json::from_slice::<serde_json::Value>(expected) else {
+        return false;
+    };
+    let Some(actual_result) = actual_json
+        .get("result")
+        .and_then(serde_json::Value::as_object)
+    else {
+        return false;
+    };
+    if actual_result.contains_key("failureDiagnostic") {
+        return false;
+    }
+    let Some(expected_result) = expected_json
+        .get_mut("result")
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return false;
+    };
+    if expected_result.remove("failureDiagnostic") != Some(serde_json::Value::Null) {
+        return false;
+    }
+    actual_json == expected_json
 }
 
 /// Resolve the one product-owned active generation.  A missing pointer is the
@@ -11540,6 +11591,151 @@ mod tests {
             1
         );
         drop(control);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn legacy_terminal_omission_replays_mixed_lineage_without_rewriting_authority() {
+        let (root, expected, failed, _, _) = end_to_end_attestation_fixture().unwrap();
+        let original = existing_control_root(&root).unwrap();
+        let mut result: ReviewedBuildResultV1 =
+            control_read_json(&original, "result.json").unwrap();
+        result.state = "BUILD_FAILED_OR_AMBIGUOUS".into();
+        result.attestation_digest = None;
+        result.failure_code = Some("fixture-terminal".into());
+        let mut legacy_result = serde_json::to_value(&result).unwrap();
+        legacy_result
+            .as_object_mut()
+            .unwrap()
+            .remove("failureDiagnostic");
+        fs::write(
+            original.guard.path().join("result.json"),
+            serde_json::to_vec(&legacy_result).unwrap(),
+        )
+        .unwrap();
+        fs::remove_file(original.guard.path().join("attestation.json")).unwrap();
+        let retry = fresh_attempt_for_authority(&failed, 'b', 'c', "retry-review");
+        let audit = terminal_failure_audit(&original, &failed).unwrap();
+        prepare_terminal_retry(&original, &failed, audit, retry.clone()).unwrap();
+        let retry_control = existing_control_root(&root).unwrap();
+        let successful = fresh_attempt_for_authority(&retry, 'd', 'e', "successful-review");
+        prepare_unclaimed_prepared_supersession(&retry_control, &retry, successful.clone())
+            .unwrap();
+        let successful_control = existing_control_root(&root).unwrap();
+        complete_successful_fixture(&root, &successful_control, &successful);
+        let attestation: ReviewedBuildAttestationV2 =
+            control_read_json(&successful_control, "attestation.json").unwrap();
+        let next = fresh_attempt_for_authority(&successful, 'a', '8', "new-review");
+        let audit = successful_producer_audit(&root, &successful_control, &successful).unwrap();
+        prepare_successful_succession(&successful_control, &successful, audit, next).unwrap();
+
+        let history = original
+            .base_guard
+            .path()
+            .join(RETRY_HISTORY_DIRECTORY)
+            .join(retry_child_name(&failed.build_attempt_id).unwrap());
+        let plan_path = original
+            .base_guard
+            .path()
+            .join(RETRY_PLAN_DIRECTORY)
+            .join(retry_child_name(&failed.build_attempt_id).unwrap());
+        let mut legacy: serde_json::Value =
+            serde_json::from_slice(&fs::read(&history).unwrap()).unwrap();
+        legacy["result"]
+            .as_object_mut()
+            .unwrap()
+            .remove("failureDiagnostic");
+        let legacy_bytes = serde_json::to_vec(&legacy).unwrap();
+        let mut plan: ReviewedBuildRetryPlanV1 =
+            serde_json::from_slice(&fs::read(&plan_path).unwrap()).unwrap();
+        plan.audit_digest = sha256(&legacy_bytes);
+        let legacy_plan = serde_json::to_vec(&plan).unwrap();
+        fs::write(&history, &legacy_bytes).unwrap();
+        fs::write(&plan_path, &legacy_plan).unwrap();
+        let validate = || {
+            validate_producer_attestation(
+                &root,
+                &expected.session_id,
+                &successful.review_record_id,
+                &successful.review_authority_sha256,
+                &expected,
+                &attestation.candidate_relative_path,
+                &attestation.candidate_sha256,
+            )
+        };
+        assert!(validate().is_ok());
+        assert_eq!(fs::read(&history).unwrap(), legacy_bytes);
+        assert_eq!(fs::read(&plan_path).unwrap(), legacy_plan);
+
+        let mut bad_cases = Vec::new();
+        let mut extra = legacy.clone();
+        extra["unexpected"] = serde_json::json!(true);
+        bad_cases.push(serde_json::to_vec(&extra).unwrap());
+        let mut changed = legacy.clone();
+        changed["result"]["failureCode"] = serde_json::json!("changed");
+        bad_cases.push(serde_json::to_vec(&changed).unwrap());
+        let mut nonnull = legacy.clone();
+        nonnull["result"]["failureDiagnostic"] = serde_json::json!({
+            "schemaVersion":1,"phase":"build","exitCode":1,"classification":"BUILD_FAILED",
+            "capturedStderrSha256":"0".repeat(64),"capturedStderrLength":1,"stderrTruncated":false
+        });
+        bad_cases.push(serde_json::to_vec(&nonnull).unwrap());
+        let duplicate = String::from_utf8(legacy_bytes.clone())
+            .unwrap()
+            .replace(
+                "\"failureCode\":\"fixture-terminal\"",
+                "\"failureCode\":\"fixture-terminal\",\"failureCode\":\"fixture-terminal\"",
+            )
+            .into_bytes();
+        assert_ne!(duplicate, legacy_bytes);
+        bad_cases.push(duplicate);
+        for bytes in bad_cases {
+            // Even a matching raw digest cannot authorize changed or extra fields.
+            plan.audit_digest = sha256(&bytes);
+            fs::write(&plan_path, serde_json::to_vec(&plan).unwrap()).unwrap();
+            fs::write(&history, bytes).unwrap();
+            assert!(validate().is_err());
+        }
+        fs::write(&plan_path, &legacy_plan).unwrap();
+        let mut wrong_raw = legacy_bytes.clone();
+        wrong_raw.push(b' ');
+        fs::write(&history, wrong_raw).unwrap();
+        assert!(validate().is_err());
+        fs::write(&history, &legacy_bytes).unwrap();
+        assert!(validate().is_ok());
+
+        // V2 successful predecessor evidence never uses legacy omission compatibility.
+        let success_history = original
+            .base_guard
+            .path()
+            .join(SUCCESS_HISTORY_DIRECTORY)
+            .join(retry_child_name(&successful.build_attempt_id).unwrap());
+        let success_plan_path = original
+            .base_guard
+            .path()
+            .join(RETRY_PLAN_DIRECTORY)
+            .join(retry_child_name(&successful.build_attempt_id).unwrap());
+        let mut success_bytes: serde_json::Value =
+            serde_json::from_slice(&fs::read(&success_history).unwrap()).unwrap();
+        success_bytes["result"]
+            .as_object_mut()
+            .unwrap()
+            .remove("failureDiagnostic");
+        let success_bytes = serde_json::to_vec(&success_bytes).unwrap();
+        let mut success_plan: ReviewedBuildRetryPlanV1 =
+            serde_json::from_slice(&fs::read(&success_plan_path).unwrap()).unwrap();
+        success_plan.audit_digest = sha256(&success_bytes);
+        fs::write(&success_history, success_bytes).unwrap();
+        fs::write(
+            success_plan_path,
+            serde_json::to_vec(&success_plan).unwrap(),
+        )
+        .unwrap();
+        assert!(validate().is_err());
+        drop(successful_control);
+        drop(retry_control);
+        drop(original);
         fs::remove_dir_all(root).unwrap();
     }
 
