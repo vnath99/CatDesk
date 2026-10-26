@@ -98,6 +98,8 @@ mod windows {
         ) -> i32;
         fn IsProcessInJob(process: *mut c_void, job: *mut c_void, result: *mut i32) -> i32;
         fn GetCurrentProcess() -> *mut c_void;
+        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut c_void;
+        fn WaitForSingleObject(handle: *mut c_void, milliseconds: u32) -> u32;
         fn GetProcessTimes(
             process: *mut c_void,
             created: *mut FileTime,
@@ -340,6 +342,7 @@ mod windows {
         pub(crate) creation_time: u64,
         workspace: std::path::PathBuf,
         entry_args: Vec<String>,
+        kind: u8,
     }
 
     static STOPPED_CONTROLLER: std::sync::Mutex<Option<StoppedControllerLifetime>> =
@@ -405,6 +408,20 @@ mod windows {
         unscoped || project
     }
 
+    fn dedicated_task_entry(args: &[String]) -> bool {
+        crate::parse_headless_mcp_options(args.iter().cloned())
+            .ok()
+            .flatten()
+            .is_some_and(|options| {
+                options.project_task_contract.is_some()
+                    && options.project_scope.is_some()
+                    && options.no_web_auto
+                    && options
+                        .maximum_runtime_seconds
+                        .is_some_and(|seconds| (1..=180).contains(&seconds))
+            })
+    }
+
     impl OwnedCandidateChild {
         /// A dedicated stopped CLI retains exactly one noninheritable armed
         /// Job handle until OS process teardown. Children inherit membership
@@ -413,26 +430,139 @@ mod windows {
             transaction: &str,
             workspace: &std::path::Path,
         ) -> Result<StoppedControllerLifetime, String> {
-            Self::enter_controller_lifetime(transaction, workspace, false)
+            Self::enter_controller_lifetime(transaction, workspace, 0)
         }
 
         pub(crate) fn enter_installed_backend_lifetime(
             transaction: &str,
             workspace: &std::path::Path,
         ) -> Result<StoppedControllerLifetime, String> {
-            Self::enter_controller_lifetime(transaction, workspace, true)
+            Self::enter_controller_lifetime(transaction, workspace, 1)
+        }
+
+        pub(crate) fn enter_project_task_lifetime(
+            workspace: &std::path::Path,
+        ) -> Result<StoppedControllerLifetime, String> {
+            let transaction = uuid::Uuid::new_v4().simple().to_string();
+            #[cfg(test)]
+            let transaction = std::env::var("CATDESK_TASK_OWNER_FIXTURE").unwrap_or(transaction);
+            Self::enter_controller_lifetime(&transaction, workspace, 2)
+        }
+
+        pub(crate) fn current_project_task_lifetime()
+        -> Result<Option<StoppedControllerLifetime>, String> {
+            let current = STOPPED_CONTROLLER
+                .lock()
+                .map_err(|_| "task owner state unavailable")?;
+            let Some(proof) = current.as_ref().filter(|proof| proof.kind == 2) else {
+                return Ok(None);
+            };
+            let args = std::env::args().skip(1).collect::<Vec<_>>();
+            let dedicated = dedicated_task_entry(&args);
+            #[cfg(test)]
+            let dedicated = dedicated
+                || (args.len() == 4
+                    && args[0] == "--exact"
+                    && args[1] == "project_mcp_task::recovery::tests::task_owner_fixture_child"
+                    && args[2] == "--ignored"
+                    && args[3] == "--nocapture"
+                    && std::env::var("CATDESK_TASK_OWNER_FIXTURE").ok().as_deref()
+                        == Some(&proof.transaction_id));
+            if !dedicated || proof.entry_args != args || proof.pid != std::process::id() {
+                return Err("task owner entry changed".into());
+            }
+            let wide = proof
+                .job_name
+                .encode_utf16()
+                .chain(Some(0))
+                .collect::<Vec<_>>();
+            let handle = unsafe { OpenJobObjectW(4, 0, wide.as_ptr()) };
+            if handle.is_null() {
+                return Err("task owner Job unavailable".into());
+            }
+            let job = KillOnCloseJob(handle);
+            job.require_armed()?;
+            let mut inside = 0;
+            if unsafe { IsProcessInJob(GetCurrentProcess(), job.0, &mut inside) } == 0
+                || inside != 1
+            {
+                return Err("task owner Job membership changed".into());
+            }
+            Ok(Some(proof.clone()))
+        }
+
+        pub(crate) fn prove_project_task_owner_exited(
+            id: &str,
+            job_name: &str,
+            session: u32,
+            pid: u32,
+            creation: u64,
+        ) -> Result<(), String> {
+            let mut current_session = 0;
+            if id.len() != 32
+                || !id.bytes().all(|b| b.is_ascii_hexdigit())
+                || pid == 0
+                || creation == 0
+                || unsafe { ProcessIdToSessionId(std::process::id(), &mut current_session) } == 0
+                || session != current_session
+                || job_name
+                    != format!(
+                        "Local\\CatDesk.ProjectTask.{id}.controller.{session}.{pid}.{creation}"
+                    )
+            {
+                return Err("task owner identity unproven".into());
+            }
+            let process = unsafe { OpenProcess(0x0010_1000, 0, pid) };
+            if process.is_null() {
+                if unsafe { GetLastError() } != 87 {
+                    return Err("task owner process unavailable".into());
+                }
+            } else {
+                let mut created = FileTime::default();
+                let mut exited = FileTime::default();
+                let mut kernel = FileTime::default();
+                let mut user = FileTime::default();
+                let queried = unsafe {
+                    GetProcessTimes(process, &mut created, &mut exited, &mut kernel, &mut user)
+                };
+                let state = unsafe { WaitForSingleObject(process, 0) };
+                unsafe { CloseHandle(process) };
+                if queried == 0
+                    || ((u64::from(created.high) << 32) | u64::from(created.low)) != creation
+                    || state != 0
+                {
+                    return Err("task owner remains live or identity is ambiguous".into());
+                }
+            }
+            let wide = job_name.encode_utf16().chain(Some(0)).collect::<Vec<_>>();
+            let handle = unsafe { OpenJobObjectW(4, 0, wide.as_ptr()) };
+            if handle.is_null() {
+                return if unsafe { GetLastError() } == 2 {
+                    Ok(())
+                } else {
+                    Err("task Job observation unavailable".into())
+                };
+            }
+            let job = KillOnCloseJob(handle);
+            job.require_armed()?;
+            if job.active_processes()? != 0 {
+                return Err("task Job remains active".into());
+            }
+            Ok(())
         }
 
         fn enter_controller_lifetime(
             transaction: &str,
             workspace: &std::path::Path,
-            installed_backend: bool,
+            kind: u8,
         ) -> Result<StoppedControllerLifetime, String> {
             if transaction.len() != 32 || !transaction.bytes().all(|b| b.is_ascii_hexdigit()) {
                 return Err("stopped controller transaction is invalid".into());
             }
             let args = std::env::args().skip(1).collect::<Vec<_>>();
-            let dedicated = if installed_backend {
+            let dedicated = if kind == 2 {
+                dedicated_task_entry(&args)
+            } else if kind == 1 {
                 dedicated_installed_backend_entry(&args)
             } else {
                 dedicated_stopped_entry(&args)
@@ -444,12 +574,16 @@ mod windows {
                     && args[2] == "--ignored"
                     && args[3] == "--nocapture"
                     && args[1]
-                        == if installed_backend {
+                        == if kind == 2 {
+                            "project_mcp_task::recovery::tests::task_owner_fixture_child"
+                        } else if kind == 1 {
                             "reviewed_candidate_owner::windows::tests::installed_controller_fixture_child"
                         } else {
                             "reviewed_candidate_owner::windows::tests::stopped_controller_fixture_child"
                         }
-                    && std::env::var(if installed_backend {
+                    && std::env::var(if kind == 2 {
+                        "CATDESK_TASK_OWNER_FIXTURE"
+                    } else if kind == 1 {
                         "CATDESK_INSTALLED_CONTROLLER_FIXTURE"
                     } else {
                         "CATDESK_STOPPED_CONTROLLER_FIXTURE"
@@ -476,6 +610,7 @@ mod windows {
                     && proof.entry_args == args
                     && proof.pid == std::process::id()
                     && proof.session_id == session
+                    && proof.kind == kind
                 {
                     Ok(proof.clone())
                 } else {
@@ -503,7 +638,9 @@ mod windows {
                 return Err("stopped controller process identity unavailable".into());
             }
             let created = (u64::from(created.high) << 32) | u64::from(created.low);
-            let prefix = if installed_backend {
+            let prefix = if kind == 2 {
+                "Local\\CatDesk.ProjectTask"
+            } else if kind == 1 {
                 "Local\\CatDesk.InstalledBackend"
             } else {
                 "Local\\CatDesk.ReleasePairStopped"
@@ -533,6 +670,7 @@ mod windows {
                 creation_time: created,
                 workspace,
                 entry_args: args,
+                kind,
             };
             *current = Some(proof.clone());
             Ok(proof)
@@ -1507,4 +1645,4 @@ mod windows {
 }
 
 #[cfg(windows)]
-pub(crate) use windows::{OwnedCandidateChild, SpawnFailure};
+pub(crate) use windows::{OwnedCandidateChild, SpawnFailure, StoppedControllerLifetime};

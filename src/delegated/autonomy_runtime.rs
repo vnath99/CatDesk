@@ -122,6 +122,11 @@ impl ProjectWriterGuard {
     }
 
     fn begin_writer_turn_with_payload(&mut self, payload: String) -> Result<(), RuntimeError> {
+        if self.pending_path.with_extension("recovery").exists() {
+            return Err(RuntimeError::Validation(
+                "project writer recovery is unfinished".into(),
+            ));
+        }
         let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -137,6 +142,119 @@ impl ProjectWriterGuard {
         })?;
         self.pending_nonce = Some(payload);
         Ok(())
+    }
+
+    pub(crate) fn begin_task_writer_turn(
+        &mut self,
+        claim: &str,
+        claim_hash: &str,
+    ) -> Result<(), RuntimeError> {
+        if claim.len() != 32 || !claim.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(RuntimeError::Validation(
+                "task writer claim is invalid".into(),
+            ));
+        }
+        if claim_hash.len() != 64
+            || !claim_hash
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            return Err(RuntimeError::Validation(
+                "task claim hash is invalid".into(),
+            ));
+        }
+        self.begin_writer_turn_with_payload(format!("project-task-v1:{claim}:{claim_hash}"))
+    }
+
+    pub(crate) fn task_marker(&self) -> Result<Option<Vec<u8>>, RuntimeError> {
+        read_writer_recovery_file(&self.pending_path, 128)
+    }
+
+    pub(crate) fn task_recovery_fence(&self) -> Result<Option<Vec<u8>>, RuntimeError> {
+        read_writer_recovery_file(&self.pending_path.with_extension("recovery"), 16384)
+    }
+
+    pub(crate) fn write_task_recovery_fence(&self, bytes: &[u8]) -> Result<(), RuntimeError> {
+        let path = self.pending_path.with_extension("recovery");
+        if let Some(existing) = read_writer_recovery_file(&path, 16384)? {
+            return if existing == bytes {
+                Ok(())
+            } else {
+                Err(RuntimeError::Validation(
+                    "writer recovery fence differs".into(),
+                ))
+            };
+        }
+        let temporary = path.with_extension(format!("recovery-{}.tmp", uuid::Uuid::new_v4()));
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+            .map_err(io_error)?;
+        file.write_all(bytes)
+            .and_then(|()| file.sync_all())
+            .map_err(io_error)?;
+        drop(file);
+        rename_writer_evidence(&temporary, &path, bytes)?;
+        if read_writer_recovery_file(&path, 16384)?.as_deref() != Some(bytes) {
+            return Err(RuntimeError::Validation(
+                "writer recovery fence readback differs".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn archive_task_marker(
+        &self,
+        claim: &str,
+        expected: &[u8],
+    ) -> Result<(), RuntimeError> {
+        if claim.len() != 32 || !claim.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(RuntimeError::Validation(
+                "task writer claim is invalid".into(),
+            ));
+        }
+        let archive = self.pending_path.with_extension(format!("retired-{claim}"));
+        match (
+            read_writer_recovery_file(&self.pending_path, 128)?,
+            read_writer_recovery_file(&archive, 128)?,
+        ) {
+            (Some(bytes), None) if bytes == expected => {
+                rename_writer_evidence(&self.pending_path, &archive, expected)
+            }
+            (None, Some(bytes)) if bytes == expected => Ok(()),
+            _ => Err(RuntimeError::Validation(
+                "task writer archive is ambiguous".into(),
+            )),
+        }
+    }
+
+    pub(crate) fn finish_task_recovery_fence(
+        &self,
+        claim: &str,
+        expected: &[u8],
+    ) -> Result<(), RuntimeError> {
+        if claim.len() != 32 || !claim.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(RuntimeError::Validation(
+                "task writer claim is invalid".into(),
+            ));
+        }
+        let source = self.pending_path.with_extension("recovery");
+        let target = self
+            .pending_path
+            .with_extension(format!("recovered-{claim}"));
+        match (
+            read_writer_recovery_file(&source, 16384)?,
+            read_writer_recovery_file(&target, 16384)?,
+        ) {
+            (Some(bytes), None) if bytes == expected => {
+                rename_writer_evidence(&source, &target, expected)
+            }
+            (None, Some(bytes)) if bytes == expected => Ok(()),
+            _ => Err(RuntimeError::Validation(
+                "task writer recovery completion differs".into(),
+            )),
+        }
     }
 
     pub(crate) fn finish_writer_turn(&mut self) -> Result<(), RuntimeError> {
@@ -163,6 +281,82 @@ impl ProjectWriterGuard {
         self.pending_nonce = None;
         Ok(())
     }
+}
+
+fn read_writer_recovery_file(path: &Path, limit: u64) -> Result<Option<Vec<u8>>, RuntimeError> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(io_error(error)),
+    };
+    if !metadata.is_file() || path_is_reparse_or_symlink(&metadata) || metadata.len() > limit {
+        return Err(RuntimeError::Validation(
+            "writer recovery evidence is unsafe".into(),
+        ));
+    }
+    let mut file = open_writer_marker_no_follow(path)?;
+    let opened = file.metadata().map_err(io_error)?;
+    if !same_writer_marker_identity(&file, path, &opened, &metadata) {
+        return Err(RuntimeError::Validation(
+            "writer recovery evidence identity changed".into(),
+        ));
+    }
+    let mut bytes = Vec::new();
+    Read::by_ref(&mut file)
+        .take(limit + 1)
+        .read_to_end(&mut bytes)
+        .map_err(io_error)?;
+    if bytes.len() as u64 > limit {
+        return Err(RuntimeError::Validation(
+            "writer recovery evidence oversized".into(),
+        ));
+    }
+    Ok(Some(bytes))
+}
+
+fn io_error(_: std::io::Error) -> RuntimeError {
+    RuntimeError::Validation("project writer recovery I/O failed".into())
+}
+
+#[cfg(windows)]
+pub(crate) fn rename_writer_evidence(
+    source: &Path,
+    target: &Path,
+    expected: &[u8],
+) -> Result<(), RuntimeError> {
+    let parent = source
+        .parent()
+        .ok_or_else(|| RuntimeError::Validation("writer evidence parent missing".into()))?;
+    if target.parent() != Some(parent) {
+        return Err(RuntimeError::Validation(
+            "writer evidence parent differs".into(),
+        ));
+    }
+    let source_name = source
+        .file_name()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| RuntimeError::Validation("writer evidence name invalid".into()))?;
+    let target_name = target
+        .file_name()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| RuntimeError::Validation("writer evidence name invalid".into()))?;
+    let pinned =
+        crate::windows_protected_fs::ProtectedDirectoryGuard::acquire(parent, "writer evidence")
+            .map_err(RuntimeError::Validation)?;
+    crate::windows_protected_fs::rename_exact_regular_child(
+        &pinned,
+        source_name,
+        target_name,
+        expected,
+        "writer evidence",
+    )
+    .map_err(RuntimeError::Validation)
+}
+#[cfg(not(windows))]
+pub(crate) fn rename_writer_evidence(_: &Path, _: &Path, _: &[u8]) -> Result<(), RuntimeError> {
+    Err(RuntimeError::Validation(
+        "task writer recovery requires Windows ownership proof".into(),
+    ))
 }
 
 fn checked_writer_state_dir(path: &Path) -> Result<PathBuf, RuntimeError> {
@@ -485,6 +679,22 @@ fn acquire_project_writer_lock_at(
     lock_root: &Path,
     project_workspace: &Path,
 ) -> Result<ProjectWriterGuard, RuntimeError> {
+    acquire_project_writer_lock_inner(lock_root, project_workspace, false)
+}
+
+pub(crate) fn acquire_project_task_writer_lock(
+    project_workspace: &Path,
+) -> Result<ProjectWriterGuard, RuntimeError> {
+    let workspace = project_workspace.canonicalize().map_err(io_error)?;
+    let root = fixed_project_writer_lock_root(&workspace)?;
+    acquire_project_writer_lock_inner(&root, &workspace, true)
+}
+
+fn acquire_project_writer_lock_inner(
+    lock_root: &Path,
+    project_workspace: &Path,
+    task_recovery: bool,
+) -> Result<ProjectWriterGuard, RuntimeError> {
     let project_workspace = project_workspace
         .canonicalize()
         .map_err(|_| RuntimeError::Validation("project writer workspace is unavailable".into()))?;
@@ -530,8 +740,19 @@ fn acquire_project_writer_lock_at(
     file.try_lock().map_err(|_| {
         RuntimeError::Validation("project workspace already has an active Codex writer".into())
     })?;
+    if !task_recovery
+        && pending_path
+            .with_extension("recovery")
+            .try_exists()
+            .map_err(io_error)?
+    {
+        return Err(RuntimeError::Validation(
+            "project writer recovery is unfinished".into(),
+        ));
+    }
     match fs::symlink_metadata(&pending_path) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Ok(_) if task_recovery => {}
         _ => {
             return Err(RuntimeError::Validation(
                 "unresolved managed project writer marker exists".into(),

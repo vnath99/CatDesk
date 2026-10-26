@@ -21,6 +21,9 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
+#[cfg(windows)]
+#[path = "project_task_recovery.rs"]
+mod recovery;
 
 pub(crate) const TOOL: &str = "catdesk_project_task_tool";
 const TOOLS: &[&str] = &[
@@ -112,6 +115,7 @@ struct TaskState {
 pub(crate) struct ProjectTask {
     project: ResolvedProjectScopeV1,
     root: PathBuf,
+    recovery_claim: Option<String>,
     witness: (PathBuf, PathBuf, String, String),
     contract: ExecutionContractV1,
     journal: DelegatedJournal,
@@ -861,6 +865,21 @@ impl ProjectTask {
             check_linked_assignment(project, &inspected, &project_lease)?;
         }
         let linked_assignment = inspected.web_work.as_ref().map(|_| inspected.clone());
+        #[cfg(windows)]
+        let lifetime =
+            crate::reviewed_candidate_owner::OwnedCandidateChild::current_project_task_lifetime()?;
+        #[cfg(windows)]
+        let recovery_inspection = inspected.clone();
+        #[cfg(windows)]
+        let mut writer = if lifetime.is_some() {
+            recovery::lock_and_recover(project, &inspected)?
+        } else {
+            acquire_project_writer_lock(&inspected.root)
+                .map_err(|_| "PROJECT_TASK_WRITER_BUSY_OR_UNRESOLVED")?
+        };
+        #[cfg(not(windows))]
+        let mut writer = acquire_project_writer_lock(&inspected.root)
+            .map_err(|_| "PROJECT_TASK_WRITER_BUSY_OR_UNRESOLVED")?;
         let AssignmentInspection {
             contract,
             command_profiles,
@@ -868,8 +887,6 @@ impl ProjectTask {
             witness,
             ..
         } = inspected;
-        let mut writer = acquire_project_writer_lock(&root)
-            .map_err(|_| "PROJECT_TASK_WRITER_BUSY_OR_UNRESOLVED")?;
         let state_root = state_root(project, &contract.task_id);
         let journal_root = state_root.join("journal");
         let journal = DelegatedJournal::open(&journal_root)
@@ -946,9 +963,22 @@ impl ProjectTask {
             },
         )
         .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
-        writer
-            .begin_writer_turn()
-            .map_err(|_| "PROJECT_TASK_WRITER_MARKER_UNAVAILABLE")?;
+        #[cfg(windows)]
+        let recovery_claim = if let Some(lifetime) = lifetime {
+            recovery::begin(&mut writer, project, &recovery_inspection, &lifetime)?
+        } else {
+            writer
+                .begin_writer_turn()
+                .map_err(|_| "PROJECT_TASK_WRITER_MARKER_UNAVAILABLE")?;
+            None
+        };
+        #[cfg(not(windows))]
+        let recovery_claim = {
+            writer
+                .begin_writer_turn()
+                .map_err(|_| "PROJECT_TASK_WRITER_MARKER_UNAVAILABLE")?;
+            None
+        };
         service
             .start()
             .map_err(|_| "PROJECT_TASK_START_UNCERTAIN_MARKER_RETAINED")?;
@@ -957,6 +987,7 @@ impl ProjectTask {
         Ok(Arc::new(Self {
             project: project.clone(),
             root,
+            recovery_claim,
             witness,
             contract,
             journal,
@@ -976,6 +1007,8 @@ impl ProjectTask {
 
     pub(crate) fn metadata(&self) -> Value {
         json!({"taskId":self.contract.task_id,"executionWorkspace":self.root,
+            "zeroCallRecoveryOwnerClaim":self.recovery_claim,
+            "coldRecoveryProfile":if self.recovery_claim.is_some(){"DEDICATED_NAMED_JOB_ZERO_CALLS"}else{"LEGACY_NO_AUTORECOVERY"},
             "registeredWorkspace":self.project.project.workspace,"access":if self.command_profiles.is_empty() {"CONTRACT_PATCH_TOOLS"} else {"CONTRACT_PATCH_AND_COMMAND_PROFILES"},
             "nativeWriterClaimed":false,"isolatedWorktreeWriterClaimed":true,
             "allowedPaths":self.contract.allowed_paths,"allowedTools":self.allowed_tools(),
@@ -1345,6 +1378,10 @@ impl ProjectTask {
                 .ok_or("PROJECT_TASK_WRITER_RETIRE_FAILED")?
                 .finish_writer_turn()
                 .map_err(|_| "PROJECT_TASK_WRITER_RETIRE_FAILED")?;
+            #[cfg(windows)]
+            if let Some(claim) = &task.recovery_claim {
+                recovery::closed(&task.project, &task.contract.task_id, claim)?;
+            }
             // Confirmed drain/marker retirement releases this exact lock even
             // if a closed router/context Arc remains alive temporarily.
             state.writer.take();

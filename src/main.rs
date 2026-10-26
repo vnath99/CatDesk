@@ -1536,6 +1536,12 @@ fn validate_isolated_fixture_scope(
 
 async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std::error::Error>> {
     let workspace_root = resolve_headless_workspace(&options.workspace)?;
+    #[cfg(windows)]
+    if options.project_task_contract.is_some() {
+        reviewed_candidate_owner::OwnedCandidateChild::enter_project_task_lifetime(
+            std::path::Path::new(&workspace_root),
+        )?;
+    }
     let project_context = match options.project_scope.clone() {
         Some(selection) => Some(
             project_mcp::ProjectContext::bind_with_task(

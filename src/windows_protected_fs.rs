@@ -1380,6 +1380,79 @@ pub(crate) fn open_reviewed_regular_for_delete<P: PinnedParent>(
     Ok(file)
 }
 
+/// Rename one exact regular file while retaining its read/delete handle. The
+/// pinned parent and FILE_SHARE_READ prevent pathname replacement between the
+/// byte comparison and the no-replace native commit.
+#[cfg(windows)]
+pub(crate) fn rename_exact_regular_child(
+    parent: &ProtectedDirectoryGuard,
+    source: &str,
+    destination: &str,
+    expected: &[u8],
+    label: &str,
+) -> Result<(), String> {
+    validate_component(source, label)?;
+    validate_component(destination, label)?;
+    if expected.len() > 128 * 1024 || source == destination {
+        return Err(format!("{label} is unsafe"));
+    }
+    parent.assert_stable(label)?;
+    let mut file = open_relative_regular_file_with_disposition_and_share(
+        parent,
+        source,
+        FILE_OPEN,
+        FILE_READ_DATA | FILE_READ_ATTRIBUTES | DELETE | SYNCHRONIZE,
+        FILE_SHARE_READ,
+        label,
+    )?;
+    let information = handle_information(file.as_raw_handle(), label)?;
+    if information.file_attributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY) != 0
+        || information.number_of_links != 1
+        || file
+            .metadata()
+            .map_err(|_| format!("{label} is unavailable"))?
+            .len()
+            != expected.len() as u64
+    {
+        return Err(format!("{label} identity drifted"));
+    }
+    let mut actual = Vec::new();
+    Read::by_ref(&mut file)
+        .take(expected.len() as u64 + 1)
+        .read_to_end(&mut actual)
+        .map_err(|_| format!("{label} is unavailable"))?;
+    if actual != expected {
+        return Err(format!("{label} bytes drifted"));
+    }
+    parent.assert_stable(label)?;
+    let name: Vec<u16> = destination.encode_utf16().collect();
+    let name_bytes = name.len() * 2;
+    let mut information = vec![0_u8; 20 + name_bytes];
+    // ReplaceIfExists=false. Never overwrite an occupied evidence name.
+    information[8..16].copy_from_slice(&(parent.last_handle(label)? as usize).to_ne_bytes());
+    information[16..20].copy_from_slice(&(name_bytes as u32).to_ne_bytes());
+    for (index, unit) in name.iter().enumerate() {
+        information[20 + index * 2..22 + index * 2].copy_from_slice(&unit.to_ne_bytes());
+    }
+    let mut status = IO_STATUS_BLOCK {
+        status: 0,
+        information: 0,
+    };
+    let result = unsafe {
+        NtSetInformationFile(
+            file.as_raw_handle(),
+            &mut status,
+            information.as_mut_ptr().cast(),
+            information.len() as u32,
+            FILE_RENAME_INFO_CLASS,
+        )
+    };
+    if result < 0 {
+        return Err(format!("{label} is unavailable ({result:#x})"));
+    }
+    parent.assert_stable(label)
+}
+
 pub(crate) fn validate_component(component: &str, label: &str) -> Result<(), String> {
     if component.is_empty()
         || component.len() > 255
