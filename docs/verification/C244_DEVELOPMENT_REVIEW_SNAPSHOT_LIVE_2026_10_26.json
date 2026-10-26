@@ -1,0 +1,48 @@
+{
+  "checkpoint": "C244",
+  "observedUtc": "2026-10-26T12:00:19.8324976+00:00",
+  "codeSourceCommit": "48625826f2241edc0e25151ad8c32b5e7942dafe",
+  "reviewedSourceCommit": "31e6d1e3f28badac4792442659b2a23c24c660fd",
+  "classification": "ISOLATED_DEVELOPMENT_BROWSER_READ_PASS_NOT_PRODUCTION_ACCEPTANCE",
+  "build": "Normal debug app and host, immutable copies; source/build/published SHA pinned",
+  "developmentSelection": "Existing guarded package update, matching controller and adapter; prior package preserved",
+  "failedPreflight": "Older controller refused DEV_PACKAGE_SCRIPT_SOURCE_MISMATCH; no pointer/version/journal mutation. Failed attempt retained.",
+  "live": {
+    "profileIdentityPreserved": true,
+    "allMetadataByteExact": true,
+    "nativeSessionFilesPreserved": 4577,
+    "testOwnedProcessesRemaining": 0,
+    "completeTurnWitness": true,
+    "snapshotDiagnosticPhase": "COMPLETE",
+    "nativeReadElapsedMilliseconds": 35198,
+    "duplicateMessages": 0,
+    "eventBoundResponseVerified": true,
+    "responseBytes": 6397,
+    "messageSentCount": 1,
+    "nativeReadBudgetMilliseconds": 90000,
+    "allFiveProjectBindingsPreserved": true,
+    "responseSha256": "6bd73dd6b8b2d1d441bcfc50a99bfac78f94c11206db7ab1e39678a60f26bf1c"
+  },
+  "review": {
+    "managedClaim": "NONRENEWABLE_LEASE_EXPIRED_NO_FINALIZATION",
+    "reviewAcknowledged": false,
+    "rawResponseRewritten": false,
+    "newProducerAuthority": false,
+    "positiveObservations": 8,
+    "sourceIntegrated": false,
+    "reportedVerdict": "PASS",
+    "requiredFocusPathsCovered": 12,
+    "strictReportSchema": "FAIL_EXTRA_FIVE_PUBLIC_DOCUMENTATION_PATHS",
+    "reportCreated": false
+  },
+  "acceptance": {
+    "sourceTests": "PASS_RECORDED_C243",
+    "differentVersionRollback": "OPEN",
+    "unattendedOperation": "STOPPED",
+    "isolatedBrowserCanary": "PASS_EXISTING_EVENT_READ_NO_RESEND",
+    "twoIndependentWebCodingConversations": "OPEN_LAST_CONNECTOR_HTTP429",
+    "protectedProductionChanged": false,
+    "installedNewSource": "OPEN"
+  },
+  "next": "Retire only expired review claim through supported cancellation, qualify selected development backend health, then review the new five-file transport delta under existing standing authorization with a fresh realistic lease and explicit report shape."
+}

@@ -1,3 +1,26 @@
+## October 26 C244 — actual review snapshot verified
+
+The C243 frame correction passed a real bounded read of the existing completed
+review: exact USER attribution and the complete 6,397-byte assistant body were
+verified. No message was resent. Matching normal-debug development artifacts
+were built and selected through the existing guarded update. The older
+controller's source-mismatch refusal is preserved; no state changed on that
+failed preflight. The working previous package, profile, all five bindings and
+4,577 native-session files are preserved, with zero test-owned processes left.
+See [actual development evidence](verification/C244_DEVELOPMENT_REVIEW_SNAPSHOT_LIVE_2026_10_26.json).
+
+The reply reports source-scope PASS with eight positive observations and all
+twelve required paths. It lists five additional public documentation paths,
+which fail the frozen report schema. Its nonrenewable managed claim also
+expired before finalization. The raw response and original contract are retained;
+no report, source integration, acknowledgment, new producer or promotion followed.
+
+Next: supported retirement of only the expired review claim, bounded development
+backend health, and a fresh scoped review of the new transport fix under standing
+authorization. Production installation, trusted different-version rollback and
+two independent Web coding conversations remain separate open gates. Recurring
+automation stays stopped; the connector's last HTTP 429 remains separate.
+
 ## October 26 C243 — private review snapshot frame
 
 One bounded routine review was delivered exactly once and its turn completed.
