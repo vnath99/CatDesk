@@ -1,3 +1,29 @@
+## October 26 C236 — zero-call task recovery source qualified
+
+Published source `922b8056651f1ec6aa78bd9844aea306d69c9e99` adds cold recovery
+for newly claimed, dedicated, bounded project-task processes. It reuses the
+existing project lease and workspace writer lock. Exact owner/Job death,
+unchanged assignment, clean worktree and zero tool activity are required.
+Durable authorization precedes exact-handle marker archival; interrupted
+recovery resumes without replay. Legacy or ambiguous markers remain blocked.
+Normal dirty-worktree resumption retains its prior behavior.
+
+All 60 focused tests, formatting and strict Clippy passed. Real Windows child
+fixtures cover interruption, both sides of archival, recorded-call refusal,
+legacy refusal and a warm resume with 90 retained dirty files. The first run's
+unsupported fixture tool name was corrected before this passing frozen run.
+All 1,978 prior state pins matched; test owners and test executables were absent
+afterward. The source commit has no visible GitHub Actions run; CI acceptance
+is not claimed. [Detailed evidence](../verification/C236_ZERO_CALL_TASK_RECOVERY_2026_10_26.json).
+
+This is source/process-fixture qualification, not installed or ChatGPT Web
+acceptance. C208 remains installed; no Wake, browser or recurring process was
+started. The old C234 quarantine remains preserved and ineligible. The next
+executable step is a bounded normal-debug canary using a fresh claimed task,
+then the existing reviewed release procedure where required. Connector HTTP
+429 and genuine two-conversation Web acceptance remain separate open gates.
+No operator action is required for the next development canary.
+
 ## October 25 C235 — installed isolated task writes and verification LIVE PASS
 
 The existing trusted C208 executable completed two concurrent operator-assigned

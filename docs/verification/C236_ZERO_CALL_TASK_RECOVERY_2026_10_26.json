@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C236",
+  "classification": "SOURCE_AND_REAL_WINDOWS_PROCESS_FIXTURES",
+  "sourceCommit": "922b8056651f1ec6aa78bd9844aea306d69c9e99",
+  "branch": "codex/web-rollover-oct17",
+  "sourceParent": "6ed9df12758d5baa417bec04e14076edb3ce4a80",
+  "startedUtc": "2026-10-26T09:59:44.0346500+00:00",
+  "finishedUtc": "2026-10-26T10:01:59.1368689+00:00",
+  "elapsedMilliseconds": 135102,
+  "maximumSeconds": 600,
+  "implementation": [
+    "Dedicated bounded task process enters its own kill-on-close Job before task binding.",
+    "New zero-call claims bind exact project, assignment, contract, workspace, owner and marker hash.",
+    "Recovery reuses project lease and workspace writer lock; archived exact marker is the commit after durable authorization.",
+    "Regular-file rename retains a read/delete handle with no write/delete sharing and refuses occupied destinations.",
+    "Recorded activity, ambiguous ownership and legacy markers remain quarantined.",
+    "Dirty or unavailable eligibility checks preserve ordinary warm admission without granting automatic recovery."
+  ],
+  "tests": {
+    "taskPassed": 16,
+    "taskIgnored": 3,
+    "ownerPassed": 16,
+    "ownerIgnored": 2,
+    "headlessPassed": 18,
+    "installedFacadePassed": 10,
+    "totalPassed": 60,
+    "failed": 0,
+    "fmt": "PASS",
+    "strictClippy": "PASS",
+    "actualWindowsChildInterruption": "PASS",
+    "beforeAndAfterArchiveRecovery": "PASS",
+    "largeDirtyWarmResume": "PASS",
+    "recordedCallAndLegacyRefusal": "PASS",
+    "exactRenameDriftCollisionHardlinkRefusal": "PASS"
+  },
+  "firstAttempt": {
+    "failed": 1,
+    "passed": 14,
+    "reason": "Test fixture used unsupported file.read instead of read; corrected and rerun with a new frozen manifest.",
+    "additionalReviewedFix": "Oversized or unavailable cleanliness probe falls back to legacy warm admission."
+  },
+  "preservation": {
+    "productionActions": 0,
+    "browserWakeRecurringStarts": 0,
+    "legacyQuarantinePreserved": true,
+    "changedPins": 0,
+    "previousPinsChecked": 1978,
+    "testExecutablesRemaining": 0,
+    "testOwnersRemaining": 0
+  },
+  "evidence": {
+    "manifestSha256": "75dfee1b32d629da3f519af2444815935de2f40ad9ba9f338178924f9222a4a1",
+    "resultSha256": "10aef498e4e36f528ddcbf502633f65b3042063ce8ad82addb23384673773a4b",
+    "outerSha256": "58c5a191d157e6e65a091a850d48d60ff647d942209b8c4e5339b8539bd37d7e",
+    "cleanupSha256": "1084861b71040a929fc9949658d4e5123221aaa963189526dd3aa51324ed265c",
+    "preservationSha256": "d7f2b909a106ae582b56dca0f4f64efd17d7930877e26d44e599c3992e6e9c5c"
+  },
+  "ci": {
+    "accepted": false,
+    "dispatchAttempts": 0,
+    "visibleRuns": 0,
+    "sourceCommit": "922b8056651f1ec6aa78bd9844aea306d69c9e99"
+  },
+  "limits": [
+    "No production promotion or installation. C208 remains the installed executable.",
+    "No authenticated ChatGPT Web acceptance; previously observed connector HTTP 429 was not retried.",
+    "Normal debug executable canary and installed rollout of this change remain pending.",
+    "Old C234 marker lacks a native owner claim and is not eligible for this recovery path.",
+    "No generic marker-clearing command is added. Existing native sessions and original workspaces are untouched."
+  ],
+  "milestoneComplete": false
+}
