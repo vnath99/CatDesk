@@ -1,5 +1,19 @@
 # CatDesk — Comprehensive handoff to Codex Desktop
 
+## Current source note — October 25 C227
+
+The bounded `operator installed-backend run` action is source-qualified
+(30 cases, formatting, strict Clippy, two static reviews). It uses existing
+settled-release authority and an actual held lifecycle lease, with dedicated
+armed process ownership. Installed C208 remains unchanged.
+
+Next: exact reviewed source publication, immutable controller build and monitored
+live qualification of this new action. First slice remains unscoped/read-only
+on the known qualification route; native/persistent serving, official connector,
+previous-version rollback and two-Web coding are not accepted. No completed
+promotion, restart, review or rollover request should be replayed.
+[Evidence](../verification/C227_INSTALLED_FOREGROUND_SOURCE_2026_10_25.json).
+
 ## Current installed test note — October 25 C226
 
 The restored installed image completed two natural 60-second headless cycles,

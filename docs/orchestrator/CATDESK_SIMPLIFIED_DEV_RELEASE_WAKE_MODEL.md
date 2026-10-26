@@ -1,3 +1,13 @@
+## October 25 C227 — installed foreground ownership implemented in source
+
+A distinct bounded operator action now serves the already trusted installed
+headless engine. It reuses existing pointer/slot/receipt readers, the lifecycle
+lease and armed process ownership. The development selector remains unchanged;
+no new candidate, release authority or competing registry was introduced.
+The whole command has a deadline with teardown reserve and fixed read-only
+scope. Source qualification passed; normal build and actual action acceptance
+remain pending. [Evidence](../verification/C227_INSTALLED_FOREGROUND_SOURCE_2026_10_25.json).
+
 ## October 25 C226 — installed operation verified; foreground ownership gap
 
 The trusted installed image now has two natural bounded headless restart/read

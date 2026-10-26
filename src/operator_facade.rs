@@ -19,6 +19,9 @@ mod web;
 #[path = "operator_development_backend.rs"]
 mod development_backend;
 
+#[path = "operator_installed_backend.rs"]
+mod installed_backend;
+
 pub(crate) use web::WebWorkLease;
 
 #[cfg(test)]
@@ -108,6 +111,9 @@ pub(crate) enum OperatorAction {
     Codex(crate::operator_codex_cli::OperatorCodexAction),
     Web(web::WebAction),
     WebDevelopment(WebDevelopmentAction),
+    InstalledBackend {
+        maximum_seconds: u64,
+    },
     SetWakeTarget {
         conversation_url: String,
         expected_current_target_sha256: Option<String>,
@@ -221,6 +227,17 @@ pub(crate) fn parse_operator_action(
         return Ok(None);
     }
     match args.get(1).map(String::as_str) {
+        Some("installed-backend") => {
+            if args.len() != 5 || args[2] != "run" || args[3] != "--max-runtime-seconds" {
+                return Err("installed-backend requires run --max-runtime-seconds <1..180>".into());
+            }
+            let maximum_seconds = args[4]
+                .parse::<u64>()
+                .ok()
+                .filter(|value| (1..=180).contains(value))
+                .ok_or("installed-backend requires run --max-runtime-seconds <1..180>")?;
+            Ok(Some(OperatorAction::InstalledBackend { maximum_seconds }))
+        }
         Some("web-dev-runtime") => parse_web_development_action(&args)
             .map(OperatorAction::WebDevelopment)
             .map(Some),
@@ -851,6 +868,9 @@ pub(crate) async fn execute_operator_action(
             }
         }
         OperatorAction::Web(action) => web::execute(action, workspace).await,
+        OperatorAction::InstalledBackend { maximum_seconds } => {
+            installed_backend::run(workspace, maximum_seconds).await
+        }
         OperatorAction::Codex(action) => {
             crate::operator_codex_cli::execute_action(action, workspace).await
         }
@@ -1718,6 +1738,50 @@ mod tests {
     use serde_json::Value;
     use sha2::Digest;
     use uuid::Uuid;
+
+    #[test]
+    fn installed_backend_cli_has_only_a_finite_run_action() {
+        let args = |values: &[&str]| values.iter().map(|v| (*v).to_owned()).collect::<Vec<_>>();
+        for budget in ["1", "180"] {
+            assert!(matches!(
+                parse_operator_action(args(&[
+                    "operator",
+                    "installed-backend",
+                    "run",
+                    "--max-runtime-seconds",
+                    budget
+                ])),
+                Ok(Some(OperatorAction::InstalledBackend { .. }))
+            ));
+        }
+        for budget in ["0", "181", "forever", "-1"] {
+            assert!(
+                parse_operator_action(args(&[
+                    "operator",
+                    "installed-backend",
+                    "run",
+                    "--max-runtime-seconds",
+                    budget
+                ]))
+                .is_err()
+            );
+        }
+        for values in [
+            vec!["operator", "installed-backend", "run"],
+            vec!["operator", "installed-backend", "start"],
+            vec![
+                "operator",
+                "installed-backend",
+                "run",
+                "--max-runtime-seconds",
+                "60",
+                "--helper",
+                "anything",
+            ],
+        ] {
+            assert!(parse_operator_action(args(&values)).is_err());
+        }
+    }
 
     #[test]
     fn release_pair_stopped_cli_is_explicit_and_does_not_change_other_prepare_commands() {

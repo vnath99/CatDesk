@@ -1,3 +1,33 @@
+## October 25 C227 — new bounded installed foreground action
+
+**Source qualified; normal controller build and live action qualification pending.**
+Use a newly qualified noncanonical controller containing C227. The installed C208
+image and previous C224 controller do not implement this command.
+
+With canonical working directory and a valid caller-process
+`CATDESK_MCP_AUTH_TOKEN`, the closed action is:
+
+```powershell
+& $qualifiedForegroundController operator installed-backend run --max-runtime-seconds 120
+```
+
+The accepted budget is 1..180 seconds for the whole command. Startup/trust/probes
+consume that budget; the child receives remaining time minus 30 seconds for
+teardown. Insufficient budgets refuse. No arbitrary binary, helper, workspace,
+configuration or authentication parameter is accepted.
+
+It validates the exact selected trusted installed release, holds the existing
+exclusive lifecycle lease, runs read-only headless MCP using a private copy of
+the stopped qualification configuration, and retains armed Jobs until exit.
+Readiness is `INSTALLED_HEADLESS_READY`, followed by a bounded final result.
+Holder loss or the command deadline closes the entire owned tree. Preserve run
+evidence on failure; no implicit promotion, fallback or retry occurs.
+
+This first slice supports existing slot B generation 2 and its known local
+qualification route. It is not native-daemon readiness, unattended operation,
+the official connector route or a project-write session.
+[Source evidence](../verification/C227_INSTALLED_FOREGROUND_SOURCE_2026_10_25.json).
+
 ## October 25 C226 — installed headless checks completed
 
 Two owned 60-second starts of the installed image passed authentication,

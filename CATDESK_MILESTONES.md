@@ -1,3 +1,11 @@
+## October 25 C227 — explicit bounded installed owner SOURCE PASS
+
+Added the installed-image foreground command with exact settled-release trust,
+held lifecycle lease, dedicated armed Job, read-only MCP and whole-command
+deadline. Thirty source cases and strict Clippy passed; live action qualification
+is next. Installed C208 bytes and all project bindings remain unchanged.
+[Evidence](docs/verification/C227_INSTALLED_FOREGROUND_SOURCE_2026_10_25.json).
+
 ## October 25 C226 — actual installed restart/read qualification PASS
 
 Two bounded natural restarts, missing/wrong-token rejection, authenticated MCP,

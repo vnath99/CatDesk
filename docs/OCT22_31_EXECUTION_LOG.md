@@ -1,3 +1,32 @@
+## October 25 C227 — bounded installed foreground action source-qualified
+
+Implemented `operator installed-backend run --max-runtime-seconds <1..180>`
+without replacing the installed artifact or changing development selection.
+Existing fixed recovery readers require exact selected-pointer/slot/canonical
+agreement and the completed stopped-release chain. A trusted PowerShell lease
+holder retains the actual exclusive lifecycle handle; its loss closes the
+dedicated controller lifetime Job and all owned children. The installed child
+uses suspended owned spawn, read-only headless mode, a private config copy and
+process-only authentication. No Wake, browser, tunnel or scheduler starts.
+
+The complete command deadline includes startup and cleanup. Serving receives
+remaining time minus a 30-second teardown reserve; small budgets can refuse.
+All four pinned binary/helper/interpreter inputs are revalidated after pinning
+and before any helper execution. No promotion or fallback occurs.
+
+Qualification at 00:56:50–00:58:25 UTC October 26 passed all six steps: 30 distinct
+Rust cases (1 CLI, 8 backend, 16 ownership, 5 stopped regressions), two ignored
+opt-in subprocess helpers, formatting and strict Clippy. Two static reviews
+passed. Actual source-process crash canaries cover the added dedicated owner
+entry. Final test-image/run-prefix and installed inventory was empty. Source
+fixtures are separate from protected runtime qualification.
+
+Next: publish this reviewed source, build an immutable controller from its exact
+commit, and test this new foreground action against the already trusted installed
+C208 image. The first slice is unscoped/read-only on its known qualification route.
+Native serving, official connector and two-project Web acceptance remain OPEN.
+[Evidence](verification/C227_INSTALLED_FOREGROUND_SOURCE_2026_10_25.json).
+
 ## October 25 C226 — two installed restarts and real read-only MCP PASS
 
 From 00:42:11 to 00:44:16 UTC October 26 (October 25 locally), the restored

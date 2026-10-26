@@ -1,3 +1,15 @@
+## October 25 C227 — installed foreground action SOURCE PASS
+
+The explicit bounded foreground action now reuses settled release trust,
+exclusive lifecycle ownership and armed child Jobs. Thirty source cases,
+formatting, strict Clippy and two static reviews passed. Its normal controller
+build and actual installed foreground qualification remain pending.
+
+First slice is unscoped/read-only with the existing stopped-release local route.
+It does not establish native public startup, unattended serving, official
+connector access, previous-version rollback or independent Web coding.
+[Evidence](verification/C227_INSTALLED_FOREGROUND_SOURCE_2026_10_25.json).
+
 ## October 25 C226 — installed restart/read PASS; Web acceptance OPEN
 
 Two natural 60-second installed-headless cycles passed 401/200 authentication,
