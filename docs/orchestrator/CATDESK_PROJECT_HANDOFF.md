@@ -1,3 +1,28 @@
+## October 26 C240/C241 — legacy producer compatibility verified
+
+C239's bounded read-only check returned `attention`: four authentic legacy
+failure audits omitted an optional field that current serialization added as
+null. Their original raw hashes and retained fields matched. Source
+`47922f3a6ad5af85a85e1bbd619cb758b24966f2` permits only that explicit schema1
+omission; raw audit/plan hashes and all other fields remain mandatory. Schema2
+success checks stay byte-exact. No historical file or digest was rewritten.
+All 123 reviewed-build tests, four review-authority checks, six release-pair
+checks, formatting and strict Clippy passed. [Source evidence](../verification/C240_LEGACY_AUDIT_COMPATIBILITY_2026_10_26.json).
+
+The rebuilt debug controller then returned `BUILD_ATTESTED` for real C208
+through 46 retained families/45 transitions. All 2,701 prior pins matched; no
+test process remained. This was one read-only result command within a 60-second
+owner, after the specific correction. C239 remains preserved, and no producer build,
+generation selection, promotion, native-session action, browser, Wake or
+recurring process ran. [Live read-only evidence](../verification/C241_EXISTING_PRODUCER_READONLY_2026_10_26.json).
+
+C238's qualified-controller-only release-writer migration rule still applies.
+Current source still needs genuine acknowledged review and an exact immutable
+snapshot before a new producer or promotion may run. Old C196/C208 authority
+cannot authorize it. The last connector result remains HTTP 429, and actual
+two-conversation Web coding/installed acceptance remain OPEN. No operator action
+is required for preparing the next source review within standing authorization.
+
 ## October 26 C238 — successful producer succession source qualified
 
 Published source `f1f0fe24cf57581fac81fe959ef3aa384a137f4a` fixes a release-path
