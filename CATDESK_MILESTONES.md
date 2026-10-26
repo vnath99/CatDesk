@@ -1,3 +1,46 @@
+## October 26 C247 — read-only MSVC pin qualified in source
+
+The real C246 producer terminated `BUILD_FAILED_OR_AMBIGUOUS` before Cargo:
+`reviewed MSVC helper directory identity is unavailable`. No candidate or
+attestation was produced. A bounded native probe established that directory
+access mask 7 requested add rights and failed with Win32 error 5; read-only mask
+129 opened the same non-reparse directory and read its identity. No ACL or
+directory metadata changed. C247 uses an explicit read-only MSVC directory pin;
+protected writable-directory guards retain their existing rights and checks.
+
+Qualification passed 125 reviewed-build tests, 14 protected-filesystem tests,
+formatting and strict Clippy; eight manual tests remain ignored. The first run's
+one new test-only granted-access failure is preserved. Correcting its native
+56-byte buffer and signed 32-bit information-class ABI enabled the full passing second run.
+These are source results, not a new producer or installed acceptance.
+See [C247 evidence](docs/verification/C247_MSVC_READ_ONLY_DIRECTORY_PIN_2026_10_26.json).
+
+## October 26 C246 — actual review acknowledged; producer refusal retained
+
+The genuine cumulative review of exact published source
+`d9aed85d6a45ddb1b4a1dcb0a0d5205c5870188e` passed managed verification and
+acknowledgment with its faithful 4,960-byte response and 217-entry source snapshot.
+The original auxiliary schema failed because 23 limitation notes exceeded its
+20-item cap. Two independent reviews accepted only that count exception: the
+approved native contract imposed no cap and all other frozen rules passed.
+The raw reply, schema failure, review decision and all 4,585 prior native file pins
+remain preserved. A bounded fresh reobservation at 19:50:12 UTC proved the
+previously `OBSERVING` Wake timer `COMPLETE`, preserving 7,914 other pins and
+retaining two immutable witness logs with zero test owners left. No message was
+resent. Supported closure then marked its transport record `CLOSED`/`completed`
+at 19:54:54 UTC, preserving 7,916 pins with only the expected three ledger fields
+changed. The API's `taskCompletionVerified=false` remains caller-reported transport
+completion, separate from the accepted native review. No browser, send, native
+execution or production action occurred. See [C246 actual evidence](docs/verification/C246_GENUINE_REVIEW_AND_MANAGED_ACK_2026_10_26.json).
+
+Next: qualify a controller containing C247, obtain genuine acknowledged review and
+snapshot for its new frozen source, then use the existing supported failed-build
+generation succession with fresh PREPARE/CONFIRM evidence. Do not repeat the failed
+CONFIRM or relabel C246 authority. Installed C208, five bindings and native owners
+remain preserved. Promotion, installed health, different-version rollback and two
+actual Web coding conversations remain open; CI is unverified and the connector's
+last HTTP 429 is separate. Recurring automation stays stopped.
+
 ## October 26 C246 — local promotion handoff qualified in source
 
 Normal reviewed-promotion preflight now has an explicit local-backend-only

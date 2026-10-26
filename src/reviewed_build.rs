@@ -6803,7 +6803,8 @@ fn pin_msvc_helper_directory(directory: &Path) -> Result<Option<PinnedMsvcHelper
     {
         return Ok(None);
     }
-    let directory = ProtectedDirectoryGuard::acquire(directory, "reviewed MSVC helper directory")?;
+    let directory =
+        ProtectedDirectoryGuard::acquire_read_only(directory, "reviewed MSVC helper directory")?;
     let mut image = open_relative_regular_file(&directory, "VCTIP.EXE", "reviewed MSVC helper")?;
     let evidence = evidence_from_open_regular(&mut image, "reviewed MSVC helper")?;
     Ok(Some(PinnedMsvcHelper {
@@ -10237,6 +10238,41 @@ mod tests {
         fs::copy(std::env::current_exe().unwrap(), root.join("VCTIP.EXE")).unwrap();
         let helper = pin_msvc_helper_directory(&root).unwrap().unwrap();
         (root, helper)
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn msvc_helper_read_only_pin_preserves_exact_file_and_directory() {
+        let root = std::env::temp_dir().join(format!("catdesk-msvc-read-pin-{}", Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        let path = root.join("VCTIP.EXE");
+        let bytes = b"read-only MSVC helper pin fixture";
+        fs::write(&path, bytes).unwrap();
+        let helper = pin_msvc_helper_directory(&root).unwrap().unwrap();
+        assert_eq!(helper.path, path);
+        assert_eq!(helper.sha256, format!("{:x}", Sha256::digest(bytes)));
+        assert_eq!(
+            opened_regular_identity(&helper.image, "MSVC fixture").unwrap(),
+            helper.identity
+        );
+        helper.directory.assert_stable("MSVC fixture").unwrap();
+        assert!(OpenOptions::new().write(true).open(&path).is_err());
+        assert!(fs::rename(&path, root.join("replaced.exe")).is_err());
+        assert!(fs::rename(&root, root.with_extension("moved")).is_err());
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+        drop(helper);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn msvc_helper_read_only_pin_keeps_absence_non_mutating() {
+        let root = std::env::temp_dir().join(format!("catdesk-msvc-no-helper-{}", Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        assert!(pin_msvc_helper_directory(&root).unwrap().is_none());
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 0);
+        fs::remove_dir(root).unwrap();
     }
 
     #[cfg(windows)]

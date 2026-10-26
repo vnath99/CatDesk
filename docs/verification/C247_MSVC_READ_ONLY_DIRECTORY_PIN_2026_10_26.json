@@ -1,0 +1,115 @@
+{
+  "checkpoint": "C247",
+  "date": "2026-10-26",
+  "classification": "SOURCE_QUALIFIED_NOT_NEW_REVIEW_PRODUCER_OR_INSTALLATION",
+  "sourceParent": "d9aed85d6a45ddb1b4a1dcb0a0d5205c5870188e",
+  "sourceWorkingPins": [
+    {
+      "path": "src/windows_protected_fs.rs",
+      "sha256": "25cc3ced306d536eb36810aaa5aeda11112e3945623b203e378e3676dedfa22e"
+    },
+    {
+      "path": "src/reviewed_build.rs",
+      "sha256": "f9ef1a541438a4b4c08195e7ee36db9e8909eb892864b229c065b1cb14fb48b2"
+    }
+  ],
+  "problem": {
+    "precedingReviewedSource": "C246",
+    "producerTerminalState": "BUILD_FAILED_OR_AMBIGUOUS",
+    "failureCode": "reviewed MSVC helper directory identity is unavailable",
+    "cargoStarted": false,
+    "candidateProduced": false,
+    "attestationProduced": false,
+    "originalFailureAndOwnershipEvidenceRetained": true,
+    "automaticRetry": false,
+    "productionPromotion": false
+  },
+  "actualNativeProbe": {
+    "scope": "EXISTING_MSVC_DIRECTORY_OPEN_AND_IDENTITY_ONLY",
+    "evidenceSha256": "099dce2cecbe71a229b283545f9fb04257a55ebdca0642e7afaaeb00e37e6963",
+    "observedUtc": "2026-10-26T19:39:08.6933790Z",
+    "originalAccessMask": 7,
+    "originalOpenSucceeded": false,
+    "originalWin32Error": 5,
+    "readOnlyAccessMask": 129,
+    "readOnlyOpenSucceeded": true,
+    "identityReadSucceeded": true,
+    "directoryNotReparse": true,
+    "readOnlyHandleClosed": true,
+    "directoryMetadataUnchanged": true,
+    "directoryWrites": 0,
+    "aclChanges": 0,
+    "catdeskCommands": 0
+  },
+  "change": {
+    "scope": "EXPLICIT_READ_ONLY_MSVC_TOOLCHAIN_DIRECTORY_PIN",
+    "purpose": "Request list/read-attributes access for identity pinning without requesting directory-add rights.",
+    "protectedWritableDirectoryRightsUnchanged": true,
+    "existingIdentityAndReparseChecksRetained": true,
+    "aclPolicyChanged": false,
+    "independentStaticReview": "PASS"
+  },
+  "qualification": {
+    "firstRun": {
+      "reviewedBuildPassed": 125,
+      "reviewedBuildFailed": 0,
+      "reviewedBuildIgnoredManual": 8,
+      "protectedFilesystemPassed": 13,
+      "protectedFilesystemFailed": 1,
+      "overall": "FAILED_NEW_TEST_ONLY_GRANTED_ACCESS_QUERY",
+      "failureEvidencePreserved": true,
+      "testFixtureCorrection": "Use the native 56-byte object-basic-information buffer and matching signed 32-bit information-class parameter. This correction changes test ABI handling, not production access rights."
+    },
+    "secondFullRun": {
+      "reviewedBuildFailed": 0,
+      "containmentSha256": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+      "ownerExitCode": 0,
+      "protectedFilesystemIgnored": 0,
+      "timedOut": false,
+      "protectedFilesystemFailed": 0,
+      "reviewedBuildIgnoredManual": 8,
+      "protectedFilesystemPassed": 14,
+      "reviewedBuildPassed": 125,
+      "qaResultSha256": "98cfbb9551141ec8b3a35cef8829e7be31633c5ec147e62e4378c1a78b56825d",
+      "ownerTimedOut": false,
+      "result": "PASS",
+      "allCommandsExitCode": 0,
+      "terminationFailed": false
+    },
+    "formatting": "PASS",
+    "strictClippy": "PASS",
+    "finalSourceQualificationClaimed": true,
+    "rootTargetedQaOwnerProcessCount": 0,
+    "broadProcessAbsenceClaimed": false
+  },
+  "preservation": {
+    "existingC246ReviewAndSnapshot": true,
+    "failedProducerHistory": true,
+    "installedC208": "UNCHANGED",
+    "projectBindingsChanged": false,
+    "nativeSessionsInterrupted": false,
+    "recurringAutomationStarted": false
+  },
+  "remaining": [
+    "Freeze and genuinely review the new material source; acknowledged C246 source does not cover this fix.",
+    "Use a qualified controller containing the correction and the existing supported failed-generation succession with fresh PREPARE/CONFIRM authority. Do not replay the failed CONFIRM.",
+    "Qualify a genuine candidate, protected promotion, installed health and different-version rollback.",
+    "Exact-source GitHub CI remains unverified; last connector HTTP 429 and two actual independent ChatGPT Web coding conversations remain open."
+  ],
+  "milestoneComplete": false,
+  "evidenceThroughUtc": "2026-10-26T19:54:54.6724417Z",
+  "branch": "codex/web-rollover-oct17",
+  "sourceParentRemoteShaVerified": true,
+  "c246Transport": {
+    "messagesResent": 0,
+    "priorWakeTimer": "OBSERVING",
+    "wakeTimer": "COMPLETE",
+    "completedObservedUtc": "2026-10-26T19:50:12.7337089Z",
+    "closure": "COMPLETED_SUPPORTED_TRANSITION",
+    "coordinatorRecord": "CLOSED",
+    "outcome": "completed",
+    "taskCompletionVerified": false,
+    "closedObservedUtc": "2026-10-26T19:54:54.6724417Z",
+    "protectedFilesCheckedAtClosure": 7916
+  }
+}
