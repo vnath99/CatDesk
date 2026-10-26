@@ -1,3 +1,27 @@
+## October 25 C224 — repair and serving have separate lifetime contracts
+
+The new source uses one existing release-pair transaction/store with an explicit
+`QUALIFIED_STOPPED` mode. A dedicated finite controller enters its own armed,
+non-breakaway Job before subprocesses or writes. Actual image/process/MCP
+qualification precedes complete tree termination and the stopped receipt. This
+removes the need for a detached serving owner during bounded integrity repair;
+legacy serving operations retain their existing owner and live-proof gates.
+
+Fresh schema2 mode authority wraps the existing reviewed artifact evidence.
+Pure preparation publishes only that mode; foreign preflights are preserved.
+Same-transaction interruption recovery retains escrow and unknown bytes. Public
+executing startup shares the exclusive lease through readiness, while plans are
+read-only. No new release registry, service, tunnel or approval system was added.
+
+Source qualification passed 36 Rust cases, one opt-in helper ignored by direct
+selection, five PowerShell invocations across four suites, formatting and strict
+Clippy. Actual Windows canaries cover normal exit and hard controller death in
+the pre-private-assignment gap. Source/fixture evidence does not prove protected
+migration, installed recovery or serving. The unchanged reviewed candidate can
+be used only after the new controller and canonical helper migration qualify.
+See [the supported procedure](CATDESK_IMPORTANT_COMMANDS.md) and
+[C224 evidence](../verification/C224_BOUNDED_STOPPED_RECOVERY_2026_10_25.json).
+
 ## October 25 C223 — compiled checks and lifetime limits
 
 The new normal debug image has passed actual capability and pre-state

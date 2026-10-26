@@ -1,3 +1,110 @@
+## October 25 C224 — bounded reviewed repair with a stopped outcome
+
+**Source qualified; protected migration and execution have not yet run.** The
+new commands require a separately qualified C224 controller and the matching
+reviewed canonical scripts. Neither the installed old executable nor the C208
+controller acquires these commands through this document.
+
+This profile reuses the existing release-pair journal, escrow, release slots and
+selection pointer. The dedicated finite controller owns an armed Job for its
+entire process lifetime before it creates children or writes transaction state.
+It qualifies the reviewed candidate through bounded local headless MCP, stops
+the complete owned tree and records `QUALIFIED_STOPPED`. Legacy detached-serving
+operations retain their outside-Job and post-release serving requirements.
+
+Supported sequence:
+
+1. Identify the exact reviewed published source commit and remote branch SHA.
+   Record required tests, independent review and the actual CI observation.
+   Missing CI is not a passing CI result. Retain the existing candidate's genuine
+   acknowledged review, immutable snapshot, producer result and build attestation.
+2. Build the controller separately from the installed canonical executable.
+   Copy it to a new immutable-by-procedure artifact path; record source commit,
+   profile, size and SHA-256. Check that hash before every invocation. The
+   reviewed candidate remains its separately attested artifact.
+3. Migrate the qualified fixed scripts through the established source-only
+   canonical fast-forward procedure: require the expected existing branch/HEAD,
+   clean tracked tree, known untracked bytes, unchanged runtime/history/binding
+   files, and exact canonical EXE/sidecar and candidate/producer readbacks.
+   Use `git merge --ff-only <verified-reviewed-commit>`. No helper-path override,
+   source reset, binary copy or checksum rewrite is part of this step.
+4. Qualify the actual checked-out canonical helpers with the relevant bounded
+   fixture checks, including Windows PowerShell 5 and PowerShell 7. Capture their
+   raw hashes for fresh preflight. This is helper qualification, not promotion.
+5. Use the exact noncanonical controller with the canonical workspace as working
+   directory. The following checks are read-only with respect to product state:
+
+   ```powershell
+   .\catdesk.ps1 diagnose
+   & $controller operator release-pair result-stopped
+   ```
+
+6. Prepare the explicit stopped-only operation using the existing acknowledged
+   review record and immutable candidate identity:
+
+   ```powershell
+   & $controller operator release-pair prepare-stopped --review-record-id <record-id> --build-path <reviewed-relative-path> --expected-sha256 <candidate-sha256>
+   ```
+
+   Preparation writes preflight/owner metadata. It is not a read-only diagnostic.
+   Require `PREFLIGHT_READY`, `mode=QUALIFIED_STOPPED`, `profile=HEADLESS_LOCAL`,
+   the expected candidate digest and a fresh confirmation token. The fixed script,
+   recovery helper, interpreter and controller identities are bound into the
+   operation. Foreign or ambiguous preflights must be preserved.
+7. Confirm that exact token once within its returned `expiresAtUnix` lease
+   (currently at most 120 seconds):
+
+   ```powershell
+   & $controller operator release-pair confirm-stopped --confirmation-token <fresh-token>
+   ```
+
+   Keep the caller monitored and bounded. The synchronous operation stages the
+   verified pair, probes the exact canonical image/process/listener, checks
+   unauthenticated 401 and authenticated 200 initialize/tools-list responses,
+   drains the candidate/helper Jobs, and commits its distinct stopped receipt.
+   It creates no detached serving owner and does not release an armed child Job.
+8. Read the durable result. Successful confirm/result output has the stopped
+   record under `result`; require its exact transaction/candidate and
+   `result.state=QUALIFIED_STOPPED`. Verify canonical EXE SHA-256 equals both the
+   attested candidate and recorded sidecar; read back the trusted release slot,
+   generation, receipt chain and selection pointer. Verify no canonical listener
+   or test-owned candidate/helper remains. Preserve the original escrow and any
+   independently trusted previous release.
+9. Perform installed startup, authenticated MCP, external connector and project
+   integration tests as separately qualified operations. `HEADLESS_LOCAL`
+   qualification does not establish ordinary native startup, Secure MCP ingress,
+   previous-version rollback or unattended operation. Preserve stopped Wake and
+   recurring-automation controls until their own owner/lifecycle gates pass.
+10. Record the actual outcome, artifact hashes, checks, remaining gates and exact
+    published SHA. A successful compilation or process start alone is insufficient.
+
+For an interrupted claimed operation, inspect the durable result first. Preserve
+all records and unknown bytes. After the exact prior controller/session and named
+Jobs are proven quiescent, the explicit same-transaction continuation is:
+
+```powershell
+& $controller operator release-pair resume-stopped --transaction-id <existing-transaction>
+```
+
+Before receipt/slot publication, supported transaction rollback is:
+
+```powershell
+& $controller operator release-pair rollback-stopped --transaction-id <existing-transaction>
+```
+
+Rollback requires intact bound escrow, unchanged reviewed inputs, and genuine
+whole-tree/empty-listener proof. It restores the recorded original tuple and
+returns operator attention; that original tuple can remain divergent. After
+receipt/slot publication use supported same-transaction completion, not rollback
+over a possibly accepted version. Cross-session, missing-artifact, foreign-owner
+or unknown-byte observations remain attention conditions. Never repeat confirm
+after an ambiguous result, erase a claim or fabricate a job-release receipt.
+
+Executing public `start`/`recover` now holds the same exclusive lifecycle lease
+through repair, launch and readiness. A missing authorization with pending
+stopped evidence is blocked. Read-only plans do not create lease/control state.
+Source evidence: [C224](../verification/C224_BOUNDED_STOPPED_RECOVERY_2026_10_25.json).
+
 ## October 25 C223 — ordinary-child launcher is ineligible
 
 The completed manual-shell probe reported Job membership at both child samples.

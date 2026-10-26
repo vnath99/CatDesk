@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C224",
+  "branch": "codex/web-rollover-oct17",
+  "sourceParent": "dbe820d10bdfdf1c95a0ac4dab1ca1b4629c6c5f",
+  "status": "SOURCE_QUALIFIED_PROTECTED_EXECUTION_NOT_RUN",
+  "implementation": {
+    "mode": "QUALIFIED_STOPPED",
+    "candidateProfile": "HEADLESS_LOCAL",
+    "storage": "Existing release-pair control/journal, escrow, release slots and selection pointer; no replacement registry or service.",
+    "authority": "Fresh schema2 mode-bound intent wraps the unchanged independently reviewed candidate authority. Stopped preparation publishes only V2; legacy preparation refuses foreign preflights.",
+    "ownership": "Dedicated finite CLI attaches itself to a fresh armed non-breakaway, noninheritable Job before review subprocesses or transaction writes. One handle remains owned until OS process exit; candidate/helper Jobs stay armed and are drained before commit.",
+    "servingGuard": "Legacy detached-serving outside-Job and live-release proof remain required.",
+    "qualification": "Exact canonical image/PID/creation/listener proof, unauthorized401 and authenticated200 initialize/tools-list with a bounded no-proxy client, then whole-tree exit and empty listener/mapped-image checks.",
+    "recovery": "Explicit same-transaction resume or prereceipt rollback; exact prior controller/session/Job exit, immutable inputs, recoverable phase journal and unknown-byte preservation.",
+    "stoppedReceipt": "Separate stopped qualification/quiescence digest chain and release-source kind; no fabricated job-release or live-serving assertion.",
+    "startupFence": "Executing public lifecycle retains the same exclusive owner lease through repair/start/readiness. Missing/unknown stopped state fails closed; read-only plans create no control state.",
+    "jsonCompatibility": "Literal process-start timestamps preserved under PowerShell5 and7."
+  },
+  "candidate": {
+    "sourceCommit": "409513a1c1f81f74f873bd4b3dca825458ef29a8",
+    "sha256": "91eea19e6e030e80900d43114f800c3642f5cc063ef2c969b83eb20d2c28d14b",
+    "existingReviewAndBuildAuthorityRetained": true,
+    "newCandidateBuilt": false,
+    "diagnosticImageUsedAsCandidate": false
+  },
+  "qualification": {
+    "evidenceType": "SOURCE_AND_DISPOSABLE_WINDOWS_PROCESS_FIXTURES",
+    "uniqueRustCasesPassed": 36,
+    "ignoredOptInFixtureHelpers": 1,
+    "uniquePowerShellSuites": 4,
+    "powerShellInvocations": 5,
+    "productionPowerShellAndBundledPowerShellCovered": true,
+    "format": "PASS",
+    "strictRootClippy": "PASS",
+    "independentStaticReviews": 2,
+    "snapshot03": {
+      "manifestSha256": "6eefd72addec12be35a679128c50c53e4d39a8b87bc5870722ac57073e1638fb",
+      "resultSha256": "d8e10da9f763d448a44d5da37ac76a49b0950d227aa41965fc468e96f2d0e979",
+      "outerSha256": "b4dd30b69ba31ddccb0d00c6356486a71d4c08f60148002d8f31a2a602a44b60",
+      "startedUtc": "2026-10-25T23:24:08.4249111+00:00",
+      "finishedUtc": "2026-10-25T23:27:11.1446855+00:00",
+      "all13StepsPassed": true
+    },
+    "finalSnapshot04": {
+      "manifestSha256": "b03652f3ae1a6c1da6446cfadbf898406318495f251d06248023ce621e1cc82d",
+      "resultSha256": "d6d8b4b6881c667f7cf1f64614b136d98a5747dabccd1d63d1aacbce1f88266f",
+      "outerSha256": "a2bc1efe2fd960596a25b291d103dac5e7ad5d5b0607938cb3367ba9fab9e333",
+      "startedUtc": "2026-10-25T23:51:17.5844823+00:00",
+      "finishedUtc": "2026-10-25T23:52:56.5662249+00:00",
+      "all8AffectedStepsPassed": true,
+      "rerunRustInteropCases": 5,
+      "reusedRustCases": 31,
+      "reuseBasis": "All four changed Rust files, other Rust inputs, Cargo.lock, parent commit and tools remained unchanged. Re-ran affected script/interop/lifecycle checks and strict Clippy after the final PowerShell-only fence change; no duplicate pass counts."
+    },
+    "actualProcessCanaries": [
+      "Normal dedicated controller returns output and exits with its armed lifetime Job.",
+      "Hard controller kill after suspended child creation but before private assignment reaps exact retained child and descendant; outer test Job stays open.",
+      "Named armed Job collision refuses; zero-active whole-tree proof and legacy handoff cleanup remain tested."
+    ],
+    "powerShellFaultScope": "Nine Stage/Commit interruption checkpoints with synthetic qualification/exit records; these are data/state fixtures, not protected promotion or actual installed health.",
+    "timeout": false,
+    "terminationFailure": false,
+    "qualifiedFileHashMeaning": "Raw source-worktree bytes used by frozen fixtures. Canonical checkout raw helper hashes require separate post-migration qualification and fresh preflight."
+  },
+  "retainedFailures": [
+    {
+      "snapshot": "01",
+      "resultSha256": "68bf234bec931634c45c481ee6d8062e24e56188b75ac6b2a56dfc699bdd6909",
+      "cause": "Legacy exact timestamp comparison failed under PowerShell7 automatic JSON DateTime conversion. Confirmed against actual PowerShell5 string behavior; corrected literal reader without relaxing equality."
+    },
+    {
+      "snapshot": "02",
+      "outerSha256": "3e367bcb32497fa69121f8d3fcb321e34c5ee2d2998d9cf4f747b804b630a80b",
+      "cause": "Stopped file replacement supplied a null backup that PowerShell marshaled as an empty path. Corrected to contained transaction escrow backups. Also corrected new FILETIME FFI signatures and reciprocal preflight mode protection; original evidence retained."
+    }
+  ],
+  "finalSourceCleanup": {
+    "observedUtc": "2026-10-26T00:13:23.3227623+00:00",
+    "evidenceSha256": "381190e6c0ef821b1ebd4f445947ad4ddc29d66fce60dd36d8be12472a5fef4f",
+    "scope": "Source test image paths and C224 run prefixes; canonical image and port 3200 inventory.",
+    "testOwnedProcesses": 0,
+    "canonicalProcesses": 0,
+    "port3200Listeners": 0,
+    "processActions": 0
+  },
+  "migration": {
+    "supportedRoute": "Established reviewed source-only canonical fast-forward with clean tracked-tree, known untracked/state/artifact byte preservation, then qualification of fixed canonical helpers and a separately built immutable noncanonical controller.",
+    "canonicalTrackedChangesObserved": 0,
+    "canonicalAncestorOfPublishedSource": true,
+    "knownUntrackedFilesObserved": 11,
+    "sourceMigrationPerformed": false,
+    "controllerBuiltFromFinalSource": false,
+    "productPreflightPerformed": false,
+    "productionPromotionPerformed": false
+  },
+  "limits": [
+    "No protected source migration, installed executable promotion or healthy production backend is proved by this source qualification.",
+    "Stopped headless qualification does not establish ordinary native startup/authentication, Secure MCP ingress or unattended serving.",
+    "Prereceipt transaction rollback restores the recorded original tuple; it does not prove a previous working production-version rollback.",
+    "Cross-session recovery and missing/corrupt immutable candidate/controller inputs fail closed; no universal artifact-loss recovery claim.",
+    "Project bindings, native sessions, browser authentication, Wake controls, completed Web canaries and recurring automation were not changed. No Web message was sent."
+  ],
+  "sources": [
+    "https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects",
+    "https://learn.microsoft.com/en-us/windows/win32/procthread/nested-jobs"
+  ],
+  "qualifiedWorkingFileSha256": {
+    "src/daemon_reload.rs": "6ca9e6e177b5ca61dfc018ea9ee3fdb4ca1314b082cc0b1c0df0946bc59944cf",
+    "src/release_pair_stopped.rs": "41640ed0504d9452eedcd8254d06d424e244dd1e5a8398d3fc606956a3193884",
+    "src/operator_facade.rs": "c2082eed281e581e7e6b4b8ae847508b08b8cf311105f795b36c3916d5215a4b",
+    "src/reviewed_candidate_owner.rs": "8ffe6b113aa1cb2c2264864a12f57eb6a0208c8a901e96464cf934afd23be59a",
+    "scripts/reconcile-reviewed-catdesk-release-pair.ps1": "41bfdf476ee4a0e7aeece8c81d140e32ddd88711aa7dee4b48dfb60a1a06570e",
+    "scripts/catdesk-release-recovery.ps1": "7e70001a9de315878187fa9bd7f7d40e4ed0af249dcc049e5698835f45d91bed",
+    "scripts/start-catdesk-stack.ps1": "7e11dae4e356c1b0aff91f50c05c69d0de2064541f4d19b037ecf1a4ae86dc61",
+    "scripts/test-reconcile-reviewed-catdesk-release-pair.ps1": "8faa269b03dff55a3adfd3f2182be18f298aa95a4b5fb7fbd5aa53ee93da3d16",
+    "scripts/test-start-catdesk-stack.ps1": "381faed81a70cf0f3454d858b9da2db7819a9b6042dc1d2d665c43054900c0f6"
+  }
+}

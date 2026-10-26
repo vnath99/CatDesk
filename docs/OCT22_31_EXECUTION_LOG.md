@@ -1,3 +1,42 @@
+## October 25 C224 — bounded stopped-recovery implementation qualified
+
+The ordinary manual owner remained in a Job, and no alternate installed owner
+qualified. Source now separates bounded integrity repair from detached serving
+inside the existing release-pair mechanism. It retains genuine candidate review,
+snapshot/producer authority, fixed-script hashing, escrow, slots and selection.
+Fresh schema2 mode intent, synchronous ownership and a distinct stopped receipt
+avoid claiming an independently persistent daemon. No original Job was changed.
+
+A fresh armed controller Job covers every child from creation, closing the
+suspended-create/private-assignment gap. Actual Windows normal-exit and hard
+crash canaries retain child/descendant handles and keep the outer test Job open,
+so positive cleanup is attributable to the new controller boundary. Shared
+startup lease is retained through repair/start/readiness; pending or malformed
+stopped state fails closed before legacy shortcuts.
+
+Snapshot03 qualification at 23:24:08–23:27:11 UTC passed all 13 steps. After the
+final PowerShell-only startup-fence correction, snapshot04 at 23:51:17–23:52:56
+UTC passed all eight affected steps. Composite coverage is 36 distinct Rust
+cases, one directly ignored opt-in helper, five PowerShell invocations across
+four suites, formatting and strict root Clippy. The unchanged Rust groups retain
+their exact input/tool evidence; the affected cross-language and script checks
+were rerun. Nine Stage/Commit fault hooks are source fixtures with synthetic
+health/exit records, separate from the actual process canaries.
+
+Retained failed runs identified PS7 JSON date coercion and null replacement
+backup handling; literal parsing and contained escrow backups fixed them without
+weakening identity checks. FILETIME ABI declarations and reciprocal mode intent
+protection were corrected before final qualification. No failed evidence was
+discarded or counted as a pass.
+
+Read-only migration checks found a clean tracked canonical tree, 11 known
+untracked files, no target-path overlap, and valid fast-forward ancestry. Protected
+source migration/controller build/promotion are still next gates. Candidate bytes,
+bindings, native sessions, browser/Wake and recurring automation are unchanged;
+no Web message or connector retry occurred. Procedure and scope:
+[C224 evidence](verification/C224_BOUNDED_STOPPED_RECOVERY_2026_10_25.json),
+[commands](orchestrator/CATDESK_IMPORTANT_COMMANDS.md).
+
 ## October 25 C223 — normal image qualified; ordinary owner route refused
 
 The operator's 21:55:39–21:55:40 UTC result matched the frozen diagnostic and

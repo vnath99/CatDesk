@@ -1,3 +1,19 @@
+## October 25 C224 — stopped-recovery source, no installed claim
+
+| Capability | Evidence |
+| --- | --- |
+| Mode-bound stopped repair and same-Tx recovery | SOURCE PASS: explicit authority/claim/journal, distinct receipt/trust kind, unknown-byte preservation and no legacy-mode reinterpretation. |
+| Controller ownership across pre-assignment crash | Actual disposable Windows PASS: normal exit/output and retained child/descendant exit after hard controller kill; outer test Job remains open. |
+| Startup/repair exclusion | SOURCE PASS: real conflicting FileStream fixtures at repair/start/readiness, pending-state refusal, success/error release and read-only plan behavior. |
+| Regression checks | 36 distinct Rust cases, one opt-in helper directly ignored; five PowerShell invocations (including5/7 reconciliation), formatting and strict Clippy PASS. |
+| Protected recovery | NOT RUN: qualified immutable controller, source-only helper migration and fresh genuine candidate preflight remain required. |
+| Installed serving/native parity, working previous-version rollback, connector and two-Web coding | OPEN. Stopped headless qualification is a separate profile. |
+
+Two failed snapshots and their corrections are retained. The final composite
+reuses only unchanged Rust inputs and reruns affected scripts/interop. No source
+fixture is being counted as a successful production promotion or Web task.
+See [C224](verification/C224_BOUNDED_STOPPED_RECOVERY_2026_10_25.json).
+
 ## October 25 C223 — compiled boundary proof, production owner still open
 
 | Requirement | Actual evidence |

@@ -1,5 +1,23 @@
 # CatDesk — Comprehensive handoff to Codex Desktop
 
+## Current implementation note — October 25 C224
+
+The new stopped-only release-pair mode is source qualified: 36 Rust cases,
+five PowerShell invocations, formatting and strict Clippy passed. A dedicated
+finite CLI's armed lifetime Job covers children from creation; actual Windows
+canaries prove normal exit and pre-private-assignment crash cleanup. Legacy
+serving's outside-Job guard is preserved. Shared startup lease and pending-state
+checks prevent competing repair/launch; read-only plans create no control files.
+
+Next are source publication, a separately qualified immutable controller, the
+established guarded canonical source-only fast-forward, actual canonical helper
+qualification, and fresh stopped-mode preflight against the unchanged genuinely
+attested candidate. No protected migration or promotion has run. Never use the
+diagnostic C223 image as a candidate or invoke the ineligible old owner launcher.
+Use [the current command procedure](CATDESK_IMPORTANT_COMMANDS.md). Preserve all
+project/native ownership, unknown Web submissions, histories and stopped recurring
+controls. Installed/live acceptance remains separate from these source results.
+
 ## Current ownership note — October 25 C223
 
 The manual ordinary-child probe completed with Job membership at both samples;

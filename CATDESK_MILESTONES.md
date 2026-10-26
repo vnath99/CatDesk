@@ -1,3 +1,14 @@
+## October 25 C224 — bounded recovery source qualified
+
+Implemented stopped-only reviewed reconciliation with fresh mode authority,
+whole-controller lifetime ownership, actual local MCP qualification, same-Tx
+interruption recovery, distinct stopped trust receipts and shared startup lease.
+Legacy serving guards remain intact. Source qualification: 36 Rust cases,
+five PowerShell invocations, formatting and strict Clippy passed; real Windows
+normal-exit and pre-assignment crash cleanup canaries passed. Protected source
+migration, promotion, installed serving, previous-version rollback and genuine
+parallel Web coding remain open. See [C224](docs/verification/C224_BOUNDED_STOPPED_RECOVERY_2026_10_25.json).
+
 ## October 25 C223 — normal executable boundary qualification
 
 The matched debug image passed the actual pure capability query and safe

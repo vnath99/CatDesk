@@ -1190,7 +1190,26 @@ function Invoke-BackendOnlyBootstrap {
 }
 
 function Invoke-CanonicalStackBootstrap {
+    $root=(Resolve-Path -LiteralPath $Workspace -ErrorAction Stop).Path
+    if($ReadyTimeoutSeconds -lt 5 -or $ReadyTimeoutSeconds -gt 180){throw 'readiness timeout is invalid'}
+    if($Mode -eq 'plan' -or -not $Execute){Invoke-CanonicalStackBootstrapCore;return}
+    $lease=$null
+    try{
+        try{$lease=Enter-CatDeskStoppedLifecycleLease -Root $root}catch{
+            Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'canonical lifecycle owner lease is unavailable'
+            return
+        }
+        Invoke-CanonicalStackBootstrapCore -StoppedLifecycleLease $lease
+    }finally{if($null -ne $lease){$lease.Dispose()}}
+}
+
+function Invoke-CanonicalStackBootstrapCore {
+    param([System.IO.FileStream]$StoppedLifecycleLease=$null)
     $root=(Resolve-Path -LiteralPath $Workspace -ErrorAction Stop).Path;if($ReadyTimeoutSeconds -lt 5 -or $ReadyTimeoutSeconds -gt 180){throw "readiness timeout is invalid"}
+    if(-not(Test-CatDeskStoppedReconciliationStartupReady -Root $root -HeldLifecycleLease $StoppedLifecycleLease)){
+        Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'same-transaction stopped reconciliation recovery is required before startup'
+        return
+    }
     $releaseRestored=$false;$releaseRecoverySource=''
     try {
         $canonical=Get-CanonicalCatDeskIdentity -Root $root -ExpectedHash $ExpectedBuildSha256 -FingerprintPath $BuildFingerprintPath

@@ -181,6 +181,21 @@ pub(crate) enum ReleasePairOperatorAction {
     Confirm {
         confirmation_token: String,
     },
+    PrepareStopped {
+        review_record_id: String,
+        build_path: PathBuf,
+        expected_sha256: String,
+    },
+    ConfirmStopped {
+        confirmation_token: String,
+    },
+    ResumeStopped {
+        transaction_id: String,
+    },
+    RollbackStopped {
+        transaction_id: String,
+    },
+    ResultStopped,
     Result,
 }
 
@@ -472,7 +487,7 @@ fn retry_web_development(
 
 fn parse_release_pair_action(args: &[String]) -> Result<Option<OperatorAction>, String> {
     let action = match args.get(2).map(String::as_str) {
-        Some("prepare")
+        Some("prepare" | "prepare-stopped")
             if args.len() == 9
                 && args[3] == "--review-record-id"
                 && args[5] == "--build-path"
@@ -482,10 +497,23 @@ fn parse_release_pair_action(args: &[String]) -> Result<Option<OperatorAction>, 
                 && args[8].len() == 64
                 && args[8].bytes().all(|byte| byte.is_ascii_hexdigit()) =>
         {
-            ReleasePairOperatorAction::Prepare {
-                review_record_id: args[4].clone(),
-                build_path: PathBuf::from(&args[6]),
-                expected_sha256: args[8].to_ascii_lowercase(),
+            let fields = (
+                args[4].clone(),
+                PathBuf::from(&args[6]),
+                args[8].to_ascii_lowercase(),
+            );
+            if args[2] == "prepare-stopped" {
+                ReleasePairOperatorAction::PrepareStopped {
+                    review_record_id: fields.0,
+                    build_path: fields.1,
+                    expected_sha256: fields.2,
+                }
+            } else {
+                ReleasePairOperatorAction::Prepare {
+                    review_record_id: args[4].clone(),
+                    build_path: PathBuf::from(&args[6]),
+                    expected_sha256: args[8].to_ascii_lowercase(),
+                }
             }
         }
         Some("confirm")
@@ -498,6 +526,36 @@ fn parse_release_pair_action(args: &[String]) -> Result<Option<OperatorAction>, 
             }
         }
         Some("result") if args.len() == 3 => ReleasePairOperatorAction::Result,
+        Some("confirm-stopped")
+            if args.len() == 5
+                && args[3] == "--confirmation-token"
+                && valid_reviewed_build_operator_value(&args[4]) =>
+        {
+            ReleasePairOperatorAction::ConfirmStopped {
+                confirmation_token: args[4].clone(),
+            }
+        }
+        Some("resume-stopped")
+            if args.len() == 5
+                && args[3] == "--transaction-id"
+                && args[4].len() == 32
+                && args[4].bytes().all(|b| b.is_ascii_hexdigit()) =>
+        {
+            ReleasePairOperatorAction::ResumeStopped {
+                transaction_id: args[4].clone(),
+            }
+        }
+        Some("rollback-stopped")
+            if args.len() == 5
+                && args[3] == "--transaction-id"
+                && args[4].len() == 32
+                && args[4].bytes().all(|b| b.is_ascii_hexdigit()) =>
+        {
+            ReleasePairOperatorAction::RollbackStopped {
+                transaction_id: args[4].clone(),
+            }
+        }
+        Some("result-stopped") if args.len() == 3 => ReleasePairOperatorAction::ResultStopped,
         _ => return Err("operator release-pair accepts only fixed actions".into()),
     };
     Ok(Some(OperatorAction::ReleasePair(action)))
@@ -876,8 +934,22 @@ pub(crate) async fn execute_operator_action(
             let workspace = workspace
                 .canonicalize()
                 .map_err(|_| "operator workspace is unavailable".to_string())?;
+            let stopped_prepare =
+                matches!(&action, ReleasePairOperatorAction::PrepareStopped { .. });
+            let stopped_transaction = if stopped_prepare {
+                Some(crate::daemon_reload::stopped::enter_controller(
+                    &workspace, "prepare", None,
+                )?)
+            } else {
+                None
+            };
             match action {
                 ReleasePairOperatorAction::Prepare {
+                    review_record_id,
+                    build_path,
+                    expected_sha256,
+                }
+                | ReleasePairOperatorAction::PrepareStopped {
                     review_record_id,
                     build_path,
                     expected_sha256,
@@ -889,6 +961,20 @@ pub(crate) async fn execute_operator_action(
                         &workspace,
                     )
                     .map_err(|_| "independent reviewed build preflight was rejected".to_string())?;
+                    if stopped_prepare {
+                        let preflight = crate::daemon_reload::stopped::prepare(
+                            &workspace,
+                            &stopped_transaction
+                                .as_ref()
+                                .ok_or("stopped controller transaction unavailable")?
+                                .transaction_id,
+                        )?;
+                        return Ok(
+                            json!({"action":"release_pair_prepare_stopped","state":"PREFLIGHT_READY",
+                            "mode":"QUALIFIED_STOPPED","profile":"HEADLESS_LOCAL","confirmationToken":preflight.confirmation_token,
+                            "expiresAtUnix":preflight.expires_at_unix,"candidateSha256":preflight.candidate_sha256(),"tunnelAction":"none"}),
+                        );
+                    }
                     let preflight =
                         crate::daemon_reload::prepare_release_pair_reconcile(&workspace)?;
                     Ok(
@@ -918,6 +1004,48 @@ pub(crate) async fn execute_operator_action(
                     };
                     Ok(
                         json!({"action":"release_pair_result","state":state,"candidateSha256":result.as_ref().map(|result| result.candidate_sha256.as_str()),"tunnelAction":"none"}),
+                    )
+                }
+                ReleasePairOperatorAction::ConfirmStopped { confirmation_token } => {
+                    let result = tokio::task::spawn_blocking(move || {
+                        crate::daemon_reload::stopped::confirm(
+                            &workspace,
+                            Some(&confirmation_token),
+                            false,
+                        )
+                    })
+                    .await
+                    .map_err(|_| "stopped controller requires recovery")??;
+                    Ok(
+                        json!({"action":"release_pair_confirm_stopped","result":result,"tunnelAction":"none"}),
+                    )
+                }
+                ReleasePairOperatorAction::ResumeStopped { transaction_id } => {
+                    let result = tokio::task::spawn_blocking(move || {
+                        crate::daemon_reload::stopped::confirm(
+                            &workspace,
+                            Some(&transaction_id),
+                            true,
+                        )
+                    })
+                    .await
+                    .map_err(|_| "stopped controller requires recovery")??;
+                    Ok(
+                        json!({"action":"release_pair_resume_stopped","result":result,"tunnelAction":"none"}),
+                    )
+                }
+                ReleasePairOperatorAction::ResultStopped => {
+                    Ok(json!({"action":"release_pair_result_stopped",
+                    "result":crate::daemon_reload::stopped::result(&workspace)?,"tunnelAction":"none"}))
+                }
+                ReleasePairOperatorAction::RollbackStopped { transaction_id } => {
+                    let result = tokio::task::spawn_blocking(move || {
+                        crate::daemon_reload::stopped::rollback(&workspace, &transaction_id)
+                    })
+                    .await
+                    .map_err(|_| "stopped controller requires recovery")??;
+                    Ok(
+                        json!({"action":"release_pair_rollback_stopped","result":result,"tunnelAction":"none"}),
                     )
                 }
             }
@@ -1146,6 +1274,11 @@ pub(crate) enum ReleasePairPhase {
     Probe,
     Commit,
     Rollback,
+    StoppedEmpty,
+    StoppedStage,
+    StoppedProbe,
+    StoppedCommit,
+    StoppedRollback,
 }
 
 /// The detached native worker supplies only fixed phase/identity values. Each
@@ -1167,13 +1300,22 @@ pub(crate) fn release_pair_invocation(
     {
         return Err("release-pair worker identity is invalid".into());
     }
-    if matches!(phase, ReleasePairPhase::Probe | ReleasePairPhase::Commit) != owner_pid.is_some()
+    if matches!(
+        phase,
+        ReleasePairPhase::Probe | ReleasePairPhase::Commit | ReleasePairPhase::StoppedProbe
+    ) != owner_pid.is_some()
         || owner_started_at_utc
             .is_some_and(|value| value.len() > 64 || value.bytes().any(|b| !b.is_ascii_graphic()))
         || (phase == ReleasePairPhase::Commit && owner_started_at_utc.is_none())
         || (matches!(
             phase,
-            ReleasePairPhase::Empty | ReleasePairPhase::Stage | ReleasePairPhase::Rollback
+            ReleasePairPhase::Empty
+                | ReleasePairPhase::Stage
+                | ReleasePairPhase::Rollback
+                | ReleasePairPhase::StoppedEmpty
+                | ReleasePairPhase::StoppedStage
+                | ReleasePairPhase::StoppedCommit
+                | ReleasePairPhase::StoppedRollback
         ) && (owner_pid.is_some() || owner_started_at_utc.is_some()))
     {
         return Err("release-pair phase arguments are invalid".into());
@@ -1217,6 +1359,11 @@ pub(crate) fn release_pair_invocation(
             ReleasePairPhase::Probe => "Probe",
             ReleasePairPhase::Commit => "Commit",
             ReleasePairPhase::Rollback => "Rollback",
+            ReleasePairPhase::StoppedEmpty => "StoppedEmpty",
+            ReleasePairPhase::StoppedStage => "StoppedStage",
+            ReleasePairPhase::StoppedProbe => "StoppedProbe",
+            ReleasePairPhase::StoppedCommit => "StoppedCommit",
+            ReleasePairPhase::StoppedRollback => "StoppedRollback",
         }
         .into(),
         "-AuthorizationId".into(),
@@ -1571,6 +1718,77 @@ mod tests {
     use serde_json::Value;
     use sha2::Digest;
     use uuid::Uuid;
+
+    #[test]
+    fn release_pair_stopped_cli_is_explicit_and_does_not_change_other_prepare_commands() {
+        let args = |values: &[&str]| values.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        let digest = "a".repeat(64);
+        assert!(matches!(
+            parse_operator_action(args(&[
+                "operator",
+                "release-pair",
+                "prepare-stopped",
+                "--review-record-id",
+                "review-1",
+                "--build-path",
+                "build/catdesk.exe",
+                "--expected-sha256",
+                &digest
+            ])),
+            Ok(Some(OperatorAction::ReleasePair(
+                ReleasePairOperatorAction::PrepareStopped { .. }
+            )))
+        ));
+        for action in ["confirm-stopped", "resume-stopped", "rollback-stopped"] {
+            let flag = if action == "confirm-stopped" {
+                "--confirmation-token"
+            } else {
+                "--transaction-id"
+            };
+            assert!(
+                parse_operator_action(args(&[
+                    "operator",
+                    "release-pair",
+                    action,
+                    flag,
+                    &"a".repeat(32)
+                ]))
+                .is_ok()
+            );
+            assert!(
+                parse_operator_action(args(&[
+                    "operator",
+                    "release-pair",
+                    action,
+                    "--outside-job-override",
+                    "yes"
+                ]))
+                .is_err()
+            );
+        }
+        assert!(
+            parse_operator_action(args(&[
+                "operator",
+                "web-dev-runtime",
+                "prepare-stopped",
+                "--package",
+                "x",
+                "--python-runtime",
+                "y"
+            ]))
+            .is_err()
+        );
+        assert!(
+            parse_operator_action(args(&[
+                "operator",
+                "release-pair",
+                "result-stopped",
+                "--workspace",
+                "other"
+            ]))
+            .is_err()
+        );
+    }
 
     #[test]
     fn web_development_requires_explicit_fixed_actions() {

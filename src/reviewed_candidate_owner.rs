@@ -22,6 +22,13 @@ mod windows {
 
     #[repr(C)]
     #[derive(Default)]
+    struct FileTime {
+        low: u32,
+        high: u32,
+    }
+
+    #[repr(C)]
+    #[derive(Default)]
     struct BasicLimits {
         process_time: i64,
         job_time: i64,
@@ -72,6 +79,8 @@ mod windows {
     #[link(name = "kernel32")]
     unsafe extern "system" {
         fn CreateJobObjectW(attributes: *const c_void, name: *const u16) -> *mut c_void;
+        fn OpenJobObjectW(access: u32, inherit: i32, name: *const u16) -> *mut c_void;
+        fn GetLastError() -> u32;
         fn SetInformationJobObject(
             job: *mut c_void,
             class: i32,
@@ -89,6 +98,16 @@ mod windows {
         ) -> i32;
         fn IsProcessInJob(process: *mut c_void, job: *mut c_void, result: *mut i32) -> i32;
         fn GetCurrentProcess() -> *mut c_void;
+        fn GetProcessTimes(
+            process: *mut c_void,
+            created: *mut FileTime,
+            exit: *mut FileTime,
+            kernel: *mut FileTime,
+            user: *mut FileTime,
+        ) -> i32;
+        fn ProcessIdToSessionId(pid: u32, session: *mut u32) -> i32;
+        fn SetHandleInformation(handle: *mut c_void, mask: u32, flags: u32) -> i32;
+        fn GetHandleInformation(handle: *mut c_void, flags: *mut u32) -> i32;
         fn CloseHandle(handle: *mut c_void) -> i32;
     }
 
@@ -101,9 +120,23 @@ mod windows {
 
     impl KillOnCloseJob {
         fn create() -> Result<Self, String> {
-            let handle = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+            Self::create_named(None)
+        }
+
+        fn create_named(name: Option<&str>) -> Result<Self, String> {
+            let wide = name.map(|name| name.encode_utf16().chain(Some(0)).collect::<Vec<_>>());
+            let handle = unsafe {
+                CreateJobObjectW(
+                    std::ptr::null(),
+                    wide.as_ref().map_or(std::ptr::null(), |s| s.as_ptr()),
+                )
+            };
             if handle.is_null() {
                 return Err("reviewed candidate owner job unavailable".into());
+            }
+            if name.is_some() && unsafe { GetLastError() } == 183 {
+                unsafe { CloseHandle(handle) };
+                return Err("reviewed stopped Job name is already owned".into());
             }
             let mut limits = ExtendedLimits::default();
             limits.basic.flags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
@@ -210,6 +243,25 @@ mod windows {
             Ok(())
         }
 
+        fn require_armed(&self) -> Result<(), String> {
+            let mut limits = ExtendedLimits::default();
+            if self.0.is_null()
+                || unsafe {
+                    QueryInformationJobObject(
+                        self.0,
+                        JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+                        (&mut limits as *mut ExtendedLimits).cast(),
+                        std::mem::size_of::<ExtendedLimits>() as u32,
+                        std::ptr::null_mut(),
+                    )
+                } == 0
+                || limits.basic.flags != JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+            {
+                return Err("reviewed stopped Job limits are unproven".into());
+            }
+            Ok(())
+        }
+
         fn require_disarmed(&self) -> Result<(), String> {
             let mut observed = ExtendedLimits::default();
             if self.0.is_null()
@@ -279,7 +331,147 @@ mod windows {
         released: bool,
     }
 
+    #[derive(Clone)]
+    pub(crate) struct StoppedControllerLifetime {
+        pub(crate) transaction_id: String,
+        pub(crate) job_name: String,
+        pub(crate) session_id: u32,
+        pub(crate) pid: u32,
+        pub(crate) creation_time: u64,
+        workspace: std::path::PathBuf,
+        entry_args: Vec<String>,
+    }
+
+    static STOPPED_CONTROLLER: std::sync::Mutex<Option<StoppedControllerLifetime>> =
+        std::sync::Mutex::new(None);
+
+    fn dedicated_stopped_entry(args: &[String]) -> bool {
+        if args.len() == 9
+            && args[0] == "operator"
+            && args[1] == "release-pair"
+            && args[2] == "prepare-stopped"
+            && args[3] == "--review-record-id"
+            && !args[4].is_empty()
+            && args[4].len() <= 128
+            && args[5] == "--build-path"
+            && !args[6].is_empty()
+            && args[6].len() <= 4096
+            && args[7] == "--expected-sha256"
+            && args[8].len() == 64
+            && args[8].bytes().all(|b| b.is_ascii_hexdigit())
+        {
+            return true;
+        }
+        args.len() == 5
+            && args[0] == "operator"
+            && args[1] == "release-pair"
+            && ((args[2] == "confirm-stopped" && args[3] == "--confirmation-token")
+                || (matches!(args[2].as_str(), "resume-stopped" | "rollback-stopped")
+                    && args[3] == "--transaction-id"))
+            && args[4].len() == 32
+            && args[4].bytes().all(|b| b.is_ascii_hexdigit())
+    }
+
     impl OwnedCandidateChild {
+        /// A dedicated stopped CLI retains exactly one noninheritable armed
+        /// Job handle until OS process teardown. Children inherit membership
+        /// at creation, including the gap before their narrower assignment.
+        pub(crate) fn enter_stopped_controller_lifetime(
+            transaction: &str,
+            workspace: &std::path::Path,
+        ) -> Result<StoppedControllerLifetime, String> {
+            if transaction.len() != 32 || !transaction.bytes().all(|b| b.is_ascii_hexdigit()) {
+                return Err("stopped controller transaction is invalid".into());
+            }
+            let args = std::env::args().skip(1).collect::<Vec<_>>();
+            let dedicated = dedicated_stopped_entry(&args);
+            #[cfg(test)]
+            let dedicated = dedicated
+                || (args.len() == 4
+                    && args[0] == "--exact"
+                    && args[2] == "--ignored"
+                    && args[3] == "--nocapture"
+                    && args[1]
+                        == "reviewed_candidate_owner::windows::tests::stopped_controller_fixture_child"
+                    && std::env::var("CATDESK_STOPPED_CONTROLLER_FIXTURE")
+                        .ok()
+                        .as_deref()
+                        == Some(transaction));
+            if !dedicated {
+                return Err("stopped controller lifetime is limited to a dedicated CLI".into());
+            }
+            let workspace = workspace
+                .canonicalize()
+                .map_err(|_| "stopped controller workspace identity unavailable")?;
+            let mut current = STOPPED_CONTROLLER
+                .lock()
+                .map_err(|_| "stopped controller entry unavailable")?;
+            if let Some(proof) = current.as_ref() {
+                let mut session = 0;
+                if unsafe { ProcessIdToSessionId(std::process::id(), &mut session) } == 0 {
+                    return Err("stopped controller session unavailable".into());
+                }
+                return if proof.transaction_id == transaction
+                    && proof.workspace == workspace
+                    && proof.entry_args == args
+                    && proof.pid == std::process::id()
+                    && proof.session_id == session
+                {
+                    Ok(proof.clone())
+                } else {
+                    Err("stopped controller cannot change transactions".into())
+                };
+            }
+            let (mut created, mut exited, mut kernel, mut user) = (
+                FileTime::default(),
+                FileTime::default(),
+                FileTime::default(),
+                FileTime::default(),
+            );
+            let mut session = 0;
+            if unsafe {
+                GetProcessTimes(
+                    GetCurrentProcess(),
+                    &mut created,
+                    &mut exited,
+                    &mut kernel,
+                    &mut user,
+                )
+            } == 0
+                || unsafe { ProcessIdToSessionId(std::process::id(), &mut session) } == 0
+            {
+                return Err("stopped controller process identity unavailable".into());
+            }
+            let created = (u64::from(created.high) << 32) | u64::from(created.low);
+            let name = format!(
+                "Local\\CatDesk.ReleasePairStopped.{transaction}.controller.{session}.{}.{created}",
+                std::process::id()
+            );
+            let job = KillOnCloseJob::create_named(Some(&name))?;
+            job.require_armed()?;
+            let mut flags = 0;
+            if unsafe { SetHandleInformation(job.0, 1, 0) } == 0
+                || unsafe { GetHandleInformation(job.0, &mut flags) } == 0
+                || flags & 1 != 0
+            {
+                return Err("stopped controller Job handle inheritance is unproven".into());
+            }
+            if unsafe { AssignProcessToJobObject(job.0, GetCurrentProcess()) } == 0 {
+                return Err("stopped controller lifetime Job assignment failed".into());
+            }
+            std::mem::forget(job);
+            let proof = StoppedControllerLifetime {
+                transaction_id: transaction.into(),
+                job_name: name,
+                session_id: session,
+                pid: std::process::id(),
+                creation_time: created,
+                workspace,
+                entry_args: args,
+            };
+            *current = Some(proof.clone());
+            Ok(proof)
+        }
         pub(crate) fn spawn(command: &mut Command) -> Result<Self, String> {
             Self::spawn_classified(command).map_err(SpawnFailure::message)
         }
@@ -298,7 +490,15 @@ mod windows {
             command: &mut Command,
             resume: impl FnOnce(&mut Child) -> Result<(), String>,
         ) -> Result<Self, SpawnFailure> {
-            let job = KillOnCloseJob::create().map_err(SpawnFailure::Owner)?;
+            Self::spawn_with_job(command, KillOnCloseJob::create(), resume)
+        }
+
+        fn spawn_with_job(
+            command: &mut Command,
+            job: Result<KillOnCloseJob, String>,
+            resume: impl FnOnce(&mut Child) -> Result<(), String>,
+        ) -> Result<Self, SpawnFailure> {
+            let job = job.map_err(SpawnFailure::Owner)?;
             // Keep console Ctrl+C on the parent so its bounded stdin stop
             // controls the child's graceful journal/root retirement.
             command.creation_flags(CREATE_SUSPENDED | CREATE_NEW_PROCESS_GROUP);
@@ -337,6 +537,48 @@ mod windows {
                 return Err(owner.failed_startup(error));
             }
             Ok(owner)
+        }
+
+        /// A bounded stopped transaction keeps its armed Job named so a later
+        /// same-transaction recovery can independently observe whole-tree exit.
+        pub(crate) fn spawn_stopped_named(
+            command: &mut Command,
+            name: &str,
+        ) -> Result<Self, String> {
+            validate_stopped_job_name(name)?;
+            if name.contains(".controller.") {
+                return Err("controller lifetime Job cannot be used for child spawn".into());
+            }
+            Self::spawn_with_job(command, KillOnCloseJob::create_named(Some(name)), |child| {
+                if unsafe { NtResumeProcess(child.as_raw_handle().cast()) } < 0 {
+                    Err("reviewed candidate child resume failed".into())
+                } else {
+                    Ok(())
+                }
+            })
+            .map_err(SpawnFailure::message)
+        }
+
+        pub(crate) fn prove_stopped_named_job_quiescent(name: &str) -> Result<(), String> {
+            validate_stopped_job_name(name)?;
+            let wide = name.encode_utf16().chain(Some(0)).collect::<Vec<_>>();
+            let handle = unsafe { OpenJobObjectW(4, 0, wide.as_ptr()) };
+            if handle.is_null() {
+                // A Job object remains alive while associated processes remain.
+                // Only ERROR_FILE_NOT_FOUND proves that this exact armed Job
+                // has ceased to exist; access/API failures are not quiescence.
+                return if unsafe { GetLastError() } == 2 {
+                    Ok(())
+                } else {
+                    Err("reviewed stopped Job observation unavailable".into())
+                };
+            }
+            let job = KillOnCloseJob(handle);
+            job.require_armed()?;
+            if job.active_processes()? != 0 {
+                return Err("reviewed stopped Job still has active processes".into());
+            }
+            Ok(())
         }
 
         fn failed_startup(mut self, error: String) -> SpawnFailure {
@@ -505,6 +747,29 @@ mod windows {
         }
     }
 
+    fn validate_stopped_job_name(name: &str) -> Result<(), String> {
+        let value = name
+            .strip_prefix("Local\\CatDesk.ReleasePairStopped.")
+            .ok_or("reviewed stopped Job name is invalid")?;
+        let (transaction, role) = value
+            .split_once('.')
+            .ok_or("reviewed stopped Job name is invalid")?;
+        if transaction.len() != 32
+            || !transaction.bytes().all(|b| b.is_ascii_hexdigit())
+            || !(matches!(role, "candidate" | "helper") || {
+                let fields = role.split('.').collect::<Vec<_>>();
+                fields.len() == 4
+                    && fields[0] == "controller"
+                    && fields[1].parse::<u32>().is_ok()
+                    && fields[2].parse::<u32>().is_ok_and(|pid| pid > 0)
+                    && fields[3].parse::<u64>().is_ok_and(|time| time > 0)
+            })
+        {
+            return Err("reviewed stopped Job name is invalid".into());
+        }
+        Ok(())
+    }
+
     impl Drop for OwnedCandidateChild {
         fn drop(&mut self) {
             if self.released {
@@ -622,6 +887,199 @@ mod windows {
         fn sleep_child() {
             if std::env::var_os("CATDESK_OWNER_JOB_TEST_CHILD").is_some() {
                 std::thread::sleep(Duration::from_secs(60));
+            }
+        }
+
+        #[test]
+        fn stopped_named_job_rejects_collision_and_proves_whole_tree_exit() {
+            let name = format!(
+                "Local\\CatDesk.ReleasePairStopped.{}.candidate",
+                uuid::Uuid::new_v4().simple()
+            );
+            let mut command = Command::new(std::env::current_exe().unwrap());
+            command
+                .args([
+                    "--exact",
+                    "reviewed_candidate_owner::windows::tests::child_with_descendant",
+                    "--nocapture",
+                ])
+                .env("CATDESK_OWNER_JOB_TEST_DESCENDANT", "1")
+                .stdout(Stdio::piped());
+            let mut owner = OwnedCandidateChild::spawn_stopped_named(&mut command, &name).unwrap();
+            let stdout = owner.child_mut().stdout.take().unwrap();
+            let (tx, rx) = std::sync::mpsc::channel();
+            let reader = std::thread::spawn(move || {
+                for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                    if let Some(pid) = line
+                        .strip_prefix("DESCENDANT_PID=")
+                        .and_then(|s| s.parse::<u32>().ok())
+                    {
+                        let _ = tx.send(pid);
+                        break;
+                    }
+                }
+            });
+            let descendant = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+            let handle = unsafe { OpenProcess(0x0010_0000, 0, descendant) };
+            assert!(!handle.is_null());
+            assert!(OwnedCandidateChild::prove_stopped_named_job_quiescent(&name).is_err());
+            let mut other = Command::new(std::env::current_exe().unwrap());
+            other
+                .args([
+                    "--exact",
+                    "reviewed_candidate_owner::windows::tests::sleep_child",
+                ])
+                .env("CATDESK_OWNER_JOB_TEST_CHILD", "1")
+                .stdout(Stdio::null());
+            assert!(OwnedCandidateChild::spawn_stopped_named(&mut other, &name).is_err());
+            owner.terminate_tree_and_confirm_quiescent().unwrap();
+            assert_eq!(unsafe { WaitForSingleObject(handle, 5000) }, 0);
+            unsafe { CloseHandle(handle) };
+            reader.join().unwrap();
+            OwnedCandidateChild::prove_stopped_named_job_quiescent(&name).unwrap();
+        }
+
+        #[test]
+        fn stopped_named_job_names_have_no_arbitrary_namespace_authority() {
+            for name in [
+                "Global\\anything",
+                "Local\\CatDesk.ReleasePairStopped.bad.candidate",
+                "Local\\CatDesk.ReleasePairStopped.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.serving",
+            ] {
+                assert!(super::validate_stopped_job_name(name).is_err());
+            }
+        }
+
+        #[test]
+        fn stopped_controller_lifetime_rejects_shared_test_host() {
+            assert!(
+                OwnedCandidateChild::enter_stopped_controller_lifetime(
+                    &uuid::Uuid::new_v4().simple().to_string(),
+                    &std::env::current_dir().unwrap()
+                )
+                .is_err()
+            );
+        }
+
+        #[test]
+        #[ignore = "Dedicated child-process fixture; invoked only by its bounded parent test"]
+        fn stopped_controller_fixture_child() {
+            use std::os::windows::process::CommandExt;
+            let transaction = std::env::var("CATDESK_STOPPED_CONTROLLER_FIXTURE").unwrap();
+            let proof = OwnedCandidateChild::enter_stopped_controller_lifetime(
+                &transaction,
+                &std::env::current_dir().unwrap(),
+            )
+            .unwrap();
+            if std::env::var("CATDESK_STOPPED_CONTROLLER_FIXTURE_STAGE").as_deref() == Ok("normal")
+            {
+                println!(
+                    "{}",
+                    serde_json::json!({"stage":"NORMAL_EXIT","job":proof.job_name,"pid":proof.pid})
+                );
+                std::io::stdout().flush().unwrap();
+                std::process::exit(0);
+            }
+            let mut runner = Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "reviewed_candidate_owner::windows::tests::child_with_descendant",
+                    "--nocapture",
+                ])
+                .env("CATDESK_OWNER_JOB_TEST_DESCENDANT", "1")
+                .stdout(Stdio::piped())
+                .spawn()
+                .unwrap();
+            let reader = BufReader::new(runner.stdout.take().unwrap());
+            let mut descendant = None;
+            for line in reader.lines().map_while(Result::ok) {
+                if let Some(pid) = line
+                    .strip_prefix("DESCENDANT_PID=")
+                    .and_then(|s| s.parse::<u32>().ok())
+                {
+                    descendant = Some(pid);
+                    break;
+                }
+            }
+            let mut suspended = Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "reviewed_candidate_owner::windows::tests::sleep_child",
+                ])
+                .env("CATDESK_OWNER_JOB_TEST_CHILD", "1")
+                .creation_flags(super::CREATE_SUSPENDED | super::CREATE_NEW_PROCESS_GROUP)
+                .stdout(Stdio::null())
+                .spawn()
+                .unwrap();
+            // Deliberately stop at the real creation-before-private-assignment
+            // boundary. Both children already inherit the controller Job.
+            println!(
+                "{}",
+                serde_json::json!({"stage":"PREASSIGN","job":proof.job_name,
+                "pid":proof.pid,"suspendedPid":suspended.id(),"runnerPid":runner.id(),"descendantPid":descendant.unwrap()})
+            );
+            std::io::stdout().flush().unwrap();
+            std::thread::sleep(Duration::from_secs(30));
+            let _ = suspended.kill();
+            let _ = suspended.wait();
+            let _ = runner.kill();
+            let _ = runner.wait();
+            std::process::exit(2);
+        }
+
+        #[test]
+        fn stopped_controller_lifetime_covers_normal_exit_and_preassignment_crash() {
+            for stage in ["normal", "preassign"] {
+                let transaction = uuid::Uuid::new_v4().simple().to_string();
+                let mut command = Command::new(std::env::current_exe().unwrap());
+                command.args(["--exact","reviewed_candidate_owner::windows::tests::stopped_controller_fixture_child","--ignored","--nocapture"])
+                    .env("CATDESK_STOPPED_CONTROLLER_FIXTURE",&transaction)
+                    .env("CATDESK_STOPPED_CONTROLLER_FIXTURE_STAGE",stage).stdout(Stdio::piped()).stdin(Stdio::piped());
+                let mut owner = OwnedCandidateChild::spawn(&mut command).unwrap();
+                let stdout = owner.child_mut().stdout.take().unwrap();
+                let (tx, rx) = std::sync::mpsc::channel();
+                let reader = std::thread::spawn(move || {
+                    for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
+                            let _ = tx.send(value);
+                            break;
+                        }
+                    }
+                });
+                let observation = rx.recv_timeout(Duration::from_secs(8)).unwrap();
+                let job = observation["job"].as_str().unwrap().to_owned();
+                if stage == "preassign" {
+                    let mut handles = Vec::new();
+                    for field in ["suspendedPid", "runnerPid", "descendantPid"] {
+                        let handle = unsafe {
+                            OpenProcess(0x0010_0000, 0, observation[field].as_u64().unwrap() as u32)
+                        };
+                        assert!(!handle.is_null());
+                        handles.push(handle);
+                    }
+                    owner.child_mut().kill().unwrap();
+                    owner.child_mut().wait().unwrap();
+                    // Outer test Job is still armed/open: these exits are
+                    // caused by closing the killed controller's lifetime Job.
+                    for handle in handles {
+                        assert_eq!(unsafe { WaitForSingleObject(handle, 5000) }, 0);
+                        unsafe { CloseHandle(handle) };
+                    }
+                } else {
+                    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+                    loop {
+                        if let Some(status) = owner.child_mut().try_wait().unwrap() {
+                            assert!(status.success());
+                            break;
+                        }
+                        assert!(std::time::Instant::now() < deadline);
+                        std::thread::sleep(Duration::from_millis(20));
+                    }
+                }
+                drop(owner.child.take());
+                OwnedCandidateChild::prove_stopped_named_job_quiescent(&job).unwrap();
+                owner.terminate_tree_and_confirm_quiescent().unwrap();
+                reader.join().unwrap();
             }
         }
 

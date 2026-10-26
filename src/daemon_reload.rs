@@ -26,6 +26,9 @@ use crate::reviewed_source_snapshot::{
     ReviewedSourceSnapshotExpectedV1, validate_committed_snapshot,
 };
 
+#[path = "release_pair_stopped.rs"]
+pub(crate) mod stopped;
+
 pub const RELOAD_WORKER_FLAG: &str = "--catdesk-reload-worker";
 pub const DAEMON_MODE_FLAG: &str = "--catdesk-daemon";
 pub const LIFECYCLE_STOP_WORKER_FLAG: &str = "--catdesk-lifecycle-stop-worker";
@@ -996,12 +999,20 @@ fn validate_release_pair_review(
     workspace: &Path,
     authorization: &ReleasePairReconcileAuthorizationV1,
 ) -> Result<ReviewedPromotionAuthorizationV1, String> {
+    validate_release_pair_review_freshness(workspace, authorization, true)
+}
+
+fn validate_release_pair_review_freshness(
+    workspace: &Path,
+    authorization: &ReleasePairReconcileAuthorizationV1,
+    require_fresh: bool,
+) -> Result<ReviewedPromotionAuthorizationV1, String> {
     let reviewed: ReviewedPromotionPreflightV1 = read_bounded_json(
         &reviewed_promotion_preflight_path(workspace),
         "independent reviewed promotion preflight",
     )?;
     if reviewed.schema_version != 1
-        || reviewed.expires_at_unix < now_unix()
+        || (require_fresh && reviewed.expires_at_unix < now_unix())
         || sha256_file(&reviewed_promotion_preflight_path(workspace))?
             != authorization.reviewed_preflight_sha256
         || reviewed.authorization.authorization_id != authorization.reviewed_authorization_id
@@ -1047,7 +1058,7 @@ fn validate_release_pair_review(
     Ok(reviewed.authorization)
 }
 
-pub fn prepare_release_pair_reconcile(
+fn build_release_pair_reconcile_preflight(
     workspace: &Path,
 ) -> Result<ReleasePairReconcilePreflightV1, String> {
     let workspace = canonical_directory(workspace, "release-pair workspace")?;
@@ -1099,15 +1110,33 @@ pub fn prepare_release_pair_reconcile(
         expires_at_unix: authorization.expires_at_unix,
         authorization,
     };
+    Ok(preflight)
+}
+
+pub fn prepare_release_pair_reconcile(
+    workspace: &Path,
+) -> Result<ReleasePairReconcilePreflightV1, String> {
+    let workspace = canonical_directory(workspace, "release-pair workspace")?;
+    let existing = if release_pair_preflight_path(&workspace).exists() {
+        let existing: ReleasePairReconcilePreflightV1 = read_bounded_json(
+            &release_pair_preflight_path(&workspace),
+            "existing release-pair preflight",
+        )
+        .map_err(|_| "existing release-pair preflight belongs to a foreign or unknown mode")?;
+        if existing.schema_version != 1 {
+            return Err("existing release-pair preflight belongs to another schema".into());
+        }
+        Some(existing)
+    } else {
+        None
+    };
+    let preflight = build_release_pair_reconcile_preflight(&workspace)?;
     if release_pair_claim_path(&workspace).exists()
         || release_pair_authorization_path(&workspace).exists()
     {
         return Err("release-pair reconciliation is already claimed".into());
     }
-    if let Ok(existing) = read_bounded_json::<ReleasePairReconcilePreflightV1>(
-        &release_pair_preflight_path(&workspace),
-        "release-pair preflight",
-    ) {
+    if let Some(existing) = existing {
         if existing.schema_version == 1
             && existing.expires_at_unix >= now_unix()
             && existing.authorization.reviewed_preflight_sha256
