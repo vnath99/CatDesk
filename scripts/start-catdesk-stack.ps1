@@ -1105,7 +1105,7 @@ function Test-BackendOnlySupport {
     param($Canonical, [int]$TimeoutMilliseconds = 5000)
     $raw = Invoke-BootstrapSeam -Name 'BackendOnlySupport' -Arguments @($Canonical, $TimeoutMilliseconds) -Default {
         param($identity, $timeout)
-        (Invoke-BoundedRecoveryHelper -FileName $identity.Path -Arguments @('--catdesk-daemon', '--backend-only', '--check-support') -TimeoutMilliseconds $timeout -FailureMessage 'backend-only support is unavailable').Output
+        (Invoke-BoundedRecoveryHelper -FileName $identity.Path -Arguments @('--catdesk-daemon', '--backend-only', '--check-support') -TimeoutMilliseconds $timeout -FailureMessage 'backend-only support is unavailable').Stdout
     }
     $text = [string]$raw
     if ($text.Length -gt 1024) { return $false }
