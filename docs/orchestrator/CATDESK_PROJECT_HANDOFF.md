@@ -1,3 +1,25 @@
+## October 28 C261 — actual no-send preparation of the original review request
+
+The qualified standalone controller performed `review retry-pre-submit` against
+the real, exactly frozen C259 request. It changed only that confirmed pre-submit
+delivery from `ATTENTION` to `CLAIMED`. The original attention bytes are archived;
+the request, reserved message, grant, native claim and queued event remain intact.
+One of 8,471 protected files changed as authorized; the other 8,470, two metadata-only
+files, all five bindings, profile identity and native sessions were preserved.
+No new event/file, browser, message, timer or receipt was created. The bounded native
+process exited successfully and zero test owners remain. This qualifies local
+recovery metadata, not a ChatGPT review, authenticated session or production release.
+
+The eligibility transition itself needs no browser authentication. Actual bounded
+`review resume` remains waiting for browser readiness and fresh claim/grant checks;
+it must reuse the existing frozen request. Do not repeat the preparation or create
+another review identity. The legacy profile diagnostic requires a production
+PAUSED host plus acknowledgment and is ineligible for the stopped isolated runtime;
+do not change production policy to run it. Next: reuse the guarded development
+profile preflight and existing read-only readiness probe for one bounded diagnostic.
+No sign-in cause is asserted from the prior attention code alone. Production,
+connector and two independent Web coding acceptance remain open.
+
 ## October 28 C260 — scoped recovery for a confirmed pre-submit review refusal
 
 C259 exposed a recovery gap: Web review `resume` requires `CLAIMED`, but a confirmed
