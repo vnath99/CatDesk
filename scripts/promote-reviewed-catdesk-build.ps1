@@ -473,8 +473,15 @@ function Invoke-PromotionHandoff([string]$Root, $From, [string]$TargetPath, [str
         $helper = Join-Path $PSScriptRoot 'restart_catdesk_daemon.ps1'
         if (-not (Test-Path -LiteralPath $helper -PathType Leaf)) { return $false }
         $before = [DateTime]::UtcNow
-        $raw = @(& $helper -OldPid ([int]$source.Pid) -ExpectedOldProcessStartedAtUtc ([string]$source.ProcessStartedAtUtc) -ExpectedOldProcessPath ([string]$source.BuildPath) -ExpectedOldProcessSha256 ([string]$source.BuildHash) -BuildPath $target -Workspace $workspaceRoot -McpPort $port -ReadyTimeoutSeconds $timeoutSeconds -BackendOnly:$localOnly -Execute 2>$null)
-        if ($LASTEXITCODE -ne 0 -or $raw.Count -eq 0) { return $false }
+        # This is a PowerShell script call, not a native executable. A normal
+        # successful return need not set LASTEXITCODE. Capture its own status
+        # inside the array expression (Windows PowerShell resets $? outside).
+        $handoffScriptSucceeded = $false
+        $raw = @(
+            & $helper -OldPid ([int]$source.Pid) -ExpectedOldProcessStartedAtUtc ([string]$source.ProcessStartedAtUtc) -ExpectedOldProcessPath ([string]$source.BuildPath) -ExpectedOldProcessSha256 ([string]$source.BuildHash) -BuildPath $target -Workspace $workspaceRoot -McpPort $port -ReadyTimeoutSeconds $timeoutSeconds -BackendOnly:$localOnly -Execute 2>$null
+            $handoffScriptSucceeded = $?
+        )
+        if (-not $handoffScriptSucceeded -or $raw.Count -eq 0) { return $false }
         $statePath = Join-Path $workspaceRoot '.catdesk\restart-handoff\latest.json'
         $deadline = [DateTime]::UtcNow.AddSeconds($timeoutSeconds)
         do {
