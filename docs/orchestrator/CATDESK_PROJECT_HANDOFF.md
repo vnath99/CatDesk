@@ -1,3 +1,31 @@
+## October 28 C258 — native helper comparison corrected after bounded build failure
+
+The acknowledged C254 source completed Cargo with exit code 0, but its producer
+reached the 900-second deadline with `DESCENDANTS_ACTIVE`. Native terminal evidence
+and cleanup are verified: no attestation or qualified candidate was created, and
+all 8,449 preceding state pins survived. The derived baseline includes 8,452 files.
+The genuine review, source snapshot and acknowledgment remain valid. Production
+and the previously trusted C208 artifact remain unchanged; no automatic retry ran.
+
+Actual bounded Windows C compile, C link and Rust link controls each reproduced a
+pinned VCTIP process remaining in the owned Job. The configured image path contains
+mixed separators, whereas Windows reports backslashes. A controlled process
+regression failed before the fix. The comparison now normalizes separators while
+retaining exact image identity, directory pins, complete membership validation,
+outside-Job exclusion, and the zero-Job/EOF gate. No Job isolation guard was relaxed.
+The full failed producer did not record member identity, so its specific cause
+remains unproven rather than being retroactively assigned to VCTIP.
+
+Qualification: 131 reviewed-build tests passed (eight existing manual tests ignored),
+the explicit compiler/linker probe passed with all three Jobs empty, formatting
+and strict Clippy passed. The new Windows ownership regression proves an outside
+process survives. These are source/native controls, not installed acceptance.
+Next: obtain cumulative independent review of the corrected exact commit, qualify
+its development controller, then run the existing snapshot/ACK/producer and guarded
+promotion chain. No fingerprint, release authority, project binding, browser profile,
+native session, external tunnel or recurring automation was changed. Production
+startup, rollback, connector and two-project Web coding acceptance remain open.
+
 ## October 28 C257 — genuine review recovered and source authority acknowledged
 
 A distinct bounded instrumented read recovered the already-delivered C254 answer;

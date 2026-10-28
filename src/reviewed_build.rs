@@ -7207,6 +7207,9 @@ impl BuildJob {
             return Ok(()); // Incomplete membership never authorizes termination.
         }
         let expected = crate::command::normalize_windows_verbatim_path(helper.path.clone());
+        // The pinned compiler directory may contain a `bin/Hostx64/x64`
+        // suffix; Windows reports the same image using backslashes.
+        let expected = expected.to_string_lossy().replace('/', "\\");
         let mut verified = Vec::new();
         for &pid in &members.ids[..members.listed as usize] {
             let Ok(pid) = u32::try_from(pid) else {
@@ -7235,7 +7238,8 @@ impl BuildJob {
             ));
             if !actual
                 .to_string_lossy()
-                .eq_ignore_ascii_case(&expected.to_string_lossy())
+                .replace('/', "\\")
+                .eq_ignore_ascii_case(&expected)
             {
                 return Ok(()); // Mixed or unknown writers: stop none of them.
             }
@@ -10658,6 +10662,47 @@ mod tests {
         drop(helper);
         drop(job);
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_helper_cleanup_accepts_mixed_separator_pin_without_widening_ownership() {
+        let root = std::env::temp_dir().join(format!("catdesk-msvc-mixed-{}", Uuid::new_v4()));
+        let directory = root.join("tool/bin");
+        fs::create_dir_all(&directory).unwrap();
+        fs::copy(
+            std::env::current_exe().unwrap(),
+            directory.join("VCTIP.EXE"),
+        )
+        .unwrap();
+        let helper = pin_msvc_helper_directory(&directory).unwrap().unwrap();
+        assert!(helper.path.to_string_lossy().contains("tool/bin"));
+        let job = BuildJob::new().unwrap();
+        let outside_job = BuildJob::new().unwrap();
+        let mut known = start_waiting_helper_fixture(&helper.path, &job);
+        let mut outside = start_waiting_helper_fixture(&helper.path, &outside_job);
+        let mut evidence = Vec::new();
+        let outcome = job.stop_only_pinned_helper(&helper, &mut evidence);
+        let known_exited = known.try_wait().unwrap().is_some();
+        let outside_preserved = outside.try_wait().unwrap().is_none();
+        // Cleanup precedes assertions, including on the expected RED result.
+        job.terminate().unwrap();
+        outside_job.terminate().unwrap();
+        known.wait().unwrap();
+        outside.wait().unwrap();
+        drop(helper);
+        drop(job);
+        drop(outside_job);
+        fs::remove_dir_all(root).unwrap();
+        outcome.unwrap();
+        assert!(outside_preserved);
+        assert_eq!(
+            evidence.len(),
+            1,
+            "equivalent Windows separators must match"
+        );
+        assert!(known_exited && evidence[0].exit_confirmed);
+        assert_eq!(evidence[0].process_id, known.id());
     }
 
     #[cfg(windows)]
@@ -16524,5 +16569,159 @@ mod tests {
         assert!(!script.contains("cargo build --release\n"));
         assert!(!script.contains("$manifest=\"$binary.sha256\""));
         assert!(!script.contains("Move-Item -LiteralPath $temporary -Destination $manifest"));
+    }
+}
+
+#[cfg(all(test, windows))]
+mod owned_msvc_probe_tests {
+    use super::*;
+    use std::os::windows::io::OwnedHandle;
+
+    fn observed_members(job: &BuildJob) -> serde_json::Value {
+        #[repr(C)]
+        struct ProcessIds {
+            assigned: u32,
+            listed: u32,
+            ids: [usize; 128],
+        }
+        unsafe extern "system" {
+            fn QueryInformationJobObject(
+                job: *mut c_void,
+                class: i32,
+                information: *mut c_void,
+                length: u32,
+                returned: *mut u32,
+            ) -> i32;
+            fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut c_void;
+            fn IsProcessInJob(process: *mut c_void, job: *mut c_void, result: *mut i32) -> i32;
+            fn QueryFullProcessImageNameW(
+                process: *mut c_void,
+                flags: u32,
+                name: *mut u16,
+                size: *mut u32,
+            ) -> i32;
+        }
+        let mut members: ProcessIds = unsafe { std::mem::zeroed() };
+        let queried = unsafe {
+            QueryInformationJobObject(
+                job.0,
+                3,
+                (&mut members as *mut ProcessIds).cast(),
+                std::mem::size_of::<ProcessIds>() as u32,
+                std::ptr::null_mut(),
+            )
+        } != 0;
+        assert!(queried && members.listed <= 128 && members.assigned == members.listed);
+        let rows: Vec<_> = members.ids[..members.listed as usize].iter().map(|pid| {
+            let pid = u32::try_from(*pid).unwrap();
+            let raw = unsafe { OpenProcess(0x0010_0000 | 0x1000, 0, pid) };
+            if raw.is_null() { return serde_json::json!({"pid":pid,"querySucceeded":false}); }
+            let handle = unsafe { OwnedHandle::from_raw_handle(raw) };
+            let mut member = 0;
+            let mut name = [0u16; 2048];
+            let mut size = name.len() as u32;
+            let valid = unsafe { IsProcessInJob(handle.as_raw_handle().cast(), job.0, &mut member) } != 0 && member != 0 && unsafe { QueryFullProcessImageNameW(handle.as_raw_handle().cast(), 0, name.as_mut_ptr(), &mut size) } != 0;
+            serde_json::json!({"pid":pid,"querySucceeded":valid,"imagePath":valid.then(||String::from_utf16_lossy(&name[..size as usize]))})
+        }).collect();
+        serde_json::json!({"activeProcesses":job.active_processes().unwrap(),"members":rows})
+    }
+
+    #[test]
+    #[ignore = "manual bounded benign MSVC Job-member probe; no release/control authority"]
+    fn current_host_benign_compile_and_link_job_members() {
+        let (cargo, rustc) = trusted_toolchain().unwrap();
+        let environment =
+            reviewed_windows_toolchain_environment(Path::new(&cargo.absolute_path)).unwrap();
+        let compiler = PathBuf::from(&environment.cc);
+        require_reviewed_toolchain_file(&compiler).unwrap();
+        let helper = pin_msvc_helper_directory(compiler.parent().unwrap()).unwrap();
+        let root =
+            std::env::temp_dir().join(format!("catdesk-msvc-members-{}", Uuid::new_v4().simple()));
+        fs::create_dir(&root).unwrap();
+        fs::write(root.join("probe.c"), b"int main(void) { return 0; }\n").unwrap();
+        fs::write(root.join("probe.rs"), b"fn main() {}\n").unwrap();
+        for probe in ["CL_COMPILE", "CL_LINK", "RUST_LINK"] {
+            let mut command = Command::new(if probe == "RUST_LINK" {
+                Path::new(&rustc.absolute_path)
+            } else {
+                &compiler
+            });
+            command
+                .current_dir(&root)
+                .env_clear()
+                .env("PATH", &environment.path)
+                .env("INCLUDE", &environment.include)
+                .env("LIB", &environment.lib)
+                .env("LIBPATH", &environment.libpath)
+                .env("SystemRoot", os_system_root().unwrap())
+                .env("SystemDrive", os_system_drive().unwrap())
+                .env("TEMP", &root)
+                .env("TMP", &root)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped())
+                .creation_flags(CREATE_SUSPENDED);
+            if probe == "RUST_LINK" {
+                command.args([
+                    "--edition=2024",
+                    "-C",
+                    "opt-level=2",
+                    "probe.rs",
+                    "-o",
+                    "probe-rust.exe",
+                ]);
+            } else {
+                command
+                    .args(["/nologo", "probe.c"])
+                    .arg(if probe == "CL_LINK" {
+                        "/Feprobe.exe"
+                    } else {
+                        "/c"
+                    });
+            }
+            let job = BuildJob::new().unwrap();
+            let mut child = command.spawn().unwrap();
+            let stderr = child.stderr.take().unwrap();
+            let reader = std::thread::spawn(move || read_bounded_cargo_stderr(stderr));
+            job.assign(&child).unwrap();
+            job.resume(&child).unwrap();
+            let deadline = std::time::Instant::now() + Duration::from_secs(20);
+            let status = loop {
+                if let Some(status) = child.try_wait().unwrap() {
+                    break Some(status);
+                }
+                if std::time::Instant::now() >= deadline {
+                    break None;
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            };
+            std::thread::sleep(Duration::from_millis(1100));
+            let before = observed_members(&job);
+            let mut evidence = Vec::new();
+            let helper_result = if status.is_some_and(|s| s.success()) {
+                helper
+                    .as_ref()
+                    .map(|pinned| job.stop_only_pinned_helper(pinned, &mut evidence))
+            } else {
+                None
+            };
+            let after = observed_members(&job);
+            job.terminate().unwrap();
+            let cleanup = std::time::Instant::now() + Duration::from_secs(5);
+            while job.active_processes().unwrap() != 0 && std::time::Instant::now() < cleanup {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert_eq!(job.active_processes().unwrap(), 0);
+            child.wait().unwrap();
+            while !reader.is_finished() && std::time::Instant::now() < cleanup {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert!(reader.is_finished());
+            let stderr = reader.join().unwrap().unwrap();
+            println!(
+                "{}",
+                serde_json::json!({"probe":probe,"rootExit":status.and_then(|s|s.code()),"before":before,"afterHelper":after,"pinnedHelper":helper.as_ref().map(|p|p.path.to_string_lossy()),"helperResult":format!("{helper_result:?}"),"helperCleanupRecords":evidence,"capturedStderrBytes":stderr.captured.len(),"ownedTreeExited":true,"artifactExecuted":false,"productionActions":0})
+            );
+        }
     }
 }
