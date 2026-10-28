@@ -44,6 +44,7 @@ pub(crate) mod install_broker_source;
 #[cfg(windows)]
 pub mod install_broker_stage_writer;
 pub mod process_job;
+pub mod readiness_probe;
 #[cfg(not(windows))]
 pub mod development_runtime {
     use crate::Result;

@@ -1,3 +1,26 @@
+## October 28 C262 — bounded inspection of the existing development browser
+
+Source adds `operator web-dev-runtime inspect-readiness --project-id <project>`.
+It reuses guarded development-login preflight and the existing read-only readiness
+probe, with the exact registered target and existing selected profile. It accepts
+no profile, URL, message or timeout override. No new profile, text entry, submission,
+queue mutation, host, scheduler or production policy change occurs. The legacy
+production-only probe retains its PAUSED-host/acknowledgment requirements.
+
+The shared probe runner requires START before browser imports, bounds the helper,
+filters output to fixed labels and proves the whole owned Job empty before reading
+its pipe. Unverified cleanup retains the existing sticky owner marker. Target
+pairing is checked before/after inspection; observations grant no send permission
+and do not establish authenticated identity. Qualification: 15 focused tests,
+root/Wake formatting and strict Clippy passed. Actual Windows fixtures exercised
+timeout cleanup and a descendant holding the output pipe; Python fixtures verified
+profile selection and readiness labels without starting a browser.
+
+This is source/native fixture qualification. Next: build the standalone controller
+and perform one bounded read of the existing selected profile. No live readiness,
+sign-in cause, ChatGPT review, new release authority or production acceptance is
+claimed yet. The original C259 event remains prepared, with no browser resumption.
+
 ## October 28 C261 — actual no-send preparation of the original review request
 
 The qualified standalone controller performed `review retry-pre-submit` against

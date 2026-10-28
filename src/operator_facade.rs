@@ -159,6 +159,9 @@ pub(crate) enum WebDevelopmentAction {
     Login {
         project_id: String,
     },
+    InspectReadiness {
+        project_id: String,
+    },
     Status,
     Start,
     Stop,
@@ -272,6 +275,8 @@ pub(crate) fn parse_operator_action(
 
 fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction, String> {
     match args.get(2).map(String::as_str) {
+        Some("inspect-readiness") if args.len()==5 && args[3]=="--project-id"
+            && catdesk_wake::protocol::valid_id(&args[4]) => Ok(WebDevelopmentAction::InspectReadiness {project_id:args[4].clone()}),
         Some("login") if args.len() == 5
             && args[3] == "--project-id"
             && catdesk_wake::protocol::valid_id(&args[4]) => Ok(WebDevelopmentAction::Login {
@@ -353,6 +358,46 @@ fn login_web_development(workspace: &Path, project_id: &str) -> Result<serde_jso
         &target.url,
     )?;
     catdesk_wake::development_runtime::login(&workspace, &target.url)
+}
+
+fn inspect_web_development_readiness(
+    workspace: &Path,
+    project_id: &str,
+) -> Result<serde_json::Value, String> {
+    let workspace = workspace
+        .canonicalize()
+        .map_err(|_| "DEV_WORKSPACE_UNAVAILABLE")?;
+    let root = catdesk_wake::development_runtime::root_for_workspace(&workspace)?
+        .ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    let lease = acquire_web_work_lease(&workspace, project_id)?;
+    let target = mcp::operator_read_project_web_target(&workspace, project_id)
+        .map_err(|_| "DEV_RUNTIME_PAIRED_TARGET_REQUIRED")?
+        .ok_or("DEV_RUNTIME_PAIRED_TARGET_REQUIRED")?;
+    let expected = catdesk_wake::protocol::Target::new(target.generation, target.url.clone())?;
+    if expected.digest != target.sha256 {
+        return Err("DEV_READINESS_TARGET_CHANGED".into());
+    }
+    lease.check_target(&expected)?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        &workspace,
+        &root,
+        &target.url,
+    )?;
+    let mut result = catdesk_wake::development_runtime::inspect_readiness(&workspace, &target.url)?;
+    lease.check_target(&expected)?;
+    let after = mcp::operator_read_project_web_target(&workspace, project_id)
+        .map_err(|_| "DEV_READINESS_TARGET_CHANGED")?
+        .ok_or("DEV_READINESS_TARGET_CHANGED")?;
+    if after.generation != target.generation
+        || after.url != target.url
+        || after.sha256 != target.sha256
+    {
+        return Err("DEV_READINESS_TARGET_CHANGED".into());
+    }
+    result["projectId"] = json!(project_id);
+    result["targetGeneration"] = json!(target.generation);
+    result["targetDigest"] = json!(target.sha256);
+    Ok(result)
 }
 
 /// Explicit controlled work for live development tests. It uses the same
@@ -860,6 +905,9 @@ pub(crate) async fn execute_operator_action(
                 } => retry_web_development(workspace, &project_id, &event_id),
                 WebDevelopmentAction::Login { project_id } => {
                     login_web_development(workspace, &project_id)
+                }
+                WebDevelopmentAction::InspectReadiness { project_id } => {
+                    inspect_web_development_readiness(workspace, &project_id)
                 }
                 WebDevelopmentAction::Status => development_runtime::status(workspace),
                 WebDevelopmentAction::Start => development_runtime::start(workspace),
@@ -2315,12 +2363,33 @@ mod tests {
     }
 
     #[test]
+    fn web_development_inspect_readiness_requires_only_registered_project() {
+        let valid = [
+            "operator",
+            "web-dev-runtime",
+            "inspect-readiness",
+            "--project-id",
+            "alpha",
+        ];
+        assert!(parse_operator_action(valid.into_iter().map(str::to_string)).is_ok());
+        for flag in ["--profile", "--url", "--message", "--seconds", "--send"] {
+            let mut args = valid.into_iter().map(str::to_string).collect::<Vec<_>>();
+            args.extend([flag.into(), "override".into()]);
+            assert!(parse_operator_action(args).is_err());
+        }
+    }
+
+    #[test]
     fn web_development_login_requires_prepared_root_before_any_browser_action() {
         let workspace =
             std::env::temp_dir().join(format!("catdesk-login-unprepared-{}", Uuid::new_v4()));
         fs::create_dir(&workspace).unwrap();
         assert_eq!(
             login_web_development(&workspace, "alpha").unwrap_err(),
+            "DEV_RUNTIME_NOT_PREPARED"
+        );
+        assert_eq!(
+            inspect_web_development_readiness(&workspace, "alpha").unwrap_err(),
             "DEV_RUNTIME_NOT_PREPARED"
         );
         fs::remove_dir(workspace).unwrap();

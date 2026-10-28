@@ -2063,6 +2063,51 @@ fn cleanup_login_child(
     Ok(exit)
 }
 
+/// Inspect the existing registered development profile without interaction,
+/// message entry, queue mutation, a new profile, or production policy changes.
+pub fn inspect_readiness(workspace: &Path, target_url: &str) -> Result<Value> {
+    let prepared = login_preflight(workspace, target_url)?;
+    let marker = dev_dir(&canonical_workspace(workspace)?).join("login-active.json");
+    write_json_new(
+        &marker,
+        &json!({"schemaVersion":1,"purpose":"DEV_LOGIN_OWNED_BROWSER_V1",
+        "targetSha256":protocol::digest(target_url),"startedUtc":now()}),
+    )?;
+    let mut command = Command::new(&prepared.python);
+    command
+        .arg("-I")
+        .arg("-c")
+        .arg(include_str!("../../scripts/wake_readiness_visual_probe.py"))
+        .arg("--await-start")
+        .arg("--profile")
+        .arg(&prepared.profile)
+        .arg("--conversation-url")
+        .arg(target_url)
+        .arg("--seconds")
+        .arg("20")
+        .current_dir(&prepared.root);
+    let result = crate::readiness_probe::run_bounded(&mut command, Duration::from_secs(90));
+    if result.as_ref().err() == Some(&"PROBE_CLEANUP_UNVERIFIED") {
+        // Reuse the existing sticky owner marker when cleanup is unproven.
+        return Err("DEV_READINESS_CLEANUP_UNVERIFIED".into());
+    }
+    plain(&marker, false)?;
+    fs::remove_file(&marker).map_err(|_| "DEV_READINESS_CLEANUP_UNVERIFIED")?;
+    let rows = result.map_err(str::to_owned)?;
+    let final_state = rows
+        .last()
+        .and_then(|row| row.strip_prefix("PROBE:FINAL:"))
+        .ok_or("DEV_READINESS_FINAL_UNOBSERVED")?;
+    require_stopped_control(&prepared.root)?;
+    require_login_target(&Store::open(&prepared.root)?, target_url)?;
+    Ok(
+        json!({"mode":"DEVELOPMENT_UNPROTECTED","status":"BROWSER_READINESS_OBSERVED",
+        "observations":rows,"finalState":final_state,"authenticationVerified":false,
+        "advisory":true,"browserReadOnly":true,"sendAttempted":false,
+        "hostStarted":false,"schedulerStarted":false,"ownedTreeExited":true}),
+    )
+}
+
 /// Open only the prepared development browser profile for manual sign-in.
 /// This intentionally never inspects authentication or reports readiness.
 /// The browser lock stays held until the private Job proves all descendants

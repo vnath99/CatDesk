@@ -39,6 +39,9 @@ def main():
     parser.add_argument("--conversation-url", required=True)
     parser.add_argument("--seconds", type=float, default=45.0)
     parser.add_argument("--await-start", action="store_true")
+    # Internal development owner supplies only its independently validated
+    # selected profile. The legacy production probe retains its fixed default.
+    parser.add_argument("--profile", type=Path)
     args = parser.parse_args()
     if args.await_start and sys.stdin.readline() != "START\n":
         return 2
@@ -48,10 +51,11 @@ def main():
         print("PROBE:BAD_URL", flush=True); return 2
     if not 5 <= args.seconds <= 120:
         print("PROBE:BAD_DURATION", flush=True); return 2
-    if not PROFILE.is_dir():
+    profile = args.profile if args.profile is not None else PROFILE
+    if not profile.is_dir():
         print("PROBE:PROFILE_NOT_FOUND", flush=True); return 2
     from seleniumbase import SB
-    with SB(uc=True, user_data_dir=str(PROFILE)) as sb:
+    with SB(uc=True, user_data_dir=str(profile)) as sb:
         sb.activate_cdp_mode(url)
         cdp = sb.cdp
         last = None
