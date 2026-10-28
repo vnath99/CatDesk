@@ -1,0 +1,46 @@
+{
+  "productionActions": 0,
+  "sourceReview": "ROOT_MANUAL_MINIMAL_ADAPTER_DIFF_REVIEW",
+  "scope": "EXISTING_PRIVATE_BODY_SHAPE_DIAGNOSTIC_ON_LOAD_ERROR",
+  "qualification": {
+    "adapterPassed": 32,
+    "rolloverSnapshotPassed": 79,
+    "ownerTimedOut": false,
+    "testsPassed": 111,
+    "resultSha256": "46bf16e881c452e591bceb1bde965de79bae4bcc8e5d6ed258e386f4b2e62afa",
+    "errors": 0,
+    "skipped": 0,
+    "failed": 0,
+    "terminationFailed": false
+  },
+  "checkpoint": "C256",
+  "independentReleaseReview": "NOT_ESTABLISHED",
+  "changesResponseText": false,
+  "sourceParent": "c46484c0d41f5826102c0cf139ff3917a9b2427a",
+  "branch": "codex/web-rollover-oct17",
+  "selectedDevelopmentPackageChanged": false,
+  "ci": "UNVERIFIED",
+  "liveDiagnostic": "NOT_YET_EXECUTED",
+  "addsBrowserActions": false,
+  "sourceWorkingPins": [
+    {
+      "path": "wake/adapter.py",
+      "sha256": "13d563dd2b28c5b5632fe24e9ccdc602780d63cda695c042d2c8c72dd861e08e"
+    },
+    {
+      "path": "wake/tests/test_new_conversation.py",
+      "sha256": "98fd7f5c690f46f3a2bc4fb58614446bb6e33df852c2aef00c8a660d70ec94d9"
+    }
+  ],
+  "changesReceiptOrBindingRules": false,
+  "atUtc": "2026-10-28T10:53:34.5263564+00:00",
+  "newReviewMessages": 0,
+  "regression": {
+    "subtestMissingDiagnosticErrors": 2,
+    "exitCode": 1,
+    "failureMeaning": "Expected bodyDiagnostics field absent for two load-error spellings",
+    "testCount": 1,
+    "productionCodeUnchangedDuringRed": true
+  },
+  "sensitiveAdditionScan": "PASS"
+}

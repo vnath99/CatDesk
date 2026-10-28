@@ -290,6 +290,10 @@ class AttemptSink:
         if cdp.scenario == "incomplete_body":
             message["textComplete"] = False
             coverage["textIncomplete"] = 1
+        if cdp.scenario == "load_error_body":
+            message["text"] = cdp.load_error_text
+            message["visibleUnits"] = len(message["text"])
+            message["revisionHash"] = bridge.digest(message["text"])
         if cdp.scenario == "large_snapshot":
             message["text"] = "😀" * 4096
             message["visibleUnits"] = 4096
@@ -1125,6 +1129,24 @@ class NewConversationTests(unittest.TestCase):
             len(json.dumps(emitted[-1], separators=(",", ":")).encode("utf-8")) + 1,
             frame_limit,
         )
+
+    def test_load_error_snapshot_retains_shape_diagnostic_without_browser_action(self):
+        for text in ("This response couldn't load", "This RESPONSE\ncouldn’t\tload"):
+            with self.subTest(text=text):
+                cdp = AttemptCdp("load_error_body")
+                cdp.load_error_text = text
+                sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
+                emitted = []
+                request = {"snapshot": True, "projectId": "project-one", "source": self.request()["source"]}
+                with patch.object(bridge, "NewConversationSink", AttemptSink), patch.object(
+                    adapter, "emit", emitted.append
+                ), patch.object(adapter.time, "sleep"):
+                    adapter.source_snapshot(bridge, sb, request)
+                snapshot = emitted[-1]["snapshot"]
+                self.assertEqual(snapshot["bodyDiagnostics"], {"status": "UNAVAILABLE"})
+                self.assertEqual(snapshot["messages"][-1]["text"], text)
+                self.assertEqual(cdp.timeline, ["snapshot", "snapshot", "body-diagnostics"])
+                self.assertEqual((cdp.sent, cdp.draft, cdp.navigation), (0, "", [SOURCE]))
 
     def test_incomplete_snapshot_adds_private_shape_without_promoting_text(self):
         cdp = AttemptCdp("incomplete_body")

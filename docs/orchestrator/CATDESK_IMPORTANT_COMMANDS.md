@@ -1,3 +1,18 @@
+## October 28 C256 — instrument the existing unloadable-response read
+
+C254 remains delivered once to its verified target, with no accepted assistant
+body. Inspection found that the existing private DOM-shape diagnostic was skipped
+when a load-error card appeared structurally complete. C256 now includes that same
+bounded diagnostic for normalized load-error text. Text, target, receipt and refusal
+rules remain unchanged; it adds no navigation, editor operation, retry or submission.
+
+The regression reproduced two missing-diagnostic cases. All 32 adapter and 79
+rollover/snapshot tests passed. Source review and publication do not qualify an
+installed runtime. Next is a guarded development-package update and one instrumented
+read of the existing C254 event, using explicit UTF-8 capture. C254's frozen request,
+C249's unknown outcome, predecessor histories and native project work stay preserved.
+Production promotion and two-project Web coding acceptance remain open.
+
 ## October 28 C253–C255 — live development health, unavailable Web review, diagnostic fix
 
 The guarded C253 development package from published source

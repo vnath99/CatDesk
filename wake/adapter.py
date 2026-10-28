@@ -696,9 +696,11 @@ def source_snapshot(bridge, sb, request):
     if not sink.exact(cdp.get_current_url()) or sink.readiness_reason(cdp) is not None:
         raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
     snapshot = bounded_source_snapshot(bridge, sink, cdp, max_message_bytes=8192)
-    if (snapshot["messages"] and snapshot["messages"][-1]["role"] == "ASSISTANT" and
-            not snapshot["messages"][-1]["textComplete"]):
-        snapshot["bodyDiagnostics"] = sink.message_body_diagnostics(cdp)
+    if snapshot["messages"] and snapshot["messages"][-1]["role"] == "ASSISTANT":
+        last = snapshot["messages"][-1]
+        normalized = bridge.normalize_message(last["text"]).replace("’", "'").replace("‘", "'").lower()
+        if not last["textComplete"] or "this response couldn't load" in normalized:
+            snapshot["bodyDiagnostics"] = sink.message_body_diagnostics(cdp)
     if not sink.exact(cdp.get_current_url()):
         raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
     payload = {
