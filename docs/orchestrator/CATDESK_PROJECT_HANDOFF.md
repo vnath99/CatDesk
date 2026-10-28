@@ -1,3 +1,23 @@
+## October 28 C252/C253 — independent Web review caught and reproduced a route defect
+
+One bounded review reached an independently eligible registered conversation
+while C249 remained blocked. Exact delivery and the completed assistant body were
+verified. The reviewer returned FAIL: native editing rejected a supported alternate
+URL for the same conversation. Its response and negative verdict are preserved.
+Only the completed review transport was closed; its temporary native claim was
+cancelled without source acceptance, finalization, ACK or release authority.
+
+C253 reproduces the defect, then fixes it using the existing conversation-identity
+check and an exact observed-document CAS. Wrong chats and untrusted URLs are refused;
+a later route change still prevents editing. All 236 relevant tests passed (126
+bridge, 32 adapter, 78 rollover/editor). The selected runtime is unchanged; corrected
+source still needs independent review and a guarded development-package update.
+
+The native Sol launch guard remains closed because OS isolation is unproven. CLI
+authentication alone does not qualify that lane, and no standalone worker bypass
+was attempted. C249's unknown submission, all bindings and existing native work
+remain preserved. Production promotion and two-conversation Web coding are open.
+See the C252 failure and C253 correction verification records.
 ## October 28 C251 — selected development runtime passed live MCP health
 
 The C250 package from exact published source

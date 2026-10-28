@@ -612,22 +612,22 @@ process.stdout.write(JSON.stringify({result, inserts, command, text:getText(edit
 
 
 class NativeConversationInsertTests(unittest.TestCase):
-    def run_native(self, message, **state):
+    def run_native(self, message, *, source_url=SOURCE, observed_url=None, **state):
         node = shutil.which("node")
         if node is None:
             self.skipTest("Node is required for the isolated editor fixture")
         scripts = []
         cdp = types.SimpleNamespace(
             evaluate=lambda script: scripts.append(script) or "INSERTED",
-            get_current_url=lambda: SOURCE,
+            get_current_url=lambda: observed_url or source_url,
             send_keys=lambda *a, **k: self.fail("no keystroke fallback"),
         )
         with tempfile.TemporaryDirectory() as profile:
-            sink = bridge.CdpSink(SOURCE, Path(profile), 1, 1)
+            sink = bridge.CdpSink(source_url, Path(profile), 1, 1)
             with patch.object(sink, "pre_typing_ready"), patch.object(sink, "text", return_value=message):
                 sink.insert_empty_conversation_draft(cdp, message)
         self.assertEqual(len(scripts), 1)
-        config = {"url": SOURCE, "turns": True, **state, "script": scripts[0]}
+        config = {"url": observed_url or source_url, "turns": True, **state, "script": scripts[0]}
         result = subprocess.run([node, "-e", NativeBootstrapInsertTests.DOM_FIXTURE],
                                 input=json.dumps(config), capture_output=True, text=True,
                                 encoding="utf-8", timeout=5, check=True)
@@ -662,6 +662,7 @@ class NativeConversationInsertTests(unittest.TestCase):
 
     def test_native_exception_never_falls_back_to_keystrokes(self):
         cdp = types.SimpleNamespace(evaluate=lambda _: (_ for _ in ()).throw(TimeoutError()),
+                                   get_current_url=lambda: SOURCE,
                                    send_keys=lambda *a, **k: self.fail("blind fallback"))
         with tempfile.TemporaryDirectory() as profile:
             sink = bridge.CdpSink(SOURCE, Path(profile), 1, 1)
@@ -669,6 +670,31 @@ class NativeConversationInsertTests(unittest.TestCase):
                 with self.assertRaisesRegex(bridge.Attention, "EVALUATION_EXCEPTION"):
                     sink.insert_empty_conversation_draft(cdp, "expected review")
 
+
+    def test_equivalent_routes_use_the_validated_observed_document(self):
+        wrapped = "https://chatgpt.com/g/project-one/c/source-123"
+        for registered, observed in ((SOURCE, wrapped), (wrapped, SOURCE)):
+            with self.subTest(registered=registered, observed=observed):
+                result = self.run_native("expected review", source_url=registered, observed_url=observed)
+                self.assertEqual((result["result"], result["inserts"]), ("INSERTED", 1))
+
+    def test_same_conversation_route_change_after_observation_refuses_edit(self):
+        wrapped = "https://chatgpt.com/g/project-one/c/source-123"
+        result = self.run_native("expected review", observed_url=wrapped, url=SOURCE)
+        self.assertEqual((result["result"], result["inserts"]), ("PRE_HOME", 0))
+
+    def test_unvalidated_observed_routes_are_refused_before_evaluation(self):
+        invalid = (ISSUED, "https://example.test/c/source-123",
+                   SOURCE + "?query=1", SOURCE + "#fragment", "https://chatgpt.com/",
+                   "https://user@chatgpt.com/c/source-123", None, 123)
+        for observed in invalid:
+            with self.subTest(observed=observed), tempfile.TemporaryDirectory() as profile:
+                cdp = types.SimpleNamespace(get_current_url=lambda: observed,
+                                            evaluate=lambda _: self.fail("invalid route must never edit"))
+                sink = bridge.CdpSink(SOURCE, Path(profile), 1, 1)
+                with patch.object(sink, "pre_typing_ready"):
+                    with self.assertRaisesRegex(bridge.Attention, "PRE_TARGET"):
+                        sink.insert_empty_conversation_draft(cdp, "expected review")
 
 class NewConversationTests(unittest.TestCase):
     def request(self):

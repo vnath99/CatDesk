@@ -6,7 +6,10 @@
     "nativeCliReadOnlyAuthCheck": "PASS",
     "required": "Genuine COMPLETED_VERIFIED acknowledged review; task-attributable output and source snapshot",
     "nativeReviewExecuted": false,
-    "newReleaseAuthorityEstablished": false
+    "newReleaseAuthorityEstablished": false,
+    "nativeLaunchEligibility": "HELD_BY_EXISTING_SOL_OS_IDENTITY_GUARD",
+    "guardWasBypassed": false,
+    "subsequentAction": "Independent eligible registered Web conversation performed C252 review; see preserved negative assessment. CLI authentication was not launch qualification."
   },
   "recurringAutomationEnabled": false,
   "reconciliation": {

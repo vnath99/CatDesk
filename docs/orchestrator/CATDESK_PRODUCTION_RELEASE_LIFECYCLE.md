@@ -1,3 +1,10 @@
+## October 28 review and runtime qualification update
+
+C252 was a verified independent Web review with a FAIL verdict; it establishes no
+release authority. C253's route-CAS correction passed source tests and awaits fresh
+review and development update. Keep the Sol OS-identity launch guard closed;
+CLI login status is not qualification. Preserve C249's unknown request without
+replay. Current evidence is in the C252/C253 verification records and project handoff.
 # Supported production executable promotion and recovery
 
 ## October 26 C249 — bounded helper rechecks qualified in source

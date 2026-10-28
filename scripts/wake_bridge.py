@@ -2377,7 +2377,17 @@ class CdpSink:
         uncertain outcomes after it. They are evidence, never retry authority.
         A lost evaluation response remains uncertain even if no text is seen.
         """
-        expected_location = self.url if conversation else NEW_CONVERSATION_HOME
+        expected_location = NEW_CONVERSATION_HOME
+        if conversation:
+            # Admit only routes accepted by the existing conversation identity
+            # policy, then bind the native CAS to this exact observed document.
+            # A later route change, even for the same chat, still refuses edit.
+            try:
+                expected_location = cdp.get_current_url()
+            except Exception as error:
+                raise Attention(f"{failure}_TARGET_UNAVAILABLE") from error
+            if not self.exact(expected_location):
+                raise Attention(f"{failure}_PRE_TARGET")
         text = keyboard_safe_message(message)
         if len(text.encode("utf-8")) > MAX_USER_MESSAGE_CHARS:
             raise Attention("BOOTSTRAP_MESSAGE_TOO_LONG")
