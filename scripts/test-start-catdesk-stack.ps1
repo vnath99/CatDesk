@@ -180,6 +180,10 @@ try {
     if(($authorized|ConvertTo-Json -Compress) -match [regex]::Escape($fixtureToken)){throw 'native auth leaked into readiness output'}
     foreach($invalid in @('', 'short',(('x'*24)+"`n"),(('x'*24)+' '),('é'*24))){
       [Environment]::SetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN',$invalid,'Process')
+      # .NET Framework removes a variable when assigned an empty string.
+      # That host cannot exercise present-but-empty environment state; do not
+      # confuse the documented absent-token path with invalid configured auth.
+      if($invalid -ceq '' -and -not [Environment]::GetEnvironmentVariables('Process').Contains('CATDESK_MCP_AUTH_TOKEN')){continue}
       $refused=Get-LocalMcpReadiness -LocalMcp $authLocal -Canonical ([pscustomobject]@{})
       if($refused.Ready -or $refused.Gate -cne 'LOCAL_MCP_AUTH_TOKEN_INVALID' -or $script:authRequests.Count -ne 2){throw 'invalid native auth reached HTTP or downgraded'}
     }

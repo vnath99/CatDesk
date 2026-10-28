@@ -1,3 +1,11 @@
+## October 28 — C254 protected promotion completed; installed startup qualification
+
+The guarded production promotion completed at 22:55 UTC. The installed executable and recorded fingerprint match the genuinely attested C254 artifact SHA-256 `608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf`, built from reviewed source `e4a99a8b6913c3db689a216f4ae4e0a7f6fff612`. Native RESULT verified `PROMOTION_COMPLETED` with `STOPPED_AFTER_BOUNDED_OWNER`; no disk swap transaction remains. The current verified release is generation 3, with the independently verified previous generation 2 retained. Final wrapper preservation and cleanup checks passed. This is actual protected installation evidence, separate from development-package selection.
+
+The first public `start -BackendOnly` test refused `LOCAL_MCP_BACKEND_ONLY_UNSUPPORTED` and left no daemon. The executable itself correctly reports support. The launcher incorrectly read `Output` from the bounded helper, whose actual field is `Stdout`. The one-line correction retains the closed native capability query, identity checks, bounded execution and complete five-field validation. A new regression invokes the actual executable through the unmocked helper; it passes on PowerShell 7 and Windows PowerShell 5.1. A Windows-only fixture adjustment recognizes that .NET Framework cannot represent present-but-empty environment variables; production authentication rules are unchanged.
+
+Installed public startup/restart, authenticated MCP, actual rollback and real two-project Web coding remain separate acceptance gates. No external Secure MCP owner, browser, Wake binding, recurring automation or native project task was changed by promotion. Source tests and retained rollback bytes alone do not establish serving or unattended acceptance. See `docs/verification/C254_PRODUCTION_PROMOTION_2026_10_28.json` for sanitized evidence and remaining gates.
+
 ## Failed local-backend intent compatibility — October 28
 
 `inspect-failed-promotion` / `retire-failed-promotion` retain their existing exact
