@@ -1,3 +1,28 @@
+## October 28 C257 — genuine review recovered and source authority acknowledged
+
+A distinct bounded instrumented read recovered the already-delivered C254 answer;
+no USER message was resent. The exact event-bound JSON passed schema checks and
+substantive inspection: six paths covered, zero findings, explicit C252 resolution
+and cumulative acceptance of `e4a99a8b6913c3db689a216f4ae4e0a7f6fff612`.
+Its 28 limitations preserve static-source scope. The earlier UI load failure's
+cause remains unproven; the diagnostic change is not claimed to have repaired it.
+
+The canonical source fast-forwarded to that exact reviewed revision. A byte-faithful
+private response report, schema-4 source snapshot covering 217 entries, native
+`COMPLETED_VERIFIED` result and genuine acknowledgment are verified. Other native
+records and all project bindings remain preserved. Later C255/C256 changes are
+excluded from this production-source acceptance.
+
+A fresh supported producer attempt is compiling the reviewed snapshot within the
+existing 900-second worker/1,020-second owner limits. Prior failure history and the
+trusted C208 rollback artifact remain retained. Build success, attestation, promotion
+and installed health are unproven until their separate validators pass. The C256
+development package passed live 401/200 MCP health, a 79-tool catalog and cleanup.
+The instrumented response read preserved 8,219 files and left no browser owner.
+Production, connector and two-project Web coding acceptance remain open. Recurring
+automation remains off. Next: qualify a genuinely attested candidate, run supported
+promotion, then public installed lifecycle and connector checks.
+
 ## October 28 C256 — instrument the existing unloadable-response read
 
 C254 remains delivered once to its verified target, with no accepted assistant
