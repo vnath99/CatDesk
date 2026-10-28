@@ -6380,13 +6380,14 @@ fn web_project_registry_status_with(
                 .get("chatgptTargetHistory")
                 .cloned()
                 .unwrap_or_else(|| json!([]));
-            let paired = operator_read_project_web_target_status(workspace, project_id);
+            let paired = registry_wake_target_snapshot(workspace, project_id);
             let wake = match &paired {
                 Ok(Some(target))
                     if registered_url == Some(target.url.as_str())
                         && registered_digest == Some(target.sha256.as_str()) =>
                 {
-                    json!({"status":"PAIRED","target":target,"deliveryProved":false})
+                    json!({"status":"PAIRED","target":target,"deliveryProved":false,
+                        "workspaceIdentityVerified":false,"executionAuthorized":false})
                 }
                 Ok(None) if registered_url.is_none() && registered_digest.is_none() => {
                     json!({"status":"UNBOUND","deliveryProved":false})
@@ -6408,13 +6409,21 @@ fn web_project_registry_status_with(
             };
             let mut rollover = rollover_status(workspace, project_id);
             annotate_rollover_current_target(&mut rollover, paired_target);
+            let mut work = crate::web_work_state::WorkLedger::status(workspace, project_id);
+            work["delivery"] = match &wake_progress {
+                Ok((events, deliveries)) => {
+                    web_work_delivery_progress(project_id, &work, paired_target, events, deliveries)
+                }
+                Err(reason) => json!({"status":"UNAVAILABLE","reason":reason,
+                    "requestReplayAllowed":false,"executionAuthorized":false}),
+            };
             Some(json!({
                 "projectId":project_id,
                 "registeredConversationUrl":registered_url,
                 "conversationHistory":history,
                 "wake":wake,
                 "queue":queue,
-                "workIntent":crate::web_work_state::WorkLedger::status(workspace, project_id),
+                "workIntent":work,
                 "context":web_project_context_status(workspace, project_id, paired_target),
                 "rollover":rollover,
             }))
@@ -6428,8 +6437,33 @@ fn web_project_registry_status_with(
         "readOnly":true,
         "deliveryProved":false,
         "installedAcceptance":"UNVERIFIED",
+        "workspaceIdentityVerified":false,
+        "executionAuthorized":false,
         "projects":statuses,
     })
+}
+
+/// Status needs exact persisted registry/Wake agreement, not execution
+/// admission. Reuse the same target/history validator without spawning Git
+/// for every row. All execution and target mutation entry points retain their
+/// separate current-workspace/Git checks.
+fn registry_wake_target_snapshot(
+    workspace: &Path,
+    project: &str,
+) -> Result<Option<ProjectWebTargetV1>, DesignatedChatTargetErrorV1> {
+    if !crate::wake_protocol_client::selected(workspace) {
+        return Err(DesignatedChatTargetErrorV1::Unavailable);
+    }
+    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)
+        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    let wake = catdesk_wake::store::Store::open_read_only(&root)
+        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    wake.with_config_read_only(|config| {
+        Ok(paired_project_target_readback_with_config(
+            workspace, project, config,
+        ))
+    })
+    .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?
 }
 
 fn annotate_rollover_current_target(
@@ -6619,6 +6653,102 @@ fn load_wake_progress_snapshot(
     Ok((events, deliveries))
 }
 
+/// Correlate the active ownership record with its own durable transport record.
+/// This joins existing read-only snapshots; it never admits work or retries.
+fn web_work_delivery_progress(
+    project: &str,
+    work: &Value,
+    paired: Option<&ProjectWebTargetV1>,
+    events: &[catdesk_wake::protocol::Event],
+    deliveries: &[catdesk_wake::store::Delivery],
+) -> Value {
+    use catdesk_wake::{protocol::digest, store::Phase};
+    let unavailable = |reason| {
+        json!({"status":"ATTENTION","reason":reason,
+        "requestReplayAllowed":false,"executionAuthorized":false,"taskCompletionVerified":false})
+    };
+    if !matches!(
+        work["status"].as_str(),
+        Some("UNOBSERVED" | "DURABLE_SNAPSHOT")
+    ) {
+        return unavailable("WORK_INTENT_UNAVAILABLE");
+    }
+    let Some(active) = work.get("active").filter(|value| !value.is_null()) else {
+        return json!({"status":"NO_ACTIVE_REQUEST","requestReplayAllowed":false,
+            "executionAuthorized":false,"taskCompletionVerified":false});
+    };
+    let (Some(id), Some(request), Some(generation), Some(target_digest), Some(message_digest)) = (
+        active["eventId"].as_str(),
+        active["requestId"].as_str(),
+        active["targetGeneration"].as_u64(),
+        active["targetSha256"].as_str(),
+        active["messageSha256"].as_str(),
+    ) else {
+        return unavailable("WORK_INTENT_IDENTITY_INVALID");
+    };
+    if active["phase"] != "OPEN"
+        || id != format!("web-work-{}", digest(&format!("{project}\0{request}")))
+    {
+        return unavailable("WORK_INTENT_IDENTITY_INVALID");
+    }
+    let queued: Vec<_> = events.iter().filter(|event| event.event_id == id).collect();
+    let recorded: Vec<_> = deliveries
+        .iter()
+        .filter(|delivery| delivery.event.event_id == id)
+        .collect();
+    if queued.len() > 1 || recorded.len() > 1 {
+        return unavailable("WORK_DELIVERY_IDENTITY_CONFLICT");
+    }
+    let event_matches = |event: &catdesk_wake::protocol::Event| {
+        event.project_id == project
+            && event.target_generation == generation
+            && matches!(
+                event.event_type.as_str(),
+                "engineering_attention" | "source_review"
+            )
+            && digest(&event.message) == message_digest
+    };
+    if queued.iter().any(|event| !event_matches(event)) {
+        return unavailable("WORK_DELIVERY_IDENTITY_CONFLICT");
+    }
+    let matches_paired = paired.map(|target| {
+        target.project_id == project
+            && target.generation == generation
+            && target.sha256 == target_digest
+    });
+    let mut result = json!({"status":"DURABLE_SNAPSHOT","eventId":id,
+        "matchesPairedTarget":matches_paired,"snapshotAtomic":false,
+        "requestReplayAllowed":false,"executionAuthorized":false,"taskCompletionVerified":false,
+        "receiptObserved":false,"requiresReconciliation":false});
+    if let Some(delivery) = recorded.first() {
+        if !event_matches(&delivery.event)
+            || delivery.target.generation != generation
+            || delivery.target.digest != target_digest
+            || delivery.message_digest != message_digest
+            || queued
+                .first()
+                .is_some_and(|event| **event != delivery.event)
+        {
+            return unavailable("WORK_DELIVERY_IDENTITY_CONFLICT");
+        }
+        result["phase"] = json!(delivery.phase);
+        result["lastActivityUtc"] = json!(delivery.updated_utc);
+        result["receiptObserved"] =
+            json!(delivery.phase == Phase::Sent && delivery.receipt.is_some());
+        result["requiresReconciliation"] = json!(matches!(
+            delivery.phase,
+            Phase::Submitting | Phase::Attention
+        ));
+    } else if let Some(event) = queued.first() {
+        result["phase"] = json!("QUEUED");
+        result["lastActivityUtc"] = json!(event.created_utc);
+    } else {
+        result["status"] = json!("UNOBSERVED");
+        result["phase"] = json!("NO_DURABLE_DELIVERY_OBSERVED");
+    }
+    result
+}
+
 fn wake_project_progress(
     project_id: &str,
     events: &[catdesk_wake::protocol::Event],
@@ -6676,7 +6806,10 @@ fn wake_project_progress(
             event["eventId"]
                 .as_str()
                 .is_some_and(|id| id.starts_with("web-work-"))
-                && event["eventType"] == "engineering_attention"
+                && matches!(
+                    event["eventType"].as_str(),
+                    Some("engineering_attention" | "source_review")
+                )
         })
         .count();
     let work_requests = recent
@@ -6685,7 +6818,10 @@ fn wake_project_progress(
             event["eventId"]
                 .as_str()
                 .is_some_and(|id| id.starts_with("web-work-"))
-                && event["eventType"] == "engineering_attention"
+                && matches!(
+                    event["eventType"].as_str(),
+                    Some("engineering_attention" | "source_review")
+                )
         })
         .take(8)
         .map(|(_, event)| {
@@ -10761,6 +10897,234 @@ mod tests {
     use std::ffi::OsString;
     use uuid::Uuid;
 
+    fn active_delivery_fixture(
+        project: &str,
+    ) -> (Value, ProjectWebTargetV1, catdesk_wake::store::Delivery) {
+        use catdesk_wake::{
+            protocol::{Event, Target, digest},
+            store::{Delivery, Phase},
+        };
+        let target = Target::new(3, format!("https://chatgpt.com/c/{project}-fixture")).unwrap();
+        let event = Event {
+            schema_version: catdesk_wake::PROTOCOL_VERSION,
+            event_id: format!("web-work-{}", digest(&format!("{project}\0request"))),
+            project_id: project.into(),
+            event_type: "source_review".into(),
+            created_utc: 10,
+            message: format!("private {project} source review"),
+            target_generation: 3,
+            audit_references: vec![],
+        };
+        let work = json!({"status":"DURABLE_SNAPSHOT","active":{"requestId":"request",
+            "eventId":event.event_id,"phase":"OPEN","targetGeneration":3,
+            "targetSha256":target.digest,"messageSha256":digest(&event.message)}});
+        let paired = ProjectWebTargetV1 {
+            project_id: project.into(),
+            url: target.url.clone(),
+            sha256: target.digest.clone(),
+            generation: 3,
+            historical_urls: vec![],
+        };
+        let delivery = Delivery {
+            schema_version: catdesk_wake::PROTOCOL_VERSION,
+            message_digest: digest(&event.message),
+            event,
+            target,
+            phase: Phase::Submitting,
+            owner: "fixture-owner".into(),
+            updated_utc: 12,
+            receipt: None,
+            reason: None,
+        };
+        (work, paired, delivery)
+    }
+
+    #[test]
+    fn active_web_work_progress_distinguishes_unknown_without_blocking_siblings() {
+        let (alpha_work, alpha_target, alpha) = active_delivery_fixture("alpha");
+        let (beta_work, beta_target, mut beta) = active_delivery_fixture("beta");
+        beta.phase = catdesk_wake::store::Phase::Claimed;
+        let events = vec![alpha.event.clone(), beta.event.clone()];
+        let deliveries = vec![alpha.clone(), beta.clone()];
+        let a = web_work_delivery_progress(
+            "alpha",
+            &alpha_work,
+            Some(&alpha_target),
+            &events,
+            &deliveries,
+        );
+        let b = web_work_delivery_progress(
+            "beta",
+            &beta_work,
+            Some(&beta_target),
+            &events,
+            &deliveries,
+        );
+        assert_eq!(a["phase"], "SUBMITTING");
+        assert_eq!(a["requiresReconciliation"], true);
+        assert_eq!(b["phase"], "CLAIMED");
+        assert_eq!(b["requiresReconciliation"], false);
+        for status in [&a, &b] {
+            assert_eq!(status["matchesPairedTarget"], true);
+            assert_eq!(status["requestReplayAllowed"], false);
+            assert_eq!(status["executionAuthorized"], false);
+            assert_eq!(status["taskCompletionVerified"], false);
+            assert_eq!(status["snapshotAtomic"], false);
+            assert!(!status.to_string().contains("private"));
+            assert!(!status.to_string().contains("https://"));
+        }
+        assert_eq!(a["eventId"], alpha.event.event_id);
+        assert!(!a.to_string().contains(&beta.event.event_id));
+        assert_eq!(
+            wake_project_progress("alpha", &events, &deliveries)["workRequests"]["recordCount"],
+            1
+        );
+    }
+
+    #[test]
+    fn active_web_work_progress_refuses_identity_conflicts() {
+        let (work, target, original) = active_delivery_fixture("alpha");
+        for change in 0..7 {
+            let mut delivery = original.clone();
+            match change {
+                0 => delivery.event.project_id = "beta".into(),
+                1 => delivery.event.target_generation += 1,
+                2 => delivery.event.event_type = "unrelated".into(),
+                3 => delivery.message_digest = "a".repeat(64),
+                4 => delivery.target.digest = "b".repeat(64),
+                5 => delivery.event.message.push_str(" changed"),
+                _ => delivery.target.generation += 1,
+            }
+            let status =
+                web_work_delivery_progress("alpha", &work, Some(&target), &[], &[delivery]);
+            assert_eq!(status["reason"], "WORK_DELIVERY_IDENTITY_CONFLICT");
+            assert_eq!(status["requestReplayAllowed"], false);
+        }
+        let duplicate = web_work_delivery_progress(
+            "alpha",
+            &work,
+            Some(&target),
+            &[],
+            &[original.clone(), original.clone()],
+        );
+        assert_eq!(duplicate["status"], "ATTENTION");
+        let mut queued = original.event.clone();
+        queued.audit_references.push("different-snapshot".into());
+        assert_eq!(
+            web_work_delivery_progress("alpha", &work, Some(&target), &[queued], &[original])["status"],
+            "ATTENTION"
+        );
+    }
+
+    #[test]
+    fn active_web_work_progress_keeps_missing_and_historical_state_unproved() {
+        let (work, mut target, delivery) = active_delivery_fixture("alpha");
+        target.generation += 1;
+        let queued = web_work_delivery_progress(
+            "alpha",
+            &work,
+            Some(&target),
+            std::slice::from_ref(&delivery.event),
+            &[],
+        );
+        assert_eq!(queued["phase"], "QUEUED");
+        assert_eq!(queued["matchesPairedTarget"], false);
+        assert_eq!(queued["executionAuthorized"], false);
+        let absent = web_work_delivery_progress("alpha", &work, None, &[], &[]);
+        assert_eq!(absent["status"], "UNOBSERVED");
+        assert_eq!(absent["requestReplayAllowed"], false);
+        assert!(absent["matchesPairedTarget"].is_null());
+        let empty = web_work_delivery_progress(
+            "alpha",
+            &json!({"status":"UNOBSERVED","active":null}),
+            None,
+            &[],
+            &[delivery],
+        );
+        assert_eq!(empty["status"], "NO_ACTIVE_REQUEST");
+        assert_eq!(
+            web_work_delivery_progress("alpha", &json!({"status":"ATTENTION"}), None, &[], &[])["status"],
+            "ATTENTION"
+        );
+    }
+
+    #[test]
+    fn active_web_work_progress_receipt_does_not_claim_task_completion() {
+        use catdesk_wake::store::{Phase, Receipt};
+        let (work, target, mut delivery) = active_delivery_fixture("alpha");
+        delivery.phase = Phase::Sent;
+        delivery.receipt = Some(Receipt {
+            schema_version: catdesk_wake::PROTOCOL_VERSION,
+            event_id: delivery.event.event_id.clone(),
+            target_generation: 3,
+            target_digest: delivery.target.digest.clone(),
+            message_digest: delivery.message_digest.clone(),
+            sent_utc: 11,
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        });
+        let status = web_work_delivery_progress("alpha", &work, Some(&target), &[], &[delivery]);
+        assert_eq!(status["receiptObserved"], true);
+        assert_eq!(status["phase"], "SENT");
+        assert_eq!(status["taskCompletionVerified"], false);
+        assert_eq!(status["requestReplayAllowed"], false);
+    }
+
+    #[test]
+    #[ignore = "read-only qualification against the operator's existing five-project control metadata"]
+    fn registry_status_current_control_metadata_read_only() {
+        eprintln!("READONLY_STATUS_PHASE=REGISTRY_START");
+        let root = PathBuf::from(
+            std::env::var_os("CATDESK_READONLY_STATUS_CONTROL")
+                .expect("explicit existing control root"),
+        );
+        let registry =
+            crate::delegated::autonomy_projects::AutonomousProjectRegistryStoreV1::open_read_only(
+                root.join(".catdesk/projects"),
+            )
+            .unwrap()
+            .load_registry()
+            .unwrap();
+        eprintln!("READONLY_STATUS_PHASE=REGISTRY_READ");
+        let report = web_project_registry_status_with(
+            &root,
+            &json!({"projects":registry.projects}),
+            |control, project| {
+                eprintln!("READONLY_STATUS_PHASE=ROLLOVER_ENTER");
+                let value = crate::operator_facade::registry_rollover_status(control, project);
+                eprintln!("READONLY_STATUS_PHASE=ROLLOVER_RETURN");
+                value
+            },
+        );
+        eprintln!("READONLY_STATUS_PHASE=STATUS_READ");
+        assert_eq!(report["readOnly"], true);
+        assert_eq!(report["installedAcceptance"], "UNVERIFIED");
+        let mut facts = Vec::new();
+        for id in ["catdesk", "wake2", "byovd", "bug-bounty", "portfoliodesk"] {
+            let project = report["projects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|project| project["projectId"] == id)
+                .expect("registered project");
+            let delivery = &project["workIntent"]["delivery"];
+            if matches!(id, "catdesk" | "wake2") {
+                assert_eq!(delivery["phase"], "SUBMITTING");
+                assert_eq!(delivery["requiresReconciliation"], true);
+                assert_eq!(delivery["matchesPairedTarget"], true);
+            } else {
+                assert_eq!(delivery["status"], "NO_ACTIVE_REQUEST");
+            }
+            assert_eq!(delivery["executionAuthorized"], false);
+            assert_eq!(delivery["requestReplayAllowed"], false);
+            assert_eq!(delivery["taskCompletionVerified"], false);
+            facts.push(json!({"projectId":id,"activeDeliveryStatus":delivery["status"],
+                "activeDeliveryPhase":delivery["phase"],"requiresReconciliation":delivery["requiresReconciliation"],
+                "workRequestCount":project["queue"]["workRequests"]["recordCount"],
+                "originalDispositionComplete":project["rollover"]["operatorDisposition"]["complete"]}));
+        }
+        println!("READONLY_CURRENT_PROJECT_FACTS={}", json!(facts));
+    }
+
     #[test]
     fn web_project_status_keeps_queue_progress_and_messages_project_scoped() {
         use catdesk_wake::protocol::{Event, digest};
@@ -10832,18 +11196,21 @@ mod tests {
             target_generation: 1,
             audit_references: vec![],
         };
+        let mut review = event("alpha", "web-work-alpha-review", "private review", 13);
+        review.event_type = "source_review".into();
         let events = [
             event("alpha", "web-work-alpha", "private alpha request", 10),
             event("alpha", "ordinary-alpha", "private ordinary event", 11),
             event("beta", "web-work-beta", "private beta request", 12),
+            review,
         ];
         let status = wake_project_progress("alpha", &events, &[]);
-        assert_eq!(status["queuedCount"], 2);
-        assert_eq!(status["workRequests"]["recordCount"], 1);
+        assert_eq!(status["queuedCount"], 3);
+        assert_eq!(status["workRequests"]["recordCount"], 2);
         assert_eq!(status["workRequests"]["status"], "TRANSPORT_ONLY");
         assert_eq!(
             status["workRequests"]["recent"][0]["eventId"],
-            "web-work-alpha"
+            "web-work-alpha-review"
         );
         assert_eq!(status["workRequests"]["recent"][0]["phase"], "QUEUED");
         assert_eq!(
