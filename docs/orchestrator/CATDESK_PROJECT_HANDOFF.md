@@ -1,3 +1,31 @@
+## October 28 C251 — selected development runtime passed live MCP health
+
+The C250 package from exact published source
+`0db2abbb0a8efa4f5b467844a98b2f04fc4171f6` is selected through the existing guarded
+update. Its verified predecessor remains retained. Selection preserved 8,170
+files, including 4,615 native session files, every project binding and the browser
+profile identity. It started neither a browser nor WakeHost.
+
+A six-second selected-development backend returned HTTP 401 without authentication
+and HTTP 200 with a valid 79-tool catalog when authenticated. Actual child identity,
+natural parent/child exit, 8,175 preserved files and the local development
+verification record were verified. This creates no production release authority.
+
+C249's first supported receipt-reconciliation attempt returned
+`SCOPED_RECONCILE_TIMEOUT`. Its outcome remains unknown at `SUBMITTING`; no receipt,
+response, message replay, draft clearing or task resolution occurred. Verification
+preserved 8,177 files, the original grant/submission state and all bindings, with no
+test owners remaining. Repeated unchanged reconciliation is not the next action.
+
+The existing producer authority gate requires a genuine completed, verified and
+acknowledged review and source snapshot; it does not require a particular Web
+provider. The installed Codex CLI supports non-interactive review and its read-only
+authentication check passed. No native review or new release authority is claimed.
+Next: use the existing qualified independent-review workflow for current source,
+preserving the uncertain Web request, before producer/promotion gates. Production
+C208, Secure MCP ownership and recurring automation remain unchanged. Two actual
+independent Web coding conversations and production acceptance remain open.
+See the C251 verification record for the sanitized evidence.
 ## October 28 C250 — native text entry qualified locally
 
 Established-conversation messages now reuse the existing native editor transaction

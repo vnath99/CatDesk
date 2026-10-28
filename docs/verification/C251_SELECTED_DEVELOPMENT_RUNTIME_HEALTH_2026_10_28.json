@@ -1,0 +1,68 @@
+{
+  "classification": "SELECTED_DEVELOPMENT_RUNTIME_LIVE_HEALTH_QUALIFIED",
+  "twoIndependentWebCodingAcceptance": "OPEN",
+  "nextReviewLane": {
+    "authorityRequiresSpecificWebProvider": false,
+    "nativeCliReadOnlyAuthCheck": "PASS",
+    "required": "Genuine COMPLETED_VERIFIED acknowledged review; task-attributable output and source snapshot",
+    "nativeReviewExecuted": false,
+    "newReleaseAuthorityEstablished": false
+  },
+  "recurringAutomationEnabled": false,
+  "reconciliation": {
+    "errorCode": "SCOPED_RECONCILE_TIMEOUT",
+    "commandOwnerTimedOut": false,
+    "protectedFilesVerified": 8177,
+    "responseCompletionVerified": false,
+    "resultSha256": "86f1338c0d7ae7c1ce233d0ffd7aa330360c4d20275d6cf4a81db9678a4623bc",
+    "ownersRemaining": 0,
+    "ledgerGrantAndBindingsPreserved": true,
+    "workResolved": false,
+    "deliveryPhase": "SUBMITTING",
+    "outcome": "UNKNOWN_SUBMISSION_PRESERVED",
+    "messagesSent": 0,
+    "nativeCommandExited": 2,
+    "exactReceiptVerified": false,
+    "scope": "FIRST_C249_NO_SEND_RECEIPT_RECONCILIATION",
+    "retryAllowed": false,
+    "originalSubmissionStatePreserved": true,
+    "draftWriteAttempted": false,
+    "exactDraftContentReverified": false
+  },
+  "productionPromotion": false,
+  "sourceRemoteShaVerified": true,
+  "selectedDevelopmentPackage": {
+    "selectedWithoutBrowserOrWakeHostStart": true,
+    "packageId": "1.0.0-dev.85-752e066a2b7f8c33d99040a55061751ef87c6719916a722a3e7e907ae4f7995f",
+    "protectedFilesVerified": 8170,
+    "nativeSessionFilesVerified": 4615,
+    "previousVerifiedVersionPreserved": true,
+    "appSha256": "b2713ebb192d8a4d3f1a1fa2b23d9a2d604ee950699b8c2f0f1d44585ad64d03",
+    "selectionResultSha256": "0e5ca90cadd09f63d44c1b331298d7f97d3d03d926716db2550c8fa8bc388802",
+    "profileIdentityPreserved": true
+  },
+  "liveDevelopmentHealth": {
+    "naturalParentAndChildExit": true,
+    "uniqueTools": 79,
+    "maximumBackendSeconds": 6,
+    "authenticatedToolCatalogVerified": true,
+    "unauthenticatedRejected": true,
+    "productionAuthorityCreated": false,
+    "actualSelectedChildVerified": true,
+    "protectedFilesVerified": 8175,
+    "resultSha256": "3eceb5078f2c52f0779da34d61a2273f29c22eead982b74ff92c2032e4f779d5",
+    "verificationRecorded": true,
+    "httpStatuses": [
+      401,
+      200
+    ],
+    "evidenceAuthority": "LOCAL_OPERATOR_PROVIDED"
+  },
+  "installedProductionC208": "PRESERVED",
+  "sourceCommit": "0db2abbb0a8efa4f5b467844a98b2f04fc4171f6",
+  "milestoneComplete": false,
+  "checkpoint": "C251",
+  "secureMcpConnector": "LAST_HTTP_429_NOT_RECHECKED_NO_PRODUCTION_RECOVERY_YET",
+  "branch": "codex/web-rollover-oct17",
+  "date": "2026-10-28"
+}
