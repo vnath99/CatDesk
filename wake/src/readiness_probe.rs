@@ -83,6 +83,11 @@ pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<Strin
             matches!(
                 state,
                 "EXACT_READY_IDLE"
+                    | "TARGET_TAB_EXACT"
+                    | "TARGET_TAB_MISSING"
+                    | "TARGET_TAB_AMBIGUOUS"
+                    | "TARGET_TAB_DRIFT"
+                    | "TARGET_TAB_UNAVAILABLE"
                     | "EXACT_READY_BUSY"
                     | "EXACT_NO_EDITOR"
                     | "LOGIN_VISIBLE"

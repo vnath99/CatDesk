@@ -109,6 +109,10 @@ mod tests {
                 .unwrap();
         }
         println!("PROBE:arbitrary-private-content");
+        println!("PROBE:TARGET_TAB_EXACT private-content-must-be-filtered");
+        for state in ["EXACT", "MISSING", "AMBIGUOUS", "DRIFT", "UNAVAILABLE"] {
+            println!("PROBE:TARGET_TAB_{state}");
+        }
         println!("PROBE:EXACT_READY_IDLE");
         println!("PROBE:FINAL:EXACT_READY_IDLE");
     }
@@ -126,7 +130,15 @@ mod tests {
         let rows = run_bounded(&mut fixture_command("success"), Duration::from_secs(5)).unwrap();
         assert_eq!(
             rows,
-            ["PROBE:EXACT_READY_IDLE", "PROBE:FINAL:EXACT_READY_IDLE"]
+            [
+                "PROBE:TARGET_TAB_EXACT",
+                "PROBE:TARGET_TAB_MISSING",
+                "PROBE:TARGET_TAB_AMBIGUOUS",
+                "PROBE:TARGET_TAB_DRIFT",
+                "PROBE:TARGET_TAB_UNAVAILABLE",
+                "PROBE:EXACT_READY_IDLE",
+                "PROBE:FINAL:EXACT_READY_IDLE"
+            ]
         );
     }
 

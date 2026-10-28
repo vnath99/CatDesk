@@ -16,18 +16,51 @@ def visible(cdp, selector):
     try: return bool(cdp.is_element_visible(selector))
     except Exception: return False
 
+def exact_url(current, expected):
+    try:
+        actual, target = urlparse(current), urlparse(expected)
+        return (actual.scheme == "https" and actual.hostname == target.hostname
+                and actual.username is None and actual.password is None and actual.port is None
+                and actual.path.rstrip("/") == target.path.rstrip("/")
+                and not actual.query and not actual.fragment)
+    except Exception:
+        return False
+
+def select_registered_target_tab(cdp, url):
+    """CDP's controlled tab may differ from the human-visible tab after login.
+
+    Select only a unique returned tab whose target metadata AND document URL
+    match the registered destination. Do not navigate, close tabs, read draft
+    contents, or export any other tab's URL. Uncertainty never permits selection.
+    """
+    try:
+        tabs = cdp.get_tabs()
+        if not isinstance(tabs, (list, tuple)) or len(tabs) > 32:
+            return "TARGET_TAB_UNAVAILABLE"
+        matches = [tab for tab in tabs if exact_url(str(tab.target.url), url)]
+        if not matches:
+            return "TARGET_TAB_MISSING"
+        if len(matches) != 1:
+            return "TARGET_TAB_AMBIGUOUS"
+        tab = matches[0]
+        if not exact_url(str(cdp.loop.run_until_complete(tab.get_current_url())), url):
+            return "TARGET_TAB_DRIFT"
+        cdp.switch_to_tab(tab)
+        return "TARGET_TAB_EXACT" if exact_url(str(cdp.get_current_url()), url) else "TARGET_TAB_DRIFT"
+    except Exception:
+        return "TARGET_TAB_UNAVAILABLE"
+
 def classify(cdp, url):
     try: current = str(cdp.get_current_url())
     except Exception: return "URL_UNAVAILABLE"
     try:
         p = urlparse(current)
-        expected = urlparse(url)
     except Exception:
         return "URL_INVALID"
     if current.startswith("chrome-error://"): return "CHROME_ERROR"
     if p.path.startswith("/auth/") or any(visible(cdp, s) for s in LOGIN): return "LOGIN_VISIBLE"
     if any(visible(cdp, s) for s in CAPTCHA): return "CAPTCHA_VISIBLE"
-    exact = p.scheme == "https" and p.hostname == expected.hostname and p.path.rstrip("/") == expected.path.rstrip("/") and not p.query and not p.fragment
+    exact = exact_url(current, url)
     if exact and visible(cdp, EDITOR):
         return "EXACT_READY_BUSY" if any(visible(cdp, s) for s in STOP) else "EXACT_READY_IDLE"
     if exact: return "EXACT_NO_EDITOR"
@@ -86,6 +119,8 @@ def main():
     with SB(uc=True, user_data_dir=str(profile)) as sb:
         sb.activate_cdp_mode(url)
         cdp = sb.cdp
+        if args.profile is not None:
+            print("PROBE:" + select_registered_target_tab(cdp, url), flush=True)
         last = None
         deadline = time.monotonic() + args.seconds
         recover_after = time.monotonic() + min(5.0, args.seconds / 2)

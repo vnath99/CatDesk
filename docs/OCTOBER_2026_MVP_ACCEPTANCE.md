@@ -1,25 +1,50 @@
-## October 28 — operator sign-in, execution policy and bounded Home recovery
+## October 28 — attested reviewed-source candidate; promotion failure preserved
 
-The operator reported signing in to the existing isolated profile. The owned login
-browser closed. A fresh read-only check from 19:34:45 to 19:36:13 UTC still observed
-`HOME`; it did not establish exact-target readiness or failed authentication. All
-8,471 protected files, two metadata-only records and profile identity were
-preserved. No message, backend, scheduler or production operation occurred; no test
-owners remained. C259 was never submitted and expired at 17:53:03 UTC. It must not
-be resumed using that expired authority.
+The exact acknowledged C254 snapshot at
+`e4a99a8b6913c3db689a216f4ae4e0a7f6fff612` completed a supported producer retry
+using the qualified helper correction in controller
+`28af7fe8a8aa5dc066df0de0263b34d52fab85d7`. Native RESULT independently validated
+`BUILD_ATTESTED`; all observed producer processes exited. The 37,000,704-byte
+candidate has SHA-256
+`608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf`.
+No new Web review or review authority was manufactured. Later development changes
+are outside this candidate's accepted source scope.
 
-The inspector now permits one same-tab exact-target navigation from a positively
-empty, idle Home composer, within its existing bounded owner. Unknown/nonempty
-composers, attachments, login/security states and route drift prevent navigation.
-This reuses the established bridge recovery approach; production probe behavior
-is unchanged. Six focused Python tests passed. A new standalone native build and
-bounded live check remain separate acceptance steps.
+The candidate passed actual backend-only capability, 401 for missing/wrong
+credentials, authenticated 200 initialization/tool listing, its exact ten-tool
+read-only catalog, natural exit and cleanup. Guarded production PREFLIGHT accepted
+the exact authority. CONFIRM returned `PROMOTION_FAILED_OR_AMBIGUOUS`. It was not
+retried. Reconciliation preserved the failed claim and all history, proved no disk
+promotion transaction, no remaining owners/listener, and the original installed
+C208 executable/fingerprint still matching
+`91eea19e6e030e80900d43114f800c3642f5cc063ef2c969b83eb20d2c28d14b`.
+Only the expected promotion-control records changed; 8,484 protected pins now
+capture that reconciled state. The attested candidate remains retained.
 
-[OPERATOR_ACTIONS.md](../OPERATOR_ACTIONS.md) records the October 28–31 standing
-policy, individual task states and operator prerequisites. Routine work continues
-within existing permissions; no expired grant or ambiguous request is replayed.
-Production promotion, connector recovery and real two-project Web coding remain
-open. No operator decision is currently requested.
+Supported read-only `-ValidatePhase1 -BackendOnly` returned
+`OPERATOR_ATTENTION_PHASE1`. A historical handoff receipt for a different image
+cannot establish current candidate/process continuity. Do not delete that receipt,
+clear the claimed attempt, rerun CONFIRM or copy the candidate into production.
+Installed startup, rollback and connector testing remain pending restoration.
+The connector was not rechecked against an unchanged stopped backend.
+
+The expired, never-submitted C259 event was safely archived/retired and its native
+claim cancelled, preserving history and quota. The operator confirms BYOVD history
+loaded after sign-in; automation's `HOME` observation is not proof of failed login.
+The development inspector now selects only a unique returned CDP tab whose target
+metadata and independently read document URL both match the registered target,
+then checks the selected document again. It does not type, navigate or close tabs
+while selecting. Ambiguity, drift and unavailable inventory fail closed. Existing
+bounded empty-Home recovery and all production probe controls remain intact.
+Eleven Python tests and four actual-Windows probe tests passed; Wake formatting and
+strict Clippy passed. Live qualification of tab selection is still pending.
+
+For unchanged valid acknowledged snapshots, the supported
+`operator reviewed-build prepare --review-record-id <record>` / `confirm` / `result`
+chain can retry an audited terminal producer failure without another Web message.
+This does not make failed production promotion replayable or authorize later source.
+See the C254/C262 verification records and `OPERATOR_ACTIONS.md`. Genuine two-project
+ChatGPT Web coding and full October MVP acceptance remain open.
 ## October 28 C262 — bounded inspection of the existing development browser
 
 Source adds `operator web-dev-runtime inspect-readiness --project-id <project>`.

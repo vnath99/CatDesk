@@ -1,4 +1,5 @@
 import contextlib
+import asyncio
 import importlib.util
 import io
 import os
@@ -69,7 +70,7 @@ class ReadinessProbeTests(unittest.TestCase):
                     contextlib.redirect_stdout(output):
                 self.assertEqual(self.probe.main(), 0)
             self.assertEqual(calls, [{"uc": True, "user_data_dir": profile}, target, "closed"])
-            self.assertEqual(output.getvalue(), "PROBE:FINAL:EXACT_READY_IDLE\n")
+            self.assertEqual(output.getvalue(), "PROBE:TARGET_TAB_UNAVAILABLE\nPROBE:FINAL:EXACT_READY_IDLE\n")
         self.assertEqual(self.probe.PROFILE, default)
 
     def test_home_recovery_requires_verified_empty_composer(self):
@@ -129,6 +130,65 @@ class ReadinessProbeTests(unittest.TestCase):
                 self.assertEqual(self.probe.main(), 0)
         cdp.get.assert_called_once_with(target)
         self.assertEqual(clock[0], 5)
+
+    def target_tabs(self, metadata_urls, document_urls, selected_url=None):
+        tabs = []
+        for metadata, document in zip(metadata_urls, document_urls):
+            async def read_url(value=document):
+                return value
+            tabs.append(types.SimpleNamespace(target=types.SimpleNamespace(url=metadata),
+                                             get_current_url=read_url))
+        cdp = mock.Mock()
+        cdp.get_tabs.return_value = tabs
+        cdp.get_current_url.return_value = selected_url
+        cdp.loop = asyncio.new_event_loop()
+        self.addCleanup(cdp.loop.close)
+        return cdp, tabs
+
+    def test_unique_tab_requires_independent_metadata_and_document_agreement(self):
+        target = "https://chatgpt.com/c/readiness-fixture"
+        home = "https://chatgpt.com/"
+        cdp, tabs = self.target_tabs([home, target], [home, target], target)
+        self.assertEqual(self.probe.select_registered_target_tab(cdp, target), "TARGET_TAB_EXACT")
+        cdp.switch_to_tab.assert_called_once_with(tabs[1])
+        cdp.get.assert_not_called()
+
+    def test_missing_or_ambiguous_target_does_not_select_a_tab(self):
+        target = "https://chatgpt.com/c/readiness-fixture"
+        for urls, expected in [(["https://chatgpt.com/"], "TARGET_TAB_MISSING"),
+                               ([target, target], "TARGET_TAB_AMBIGUOUS")]:
+            cdp, _ = self.target_tabs(urls, urls)
+            self.assertEqual(self.probe.select_registered_target_tab(cdp, target), expected)
+            cdp.switch_to_tab.assert_not_called()
+
+    def test_stale_metadata_and_changed_selected_document_fail_closed(self):
+        target = "https://chatgpt.com/c/readiness-fixture"
+        home = "https://chatgpt.com/"
+        cdp, _ = self.target_tabs([target], [home], target)
+        self.assertEqual(self.probe.select_registered_target_tab(cdp, target), "TARGET_TAB_DRIFT")
+        cdp.switch_to_tab.assert_not_called()
+        cdp, _ = self.target_tabs([target], [target], home)
+        self.assertEqual(self.probe.select_registered_target_tab(cdp, target), "TARGET_TAB_DRIFT")
+
+    def test_unavailable_or_excessive_tab_inventory_never_selects(self):
+        target = "https://chatgpt.com/c/readiness-fixture"
+        cdp = mock.Mock()
+        for inventory in [None, [], [None] * 33]:
+            cdp.get_tabs.return_value = inventory
+            expected = "TARGET_TAB_MISSING" if inventory == [] else "TARGET_TAB_UNAVAILABLE"
+            self.assertEqual(self.probe.select_registered_target_tab(cdp, target), expected)
+        cdp.get_tabs.side_effect = RuntimeError("unavailable")
+        self.assertEqual(self.probe.select_registered_target_tab(cdp, target), "TARGET_TAB_UNAVAILABLE")
+        cdp.switch_to_tab.assert_not_called()
+
+    def test_target_comparison_refuses_credentials_ports_and_other_projects(self):
+        target = "https://chatgpt.com/c/readiness-fixture"
+        for current in ["http://chatgpt.com/c/readiness-fixture", target + "?query=1",
+                        target + "#fragment", "https://user@chatgpt.com/c/readiness-fixture",
+                        "https://chatgpt.com:443/c/readiness-fixture",
+                        "https://other.example/c/readiness-fixture",
+                        "https://chatgpt.com/c/other"]:
+            self.assertFalse(self.probe.exact_url(current, target))
 
 
 if __name__ == "__main__":

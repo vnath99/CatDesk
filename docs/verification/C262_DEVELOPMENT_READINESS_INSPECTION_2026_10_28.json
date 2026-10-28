@@ -62,15 +62,31 @@
     "metadataOnlyPreserved": 2
   },
   "homeRecoveryCorrection": {
-    "nativeLiveResult": "PENDING",
+    "nativeLiveResult": "COMPLETED_HOME_TARGET_UNVERIFIED",
     "sourceTestsPassed": 6,
-    "scope": "Development profile only; one same-tab exact-target navigation after positive empty idle Home composer check; existing total deadline and Job owner retained; no draft contents exported"
+    "scope": "Development profile only; one same-tab exact-target navigation after positive empty idle Home composer check; existing total deadline and Job owner retained; no draft contents exported",
+    "sourceCommit": "102681bbc355bcb5cf4554b3146e05de6f05f2bf",
+    "resultSha256": "1ad1faf855d07be20957f05d9cd6002ef89c19f4ca1e213254e5bcdbf6c41203",
+    "statePreserved": true,
+    "testOwnedProcessesRemaining": 0
   },
   "expiredC259": {
     "renewed": false,
     "expiresUtc": "2026-10-28T17:53:03Z",
     "replayAllowed": false,
     "submitted": false,
-    "state": "CLAIMED_PRESERVED_EXPIRED"
+    "state": "CLOSED_RETIRED_NATIVE_CANCELLED_INACTIVE_VERSION_5",
+    "historyPreserved": true,
+    "eventArchived": true,
+    "releaseAuthorityCreated": false
+  },
+  "computerUseInspection": "STOPPED_BY_URL_CONFIDENCE_POLICY_NO_UI_INPUT",
+  "finalCleanup": {
+    "protectedPinsPreserved": 8471,
+    "testOwnedProcessesRemaining": 0,
+    "loginOwnerMarkerPresent": false,
+    "atUtc": "2026-10-28T19:49:39.2785695+00:00",
+    "productionActions": 0,
+    "messagesSent": 0
   }
 }

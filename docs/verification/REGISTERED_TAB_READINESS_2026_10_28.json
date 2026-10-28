@@ -1,0 +1,33 @@
+{
+  "liveSelection": "PENDING",
+  "sourceQualificationSha256": "3a74ed44ef9496febd6145073280574545a060024e061e4bd7ee2e49710f4f4e",
+  "milestoneComplete": false,
+  "qualification": {
+    "fixedDiagnosticOutputFiltering": "PASS",
+    "nativeTimeoutAndHeldPipeCleanup": "PASS",
+    "wakeStrictClippy": "PASS_ALL_TARGETS_TEST_SUPPORT",
+    "wakeFormat": "PASS",
+    "pythonPassed": 11,
+    "failed": 0,
+    "nativeWindowsPassed": 4
+  },
+  "priorAutomationState": "HOME",
+  "date": "2026-10-28",
+  "operatorEvidence": "BYOVD conversation history loaded after manual sign-in; this does not substitute for exact machine URL verification",
+  "productionActions": 0,
+  "classification": "SOURCE_AND_NATIVE_FIXTURES_QUALIFIED_LIVE_PENDING",
+  "sourceParentCommit": "102681bbc355bcb5cf4554b3146e05de6f05f2bf",
+  "selection": {
+    "authenticationAuthorityCreated": false,
+    "typing": false,
+    "metadataAndDocumentUrlAgreement": true,
+    "productionProbeChanged": false,
+    "maximumTabs": 32,
+    "navigationDuringSelection": false,
+    "otherTabUrlsExported": false,
+    "selectedDocumentRechecked": true,
+    "uniqueReturnedTargetRequired": true,
+    "tabClosing": false
+  },
+  "purpose": "Resolve human-visible conversation versus controlled CDP tab discrepancy without wrong-chat selection"
+}
