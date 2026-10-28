@@ -10,7 +10,7 @@
   "date": "2026-10-28",
   "command": "operator web review retry-pre-submit --project-id <project> --input-file <frozen-review.json>",
   "classification": "SOURCE_QUALIFIED_SCOPED_PRE_SUBMIT_RETRY_NOT_DEPLOYED",
-  "sourceCi": "UNVERIFIED",
+  "sourceCi": "UNVERIFIED_ZERO_CHECK_RUNS",
   "behavior": {
     "productionAction": "NONE",
     "newEvent": false,
@@ -42,5 +42,24 @@
     "redStartWitnessRegression": true
   },
   "liveC259Request": "PRESERVED_ATTENTION_NOT_RETRIED",
-  "standaloneNativeQualification": "PENDING"
+  "standaloneNativeQualification": "LIVE_LOCAL_NEGATIVE_PASS_NOT_PRODUCTION",
+  "sourceCommit": "5964217a250a6e6c39880c05092766029a73b33a",
+  "standaloneController": {
+    "observedUtc": "2026-10-28T12:37:25.1409461+00:00",
+    "actualC259Retry": false,
+    "nativeSessionsPreserved": true,
+    "allFiveBindingsPreserved": true,
+    "protectedFiles": 8471,
+    "changedMaterialPayload": "REFUSED_WEB_REVIEW_GRANT_SCOPE_CHANGED",
+    "nativeWindowsProcess": true,
+    "metadataOnlyPreserved": 2,
+    "ownersRemaining": 0,
+    "frozenReviewPacketPreserved": true,
+    "sourceCommit": "5964217a250a6e6c39880c05092766029a73b33a",
+    "productionActions": 0,
+    "selectedRuntimeChanged": false,
+    "browserActions": 0,
+    "appSha256": "b15fe719b1cf74336238d4aaaf45f074655a254503437bdc257eb139fe060a2f",
+    "submissionAttempts": 0
+  }
 }

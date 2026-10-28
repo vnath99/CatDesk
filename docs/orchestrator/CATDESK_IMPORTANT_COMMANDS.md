@@ -18,10 +18,15 @@ bytes; another blocked project stays unchanged while the eligible project prepar
 These are source/isolated controls, not actual Web or installed production proof.
 
 C259's frozen request, reservation, native claim and `ATTENTION` journal remain
-untouched. No authentication/profile change or replay occurred. Next: qualify the
-standalone development controller without selecting a package, and test rejection
-of a changed review identity. After operator browser inspection and actual readiness
-recovery, revalidate the original request before any explicit retry preparation
+untouched. No authentication/profile change or replay occurred. Standalone source
+`5964217a250a6e6c39880c05092766029a73b33a` was built separately and its real Windows
+process rejected a deliberately changed material payload with
+`WEB_REVIEW_GRANT_SCOPE_CHANGED`. All 8,471 protected files, two metadata-only files,
+five bindings, native sessions and the frozen request were preserved. No browser
+opened, no message was submitted, no package was selected and zero test owners
+remain. This is actual local rejection evidence, not installed/Web acceptance.
+After operator browser inspection and actual readiness recovery, revalidate the
+original request before any explicit retry preparation
 and bounded resume. Production still needs genuine review and producer authority;
 connector, installed rollback and two independent Web coding acceptance remain open.
 
