@@ -1,3 +1,34 @@
+## October 28 — installed source qualified; handoff status defect reproduced
+
+The trusted C208 image passed bounded installed headless startup: unauthorized
+401, authenticated initialize/list 200, exact ten-tool read-only catalog and whole
+owned-Job exit. The first failed attempt and superseded historical handoff were
+then retired by the supported native transition, preserving all seven original
+files byte-for-byte and recording durable completion. No executable changed.
+
+A fresh existing promotion preflight passed but confirmation stopped before a
+disk swap, leaving a new local-backend `INTENT_RECORDED` receipt. The installed
+C208 executable/fingerprint remain intact. Read-only reconciliation verified all
+8,485 prior pins, six new failure/intent files, two metadata records and zero
+owners/listeners; no disk transaction exists. No blind retry occurred.
+
+Actual Windows PowerShell tests reproduced a false-failure check: the promoter
+used unset/stale native LASTEXITCODE after a successful PowerShell-script call.
+Source fix `958e8d73903d9661051d992ee47e948efadea6f0` captures the script's own
+status inside the array expression. Both engine matrices and the existing suite
+pass. Recovery now admits five mandatory records with optional attestation copy
+and an exact expired, quiescent pre-swap local intent. It preserves UTF-8 BOM/raw
+bytes and refuses unknown, completed or foreign receipts. Fourteen Rust checks,
+14 worker-classifier cases, formatting and strict Clippy passed. This does not
+clear Web rollover quarantine or create new source/build/LKG approval.
+
+Next: qualify the updated controller against that same preserved intent, complete
+reviewed retirement, integrate the exact tested helper correction and use fresh
+normal promotion authority for the unchanged attested C254 candidate. Production
+startup, rollback, connector and independent two-project Web coding remain open.
+No operator action or repeated sign-in is currently requested. See
+`docs/verification/PROMOTION_HANDOFF_STATUS_AND_INTENT_RECOVERY_2026_10_28.json`.
+
 ## October 28 — bounded promotion source bridge qualified in source
 
 The native reviewed-promotion worker now reuses the existing installed-foreground

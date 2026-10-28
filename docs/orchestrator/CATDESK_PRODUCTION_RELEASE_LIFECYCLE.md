@@ -1,3 +1,36 @@
+## Failed local-backend intent compatibility — October 28
+
+`inspect-failed-promotion` / `retire-failed-promotion` retain their existing exact
+transaction/digest contract. Native records are the five mandatory files:
+preflight, authorization, claim, terminal result and worker-owner. The copied
+reviewed-build attestation is optional and never substitutes for independent
+producer validation. Unknown files or missing mandatory authority refuse recovery.
+
+A schema-4 `INTENT_RECORDED` receipt is eligible only for the exact expired,
+failed local-backend attempt, matching workspace/candidate/hash/port/profile and
+a creation time bound to its authorization window. No authenticated completion is
+inferred. Both release images, the native worker and fixed PowerShell file workers
+must be quiescent; the original PID must be gone or provably reused. The canonical
+pair must still be the independently trusted prior release, with no disk-swap
+transaction. Completed, foreign, malformed or otherwise unknown receipts remain
+quarantined for their original recovery. An intent alone is never a new approval.
+
+Windows PowerShell's single UTF-8 BOM is accepted for receipt decoding; the raw
+bytes and hash are preserved in the existing archive/journal transaction. Prior
+completed retirement receipts remain durable when another retirement is admitted.
+Only shared release mutation is leased; other project work is independent.
+The fixed file-worker classifier recognizes actual `-File` invocations rather
+than treating source text in a read-only `-Command` diagnostic as a live worker.
+
+The promoter's status correction uses the PowerShell call's own status captured
+inside the array expression. It never resets a native exit code to fake success.
+Empty/throwing/nonzero-exit launches still refuse; exact authenticated receipt and
+listener/handoff checks remain mandatory. Qualify and integrate the exact reviewed
+helper bytes before a new preflight; retain the same genuine C254 candidate and
+its original source/build authority. No new production candidate is needed for
+this maintainer-script correction. Source status fix is public; canonical helper
+integration and the second failed-intent retirement are not yet executed.
+
 ## Bounded promotion source-listener bridge (source qualification October 28)
 
 The reviewed-promotion worker has a narrow local-backend-only branch for a stopped,

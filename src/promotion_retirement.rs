@@ -49,6 +49,25 @@ struct Journal {
     plan: Plan,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BackendOnlyIntent {
+    schema_version: u8,
+    status: String,
+    created_at_utc: String,
+    old_pid: u32,
+    old_listener_ports: Vec<u16>,
+    mcp_port: u16,
+    old_owns_configured_port: bool,
+    workspace_path: String,
+    build_path: String,
+    build_sha256: String,
+    startup_delay_seconds: u64,
+    recovery: String,
+    profile: String,
+    mcp_authenticated: bool,
+}
+
 fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
@@ -66,6 +85,12 @@ fn valid_digest(value: &str) -> bool {
         && value
             .bytes()
             .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase())
+}
+fn receipt_json(raw: &[u8]) -> Result<serde_json::Value, String> {
+    // Windows PowerShell 5 writes UTF-8 BOM by default. Decode that one
+    // known marker; hashes and native archive renames retain the original bytes.
+    serde_json::from_slice(raw.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(raw))
+        .map_err(|_| "retirement receipt invalid".into())
 }
 fn archive_name(id: &str) -> Result<String, String> {
     if !valid_id(id) {
@@ -157,15 +182,22 @@ fn record_hashes(control: &Guard) -> Result<BTreeMap<String, String>, String> {
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| format!("{LABEL} inventory unavailable"))?;
     names.sort();
-    if names != RECORDS {
+    // Older native workers keep five core records. A copied attestation is
+    // optional; producer authority is independently revalidated below.
+    if names.iter().any(|name| !RECORDS.contains(&name.as_str()))
+        || RECORDS
+            .iter()
+            .filter(|name| **name != "reviewed-build-attestation.json")
+            .any(|name| !names.iter().any(|actual| actual == name))
+    {
         return Err(format!("{LABEL} unexpected control records"));
     }
-    RECORDS
+    names
         .into_iter()
         .map(|name| {
             Ok((
-                name.into(),
-                digest(&read_relative_regular(control, name, 16384, LABEL)?),
+                name.clone(),
+                digest(&read_relative_regular(control, &name, 16384, LABEL)?),
             ))
         })
         .collect()
@@ -214,6 +246,14 @@ pub(crate) fn ensure_ready(_workspace: &Path) -> Result<(), String> {
 #[cfg(windows)]
 const INSPECTION: &str = r#"
 $ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; [Console]::InputEncoding=[Text.UTF8Encoding]::new($false)
+function Test-CatDeskReleaseWorkerCommandLine([string]$Line,[string]$Root){
+ $prefix='(?i)^\s*(?:"[^"]+"|[^\s"]+)\s+(?:(?:-NoLogo|-NoProfile|-NonInteractive|-ExecutionPolicy\s+(?:Bypass|RemoteSigned|AllSigned|Default))\s+)*-File\s+'
+ foreach($name in @('restart_catdesk_daemon_worker.ps1','promote-reviewed-catdesk-build.ps1')){
+  $file=[regex]::Escape((Join-Path (Join-Path $Root 'scripts') $name))
+  if($Line -match ($prefix+'(?:"'+$file+'"|'+$file+')(?=\s|$)')){return $true}
+ }
+ return $false
+}
 try {
  $i=[Console]::In.ReadToEnd()|ConvertFrom-Json
  . (Join-Path $i.workspace 'scripts/catdesk-release-recovery.ps1')
@@ -238,9 +278,19 @@ try {
    if(!$i.ownedWorkerPid -or $p.ProcessId -ne $i.ownedWorkerPid -or $image -ine [IO.Path]::GetFullPath($i.ownedWorkerImage)){throw 'live promotion worker'}
   }
  }
+ foreach($p in @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe' OR Name='pwsh.exe'" -OperationTimeoutSec 5 -ErrorAction Stop)){
+  if($p.CommandLine -and (Test-CatDeskReleaseWorkerCommandLine $p.CommandLine $i.workspace)){throw 'live release helper'}
+ }
+ $historyUnix=$i.historicalCompletedUnix; $intentCreated=$null
+ if($i.intentCreatedAtUtc){
+  if($i.intentCreatedAtUtc -cnotmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{7}Z$'){throw 'intent time'}
+  $intentCreated=([DateTimeOffset]::Parse($i.intentCreatedAtUtc,[Globalization.CultureInfo]::InvariantCulture)).ToUnixTimeSeconds()
+  if($intentCreated -lt ([long]$i.authorizationGeneration-30) -or $intentCreated -gt ([long]$i.authorizationExpires+30)){throw 'intent window'}
+  $historyUnix=$intentCreated
+ }
  foreach($pidValue in $i.historicalPids){
   $p=Get-Process -Id $pidValue -ErrorAction SilentlyContinue
-  if($p -and $p.StartTime.ToUniversalTime() -le ([DateTimeOffset]::FromUnixTimeSeconds($i.historicalCompletedUnix).UtcDateTime.AddSeconds(2))){throw 'historical owner'}
+  if($p -and $p.StartTime.ToUniversalTime() -le ([DateTimeOffset]::FromUnixTimeSeconds($historyUnix).UtcDateTime.AddSeconds(2))){throw 'historical owner'}
  }
  $original=$null; $qualified=$null
  if($i.historicalPids.Count){
@@ -249,7 +299,9 @@ try {
   $q=ConvertFrom-CatDeskLiteralJson ([IO.File]::ReadAllText((Join-Path $i.workspace '.catdesk/release-pair-control/qualification.json')))
   $original=$authority.authorization.originalBinarySha256; $qualified=$q.qualifiedAtUnix
  }
- @{canonicalSha256=$pair.Hash;slot=$trusted.Slot;generation=$trusted.Generation;metadataSha256=Get-CatDeskRecoverySha256 $trusted.Metadata;originalSha256=$original;qualifiedUnix=$qualified;ownersEmpty=$true}|ConvertTo-Json -Compress
+ $proof=@{canonicalSha256=$pair.Hash;slot=$trusted.Slot;generation=$trusted.Generation;metadataSha256=Get-CatDeskRecoverySha256 $trusted.Metadata;originalSha256=$original;qualifiedUnix=$qualified;ownersEmpty=$true}
+ if($null -ne $intentCreated){$proof.intentCreatedUnix=$intentCreated}
+ $proof|ConvertTo-Json -Compress
 } catch { [Console]::Error.Write('PROMOTION_RETIREMENT_INSPECTION_REFUSED'); exit 2 }
 "#;
 
@@ -260,7 +312,7 @@ fn inspect_owners(
     handoff: Option<&ReloadHandoffStateV1>,
     helper_hash: &str,
 ) -> Result<serde_json::Value, String> {
-    inspect_owners_context(workspace, auth, handoff, helper_hash, false, None)
+    inspect_owners_context(workspace, auth, handoff, helper_hash, false, None, None)
 }
 
 fn inspect_owners_context(
@@ -270,6 +322,7 @@ fn inspect_owners_context(
     helper_hash: &str,
     owned_worker: bool,
     bridge_pid: Option<u32>,
+    intent: Option<&BackendOnlyIntent>,
 ) -> Result<serde_json::Value, String> {
     use crate::reviewed_candidate_owner::OwnedCandidateChild;
     let interpreter = crate::operator_facade::trusted_windows_powershell(workspace)?;
@@ -300,8 +353,9 @@ fn inspect_owners_context(
     let mut owner = OwnedCandidateChild::spawn(&mut command)?;
     let input = serde_json::json!({"workspace":crate::command::normalize_windows_verbatim_path(workspace.to_path_buf()),
         "candidate":crate::command::normalize_windows_verbatim_path(workspace.join(&auth.candidate_relative_path)),
-        "priorSha256":auth.prior_canonical_sha256,"transactionId":auth.transaction_id,"historicalPids":handoff.map(|v|vec![v.old_pid,v.new_pid.unwrap_or(0)]).unwrap_or_default(),
+        "priorSha256":auth.prior_canonical_sha256,"transactionId":auth.transaction_id,"historicalPids":intent.map(|v|vec![v.old_pid]).unwrap_or_else(||handoff.map(|v|vec![v.old_pid,v.new_pid.unwrap_or(0)]).unwrap_or_default()),
         "historicalCompletedUnix":handoff.map(|v|v.completed_at_unix).unwrap_or(0),
+        "intentCreatedAtUtc":intent.map(|v|v.created_at_utc.as_str()),"authorizationGeneration":auth.generation,"authorizationExpires":auth.expires_at_unix,
         "bridgePid":bridge_pid,"ownedWorkerPid":owned_worker.then_some(std::process::id()),
         "ownedWorkerImage":if owned_worker {Some(crate::command::normalize_windows_verbatim_path(std::env::current_exe().map_err(|_|"promotion worker image unavailable")?))}else{None}});
     owner
@@ -390,6 +444,7 @@ pub(super) fn verify_bridge_listener(
         &accepted_helper(workspace, auth)?,
         false,
         Some(pid),
+        None,
     )
     .map(|_| ())
 }
@@ -417,6 +472,7 @@ pub(super) fn admit_stopped_source(
         None,
         &accepted_helper(workspace, auth)?,
         true,
+        None,
         None,
     )
     .map(|_| ())
@@ -476,6 +532,45 @@ fn validate_terminal_binding(
         return Err(format!(
             "{LABEL} exact terminal pre-mutation evidence required"
         ));
+    }
+    Ok(())
+}
+
+fn validate_failed_intent(
+    workspace: &Path,
+    auth: &ReviewedPromotionAuthorizationV1,
+    intent: &BackendOnlyIntent,
+    proof: &serde_json::Value,
+) -> Result<(), String> {
+    let workspace = canonical_directory(workspace, "failed intent root")?;
+    let created = proof["intentCreatedUnix"]
+        .as_u64()
+        .ok_or("failed handoff intent time unproven")?;
+    if intent.schema_version != 4
+        || intent.status != "INTENT_RECORDED"
+        || intent.profile != "LOCAL_BACKEND_ONLY"
+        || intent.mcp_authenticated
+        || intent.old_pid == 0
+        || !intent.old_owns_configured_port
+        || intent.mcp_port != 3200
+        || intent.old_listener_ports != [3200]
+        || intent.startup_delay_seconds > 30
+        || intent.build_sha256 != auth.candidate_sha256
+        || intent.recovery.len() > 512
+        || created < auth.generation.saturating_sub(30)
+        || created > auth.expires_at_unix.saturating_add(30)
+        || canonical_directory(Path::new(&intent.workspace_path), "failed intent workspace")?
+            != workspace
+        || canonical_workspace_file(
+            &workspace,
+            Path::new(&intent.build_path),
+            "failed intent candidate",
+        )? != workspace
+            .join(&auth.candidate_relative_path)
+            .canonicalize()
+            .map_err(|_| "failed intent candidate unavailable")?
+    {
+        return Err("failed handoff intent is not bound to this pre-swap attempt".into());
     }
     Ok(())
 }
@@ -551,19 +646,44 @@ fn inspect_locked(
         )?),
         (v, _) => v,
     };
-    let handoff: Option<ReloadHandoffStateV1> = raw
-        .as_ref()
-        .map(|v| {
-            serde_json::from_slice(v).map_err(|_| format!("{LABEL} historical receipt invalid"))
-        })
-        .transpose()?;
+    let mut handoff: Option<ReloadHandoffStateV1> = None;
+    let mut intent: Option<BackendOnlyIntent> = None;
+    if let Some(raw) = &raw {
+        let value = receipt_json(raw)?;
+        match value["schemaVersion"].as_u64() {
+            Some(1) => {
+                handoff = Some(serde_json::from_value(value).map_err(|_| "legacy receipt invalid")?)
+            }
+            Some(4) => {
+                intent = Some(
+                    serde_json::from_value(value).map_err(|_| "backend intent fields invalid")?,
+                )
+            }
+            _ => return Err("retirement receipt mode is unknown".into()),
+        }
+    }
     let snapshot = validate_committed_snapshot(workspace, &auth.snapshot_expected)?;
     let helper = snapshot
         .entries
         .iter()
         .find(|v| v.relative_path == "scripts/catdesk-release-recovery.ps1")
         .ok_or("reviewed recovery helper is absent from the accepted snapshot")?;
-    let proof = inspect_owners(workspace, &auth, handoff.as_ref(), &helper.sha256)?;
+    let proof = if intent.is_some() {
+        inspect_owners_context(
+            workspace,
+            &auth,
+            handoff.as_ref(),
+            &helper.sha256,
+            false,
+            None,
+            intent.as_ref(),
+        )?
+    } else {
+        inspect_owners(workspace, &auth, handoff.as_ref(), &helper.sha256)?
+    };
+    if let Some(intent) = &intent {
+        validate_failed_intent(workspace, &auth, intent, &proof)?;
+    }
     if let Some(h) = &handoff {
         if h.schema_version != 1
             || h.status != "REPLACEMENT_READY_PENDING_TRANSPORT_RECONNECT"
@@ -954,6 +1074,138 @@ mod tests {
         assert!(!root.join(".catdesk/promotion-control").exists());
         assert!(!root.join(".catdesk/restart-handoff/latest.json").exists());
         drop(parent);
+        cleanup_fixture(root);
+    }
+
+    #[test]
+    fn five_core_records_are_valid_but_a_missing_authority_is_not() {
+        let (root, mut value) = fixture();
+        let receipt = b"\xef\xbb\xbf{\"fixture\":\"byte-preserved PowerShell receipt\"}";
+        fs::write(root.join(".catdesk/restart-handoff/latest.json"), receipt).unwrap();
+        value.plan.historical_handoff_sha256 = Some(digest(receipt));
+        fs::remove_file(root.join(".catdesk/promotion-control/reviewed-build-attestation.json"))
+            .unwrap();
+        let parent = metadata(&root).unwrap();
+        let control = child(&parent, "promotion-control").unwrap();
+        value.plan.records = record_hashes(&control).unwrap();
+        assert_eq!(value.plan.records.len(), 5);
+        drop(control);
+        value.evidence_sha256 = digest(&bytes(&value.plan).unwrap());
+        update_journal(&parent, &value).unwrap();
+        archive_locked(&parent, &mut value, |_| Ok(())).unwrap();
+        ensure_ready(&root).unwrap();
+        assert_eq!(
+            fs::read(
+                root.join(".catdesk/restart-handoff")
+                    .join(format!("retired-{}.json", digest(receipt)))
+            )
+            .unwrap(),
+            receipt
+        );
+        drop(parent);
+        cleanup_fixture(root);
+
+        let (root, _) = fixture();
+        fs::remove_file(root.join(".catdesk/promotion-control/authorization.json")).unwrap();
+        let parent = metadata(&root).unwrap();
+        let control = child(&parent, "promotion-control").unwrap();
+        assert!(record_hashes(&control).is_err());
+        drop(control);
+        drop(parent);
+        cleanup_fixture(root);
+    }
+
+    #[test]
+    fn receipt_decoder_accepts_one_utf8_bom_and_refuses_unknown_encoding() {
+        for raw in [
+            b"{\"schemaVersion\":4}".as_slice(),
+            b"\xef\xbb\xbf{\"schemaVersion\":4}".as_slice(),
+        ] {
+            assert_eq!(receipt_json(raw).unwrap()["schemaVersion"], 4);
+        }
+        for raw in [
+            b"\xff\xfe{\0}".as_slice(),
+            b"\xef\xbb\xbf\xef\xbb\xbf{}".as_slice(),
+            b"unknown receipt".as_slice(),
+        ] {
+            assert!(receipt_json(raw).is_err());
+        }
+    }
+
+    #[test]
+    fn only_exact_local_intent_for_the_failed_attempt_can_be_reconciled() {
+        let (root, _) = fixture();
+        fs::create_dir(root.join("candidate")).unwrap();
+        let candidate = root.join("candidate/catdesk.exe");
+        fs::write(&candidate, b"disposable fixture, no executable authority").unwrap();
+        let (mut auth, _, _, _) = terminal_fixture();
+        auth.generation = 100;
+        auth.expires_at_unix = 200;
+        let intent = BackendOnlyIntent {
+            schema_version: 4,
+            status: "INTENT_RECORDED".into(),
+            created_at_utc: "1970-01-01T00:02:30.0000000Z".into(),
+            old_pid: 42,
+            old_listener_ports: vec![3200],
+            mcp_port: 3200,
+            old_owns_configured_port: true,
+            workspace_path: root.to_string_lossy().into(),
+            build_path: candidate.to_string_lossy().into(),
+            build_sha256: auth.candidate_sha256.clone(),
+            startup_delay_seconds: 3,
+            recovery: "fixture history retained".into(),
+            profile: "LOCAL_BACKEND_ONLY".into(),
+            mcp_authenticated: false,
+        };
+        let proof = serde_json::json!({"intentCreatedUnix":150});
+        validate_failed_intent(&root, &auth, &intent, &proof).unwrap();
+        for scenario in [
+            "schema",
+            "status",
+            "profile",
+            "authenticated",
+            "pid",
+            "port",
+            "ports",
+            "owned",
+            "delay",
+            "candidate",
+            "workspace",
+        ] {
+            let mut bad = intent.clone();
+            match scenario {
+                "schema" => bad.schema_version = 3,
+                "status" => bad.status = "RECOVERED_PENDING_TRANSPORT_CHECK".into(),
+                "profile" => bad.profile = "UNKNOWN".into(),
+                "authenticated" => bad.mcp_authenticated = true,
+                "pid" => bad.old_pid = 0,
+                "port" => bad.mcp_port = 3201,
+                "ports" => bad.old_listener_ports.push(3201),
+                "owned" => bad.old_owns_configured_port = false,
+                "delay" => bad.startup_delay_seconds = 31,
+                "candidate" => bad.build_sha256 = "f".repeat(64),
+                _ => bad.workspace_path = root.parent().unwrap().to_string_lossy().into(),
+            }
+            assert!(
+                validate_failed_intent(&root, &auth, &bad, &proof).is_err(),
+                "{scenario}"
+            );
+        }
+        for time in [69, 231] {
+            assert!(
+                validate_failed_intent(
+                    &root,
+                    &auth,
+                    &intent,
+                    &serde_json::json!({"intentCreatedUnix":time})
+                )
+                .is_err()
+            );
+        }
+        assert!(validate_failed_intent(&root, &auth, &intent, &serde_json::json!({})).is_err());
+        let mut raw = serde_json::to_value(&intent).unwrap();
+        raw["unknownReceiptFlag"] = true.into();
+        assert!(serde_json::from_value::<BackendOnlyIntent>(raw).is_err());
         cleanup_fixture(root);
     }
 
