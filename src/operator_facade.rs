@@ -22,6 +22,11 @@ mod development_backend;
 #[path = "operator_installed_backend.rs"]
 mod installed_backend;
 
+#[cfg(windows)]
+pub(crate) use installed_backend::{
+    backend_command as promotion_source_command, verify_mcp_at as verify_promotion_source_mcp,
+};
+
 pub(crate) use web::WebWorkLease;
 
 #[cfg(test)]
@@ -210,6 +215,10 @@ pub(crate) enum ReleasePairOperatorAction {
         transaction_id: String,
     },
     RetireFailedPromotion {
+        transaction_id: String,
+        evidence_sha256: String,
+    },
+    QualifyPromotionSource {
         transaction_id: String,
         evidence_sha256: String,
     },
@@ -643,7 +652,7 @@ fn parse_release_pair_action(args: &[String]) -> Result<Option<OperatorAction>, 
                 transaction_id: args[4].clone(),
             }
         }
-        Some("retire-failed-promotion")
+        Some(command @ ("retire-failed-promotion" | "qualify-promotion-source"))
             if args.len() == 7
                 && args[3] == "--transaction-id"
                 && args[5] == "--expected-evidence-sha256"
@@ -656,9 +665,16 @@ fn parse_release_pair_action(args: &[String]) -> Result<Option<OperatorAction>, 
                     .bytes()
                     .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase()) =>
         {
-            ReleasePairOperatorAction::RetireFailedPromotion {
-                transaction_id: args[4].clone(),
-                evidence_sha256: args[6].clone(),
+            if command == "qualify-promotion-source" {
+                ReleasePairOperatorAction::QualifyPromotionSource {
+                    transaction_id: args[4].clone(),
+                    evidence_sha256: args[6].clone(),
+                }
+            } else {
+                ReleasePairOperatorAction::RetireFailedPromotion {
+                    transaction_id: args[4].clone(),
+                    evidence_sha256: args[6].clone(),
+                }
             }
         }
         _ => return Err("operator release-pair accepts only fixed actions".into()),
@@ -1193,6 +1209,26 @@ pub(crate) async fn execute_operator_action(
                     {
                         let _ = (transaction_id, evidence_sha256);
                         Err("promotion retirement requires Windows".into())
+                    }
+                }
+                ReleasePairOperatorAction::QualifyPromotionSource {
+                    transaction_id,
+                    evidence_sha256,
+                } => {
+                    #[cfg(windows)]
+                    return tokio::task::spawn_blocking(move || {
+                        crate::daemon_reload::retirement::qualify_stopped_source(
+                            &workspace,
+                            &transaction_id,
+                            &evidence_sha256,
+                        )
+                    })
+                    .await
+                    .map_err(|_| "promotion source qualification failed")?;
+                    #[cfg(not(windows))]
+                    {
+                        let _ = (transaction_id, evidence_sha256);
+                        Err("promotion source qualification requires Windows".into())
                     }
                 }
             }
@@ -1903,6 +1939,11 @@ mod tests {
             hash,
         ];
         assert!(super::parse_operator_action(retire.clone()).is_ok());
+        let mut qualify = retire.clone();
+        qualify[2] = "qualify-promotion-source".into();
+        assert!(super::parse_operator_action(qualify.clone()).is_ok());
+        qualify.push("--force".into());
+        assert!(super::parse_operator_action(qualify).is_err());
         for index in [3, 4, 5, 6] {
             let mut changed = retire.clone();
             changed[index] = "../unscoped".into();

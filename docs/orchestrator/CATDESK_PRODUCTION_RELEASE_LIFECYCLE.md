@@ -1,3 +1,46 @@
+## Bounded promotion source-listener bridge (source qualification October 28)
+
+The reviewed-promotion worker has a narrow local-backend-only branch for a stopped,
+already qualified current release. It reuses the installed foreground runtime's
+fixed headless read-only command to supply the old process required by the existing
+promotion handoff. It creates no persistent runtime or source/build/LKG authority.
+Its armed child Job is never released; maximum source lifetime is 120 seconds.
+It explicitly proves tree exit after promotion or failure. Public lifecycle,
+external ownership and ordinary running-current promotion are unchanged.
+
+Before retiring failed metadata, test the old image from its canonical workspace:
+
+```text
+operator release-pair qualify-promotion-source --transaction-id <32-lowercase-hex> --expected-evidence-sha256 <frozen-eligible-inspection-sha256>
+```
+
+Use the qualified controller; the old installed executable lacks this new command.
+Admission requires the exact expired local failed attempt previously ELIGIBLE,
+existing reviewed producer/LKG evidence and the qualified-stopped chain. Existing
+operation and lifecycle leases are exclusive. The original qualification config
+and verified old image are retained. The fixed headless startup disables tunnel
+and Web automation; its fresh token is supplied only in the child environment.
+The listener's PID/image are independently checked before and after authenticated
+MCP. `QUALIFIED_PROMOTION_SOURCE_STOPPED` requires 401 without authentication,
+200 initialize/listing, the exact ten-tool read-only catalog and whole-Job exit.
+The command retires no records and changes no executable/fingerprint or release
+approval. No shell, path, token, destination or duration override is accepted.
+A refusal/uncertain cleanup requires evidence inspection before any further action.
+
+After live qualification and reviewed exact retirement, fresh promotion preflight
+and confirmation can proceed. The worker requires completed matching retirement,
+no unresolved new handoff and no competing owner. It holds the existing lifecycle
+lease throughout source ownership. The original script performs every authority
+check, handoff, canonical swap, rollback and promotion/LKG evidence step. Bridge
+admission failure preserves a failed-or-ambiguous result; claims are never blindly
+replayed. No healthy installed release is inferred from successful source startup.
+
+Source qualification: 38 daemon/recovery/bridge tests, 20 operator tests and eight
+installed-runtime tests passed (including two subprocess fixture entry points),
+formatting and strict all-target Clippy passed. Actual source-listener startup,
+installed promotion, rollback, connector and two-project Web coding remain separate
+live gates. This procedure never copies an unreviewed development image to production.
+
 ## October 28 — real failed-promotion inspection qualified; stopped startup still open
 
 The qualified controller from source `c980eed0d299fe4bae3e661c543d6574f3e7f693`

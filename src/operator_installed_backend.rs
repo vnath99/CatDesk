@@ -458,7 +458,7 @@ fn validate_ready(value: &Value, root: &Path, config: &Path, seconds: u64) -> Re
     }
     Ok(())
 }
-async fn verify_mcp_at(endpoint: &str, token: &str) -> Result<(), String> {
+pub(crate) async fn verify_mcp_at(endpoint: &str, token: &str) -> Result<(), String> {
     let url = reqwest::Url::parse(endpoint).map_err(|_| "INSTALLED_BACKEND_HTTP_INVALID")?;
     if url.scheme() != "http"
         || url.host_str() != Some("127.0.0.1")
@@ -602,7 +602,7 @@ fn history_snapshot(root: &Path) -> Result<Vec<(String, String)>, String> {
     output.sort();
     Ok(output)
 }
-fn backend_command(
+pub(crate) fn backend_command(
     root: &Path,
     binary: &Path,
     config: &Path,

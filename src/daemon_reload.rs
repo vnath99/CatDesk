@@ -29,6 +29,9 @@ use crate::reviewed_source_snapshot::{
 #[path = "promotion_retirement.rs"]
 #[cfg(windows)]
 pub(crate) mod retirement;
+#[path = "promotion_source_bridge.rs"]
+#[cfg(windows)]
+pub(crate) mod source_bridge;
 #[path = "release_pair_stopped.rs"]
 pub(crate) mod stopped;
 
@@ -806,7 +809,35 @@ pub fn run_reviewed_promotion_worker(args: ReviewedPromotionWorkerArgsV1) -> Res
             &authorization.transaction_id,
         )?
     };
-    let result = crate::operator_facade::run_fixed_powershell_invocation_blocking(invocation)?;
+    // A previously qualified stopped release can supply the old listener using
+    // its existing bounded headless mode. The normal handoff/promotion remains
+    // the sole writer of the canonical pair and release authority.
+    #[cfg(windows)]
+    let mut source_bridge = match source_bridge::start_if_required(&workspace, &authorization) {
+        Ok(bridge) => bridge,
+        Err(error) => {
+            // No promotion helper ran. Preserve a terminal ambiguous result;
+            // never replay a consumed claim or assert cleanup from this label.
+            atomic_json_write(
+                &reviewed_promotion_result_path(&workspace),
+                &ReviewedPromotionResultV1 {
+                    schema_version: 1,
+                    state: "PROMOTION_FAILED_OR_AMBIGUOUS".into(),
+                    authorization_generation: authorization.generation,
+                    candidate_sha256: authorization.candidate_sha256,
+                    transaction_id: authorization.transaction_id,
+                    serving_state: None,
+                },
+            )?;
+            return Err(error);
+        }
+    };
+    let result = crate::operator_facade::run_fixed_powershell_invocation_blocking(invocation);
+    #[cfg(windows)]
+    if let Some(bridge) = source_bridge.as_mut() {
+        bridge.stop()?;
+    }
+    let result = result?;
     let state = if result.success
         && result.stderr.trim().is_empty()
         && result.stdout.len() <= 4096

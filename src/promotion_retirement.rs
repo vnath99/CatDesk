@@ -220,13 +220,23 @@ try {
  $pair=Get-CatDeskCanonicalPairEvidence $i.workspace
  $trusted=Get-CatDeskLastKnownGoodRelease $i.workspace
  if(!$trusted -or $trusted.Hash -cne $pair.Hash -or $pair.Hash -cne $i.priorSha256){throw 'untrusted'}
+ if($i.bridgePid){
+  $p=Get-Process -Id $i.bridgePid -ErrorAction Stop
+  if(!$p.Path -or [IO.Path]::GetFullPath($p.Path) -ine [IO.Path]::GetFullPath($pair.Binary)){throw 'bridge image'}
+  $listeners=@(Get-NetTCPConnection -State Listen -ErrorAction Stop|Where-Object LocalPort -eq 3200)
+  if(!$listeners.Count -or @($listeners|Where-Object {$_.OwningProcess -ne $i.bridgePid -or $_.LocalAddress -notin @('127.0.0.1','::1')}).Count){throw 'bridge listener'}
+  @{canonicalSha256=$pair.Hash;bridgePid=$i.bridgePid;listenerVerified=$true}|ConvertTo-Json -Compress
+  exit 0
+ }
  if(@(Get-NetTCPConnection -State Listen -ErrorAction Stop|Where-Object LocalPort -eq 3200).Count){throw 'listener'}
  $canonical=[IO.Path]::GetFullPath($pair.Binary); $candidate=[IO.Path]::GetFullPath($i.candidate)
  foreach($p in @(Get-CimInstance Win32_Process -Filter "Name='catdesk.exe' OR Name='CatDeskBinagotchy.exe'" -OperationTimeoutSec 5 -ErrorAction Stop)) {
   if(!$p.ExecutablePath -or !$p.CommandLine){throw 'unknown image'}
   $image=[IO.Path]::GetFullPath($p.ExecutablePath)
   if($image -ieq $canonical -or $image -ieq $candidate){throw 'live image'}
-  if($p.CommandLine.Contains('--catdesk-reviewed-promotion-worker') -and $p.CommandLine.Contains($i.transactionId)){throw 'live promotion worker'}
+  if($p.CommandLine.Contains('--catdesk-reviewed-promotion-worker') -and $p.CommandLine.Contains($i.transactionId)){
+   if(!$i.ownedWorkerPid -or $p.ProcessId -ne $i.ownedWorkerPid -or $image -ine [IO.Path]::GetFullPath($i.ownedWorkerImage)){throw 'live promotion worker'}
+  }
  }
  foreach($pidValue in $i.historicalPids){
   $p=Get-Process -Id $pidValue -ErrorAction SilentlyContinue
@@ -249,6 +259,17 @@ fn inspect_owners(
     auth: &ReviewedPromotionAuthorizationV1,
     handoff: Option<&ReloadHandoffStateV1>,
     helper_hash: &str,
+) -> Result<serde_json::Value, String> {
+    inspect_owners_context(workspace, auth, handoff, helper_hash, false, None)
+}
+
+fn inspect_owners_context(
+    workspace: &Path,
+    auth: &ReviewedPromotionAuthorizationV1,
+    handoff: Option<&ReloadHandoffStateV1>,
+    helper_hash: &str,
+    owned_worker: bool,
+    bridge_pid: Option<u32>,
 ) -> Result<serde_json::Value, String> {
     use crate::reviewed_candidate_owner::OwnedCandidateChild;
     let interpreter = crate::operator_facade::trusted_windows_powershell(workspace)?;
@@ -280,7 +301,9 @@ fn inspect_owners(
     let input = serde_json::json!({"workspace":crate::command::normalize_windows_verbatim_path(workspace.to_path_buf()),
         "candidate":crate::command::normalize_windows_verbatim_path(workspace.join(&auth.candidate_relative_path)),
         "priorSha256":auth.prior_canonical_sha256,"transactionId":auth.transaction_id,"historicalPids":handoff.map(|v|vec![v.old_pid,v.new_pid.unwrap_or(0)]).unwrap_or_default(),
-        "historicalCompletedUnix":handoff.map(|v|v.completed_at_unix).unwrap_or(0)});
+        "historicalCompletedUnix":handoff.map(|v|v.completed_at_unix).unwrap_or(0),
+        "bridgePid":bridge_pid,"ownedWorkerPid":owned_worker.then_some(std::process::id()),
+        "ownedWorkerImage":if owned_worker {Some(crate::command::normalize_windows_verbatim_path(std::env::current_exe().map_err(|_|"promotion worker image unavailable")?))}else{None}});
     owner
         .child_mut()
         .stdin
@@ -333,10 +356,88 @@ fn inspect_owners(
     }
     let proof: serde_json::Value =
         serde_json::from_slice(&out).map_err(|_| format!("{LABEL} proof invalid"))?;
-    if proof["ownersEmpty"] != true || proof["canonicalSha256"] != auth.prior_canonical_sha256 {
+    let scope_matches = match bridge_pid {
+        Some(pid) => proof["listenerVerified"] == true && proof["bridgePid"] == pid,
+        None => proof["ownersEmpty"] == true,
+    };
+    if !scope_matches || proof["canonicalSha256"] != auth.prior_canonical_sha256 {
         return Err(format!("{LABEL} ownership proof differs"));
     }
     Ok(proof)
+}
+
+fn accepted_helper(
+    workspace: &Path,
+    auth: &ReviewedPromotionAuthorizationV1,
+) -> Result<String, String> {
+    validate_committed_snapshot(workspace, &auth.snapshot_expected)?
+        .entries
+        .into_iter()
+        .find(|v| v.relative_path == "scripts/catdesk-release-recovery.ps1")
+        .map(|v| v.sha256)
+        .ok_or_else(|| "accepted recovery helper unavailable".into())
+}
+
+pub(super) fn verify_bridge_listener(
+    workspace: &Path,
+    auth: &ReviewedPromotionAuthorizationV1,
+    pid: u32,
+) -> Result<(), String> {
+    inspect_owners_context(
+        workspace,
+        auth,
+        None,
+        &accepted_helper(workspace, auth)?,
+        false,
+        Some(pid),
+    )
+    .map(|_| ())
+}
+
+pub(super) fn admit_stopped_source(
+    workspace: &Path,
+    auth: &ReviewedPromotionAuthorizationV1,
+) -> Result<(), String> {
+    let parent = metadata(workspace)?;
+    let j = journal(&parent)?.ok_or("promotion source requires completed explicit retirement")?;
+    if j.phase != "COMPLETED"
+        || j.plan.prior_sha256 != auth.prior_canonical_sha256
+        || j.plan.candidate_sha256 != auth.candidate_sha256
+    {
+        return Err("promotion source retirement binding differs".into());
+    }
+    verify_archive(&parent, &j)?;
+    let handoffs = child(&parent, "restart-handoff")?;
+    if read_optional_relative_regular(&handoffs, "latest.json", 4096, LABEL)?.is_some() {
+        return Err("promotion source has an unresolved new handoff".into());
+    }
+    inspect_owners_context(
+        workspace,
+        auth,
+        None,
+        &accepted_helper(workspace, auth)?,
+        true,
+        None,
+    )
+    .map(|_| ())
+}
+
+pub(crate) fn qualify_stopped_source(
+    workspace: &Path,
+    transaction: &str,
+    expected: &str,
+) -> Result<serde_json::Value, String> {
+    let parent = metadata(workspace)?;
+    let _lock = create_delete_on_close_regular_lock(&parent, "promotion-operation.lock", LABEL)?;
+    let _lifecycle = super::source_bridge::lifecycle_lease(workspace)?;
+    let previous = journal(&parent)?;
+    let plan = inspect_locked(workspace, &parent, transaction, previous.as_ref())?;
+    if digest(&bytes(&plan)?) != expected {
+        return Err("promotion source evidence differs".into());
+    }
+    let control = child(&parent, "promotion-control")?;
+    let auth: ReviewedPromotionAuthorizationV1 = read_json(&control, "authorization.json")?;
+    super::source_bridge::qualify(workspace, &auth)
 }
 
 #[cfg(windows)]
@@ -876,6 +977,35 @@ mod tests {
             drop(parent);
             cleanup_fixture(root);
         }
+    }
+
+    #[test]
+    fn promotion_source_requires_completed_matching_retirement_and_no_new_handoff() {
+        let (root, mut value) = fixture();
+        let (mut auth, _, _, _) = terminal_fixture();
+        auth.prior_canonical_sha256 = value.plan.prior_sha256.clone();
+        auth.candidate_sha256 = value.plan.candidate_sha256.clone();
+        assert!(admit_stopped_source(&root, &auth).is_err());
+        let parent = metadata(&root).unwrap();
+        archive_locked(&parent, &mut value, |_| Ok(())).unwrap();
+        let mut changed = auth.clone();
+        changed.candidate_sha256 = "f".repeat(64);
+        assert!(admit_stopped_source(&root, &changed).is_err());
+        changed = auth.clone();
+        changed.prior_canonical_sha256 = "f".repeat(64);
+        assert!(admit_stopped_source(&root, &changed).is_err());
+        fs::write(
+            root.join(".catdesk/restart-handoff/latest.json"),
+            b"unknown new handoff",
+        )
+        .unwrap();
+        assert!(admit_stopped_source(&root, &auth).is_err());
+        assert_eq!(
+            fs::read(root.join(".catdesk/restart-handoff/latest.json")).unwrap(),
+            b"unknown new handoff"
+        );
+        drop(parent);
+        cleanup_fixture(root);
     }
 
     #[test]

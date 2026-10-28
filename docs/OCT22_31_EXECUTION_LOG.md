@@ -1,3 +1,21 @@
+## October 28 — bounded promotion source bridge qualified in source
+
+The native reviewed-promotion worker now reuses the existing installed-foreground
+read-only command and exact ten-tool MCP verifier to supply a temporary old listener
+from the already qualified stopped release. The normal guarded promotion/handoff
+remains the only installation writer. Existing trust, original sealed config,
+matching prior/candidate retirement and exclusive lifecycle ownership are required.
+Its armed Job is never released; the source lifetime is limited to 120 seconds.
+No browser, Wake, scheduler or tunnel starts. Tokens remain off command lines.
+
+Qualification passed 66 selected tests (including two subprocess fixture entry
+points), formatting and strict Clippy. Live qualification, metadata retirement and
+production promotion have not yet occurred. Next: build the qualified controller
+once, qualify the existing old image before retirement, and verify cleanup and
+protected state. All project/native ownership and release artifacts remain intact.
+See `docs/verification/PROMOTION_SOURCE_BRIDGE_2026_10_28.json` and the release
+lifecycle bridge procedure. Installed and two-project Web acceptance remain open.
+
 ## October 28 — real failed-promotion inspection qualified; stopped startup still open
 
 The qualified controller from source `c980eed0d299fe4bae3e661c543d6574f3e7f693`
