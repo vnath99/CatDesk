@@ -1,3 +1,30 @@
+## October 28 C260 — scoped recovery for a confirmed pre-submit review refusal
+
+C259 exposed a recovery gap: Web review `resume` requires `CLAIMED`, but a confirmed
+pre-submit login/profile refusal remains `ATTENTION`. The existing development
+retry deliberately accepts only `dev-` events. Source now adds
+`operator web review retry-pre-submit --project-id <project> --input-file <frozen-review.json>`.
+It reuses the existing grant/reservation and exact queued event, preparing only
+`ATTENTION` → `CLAIMED`; it never opens a browser, sends, refunds quota or starts a
+host. Only the observed `LOGIN_OR_PROFILE_REQUIRED` pre-submit case is eligible.
+Registered target, payload, audit reference, expiry, revocation and dispatch checks
+remain mandatory, under existing project/registry/host/transaction locks.
+
+A regression proved the old low-level retry could ignore a surviving submission
+start witness. Wake now refuses a start witness, timer or archive under its existing
+transaction lock. Qualification passed 70 focused tests, both formatting checks
+and strict Clippy including tests. Fifteen unsafe workflow cases preserve fixture
+bytes; another blocked project stays unchanged while the eligible project prepares.
+These are source/isolated controls, not actual Web or installed production proof.
+
+C259's frozen request, reservation, native claim and `ATTENTION` journal remain
+untouched. No authentication/profile change or replay occurred. Next: qualify the
+standalone development controller without selecting a package, and test rejection
+of a changed review identity. After operator browser inspection and actual readiness
+recovery, revalidate the original request before any explicit retry preparation
+and bounded resume. Production still needs genuine review and producer authority;
+connector, installed rollback and two independent Web coding acceptance remain open.
+
 ## October 28 C259 — corrected controller healthy; fresh review held before submission
 
 Source `28af7fe8a8aa5dc066df0de0263b34d52fab85d7` is published with exact remote

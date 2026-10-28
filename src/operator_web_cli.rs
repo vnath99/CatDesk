@@ -316,7 +316,10 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                 })
             }
         }
-        ("review", "authorize" | "revoke" | "preflight" | "run" | "resume") => {
+        (
+            "review",
+            "authorize" | "revoke" | "preflight" | "run" | "resume" | "retry-pre-submit",
+        ) => {
             let input_file = options
                 .remove("--input-file")
                 .ok_or("WEB_USAGE: --input-file is required")?;
@@ -1930,6 +1933,28 @@ mod tests {
         let mut invalid = valid;
         *invalid.last_mut().unwrap() = "../event".into();
         assert!(parse(&invalid).is_err());
+    }
+
+    #[test]
+    fn review_retry_pre_submit_accepts_only_frozen_project_input() {
+        let valid = args(&[
+            "operator",
+            "web",
+            "review",
+            "retry-pre-submit",
+            "--project-id",
+            "alpha",
+            "--input-file",
+            "review.json",
+        ]);
+        assert!(
+            matches!(parse(&valid), Ok(WebAction::ReviewAuthorization { operation, .. }) if operation == "retry-pre-submit")
+        );
+        for flag in ["--url", "--message", "--force", "--submit"] {
+            let mut invalid = valid.clone();
+            invalid.extend(args(&[flag, "override"]));
+            assert!(parse(&invalid).is_err());
+        }
     }
 
     #[test]

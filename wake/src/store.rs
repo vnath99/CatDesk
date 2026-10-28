@@ -1970,6 +1970,20 @@ impl Store {
         if delivery.phase != Phase::Attention || delivery.receipt.is_some() {
             return Err("SUBMISSION_RETRY_REFUSED".into());
         }
+        // Surviving submission evidence remains authoritative even if an older
+        // or interrupted journal says ATTENTION. Never downgrade that boundary.
+        for path in [
+            self.submission_start_path(id),
+            self.timer_path(id),
+            self.archive_path(id),
+        ] {
+            if path
+                .try_exists()
+                .map_err(|_| "SUBMISSION_RETRY_EVIDENCE_UNAVAILABLE")?
+            {
+                return Err("SUBMISSION_RETRY_REFUSED".into());
+            }
+        }
         if self.read_config()?.targets.get(&delivery.event.project_id) != Some(&delivery.target) {
             return Err("TARGET_GENERATION_STALE".into());
         }

@@ -525,6 +525,43 @@ fn producer_replay_keeps_original_target_generation() {
 }
 
 #[test]
+fn pre_submit_retry_refuses_surviving_submission_witnesses() {
+    for directory in ["logs", "turns", "archive"] {
+        let fixture = Fixture::new();
+        let store = fixture.store();
+        let event = event();
+        store.publish(&event).unwrap();
+        let lease = store.host_lock().unwrap();
+        store.claim(&event, &lease).unwrap();
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Attention,
+                None,
+                Some("LOGIN_OR_PROFILE_REQUIRED".into()),
+            )
+            .unwrap();
+        let name = if directory == "logs" {
+            format!("submission-start-{}.json", event.event_id)
+        } else {
+            format!("{}.json", event.event_id)
+        };
+        let witness = fixture.root.join(directory).join(name);
+        // Even an unreadable/partial witness cannot authorize another attempt.
+        fs::write(&witness, b"{partial").unwrap();
+        let before = store.delivery(&event.event_id).unwrap().unwrap();
+        assert_eq!(
+            store.retry_pre_submit(&event.event_id).unwrap_err(),
+            "SUBMISSION_RETRY_REFUSED",
+            "{directory}"
+        );
+        assert_eq!(store.delivery(&event.event_id).unwrap().unwrap(), before);
+        assert_eq!(fs::read(witness).unwrap(), b"{partial");
+    }
+}
+
+#[test]
 fn pre_submit_retry_is_explicit_and_submitting_can_never_be_downgraded() {
     let f = Fixture::new();
     let s = f.store();
