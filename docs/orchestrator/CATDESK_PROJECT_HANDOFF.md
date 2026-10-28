@@ -1,3 +1,42 @@
+## October 28 C259 — corrected controller healthy; fresh review held before submission
+
+Source `28af7fe8a8aa5dc066df0de0263b34d52fab85d7` is published with exact remote
+SHA readback. Its selected development app has SHA-256
+`df0cab8196c889b72fa3fd3c7dc0b5c1ccc1b202897d8c161655ce7a0593496b`.
+Supported six-second backend qualification verified the actual selected executable,
+401 without authentication, 200 with authentication, 79 unique tools, natural
+parent/child exit and 8,459 preserved files. Previous verified development artifacts
+remain retained. This is local development qualification, not production promotion.
+The new controller separately validated the native failed-build RESULT and retained
+trusted C208 artifact without scheduling another producer or changing authority.
+
+The existing registry admitted one frozen, bounded, read-only public-source review
+under standing authorization. It returned `LOGIN_OR_PROFILE_REQUIRED` before the
+browser submission boundary. Reconciliation proves `ATTENTION`, no dispatch marker,
+no submission-start witness, no receipt, no timer and zero remaining test owners.
+All 8,469 prior state pins and five project bindings were verified; two scoped
+queue/delivery records produce a new 8,471-file baseline. No request was replayed.
+The native review claim remains waiting, without source acceptance or a new build.
+This differs from a submitted request with an unknown outcome. No authentication
+expiry cause is asserted from the attention code alone.
+
+Recovery uses the existing `operator web-dev-runtime login --project-id <project>`
+from an interactive terminal, reusing the selected development profile. An operator
+must inspect/sign in only in that browser if needed, preserve unknown drafts, and
+press Enter in the terminal to close it through its owned cleanup procedure.
+`LOGIN_WINDOW_CLOSED_UNVERIFIED` is not authentication proof. Fresh supported review
+resume admission and immutable identity checks remain mandatory before delivery.
+The development-only `retry` command requires a `dev-` event; do not use it for a
+`web-work-` review or relax that restriction. No recurring host or scheduler starts.
+
+Next: resolve the browser readiness gate, obtain genuine review of the frozen source,
+then complete the existing source/snapshot/ACK/producer and guarded promotion chain.
+Installed startup/rollback, separate connector connectivity and two-project Web
+coding acceptance remain open. Exact-source CI still has no check runs. Production,
+external Secure MCP ownership, native sessions and historical unknown requests are
+preserved. No new operator permission decision is needed for the routine review;
+actual browser sign-in, if required, remains a human action.
+
 ## October 28 C258 — native helper comparison corrected after bounded build failure
 
 The acknowledged C254 source completed Cargo with exit code 0, but its producer
