@@ -37,7 +37,7 @@ then checks the selected document again. It does not type, navigate or close tab
 while selecting. Ambiguity, drift and unavailable inventory fail closed. Existing
 bounded empty-Home recovery and all production probe controls remain intact.
 Eleven Python tests and four actual-Windows probe tests passed; Wake formatting and
-strict Clippy passed. Live qualification of tab selection is still pending.
+strict Clippy passed. One bounded live inspection observed TARGET_TAB_DRIFT then CHROME_ERROR; no ready authority or message was produced. The specific Chrome error code was not collected. All 8,484 protected files and two metadata-only records were preserved; zero test owners remained. No automatic retry occurred.
 
 For unchanged valid acknowledged snapshots, the supported
 `operator reviewed-build prepare --review-record-id <record>` / `confirm` / `result`
