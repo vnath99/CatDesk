@@ -26,6 +26,9 @@ use crate::reviewed_source_snapshot::{
     ReviewedSourceSnapshotExpectedV1, validate_committed_snapshot,
 };
 
+#[path = "promotion_retirement.rs"]
+#[cfg(windows)]
+pub(crate) mod retirement;
 #[path = "release_pair_stopped.rs"]
 pub(crate) mod stopped;
 
@@ -437,6 +440,10 @@ pub fn prepare_reviewed_promotion_with_profile(
     local_backend_only: bool,
 ) -> Result<ReviewedPromotionPreflightV1, String> {
     let workspace = canonical_directory(workspace, "reviewed promotion workspace")?;
+    #[cfg(windows)]
+    let _promotion_lease = retirement::mutation_lease(&workspace)?;
+    #[cfg(windows)]
+    retirement::ensure_ready(&workspace)?;
     let candidate =
         canonical_workspace_file(&workspace, candidate, "reviewed promotion candidate")?;
     let candidate_sha256 = sha256_file(&candidate)?;
@@ -539,11 +546,32 @@ pub fn prepare_reviewed_promotion_with_profile(
             && existing.expires_at_unix >= now_unix()
             && same_reviewed_promotion_evidence(&existing.authorization, &preflight.authorization)
         {
+            if reviewed_promotion_claim_path(&workspace).exists() {
+                let claim: ReviewedPromotionClaimV1 = read_bounded_json(
+                    &reviewed_promotion_claim_path(&workspace),
+                    "reviewed promotion claim",
+                )?;
+                if claim.authorization_id != existing.authorization.authorization_id
+                    || claim.transaction_id != existing.authorization.transaction_id
+                    || claim.claim_id != existing.authorization.claim_id
+                    || claim.state != "CLAIMED_PENDING"
+                {
+                    return Err(
+                        "reviewed promotion claim differs; explicit recovery is required".into(),
+                    );
+                }
+            }
             return Ok(existing);
         }
         if existing.authorization.review_record_id == preflight.authorization.review_record_id {
             return Err("reviewed promotion binding is already immutable".into());
         }
+    }
+    if reviewed_promotion_claim_path(&workspace).exists() {
+        return Err(
+            "reviewed promotion is claimed; inspect RESULT and use explicit stopped retirement"
+                .into(),
+        );
     }
     atomic_json_write(&reviewed_promotion_preflight_path(&workspace), &preflight)?;
     Ok(preflight)
@@ -556,6 +584,10 @@ pub fn confirm_reviewed_promotion(
     confirmation_token: &str,
 ) -> Result<ReviewedPromotionConfirmationOutcomeV1, String> {
     let workspace = canonical_directory(workspace, "reviewed promotion workspace")?;
+    #[cfg(windows)]
+    let _promotion_lease = retirement::mutation_lease(&workspace)?;
+    #[cfg(windows)]
+    retirement::ensure_ready(&workspace)?;
     let preflight: ReviewedPromotionPreflightV1 = read_bounded_json(
         &reviewed_promotion_preflight_path(&workspace),
         "reviewed promotion preflight",

@@ -752,7 +752,9 @@ impl ProtectedDirectoryGuard {
     /// can only make this fail closed.
     #[cfg(windows)]
     pub(crate) fn reopen_direct_child_for_delete(mut self, label: &str) -> Result<Self, String> {
-        if self.directories.len() != 2 {
+        // The final object is a direct child of the preceding pinned handle,
+        // including when that parent has its own retained ancestor chain.
+        if self.directories.len() < 2 {
             return Err(format!("{label} is not a direct child"));
         }
         self.assert_stable(label)?;

@@ -1,3 +1,52 @@
+## Stopped failed-promotion retirement (source-qualified October 28)
+
+Use the qualified operator executable with its working directory set to the
+intended registered CatDesk installation. These commands are not available in the
+older installed C208 executable. Development package selection is not promotion.
+
+```text
+operator release-pair inspect-failed-promotion --transaction-id <32-lowercase-hex>
+operator release-pair retire-failed-promotion --transaction-id <same-id> --expected-evidence-sha256 <64-lowercase-hex>
+```
+
+`inspect-failed-promotion` produces `ELIGIBLE` and a stable `evidenceSha256` only
+for the exact expired, terminal failed, local-backend-only attempt. It checks the
+retained independent review/producer snapshot, canonical pair and existing LKG
+verifier, no disk promotion transaction, no listener or mapped release/candidate,
+no matching active promotion worker and historical PID-instance exit. The fixed
+Windows PowerShell helper is pinned to the accepted source snapshot and runs in
+a bounded, owned Job. Inspection writes no persistent CatDesk state; it uses an
+ephemeral exclusive lease. Refusal grants no recovery or promotion authority.
+
+Only after reviewing that exact evidence may `retire-failed-promotion` run. It
+revalidates every prerequisite and digest, acquires the existing public lifecycle
+lease and retains the trusted executable/fingerprint without write/delete sharing.
+It journals `PREPARED`, archives the exact six records under
+`.catdesk/promotion-retired-<transaction-id>`, then records `PROMOTION_ARCHIVED`.
+A historical V1 handoff is eligible only when existing qualified-stopped authority
+proves that its different image was superseded; its original bytes are renamed to
+`restart-handoff/retired-<sha256>.json`. Completion is `COMPLETED`. Prior completion
+receipts remain durable when a later retirement begins. Nothing is discarded.
+
+After interruption, run inspection for the SAME transaction. Review its unchanged
+evidence and resume the same retirement command. Existing matching archives make
+moves idempotent; unknown records, digest changes, competing owners, an unfinished
+disk transaction or ambiguous locations refuse recovery. Do not delete a journal,
+receipt, claim or quarantine to force progress. No blind replay of CONFIRM occurs.
+
+After verified completion, a fresh guarded promotion preflight may use the existing
+independently attested candidate. All original review, build, rollback, promotion
+and bounded lifecycle checks still apply. This branch does not repair an arbitrary
+failed replacement or an untrusted executable pair. Such cases remain with their
+original supported recovery procedure. Source tests do not prove this operation
+on the installed backend or establish normal unattended operation.
+
+Qualification: 10 focused recovery tests, 19 existing daemon tests, 20 operator
+parser/invocation tests, 14 protected filesystem tests and 23 isolated snapshot
+tests passed; formatting and strict all-target Clippy passed. Two of the ten
+recovery tests are subprocess fixture entry points. Actual Windows ownership and
+hard-interruption tests use disposable directories, not installed authority.
+
 ## October 28 — attested reviewed-source candidate; promotion failure preserved
 
 The exact acknowledged C254 snapshot at

@@ -1,3 +1,28 @@
+## October 28 — stopped failed-promotion recovery, source qualification
+
+Source adds an explicit, stopped-only retirement branch to the existing release-pair
+operator. It preserves the six failed promotion records and a provably superseded
+historical handoff through pinned, no-replace native renames and a durable journal.
+An interrupted transition fences new promotion until the same evidence resumes.
+The original trusted executable, fingerprint, LKG authority and reviewed candidate
+are retained; this operation creates no source review or build authority.
+
+Qualification passed 86 selected tests (including two subprocess fixture entry
+points), formatting and strict all-target Clippy. Actual Windows tests terminated
+an owned process at both archive boundaries, recovered with a fresh owner and
+refused retirement while the candidate was mapped despite an empty backend port.
+Changed records, unknown receipts, collisions and uncertain ownership fail closed.
+The existing independent-workspace lock behavior also passed.
+
+This is source/native-fixture qualification only. The stopped installation has
+not undergone this transition or a new promotion. Next: one bounded read-only
+inspection of the real failed transaction, then independently qualify the exact
+recovery evidence before any mutation. Installed startup, rollback, connector and
+two-project ChatGPT Web coding acceptance remain open. No operator decision is
+currently requested; browser readiness remains separately blocked and completed
+canaries are not replayed. See the release lifecycle recovery section and
+`docs/verification/STOPPED_PROMOTION_RETIREMENT_2026_10_28.json`.
+
 ## October 28 — attested reviewed-source candidate; promotion failure preserved
 
 The exact acknowledged C254 snapshot at

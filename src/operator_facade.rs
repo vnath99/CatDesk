@@ -206,6 +206,13 @@ pub(crate) enum ReleasePairOperatorAction {
         transaction_id: String,
     },
     ResultStopped,
+    InspectFailedPromotion {
+        transaction_id: String,
+    },
+    RetireFailedPromotion {
+        transaction_id: String,
+        evidence_sha256: String,
+    },
     Result,
 }
 
@@ -624,6 +631,36 @@ fn parse_release_pair_action(args: &[String]) -> Result<Option<OperatorAction>, 
             }
         }
         Some("result-stopped") if args.len() == 3 => ReleasePairOperatorAction::ResultStopped,
+        Some("inspect-failed-promotion")
+            if args.len() == 5
+                && args[3] == "--transaction-id"
+                && args[4].len() == 32
+                && args[4]
+                    .bytes()
+                    .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase()) =>
+        {
+            ReleasePairOperatorAction::InspectFailedPromotion {
+                transaction_id: args[4].clone(),
+            }
+        }
+        Some("retire-failed-promotion")
+            if args.len() == 7
+                && args[3] == "--transaction-id"
+                && args[5] == "--expected-evidence-sha256"
+                && args[4].len() == 32
+                && args[4]
+                    .bytes()
+                    .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase())
+                && args[6].len() == 64
+                && args[6]
+                    .bytes()
+                    .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase()) =>
+        {
+            ReleasePairOperatorAction::RetireFailedPromotion {
+                transaction_id: args[4].clone(),
+                evidence_sha256: args[6].clone(),
+            }
+        }
         _ => return Err("operator release-pair accepts only fixed actions".into()),
     };
     Ok(Some(OperatorAction::ReleasePair(action)))
@@ -1124,6 +1161,39 @@ pub(crate) async fn execute_operator_action(
                     Ok(
                         json!({"action":"release_pair_rollback_stopped","result":result,"tunnelAction":"none"}),
                     )
+                }
+                ReleasePairOperatorAction::InspectFailedPromotion { transaction_id } => {
+                    #[cfg(windows)]
+                    return tokio::task::spawn_blocking(move || {
+                        crate::daemon_reload::retirement::inspect(&workspace, &transaction_id)
+                    })
+                    .await
+                    .map_err(|_| "promotion retirement inspection failed")?;
+                    #[cfg(not(windows))]
+                    {
+                        let _ = transaction_id;
+                        Err("promotion retirement requires Windows".into())
+                    }
+                }
+                ReleasePairOperatorAction::RetireFailedPromotion {
+                    transaction_id,
+                    evidence_sha256,
+                } => {
+                    #[cfg(windows)]
+                    return tokio::task::spawn_blocking(move || {
+                        crate::daemon_reload::retirement::retire(
+                            &workspace,
+                            &transaction_id,
+                            &evidence_sha256,
+                        )
+                    })
+                    .await
+                    .map_err(|_| "promotion retirement requires recovery")?;
+                    #[cfg(not(windows))]
+                    {
+                        let _ = (transaction_id, evidence_sha256);
+                        Err("promotion retirement requires Windows".into())
+                    }
                 }
             }
         }
@@ -1811,6 +1881,37 @@ pub(crate) fn valid_repair_result(result: &CommandResult) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn failed_promotion_operator_commands_require_exact_identity_and_digest() {
+        let id = "a".repeat(32);
+        let hash = "b".repeat(64);
+        let inspect = vec![
+            "operator".into(),
+            "release-pair".into(),
+            "inspect-failed-promotion".into(),
+            "--transaction-id".into(),
+            id.clone(),
+        ];
+        assert!(super::parse_operator_action(inspect.clone()).is_ok());
+        let retire = vec![
+            "operator".into(),
+            "release-pair".into(),
+            "retire-failed-promotion".into(),
+            "--transaction-id".into(),
+            id,
+            "--expected-evidence-sha256".into(),
+            hash,
+        ];
+        assert!(super::parse_operator_action(retire.clone()).is_ok());
+        for index in [3, 4, 5, 6] {
+            let mut changed = retire.clone();
+            changed[index] = "../unscoped".into();
+            assert!(super::parse_operator_action(changed).is_err());
+        }
+        let mut extra = inspect;
+        extra.push("--force".into());
+        assert!(super::parse_operator_action(extra).is_err());
+    }
     use super::*;
     use serde_json::Value;
     use sha2::Digest;
