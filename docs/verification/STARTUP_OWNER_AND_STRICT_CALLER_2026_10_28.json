@@ -1,0 +1,106 @@
+{
+  "observedUtc": "2026-10-28T23:29:05.1212133+00:00",
+  "preservation": {
+    "verificationSha256": "5b599a7d50616bf1fce4d77fceb4046a6e1765eacdb0fe406352ac4bd0856b96",
+    "failures": 0,
+    "remainingPort3200Owners": 0,
+    "metadataPins": 2,
+    "hashedPins": 8502
+  },
+  "sourceCommit": "c014db86bbd872d07d99160694534299df4c3af2",
+  "connector": "NOT_REPROBED_UNCHANGED_LAST_HTTP_429",
+  "schemaVersion": 1,
+  "references": [
+    "https://learn.microsoft.com/en-us/windows/win32/taskschd/task-scheduler-error-and-success-constants",
+    "https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-tsch/528539ab-2678-4184-9573-cd624916ef9a"
+  ],
+  "unattendedServingAcceptance": "OPEN",
+  "processActions": {
+    "recurringAutomationStarts": 0,
+    "nativeProjectTaskActions": 0,
+    "tunnelChanges": 0,
+    "browserStarts": 0,
+    "wakeStarts": 0,
+    "newReleaseCandidates": 0,
+    "officialRuntimeStarts": 0
+  },
+  "remoteSourceShaVerified": true,
+  "supervisor": {
+    "installedExecutableUpdated": false,
+    "protectedSupervisorRootChanges": 0,
+    "taskRegistrations": 0,
+    "evidenceType": "SOURCE_AND_ACTUAL_WINDOWS_READ_ONLY_COM",
+    "installedDefinition": "SUPERVISOR_STARTUP_TASK_LOOKUP_FAILED",
+    "taskRuns": 0,
+    "focusedTestsPassed": 12,
+    "taskDeletions": 0,
+    "installedStatus": "SUPERVISOR_STARTUP_POLICY_UNPROVEN",
+    "accountInformationErrorIsNotAbsence": true,
+    "fixedTaskExists": false,
+    "observedLookupHresult": "0x80070002",
+    "sourceLookupClassification": "ABSENT",
+    "optInActualComTestsPassed": 1,
+    "taskUpdates": 0
+  },
+  "testLogDigests": [
+    {
+      "sha256": "860dfd26ab04d0476a42197649b77450f5394ddd389cb789d65c2207c276844a",
+      "test": "fixed-startup-absence-source-tests-v2"
+    },
+    {
+      "sha256": "4df32a604691ef74c9e5cb24266ae8c9912c28c6add86760a269d67974650696",
+      "test": "fixed-startup-absence-actual-com"
+    },
+    {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "test": "fixed-startup-absence-format-v2"
+    },
+    {
+      "sha256": "d5bb8cb340502f413bf1bfa676ea44217abe9f22572c20807fde781a70ef97e1",
+      "test": "fixed-startup-absence-clippy"
+    },
+    {
+      "sha256": "74786f4db89764f6bb655a4ca4c4afcfd1b71eb69e757e8740c5d24b44317a2b",
+      "test": "strict-readiness-core-v2"
+    },
+    {
+      "sha256": "ef93b14630d38f061700b7fe9a8f749504219d5201b15df1a9a580a60bac8738",
+      "test": "strict-readiness-windows-v2"
+    },
+    {
+      "sha256": "b3776baca320adcbaa3dcb289c24f34f5934779b219de9949ba56f80efcbc622",
+      "test": "strict-readiness-bootstrap-core-final"
+    },
+    {
+      "sha256": "b3776baca320adcbaa3dcb289c24f34f5934779b219de9949ba56f80efcbc622",
+      "test": "strict-readiness-bootstrap-windows-final"
+    }
+  ],
+  "sourceFiles": {
+    "startupScriptSha256": "15d4771ffcaa601cf4e7f32e7e9ef24d5a515ce04e068acb703e31d583e55761",
+    "supervisorStartupSha256": "4097e8f7746c59f5259acaae5c9fc845738c5598f1e28dada14ee7dcccb83663"
+  },
+  "goal": "ACTIVE",
+  "branch": "codex/web-rollover-oct17",
+  "webCodingAcceptance": "OPEN",
+  "strictStartup": {
+    "resultSha256": "80ac916623eae7a243f028bdf3e77a5a4ff5a9c889c4553dc59e57a751f5300d",
+    "callerStrictMode": "Latest",
+    "evidenceType": "INSTALLED_BOUNDED",
+    "installedExecutableSha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf",
+    "missingAndWrongAuthStatus": 401,
+    "publicStartStopCycles": 1,
+    "authenticatedInitializeAndToolsStatus": 200,
+    "fixtureCasesPerEngine": 18,
+    "bootstrapSuitesBothPassed": true,
+    "outerSha256": "8dd05b4c6893aeb17522db9c1daf61e9a98fe5869a074da110c7082ed20e83de",
+    "toolCount": 102,
+    "launcherSourceOnlyIntegrated": true,
+    "testedPowerShellVersions": [
+      "7.6.5",
+      "5.1.26100.9711"
+    ],
+    "fingerprintMatches": true
+  },
+  "ci": "UNVERIFIED_ZERO_EXACT_COMMIT_RUNS"
+}
