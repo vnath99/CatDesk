@@ -34,6 +34,34 @@ def classify(cdp, url):
     if p.hostname in {"chatgpt.com","chat.openai.com"} and p.path in {"","/"}: return "HOME"
     return "TARGET_DRIFT"
 
+def recover_empty_home(cdp, url):
+    """One same-tab navigation, only from a positively empty, idle Home.
+
+    HOME alone says nothing about authentication. Never inspect/export draft
+    contents or leave an unknown composer. The caller consumes its sole recovery
+    attempt even if this check or navigation fails.
+    """
+    if classify(cdp, url) != "HOME":
+        return
+    try:
+        empty = cdp.evaluate("""(() => {
+            if (document.readyState !== 'complete') return false;
+            const editors = document.querySelectorAll('#prompt-textarea');
+            if (editors.length !== 1) return false;
+            const e = editors[0];
+            if (!(e instanceof HTMLTextAreaElement) && !e.isContentEditable) return false;
+            const text = e instanceof HTMLTextAreaElement ? e.value : e.textContent;
+            if (text !== '' || e.querySelector('img, video, audio, input, [data-file-id]')) return false;
+            if (document.querySelector('[data-testid*="attachment" i], [data-testid*="file-thumbnail" i]')) return false;
+            return true;
+        })()""")
+        # Require an actual boolean, never truthy error strings or wrapped values.
+        if empty is True and not any(visible(cdp, s) for s in STOP):
+            # Existing bridge recovery also uses get(): open() can switch tabs.
+            cdp.get(url)
+    except Exception:
+        pass
+
 def main():
     parser = argparse.ArgumentParser(description="Read-only CatDesk Wake profile readiness probe")
     parser.add_argument("--conversation-url", required=True)
@@ -60,10 +88,15 @@ def main():
         cdp = sb.cdp
         last = None
         deadline = time.monotonic() + args.seconds
+        recover_after = time.monotonic() + min(5.0, args.seconds / 2)
+        recovery_attempted = False
         while time.monotonic() < deadline:
             state = classify(cdp, url)
             if state != last:
                 print("PROBE:" + state, flush=True); last = state
+            if args.profile is not None and state == "HOME" and not recovery_attempted and time.monotonic() >= recover_after:
+                recovery_attempted = True
+                recover_empty_home(cdp, url)
             time.sleep(1)
         print("PROBE:FINAL:" + classify(cdp, url), flush=True)
     return 0

@@ -1,5 +1,5 @@
 {
-  "classification": "SOURCE_QUALIFIED_NO_LIVE_BROWSER_CLAIM",
+  "classification": "SOURCE_QUALIFIED_LIVE_HOME_TARGET_UNVERIFIED",
   "qualification": {
     "wakeFormatting": "PASS",
     "timeoutCleanup": true,
@@ -26,7 +26,7 @@
   "checkpoint": "C262",
   "sourceParentCommit": "bd34d957ab000b2ac10c7f3ee661ce5812d65a1d",
   "twoWebCodingAcceptance": "OPEN",
-  "liveBrowserInspection": "PENDING",
+  "liveBrowserInspection": "COMPLETED_BEFORE_AND_AFTER_OPERATOR_SIGNIN_HOME",
   "controls": {
     "profileCreated": false,
     "existingLoginPreflightReused": true,
@@ -45,5 +45,32 @@
     "legacyProductionPauseRequirementUnchanged": true,
     "authenticationAuthority": "Advisory observation only; never establishes send permission",
     "interactiveTerminalRequired": false
+  },
+  "sourceCommit": "e830279ad5b474bf26f79dd982de2e44caa18a59",
+  "liveEvidence": {
+    "productionActions": 0,
+    "postSignInFinishedUtc": "2026-10-28T19:36:13.8772780+00:00",
+    "statePreserved": true,
+    "ownersRemaining": 0,
+    "sendAttempted": false,
+    "postSignInStartedUtc": "2026-10-28T19:34:45.1417275+00:00",
+    "finalState": "HOME",
+    "hostStarted": false,
+    "protectedFiles": 8471,
+    "resultSha256": "e627227126466476e8e2c37bf405979ac694cc24e618756d9dab77a9021ab254",
+    "authenticationVerified": false,
+    "metadataOnlyPreserved": 2
+  },
+  "homeRecoveryCorrection": {
+    "nativeLiveResult": "PENDING",
+    "sourceTestsPassed": 6,
+    "scope": "Development profile only; one same-tab exact-target navigation after positive empty idle Home composer check; existing total deadline and Job owner retained; no draft contents exported"
+  },
+  "expiredC259": {
+    "renewed": false,
+    "expiresUtc": "2026-10-28T17:53:03Z",
+    "replayAllowed": false,
+    "submitted": false,
+    "state": "CLAIMED_PRESERVED_EXPIRED"
   }
 }

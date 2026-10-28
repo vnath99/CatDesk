@@ -1,3 +1,25 @@
+## October 28 — operator sign-in, execution policy and bounded Home recovery
+
+The operator reported signing in to the existing isolated profile. The owned login
+browser closed. A fresh read-only check from 19:34:45 to 19:36:13 UTC still observed
+`HOME`; it did not establish exact-target readiness or failed authentication. All
+8,471 protected files, two metadata-only records and profile identity were
+preserved. No message, backend, scheduler or production operation occurred; no test
+owners remained. C259 was never submitted and expired at 17:53:03 UTC. It must not
+be resumed using that expired authority.
+
+The inspector now permits one same-tab exact-target navigation from a positively
+empty, idle Home composer, within its existing bounded owner. Unknown/nonempty
+composers, attachments, login/security states and route drift prevent navigation.
+This reuses the established bridge recovery approach; production probe behavior
+is unchanged. Six focused Python tests passed. A new standalone native build and
+bounded live check remain separate acceptance steps.
+
+[OPERATOR_ACTIONS.md](../../OPERATOR_ACTIONS.md) records the October 28–31 standing
+policy, individual task states and operator prerequisites. Routine work continues
+within existing permissions; no expired grant or ambiguous request is replayed.
+Production promotion, connector recovery and real two-project Web coding remain
+open. No operator decision is currently requested.
 ## October 28 C262 — bounded inspection of the existing development browser
 
 Source adds `operator web-dev-runtime inspect-readiness --project-id <project>`.
