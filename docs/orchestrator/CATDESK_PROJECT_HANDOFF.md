@@ -1,3 +1,37 @@
+## October 28 C253–C255 — live development health, unavailable Web review, diagnostic fix
+
+The guarded C253 development package from published source
+`e4a99a8b6913c3db689a216f4ae4e0a7f6fff612` is selected with its verified
+predecessor retained. Its six-second live backend returned 401 without authentication
+and 200 with 79 unique MCP tools when authenticated; actual child identity and
+natural cleanup passed. This remains development qualification.
+
+C254 delivered one standing-authorized read-only review with an exact USER receipt.
+Bounded reobservation refused `RESPONSE_TARGET_DRIFT`; the separate supported read
+reached the correct conversation and latest request but found an assistant load-error
+placeholder. No substantive review, acceptance, ACK, snapshot or build authority
+was created. The request remains preserved without resend. Final checks preserved
+8,212 files, all five bindings and native session state, with no test owners left.
+The separate connector HTTP 429 was not rechecked or identified as this UI failure's cause.
+
+C255 fixes a reproduced source defect: wrapped load-error text could pass the review
+reader. Whitespace/quote variants now remain unverified with the fixed diagnostic
+`WEB_REVIEW_RESPONSE_LOAD_ERROR`; unfinished or incomplete bodies retain their
+existing refusal. All 26 relevant Web CLI tests, formatting and strict Clippy passed
+on the final source. Production and the selected development executable are unchanged
+by C255; its installed/live qualification and independent source review remain open.
+Captured diagnostic text showed a private harness encoding limitation; original
+captures are retained and no repaired bytes were used as review authority.
+
+Next: recover substantive evidence for the already delivered C254 request through
+supported read-only mechanisms after the Web dependency changes. Genuine acceptance
+can qualify its exact reviewed revision for the existing producer/promotion chain;
+C255 needs separate qualification before inclusion in production. Do not create an
+equivalent review or replay an unknown request. Recurring Wake/browser automation
+remains off. Production startup, rollback, connector and two-project Web coding
+acceptance remain open; no operator action is required for continued source work.
+See the C253/C254 live-development and C255 source verification records.
+
 ## October 28 C252/C253 — independent Web review caught and reproduced a route defect
 
 One bounded review reached an independently eligible registered conversation

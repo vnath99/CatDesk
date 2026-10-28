@@ -805,10 +805,20 @@ fn review_text(snapshot: &Value, expected_message_digest: &str) -> Result<String
         || assistant["textComplete"] != true
         || text.trim().is_empty()
         || text.len() > 8192
-        || text.to_ascii_lowercase().contains("response couldn’t load")
-        || text.to_ascii_lowercase().contains("response couldn't load")
     {
         return Err("WEB_REVIEW_RESPONSE_NOT_COMPLETE".into());
+    }
+    // A rendered load-error card is neither a review nor an unfinished answer.
+    // Match its observable whitespace/quote variants without changing the
+    // returned response bytes or permitting any retry/submission action.
+    let normalized = text
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .replace(['’', '‘'], "'")
+        .to_ascii_lowercase();
+    if normalized.contains("response couldn't load") {
+        return Err("WEB_REVIEW_RESPONSE_LOAD_ERROR".into());
     }
     Ok(text.to_owned())
 }
@@ -1601,6 +1611,36 @@ mod tests {
         .unwrap();
         assert_eq!(success["eventVerified"], true);
         assert_eq!(success["response"], "Verified review body.");
+        for placeholder in [
+            "This response couldn't load",
+            "This response\ncouldn’t load",
+        ] {
+            let unavailable = read_review_using(
+                &control,
+                "alpha",
+                &event.event_id,
+                None,
+                &|| Ok(()),
+                |_, _, _, _, _| SnapshotReadReport {
+                    snapshot: Some(json!({"messages":[
+                        {"role":"USER","text":event.message,"textComplete":true},
+                        {"role":"ASSISTANT","text":placeholder,"textComplete":true}
+                    ]})),
+                    failure: None,
+                    diagnostic: SnapshotDiagnostic {
+                        phase: SnapshotReadPhase::Complete,
+                        elapsed_millis: 10,
+                        budget_millis: 90000,
+                    },
+                },
+            )
+            .unwrap();
+            assert_eq!(unavailable["eventVerified"], false);
+            assert_eq!(unavailable["status"], "UNVERIFIED_EVENT_SNAPSHOT");
+            assert_eq!(unavailable["reason"], "WEB_REVIEW_RESPONSE_LOAD_ERROR");
+            assert_eq!(unavailable["sendAttempted"], false);
+            assert!(unavailable.get("response").is_none());
+        }
         assert!(
             read_review_using(
                 &control,
@@ -1777,6 +1817,54 @@ mod tests {
             let mut empty = command;
             empty.last_mut().unwrap().clear();
             assert!(parse(&empty).is_err());
+        }
+    }
+
+    #[test]
+    fn review_read_distinguishes_load_failure_without_accepting_placeholder_text() {
+        let message_digest = catdesk_wake::protocol::digest("approved review request");
+        for placeholder in [
+            "This response couldn't load",
+            "This response couldn’t load",
+            "This RESPONSE\ncouldn’t\tload",
+            "This response\u{00a0}couldn‘t load",
+        ] {
+            let mut snapshot = json!({"messages":[
+                {"role":"USER","text":"approved review request","textComplete":true},
+                {"role":"ASSISTANT","text":placeholder,"textComplete":true}
+            ]});
+            assert_eq!(
+                review_text(&snapshot, &message_digest).unwrap_err(),
+                "WEB_REVIEW_RESPONSE_LOAD_ERROR",
+                "placeholder must remain unverified: {placeholder:?}"
+            );
+            assert_eq!(
+                review_text(&snapshot, &"0".repeat(64)).unwrap_err(),
+                "WEB_REVIEW_EVENT_NOT_LATEST_OR_INCOMPLETE"
+            );
+            snapshot["messages"][1]["textComplete"] = json!(false);
+            assert_eq!(
+                review_text(&snapshot, &message_digest).unwrap_err(),
+                "WEB_REVIEW_RESPONSE_NOT_COMPLETE"
+            );
+        }
+    }
+
+    #[test]
+    fn review_read_rejects_wrapped_load_error_instead_of_accepting_it_as_review() {
+        let message_digest = catdesk_wake::protocol::digest("approved review request");
+        for placeholder in [
+            "This RESPONSE\ncouldn’t\tload",
+            "This response\u{00a0}couldn‘t load",
+        ] {
+            let snapshot = json!({"messages":[
+                {"role":"USER","text":"approved review request","textComplete":true},
+                {"role":"ASSISTANT","text":placeholder,"textComplete":true}
+            ]});
+            assert!(
+                review_text(&snapshot, &message_digest).is_err(),
+                "load placeholder must not become verified review text: {placeholder:?}"
+            );
         }
     }
 
