@@ -873,9 +873,23 @@ function Get-LocalMcpReadiness {
             $content=[string]$response.Content
             if($content.Length -gt $script:MaxMcpReplyBytes){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_RESPONSE_INVALID'}
             try{$parsed=$content|ConvertFrom-Json -ErrorAction Stop}catch{return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_RESPONSE_INVALID'}
-            if($parsed.error){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
-            if($request.method -eq "initialize" -and $null -eq $parsed.result.serverInfo){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
-            if($request.method -eq "tools/list"){$names=@($parsed.result.tools|ForEach-Object{$_.name});if($names -notcontains "catdesk_instruction" -or $names -notcontains "delegated_run_list"){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}}
+            # Successful JSON-RPC responses normally omit error. Inspect the
+            # member before reading it so caller strict mode cannot turn a
+            # healthy installed backend into a redacted ACTION_REQUIRED.
+            if($parsed -isnot [System.Management.Automation.PSCustomObject]){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_RESPONSE_INVALID'}
+            if($parsed.PSObject.Properties['error'] -and $parsed.error){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
+            if(-not $parsed.PSObject.Properties['result'] -or $parsed.result -isnot [System.Management.Automation.PSCustomObject]){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
+            $rpcResult=$parsed.result
+            if($request.method -eq "initialize" -and (-not $rpcResult.PSObject.Properties['serverInfo'] -or $rpcResult.serverInfo -isnot [System.Management.Automation.PSCustomObject])){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
+            if($request.method -eq "tools/list"){
+                if(-not $rpcResult.PSObject.Properties['tools']){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
+                $names=@()
+                foreach($tool in @($rpcResult.tools)){
+                    if($tool -isnot [System.Management.Automation.PSCustomObject] -or -not $tool.PSObject.Properties['name'] -or $tool.name -isnot [string]){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
+                    $names+=$tool.name
+                }
+                if($names -notcontains "catdesk_instruction" -or $names -notcontains "delegated_run_list"){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
+            }
         }
         return New-LocalMcpReadinessResult -Ready $true -Gate 'READY'
     }

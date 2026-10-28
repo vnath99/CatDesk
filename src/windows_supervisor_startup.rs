@@ -577,6 +577,15 @@ fn native_hresult_reason(
     }
 }
 
+/// GetTask reports HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) for an absent
+/// task. 0x8004130F is SCHED_E_ACCOUNT_INFORMATION_NOT_SET, not absence.
+/// A failed lookup must also return no object before absence can authorize
+/// the existing create-only registration path.
+fn native_task_lookup_is_absent(status: i32, object_is_null: bool) -> bool {
+    const HRESULT_FILE_NOT_FOUND: i32 = 0x8007_0002_u32 as i32;
+    status == HRESULT_FILE_NOT_FOUND && object_is_null
+}
+
 #[cfg(windows)]
 mod native {
     use std::ffi::c_void;
@@ -587,7 +596,6 @@ mod native {
         SupervisorStartupDefinitionStateV1, SupervisorStartupErrorV1, xml_is_exact_owned,
     };
 
-    const SCHED_E_TASK_NOT_FOUND: i32 = 0x8004_130F_u32 as i32;
     const TASK_CREATE: i32 = 0x2;
     const TASK_UPDATE: i32 = 0x4;
     const TASK_LOGON_INTERACTIVE_TOKEN: i32 = 3;
@@ -841,7 +849,7 @@ mod native {
         let mut task_raw = std::ptr::null_mut();
         let get_task: ITaskFolderGetTask = unsafe { method(folder.0, I_TASK_FOLDER_GET_TASK_SLOT) };
         let hr = unsafe { get_task(folder.0, name.as_ptr(), &mut task_raw) };
-        if hr == SCHED_E_TASK_NOT_FOUND {
+        if super::native_task_lookup_is_absent(hr, task_raw.is_null()) {
             return Ok(None);
         }
         if hr < 0 || task_raw.is_null() {
@@ -967,6 +975,19 @@ mod native {
     mod abi_tests {
         use super::*;
 
+        #[test]
+        #[ignore = "read-only Windows host qualification; requires the fixed task to be absent"]
+        fn fixed_task_absence_is_observed_through_actual_com() {
+            let (_apartment, service) = connect_service().expect("Task Scheduler connection");
+            let folder = root_folder(&service).expect("Task Scheduler root");
+            assert!(
+                existing_task_xml(&folder)
+                    .expect("fixed task lookup must distinguish absence from lookup failure")
+                    .is_none(),
+                "qualification requires the fixed task to remain absent; no task is mutated"
+            );
+        }
+
         #[derive(Default)]
         struct FakeComVtable {
             calls: Vec<usize>,
@@ -1060,6 +1081,24 @@ mod native {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_file_not_found_without_an_object_is_task_absence() {
+        assert!(native_task_lookup_is_absent(0x8007_0002_u32 as i32, true));
+        assert!(!native_task_lookup_is_absent(0x8007_0002_u32 as i32, false));
+        for status in [
+            0,
+            1,
+            0x8004_130F_u32 as i32, // account information is missing
+            0x8007_0005_u32 as i32, // access denied
+            0x8007_0003_u32 as i32, // folder/path unavailable
+            0x8007_06BA_u32 as i32, // scheduler RPC unavailable
+            -1,
+        ] {
+            assert!(!native_task_lookup_is_absent(status, true));
+            assert!(!native_task_lookup_is_absent(status, false));
+        }
+    }
 
     #[test]
     fn authority_accepts_only_non_system_interactive_sid_shape() {
