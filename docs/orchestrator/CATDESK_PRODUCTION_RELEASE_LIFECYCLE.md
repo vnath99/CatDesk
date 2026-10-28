@@ -1,3 +1,23 @@
+## October 28 — real failed-promotion inspection qualified; stopped startup still open
+
+The qualified controller from source `c980eed0d299fe4bae3e661c543d6574f3e7f693`
+completed one bounded read-only inspection of the actual failed promotion at
+21:23:45–21:24:00 UTC. Native result: `ELIGIBLE`, including the exact superseded
+historical receipt and existing trusted release/producer authority. All 8,484
+protected files, two metadata-only records, profile identity and project state
+were preserved; zero test owners remained. No metadata retirement, binary change,
+browser action, new message or recurring process was performed.
+
+A second prerequisite remains: the existing promotion's phase-one entry requires
+a running canonical backend, while the current trusted C208 image lacks supported
+backend-only startup. Retiring the records alone cannot restore service. Next:
+qualify the existing guarded promotion/lifecycle path for a stopped current release,
+with a retained trusted rollback and bounded owner, before any new promotion.
+Do not start the broader GUI/Wake/tunnel stack as a workaround. No operator decision
+is requested. Installed health, rollback, connector and independent two-project
+ChatGPT Web coding remain open; zero remote CI checks/runs means CI unverified.
+See `docs/verification/STOPPED_PROMOTION_RETIREMENT_2026_10_28.json`.
+
 ## Stopped failed-promotion retirement (source-qualified October 28)
 
 Use the qualified operator executable with its working directory set to the
