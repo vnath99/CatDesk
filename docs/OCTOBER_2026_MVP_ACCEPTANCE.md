@@ -1,3 +1,24 @@
+## October 28 C250 — native text entry qualified locally
+
+Established-conversation messages now reuse the existing native editor transaction
+from rollover. It inserts once after the durable write boundary and rechecks the
+exact URL, unique editor, empty draft and editor identity. An uncertain native
+edit never falls back to keystrokes. The existing home/rollover guards remain.
+
+All 126 bridge, 75 rollover/editor and 32 adapter tests passed. An actual isolated
+local HTML browser inserted 5,700 bytes in one input event (16 ms measured), with
+zero key or submit events, and refused to overwrite the resulting draft. Cleanup
+passed. This is source and local-browser evidence; the selected authenticated
+adapter and production executable are unchanged. The test library downloaded a
+matching Chrome driver into the development cache; this grants no release authority.
+
+The C249 review for published `2d54c9085e4edbd473784b046d00c9e6ed5a2d49`
+remains `SUBMITTING` with an unknown outcome. Read-only diagnosis found a stable
+partial prefix and disagreeing readers. Its draft and history remain preserved;
+no replay, new review acceptance or promotion is claimed. The prior timeout's
+cause remains unproven. Next: qualify the updated development adapter and use the
+supported recovery procedure for the pending review without blind resubmission.
+See the C250 verification record for evidence and remaining live acceptance gates.
 ## October 26 C249 — bounded helper rechecks qualified in source
 
 A real regression reproduced the one-shot helper-cleanup defect: an unknown Job

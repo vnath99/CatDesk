@@ -611,6 +611,65 @@ process.stdout.write(JSON.stringify({result, inserts, command, text:getText(edit
             self.assertEqual(len(calls), 1)
 
 
+class NativeConversationInsertTests(unittest.TestCase):
+    def run_native(self, message, **state):
+        node = shutil.which("node")
+        if node is None:
+            self.skipTest("Node is required for the isolated editor fixture")
+        scripts = []
+        cdp = types.SimpleNamespace(
+            evaluate=lambda script: scripts.append(script) or "INSERTED",
+            get_current_url=lambda: SOURCE,
+            send_keys=lambda *a, **k: self.fail("no keystroke fallback"),
+        )
+        with tempfile.TemporaryDirectory() as profile:
+            sink = bridge.CdpSink(SOURCE, Path(profile), 1, 1)
+            with patch.object(sink, "pre_typing_ready"), patch.object(sink, "text", return_value=message):
+                sink.insert_empty_conversation_draft(cdp, message)
+        self.assertEqual(len(scripts), 1)
+        config = {"url": SOURCE, "turns": True, **state, "script": scripts[0]}
+        result = subprocess.run([node, "-e", NativeBootstrapInsertTests.DOM_FIXTURE],
+                                input=json.dumps(config), capture_output=True, text=True,
+                                encoding="utf-8", timeout=5, check=True)
+        return json.loads(result.stdout)
+
+    def test_existing_history_allows_one_native_edit_for_long_text(self):
+        message = 'Review "public source": café 😀. ' * 100
+        for textarea in (True, False):
+            with self.subTest(textarea=textarea):
+                result = self.run_native(message, textarea=textarea)
+                self.assertEqual((result["result"], result["inserts"], result["command"]),
+                                 ("INSERTED", 1, "insertText"))
+                self.assertEqual(result["text"], message)
+
+    def test_target_draft_focus_and_editor_cas_refuse_before_write(self):
+        for state, code in (({"url": ISSUED}, "PRE_HOME"),
+                            ({"draft": "preserve operator draft"}, "PRE_RAW_CAS"),
+                            ({"multiple": True}, "PRE_EDITOR_COUNT"),
+                            ({"focus": "url"}, "PRE_HOME"),
+                            ({"focus": "draft"}, "PRE_RAW_CAS"),
+                            ({"focus": "replace"}, "PRE_EDITOR_CHANGED")):
+            with self.subTest(state=state):
+                result = self.run_native("expected review", **state)
+                self.assertEqual((result["result"], result["inserts"]), (code, 0))
+
+    def test_lost_partial_or_redirected_edit_never_retries(self):
+        for outcome, code in (("partial", "POST_COMMAND_FALSE"),
+                              ("throw", "POST_EXCEPTION"), ("post-url", "POST_SCOPE")):
+            with self.subTest(outcome=outcome):
+                result = self.run_native("expected review", outcome=outcome)
+                self.assertEqual((result["result"], result["inserts"]), (code, 1))
+
+    def test_native_exception_never_falls_back_to_keystrokes(self):
+        cdp = types.SimpleNamespace(evaluate=lambda _: (_ for _ in ()).throw(TimeoutError()),
+                                   send_keys=lambda *a, **k: self.fail("blind fallback"))
+        with tempfile.TemporaryDirectory() as profile:
+            sink = bridge.CdpSink(SOURCE, Path(profile), 1, 1)
+            with patch.object(sink, "pre_typing_ready"):
+                with self.assertRaisesRegex(bridge.Attention, "EVALUATION_EXCEPTION"):
+                    sink.insert_empty_conversation_draft(cdp, "expected review")
+
+
 class NewConversationTests(unittest.TestCase):
     def request(self):
         return {

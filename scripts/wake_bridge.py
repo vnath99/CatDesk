@@ -2314,7 +2314,7 @@ class CdpSink:
                         if not self.exact(cdp.get_current_url()): raise Attention("TARGET_IDENTITY_MISMATCH")
                         self.pre_typing_ready(cdp)
                         editor_selector = self.editor_selector(cdp, prevalidated=True)
-                        cdp.send_keys(editor_selector, typed_message, timeout=self.ui_timeout)
+                        self.insert_empty_conversation_draft(cdp, typed_message)
                         if normalize_message(self.text(cdp)) != normalize_message(message): raise Attention("TYPING_NOT_CONFIRMED")
                         send_selector = self.wait_for_send_control(cdp, min(self.ui_timeout, 20))
                         if normalize_message(self.text(cdp)) != normalize_message(message): raise Attention("TYPING_NOT_CONFIRMED")
@@ -2350,6 +2350,170 @@ class CdpSink:
                     raise
                 time.sleep(READINESS_POLL_SECONDS)
         raise Attention("BROWSER_NETWORK_ERROR")
+
+    def insert_empty_conversation_draft(self, cdp: Any, message: str) -> None:
+        """One native edit under the existing exact-target/empty-draft guards.
+
+        Reuse the rollover editor CAS, allowing the existing conversation's
+        history. A lost or negative result never falls back to keystrokes.
+        The caller must already have persisted its uncertain-write boundary.
+        """
+        self.pre_typing_ready(cdp)
+        # Compatibility for reduced CDP adapters lacking native evaluation.
+        # Never fall back after starting a native editing transaction.
+        if not callable(getattr(cdp, "evaluate", None)):
+            cdp.send_keys(self.editor_selector(cdp, prevalidated=True),
+                          keyboard_safe_message(message), timeout=self.ui_timeout)
+            return
+        self._replace_home_draft_once(
+            cdp, message, None, "CONVERSATION_DRAFT_INSERT_UNVERIFIED", conversation=True
+        )
+
+    def _replace_home_draft_once(self, cdp: Any, message: str, expected_raw: str | None,
+                                 failure: str, *, conversation: bool = False) -> None:
+        """One native input operation with a same-evaluation composer CAS.
+
+        Fixed diagnostic suffixes distinguish refusals before our edit from
+        uncertain outcomes after it. They are evidence, never retry authority.
+        A lost evaluation response remains uncertain even if no text is seen.
+        """
+        expected_location = self.url if conversation else NEW_CONVERSATION_HOME
+        text = keyboard_safe_message(message)
+        if len(text.encode("utf-8")) > MAX_USER_MESSAGE_CHARS:
+            raise Attention("BOOTSTRAP_MESSAGE_TOO_LONG")
+        script = f"""(() => {{
+            let editAttempted = false;
+            try {{
+            {COMPOSER_TEXT_READER}
+            const text = {json.dumps(text)};
+            const expectedRaw = {json.dumps(expected_raw)};
+            const hasTurns = () => Boolean(document.querySelector(
+                '[data-message-author-role="user"], [data-message-author-role="assistant"], '
+                + 'article[data-turn="user"], article[data-turn="assistant"], '
+                + '[data-user-message-bubble], [class~="group/user-message"], h4[data-conversation-role="assistant"]'
+            ));
+            const editors = () => Array.from(document.querySelectorAll(
+                '#prompt-textarea, div.ProseMirror[contenteditable="true"], [contenteditable="true"][data-lexical-editor="true"]'
+            )).filter(element => {{
+                const style = window.getComputedStyle(element);
+                return element.getClientRects().length > 0 &&
+                    style.visibility !== 'hidden' && style.display !== 'none';
+            }});
+            if (location.href !== {json.dumps(expected_location)}) return 'PRE_HOME';
+            if ({json.dumps(not conversation)} && hasTurns()) return 'PRE_TURNS';
+            if (document.readyState === 'loading') return 'PRE_NOT_READY';
+            const visible = editors();
+            if (visible.length !== 1) return 'PRE_EDITOR_COUNT';
+            const editor = visible[0];
+            const plainStructure = () => {{
+                const tags = new Set(['P', 'DIV', 'SPAN', 'BR']);
+                const attributes = new Set(['class', 'dir', 'data-placeholder']);
+                const plain = node => {{
+                    if (node.nodeType === 3) return true;
+                    if (node.nodeType !== 1) return false;
+                    if (node !== editor) {{
+                        const tag = String(node.tagName).toUpperCase();
+                        // Current ProseMirror marks its empty P placeholder.
+                        // Accept that inert marker only on a truly empty
+                        // paragraph; it cannot hide text, rich nodes or chips.
+                        const emptyParagraph = node.hasAttribute('data-empty-paragraph');
+                        if (emptyParagraph && (tag !== 'P' ||
+                            !Array.from(node.childNodes).every(child =>
+                                child.nodeType === 3 ? !(child.nodeValue || '').trim() :
+                                child.nodeType === 1 && String(child.tagName).toUpperCase() === 'BR' &&
+                                    child.childNodes.length === 0))) return false;
+                        if (!tags.has(tag) ||
+                            Array.from(node.attributes).some(attribute => !attributes.has(attribute.name) &&
+                                !(emptyParagraph && attribute.name === 'data-empty-paragraph')) ||
+                            (node.hasAttribute('dir') && !['auto', 'ltr', 'rtl'].includes(node.getAttribute('dir'))))
+                            return false;
+                        const style = window.getComputedStyle(node);
+                        if (node.hidden || node.inert || style.display === 'none' ||
+                            ['hidden', 'collapse'].includes(style.visibility) || style.opacity === '0' ||
+                            style.contentVisibility === 'hidden') return false;
+                    }}
+                    return Array.from(node.childNodes).every(plain);
+                }};
+                return plain(editor);
+            }};
+            const draftRefusal = () => {{
+                const current = editors();
+                const raw = editor.value ?? editor.innerText ?? editor.textContent ?? '';
+                if (location.href !== {json.dumps(expected_location)}) return 'PRE_HOME';
+                if ({json.dumps(not conversation)} && hasTurns()) return 'PRE_TURNS';
+                if (current.length !== 1) return 'PRE_EDITOR_COUNT';
+                if (current[0] !== editor || !editor.isConnected) return 'PRE_EDITOR_CHANGED';
+                if (!plainStructure()) return 'PRE_STRUCTURE';
+                if (!(expectedRaw === null ? composerText(editor).trim() === '' : raw === expectedRaw))
+                    return 'PRE_RAW_CAS';
+                return null;
+            }};
+            let refusal = draftRefusal();
+            if (refusal) return refusal;
+            if (!editor.isContentEditable && !(editor instanceof HTMLTextAreaElement)) return 'PRE_EDITABLE';
+            editor.focus();
+            refusal = draftRefusal();
+            if (refusal) return refusal;
+            if (document.activeElement !== editor) return 'PRE_FOCUS';
+            let selection = null;
+            if (editor.isContentEditable) {{
+                selection = window.getSelection();
+                if (!selection) return 'PRE_SELECTION';
+                const range = document.createRange();
+                range.selectNodeContents(editor);
+                selection.removeAllRanges();
+                selection.addRange(range);
+            }} else {{
+                editor.setSelectionRange(0, editor.value.length);
+            }}
+            const selectionOwned = () => {{
+                if (!editor.isContentEditable) return editor.selectionStart === 0 &&
+                    editor.selectionEnd === editor.value.length;
+                if (!selection || selection.rangeCount !== 1 || !editor.contains(selection.anchorNode) ||
+                    !editor.contains(selection.focusNode)) return false;
+                const selected = selection.getRangeAt(0);
+                return selected.startContainer === editor && selected.endContainer === editor &&
+                    selected.startOffset === 0 && selected.endOffset === editor.childNodes.length;
+            }};
+            refusal = draftRefusal();
+            if (refusal) return refusal;
+            if (document.activeElement !== editor) return 'PRE_FOCUS';
+            if (!selectionOwned()) return 'PRE_SELECTION';
+            // Use the editor's native input transaction, never textContent or
+            // innerHTML assignment. There is exactly one insertion attempt.
+            editAttempted = true;
+            if (!document.execCommand('insertText', false, text)) return 'POST_COMMAND_FALSE';
+            const after = editors();
+            if (location.href !== {json.dumps(expected_location)} || ({json.dumps(not conversation)} && hasTurns()) ||
+                after.length !== 1 || after[0] !== editor || !editor.isConnected) return 'POST_SCOPE';
+            if (composerText(editor) !== text) return 'POST_TEXT';
+            return 'INSERTED';
+            }} catch (_) {{
+                return editAttempted ? 'POST_EXCEPTION' : 'PRE_EXCEPTION';
+            }}
+        }})()"""
+        try:
+            observed = CdpSink.cdp_value(cdp.evaluate(script))
+        except Exception as error:
+            raise Attention(f"{failure}_EVALUATION_EXCEPTION") from error
+        if observed != "INSERTED":
+            diagnostics = {
+                "PRE_HOME", "PRE_TURNS", "PRE_NOT_READY", "PRE_EDITOR_COUNT",
+                "PRE_EDITOR_CHANGED", "PRE_STRUCTURE", "PRE_RAW_CAS", "PRE_EDITABLE",
+                "PRE_FOCUS", "PRE_SELECTION", "PRE_EXCEPTION", "POST_COMMAND_FALSE",
+                "POST_SCOPE", "POST_TEXT", "POST_EXCEPTION",
+            }
+            code = observed if isinstance(observed, str) and observed in diagnostics else "RESULT_INVALID"
+            raise Attention(f"{failure}_{code}")
+        try:
+            if conversation:
+                if not self.exact(cdp.get_current_url()) or normalize_message(self.text(cdp)) != normalize_message(message):
+                    raise Attention("CONVERSATION_DRAFT_NOT_CONFIRMED")
+            else:
+                self.check_typed_home(cdp, message)
+        except Exception as error:
+            raise Attention(f"{failure}_POST_VERIFY") from error
+
 
 class NewConversationSink(CdpSink):
     """One owned, empty ChatGPT home -> one issued conversation; never binds Wake."""
@@ -2902,146 +3066,6 @@ class NewConversationSink(CdpSink):
         self.check_typed_home(cdp, actual_text)
         self._replace_home_draft_once(cdp, message, actual_text, "BOOTSTRAP_DRAFT_REPAIR_UNVERIFIED")
         self.check_plain_home_draft(cdp)
-
-    def _replace_home_draft_once(self, cdp: Any, message: str, expected_raw: str | None,
-                                 failure: str) -> None:
-        """One native input operation with a same-evaluation composer CAS.
-
-        Fixed diagnostic suffixes distinguish refusals before our edit from
-        uncertain outcomes after it. They are evidence, never retry authority.
-        A lost evaluation response remains uncertain even if no text is seen.
-        """
-        text = keyboard_safe_message(message)
-        if len(text.encode("utf-8")) > MAX_USER_MESSAGE_CHARS:
-            raise Attention("BOOTSTRAP_MESSAGE_TOO_LONG")
-        script = f"""(() => {{
-            let editAttempted = false;
-            try {{
-            {COMPOSER_TEXT_READER}
-            const text = {json.dumps(text)};
-            const expectedRaw = {json.dumps(expected_raw)};
-            const hasTurns = () => Boolean(document.querySelector(
-                '[data-message-author-role="user"], [data-message-author-role="assistant"], '
-                + 'article[data-turn="user"], article[data-turn="assistant"], '
-                + '[data-user-message-bubble], [class~="group/user-message"], h4[data-conversation-role="assistant"]'
-            ));
-            const editors = () => Array.from(document.querySelectorAll(
-                '#prompt-textarea, div.ProseMirror[contenteditable="true"], [contenteditable="true"][data-lexical-editor="true"]'
-            )).filter(element => {{
-                const style = window.getComputedStyle(element);
-                return element.getClientRects().length > 0 &&
-                    style.visibility !== 'hidden' && style.display !== 'none';
-            }});
-            if (location.href !== {json.dumps(NEW_CONVERSATION_HOME)}) return 'PRE_HOME';
-            if (hasTurns()) return 'PRE_TURNS';
-            if (document.readyState === 'loading') return 'PRE_NOT_READY';
-            const visible = editors();
-            if (visible.length !== 1) return 'PRE_EDITOR_COUNT';
-            const editor = visible[0];
-            const plainStructure = () => {{
-                const tags = new Set(['P', 'DIV', 'SPAN', 'BR']);
-                const attributes = new Set(['class', 'dir', 'data-placeholder']);
-                const plain = node => {{
-                    if (node.nodeType === 3) return true;
-                    if (node.nodeType !== 1) return false;
-                    if (node !== editor) {{
-                        const tag = String(node.tagName).toUpperCase();
-                        // Current ProseMirror marks its empty P placeholder.
-                        // Accept that inert marker only on a truly empty
-                        // paragraph; it cannot hide text, rich nodes or chips.
-                        const emptyParagraph = node.hasAttribute('data-empty-paragraph');
-                        if (emptyParagraph && (tag !== 'P' ||
-                            !Array.from(node.childNodes).every(child =>
-                                child.nodeType === 3 ? !(child.nodeValue || '').trim() :
-                                child.nodeType === 1 && String(child.tagName).toUpperCase() === 'BR' &&
-                                    child.childNodes.length === 0))) return false;
-                        if (!tags.has(tag) ||
-                            Array.from(node.attributes).some(attribute => !attributes.has(attribute.name) &&
-                                !(emptyParagraph && attribute.name === 'data-empty-paragraph')) ||
-                            (node.hasAttribute('dir') && !['auto', 'ltr', 'rtl'].includes(node.getAttribute('dir'))))
-                            return false;
-                        const style = window.getComputedStyle(node);
-                        if (node.hidden || node.inert || style.display === 'none' ||
-                            ['hidden', 'collapse'].includes(style.visibility) || style.opacity === '0' ||
-                            style.contentVisibility === 'hidden') return false;
-                    }}
-                    return Array.from(node.childNodes).every(plain);
-                }};
-                return plain(editor);
-            }};
-            const draftRefusal = () => {{
-                const current = editors();
-                const raw = editor.value ?? editor.innerText ?? editor.textContent ?? '';
-                if (location.href !== {json.dumps(NEW_CONVERSATION_HOME)}) return 'PRE_HOME';
-                if (hasTurns()) return 'PRE_TURNS';
-                if (current.length !== 1) return 'PRE_EDITOR_COUNT';
-                if (current[0] !== editor || !editor.isConnected) return 'PRE_EDITOR_CHANGED';
-                if (!plainStructure()) return 'PRE_STRUCTURE';
-                if (!(expectedRaw === null ? composerText(editor).trim() === '' : raw === expectedRaw))
-                    return 'PRE_RAW_CAS';
-                return null;
-            }};
-            let refusal = draftRefusal();
-            if (refusal) return refusal;
-            if (!editor.isContentEditable && !(editor instanceof HTMLTextAreaElement)) return 'PRE_EDITABLE';
-            editor.focus();
-            refusal = draftRefusal();
-            if (refusal) return refusal;
-            if (document.activeElement !== editor) return 'PRE_FOCUS';
-            let selection = null;
-            if (editor.isContentEditable) {{
-                selection = window.getSelection();
-                if (!selection) return 'PRE_SELECTION';
-                const range = document.createRange();
-                range.selectNodeContents(editor);
-                selection.removeAllRanges();
-                selection.addRange(range);
-            }} else {{
-                editor.setSelectionRange(0, editor.value.length);
-            }}
-            const selectionOwned = () => {{
-                if (!editor.isContentEditable) return editor.selectionStart === 0 &&
-                    editor.selectionEnd === editor.value.length;
-                if (!selection || selection.rangeCount !== 1 || !editor.contains(selection.anchorNode) ||
-                    !editor.contains(selection.focusNode)) return false;
-                const selected = selection.getRangeAt(0);
-                return selected.startContainer === editor && selected.endContainer === editor &&
-                    selected.startOffset === 0 && selected.endOffset === editor.childNodes.length;
-            }};
-            refusal = draftRefusal();
-            if (refusal) return refusal;
-            if (document.activeElement !== editor) return 'PRE_FOCUS';
-            if (!selectionOwned()) return 'PRE_SELECTION';
-            // Use the editor's native input transaction, never textContent or
-            // innerHTML assignment. There is exactly one insertion attempt.
-            editAttempted = true;
-            if (!document.execCommand('insertText', false, text)) return 'POST_COMMAND_FALSE';
-            const after = editors();
-            if (location.href !== {json.dumps(NEW_CONVERSATION_HOME)} || hasTurns() ||
-                after.length !== 1 || after[0] !== editor || !editor.isConnected) return 'POST_SCOPE';
-            if (composerText(editor) !== text) return 'POST_TEXT';
-            return 'INSERTED';
-            }} catch (_) {{
-                return editAttempted ? 'POST_EXCEPTION' : 'PRE_EXCEPTION';
-            }}
-        }})()"""
-        try:
-            observed = CdpSink.cdp_value(cdp.evaluate(script))
-        except Exception as error:
-            raise Attention(f"{failure}_EVALUATION_EXCEPTION") from error
-        if observed != "INSERTED":
-            diagnostics = {
-                "PRE_HOME", "PRE_TURNS", "PRE_NOT_READY", "PRE_EDITOR_COUNT",
-                "PRE_EDITOR_CHANGED", "PRE_STRUCTURE", "PRE_RAW_CAS", "PRE_EDITABLE",
-                "PRE_FOCUS", "PRE_SELECTION", "PRE_EXCEPTION", "POST_COMMAND_FALSE",
-                "POST_SCOPE", "POST_TEXT", "POST_EXCEPTION",
-            }
-            code = observed if isinstance(observed, str) and observed in diagnostics else "RESULT_INVALID"
-            raise Attention(f"{failure}_{code}")
-        try:
-            self.check_typed_home(cdp, message)
-        except Exception as error:
-            raise Attention(f"{failure}_POST_VERIFY") from error
 
     def normalize_owned_home_draft(self, cdp: Any, message: str) -> bool:
         """Remove known link formatting without changing owned text data.

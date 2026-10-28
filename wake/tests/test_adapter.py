@@ -50,6 +50,9 @@ class FakeSink:
         if not prevalidated:
             raise AssertionError("adapter must resolve only after pre-typing validation")
         return bridge.EDITOR
+    def insert_empty_conversation_draft(self, cdp, message):
+        self.pre_typing_ready(cdp)
+        cdp.send_keys(self.editor_selector(cdp, prevalidated=True), message, timeout=self.ui_timeout)
     def pre_submit_receipt_snapshot(self, cdp, digest): return []
     def best_effort_present_browser(self, cdp): pass
     def text(self, cdp): return cdp.draft

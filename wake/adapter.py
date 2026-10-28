@@ -125,7 +125,7 @@ def attempt(bridge, sb, event, target, *, cooperative=False):
     # Carry the exact validated selector through typing and the native-Enter
     # fallback; alternate ChatGPT composers need not expose bridge.EDITOR.
     editor_selector = sink.editor_selector(cdp, prevalidated=True)
-    cdp.send_keys(editor_selector, typed_message, timeout=sink.ui_timeout)
+    sink.insert_empty_conversation_draft(cdp, typed_message)
     if bridge.normalize_message(sink.text(cdp)) != bridge.normalize_message(message):
         raise bridge.Attention("TYPING_NOT_CONFIRMED")
     send_selector = sink.wait_for_send_control(cdp, 20)

@@ -1705,6 +1705,12 @@ class WakeBridgeTests(unittest.TestCase):
             def send_keys(self, _selector, text, timeout):
                 self.composer = text
             def evaluate(self, script):
+                # Emulate the input primitive; native editor CAS is exercised
+                # independently by the JavaScript DOM fixture tests.
+                if "document.execCommand('insertText'" in script:
+                    text, _ = json.JSONDecoder().raw_decode(script.rsplit("const text = ", 1)[1])
+                    self.send_keys(wake_bridge.EDITOR, text, timeout=1)
+                    return "INSERTED"
                 if script == "document.readyState": return "complete"
                 if "return composerText(visible[0])" in script: return self.composer
                 if "#prompt-textarea" in script: return ["ready", self.composer == ""]
@@ -2561,6 +2567,12 @@ class WakeBridgeTests(unittest.TestCase):
                 if any(char in text for char in "\r\n\t"):
                     raise AssertionError("message typing would submit a USER turn")
             def evaluate(self, script):
+                # Emulate the input primitive; native editor CAS is exercised
+                # independently by the JavaScript DOM fixture tests.
+                if "document.execCommand('insertText'" in script:
+                    text, _ = json.JSONDecoder().raw_decode(script.rsplit("const text = ", 1)[1])
+                    self.send_keys(wake_bridge.EDITOR, text, timeout=1)
+                    return "INSERTED"
                 if "return composerText(visible[0])" in script: return getattr(self, "composer", "")
                 if "#prompt-textarea" in script: return ["ready", True]
                 if "const selectorTiers" in script:
@@ -2661,6 +2673,12 @@ class WakeBridgeTests(unittest.TestCase):
             def send_keys(self, _selector, text, timeout): timeline.append("type"); self.composer = text
             def press_keys(self, *_args, **_kwargs): raise AssertionError("human-speed message typing is forbidden")
             def evaluate(self, script):
+                # Emulate the input primitive; native editor CAS is exercised
+                # independently by the JavaScript DOM fixture tests.
+                if "document.execCommand('insertText'" in script:
+                    text, _ = json.JSONDecoder().raw_decode(script.rsplit("const text = ", 1)[1])
+                    self.send_keys(wake_bridge.EDITOR, text, timeout=1)
+                    return "INSERTED"
                 if "return composerText(visible[0])" in script: return getattr(self, "composer", "")
                 if "#prompt-textarea" in script: return ["ready", True]
                 if "const selectorTiers" in script:
@@ -2832,6 +2850,12 @@ class WakeBridgeTests(unittest.TestCase):
             def press_keys(self, *_args, **_kwargs):
                 raise AssertionError("human-speed message typing is forbidden")
             def evaluate(self, script):
+                # Emulate the input primitive; native editor CAS is exercised
+                # independently by the JavaScript DOM fixture tests.
+                if "document.execCommand('insertText'" in script:
+                    text, _ = json.JSONDecoder().raw_decode(script.rsplit("const text = ", 1)[1])
+                    self.send_keys(wake_bridge.EDITOR, text, timeout=1)
+                    return "INSERTED"
                 if "const composerText = root" in script:
                     return self.composer
                 if "#prompt-textarea" in script:
@@ -2932,6 +2956,12 @@ class WakeBridgeTests(unittest.TestCase):
                 self.composer = ""
                 self.messages.append(message)
             def evaluate(self, script):
+                # Emulate the input primitive; native editor CAS is exercised
+                # independently by the JavaScript DOM fixture tests.
+                if "document.execCommand('insertText'" in script:
+                    text, _ = json.JSONDecoder().raw_decode(script.rsplit("const text = ", 1)[1])
+                    self.send_keys(wake_bridge.EDITOR, text, timeout=1)
+                    return "INSERTED"
                 if "return composerText(visible[0])" in script: return getattr(self, "composer", "")
                 if "#prompt-textarea" in script: return ["ready", True]
                 if "const selectorTiers" in script:
