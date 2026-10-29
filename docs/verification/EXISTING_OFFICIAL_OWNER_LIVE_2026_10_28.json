@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-29T01:04:21.529326+00:00",
+  "localDate": "2026-10-28",
+  "classification": "ACTUAL_INSTALLED_BACKEND_AND_EXISTING_OFFICIAL_OWNER_LIFECYCLE_PASS_CONNECTOR_DELIVERY_FAILED",
+  "sourceBranch": "codex/web-rollover-oct17",
+  "developmentSourceCommit": "47e298d1d93bf029055d9e99d14fd97d5363b7a5",
+  "installedReviewedSourceCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "installedSha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf",
+  "authorization": {
+    "humanApproved": true,
+    "workflowSha256": "4de9f43922e31ff57d6cf1544cce8ab5786e8410decee3d6921b5e7e04a7df9f",
+    "maximumSeconds": 180,
+    "providerMessagesAllowed": 0,
+    "connectorProbesMaximum": 1,
+    "newTunnelAllowed": false,
+    "authSettingChangesAllowed": false
+  },
+  "officialOwner": {
+    "existingAliasAndProfileReused": true,
+    "existingTunnelVerified": true,
+    "existingRuntimeKeyReferenceReused": true,
+    "profileBytesUnchanged": true,
+    "originalProfilePreservedPrivately": true,
+    "processRunningDuringTest": true,
+    "healthyDuringTest": true,
+    "readyDuringTest": true,
+    "healthzStatus": 200,
+    "readyzStatus": 200,
+    "controlPlanePollHealth": "unknown",
+    "controlPlanePollingAccepted": false,
+    "supportedStopPassed": true,
+    "processRunningAfterStop": false,
+    "resultSha256": "a670e81b9ded2807fd2cafbc77b74f039cddac4cbb8749a5cfff70868d518d9e",
+    "readyStatusSha256": "83ba9e3b6b3671a829632337662b24988b8db42c819e0db2f8b021d5f011df27",
+    "stoppedStatusSha256": "b885953acf8940dae8bdc497cac25148eec69a8199e75796061b5cb36ac0c7c7"
+  },
+  "installedBackend": {
+    "publicBackendOnlyStartPassed": true,
+    "publicStopPassed": true,
+    "profile": "EXISTING_DEFAULT_OPAQUE_ROUTE_NO_BEARER_OVERLAY",
+    "registryScope": "CANONICAL",
+    "currentServingState": "STOPPED_AFTER_AUTHORIZED_BOUNDED_TEST"
+  },
+  "connector": {
+    "tool": "catdesk_transport_status",
+    "attempts": 1,
+    "responseReceived": false,
+    "httpStatus": null,
+    "classification": "CHATGPT_CONNECTOR_TRANSPORT_SEND_FAILED",
+    "requestStage": "CHATGPT_BACKEND_API_MCP_TRANSPORT",
+    "catdeskToolResponseReceived": false,
+    "historical429SupersededAsLatestProbe": true,
+    "earlier429StillHistoricalEvidence": true,
+    "immediateRetry": false
+  },
+  "preservation": {
+    "protectedFiles": 126,
+    "changedProtectedFiles": 0,
+    "projectBindingMutations": 0,
+    "nativeProjectTaskActions": 0,
+    "browserStarts": 0,
+    "wakeStarts": 0,
+    "recurringAutomationStarts": 0,
+    "newTunnels": 0,
+    "authenticationSettingChanges": 0,
+    "providerMessages": 0,
+    "remainingBackendListeners": 0,
+    "remainingNativeRuntimeProcesses": 0,
+    "containmentTimedOut": false,
+    "terminationFailed": false,
+    "outerResultSha256": "dd949578430916b52a7cfa97277b8d4342035359411ea36364805d3af90aa3cc"
+  },
+  "sourceParity": {
+    "classification": "SOURCE_PROVENANCE_NOT_NEW_FEATURE_RUNTIME_ACCEPTANCE",
+    "coreFiles": [
+      {
+        "file": "src/project_mcp.rs",
+        "installedReviewedSourceSha256": "37f1080375a679b7c572274d9f2e1d6bb916e865f01451d4abef8a0db34b3725",
+        "currentSourceSha256": "37f1080375a679b7c572274d9f2e1d6bb916e865f01451d4abef8a0db34b3725",
+        "identical": true
+      },
+      {
+        "file": "src/project_mcp_task.rs",
+        "installedReviewedSourceSha256": "1a3956457434f76a479ee2d86ae8be3e4be3ec4ca34422339c569a61da75a01f",
+        "currentSourceSha256": "1a3956457434f76a479ee2d86ae8be3e4be3ec4ca34422339c569a61da75a01f",
+        "identical": true
+      },
+      {
+        "file": "src/web_work.rs",
+        "installedReviewedSourceSha256": "0e256f23f2b25b7031f59b5130e2bb1490d8fd970bfd00e17a6df71eb4e34cf7",
+        "currentSourceSha256": "0e256f23f2b25b7031f59b5130e2bb1490d8fd970bfd00e17a6df71eb4e34cf7",
+        "identical": true
+      },
+      {
+        "file": "src/web_work_state.rs",
+        "installedReviewedSourceSha256": "a64d99c1cefcf3c34aa78ec589643242f5043582605bb8efee0ac1bdbb92ace8",
+        "currentSourceSha256": "a64d99c1cefcf3c34aa78ec589643242f5043582605bb8efee0ac1bdbb92ace8",
+        "identical": true
+      },
+      {
+        "file": "src/web_task_dispatch.rs",
+        "installedReviewedSourceSha256": "812691d9a8adfce97b0e998891096f04351e03199655cc504158ed45f64c1692",
+        "currentSourceSha256": "812691d9a8adfce97b0e998891096f04351e03199655cc504158ed45f64c1692",
+        "identical": true
+      },
+      {
+        "file": "src/web_task_handoff.rs",
+        "installedReviewedSourceSha256": "56aba550d34376ca64964587c0be98fd3d6a2d80abcd0adde5fd5cb1bfced30f",
+        "currentSourceSha256": "56aba550d34376ca64964587c0be98fd3d6a2d80abcd0adde5fd5cb1bfced30f",
+        "identical": true
+      },
+      {
+        "file": "src/operator_web_rollover.rs",
+        "installedReviewedSourceSha256": "96e4140833b03b284ddf601fb91560dc27763765cad9ba49beb6356130ff16e3",
+        "currentSourceSha256": "96e4140833b03b284ddf601fb91560dc27763765cad9ba49beb6356130ff16e3",
+        "identical": true
+      },
+      {
+        "file": "src/operator_web_auto.rs",
+        "installedReviewedSourceSha256": "55f19962385f17c4e2ab654574d68c32ff480930eca40eb9ebbdf87c994c9f85",
+        "currentSourceSha256": "55f19962385f17c4e2ab654574d68c32ff480930eca40eb9ebbdf87c994c9f85",
+        "identical": true
+      },
+      {
+        "file": "src/web_context_control.rs",
+        "installedReviewedSourceSha256": "dadce083e8fd2ac5d2e8d391faa5c287d04a41e1c7582ed94ab7bf86f9688870",
+        "currentSourceSha256": "dadce083e8fd2ac5d2e8d391faa5c287d04a41e1c7582ed94ab7bf86f9688870",
+        "identical": true
+      }
+    ],
+    "fullDependencyParityClaimed": false,
+    "newRuntimeFeatureAcceptanceClaimed": false,
+    "grantedTaskHandoffAlreadyImplemented": true,
+    "newCandidateNotCreated": true
+  },
+  "remaining": {
+    "twoIndependentWebCodingConversations": "OPEN_NO_PROVIDER_TOOL_CALLS",
+    "centralDispatchOnDefaultProfile": "BEARER_CONNECTION_REQUIRED",
+    "managedBearerForwarding": "LOCAL_NATIVE_RUN_QUALIFIED_MANAGED_CONNECT_HANDOFF_UNVERIFIED",
+    "controlRegistryScopeSelection": "SEPARATE_REGISTRIES_PRESERVED_NO_COPY_OR_MERGE",
+    "unattendedServing": "NOT_ACTIVATED",
+    "connector": "WAITING_EXTERNAL_TRANSPORT_NO_HTTP_STATUS_FROM_LATEST_FAILURE"
+  },
+  "goal": "ACTIVE"
+}
