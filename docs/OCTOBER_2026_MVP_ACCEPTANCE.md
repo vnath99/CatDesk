@@ -1,5 +1,8 @@
 ## October 28 — actual Home recovery refusal identified; manual profile inspection pending
 
+> Current dated checkpoint: [October 29, 2026 source, validation and remaining work](SYNC_STATUS_2026-10-29.md). Earlier status entries retain their historical scope.
+
+
 Source `da501455efd91b725fafafe8ff5ea0ecbf2f3cfd` makes the existing guarded Home check report fixed refusal reasons without exporting draft text. Every original editor/text/media/attachment condition remains. The evaluation checks that the document is still exact HTTPS ChatGPT Home; only the exact primitive EMPTY result permits the existing single navigation, after another route/busy check. Unknown values and wrappers refuse. Seventeen Python checks and four Windows process tests passed, as did Wake formatting and strict all-target Clippy. The source remote SHA is verified; zero visible exact-commit checks/runs leave CI UNVERIFIED.
 
 One monitored inspection using a separately built development controller completed with HOME_CHECK:EDITOR_MISSING. The registered target was absent at every bounded tab check, and the final state remained HOME. This identifies why recovery refused; it proves neither expired authentication nor a specific network cause. No message was sent or draft changed. All 313 protected files remained unchanged and the owned tree exited; bindings, native sessions, installed release, selected development package, Wake and external owner remained untouched. A bounded read of the retained official-owner test log found no explicit HTTP error status; it does not turn prior local readiness into upstream acceptance, and no connector request was repeated.

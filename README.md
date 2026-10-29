@@ -1,5 +1,8 @@
 # CatDesk
 
+> Current dated checkpoint: [October 29, 2026 source, validation and remaining work](docs/SYNC_STATUS_2026-10-29.md). Earlier status entries retain their historical scope.
+
+
 An open-source tool that turns ChatGPT Web into a coding agent. No reverse engineering, no API, no Codex. A ChatGPT Plus subscription is enough.
 
 ## Current project handoff
