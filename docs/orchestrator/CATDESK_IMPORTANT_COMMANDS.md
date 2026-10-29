@@ -1,3 +1,23 @@
+## 2026-10-29 22:49 UTC — exact native Codex dispatch and control scope — TESTED_SOURCE
+
+Source `f09a8ce8b966a30ddbbebadeccacb3e6185ee883` adds local `operator codex queue dispatch-task`, requiring project, registered absolute workspace, exact task ID and full binding SHA256. Prompt/model/profile overrides refuse. Existing queue/scheduler/native execution are reused. Selection cannot claim a sibling or earlier different task; stale sibling records remain unchanged; claimed/unknown attempts remain nonreplayable. Both global and exact dispatch now carry the caller's actual control-registry root explicitly. They no longer infer that registry from CatDesk's project workspace. No mutable global working directory was added.
+
+All80 enabled native queue tests passed (two opt-ins ignored), including the two new selector/parser cases, existing fair dispatch, leases, recovery and review tests. Strict root all-target Clippy and formatting passed. Source/remote hash matches; hosted exact-source CI has zero visible runs/checks, UNVERIFIED. No real native turn, other project session, browser, Wake, tunnel or installed release was started/modified. This is source/metadata selection proof, not native/Web acceptance. Evidence: `docs/verification/EXACT_NATIVE_CODEX_DISPATCH_2026_10_29.json`.
+
+A concrete next blocker was found: `run_queued_turn` still marks descendant absence unproven after observing parent exit/EOF. Native execution must not be exposed through MCP as fully lifecycle-qualified in that state. Next READY source work is reuse of the existing qualified owned-child Job primitive in that runner, retaining writer/lease recovery on unknown outcomes; then add explicit project-scoped MCP native authority. Existing native development sessions remain usable and untouched. This is not completion of the two-Web-chat MVP.
+
+Source-only command reference (not installed in C254; real native execution qualification remains pending):
+
+```powershell
+& '<qualified-runtime>' operator codex queue preflight --project-id '<project>' --workspace '<registered-workspace>'
+# Candidate preflight exposes bindingSha256 but grants no launch authority.
+& '<runtime-containing-this-source>' operator codex queue dispatch-task `
+  --project-id '<project>' --workspace '<registered-workspace>' `
+  --task-id '<existing-queued-task>' --expected-binding-sha256 '<fresh-bindingSha256>'
+```
+
+Invoke from the intended control root. Exact dispatch is a local operator action, not a remote grant. Normal native model/sandbox/approval policy and existing clean-root/writer checks remain. Preserve unknown jobs; do not create another task ID to bypass a held attempt. The original optionless fair `queue dispatch` remains supported. No real native canary was run for this source increment.
+
 ## 2026-10-29 22:29 UTC — existing central development serving qualified — TESTED_LOCAL_RUNTIME
 
 Two monitored25-second runs of the existing `operator web-dev-runtime run-backend` served the intended control scope: authenticated initialize/catalog200, unauthorized401,79 tools with central task dispatch and no raw shell/write tools, all10 registered URLs on an exact local read, and ungranted-task refusal. Both owners exited naturally, proved owned-tree cleanup and closed their endpoints. A prior harness path-spelling failure before HTTP is preserved. Existing selected package, production installation, bindings, native owners, browser, Wake and tunnel were unchanged.
