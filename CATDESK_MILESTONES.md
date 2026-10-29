@@ -1,3 +1,13 @@
+## 2026-10-29 23:23 UTC — frozen native requests and independent scoped reads — TESTED_SOURCE
+
+Source `c9541810701905176efdafc41957125e1f033617` adds `requestSha256` to native queue summaries and an optional local `dispatch-task --expected-request-sha256` pin. The pin covers task/binding/prompt/model/effort/sandbox settings, stays stable across attempt/receipt/state changes, and is checked before CLI probes and again under the claim lock. It provides integrity selection, not execution authorization. Persisted job schema and legacy unpinned local dispatch remain compatible.
+
+Exact dispatch now reads only the named job. A malformed sibling record stays unchanged and cannot block that scoped claim; global queue/status readers still refuse corruption. Final queue/submodule regression:100 passed,0 failed,2 existing opt-ins ignored; strict all-target Clippy and formatting passed. Six selected pinned critical files remained identical; no fixture process remained. An initial parser allowlist failure was fixed and the full suite rerun. Evidence: `docs/verification/NATIVE_REQUEST_SCOPE_2026_10_29.json`.
+
+A proposed namespace change was removed after the authoritative resolver disproved its premise: CatDesk's registered workspace must equal the control root. That invariant remains intact. Its failed fixture made no native task launch; one temporary directory is preserved because automatic approval review blocked deletion. Details stay in the private audit. This does not block source work.
+
+Next READY: exact native-task capability in the existing execution grant/key/journal and MCP dispatcher. No new authorization system was introduced here. Native MCP reachability, installed new features and genuine two-Web-chat coding remain OPEN. Existing project sessions, bindings, production and browser/Wake/tunnel ownership are unchanged. Existing connector/profile prerequisites were not retried.
+
 ## 2026-10-29 23:06 UTC — native queue descendant ownership — TESTED_SOURCE / DISPOSABLE_WINDOWS_PROCESSES
 
 Source `d58cf08453f2b1fcbd9860592a99fb3e5ed3e099` reuses the existing suspended-child/private kill-on-close Job owner for the normal native queue invocation. Arguments, model/effort, workspace-write sandbox and project/writer gates remain intact. Inspection found the previous completion path released a lease on parent exit alone; this is now refused. New receipts record `treeExitProven`. Missing historical proof defaults to false without rewriting old records. Historical evidence remains readable; new local verification requires the proof.
