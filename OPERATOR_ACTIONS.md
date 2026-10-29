@@ -1,3 +1,9 @@
+## 2026-10-29 21:44 UTC — dependency-aware source continuation
+
+Semantic Wake producer/crash fence is COMPLETED_VERIFIED at `9f4c0f99faf2fc7ee71163bfbe91ced28c69bcd9` (source only). Explicit project-task manual-wake ingress is RUNNING in the existing source owner. No routine operator approval is needed for these source tests.
+
+Correction to the earlier serving-row classification: canonical/control scope mismatch is passive metadata, not proof of corrupted registries. Supported authenticated serving-path reconciliation is READY_TO_EXECUTE as a source investigation; installed/Web qualification remains open. Preserve both scopes. The existing profile inspection remains the single WAITING_FOR_OPERATOR action, and reported Oct29 connector429 remains WAITING_FOR_EXTERNAL_SERVICE. Neither dependency was re-probed.
+
 ## 2026-10-29 21:25 UTC — current dependency queue; no new routine approval
 
 | Task | Status / owner | Required change | Limits and independent work |
