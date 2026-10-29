@@ -175,6 +175,7 @@ pub(crate) enum QueueAction {
         scope: CodexScope,
         task_id: String,
         expected_binding_sha256: String,
+        expected_request_sha256: Option<String>,
     },
     Pause {
         scope: CodexScope,
@@ -236,6 +237,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
                 | "--expected-profile"
                 | "--new-profile"
                 | "--expected-binding-sha256"
+                | "--expected-request-sha256"
                 | "--confirm-chat-quiescent"
                 | "--new-workspace"
                 | "--expected-old-head"
@@ -270,14 +272,18 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
         let expected_binding_sha256 = values
             .remove("--expected-binding-sha256")
             .ok_or("CODEX_QUEUE_USAGE: --expected-binding-sha256 is required")?;
+        let expected_request_sha256 = values.remove("--expected-request-sha256");
         valid_slug(&project_id)?;
         valid_slug(&task_id)?;
         if !workspace.is_absolute()
             || !valid_sha256_hex(&expected_binding_sha256)
             || expected_binding_sha256 != expected_binding_sha256.to_ascii_lowercase()
+            || expected_request_sha256
+                .as_ref()
+                .is_some_and(|hash| !valid_sha256_hex(hash) || hash != &hash.to_ascii_lowercase())
             || !values.is_empty()
         {
-            return Err("CODEX_QUEUE_USAGE: exact dispatch requires absolute workspace and lowercase binding SHA-256 only".into());
+            return Err("CODEX_QUEUE_USAGE: exact dispatch requires absolute workspace and lowercase binding/request SHA-256".into());
         }
         return Ok(QueueAction::DispatchTask {
             scope: CodexScope {
@@ -286,6 +292,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
             },
             task_id,
             expected_binding_sha256,
+            expected_request_sha256,
         });
     }
     if matches!(verb, "status" | "dispatch") {
@@ -719,6 +726,20 @@ impl QueueJob {
             && self.cyber_access_program == other.cyber_access_program
             && self.windows_sandbox == other.windows_sandbox
     }
+    fn request_sha256(&self) -> String {
+        let identity = serde_json::to_vec(&(
+            self.schema_version,
+            &self.task_id,
+            &self.binding,
+            &self.prompt_sha256,
+            &self.model,
+            &self.effort,
+            &self.cyber_access_program,
+            &self.windows_sandbox,
+        ))
+        .expect("serializable queued native request");
+        format!("{:x}", Sha256::digest(identity))
+    }
     fn summary(&self) -> Value {
         let mut summary = json!({
             "projectId": self.binding.project_id, "taskId": self.task_id,
@@ -726,6 +747,7 @@ impl QueueJob {
             "targetSha256": self.binding.target_sha256,
             "gitIdentitySha256": format!("{:x}", Sha256::digest(self.binding.git_identity.as_bytes())),
             "verificationProfile": self.binding.verification_profile,
+            "requestSha256": self.request_sha256(),
             "promptSha256": self.prompt_sha256, "state": self.state,
             "createdAtUnix": self.created_at_unix,
             "attemptId": self.attempt.as_ref().map(|attempt| &attempt.attempt_id),
@@ -2567,11 +2589,17 @@ pub(crate) async fn execute_action(
             scope,
             task_id,
             expected_binding_sha256,
+            expected_request_sha256,
         } => {
             dispatch_selected(
                 &control.project,
                 &control.control_workspace,
-                Some((&scope, &task_id, &expected_binding_sha256)),
+                Some((
+                    &scope,
+                    &task_id,
+                    &expected_binding_sha256,
+                    expected_request_sha256.as_deref(),
+                )),
             )
             .await
         }
@@ -3443,10 +3471,31 @@ fn scheduler(control_workspace: &Path) -> Result<AutonomousProjectRegistryStoreV
         .map_err(|_| "CODEX_QUEUE: control registry is unavailable".to_string())
 }
 
-type DispatchSelection<'a> = Option<(&'a CodexScope, &'a str, &'a str)>;
+type DispatchSelection<'a> = Option<(&'a CodexScope, &'a str, &'a str, Option<&'a str>)>;
+
+fn dispatch_jobs(
+    queue: &QueueStore,
+    selected: DispatchSelection<'_>,
+) -> Result<Vec<QueueJob>, String> {
+    let Some((scope, task, _, expected)) = selected else {
+        return queue.jobs();
+    };
+    // A scoped invocation must not decode unrelated records: a corrupt or
+    // unresolved sibling is not authority to block this project's task.
+    let job = queue.load_job(&scope.project_id, task)?;
+    if let Some(expected) = expected {
+        let job = job
+            .as_ref()
+            .ok_or("CODEX_QUEUE_SCOPE: selected native request is unavailable")?;
+        if job.request_sha256() != expected {
+            return Err("CODEX_QUEUE_SCOPE: selected native request changed".into());
+        }
+    }
+    Ok(job.into_iter().collect())
+}
 
 fn exact_dispatch_binding(control: &Path, selected: DispatchSelection<'_>) -> Result<(), String> {
-    if let Some((scope, _, expected)) = selected {
+    if let Some((scope, _, expected, _)) = selected {
         let project = registered_project(control, scope)?;
         if project_binding_sha256(&project)? != expected {
             return Err("CODEX_QUEUE_SCOPE: exact dispatch binding changed".into());
@@ -3478,12 +3527,7 @@ fn claim_selected(
         }
     }
     let mut ready = BTreeMap::<String, QueueJob>::new();
-    for mut job in queue.jobs()? {
-        if let Some((scope, task_id, _)) = selected
-            && (job.binding.project_id != scope.project_id || job.task_id != task_id)
-        {
-            continue;
-        }
+    for mut job in dispatch_jobs(queue, selected)? {
         if job.state != QueueState::Ready {
             continue;
         }
@@ -5526,12 +5570,14 @@ async fn dispatch_selected(
 ) -> Result<Value, String> {
     exact_dispatch_binding(control_workspace, selected)?;
     let queue = QueueStore::open_for_operator(control, control_workspace)?;
-    if !queue.jobs()?.iter().any(|job| {
-        job.state == QueueState::Ready
-            && selected.is_none_or(|(scope, task, _)| {
-                job.binding.project_id == scope.project_id && job.task_id == task
-            })
-    }) {
+    // Validate the frozen request before probes and again under the claim lock.
+    let ready = {
+        let _lock = queue.lock()?;
+        dispatch_jobs(&queue, selected)?
+            .iter()
+            .any(|job| job.state == QueueState::Ready)
+    };
+    if !ready {
         return Ok(json!({ "action":"codex_queue_dispatch", "status":"no_ready_tasks" }));
     }
     let turn_limit = turn_timeout()?;
@@ -11339,6 +11385,116 @@ mod tests {
     }
 
     #[test]
+    fn frozen_native_request_pin_refuses_material_substitution_but_not_state_changes() {
+        let (fixture, projects, queue) = three_project_fixture(2);
+        let project = &projects[1];
+        let job = QueueJob::new(
+            "frozen_native".into(),
+            project,
+            "approved prompt".into(),
+            Some("gpt-6.1-sol".into()),
+            Some("medium".into()),
+        )
+        .unwrap();
+        let pin = job.request_sha256();
+        assert_eq!(job.summary()["requestSha256"], pin);
+        let mut changed = job.clone();
+        changed.state = QueueState::Attention;
+        changed.receipt_id = Some(Uuid::new_v4().to_string());
+        assert_eq!(changed.request_sha256(), pin);
+        for change in ["prompt", "model", "effort", "sandbox", "cyber", "binding"] {
+            let mut changed = job.clone();
+            match change {
+                "prompt" => {
+                    changed.prompt = "substituted".into();
+                    changed.prompt_sha256 =
+                        format!("{:x}", Sha256::digest(changed.prompt.as_bytes()));
+                }
+                "model" => changed.model = Some("gpt-6.1-terra".into()),
+                "effort" => changed.effort = Some("high".into()),
+                "sandbox" => changed.windows_sandbox = Some("mxc".into()),
+                "cyber" => changed.cyber_access_program = Some("standard".into()),
+                _ => changed.binding.thread_id = Uuid::new_v4().to_string(),
+            }
+            assert_ne!(changed.request_sha256(), pin, "{change}");
+        }
+        queue.save_job(&job).unwrap();
+        let foreign_path = queue.job_path("beta", "malformed_foreign");
+        fs::write(&foreign_path, b"{malformed sibling retained").unwrap();
+        assert!(queue.jobs().is_err());
+        let bytes = fs::read(queue.job_path("alpha", "frozen_native")).unwrap();
+        let scope = job.binding.scope();
+        let binding = project_binding_sha256(project).unwrap();
+        let bad = "0".repeat(64);
+        assert!(
+            claim_selected(
+                &projects[0].workspace,
+                &queue,
+                Some((&scope, &job.task_id, &binding, Some(&bad)))
+            )
+            .unwrap_err()
+            .contains("request changed")
+        );
+        assert_eq!(
+            fs::read(queue.job_path("alpha", "frozen_native")).unwrap(),
+            bytes
+        );
+        assert_eq!(
+            fs::read_dir(projects[0].workspace.join(".catdesk/projects/leases"))
+                .unwrap()
+                .count(),
+            0
+        );
+        let claimed = claim_selected(
+            &projects[0].workspace,
+            &queue,
+            Some((&scope, &job.task_id, &binding, Some(&pin))),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(claimed.request_sha256(), pin);
+        assert_eq!(
+            fs::read(foreign_path).unwrap(),
+            b"{malformed sibling retained"
+        );
+        cleanup(fixture);
+    }
+
+    #[test]
+    fn exact_dispatch_parser_accepts_only_a_valid_optional_request_pin() {
+        let root = std::env::temp_dir().to_string_lossy().into_owned();
+        let binding = "b".repeat(64);
+        let request = "c".repeat(64);
+        let base = [
+            "catdesk",
+            "codex",
+            "queue",
+            "dispatch-task",
+            "--project-id",
+            "alpha",
+            "--workspace",
+            root.as_str(),
+            "--task-id",
+            "frozen_native",
+            "--expected-binding-sha256",
+            binding.as_str(),
+        ];
+        let mut args = base.to_vec();
+        args.extend(["--expected-request-sha256", request.as_str()]);
+        assert!(
+            matches!(parse(&args), Ok(QueueAction::DispatchTask { expected_request_sha256: Some(pin), .. }) if pin == request)
+        );
+        for invalid in [
+            "not-a-hash",
+            "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+        ] {
+            let mut args = base.to_vec();
+            args.extend(["--expected-request-sha256", invalid]);
+            assert!(parse(&args).is_err());
+        }
+    }
+
+    #[test]
     fn exact_dispatch_task_claim_is_cold_durable_and_never_mutates_sibling_jobs() {
         let (fixture, projects, queue) = three_project_fixture(2);
         let control = &projects[0].workspace;
@@ -11367,7 +11523,7 @@ mod tests {
             claim_selected(
                 &projects[1].workspace,
                 &queue,
-                Some((&scope, "alpha_second", &hash))
+                Some((&scope, "alpha_second", &hash, None))
             )
             .is_err()
         );
@@ -11375,7 +11531,7 @@ mod tests {
             claim_selected(
                 control,
                 &queue,
-                Some((&scope, "alpha_second", &"a".repeat(64)))
+                Some((&scope, "alpha_second", &"a".repeat(64), None))
             )
             .is_err()
         );
@@ -11384,11 +11540,11 @@ mod tests {
             second
         );
         assert!(
-            claim_selected(control, &queue, Some((&scope, "missing", &hash)))
+            claim_selected(control, &queue, Some((&scope, "missing", &hash, None)))
                 .unwrap()
                 .is_none()
         );
-        let claimed = claim_selected(control, &queue, Some((&scope, "alpha_second", &hash)))
+        let claimed = claim_selected(control, &queue, Some((&scope, "alpha_second", &hash, None)))
             .unwrap()
             .unwrap();
         assert_eq!(claimed.task_id, "alpha_second");
@@ -11402,7 +11558,7 @@ mod tests {
             earlier
         );
         assert!(
-            claim_selected(control, &queue, Some((&scope, "alpha_second", &hash)))
+            claim_selected(control, &queue, Some((&scope, "alpha_second", &hash, None)))
                 .unwrap()
                 .is_none()
         );
