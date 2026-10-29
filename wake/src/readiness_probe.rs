@@ -79,6 +79,25 @@ pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<Strin
             let Some(state) = line.strip_prefix("PROBE:") else {
                 return false;
             };
+            if let Some(reason) = state.strip_prefix("HOME_CHECK:") {
+                return matches!(
+                    reason,
+                    "EMPTY"
+                        | "NOT_HOME"
+                        | "BUSY"
+                        | "DOCUMENT_LOADING"
+                        | "EDITOR_MISSING"
+                        | "EDITOR_AMBIGUOUS"
+                        | "EDITOR_UNSUPPORTED"
+                        | "DRAFT_PRESENT"
+                        | "EDITOR_MEDIA_PRESENT"
+                        | "ATTACHMENT_INDICATOR"
+                        | "EVALUATION_UNKNOWN"
+                        | "EVALUATION_FAILED"
+                        | "NAVIGATION_ATTEMPTED"
+                        | "NAVIGATION_FAILED"
+                );
+            }
             if let Some(code) = state.strip_prefix("NETWORK:") {
                 return matches!(
                     code,

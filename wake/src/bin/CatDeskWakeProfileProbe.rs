@@ -115,6 +115,11 @@ mod tests {
         println!("PROBE:NETWORK:ERR_PRIVATE_CONTENT");
         println!("PROBE:NETWORK:ERR_CONNECTION_RESET private-content-must-be-filtered");
         println!("PROBE:FINAL:NETWORK:ERR_CONNECTION_RESET");
+        println!("PROBE:HOME_CHECK:DRAFT_PRESENT");
+        println!("PROBE:HOME_CHECK:NAVIGATION_ATTEMPTED");
+        println!("PROBE:HOME_CHECK:private-draft-content");
+        println!("PROBE:HOME_CHECK:EMPTY private-draft-content");
+        println!("PROBE:FINAL:HOME_CHECK:EMPTY");
         for state in ["EXACT", "MISSING", "AMBIGUOUS", "DRIFT", "UNAVAILABLE"] {
             println!("PROBE:TARGET_TAB_{state}");
         }
@@ -138,6 +143,8 @@ mod tests {
             [
                 "PROBE:NETWORK:ERR_PROXY_CONNECTION_FAILED",
                 "PROBE:NETWORK:UNKNOWN",
+                "PROBE:HOME_CHECK:DRAFT_PRESENT",
+                "PROBE:HOME_CHECK:NAVIGATION_ATTEMPTED",
                 "PROBE:TARGET_TAB_EXACT",
                 "PROBE:TARGET_TAB_MISSING",
                 "PROBE:TARGET_TAB_AMBIGUOUS",

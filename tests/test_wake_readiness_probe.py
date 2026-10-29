@@ -98,14 +98,46 @@ class ReadinessProbeTests(unittest.TestCase):
 
     def test_home_recovery_requires_verified_empty_composer(self):
         target = "https://chatgpt.com/c/readiness-fixture"
-        for empty in [True, False, None, "true", {"value": True}]:
+        for empty in ["EMPTY", True, False, None, "true", {"value": "EMPTY"}, "EMPTY private"]:
             with self.subTest(empty=empty):
                 cdp = mock.Mock()
                 cdp.get_current_url.return_value = "https://chatgpt.com/"
                 cdp.is_element_visible.return_value = False
                 cdp.evaluate.return_value = empty
                 self.probe.recover_empty_home(cdp, target)
-                self.assertEqual(cdp.get.call_args_list, [mock.call(target)] if empty is True else [])
+                self.assertEqual(cdp.get.call_args_list, [mock.call(target)] if empty == "EMPTY" else [])
+
+    def test_home_refusal_reasons_are_fixed_and_do_not_navigate(self):
+        target = "https://chatgpt.com/c/readiness-fixture"
+        cdp = mock.Mock()
+        cdp.get_current_url.return_value = "https://chatgpt.com/"
+        cdp.is_element_visible.return_value = False
+        for reason in self.probe.HOME_CHECKS - {"EMPTY"}:
+            cdp.evaluate.return_value = reason
+            self.assertEqual(self.probe.recover_empty_home(cdp, target), reason)
+        for value in [True, None, "private draft", "EMPTY\n", {"value": "EMPTY"}]:
+            cdp.evaluate.return_value = value
+            self.assertEqual(self.probe.recover_empty_home(cdp, target), "EVALUATION_UNKNOWN")
+        cdp.evaluate.side_effect = RuntimeError("private failure")
+        self.assertEqual(self.probe.recover_empty_home(cdp, target), "EVALUATION_FAILED")
+        cdp.get.assert_not_called()
+
+    def test_home_route_change_or_busy_state_refuses_navigation_after_empty_check(self):
+        target = "https://chatgpt.com/c/readiness-fixture"
+        cdp = mock.Mock()
+        cdp.evaluate.return_value = "EMPTY"
+        cdp.is_element_visible.return_value = False
+        cdp.get_current_url.side_effect = ["https://chatgpt.com/", target]
+        self.assertEqual(self.probe.recover_empty_home(cdp, target), "NOT_HOME")
+        cdp.get.assert_not_called()
+        cdp.get_current_url.side_effect = None
+        cdp.get_current_url.return_value = "https://chatgpt.com/"
+        def evaluation(_):
+            cdp.is_element_visible.side_effect = lambda selector: selector in self.probe.STOP
+            return "EMPTY"
+        cdp.evaluate.side_effect = evaluation
+        self.assertEqual(self.probe.recover_empty_home(cdp, target), "BUSY")
+        cdp.get.assert_not_called()
 
     def test_recovery_refuses_login_security_drift_busy_and_unknown_state(self):
         target = "https://chatgpt.com/c/readiness-fixture"
@@ -119,7 +151,7 @@ class ReadinessProbeTests(unittest.TestCase):
                 cdp = mock.Mock()
                 cdp.get_current_url.return_value = current
                 cdp.is_element_visible.side_effect = lambda selector: selector in visible
-                cdp.evaluate.return_value = True
+                cdp.evaluate.return_value = "EMPTY"
                 self.probe.recover_empty_home(cdp, target)
                 cdp.get.assert_not_called()
         cdp = mock.Mock()
@@ -134,7 +166,7 @@ class ReadinessProbeTests(unittest.TestCase):
         cdp = mock.Mock()
         cdp.get_current_url.return_value = "https://chatgpt.com/"
         cdp.is_element_visible.return_value = False
-        cdp.evaluate.return_value = True
+        cdp.evaluate.return_value = "EMPTY"
         browser = mock.MagicMock()
         browser.__enter__.return_value = browser
         browser.cdp = cdp

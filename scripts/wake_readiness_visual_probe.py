@@ -21,6 +21,11 @@ NETWORK_ERRORS = frozenset({
     "ERR_HTTP_RESPONSE_CODE_FAILURE", "ERR_TOO_MANY_RETRIES", "ERR_EMPTY_RESPONSE",
     "ERR_FAILED", "ERR_HTTP2_PROTOCOL_ERROR", "ERR_SSL_PROTOCOL_ERROR", "ERR_QUIC_PROTOCOL_ERROR",
 })
+HOME_CHECKS = frozenset({
+    "EMPTY", "NOT_HOME", "BUSY", "DOCUMENT_LOADING", "EDITOR_MISSING",
+    "EDITOR_AMBIGUOUS", "EDITOR_UNSUPPORTED", "DRAFT_PRESENT", "EDITOR_MEDIA_PRESENT",
+    "ATTACHMENT_INDICATOR", "EVALUATION_UNKNOWN", "EVALUATION_FAILED",
+})
 
 def visible(cdp, selector):
     try: return bool(cdp.is_element_visible(selector))
@@ -98,33 +103,59 @@ def chrome_error_detail(cdp):
         pass
     return "UNKNOWN"
 
-def recover_empty_home(cdp, url):
-    """One same-tab navigation, only from a positively empty, idle Home.
+def home_recovery_check(cdp, url):
+    """Explain the existing emptiness guard using fixed metadata, never text.
 
-    HOME alone says nothing about authentication. Never inspect/export draft
-    contents or leave an unknown composer. The caller consumes its sole recovery
-    attempt even if this check or navigation fails.
+    The reason is not authentication or task authority. The document must still
+    be HTTPS ChatGPT Home inside the evaluation before inspecting its composer.
     """
     if classify(cdp, url) != "HOME":
-        return
+        return "NOT_HOME"
+    if any(visible(cdp, s) for s in STOP):
+        return "BUSY"
     try:
-        empty = cdp.evaluate("""(() => {
-            if (document.readyState !== 'complete') return false;
+        reason = cdp.evaluate("""(() => {
+            if (location.protocol !== 'https:' ||
+                !['chatgpt.com', 'chat.openai.com'].includes(location.hostname) ||
+                !['', '/'].includes(location.pathname) || location.port ||
+                location.username || location.password || location.search || location.hash) return 'NOT_HOME';
+            if (document.readyState !== 'complete') return 'DOCUMENT_LOADING';
             const editors = document.querySelectorAll('#prompt-textarea');
-            if (editors.length !== 1) return false;
+            if (editors.length === 0) return 'EDITOR_MISSING';
+            if (editors.length !== 1) return 'EDITOR_AMBIGUOUS';
             const e = editors[0];
-            if (!(e instanceof HTMLTextAreaElement) && !e.isContentEditable) return false;
+            if (!(e instanceof HTMLTextAreaElement) && !e.isContentEditable) return 'EDITOR_UNSUPPORTED';
             const text = e instanceof HTMLTextAreaElement ? e.value : e.textContent;
-            if (text !== '' || e.querySelector('img, video, audio, input, [data-file-id]')) return false;
-            if (document.querySelector('[data-testid*="attachment" i], [data-testid*="file-thumbnail" i]')) return false;
-            return true;
+            if (text !== '') return 'DRAFT_PRESENT';
+            if (e.querySelector('img, video, audio, input, [data-file-id]')) return 'EDITOR_MEDIA_PRESENT';
+            if (document.querySelector('[data-testid*="attachment" i], [data-testid*="file-thumbnail" i]')) return 'ATTACHMENT_INDICATOR';
+            return 'EMPTY';
         })()""")
-        # Require an actual boolean, never truthy error strings or wrapped values.
-        if empty is True and not any(visible(cdp, s) for s in STOP):
-            # Existing bridge recovery also uses get(): open() can switch tabs.
-            cdp.get(url)
+        if isinstance(reason, str) and reason in HOME_CHECKS:
+            return reason
     except Exception:
-        pass
+        return "EVALUATION_FAILED"
+    return "EVALUATION_UNKNOWN"
+
+def recover_empty_home(cdp, url):
+    """One same-tab navigation after the same strict idle/empty checks.
+
+    The caller consumes its sole attempt regardless of the fixed outcome. No
+    unknown draft, attachment, wrapped value or evaluation failure permits it.
+    """
+    reason = home_recovery_check(cdp, url)
+    if reason != "EMPTY":
+        return reason
+    if classify(cdp, url) != "HOME":
+        return "NOT_HOME"
+    if any(visible(cdp, s) for s in STOP):
+        return "BUSY"
+    try:
+        # Existing bridge recovery also uses get(): open() can switch tabs.
+        cdp.get(url)
+        return "NAVIGATION_ATTEMPTED"
+    except Exception:
+        return "NAVIGATION_FAILED"
 
 def main():
     parser = argparse.ArgumentParser(description="Read-only CatDesk Wake profile readiness probe")
@@ -176,7 +207,7 @@ def main():
                     print("PROBE:NETWORK:" + chrome_error_detail(cdp), flush=True)
             if args.profile is not None and state == "HOME" and not recovery_attempted and time.monotonic() >= recover_after:
                 recovery_attempted = True
-                recover_empty_home(cdp, url)
+                print("PROBE:HOME_CHECK:" + recover_empty_home(cdp, url), flush=True)
             time.sleep(1)
         final = classify(cdp, url)
         if final == "CHROME_ERROR" and last != final:
