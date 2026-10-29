@@ -1,3 +1,14 @@
+## 2026-10-29 21:25 UTC — current dependency queue; no new routine approval
+
+| Task | Status / owner | Required change | Limits and independent work |
+|---|---|---|---|
+| CD-P6 connector | WAITING_FOR_EXTERNAL_SERVICE / existing connector owner | Changed upstream serving evidence after operator-reported Oct29 SSE429 | No speculative probe/reconnect; Oct28 no-status failure remains separate. Source work continues. |
+| REGISTERED_PROFILE_EDITOR_MISSING_INSPECTION | WAITING_FOR_OPERATOR / existing profile owner | Existing supported login inspection already requested; exact private command/hash retained | Same profile, bounded cleanup, no send, new profile or draft clearing. Do not repeat request. |
+| Canonical/control registry serving | BLOCKED_BY_TECHNICAL_DEFECT / CatDesk source owner | Supported authenticated serving path for intended scope; metadata-only doctor observes canonical mismatch | Preserve both stores/targets/native ownership; no ad-hoc merge or failed generic ControlWorkspace relaunch. |
+| CD-P4 semantic Wake producer | RUNNING / CatDesk source subtask owner | Frozen per-turn dedupe with Store lock/restart/unknown tests | Offline fixtures only; no grant expansion, browser or runtime start. |
+
+The approved existing official-owner test completed and cleaned up on Oct28 local time; its one connector attempt is not pending and must not be replayed. No additional operator action is needed for the independent source work. Existing PUBLIC publication policy remains in force; visibility preference requires a separate administration decision. Source/metadata evidence: `docs/verification/PASSIVE_LAYERED_DOCTOR_2026_10_29.json`.
+
 ## October 28 — actual Home recovery refusal identified; manual profile inspection pending
 
 Source `da501455efd91b725fafafe8ff5ea0ecbf2f3cfd` makes the existing guarded Home check report fixed refusal reasons without exporting draft text. Every original editor/text/media/attachment condition remains. The evaluation checks that the document is still exact HTTPS ChatGPT Home; only the exact primitive EMPTY result permits the existing single navigation, after another route/busy check. Unknown values and wrappers refuse. Seventeen Python checks and four Windows process tests passed, as did Wake formatting and strict all-target Clippy. The source remote SHA is verified; zero visible exact-commit checks/runs leave CI UNVERIFIED.

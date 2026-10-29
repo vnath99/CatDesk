@@ -1,3 +1,20 @@
+## 2026-10-29 21:25 UTC — additive passive one-command doctor (reviewed source)
+
+From the reviewed source checkout, inspect an existing installed release without starting it:
+
+```powershell
+.\catdesk.ps1 doctor -Workspace '<existing-release-workspace>'
+.\catdesk.ps1 doctor -Workspace '<existing-release-workspace>' -Human
+```
+
+JSON is the default; `-Human` emits one fixed summary per layer. To inspect a separately registered control scope without merging registries, add `-ProjectWorkspace '<existing-control-workspace>' -WakeRoot '<matching-existing-wake-root>'`. These options and `-ObservationFile` are doctor-only. Default Wake metadata scope is the existing local CatDeskWake root. The release workspace must contain the verified installed executable/fingerprint; the source checkout need not contain a new executable. This helper is source-qualified, not integrated into the canonical launcher yet.
+
+The command is read-only: no startup/repair, HTTP/MCP POST, browser action, CLI authentication check, store initialization or report file write. Existing bounded Windows listener inventory is used. Local metadata paths must be local drive paths without reparse ancestors; do not point it at network shares. Pairing facts explicitly do not establish caller identity or native session liveness. The legacy `diagnose` command retains its contract; use the already authorized public `recover` procedure for repair, never an invented `doctor --repair` option.
+
+Optional `-ObservationFile '<local-redacted-json>'` accepts at most 16KiB, schema1, source OPERATOR_REPORTED or RETAINED_REPORT, an actual ISO observation date or timestamp and up to32 allowlisted layer/code pairs. Example: `{"schemaVersion":1,"source":"OPERATOR_REPORTED","observedUtc":"2026-10-29","observations":[{"layer":"CONNECTOR","code":"UPSTREAM_RATE_OR_CONNECTOR_UNAVAILABLE"}]}`. Imported facts are UNVERIFIED advisory; they never create PASS or hide a current unknown send. A stopped listener is a local observation, not proof of the cause of shutdown or of an upstream429.
+
+Qualification: 72 assertions per PowerShell engine plus three actual passive metadata calls; 5,858 protected files unchanged. Python spawning Windows PowerShell from a PowerShell7 environment must give that child its normal built-in module roots; remove inherited PSModulePath keys case-insensitively from that child environment only. Do not change system module paths or guards. Evidence: `docs/verification/PASSIVE_LAYERED_DOCTOR_2026_10_29.json`.
+
 ## October 28 — actual Home recovery refusal identified; manual profile inspection pending
 
 Source `da501455efd91b725fafafe8ff5ea0ecbf2f3cfd` makes the existing guarded Home check report fixed refusal reasons without exporting draft text. Every original editor/text/media/attachment condition remains. The evaluation checks that the document is still exact HTTPS ChatGPT Home; only the exact primitive EMPTY result permits the existing single navigation, after another route/busy check. Unknown values and wrappers refuse. Seventeen Python checks and four Windows process tests passed, as did Wake formatting and strict all-target Clippy. The source remote SHA is verified; zero visible exact-commit checks/runs leave CI UNVERIFIED.
