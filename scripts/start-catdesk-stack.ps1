@@ -2,6 +2,7 @@
 param(
     [ValidateSet("plan", "recover")][string]$Mode = "plan",
     [string]$Workspace = "",
+    [string]$ControlWorkspace = "",
     [string]$ConfigPath = (Join-Path ([Environment]::GetFolderPath("UserProfile")) ".catdesk\config.toml"),
     [int]$ReadyTimeoutSeconds = 180,
     [string]$ExpectedBuildSha256 = "",
@@ -817,7 +818,7 @@ function New-LocalMcpReadinessResult {
         'LOCAL_MCP_RESPONSE_UNAVAILABLE',
         'LOCAL_MCP_RESPONSE_INVALID',
         'LOCAL_MCP_PROTOCOL_UNREADY',
-        'LOCAL_MCP_BACKEND_ONLY_UNSUPPORTED', 'LOCAL_MCP_AUTH_TOKEN_INVALID', 'LOCAL_MCP_AUTH_SCOPE_INVALID'
+        'LOCAL_MCP_BACKEND_ONLY_UNSUPPORTED', 'LOCAL_MCP_AUTH_TOKEN_INVALID', 'LOCAL_MCP_AUTH_SCOPE_INVALID', 'LOCAL_MCP_CONTROL_WORKSPACE_OWNER_UNPROVEN'
     )){throw 'local MCP readiness gate is invalid'}
     return [pscustomobject]@{Ready=$Ready;Gate=$Gate}
 }
@@ -1134,9 +1135,10 @@ function Test-BackendOnlySupport {
 }
 
 function Start-BackendOnlyDaemon {
-    param($Canonical, [string]$Root, [string]$Config)
-    Invoke-BootstrapSeam -Name 'BackendOnlyStart' -Arguments @($Canonical, $Root, $Config) -Default {
-        param($identity, $workspaceRoot, $configPath)
+    param($Canonical, [string]$Root, [string]$Config, [string]$RuntimeWorkspace = '')
+    if ([string]::IsNullOrWhiteSpace($RuntimeWorkspace)) { $RuntimeWorkspace = $Root }
+    Invoke-BootstrapSeam -Name 'BackendOnlyStart' -Arguments @($Canonical, $Root, $Config, $RuntimeWorkspace) -Default {
+        param($identity, $releaseRoot, $configPath, $workspaceRoot)
         $info = [Diagnostics.ProcessStartInfo]::new()
         $info.FileName = $identity.Path
         $info.Arguments = '--catdesk-daemon --backend-only'
@@ -1152,12 +1154,42 @@ function Start-BackendOnlyDaemon {
     }
 }
 
+function Resolve-BackendControlWorkspace {
+    param([string]$Root, [string]$Requested = '')
+    if ([string]::IsNullOrWhiteSpace($Requested)) { return $Root }
+    if ($Requested.Length -gt 4096 -or $Requested -notmatch '^[A-Za-z]:[\\/]') { throw 'LOCAL_MCP_CONTROL_WORKSPACE_INVALID' }
+    $expected = [IO.Path]::GetFullPath($Requested).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    if ($expected -match '^[A-Za-z]:$') { throw 'LOCAL_MCP_CONTROL_WORKSPACE_INVALID' }
+    if ([string]::Equals($expected, $Root.TrimEnd([IO.Path]::DirectorySeparatorChar), [StringComparison]::OrdinalIgnoreCase)) { return $Root }
+    # Only an explicit existing control root may differ from the installation.
+    # Reuse its registry; never initialize, merge or copy project bindings here.
+    $paths = [Collections.Generic.List[string]]::new()
+    $cursor = $expected
+    while (-not [string]::IsNullOrEmpty($cursor)) {
+        $paths.Add($cursor)
+        $parent = [IO.Path]::GetDirectoryName($cursor)
+        if ($parent -ceq $cursor) { break }
+        $cursor = $parent
+    }
+    $paths.Add((Join-Path $expected '.catdesk'))
+    $paths.Add((Join-Path $expected '.catdesk/projects'))
+    foreach ($path in $paths) {
+        $item = Get-Item -LiteralPath $path -Force -ErrorAction Stop
+        if ($item -isnot [IO.DirectoryInfo] -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'LOCAL_MCP_CONTROL_WORKSPACE_INVALID' }
+    }
+    $registry = Get-Item -LiteralPath (Join-Path $expected '.catdesk/projects/projects.json') -Force -ErrorAction Stop
+    if ($registry -isnot [IO.FileInfo] -or ($registry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $registry.Length -lt 1 -or $registry.Length -gt 16777216) { throw 'LOCAL_MCP_CONTROL_WORKSPACE_INVALID' }
+    return $expected
+}
+
 function Get-BackendOnlyUtcNow {
     [datetime](Invoke-BootstrapSeam -Name 'BackendOnlyUtcNow' -Arguments @() -Default { [DateTime]::UtcNow })
 }
 
 function Invoke-BackendOnlyBootstrap {
-    param([string]$Root, $Canonical)
+    param([string]$Root, $Canonical, [string]$RuntimeWorkspace = '')
+    if ([string]::IsNullOrWhiteSpace($RuntimeWorkspace)) { $RuntimeWorkspace = $Root }
+    $separateControl = -not [string]::Equals($Root, $RuntimeWorkspace, [StringComparison]::OrdinalIgnoreCase)
     # Release repair before this function retains its existing integrity/owner
     # gates and helper timeouts. Only local convergence is capped here; a probe
     # already in flight retains its existing finite per-call timeout.
@@ -1170,6 +1202,11 @@ function Invoke-BackendOnlyBootstrap {
     $existing = Get-LoopbackCatDeskListener -Port $local.Port -Canonical $Canonical
     if ($existing -and -not $existing.MatchesCanonical) {
         Write-RedactedStatus 'TRANSPORT_VERIFICATION_FAILED' 'local backend owner refused' '' 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH'; return
+    }
+    if ($separateControl -and $existing) {
+        # Path/PID/health do not prove an existing daemon's control workspace.
+        # An explicit switch needs a fresh owner; never adopt or recycle it.
+        Write-RedactedStatus 'TRANSPORT_VERIFICATION_FAILED' 'control workspace requires a fresh local owner' '' 'LOCAL_MCP_CONTROL_WORKSPACE_OWNER_UNPROVEN'; return
     }
     if ($Mode -eq 'plan' -or -not $Execute) {
         $ready = Get-LocalMcpReadiness -LocalMcp $local -Canonical $Canonical
@@ -1184,11 +1221,19 @@ function Invoke-BackendOnlyBootstrap {
         if (-not $supported) { Write-RedactedStatus 'TRANSPORT_VERIFICATION_FAILED' 'verified image does not support backend-only startup' '' 'LOCAL_MCP_BACKEND_ONLY_UNSUPPORTED'; return }
         # Do not retire any stale process until its verified replacement has
         # proved this closed mode. No foreign listener or same-path racer wins.
-        [void](Stop-StaleCanonicalCatDeskDaemonForRecovery -Canonical $Canonical -LocalMcp $local)
+        if ($separateControl) {
+            if (@(Get-CatDeskDaemonProcessCandidates -Canonical $Canonical).Count -ne 0) {
+                Write-RedactedStatus 'TRANSPORT_VERIFICATION_FAILED' 'control workspace requires a fresh local owner' '' 'LOCAL_MCP_CONTROL_WORKSPACE_OWNER_UNPROVEN'; return
+            }
+        } else {
+            [void](Stop-StaleCanonicalCatDeskDaemonForRecovery -Canonical $Canonical -LocalMcp $local)
+        }
         if (Get-LoopbackCatDeskListener -Port $local.Port -Canonical $Canonical) { throw 'local backend listener changed before launch' }
         $rechecked = Get-CanonicalCatDeskIdentity -Root $Root -ExpectedHash $ExpectedBuildSha256 -FingerprintPath $BuildFingerprintPath
         if ($rechecked.Path -cne $Canonical.Path -or $rechecked.Sha256 -cne $Canonical.Sha256) { throw 'local backend release changed before launch' }
-        if ((Get-BackendOnlyUtcNow) -lt $deadline) { $started = Start-BackendOnlyDaemon -Canonical $Canonical -Root $Root -Config $ConfigPath }
+        $checkedControl = Resolve-BackendControlWorkspace -Root $Root -Requested $RuntimeWorkspace
+        if (-not [string]::Equals($checkedControl, $RuntimeWorkspace, [StringComparison]::OrdinalIgnoreCase)) { throw 'LOCAL_MCP_CONTROL_WORKSPACE_INVALID' }
+        if ((Get-BackendOnlyUtcNow) -lt $deadline) { $started = Start-BackendOnlyDaemon -Canonical $Canonical -Root $Root -Config $ConfigPath -RuntimeWorkspace $checkedControl }
     }
     $lastGate = 'LOCAL_MCP_RESPONSE_UNAVAILABLE'
     while ((Get-BackendOnlyUtcNow) -lt $deadline) {
@@ -1205,6 +1250,8 @@ function Invoke-BackendOnlyBootstrap {
 
 function Invoke-CanonicalStackBootstrap {
     $root=(Resolve-Path -LiteralPath $Workspace -ErrorAction Stop).Path
+    if (-not [string]::IsNullOrWhiteSpace($ControlWorkspace) -and -not $BackendOnly) { throw 'ControlWorkspace requires backend-only startup' }
+    [void](Resolve-BackendControlWorkspace -Root $root -Requested $ControlWorkspace)
     if($ReadyTimeoutSeconds -lt 5 -or $ReadyTimeoutSeconds -gt 180){throw 'readiness timeout is invalid'}
     if($Mode -eq 'plan' -or -not $Execute){Invoke-CanonicalStackBootstrapCore;return}
     $lease=$null
@@ -1220,6 +1267,8 @@ function Invoke-CanonicalStackBootstrap {
 function Invoke-CanonicalStackBootstrapCore {
     param([System.IO.FileStream]$StoppedLifecycleLease=$null)
     $root=(Resolve-Path -LiteralPath $Workspace -ErrorAction Stop).Path;if($ReadyTimeoutSeconds -lt 5 -or $ReadyTimeoutSeconds -gt 180){throw "readiness timeout is invalid"}
+    if (-not [string]::IsNullOrWhiteSpace($ControlWorkspace) -and -not $BackendOnly) { throw 'ControlWorkspace requires backend-only startup' }
+    $runtimeWorkspace=Resolve-BackendControlWorkspace -Root $root -Requested $ControlWorkspace
     if(-not(Test-CatDeskStoppedReconciliationStartupReady -Root $root -HeldLifecycleLease $StoppedLifecycleLease)){
         Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'same-transaction stopped reconciliation recovery is required before startup'
         return
@@ -1244,7 +1293,7 @@ function Invoke-CanonicalStackBootstrapCore {
             return
         }
     }
-    if ($BackendOnly) { Invoke-BackendOnlyBootstrap -Root $root -Canonical $canonical; return }
+    if ($BackendOnly) { Invoke-BackendOnlyBootstrap -Root $root -Canonical $canonical -RuntimeWorkspace $runtimeWorkspace; return }
     $localMcp=Get-ConfiguredLocalMcp -Path $ConfigPath;$runtimeAlias=Get-ConfiguredRuntimeAlias -Path $ConfigPath;$client=Find-TunnelClient -ExplicitPath $TunnelClientPath;if(-not $client){throw "official runtime client unavailable"};$setup=Join-Path $root "scripts\setup-secure-mcp.ps1";$diskMode=Read-OfficialRuntimeProcessMode -Path $ConfigPath;$existing=Get-LoopbackCatDeskListener -Port $localMcp.Port -Canonical $canonical;$launched=$false
     Test-CodexOnDemandPrerequisites
     $wakeReady=Test-WakeBridgeRuntime -Root $root
