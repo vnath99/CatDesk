@@ -16,6 +16,7 @@ pub(super) fn fair_round(
 ) -> Result<Vec<Event>> {
     let mut chosen = BTreeMap::<String, Event>::new();
     let mut uncertain = BTreeMap::<String, Event>::new();
+    let mut expired_claims = BTreeSet::new();
     // Existing created-time ordering is retained inside each project.
     for event in store.events()? {
         if targets
@@ -31,6 +32,19 @@ pub(super) fn fair_round(
         {
             continue;
         }
+        if event.is_expired_at(observed_utc)? {
+            match delivery.as_ref().map(|value| &value.phase) {
+                None => continue,
+                Some(Phase::Claimed | Phase::Attention) => {
+                    // A pre-submit crash may have left an owned composer draft.
+                    // Expiry cannot discard it or authorize another event in
+                    // that conversation. Other projects remain schedulable.
+                    expired_claims.insert(event.project_id.clone());
+                    continue;
+                }
+                _ => {}
+            }
+        }
         if delivery.as_ref().is_some_and(|value| {
             value.phase == Phase::Attention && value.reason.as_deref() != Some("CHATGPT_NOT_IDLE")
         }) {
@@ -45,6 +59,9 @@ pub(super) fn fair_round(
                 .or_insert_with(|| event.clone());
         }
         chosen.entry(event.project_id.clone()).or_insert(event);
+    }
+    for project in expired_claims {
+        chosen.remove(&project);
     }
     // The crash boundary can precede same-tab acceptance and its timer.
     // Such a delivery still owns the conversation until read-only recovery.
@@ -102,7 +119,7 @@ pub(super) mod tests {
     use super::*;
     use crate::{
         PROTOCOL_VERSION,
-        protocol::digest,
+        protocol::{WakeMetadata, WakePurpose, digest},
         store::{Delivery, HostLease, Receipt, now},
     };
 
@@ -281,5 +298,127 @@ pub(super) mod tests {
             ids(&store, None, &BTreeMap::new()),
             ["alpha-2", "beta-1", "gamma-1"]
         );
+    }
+
+    fn manual_event(store: &Store, created_utc: u64, expires_utc: u64) -> Event {
+        let event = Event {
+            schema_version: PROTOCOL_VERSION,
+            event_id: "alpha-manual".into(),
+            project_id: "alpha".into(),
+            event_type: "engineering_attention".into(),
+            created_utc,
+            message: "Continue alpha's assigned task".into(),
+            target_generation: store.config().unwrap().targets["alpha"].generation,
+            audit_references: Vec::new(),
+        }
+        .with_wake_metadata(WakeMetadata {
+            purpose: WakePurpose::ManualEndTurn,
+            source_event_id: "alpha-source-event".into(),
+            source_turn_id: "alpha-source-turn".into(),
+            priority: 255,
+            expires_utc,
+        })
+        .unwrap();
+        store.publish(&event).unwrap();
+        event
+    }
+
+    #[test]
+    fn wake_metadata_expiry_skips_only_unclaimed_work_and_preserves_claimed_drafts_on_restart() {
+        let (store, lease) = fixture("expiry-claimed");
+        let event = manual_event(&store, now() - 120, now() - 60);
+        // The expired intent remains durable, but does not consume a slice.
+        assert_eq!(
+            ids(&store, None, &BTreeMap::new()),
+            ["alpha-1", "beta-1", "gamma-1"]
+        );
+        assert!(store.delivery(&event.event_id).unwrap().is_none());
+        let claimed = store.claim(&event, &lease).unwrap();
+        assert_eq!(ids(&store, None, &BTreeMap::new()), ["beta-1", "gamma-1"]);
+        drop(lease);
+        let reopened =
+            Store::open_scoped_for_test(store.root(), store.root().parent().unwrap()).unwrap();
+        assert_eq!(
+            ids(&reopened, None, &BTreeMap::new()),
+            ["beta-1", "gamma-1"]
+        );
+        assert_eq!(reopened.delivery(&event.event_id).unwrap(), Some(claimed));
+        assert!(reopened.events().unwrap().contains(&event));
+        std::fs::remove_dir_all(store.root().parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn wake_metadata_expiry_never_suppresses_unknown_submit_or_sent_response_observation() {
+        let (store, lease) = fixture("expiry-reconciliation");
+        let event = manual_event(&store, now(), now() + 300);
+        let delivery = store.claim(&event, &lease).unwrap();
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        let observed_after_expiry = event.wake_metadata().unwrap().unwrap().expires_utc;
+        let round = || {
+            fair_round(
+                &store,
+                &store.config().unwrap().targets,
+                None,
+                &BTreeMap::new(),
+                observed_after_expiry,
+            )
+            .unwrap()
+            .into_iter()
+            .map(|event| event.event_id)
+            .collect::<Vec<_>>()
+        };
+        assert_eq!(round(), ["alpha-manual", "beta-1", "gamma-1"]);
+        assert_eq!(
+            store.claim(&event, &lease).unwrap_err(),
+            "SUBMISSION_RECONCILIATION_REQUIRED"
+        );
+        let receipt = Receipt {
+            schema_version: PROTOCOL_VERSION,
+            event_id: event.event_id.clone(),
+            target_generation: delivery.target.generation,
+            target_digest: delivery.target.digest,
+            message_digest: digest(&event.message),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        store
+            .record_exact_receipt_timer(&event.event_id, &receipt)
+            .unwrap();
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Sent,
+                Some(receipt),
+                None,
+            )
+            .unwrap();
+        assert_eq!(round(), ["alpha-manual", "beta-1", "gamma-1"]);
+        assert_eq!(
+            store.delivery(&event.event_id).unwrap().unwrap().phase,
+            Phase::Sent
+        );
+        drop(lease);
+        std::fs::remove_dir_all(store.root().parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn wake_metadata_priority_does_not_override_fifo_or_project_rotation() {
+        let (store, lease) = fixture("priority-fairness");
+        manual_event(&store, now() + 1, now() + 300);
+        assert_eq!(
+            ids(&store, Some("alpha"), &BTreeMap::new()),
+            ["beta-1", "gamma-1", "alpha-1"]
+        );
+        drop(lease);
+        std::fs::remove_dir_all(store.root().parent().unwrap()).unwrap();
     }
 }

@@ -1645,6 +1645,12 @@ impl Store {
             }
         }
         if next == Phase::Submitting {
+            // Recheck immediately before authorizing browser submission. Do
+            // not apply TTL to SUBMITTING/SENT recovery or receipt recording:
+            // an unknown outcome must never be retired or made replayable.
+            if delivery.event.is_expired_at(now())? {
+                return Err("QUEUE_EVENT_EXPIRED".into());
+            }
             // Keep the immutable recovery-window start separate from the
             // queue's age and the mutable attention timestamp. A sidecar keeps
             // the existing Delivery JSON readable by earlier installed hosts.
@@ -3708,5 +3714,194 @@ mod turn_timer_tests {
             ResponseState::Observing
         );
         let _ = fs::remove_dir_all(root);
+    }
+}
+
+#[cfg(test)]
+mod wake_metadata_tests {
+    use super::*;
+    use crate::protocol::{WakeMetadata, WakePurpose};
+
+    fn fixture() -> (PathBuf, Store, Target) {
+        let base = std::env::temp_dir().join(format!(
+            "wake-metadata-{}-{}",
+            std::process::id(),
+            TEMP.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir(&base).unwrap();
+        let store = Store::open_scoped_for_test(&base.join("wake"), &base).unwrap();
+        store.initialize().unwrap();
+        let target = store
+            .set_target("alpha", 0, "https://chatgpt.com/c/alpha")
+            .unwrap();
+        (base, store, target)
+    }
+
+    fn metadata(expires_utc: u64) -> WakeMetadata {
+        WakeMetadata {
+            purpose: WakePurpose::ManualEndTurn,
+            source_event_id: "source-alpha-1".into(),
+            source_turn_id: "turn-alpha-1".into(),
+            priority: 10,
+            expires_utc,
+        }
+    }
+
+    fn expired_event(target: &Target) -> Event {
+        let created_utc = now() - 120;
+        Event {
+            schema_version: PROTOCOL_VERSION,
+            event_id: "manual-alpha-expired".into(),
+            project_id: "alpha".into(),
+            event_type: "engineering_attention".into(),
+            created_utc,
+            message: "Continue alpha's assigned task".into(),
+            target_generation: target.generation,
+            audit_references: metadata(created_utc + 60)
+                .audit_references(created_utc)
+                .unwrap(),
+        }
+    }
+
+    #[test]
+    fn wake_metadata_publication_preserves_target_cas_immutable_identity_and_restart() {
+        let (base, store, target) = fixture();
+        let references = metadata(now() + 300).audit_references(now()).unwrap();
+        let event = store
+            .produce_expected_with_audit(
+                "manual-alpha",
+                "alpha",
+                "engineering_attention",
+                "Continue alpha",
+                &target,
+                &references,
+            )
+            .unwrap();
+        let persisted = fs::read(store.event_path("manual-alpha")).unwrap();
+        let reopened =
+            Store::open_scoped_for_test(store.root(), store.root().parent().unwrap()).unwrap();
+        let replay = reopened
+            .produce_expected_with_audit(
+                "manual-alpha",
+                "alpha",
+                "engineering_attention",
+                "Continue alpha",
+                &target,
+                &references,
+            )
+            .unwrap();
+        assert_eq!(replay, event);
+        assert_eq!(
+            replay.wake_metadata().unwrap(),
+            event.wake_metadata().unwrap()
+        );
+        assert_eq!(
+            fs::read(store.event_path("manual-alpha")).unwrap(),
+            persisted
+        );
+        let mut changed = references.clone();
+        changed[2] = "catdesk.wake.v1:source-turn:turn-alpha-2".into();
+        assert_eq!(
+            reopened
+                .produce_expected_with_audit(
+                    "manual-alpha",
+                    "alpha",
+                    "engineering_attention",
+                    "Continue alpha",
+                    &target,
+                    &changed,
+                )
+                .unwrap_err(),
+            "QUEUE_EVENT_ID_CONFLICT"
+        );
+        let wrong_target = Target::new(2, target.url.clone()).unwrap();
+        assert_eq!(
+            reopened
+                .produce_expected_with_audit(
+                    "manual-other",
+                    "alpha",
+                    "engineering_attention",
+                    "Continue alpha",
+                    &wrong_target,
+                    &references,
+                )
+                .unwrap_err(),
+            "TARGET_EXPECTATION_MISMATCH"
+        );
+        assert_eq!(reopened.events().unwrap(), [event]);
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn wake_metadata_expiry_refuses_submit_before_any_submission_journal_write() {
+        let (base, store, target) = fixture();
+        let event = expired_event(&target);
+        store.publish(&event).unwrap();
+        let lease = store.host_lock().unwrap();
+        let claimed = store.claim(&event, &lease).unwrap();
+        let before = fs::read(store.delivery_path(&event.event_id)).unwrap();
+        assert_eq!(
+            store
+                .transition(
+                    &event.event_id,
+                    lease.owner(),
+                    Phase::Submitting,
+                    None,
+                    None
+                )
+                .unwrap_err(),
+            "QUEUE_EVENT_EXPIRED"
+        );
+        assert_eq!(store.delivery(&event.event_id).unwrap(), Some(claimed));
+        assert_eq!(
+            fs::read(store.delivery_path(&event.event_id)).unwrap(),
+            before
+        );
+        assert!(!store.submission_start_path(&event.event_id).exists());
+        assert!(!store.archive_path(&event.event_id).exists());
+        drop(lease);
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn wake_metadata_expired_unknown_submission_remains_unreplayable_and_reconcilable() {
+        let (base, store, target) = fixture();
+        let event = expired_event(&target);
+        store.publish(&event).unwrap();
+        let lease = store.host_lock().unwrap();
+        let mut historical = store.claim(&event, &lease).unwrap();
+        // Fixture represents a submission committed before its TTL elapsed.
+        // No clock mutation, browser action, or production state is involved.
+        historical.phase = Phase::Submitting;
+        historical.updated_utc = event.created_utc + 1;
+        historical.validate().unwrap();
+        atomic(&store.delivery_path(&event.event_id), &historical).unwrap();
+        assert_eq!(
+            store.claim(&event, &lease).unwrap_err(),
+            "SUBMISSION_RECONCILIATION_REQUIRED"
+        );
+        assert_eq!(
+            store.retry_pre_submit(&event.event_id).unwrap_err(),
+            "SUBMISSION_RETRY_REFUSED"
+        );
+        assert_eq!(store.delivery(&event.event_id).unwrap(), Some(historical));
+        let receipt = Receipt {
+            schema_version: PROTOCOL_VERSION,
+            event_id: event.event_id.clone(),
+            target_generation: target.generation,
+            target_digest: target.digest,
+            message_digest: digest(&event.message),
+            sent_utc: event.created_utc + 2,
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        let reconciled = store
+            .reconcile_submitting_sent(&event.event_id, receipt.clone())
+            .unwrap();
+        assert_eq!(reconciled.phase, Phase::Sent);
+        assert_eq!(reconciled.receipt, Some(receipt));
+        assert_eq!(reconciled.event, event);
+        assert!(store.archive_path(&event.event_id).exists());
+        drop(lease);
+        fs::remove_dir_all(base).unwrap();
     }
 }
