@@ -1,3 +1,15 @@
+## 2026-10-29 22:04 UTC — current source queue; live gates preserved
+
+| Task | State / owner | Next executable action |
+|---|---|---|
+| CD-P4 manual Wake ingress | COMPLETED_VERIFIED / CatDesk source owner | Source/loopback evidence at `1411f25787b4bb2b3e293a2152770faa10090811`; installed/Web proof remains open. |
+| CD-P5 manual metadata traffic | READY_TO_EXECUTE / next source owner | Reuse the existing exact-target traffic observer without native writer or competing registry; preserve uncertainty. |
+| CD-P3 intended-scope serving | READY_TO_EXECUTE (source qualification) / CatDesk source owner | Reconcile existing supported authenticated serving path; preserve both registries and avoid the reverted generic launcher experiment. |
+| Connector | WAITING_FOR_EXTERNAL_SERVICE / existing connector owner | Changed serving evidence after reported Oct29 SSE429; no speculative restart/probe. |
+| REGISTERED_PROFILE_EDITOR_MISSING_INSPECTION | WAITING_FOR_OPERATOR / existing profile owner | Existing private supported inspection already requested; same profile, bounded cleanup, no send or draft clearing. No repeated request. |
+
+No new operator approval is required for continuing source tasks. No recurring service was activated. Final inventory and all 5,858 protected-file comparisons passed. Earlier synthetic source-test key/temp artifacts remain preserved; only newly tracked fixture keys were cleaned. Evidence: `docs/verification/MANUAL_WAKE_INGRESS_2026_10_29.json`.
+
 ## 2026-10-29 21:44 UTC — dependency-aware source continuation
 
 Semantic Wake producer/crash fence is COMPLETED_VERIFIED at `9f4c0f99faf2fc7ee71163bfbe91ced28c69bcd9` (source only). Explicit project-task manual-wake ingress is RUNNING in the existing source owner. No routine operator approval is needed for these source tests.

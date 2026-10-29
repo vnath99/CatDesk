@@ -1,3 +1,19 @@
+## 2026-10-29 22:04 UTC — explicit manual-wake task capability (source qualified, not installed)
+
+A runtime containing source `1411f25787b4bb2b3e293a2152770faa10090811` supports this optional local grant flag:
+
+```powershell
+& '<qualified-runtime-containing-this-feature>' operator web work execution-grant `
+  --project-id '<registered-project>' --input-file '<frozen-assignment-pins.json>' `
+  --allow-manual-wake
+```
+
+Prerequisites are the existing exact OPEN work/assignment, paired target, normal grant preflight and fresh grant record. No flag means the previous serialized grant. Existing immutable grants cannot be upgraded inline; do not replace a running task or rewrite its grant. The flag is rejected on revoke and unrelated commands. Existing execution-revoke applies to the whole grant. Current installed C254 does not implement this option; a fresh true-capability grant requires the matching qualified runtime. An older rollback reader refuses that grant rather than stripping the field or changing authority. Legacy grants retain their normal behavior.
+
+Through `catdesk_web_task_tool` (or its existing closed `CATDESK_WEB_TASK=` adapter), retain all exact assignment/key/target envelope fields and select `tool: "wake.manual_end_turn"`, with only `arguments: {"sourceTurnId":"<stable-turn-id>","priority":0,"ttlSeconds":300}`. Source-turn IDs are bounded to128 characters, priority0..255, TTL1..86400 seconds. The server supplies fixed text/project/source/destination. Return status WAKE_INTENT_RECORDED proves queue admission only; delivery and completed assistant response require the existing receipt/timer checks. No sender or browser starts. Do not replay an uncertain call, invent a new identity to evade its journal, or rebind a target. Lost/ambiguous results retain the existing recovery fence.
+
+Scope limits: private execution keys stay in their intended local/private handoff channel; never publish them. Manual tool traffic is not yet attributed by the per-conversation observer; real-project admission latency is unqualified. This does not close installed/Web acceptance. Evidence: `docs/verification/MANUAL_WAKE_INGRESS_2026_10_29.json`.
+
 ## 2026-10-29 21:25 UTC — additive passive one-command doctor (reviewed source)
 
 From the reviewed source checkout, inspect an existing installed release without starting it:
