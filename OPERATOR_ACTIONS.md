@@ -1,3 +1,11 @@
+## 2026-10-29 22:29 UTC — existing central development serving qualified — TESTED_LOCAL_RUNTIME
+
+Two monitored25-second runs of the existing `operator web-dev-runtime run-backend` served the intended control scope: authenticated initialize/catalog200, unauthorized401,79 tools with central task dispatch and no raw shell/write tools, all10 registered URLs on an exact local read, and ungranted-task refusal. Both owners exited naturally, proved owned-tree cleanup and closed their endpoints. A prior harness path-spelling failure before HTTP is preserved. Existing selected package, production installation, bindings, native owners, browser, Wake and tunnel were unchanged.
+
+Ten pinned metadata files were identical. The development config changed only usage: a measured17 input/2641 output/2658 total tokens and one call reconstructed the first successful run's complete prior config SHA256 exactly. The second run's saved before/after bytes independently prove no non-usage field changed. Both accounting updates remain; no config/fingerprint was rewritten. Evidence: `docs/verification/CENTRAL_DEVELOPMENT_SERVING_2026_10_29.json`.
+
+This qualifies local development serving, not installed/ChatGPT Web acceptance. The selected package predates recent source-only manual-wake/traffic changes. Connector429 and the existing profile inspection remain separate unchanged gates; no provider request was made. Full normal native Codex reachability from Web, genuine two-chat coding, installed new features and unattended operation remain open. Next READY source task: inspect and complete the existing normal native Codex pathway through exact project/ownership grants; fixed contract tools alone are insufficient.
+
 ## 2026-10-29 22:18 UTC — manual-wake conversation accounting — TESTED_SOURCE
 
 Source `fb6d4977676c4345a9db9e5da0437840826def41` reuses the existing exact-target traffic observer for admitted manual-wake calls, without starting a native writer. Arguments omit execution keys/authentication; durable records retain counts/hashes. Successful and journal-rejected invocations are counted independently. A foreign key changes neither ledger, and a retry changes only its own conversation. An owned asynchronous turn preserves bookkeeping drain after HTTP cancellation. Existing late-response/rollover and busy-ledger behavior remains covered.
