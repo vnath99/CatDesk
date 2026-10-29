@@ -195,6 +195,20 @@ pub(crate) async fn handle(control: &str, request: &JsonRpcRequest) -> JsonRpcRe
     if call.tool == "wake.manual_end_turn" {
         // Dropping the HTTP awaiter cannot cancel this bounded metadata turn;
         // the existing journal remains the no-replay authority on a lost reply.
+        let response_id = id.clone();
+        return match tokio::spawn(async move {
+        let selection = call.selection();
+        // Omit executionKey and the authentication envelope from observation.
+        let observed_params = json!({"name":TOOL,"arguments":call.task_args()});
+        let call = std::sync::Arc::new(call);
+        let owned = call.clone();let root = control.clone();
+        let admitted = tokio::task::spawn_blocking(move || authorize(&root, &owned)).await;
+        match admitted {
+            Ok(Ok(_)) => {},
+            Ok(Err(reason)) => return JsonRpcResponse::error(response_id, -32002, reason),
+            Err(_) => return JsonRpcResponse::error(response_id, -32002, "WEB_TASK_AUTHORIZATION_UNAVAILABLE".into()),
+        }
+        let traffic = crate::project_mcp::TrafficObservation::start_scoped(control.clone(), &selection, observed_params).await;
         let result = tokio::task::spawn_blocking(move || {
             crate::web_work::manual_wake(
                 &control,
@@ -202,13 +216,13 @@ pub(crate) async fn handle(control: &str, request: &JsonRpcRequest) -> JsonRpcRe
                 &call.execution_key,
                 &call.task_id,
                 &call.call_id,
-                call.arguments,
+                call.arguments.clone(),
             )
         })
         .await;
-        return match result {
+        let mut response = match result {
             Ok(Ok(result)) => JsonRpcResponse::success(
-                id,
+                response_id,
                 json!({"content":[{"type":"text","text":"Manual continuation intent recorded; delivery unverified."}],
                     "structuredContent":result,"isError":false,
                     "_meta":{"catdeskTaskLifecycle":{"status":"QUEUED_ONLY","nativeSessionAction":"NONE",
@@ -216,12 +230,19 @@ pub(crate) async fn handle(control: &str, request: &JsonRpcRequest) -> JsonRpcRe
                         "executionAuthority":"LOCAL_EXACT_ASSIGNMENT_KEY_AND_MANUAL_WAKE_CAPABILITY",
                         "conversationOriginAuthenticated":false,"retryWithNewCallIdAllowed":false}}}),
             ),
-            Ok(Err(reason)) => JsonRpcResponse::error(id, -32002, reason),
+            Ok(Err(reason)) => JsonRpcResponse::error(response_id, -32002, reason),
             Err(_) => {
-                JsonRpcResponse::error(id, -32002, "WEB_TASK_OUTCOME_UNKNOWN_NO_REPLAY".into())
+                JsonRpcResponse::error(response_id, -32002, "WEB_TASK_OUTCOME_UNKNOWN_NO_REPLAY".into())
             }
         };
+        traffic.finish(&mut response).await;
+        response
+        }).await {
+            Ok(response) => response,
+            Err(_) => JsonRpcResponse::error(id, -32002, "WEB_TASK_OUTCOME_UNKNOWN_NO_REPLAY".into()),
+        };
     }
+
     let response_id = id.clone();
     // Detach only this existing bounded turn if its HTTP awaiter disappears.
     // The owned future still drains the task and releases its exact lease.
@@ -502,6 +523,56 @@ mod tests {
         assert_eq!(fs::read(&beta_path).unwrap(), beta_bytes);
         drop(beta);
         assert!(!beta_path.try_exists().unwrap());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn manual_traffic_is_project_bound_counts_retries_and_refuses_foreign_keys() {
+        use crate::web_conversation_context::WebContextStore;
+        fn pressure(f: &Fixture) -> crate::web_conversation_context::PressureStatus {
+            let store =
+                WebContextStore::open_read_only(f.control.join(".catdesk/web-context")).unwrap();
+            let key = store
+                .active_key(f.pins["projectId"].as_str().unwrap())
+                .unwrap()
+                .unwrap();
+            store.pressure(&key).unwrap()
+        }
+        let alpha = fixture_with_manual_wake("alpha", true);
+        let beta = fixture_with_manual_wake("beta", true);
+        ready_manual_wake(&alpha);
+        ready_manual_wake(&beta);
+        let a = manual_request(&alpha, "traffic-alpha", "turn-alpha");
+        let b = manual_request(&beta, "traffic-beta", "turn-beta");
+        let (ra, rb) = tokio::join!(call(&alpha, a.clone()), call(&beta, b));
+        for response in [&ra, &rb] {
+            assert!(response.get("error").is_none(), "{response}");
+            let observed = &response["result"]["_meta"]["catdeskContextObservation"];
+            assert_eq!(observed["arguments"], "RECORDED");
+            assert_eq!(observed["result"], "RECORDED");
+            assert_eq!(observed["originAuthenticated"], false);
+            assert_eq!(observed["rawTextPersisted"], false);
+        }
+        let before_a = pressure(&alpha);
+        let before_b = pressure(&beta);
+        assert_eq!(before_a.recorded_events, 2);
+        assert_eq!(before_b.recorded_events, 2);
+        assert!(before_a.observed_tool_argument_tokens > 0);
+        assert!(before_a.observed_tool_result_tokens > 0);
+        assert!(!before_a.coverage_known);
+        // A second actual invocation consumes context even when its effect is
+        // suppressed by the journal. It cannot increment Beta's estimate.
+        assert_eq!(
+            call(&alpha, a.clone()).await["error"]["message"],
+            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+        );
+        assert_eq!(pressure(&alpha).recorded_events, 4);
+        assert_eq!(pressure(&beta), before_b);
+        let before_denied = pressure(&alpha);
+        let mut foreign = a;
+        foreign["params"]["arguments"]["executionKey"] = json!(beta.key);
+        assert!(call(&alpha, foreign).await.get("error").is_some());
+        assert_eq!(pressure(&alpha), before_denied);
+        assert_eq!(pressure(&beta), before_b);
     }
 
     #[test]

@@ -36,7 +36,7 @@ const TRAFFIC_CHUNK_BYTES: usize = 8 * 1024;
 /// transport retry may be a second provider-visible exchange; it is never
 /// silently merged with a legitimate equal call. Re-recording a part of this
 /// same invocation is idempotent in the existing context ledger.
-struct TrafficObservation {
+pub(crate) struct TrafficObservation {
     control: PathBuf,
     key: Option<ConversationKey>,
     invocation: String,
@@ -189,7 +189,17 @@ fn response_traffic(response: &JsonRpcResponse) -> TrafficText {
 
 impl TrafficObservation {
     async fn start(context: &ProjectContext, current: &Selection, params: Value) -> Self {
-        let control = context.registered.control_workspace.clone();
+        Self::start_scoped(
+            context.registered.control_workspace.clone(),
+            current,
+            params,
+        )
+        .await
+    }
+
+    /// Called only after exact project/task-key admission. This observes traffic;
+    /// it does not bind a worker, grant execution or attest provider identity.
+    pub(crate) async fn start_scoped(control: PathBuf, current: &Selection, params: Value) -> Self {
         let mut observation = Self {
             control: control.clone(),
             key: None,
@@ -250,7 +260,7 @@ impl TrafficObservation {
         observation
     }
 
-    async fn finish(self, response: &mut JsonRpcResponse) {
+    pub(crate) async fn finish(self, response: &mut JsonRpcResponse) {
         let mut result_status = "UNAVAILABLE";
         if let Some(key) = self.key {
             let text = response_traffic(response);
