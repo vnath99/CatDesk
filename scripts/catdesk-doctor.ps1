@@ -24,6 +24,18 @@ function Assert-DoctorLocalPath([string]$Path) {
     }
 }
 
+function Test-DoctorWorkspaceSpelling($Path) {
+    # Rust canonicalize persists local Windows workspaces with a verbatim drive
+    # prefix. Inspect spelling only: do not open another project's directory or
+    # interpret a registry row as current filesystem/ownership authority.
+    if($Path -isnot [string] -or $Path.Length -gt 4096){return $false}
+    $ordinary=$Path
+    if($ordinary.StartsWith('\\?\',[StringComparison]::Ordinal)){$ordinary=$ordinary.Substring(4)}
+    if($ordinary -notmatch '\A[A-Za-z]:[\\/]' -or $ordinary -match '(?:\A|[\\/])\.\.?(?:[\\/]|\z)'){return $false}
+    if($ordinary.IndexOfAny([IO.Path]::GetInvalidPathChars()) -ge 0 -or $ordinary.Substring(2).Contains(':')){return $false}
+    try{return [string]::Equals([IO.Path]::GetFullPath($ordinary),$ordinary.Replace('/','\'),[StringComparison]::OrdinalIgnoreCase)}catch{return $false}
+}
+
 function Read-DoctorJson([string]$Path, [int]$MaximumBytes = 1048576) {
     Assert-DoctorLocalPath $Path
     $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
@@ -125,13 +137,19 @@ function Invoke-CatDeskDoctor([string]$ObservationFile = '', [string]$ProjectWor
         $wake=$null;$invalidWake=$false
         try{
             $wake=Read-DoctorJson (Join-Path $WakeRoot 'config.json');$wakeVersion=Get-DoctorProperty $wake 'schemaVersion'
-            if(($wakeVersion -isnot [int] -and $wakeVersion -isnot [long]) -or $wakeVersion -ne 1){$wake=$null;$invalidWake=$true}
-        }catch{}
+            $retired=Get-DoctorProperty $wake 'retiredTargets';$retiredCount=0
+            if($null -ne $retired){
+                if($retired -isnot [pscustomobject]){throw 'WAKE_CONFIG_INVALID'}
+                $retiredCount=@($retired.PSObject.Properties).Count
+            }
+            if(($wakeVersion -isnot [int] -and $wakeVersion -isnot [long]) -or $wakeVersion -notin @(1,2) -or
+                ($wakeVersion -eq 1 -and $retiredCount -ne 0) -or ($wakeVersion -eq 2 -and $retiredCount -eq 0) -or $retiredCount -gt 256){$wake=$null;$invalidWake=$true}
+        }catch{if($_.Exception.Message -ceq 'WAKE_CONFIG_INVALID'){$wake=$null;$invalidWake=$true}}
         foreach($project in $projects){
             $id=Get-DoctorProperty $project 'projectId'
-            if($id -isnot [string] -or $id -notmatch '\A[A-Za-z0-9][A-Za-z0-9._-]{0,127}\z' -or $seen.ContainsKey($id)){throw 'REGISTRY_INVALID'}
+            if($id -isnot [string] -or $id -cnotmatch '\A[A-Za-z0-9_-]{1,200}\z' -or $seen.ContainsKey($id)){throw 'REGISTRY_INVALID'}
             $projectPath=Get-DoctorProperty $project 'workspace'
-            if($projectPath -isnot [string] -or $projectPath.Length -gt 4096 -or $projectPath -notmatch '\A[A-Za-z]:[\\/]'){throw 'REGISTRY_INVALID'}
+            if(-not (Test-DoctorWorkspaceSpelling $projectPath)){throw 'REGISTRY_INVALID'}
             $seen[$id]=$true
             if(Get-DoctorProperty $project 'codexThreadId'){$native++}
             $url=Get-DoctorProperty $project 'chatgptTargetUrl'
@@ -143,7 +161,7 @@ function Invoke-CatDeskDoctor([string]$ObservationFile = '', [string]$ProjectWor
                 $digest -is [string] -and $digest -cmatch '\A[a-f0-9]{64}\z' -and $digest -ceq (Get-LifecycleSha256Hex $url) -and
                 (Get-DoctorProperty $target 'url') -ceq $url -and (Get-DoctorProperty $target 'digest') -ceq $digest -and ($generation -is [int] -or $generation -is [long]) -and $generation -gt 0){$paired++}
         }
-        $facts=@{registeredProjects=$projects.Count;webBindings=$web;pairedWakeTargets=$paired;nativeOwnerRegistrations=$native;nativeOwnerLivenessVerified=$false}
+        $facts=@{registeredProjects=$projects.Count;webBindings=$web;pairedWakeTargets=$paired;nativeOwnerRegistrations=$native;metadataOnly=$true;nativeOwnerLivenessVerified=$false}
         if($invalidWake -and $web -gt 0){Set-DoctorLayer 'PROJECT_REGISTRY' 'FAIL' 'WAKE_CONFIG_INVALID' $facts}
         elseif($paired -eq $web){Set-DoctorLayer 'PROJECT_REGISTRY' 'PASS' 'REGISTRY_METADATA_PAIRED' $facts}
         else{Set-DoctorLayer 'PROJECT_REGISTRY' 'FAIL' 'PROJECT_WAKE_TARGET_MISMATCH' $facts}

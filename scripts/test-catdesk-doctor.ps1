@@ -76,13 +76,32 @@ try{
  Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=1;targets=@{alpha=@{url=$url;digest=$digest;generation=1}}}
  Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=999;targets=@{alpha=@{url=$url;digest=$digest;generation=1}}}
  Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').code -ceq 'WAKE_CONFIG_INVALID') 'unknown Wake schema was accepted as paired'
+ Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=2;targets=@{alpha=@{url=$url;digest=$digest;generation=1}};retiredTargets=@{retired=@{retirementId='retired-fixture';lastTarget=$null;retiredUtc=1}}}
+ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').facts.pairedWakeTargets -eq 1) 'supported retired-target schema refused'
+ Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=2;targets=@{alpha=@{url=$url;digest=$digest;generation=1}};retiredTargets=@{}}
+ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').code -ceq 'WAKE_CONFIG_INVALID') 'schema2 without retirement accepted'
+ Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=1;targets=@{alpha=@{url=$url;digest=$digest;generation=1}};retiredTargets=@{retired=@{}}}
+ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').code -ceq 'WAKE_CONFIG_INVALID') 'retirement allowed in legacy schema'
  Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=1;targets=@{alpha=@{url=$url;digest=$digest;generation=1}}}
  Save (Join-Path $projectRoot '.catdesk/projects/projects.json') @{schemaVersion=1;projects=@(@{projectId='alpha';chatgptTargetUrl=$url;chatgptTargetSha256=$digest})}
  Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').code -ceq 'REGISTRY_INVALID') 'missing workspace was accepted as paired'
+ Save (Join-Path $projectRoot '.catdesk/projects/projects.json') @{schemaVersion=1;projects=@(@{projectId='invalid.id';workspace=$projectRoot;chatgptTargetUrl=$url;chatgptTargetSha256=$digest})}
+ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').code -ceq 'REGISTRY_INVALID') 'invalid Wake project ID was accepted'
+ Save (Join-Path $projectRoot '.catdesk/projects/projects.json') @{schemaVersion=1;projects=@(@{projectId='alpha';workspace=(Join-Path $projectRoot '../elsewhere');chatgptTargetUrl=$url;chatgptTargetSha256=$digest})}
+ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').status -cne 'PASS') 'noncanonical workspace was accepted'
  [IO.File]::WriteAllText((Join-Path $projectRoot '.catdesk/projects/projects.json'),$before[(Join-Path $projectRoot '.catdesk/projects/projects.json')])
  foreach($path in $before.Keys){Require ([IO.File]::ReadAllText($path) -ceq $before[$path]) 'doctor mutated protected fixture data'}
  Require ($script:forbidden -eq 0) 'doctor performed a forbidden probe or mutation'
  . (Join-Path $PSScriptRoot 'catdesk-doctor.ps1')
+ foreach($local in @($projectRoot,('\\?\'+$projectRoot),$projectRoot.Replace('\','/'))){
+  Require (Test-DoctorWorkspaceSpelling $local) 'canonical local workspace spelling refused'
+ }
+ foreach($invalidPath in @('relative','\\server\share','\\?\UNC\server\share','\\.\C:\project','C:\project\..\outside','\\?\C:\project\..\outside','C:\project:stream')){
+  Require (-not (Test-DoctorWorkspaceSpelling $invalidPath)) 'unsupported workspace spelling accepted'
+ }
+ Save (Join-Path $projectRoot '.catdesk/projects/projects.json') @{schemaVersion=1;projects=@(@{projectId='alpha';workspace=('\\?\'+$projectRoot);chatgptTargetUrl=$url;chatgptTargetSha256=$digest})}
+ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').facts.pairedWakeTargets -eq 1) 'Rust canonical registry workspace refused'
+ [IO.File]::WriteAllText((Join-Path $projectRoot '.catdesk/projects/projects.json'),$before[(Join-Path $projectRoot '.catdesk/projects/projects.json')])
  foreach($nonlocal in @('relative.json','\\server\share\observation.json','https://invalid.example/report')){
   $refused=$false;try{Assert-DoctorLocalPath $nonlocal}catch{$refused=$_.Exception.Message -ceq 'DOCTOR_LOCAL_PATH_REQUIRED'}
   Require $refused 'nonlocal metadata path was not refused before filesystem access'
