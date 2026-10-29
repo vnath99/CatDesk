@@ -344,18 +344,38 @@ fn prefix(root: &Path, helper: &Path) -> String {
 }
 fn trust_command(root: &Path, helper: &Path) -> String {
     format!(
-        "{} $lease=Enter-CatDeskStoppedLifecycleLease $root;try {{ if(-not(Test-CatDeskStoppedReconciliationStartupReady -Root $root -HeldLifecycleLease $lease)){{throw 'startup authority'}};$p=Read-CatDeskLkgPointer $root;$s=Read-CatDeskLkgSlot $root $p.Slot;$c=Get-CatDeskCanonicalPairEvidence $root;if($p.Hash -cne $s.Hash -or $p.Generation -ne $s.Generation -or $p.Slot -cne $s.Slot -or $c.Hash -cne $s.Hash){{throw 'selected release'}};$r=Get-CatDeskQualifiedStoppedAuthority $root $s.Hash;[pscustomobject]@{{schemaVersion=1;state='TRUSTED_INSTALLED';sha256=$s.Hash;slot=$s.Slot;generation=$s.Generation;receiptTransaction=$r.transactionId}}|ConvertTo-Json -Compress;[Console]::Out.Flush();if([Console]::In.ReadLine() -cne 'STOP'){{throw 'lease channel closed'}} }}finally{{$lease.Dispose()}}",
-        prefix(root, helper)
+        "{} $lease=Enter-CatDeskStoppedLifecycleLease $root;try {{ if(-not(Test-CatDeskStoppedReconciliationStartupReady -Root $root -HeldLifecycleLease $lease)){{throw 'startup authority'}};{};[Console]::Out.Flush();if([Console]::In.ReadLine() -cne 'STOP'){{throw 'lease channel closed'}} }}finally{{$lease.Dispose()}}",
+        prefix(root, helper),
+        selected_release_proof_script()
     )
 }
+
+/// Reuse the selected slot's existing authority rather than requiring every
+/// future release to have the initial stopped migration's hash/generation.
+/// This fragment only reads; it cannot repair, promote or mint authority.
+fn selected_release_proof_script() -> &'static str {
+    "if(Test-Path -LiteralPath (Join-Path $root '.catdesk/promotion-recovery/promotion-transaction.json')){throw 'pending promotion'};$p=Read-CatDeskLkgPointer $root;if($null -eq $p){throw 'selected pointer missing'};$s=Read-CatDeskLkgSlot $root $p.Slot;$c=Get-CatDeskCanonicalPairEvidence $root;if($null -eq $s -or $p.Hash -cne $s.Hash -or $p.Generation -ne $s.Generation -or $p.Slot -cne $s.Slot -or $c.Hash -cne $s.Hash){throw 'selected release'};$m=ConvertFrom-CatDeskLiteralJson ([IO.File]::ReadAllText($s.Metadata));switch -CaseSensitive ($m.source){'reviewed_promotion'{$r=Get-CatDeskReviewedPromotionAuthority -Root $root -Canonical $c};'reviewed_qualified_stopped'{$r=Get-CatDeskQualifiedStoppedAuthority -Root $root -ExpectedHash $s.Hash};'reviewed_reconciliation'{$r=Get-CatDeskReviewedReconciliationAuthority -Root $root -ExpectedHash $s.Hash};default{throw 'selected authority unsupported'}};[pscustomobject]@{schemaVersion=2;state='TRUSTED_INSTALLED';sha256=$s.Hash;slot=$s.Slot;generation=$s.Generation;authorityKind=$m.source;receiptTransaction=$r.transactionId}|ConvertTo-Json -Compress"
+}
+
 fn validate_trust(proof: &Value, expected: &str) -> Result<(), String> {
+    let selected_version = matches!(proof["slot"].as_str(), Some("slot-a" | "slot-b"))
+        && proof["generation"]
+            .as_u64()
+            .is_some_and(|generation| (1..=i32::MAX as u64).contains(&generation));
+    let authority = match proof["authorityKind"].as_str() {
+        Some("reviewed_promotion") => selected_version,
+        Some("reviewed_qualified_stopped" | "reviewed_reconciliation") => {
+            proof["slot"] == "slot-b" && proof["generation"] == 2
+        }
+        _ => false,
+    };
     if expected.len() != 64
         || !expected.bytes().all(|b| b.is_ascii_hexdigit())
-        || proof["schemaVersion"] != 1
+        || proof.as_object().is_none_or(|object| object.len() != 7)
+        || proof["schemaVersion"] != 2
         || proof["state"] != "TRUSTED_INSTALLED"
         || proof["sha256"] != expected
-        || proof["slot"] != "slot-b"
-        || proof["generation"] != 2
+        || !authority
         || proof["receiptTransaction"]
             .as_str()
             .is_none_or(|s| s.len() != 32 || !s.bytes().all(|b| b.is_ascii_hexdigit()))
@@ -599,6 +619,18 @@ fn history_snapshot(root: &Path) -> Result<Vec<(String, String)>, String> {
         "target/release/catdesk.exe.sha256".into(),
         hash(&root.join("target/release/catdesk.exe.sha256"))?,
     ));
+    let promotion_receipt = root.join(".catdesk/promotion-recovery/reviewed-promotion.json");
+    if promotion_receipt.exists() {
+        let receipt = regular(
+            root,
+            ".catdesk/promotion-recovery/reviewed-promotion.json",
+            2048,
+        )?;
+        output.push((
+            ".catdesk/promotion-recovery/reviewed-promotion.json".into(),
+            hash(&receipt)?,
+        ));
+    }
     output.sort();
     Ok(output)
 }
@@ -945,20 +977,147 @@ mod tests {
         assert!(validate_catalog(&json!({"result":{"tools":tools}})).is_err());
     }
     #[test]
-    fn installed_backend_trust_requires_exact_selected_stopped_version() {
+    fn installed_backend_trust_accepts_reviewed_succession_and_keeps_legacy_identity() {
         let sha = "a".repeat(64);
-        let mut p = json!({"schemaVersion":1,"state":"TRUSTED_INSTALLED","sha256":sha,"slot":"slot-b","generation":2,"receiptTransaction":"a".repeat(32)});
+        let mut p = json!({"schemaVersion":2,"state":"TRUSTED_INSTALLED","sha256":sha,"slot":"slot-b","generation":2,"authorityKind":"reviewed_qualified_stopped","receiptTransaction":"a".repeat(32)});
         assert!(validate_trust(&p, &sha).is_ok());
         p["slot"] = json!("slot-a");
         assert!(validate_trust(&p, &sha).is_err());
-        p["slot"] = json!("slot-b");
+        p["generation"] = json!(3);
+        assert!(validate_trust(&p, &sha).is_err());
+        p["authorityKind"] = json!("reviewed_promotion");
+        assert!(validate_trust(&p, &sha).is_ok());
         assert!(validate_trust(&p, &"b".repeat(64)).is_err());
+        for (field, value) in [
+            ("schemaVersion", json!(1)),
+            ("slot", json!("../slot-a")),
+            ("generation", json!(0)),
+            ("generation", json!(3.5)),
+            ("generation", json!(i32::MAX as u64 + 1)),
+            ("authorityKind", json!("operational_verified")),
+            ("receiptTransaction", json!("x".repeat(32))),
+        ] {
+            let mut changed = p.clone();
+            changed[field] = value;
+            assert!(validate_trust(&changed, &sha).is_err(), "{field}");
+        }
+        p["authorityKind"] = json!("reviewed_reconciliation");
+        assert!(validate_trust(&p, &sha).is_err());
+        p["slot"] = json!("slot-b");
+        p["generation"] = json!(2);
+        assert!(validate_trust(&p, &sha).is_ok());
+    }
+    #[cfg(windows)]
+    #[test]
+    fn selected_release_native_guards_reject_pending_and_unproven_promotion() {
+        let root = std::env::temp_dir().join(format!(
+            "catdesk-selected-authority-fixture-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let slot = root.join(".catdesk/release-recovery/slot-a");
+        let release = root.join("target/release");
+        let promotion = root.join(".catdesk/promotion-recovery");
+        let helper = root.join("scripts/catdesk-release-recovery.ps1");
+        for dir in [&slot, &release, &promotion, helper.parent().unwrap()] {
+            fs::create_dir_all(dir).unwrap();
+        }
+        fs::write(
+            &helper,
+            include_bytes!("../scripts/catdesk-release-recovery.ps1"),
+        )
+        .unwrap();
+        // Inert bytes and synthetic receipts only, isolated from any installed
+        // root. This fixture never executes an artifact or creates real trust.
+        let bytes = b"non-executable-selected-release-fixture";
+        let sha = format!("{:x}", Sha256::digest(bytes));
+        for dir in [&slot, &release] {
+            fs::write(dir.join("catdesk.exe"), bytes).unwrap();
+            fs::write(dir.join("catdesk.exe.sha256"), &sha).unwrap();
+        }
+        let pointer = json!({"schemaVersion":1,"slot":"slot-a","generation":3,"sha256":sha});
+        let manifest = json!({"schemaVersion":1,"generation":3,"source":"reviewed_promotion","sha256":sha,"capturedAtUtc":"2026-10-28T00:00:00Z"});
+        let receipt = json!({"schemaVersion":1,"transactionId":"a".repeat(32),"authorizationId":"b".repeat(32),"stage":"CANONICAL_HANDOFF_PROVEN","candidateHash":sha,"canonicalRelativePath":"target\\release\\catdesk.exe","canonicalSha256":sha});
+        let pointer_path = root.join(".catdesk/release-recovery/current.json");
+        let manifest_path = slot.join("manifest.json");
+        let receipt_path = promotion.join("reviewed-promotion.json");
+        let pending_path = promotion.join("promotion-transaction.json");
+        let command = format!(
+            "{} {}",
+            prefix(&root, &helper),
+            selected_release_proof_script()
+        );
+        for case in 0..7 {
+            let mut p = pointer.clone();
+            let mut m = manifest.clone();
+            let mut r = receipt.clone();
+            if case == 1 {
+                r["canonicalSha256"] = json!("c".repeat(64));
+            }
+            if case == 2 {
+                r["stage"] = json!("SWAPPED_PENDING_HANDOFF");
+            }
+            if case == 3 {
+                m["source"] = json!("operational_verified");
+            }
+            if case == 4 {
+                p["generation"] = json!(4);
+            }
+            fs::write(&pointer_path, serde_json::to_vec(&p).unwrap()).unwrap();
+            fs::write(&manifest_path, serde_json::to_vec(&m).unwrap()).unwrap();
+            fs::write(&receipt_path, serde_json::to_vec(&r).unwrap()).unwrap();
+            if case == 5 {
+                fs::remove_file(&receipt_path).unwrap();
+            }
+            if case == 6 {
+                fs::write(&pending_path, b"{}").unwrap();
+            }
+            let proof = ps_once(&root, command.clone());
+            if case == 0 {
+                validate_trust(&proof.unwrap(), &sha).unwrap();
+            } else {
+                assert!(proof.is_err(), "unsafe fixture case {case} was accepted");
+            }
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "opt-in read-only inspection of the actual installed selected authority"]
+    fn installed_current_selected_authority_read_only() {
+        let root = PathBuf::from(
+            std::env::var_os("CATDESK_READONLY_INSTALLED_RELEASE_ROOT")
+                .expect("explicit existing root required"),
+        );
+        let helper = regular(&root, "scripts/catdesk-release-recovery.ps1", 131072).unwrap();
+        assert_eq!(
+            hash(&helper).unwrap(),
+            format!(
+                "{:x}",
+                Sha256::digest(include_bytes!("../scripts/catdesk-release-recovery.ps1"))
+            )
+        );
+        let image = regular(&root, "target/release/catdesk.exe", 134217728).unwrap();
+        let before = history_snapshot(&root).unwrap();
+        let command = format!(
+            "{} $lease=Enter-CatDeskStoppedLifecycleLease $root;try{{if(-not(Test-CatDeskStoppedReconciliationStartupReady -Root $root -HeldLifecycleLease $lease)){{throw 'startup authority'}};{}}}finally{{$lease.Dispose()}}",
+            prefix(&root, &helper),
+            selected_release_proof_script()
+        );
+        let proof = ps_once(&root, command).unwrap();
+        validate_trust(&proof, &hash(&image).unwrap()).unwrap();
+        assert_eq!(history_snapshot(&root).unwrap(), before);
+        println!(
+            "READ_ONLY_SELECTED_RELEASE_FACTS={}",
+            json!({"slot":proof["slot"],"generation":proof["generation"],"authorityKind":proof["authorityKind"],"sha256":proof["sha256"],"authorityWrites":0,"backendStarts":0})
+        );
     }
     #[test]
     fn installed_backend_script_holds_real_lease_without_mutating_release() {
         let s = trust_command(Path::new("C:/root'quoted"), Path::new("C:/root/helper.ps1"));
         assert!(s.contains("Read-CatDeskLkgPointer"));
         assert!(s.contains("Read-CatDeskLkgSlot"));
+        assert!(s.contains("Get-CatDeskReviewedPromotionAuthority"));
+        assert!(s.contains("promotion-transaction.json"));
         assert!(s.contains("-HeldLifecycleLease $lease"));
         assert!(s.contains("ReadLine()"));
         assert!(s.contains("root''quoted"));

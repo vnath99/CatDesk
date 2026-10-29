@@ -191,8 +191,9 @@ async fn verify_mcp(endpoint: &str, token: &str, expected: &Value) -> Result<(),
 
 fn read_trust(root: &Path, helper: &Path) -> String {
     format!(
-        "{} $p=Read-CatDeskLkgPointer $root;$s=Read-CatDeskLkgSlot $root $p.Slot;$c=Get-CatDeskCanonicalPairEvidence $root;if($p.Hash -cne $s.Hash -or $p.Generation -ne $s.Generation -or $p.Slot -cne $s.Slot -or $c.Hash -cne $s.Hash){{throw 'selected release'}};$r=Get-CatDeskQualifiedStoppedAuthority $root $s.Hash;[pscustomobject]@{{schemaVersion=1;state='TRUSTED_INSTALLED';sha256=$s.Hash;slot=$s.Slot;generation=$s.Generation;receiptTransaction=$r.transactionId}}|ConvertTo-Json -Compress",
-        prefix(root, helper)
+        "{} {}",
+        prefix(root, helper),
+        selected_release_proof_script()
     )
 }
 
@@ -331,6 +332,7 @@ fn verify_pins(expected: &[(PathBuf, String)]) -> Result<(), String> {
 fn pin_inputs(
     root: &Path,
     control: &Path,
+    proof: &Value,
 ) -> Result<(Vec<fs::File>, Vec<(PathBuf, String)>, PathBuf), String> {
     use std::os::windows::fs::OpenOptionsExt;
     let runtime = catdesk_wake::development_runtime::root_for_workspace(control)?
@@ -377,6 +379,27 @@ fn pin_inputs(
             root,
             &format!(".catdesk/release-pair-control/{name}"),
             12288,
+        )?);
+    }
+    // Legacy migration inputs remain retained for the previous version, but
+    // the current selected artifact and its native promotion receipt must also
+    // stay pinned while this independent project endpoint serves.
+    let slot = proof["slot"]
+        .as_str()
+        .filter(|slot| matches!(*slot, "slot-a" | "slot-b"))
+        .ok_or("INSTALLED_BACKEND_AUTHORITY_UNPROVEN")?;
+    for leaf in ["catdesk.exe", "catdesk.exe.sha256", "manifest.json"] {
+        paths.push(regular(
+            root,
+            &format!(".catdesk/release-recovery/{slot}/{leaf}"),
+            134217728,
+        )?);
+    }
+    if proof["authorityKind"] == "reviewed_promotion" {
+        paths.push(regular(
+            root,
+            ".catdesk/promotion-recovery/reviewed-promotion.json",
+            2048,
         )?);
     }
     for relative in [
@@ -605,15 +628,18 @@ pub(super) fn run_owned(
         watch = Some(HolderWatch::start(
             holder.as_mut().ok_or("INSTALLED_PROJECT_HANDOFF_FAILED")?,
         )?);
-        let (_pins, expected_inputs, config) = pin_inputs(&root, &control)?;
+        expected_hash = hash(&binary)?;
+        validate_trust(&proof, &expected_hash)?;
+        let (_pins, expected_inputs, config) = pin_inputs(&root, &control, &proof)?;
         expected_hash = hash(&binary)?;
         validate_trust(&proof, &expected_hash)?;
         // Complete byte pins are already held. This second supported read
         // binds the selected pointer/slot/receipt to those exact pinned bytes.
-        validate_trust(
-            &ps_once(&root, read_trust(&root, &recovery))?,
-            &expected_hash,
-        )?;
+        let pinned_proof = ps_once(&root, read_trust(&root, &recovery))?;
+        validate_trust(&pinned_proof, &expected_hash)?;
+        if pinned_proof != proof {
+            return Err("INSTALLED_BACKEND_AUTHORITY_CHANGED".into());
+        }
         verify_pins(&expected_inputs)?;
         let history = history_snapshot(&root)?;
         let path = run_directory(&root, &id)?;
