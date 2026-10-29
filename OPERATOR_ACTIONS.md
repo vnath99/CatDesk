@@ -1,3 +1,9 @@
+## 2026-10-29 22:18 UTC — manual-wake conversation accounting — TESTED_SOURCE
+
+Source `fb6d4977676c4345a9db9e5da0437840826def41` reuses the existing exact-target traffic observer for admitted manual-wake calls, without starting a native writer. Arguments omit execution keys/authentication; durable records retain counts/hashes. Successful and journal-rejected invocations are counted independently. A foreign key changes neither ledger, and a retry changes only its own conversation. An owned asynchronous turn preserves bookkeeping drain after HTTP cancellation. Existing late-response/rollover and busy-ledger behavior remains covered.
+
+Twelve dispatcher and seven observer tests passed (19 distinct); strict all-target Clippy and formatting passed. The initial test-type compilation error is preserved. Source/remote SHA matches; hosted CI has zero visible exact-source runs/checks, UNVERIFIED. This closes the previously recorded manual-traffic hook gap in source only. Coverage remains uncertain: unauthenticated/unattributable requests and raw authentication material are excluded; provider origin and exact hidden tokens are not established. No connector/browser/Wake probe, production installation or completed-canary replay occurred. Existing live gates remain unchanged. Next READY task is supported authenticated serving-scope reconciliation, retaining both registries and native ownership. Evidence: `docs/verification/MANUAL_WAKE_TRAFFIC_2026_10_29.json`.
+
 ## 2026-10-29 22:04 UTC — current source queue; live gates preserved
 
 | Task | State / owner | Next executable action |
