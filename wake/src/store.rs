@@ -1,4 +1,6 @@
-use crate::protocol::{Event, Target, digest, valid_id};
+use crate::protocol::{
+    Event, MAX_WAKE_TTL_SECONDS, Target, WakeMetadata, WakePurpose, digest, valid_id,
+};
 use crate::{PROTOCOL_VERSION, Result};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
@@ -21,6 +23,51 @@ pub fn now() -> u64 {
         .duration_since(UNIX_EPOCH)
         .expect("UTC clock before epoch")
         .as_secs()
+}
+
+/// Semantic input for one target-bound Wake intent. The Store assigns its ID,
+/// received time and absolute expiry; callers cannot choose those wire fields.
+#[derive(Clone, Copy, Debug)]
+pub struct WakeIntent<'a> {
+    pub purpose: WakePurpose,
+    pub source_event_id: &'a str,
+    pub source_turn_id: &'a str,
+    pub priority: u8,
+    pub ttl_seconds: u64,
+}
+
+impl WakeIntent<'_> {
+    fn metadata(&self, created_utc: u64) -> Result<WakeMetadata> {
+        if self.ttl_seconds == 0 || self.ttl_seconds > MAX_WAKE_TTL_SECONDS {
+            return Err("QUEUE_WAKE_METADATA_INVALID".into());
+        }
+        let metadata = WakeMetadata {
+            purpose: self.purpose,
+            source_event_id: self.source_event_id.into(),
+            source_turn_id: self.source_turn_id.into(),
+            priority: self.priority,
+            expires_utc: created_utc
+                .checked_add(self.ttl_seconds)
+                .ok_or("QUEUE_WAKE_METADATA_INVALID")?,
+        };
+        metadata.validate(created_utc)?;
+        Ok(metadata)
+    }
+
+    fn event_id(&self, project: &str) -> Result<String> {
+        if !valid_id(project) {
+            return Err("QUEUE_EVENT_INVALID".into());
+        }
+        self.metadata(1)?;
+        let identity = serde_json::to_string(&(
+            project,
+            self.source_event_id,
+            self.source_turn_id,
+            self.purpose,
+        ))
+        .map_err(|_| "QUEUE_WAKE_METADATA_INVALID")?;
+        Ok(format!("wake-intent-{}", digest(&identity)))
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -1180,6 +1227,104 @@ impl Store {
         )
     }
 
+    /// Record one bounded semantic intent against the caller's exact target.
+    /// Registered callers must retain their existing admission/ownership checks.
+    /// This only queues metadata: it grants no permission and starts no sender.
+    /// Replays use every durable event/delivery witness and never repair or
+    /// recreate queue/archive files, including an unknown prior submission.
+    pub fn produce_expected_wake(
+        &self,
+        project: &str,
+        message: &str,
+        expected: &Target,
+        intent: WakeIntent<'_>,
+    ) -> Result<Event> {
+        let event_id = intent.event_id(project)?;
+        expected.validate()?;
+        // Validate message and all caller-controlled metadata before touching
+        // Store state. The actual received time is assigned under its lock.
+        let make_event = |created_utc| {
+            Event {
+                schema_version: PROTOCOL_VERSION,
+                event_id: event_id.clone(),
+                project_id: project.into(),
+                event_type: "engineering_attention".into(),
+                created_utc,
+                message: message.into(),
+                target_generation: expected.generation,
+                audit_references: Vec::new(),
+            }
+            .with_wake_metadata(intent.metadata(created_utc)?)
+        };
+        make_event(1)?;
+
+        let _lock = self.lock()?;
+        let config = self.read_config()?;
+        if config.retired_targets.contains_key(project) {
+            return Err("CONFIG_PROJECT_RETIRED".into());
+        }
+        if config.targets.get(project) != Some(expected) {
+            return Err("TARGET_EXPECTATION_MISMATCH".into());
+        }
+        let mut previous = None;
+        for path in [self.archive_path(&event_id), self.event_path(&event_id)] {
+            if path.try_exists().map_err(|_| "QUEUE_UNAVAILABLE")? {
+                let event: Event = read(&path)?;
+                event.validate()?;
+                if previous.as_ref().is_some_and(|prior| prior != &event) {
+                    return Err("QUEUE_EVENT_ID_CONFLICT".into());
+                }
+                previous = Some(event);
+            }
+        }
+        let delivery = self.read_delivery(&event_id)?;
+        if let Some(delivery) = delivery.as_ref() {
+            if delivery.target != *expected {
+                return Err("TARGET_EXPECTATION_MISMATCH".into());
+            }
+            if previous
+                .as_ref()
+                .is_some_and(|prior| prior != &delivery.event)
+            {
+                return Err("QUEUE_EVENT_ID_CONFLICT".into());
+            }
+            previous = Some(delivery.event.clone());
+        }
+        if self.has_submission_witness_locked(&event_id)? {
+            // A surviving queue or CLAIMED journal cannot downgrade a crossed
+            // boundary. Only its compatible SUBMITTING/SENT delivery permits
+            // immutable readback; it never authorizes another submission.
+            let delivery = delivery
+                .as_ref()
+                .filter(|delivery| matches!(delivery.phase, Phase::Submitting | Phase::Sent))
+                .ok_or("SUBMISSION_RECONCILIATION_REQUIRED")?;
+            self.submission_started_utc(delivery)?;
+            if let Some(timer) = self.read_timer(&event_id)?
+                && (timer.project_id != delivery.event.project_id
+                    || timer.target_generation != delivery.target.generation
+                    || timer.target_digest != delivery.target.digest)
+            {
+                return Err("TIMER_SUBMISSION_BINDING_MISMATCH".into());
+            }
+        }
+        let created_utc = previous
+            .as_ref()
+            .map_or_else(now, |event| event.created_utc);
+        let event = make_event(created_utc)?;
+        if let Some(previous) = previous {
+            if previous.target_generation != expected.generation {
+                return Err("TARGET_EXPECTATION_MISMATCH".into());
+            }
+            if previous != event {
+                return Err("QUEUE_EVENT_ID_CONFLICT".into());
+            }
+            return Ok(previous);
+        }
+        self.check_capacity()?;
+        atomic(&self.event_path(&event_id), &event)?;
+        Ok(event)
+    }
+
     /// Both authentic review producers use the same project-scoped message
     /// and target CAS. An exact legacy CatDesk message may be returned only
     /// from an existing event; new events always use the current message.
@@ -1604,6 +1749,9 @@ impl Store {
                 return Err("RECEIPT_BINDING_MISMATCH".into());
             }
         }
+        if self.has_submission_witness_locked(&event.event_id)? {
+            return Err("SUBMISSION_RECONCILIATION_REQUIRED".into());
+        }
         let delivery = Delivery {
             schema_version: PROTOCOL_VERSION,
             event: event.clone(),
@@ -1645,6 +1793,9 @@ impl Store {
             }
         }
         if next == Phase::Submitting {
+            if self.has_submission_witness_locked(id)? {
+                return Err("SUBMISSION_RECONCILIATION_REQUIRED".into());
+            }
             // Recheck immediately before authorizing browser submission. Do
             // not apply TTL to SUBMITTING/SENT recovery or receipt recording:
             // an unknown outcome must never be retired or made replayable.
@@ -1682,6 +1833,29 @@ impl Store {
         self.root
             .join("logs")
             .join(format!("submission-start-{id}.json"))
+    }
+
+    /// Called under the Store transaction lock. Even a partial submission
+    /// write remains evidence; a stale CLAIMED owner must not replace it.
+    fn has_submission_witness_locked(&self, id: &str) -> Result<bool> {
+        for path in [self.submission_start_path(id), self.timer_path(id)] {
+            if path
+                .try_exists()
+                .map_err(|_| "SUBMISSION_RETRY_EVIDENCE_UNAVAILABLE")?
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// A scheduler read cannot clear or downgrade partial submission evidence.
+    pub(crate) fn submission_witness_present(&self, id: &str) -> Result<bool> {
+        if !valid_id(id) {
+            return Err("QUEUE_EVENT_INVALID".into());
+        }
+        let _lock = self.read_lock()?;
+        self.has_submission_witness_locked(id)
     }
 
     pub(crate) fn submission_started_utc(&self, delivery: &Delivery) -> Result<u64> {
@@ -3902,6 +4076,686 @@ mod wake_metadata_tests {
         assert_eq!(reconciled.event, event);
         assert!(store.archive_path(&event.event_id).exists());
         drop(lease);
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    fn intent() -> WakeIntent<'static> {
+        WakeIntent {
+            purpose: WakePurpose::ManualEndTurn,
+            source_event_id: "source-alpha-1",
+            source_turn_id: "turn-alpha-1",
+            priority: 10,
+            ttl_seconds: 300,
+        }
+    }
+
+    #[test]
+    fn semantic_wake_freezes_received_time_and_expiry_across_cold_retries() {
+        let (base, store, target) = fixture();
+        let before = now();
+        let first = store
+            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+            .unwrap();
+        assert!((before..=now()).contains(&first.created_utc));
+        assert_eq!(
+            first.wake_metadata().unwrap().unwrap().expires_utc,
+            first.created_utc + intent().ttl_seconds
+        );
+        // A previously received intent is fixture data, not a changed clock.
+        // Its age exposes any accidental regeneration of creation/expiry.
+        let historical_created_utc = first.created_utc - 120;
+        let historical = Event {
+            created_utc: historical_created_utc,
+            audit_references: Vec::new(),
+            ..first
+        }
+        .with_wake_metadata(intent().metadata(historical_created_utc).unwrap())
+        .unwrap();
+        atomic(&store.event_path(&historical.event_id), &historical).unwrap();
+        let saved = fs::read(store.event_path(&historical.event_id)).unwrap();
+        let reopened =
+            Store::open_scoped_for_test(store.root(), store.root().parent().unwrap()).unwrap();
+        let replay = reopened
+            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+            .unwrap();
+        assert_eq!(replay, historical);
+        assert_eq!(fs::read(store.event_path(&replay.event_id)).unwrap(), saved);
+        assert_eq!(reopened.events().unwrap(), [historical]);
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn semantic_wake_material_changes_conflict_but_distinct_source_identity_is_admitted() {
+        let (base, store, target) = fixture();
+        let original = store
+            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+            .unwrap();
+        assert_eq!(
+            original.event_id,
+            "wake-intent-b128942a8ffb67ccf1e9583f55a01b58c0f681f5c06ec3d22246e9ebfea943ad"
+        );
+        let saved = fs::read(store.event_path(&original.event_id)).unwrap();
+        for changed in [
+            WakeIntent {
+                priority: 11,
+                ..intent()
+            },
+            WakeIntent {
+                ttl_seconds: 301,
+                ..intent()
+            },
+        ] {
+            assert_eq!(
+                store
+                    .produce_expected_wake("alpha", "Continue alpha", &target, changed)
+                    .unwrap_err(),
+                "QUEUE_EVENT_ID_CONFLICT"
+            );
+        }
+        assert_eq!(
+            store
+                .produce_expected_wake("alpha", "Different task", &target, intent())
+                .unwrap_err(),
+            "QUEUE_EVENT_ID_CONFLICT"
+        );
+        assert_eq!(
+            fs::read(store.event_path(&original.event_id)).unwrap(),
+            saved
+        );
+        let mut identities = BTreeSet::from([original.event_id]);
+        for distinct in [
+            WakeIntent {
+                source_turn_id: "turn-alpha-2",
+                ..intent()
+            },
+            WakeIntent {
+                source_event_id: "source-alpha-2",
+                ..intent()
+            },
+            WakeIntent {
+                purpose: WakePurpose::NewTask,
+                ..intent()
+            },
+        ] {
+            let event = store
+                .produce_expected_wake("alpha", "Continue alpha", &target, distinct)
+                .unwrap();
+            assert!(identities.insert(event.event_id));
+        }
+        assert_eq!(store.events().unwrap().len(), 4);
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn semantic_wake_unknown_expired_submission_is_not_recreated_or_refreshed_after_restart() {
+        let (base, store, target) = fixture();
+        let intent = WakeIntent {
+            ttl_seconds: 60,
+            ..intent()
+        };
+        let created_utc = now() - 120;
+        let event = Event {
+            schema_version: PROTOCOL_VERSION,
+            event_id: intent.event_id("alpha").unwrap(),
+            project_id: "alpha".into(),
+            event_type: "engineering_attention".into(),
+            created_utc,
+            message: "Continue alpha".into(),
+            target_generation: target.generation,
+            audit_references: Vec::new(),
+        }
+        .with_wake_metadata(intent.metadata(created_utc).unwrap())
+        .unwrap();
+        store.publish(&event).unwrap();
+        let lease = store.host_lock().unwrap();
+        let mut historical = store.claim(&event, &lease).unwrap();
+        historical.phase = Phase::Submitting;
+        historical.updated_utc = created_utc + 1;
+        historical.validate().unwrap();
+        atomic(&store.delivery_path(&event.event_id), &historical).unwrap();
+        let saved_delivery = fs::read(store.delivery_path(&event.event_id)).unwrap();
+        let saved_queue = fs::read(store.event_path(&event.event_id)).unwrap();
+        drop(lease);
+        let reopened =
+            Store::open_scoped_for_test(store.root(), store.root().parent().unwrap()).unwrap();
+        assert_eq!(
+            reopened
+                .produce_expected_wake("alpha", "Continue alpha", &target, intent)
+                .unwrap(),
+            event
+        );
+        assert!(event.is_expired_at(now()).unwrap());
+        assert_eq!(
+            fs::read(store.event_path(&event.event_id)).unwrap(),
+            saved_queue
+        );
+        assert_eq!(
+            fs::read(store.delivery_path(&event.event_id)).unwrap(),
+            saved_delivery
+        );
+        let recovered_lease = reopened.host_lock().unwrap();
+        assert_eq!(
+            reopened.claim(&event, &recovered_lease).unwrap_err(),
+            "SUBMISSION_RECONCILIATION_REQUIRED"
+        );
+        drop(recovered_lease);
+        // Even incomplete historical evidence cannot cause a new queue write.
+        fs::remove_file(store.event_path(&event.event_id)).unwrap();
+        assert_eq!(
+            reopened
+                .produce_expected_wake("alpha", "Continue alpha", &target, intent)
+                .unwrap(),
+            event
+        );
+        assert!(!store.event_path(&event.event_id).exists());
+        assert!(!store.archive_path(&event.event_id).exists());
+        assert_eq!(
+            fs::read(store.delivery_path(&event.event_id)).unwrap(),
+            saved_delivery
+        );
+        assert_eq!(
+            reopened.delivery(&event.event_id).unwrap(),
+            Some(historical)
+        );
+        assert_eq!(
+            reopened.retry_pre_submit(&event.event_id).unwrap_err(),
+            "SUBMISSION_RETRY_REFUSED"
+        );
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn semantic_wake_archived_delivery_reuses_all_original_bytes_without_queue_republication() {
+        let (base, store, target) = fixture();
+        let event = store
+            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+            .unwrap();
+        let lease = store.host_lock().unwrap();
+        let delivery = store.claim(&event, &lease).unwrap();
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        let receipt = Receipt {
+            schema_version: PROTOCOL_VERSION,
+            event_id: event.event_id.clone(),
+            target_generation: target.generation,
+            target_digest: target.digest.clone(),
+            message_digest: delivery.message_digest,
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        store
+            .record_exact_receipt_timer(&event.event_id, &receipt)
+            .unwrap();
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Sent,
+                Some(receipt),
+                None,
+            )
+            .unwrap();
+        let saved = [
+            store.archive_path(&event.event_id),
+            store.delivery_path(&event.event_id),
+            store.timer_path(&event.event_id),
+        ]
+        .into_iter()
+        .map(|path| {
+            let bytes = fs::read(&path).unwrap();
+            (path, bytes)
+        })
+        .collect::<Vec<_>>();
+        drop(lease);
+        let reopened =
+            Store::open_scoped_for_test(store.root(), store.root().parent().unwrap()).unwrap();
+        assert_eq!(
+            reopened
+                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                .unwrap(),
+            event
+        );
+        for (path, bytes) in saved {
+            assert_eq!(fs::read(path).unwrap(), bytes);
+        }
+        assert!(reopened.events().unwrap().is_empty());
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn semantic_wake_wrong_or_stale_target_cannot_publish_or_retarget_an_existing_intent() {
+        let (base, store, target) = fixture();
+        let original = store
+            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+            .unwrap();
+        let saved = fs::read(store.event_path(&original.event_id)).unwrap();
+        for wrong in [
+            Target::new(target.generation, "https://chatgpt.com/c/wrong".into()).unwrap(),
+            Target::new(target.generation + 1, target.url.clone()).unwrap(),
+        ] {
+            assert_eq!(
+                store
+                    .produce_expected_wake("alpha", "Continue alpha", &wrong, intent())
+                    .unwrap_err(),
+                "TARGET_EXPECTATION_MISMATCH"
+            );
+        }
+        let next = store
+            .set_target("alpha", target.generation, "https://chatgpt.com/c/next")
+            .unwrap();
+        for expected in [&target, &next] {
+            assert_eq!(
+                store
+                    .produce_expected_wake("alpha", "Continue alpha", expected, intent())
+                    .unwrap_err(),
+                "TARGET_EXPECTATION_MISMATCH"
+            );
+        }
+        assert_eq!(
+            fs::read(store.event_path(&original.event_id)).unwrap(),
+            saved
+        );
+        assert_eq!(store.events().unwrap(), [original]);
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn semantic_wake_refuses_unbounded_input_and_read_only_writes() {
+        let (base, store, target) = fixture();
+        for invalid in [
+            WakeIntent {
+                ttl_seconds: 0,
+                ..intent()
+            },
+            WakeIntent {
+                ttl_seconds: MAX_WAKE_TTL_SECONDS + 1,
+                ..intent()
+            },
+            WakeIntent {
+                source_event_id: "foreign/event",
+                ..intent()
+            },
+            WakeIntent {
+                source_turn_id: "",
+                ..intent()
+            },
+        ] {
+            assert_eq!(
+                store
+                    .produce_expected_wake("alpha", "Continue alpha", &target, invalid)
+                    .unwrap_err(),
+                "QUEUE_WAKE_METADATA_INVALID"
+            );
+        }
+        for message in [
+            "".to_owned(),
+            "not  normalized".into(),
+            "x\0y".into(),
+            "x".repeat(2049),
+        ] {
+            assert_eq!(
+                store
+                    .produce_expected_wake("alpha", &message, &target, intent())
+                    .unwrap_err(),
+                "QUEUE_EVENT_INVALID"
+            );
+        }
+        let read_only = Store::open_read_only(store.root()).unwrap();
+        assert_eq!(
+            read_only
+                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                .unwrap_err(),
+            "STATE_READ_ONLY"
+        );
+        assert!(store.events().unwrap().is_empty());
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn semantic_wake_conflicting_durable_witnesses_are_preserved_without_repair() {
+        let (base, store, target) = fixture();
+        let event = store
+            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+            .unwrap();
+        let conflicting = Event {
+            message: "Different historical content".into(),
+            ..event.clone()
+        };
+        atomic(&store.archive_path(&event.event_id), &conflicting).unwrap();
+        let queue_bytes = fs::read(store.event_path(&event.event_id)).unwrap();
+        let archive_bytes = fs::read(store.archive_path(&event.event_id)).unwrap();
+        assert_eq!(
+            store
+                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                .unwrap_err(),
+            "QUEUE_EVENT_ID_CONFLICT"
+        );
+        assert_eq!(
+            fs::read(store.event_path(&event.event_id)).unwrap(),
+            queue_bytes
+        );
+        assert_eq!(
+            fs::read(store.archive_path(&event.event_id)).unwrap(),
+            archive_bytes
+        );
+        fs::remove_file(store.archive_path(&event.event_id)).unwrap();
+        let historical = Delivery {
+            schema_version: PROTOCOL_VERSION,
+            event: conflicting.clone(),
+            target: target.clone(),
+            phase: Phase::Submitting,
+            owner: "historical-owner".into(),
+            updated_utc: event.created_utc,
+            message_digest: digest(&conflicting.message),
+            receipt: None,
+            reason: None,
+        };
+        historical.validate().unwrap();
+        atomic(&store.delivery_path(&event.event_id), &historical).unwrap();
+        let delivery_bytes = fs::read(store.delivery_path(&event.event_id)).unwrap();
+        assert_eq!(
+            store
+                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                .unwrap_err(),
+            "QUEUE_EVENT_ID_CONFLICT"
+        );
+        assert_eq!(
+            fs::read(store.event_path(&event.event_id)).unwrap(),
+            queue_bytes
+        );
+        assert_eq!(
+            fs::read(store.delivery_path(&event.event_id)).unwrap(),
+            delivery_bytes
+        );
+        assert!(!store.archive_path(&event.event_id).exists());
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn semantic_wake_orphaned_submission_or_timer_witness_refuses_new_queue_entry() {
+        let (base, store, target) = fixture();
+        let event_id = intent().event_id("alpha").unwrap();
+        let submission = SubmissionStart {
+            schema_version: PROTOCOL_VERSION,
+            event_id: event_id.clone(),
+            target_generation: target.generation,
+            target_digest: target.digest.clone(),
+            started_utc: now(),
+        };
+        let path = store.submission_start_path(&event_id);
+        atomic(&path, &submission).unwrap();
+        let saved = fs::read(&path).unwrap();
+        assert_eq!(
+            store
+                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                .unwrap_err(),
+            "SUBMISSION_RECONCILIATION_REQUIRED"
+        );
+        assert!(store.events().unwrap().is_empty());
+        assert_eq!(fs::read(&path).unwrap(), saved);
+        fs::remove_file(path).unwrap();
+        let timer = TurnTimer {
+            schema_version: PROTOCOL_VERSION,
+            event_id: event_id.clone(),
+            project_id: "alpha".into(),
+            target_generation: target.generation,
+            target_digest: target.digest,
+            started_utc: now(),
+            completed_utc: None,
+            response_state: ResponseState::Observing,
+        };
+        let path = store.timer_path(&event_id);
+        atomic(&path, &timer).unwrap();
+        let saved = fs::read(&path).unwrap();
+        let expected = store.config().unwrap().targets["alpha"].clone();
+        assert_eq!(
+            store
+                .produce_expected_wake("alpha", "Continue alpha", &expected, intent())
+                .unwrap_err(),
+            "SUBMISSION_RECONCILIATION_REQUIRED"
+        );
+        assert!(store.events().unwrap().is_empty());
+        assert_eq!(fs::read(path).unwrap(), saved);
+        assert!(store.delivery(&event_id).unwrap().is_none());
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    fn witness_bytes(store: &Store, id: &str) -> Vec<(PathBuf, Option<Vec<u8>>)> {
+        [
+            store.root().join("config.json"),
+            store.event_path(id),
+            store.archive_path(id),
+            store.delivery_path(id),
+            store.submission_start_path(id),
+            store.timer_path(id),
+        ]
+        .into_iter()
+        .map(|path| {
+            let bytes = path.try_exists().unwrap().then(|| fs::read(&path).unwrap());
+            (path, bytes)
+        })
+        .collect()
+    }
+
+    #[test]
+    fn semantic_wake_queue_sidecars_refuse_producer_claim_and_same_owner_submit_without_writes() {
+        for phase in [
+            None,
+            Some(Phase::Claimed),
+            Some(Phase::Attention),
+            Some(Phase::Stale),
+        ] {
+            for kind in ["submission", "timer"] {
+                let (base, store, target) = fixture();
+                let event = store
+                    .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                    .unwrap();
+                let lease = store.host_lock().unwrap();
+                if let Some(phase) = phase.as_ref() {
+                    let mut delivery = store.claim(&event, &lease).unwrap();
+                    delivery.phase = phase.clone();
+                    delivery.validate().unwrap();
+                    atomic(&store.delivery_path(&event.event_id), &delivery).unwrap();
+                }
+                if kind == "submission" {
+                    let start = SubmissionStart {
+                        schema_version: PROTOCOL_VERSION,
+                        event_id: event.event_id.clone(),
+                        target_generation: target.generation,
+                        target_digest: target.digest.clone(),
+                        started_utc: event.created_utc,
+                    };
+                    atomic(&store.submission_start_path(&event.event_id), &start).unwrap();
+                } else {
+                    let timer = TurnTimer {
+                        schema_version: PROTOCOL_VERSION,
+                        event_id: event.event_id.clone(),
+                        project_id: event.project_id.clone(),
+                        target_generation: target.generation,
+                        target_digest: target.digest.clone(),
+                        started_utc: event.created_utc,
+                        completed_utc: None,
+                        response_state: ResponseState::Observing,
+                    };
+                    atomic(&store.timer_path(&event.event_id), &timer).unwrap();
+                }
+                let saved = witness_bytes(&store, &event.event_id);
+                assert_eq!(
+                    store
+                        .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                        .unwrap_err(),
+                    "SUBMISSION_RECONCILIATION_REQUIRED"
+                );
+                assert_eq!(
+                    store.claim(&event, &lease).unwrap_err(),
+                    "SUBMISSION_RECONCILIATION_REQUIRED"
+                );
+                if phase == Some(Phase::Claimed) {
+                    assert_eq!(
+                        store
+                            .transition(
+                                &event.event_id,
+                                lease.owner(),
+                                Phase::Submitting,
+                                None,
+                                None
+                            )
+                            .unwrap_err(),
+                        "SUBMISSION_RECONCILIATION_REQUIRED"
+                    );
+                }
+                let reopened =
+                    Store::open_scoped_for_test(store.root(), store.root().parent().unwrap())
+                        .unwrap();
+                assert_eq!(
+                    reopened
+                        .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                        .unwrap_err(),
+                    "SUBMISSION_RECONCILIATION_REQUIRED"
+                );
+                assert_eq!(witness_bytes(&store, &event.event_id), saved);
+                drop(lease);
+                fs::remove_dir_all(base).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn semantic_wake_crossed_boundary_refuses_mismatched_submission_start_without_writes() {
+        let (base, store, target) = fixture();
+        let event = store
+            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+            .unwrap();
+        let lease = store.host_lock().unwrap();
+        store.claim(&event, &lease).unwrap();
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        assert_eq!(
+            store
+                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                .unwrap(),
+            event
+        );
+        let path = store.submission_start_path(&event.event_id);
+        let mut start: SubmissionStart = read(&path).unwrap();
+        start.target_digest = "f".repeat(64);
+        atomic(&path, &start).unwrap();
+        let saved = witness_bytes(&store, &event.event_id);
+        assert_eq!(
+            store
+                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                .unwrap_err(),
+            "SUBMISSION_START_BINDING_INVALID"
+        );
+        assert_eq!(witness_bytes(&store, &event.event_id), saved);
+        drop(lease);
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn semantic_wake_crossed_boundary_refuses_mismatched_timer_without_writes() {
+        let (base, store, target) = fixture();
+        let event = store
+            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+            .unwrap();
+        let lease = store.host_lock().unwrap();
+        store.claim(&event, &lease).unwrap();
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        store.start_submission_timer(&event.event_id).unwrap();
+        assert_eq!(
+            store
+                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                .unwrap(),
+            event
+        );
+        let timer = store.timer(&event.event_id).unwrap().unwrap();
+        for changed in [
+            TurnTimer {
+                project_id: "beta".into(),
+                ..timer.clone()
+            },
+            TurnTimer {
+                target_generation: target.generation + 1,
+                ..timer.clone()
+            },
+            TurnTimer {
+                target_digest: "f".repeat(64),
+                ..timer.clone()
+            },
+        ] {
+            atomic(&store.timer_path(&event.event_id), &changed).unwrap();
+            let saved = witness_bytes(&store, &event.event_id);
+            assert_eq!(
+                store
+                    .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                    .unwrap_err(),
+                "TIMER_SUBMISSION_BINDING_MISMATCH"
+            );
+            assert_eq!(witness_bytes(&store, &event.event_id), saved);
+        }
+        drop(lease);
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn semantic_wake_simultaneous_independent_producers_keep_project_identity_and_deduplicate() {
+        use std::sync::{Arc, Barrier};
+        let (base, store, alpha) = fixture();
+        let beta = store
+            .set_target("beta", 0, "https://chatgpt.com/c/beta")
+            .unwrap();
+        let store = Arc::new(store);
+        let barrier = Arc::new(Barrier::new(4));
+        let threads = [
+            ("alpha", alpha.clone()),
+            ("beta", beta.clone()),
+            ("alpha", alpha),
+            ("beta", beta),
+        ]
+        .into_iter()
+        .map(|(project, target)| {
+            let store = store.clone();
+            let barrier = barrier.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                store
+                    .produce_expected_wake(project, "Continue assigned work", &target, intent())
+                    .unwrap()
+            })
+        })
+        .collect::<Vec<_>>();
+        let events = threads
+            .into_iter()
+            .map(|thread| thread.join().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(events[0], events[2]);
+        assert_eq!(events[1], events[3]);
+        assert_ne!(events[0].event_id, events[1].event_id);
+        assert_eq!(events[0].project_id, "alpha");
+        assert_eq!(events[1].project_id, "beta");
+        assert_eq!(store.events().unwrap().len(), 2);
         fs::remove_dir_all(base).unwrap();
     }
 }

@@ -16,7 +16,7 @@ pub(super) fn fair_round(
 ) -> Result<Vec<Event>> {
     let mut chosen = BTreeMap::<String, Event>::new();
     let mut uncertain = BTreeMap::<String, Event>::new();
-    let mut expired_claims = BTreeSet::new();
+    let mut blocked_projects = BTreeSet::new();
     // Existing created-time ordering is retained inside each project.
     for event in store.events()? {
         if targets
@@ -26,6 +26,17 @@ pub(super) fn fair_round(
             continue;
         }
         let delivery = store.delivery(&event.event_id)?;
+        if delivery
+            .as_ref()
+            .is_none_or(|value| !matches!(value.phase, Phase::Submitting | Phase::Sent))
+            && store.submission_witness_present(&event.event_id) != Ok(false)
+        {
+            // Partial/unreadable submission evidence reserves this project,
+            // including a crash after start-witness commit but before the
+            // SUBMITTING delivery write. Sibling projects remain eligible.
+            blocked_projects.insert(event.project_id.clone());
+            continue;
+        }
         if delivery
             .as_ref()
             .is_some_and(|value| matches!(value.phase, Phase::Sent | Phase::Stale))
@@ -39,7 +50,7 @@ pub(super) fn fair_round(
                     // A pre-submit crash may have left an owned composer draft.
                     // Expiry cannot discard it or authorize another event in
                     // that conversation. Other projects remain schedulable.
-                    expired_claims.insert(event.project_id.clone());
+                    blocked_projects.insert(event.project_id.clone());
                     continue;
                 }
                 _ => {}
@@ -60,7 +71,7 @@ pub(super) fn fair_round(
         }
         chosen.entry(event.project_id.clone()).or_insert(event);
     }
-    for project in expired_claims {
+    for project in blocked_projects {
         chosen.remove(&project);
     }
     // The crash boundary can precede same-tab acceptance and its timer.
@@ -298,6 +309,68 @@ pub(super) mod tests {
             ids(&store, None, &BTreeMap::new()),
             ["alpha-2", "beta-1", "gamma-1"]
         );
+    }
+
+    #[test]
+    fn orphaned_pre_submit_witness_holds_only_its_project_and_survives_restart() {
+        for claimed in [false, true] {
+            for kind in ["submission", "timer"] {
+                let (store, lease) = fixture("orphaned-pre-submit");
+                let event = store
+                    .events()
+                    .unwrap()
+                    .into_iter()
+                    .find(|event| event.event_id == "alpha-1")
+                    .unwrap();
+                if claimed {
+                    store.claim(&event, &lease).unwrap();
+                }
+                let target = store.config().unwrap().targets["alpha"].clone();
+                let (path, witness) = if kind == "submission" {
+                    (
+                        store.root().join("logs/submission-start-alpha-1.json"),
+                        serde_json::json!({
+                            "schemaVersion":PROTOCOL_VERSION,"eventId":event.event_id,
+                            "targetGeneration":target.generation,"targetDigest":target.digest,"startedUtc":event.created_utc
+                        }),
+                    )
+                } else {
+                    (
+                        store.root().join("turns/alpha-1.json"),
+                        serde_json::json!({
+                            "schemaVersion":PROTOCOL_VERSION,"eventId":event.event_id,"projectId":event.project_id,
+                            "targetGeneration":target.generation,"targetDigest":target.digest,"startedUtc":event.created_utc,
+                            "completedUtc":null,"responseState":"OBSERVING"
+                        }),
+                    )
+                };
+                let bytes = serde_json::to_vec(&witness).unwrap();
+                std::fs::write(&path, &bytes).unwrap();
+                let original_delivery = store.delivery(&event.event_id).unwrap();
+                let queue_path = store.root().join("queue/alpha-1.json");
+                let queue_bytes = std::fs::read(&queue_path).unwrap();
+                assert_eq!(ids(&store, None, &BTreeMap::new()), ["beta-1", "gamma-1"]);
+                assert_eq!(
+                    store.claim(&event, &lease).unwrap_err(),
+                    "SUBMISSION_RECONCILIATION_REQUIRED"
+                );
+                drop(lease);
+                let reopened =
+                    Store::open_scoped_for_test(store.root(), store.root().parent().unwrap())
+                        .unwrap();
+                assert_eq!(
+                    ids(&reopened, None, &BTreeMap::new()),
+                    ["beta-1", "gamma-1"]
+                );
+                assert_eq!(
+                    reopened.delivery(&event.event_id).unwrap(),
+                    original_delivery
+                );
+                assert_eq!(std::fs::read(path).unwrap(), bytes);
+                assert_eq!(std::fs::read(queue_path).unwrap(), queue_bytes);
+                std::fs::remove_dir_all(store.root().parent().unwrap()).unwrap();
+            }
+        }
     }
 
     fn manual_event(store: &Store, created_utc: u64, expires_utc: u64) -> Event {
