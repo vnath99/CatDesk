@@ -1,3 +1,25 @@
+## October 28 — installed-project controller accepts reviewed release succession
+
+Source `0a84508a4590d701d9704f4a0d809f354a8d3cf2` removes an actual controller compatibility defect: both installed-controller paths required the initial stopped migration's slot-b/generation2 receipt even after a legitimate native promotion. A read-only reproduction showed current C254 at slot-a/generation3 with a valid existing promotion receipt, while the old hash-specific check refused it. Both controllers now share a read-only selected-authority proof: pointer, slot artifact, canonical pair and the appropriate existing receipt must agree. Legacy migration constraints remain; pending promotion, unsupported authority and drift refuse. The selected current artifact/receipt stay pinned, and the second proof must exactly equal the first. No new authority record or recovery helper was introduced.
+
+Eighteen existing controller tests, one native fixture test covering seven positive/negative cases, the actual installed-authority read through Windows PowerShell, formatting and strict all-target Clippy passed. A separate debug development controller was built from that exact published source. Its monitored 150-second test used the actual installed C254 image through the existing run-project command, verified the registered read-only scope, authenticated initialize/catalog, missing-bearer 401 and an exact private registered-file read. The global startup lease was released before READY. The controller exited naturally with code0; the endpoint and owned Jobs were gone.
+
+All 130 protected files remained identical. The one declared conversation ledger appended seven attributed MCP traffic events (44 to51), preserving its full prior prefix, identity and coverage. Release history remained identical under the controller's own check. No source write, native writer/session action, browser, Wake, external runtime, recurring activation, binding or canonical executable change occurred. The new controller is a separately qualified development artifact, not a protected release or a selected development package. Persisted historical authority remains untouched; old embedded controllers are not automatically updated.
+
+This proves the controller correction against an installed project runtime, not a ChatGPT Web caller or two-project Web coding. The existing core task/handoff path remains in C254; no new serving-release candidate was built. Source remote SHA is verified; exact-commit CI has zero visible checks/runs and remains UNVERIFIED. The separate latest connector failure remains a ChatGPT backend MCP transport failure with no HTTP status and was not retried. Next is the existing authenticated central ingress and actual Web task handoff, preserving both registry scopes and native owners. Evidence: `docs/verification/SELECTED_RELEASE_CONTROLLER_SUCCESSION_2026_10_28.json`.
+
+Qualified development-controller invocation (the C254 canonical executable still contains the older embedded controller): run the separately built, hash-verified controller from the canonical installation directory, using the already registered control root and freshly verified target witnesses:
+
+```powershell
+Set-Location '<canonical-install-root>'
+& '<qualified-development-controller>' operator installed-backend run-project `
+  --control-workspace '<existing-control-root>' --project-id '<registered-project>' `
+  --project-target-generation <verified-generation> `
+  --project-target-sha256 '<verified-digest>' --max-runtime-seconds 100
+```
+
+This supported command is bounded and read-only; it starts the selected trusted installed image on a project-fixed loopback endpoint. It does not bind a ChatGPT conversation, claim a native writer, enable Wake, install the development controller or qualify a Web caller. The correction reads existing authority through the unchanged recovery helper; do not rewrite old receipts or fingerprints to make an old controller accept a new generation.
+
 ## October 28 — existing official runtime lifecycle verified; connector fails before tool response
 
 The operator approved the frozen 180-second workflow. It started the verified installed C254 backend through the public backend-only lifecycle, then reused the existing official runtime alias, profile, tunnel and retained key reference. The supported owner reported running, healthy and ready; /healthz and /readyz both returned 200. Control-plane poll health remained UNKNOWN, so upstream polling acceptance is not claimed.
