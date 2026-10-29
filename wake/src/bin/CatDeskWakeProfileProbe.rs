@@ -110,6 +110,11 @@ mod tests {
         }
         println!("PROBE:arbitrary-private-content");
         println!("PROBE:TARGET_TAB_EXACT private-content-must-be-filtered");
+        println!("PROBE:NETWORK:ERR_PROXY_CONNECTION_FAILED");
+        println!("PROBE:NETWORK:UNKNOWN");
+        println!("PROBE:NETWORK:ERR_PRIVATE_CONTENT");
+        println!("PROBE:NETWORK:ERR_CONNECTION_RESET private-content-must-be-filtered");
+        println!("PROBE:FINAL:NETWORK:ERR_CONNECTION_RESET");
         for state in ["EXACT", "MISSING", "AMBIGUOUS", "DRIFT", "UNAVAILABLE"] {
             println!("PROBE:TARGET_TAB_{state}");
         }
@@ -131,6 +136,8 @@ mod tests {
         assert_eq!(
             rows,
             [
+                "PROBE:NETWORK:ERR_PROXY_CONNECTION_FAILED",
+                "PROBE:NETWORK:UNKNOWN",
                 "PROBE:TARGET_TAB_EXACT",
                 "PROBE:TARGET_TAB_MISSING",
                 "PROBE:TARGET_TAB_AMBIGUOUS",

@@ -41,6 +41,29 @@ class ReadinessProbeTests(unittest.TestCase):
         with mock.patch.object(sys, "argv", argv), mock.patch.object(sys, "stdin", io.StringIO("NO\n")):
             self.assertEqual(self.probe.main(), 2)
 
+    def test_network_detail_reads_only_an_internal_error_document(self):
+        cdp = mock.Mock()
+        for current in ["https://chatgpt.com/c/readiness-fixture", "https://chatgpt.com/",
+                        "https://other.example/", "about:blank"]:
+            cdp.get_current_url.return_value = current
+            self.assertEqual(self.probe.chrome_error_detail(cdp), "UNKNOWN")
+        cdp.evaluate.assert_not_called()
+        cdp.get.assert_not_called()
+
+    def test_network_detail_exports_only_fixed_codes(self):
+        cdp = mock.Mock()
+        cdp.get_current_url.return_value = "chrome-error://chromewebdata/"
+        for code in self.probe.NETWORK_ERRORS:
+            cdp.evaluate.return_value = " \n" + code + "\n"
+            self.assertEqual(self.probe.chrome_error_detail(cdp), code)
+        for value in [None, True, {"value": "ERR_CONNECTION_RESET"}, "ERR_PRIVATE_CONTENT",
+                      "ERR_CONNECTION_RESET private-page-text", "https://chatgpt.com/c/private"]:
+            cdp.evaluate.return_value = value
+            self.assertEqual(self.probe.chrome_error_detail(cdp), "UNKNOWN")
+        cdp.evaluate.side_effect = RuntimeError("private failure")
+        self.assertEqual(self.probe.chrome_error_detail(cdp), "UNKNOWN")
+        cdp.get.assert_not_called()
+
     def test_development_owner_supplies_existing_profile_without_changing_default(self):
         default = self.probe.PROFILE
         target = "https://chatgpt.com/c/readiness-fixture"

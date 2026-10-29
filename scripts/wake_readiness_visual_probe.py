@@ -11,6 +11,16 @@ EDITOR = "#prompt-textarea"
 STOP = ("button[data-testid='stop-button']", "button[aria-label*='stop' i]")
 LOGIN = ("a[href*='/auth/login']", "button[data-testid*='login' i]")
 CAPTCHA = ("iframe[title*='captcha' i]", "[data-testid*='captcha' i]", "iframe[title*='security' i]", "[data-testid*='security' i]")
+NETWORK_ERRORS = frozenset({
+    "ERR_NETWORK_CHANGED", "ERR_INTERNET_DISCONNECTED", "ERR_NAME_NOT_RESOLVED",
+    "ERR_CONNECTION_CLOSED", "ERR_CONNECTION_RESET", "ERR_CONNECTION_ABORTED",
+    "ERR_CONNECTION_REFUSED", "ERR_CONNECTION_TIMED_OUT", "ERR_TIMED_OUT",
+    "ERR_PROXY_CONNECTION_FAILED", "ERR_TUNNEL_CONNECTION_FAILED",
+    "ERR_CERT_DATE_INVALID", "ERR_CERT_AUTHORITY_INVALID", "ERR_CERT_COMMON_NAME_INVALID",
+    "ERR_BLOCKED_BY_CLIENT", "ERR_BLOCKED_BY_ADMINISTRATOR", "ERR_BLOCKED_BY_RESPONSE",
+    "ERR_HTTP_RESPONSE_CODE_FAILURE", "ERR_TOO_MANY_RETRIES", "ERR_EMPTY_RESPONSE",
+    "ERR_FAILED", "ERR_HTTP2_PROTOCOL_ERROR", "ERR_SSL_PROTOCOL_ERROR", "ERR_QUIC_PROTOCOL_ERROR",
+})
 
 def visible(cdp, selector):
     try: return bool(cdp.is_element_visible(selector))
@@ -66,6 +76,27 @@ def classify(cdp, url):
     if exact: return "EXACT_NO_EDITOR"
     if p.hostname in {"chatgpt.com","chat.openai.com"} and p.path in {"","/"}: return "HOME"
     return "TARGET_DRIFT"
+
+def chrome_error_detail(cdp):
+    """Export only a fixed browser error label, never page text or a target URL.
+
+    Ordinary ChatGPT documents, including unknown drafts, are not inspected.
+    The browser's internal error document must still be selected at evaluation.
+    """
+    try:
+        if not str(cdp.get_current_url()).startswith("chrome-error://"):
+            return "UNKNOWN"
+        code = cdp.evaluate("""(() => {
+            if (location.protocol !== 'chrome-error:') return null;
+            const nodes = document.querySelectorAll('#error-code, .error-code');
+            if (nodes.length !== 1) return null;
+            return nodes[0].textContent;
+        })()""")
+        if isinstance(code, str) and code.strip() in NETWORK_ERRORS:
+            return code.strip()
+    except Exception:
+        pass
+    return "UNKNOWN"
 
 def recover_empty_home(cdp, url):
     """One same-tab navigation, only from a positively empty, idle Home.
@@ -129,10 +160,15 @@ def main():
             state = classify(cdp, url)
             if state != last:
                 print("PROBE:" + state, flush=True); last = state
+                if state == "CHROME_ERROR":
+                    print("PROBE:NETWORK:" + chrome_error_detail(cdp), flush=True)
             if args.profile is not None and state == "HOME" and not recovery_attempted and time.monotonic() >= recover_after:
                 recovery_attempted = True
                 recover_empty_home(cdp, url)
             time.sleep(1)
-        print("PROBE:FINAL:" + classify(cdp, url), flush=True)
+        final = classify(cdp, url)
+        if final == "CHROME_ERROR" and last != final:
+            print("PROBE:NETWORK:" + chrome_error_detail(cdp), flush=True)
+        print("PROBE:FINAL:" + final, flush=True)
     return 0
 if __name__ == "__main__": raise SystemExit(main())

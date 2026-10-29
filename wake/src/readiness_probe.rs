@@ -79,6 +79,36 @@ pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<Strin
             let Some(state) = line.strip_prefix("PROBE:") else {
                 return false;
             };
+            if let Some(code) = state.strip_prefix("NETWORK:") {
+                return matches!(
+                    code,
+                    "UNKNOWN"
+                        | "ERR_NETWORK_CHANGED"
+                        | "ERR_INTERNET_DISCONNECTED"
+                        | "ERR_NAME_NOT_RESOLVED"
+                        | "ERR_CONNECTION_CLOSED"
+                        | "ERR_CONNECTION_RESET"
+                        | "ERR_CONNECTION_ABORTED"
+                        | "ERR_CONNECTION_REFUSED"
+                        | "ERR_CONNECTION_TIMED_OUT"
+                        | "ERR_TIMED_OUT"
+                        | "ERR_PROXY_CONNECTION_FAILED"
+                        | "ERR_TUNNEL_CONNECTION_FAILED"
+                        | "ERR_CERT_DATE_INVALID"
+                        | "ERR_CERT_AUTHORITY_INVALID"
+                        | "ERR_CERT_COMMON_NAME_INVALID"
+                        | "ERR_BLOCKED_BY_CLIENT"
+                        | "ERR_BLOCKED_BY_ADMINISTRATOR"
+                        | "ERR_BLOCKED_BY_RESPONSE"
+                        | "ERR_HTTP_RESPONSE_CODE_FAILURE"
+                        | "ERR_TOO_MANY_RETRIES"
+                        | "ERR_EMPTY_RESPONSE"
+                        | "ERR_FAILED"
+                        | "ERR_HTTP2_PROTOCOL_ERROR"
+                        | "ERR_SSL_PROTOCOL_ERROR"
+                        | "ERR_QUIC_PROTOCOL_ERROR"
+                );
+            }
             let state = state.strip_prefix("FINAL:").unwrap_or(state);
             matches!(
                 state,
