@@ -121,9 +121,9 @@ pub(crate) fn schema() -> Value {
         "expectedTargetGeneration":{"type":"integer","minimum":1},"expectedTargetSha256":{"type":"string","pattern":"^[a-f0-9]{64}$"},
         "executionKey":{"type":"string","pattern":"^[a-f0-9]{64}$","description":"Private key from this task's LOCAL execution-grant; never use a sibling project's key."},
         "taskId":{"type":"string"},"callId":{"type":"string"},
-        "tool":{"type":"string","enum":["read","search","patch.preview","patch.apply","patch.compare","diff.actual","verify.command"]},"arguments":{"type":"object"}},
+        "tool":{"type":"string","enum":["read","search","patch.preview","patch.apply","patch.compare","diff.actual","verify.command","wake.manual_end_turn"],"description":"wake.manual_end_turn requires a fresh explicit local manual-wake grant; arguments are sourceTurnId, priority(0..255), ttlSeconds(1..86400). It records one fixed continuation intent without starting a sender."},"arguments":{"type":"object"}},
     "required":["projectId","requestId","sourceEventId","assignmentSha256","expectedTargetGeneration","expectedTargetSha256","executionKey","taskId","callId","tool","arguments"],"additionalProperties":false},
-    "annotations":{"readOnlyHint":false,"destructiveHint":true,"openWorldHint":false}})
+    "annotations":{"readOnlyHint":false,"destructiveHint":true,"openWorldHint":true}})
 }
 
 #[derive(Deserialize)]
@@ -192,6 +192,36 @@ pub(crate) async fn handle(control: &str, request: &JsonRpcRequest) -> JsonRpcRe
         return JsonRpcResponse::error(id, -32602, "WEB_TASK_ARGUMENTS_INVALID".into());
     }
     let control = PathBuf::from(control);
+    if call.tool == "wake.manual_end_turn" {
+        // Dropping the HTTP awaiter cannot cancel this bounded metadata turn;
+        // the existing journal remains the no-replay authority on a lost reply.
+        let result = tokio::task::spawn_blocking(move || {
+            crate::web_work::manual_wake(
+                &control,
+                call.pins(),
+                &call.execution_key,
+                &call.task_id,
+                &call.call_id,
+                call.arguments,
+            )
+        })
+        .await;
+        return match result {
+            Ok(Ok(result)) => JsonRpcResponse::success(
+                id,
+                json!({"content":[{"type":"text","text":"Manual continuation intent recorded; delivery unverified."}],
+                    "structuredContent":result,"isError":false,
+                    "_meta":{"catdeskTaskLifecycle":{"status":"QUEUED_ONLY","nativeSessionAction":"NONE",
+                        "isolatedWorktreeWriterClaimed":false,"browserStarted":false,"wakeHostStarted":false,
+                        "executionAuthority":"LOCAL_EXACT_ASSIGNMENT_KEY_AND_MANUAL_WAKE_CAPABILITY",
+                        "conversationOriginAuthenticated":false,"retryWithNewCallIdAllowed":false}}}),
+            ),
+            Ok(Err(reason)) => JsonRpcResponse::error(id, -32002, reason),
+            Err(_) => {
+                JsonRpcResponse::error(id, -32002, "WEB_TASK_OUTCOME_UNKNOWN_NO_REPLAY".into())
+            }
+        };
+    }
     let response_id = id.clone();
     // Detach only this existing bounded turn if its HTTP awaiter disappears.
     // The owned future still drains the task and releases its exact lease.
@@ -292,8 +322,77 @@ mod tests {
         key: String,
         task: PathBuf,
         native: PathBuf,
+        keys: Vec<OwnedFixtureKey>,
+    }
+
+    struct OwnedFixtureKey {
+        path: PathBuf,
+        bytes: Vec<u8>,
+    }
+
+    impl OwnedFixtureKey {
+        fn retain(expected: PathBuf, granted: &Value) -> Self {
+            assert_eq!(granted["executionKeyFile"].as_str(), expected.to_str());
+            let bytes = fs::read(&expected).unwrap();
+            let key: String = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(key.len(), 64);
+            assert!(
+                key.bytes()
+                    .all(|value| value.is_ascii_hexdigit() && !value.is_ascii_uppercase())
+            );
+            Self {
+                path: expected,
+                bytes,
+            }
+        }
+    }
+
+    impl Drop for OwnedFixtureKey {
+        fn drop(&mut self) {
+            // Only this exact path, proved absent before its fixture grant,
+            // may be removed. Never sweep the shared user key directory.
+            let metadata = fs::symlink_metadata(&self.path).unwrap();
+            use std::os::windows::fs::MetadataExt;
+            assert!(
+                metadata.is_file()
+                    && !metadata.file_type().is_symlink()
+                    && metadata.file_attributes() & 0x400 == 0
+            );
+            let parent = fs::symlink_metadata(self.path.parent().unwrap()).unwrap();
+            assert!(
+                parent.is_dir()
+                    && !parent.file_type().is_symlink()
+                    && parent.file_attributes() & 0x400 == 0
+            );
+            assert_eq!(fs::read(&self.path).unwrap(), self.bytes);
+            fs::remove_file(&self.path).unwrap();
+        }
+    }
+
+    fn fresh_fixture_key_path(control: &Path, project: &str) -> PathBuf {
+        let record = crate::web_work_state::WorkLedger::open(control, project)
+            .unwrap()
+            .record("request-a")
+            .unwrap()
+            .unwrap();
+        let identity = protocol::digest(
+            &serde_json::to_string(&(control, project, record.task_assignment.as_ref().unwrap()))
+                .unwrap(),
+        );
+        let path = crate::delegated::autonomy_runtime::fixed_current_user_catdesk_state_root()
+            .unwrap()
+            .join("WebTaskKeys")
+            .join(format!("{identity}.json"));
+        assert!(
+            !path.try_exists().unwrap(),
+            "fixture cannot take ownership of an existing key"
+        );
+        path
     }
     fn fixture(id: &str) -> Fixture {
+        fixture_with_manual_wake(id, false)
+    }
+    fn fixture_with_manual_wake(id: &str, allow_manual_wake: bool) -> Fixture {
         let (control, assignment, wake, pins, event) =
             crate::web_work::tests::assignment_fixture_for(id);
         wake.publish(&event).unwrap();
@@ -310,13 +409,27 @@ mod tests {
                 .is_err()
         );
         sent(&wake, &event);
-        let granted = crate::web_work::execution_permission(&control, pins.clone(), false).unwrap();
+        let expected_key = fresh_fixture_key_path(&control, id);
+        let granted = crate::web_work::execution_permission_with_manual_wake(
+            &control,
+            pins.clone(),
+            false,
+            allow_manual_wake,
+        )
+        .unwrap();
+        let owned_key = OwnedFixtureKey::retain(expected_key, &granted);
         assert!(!Path::new(granted["executionKeyFile"].as_str().unwrap()).starts_with(&control));
         let key: String = serde_json::from_slice(
             &fs::read(granted["executionKeyFile"].as_str().unwrap()).unwrap(),
         )
         .unwrap();
-        let again = crate::web_work::execution_permission(&control, pins.clone(), false).unwrap();
+        let again = crate::web_work::execution_permission_with_manual_wake(
+            &control,
+            pins.clone(),
+            false,
+            allow_manual_wake,
+        )
+        .unwrap();
         assert_eq!(granted, again);
         assert!(!granted.to_string().contains(&key));
         Fixture {
@@ -325,6 +438,7 @@ mod tests {
             key,
             task,
             native,
+            keys: vec![owned_key],
         }
     }
     fn request(f: &Fixture, id: &str, tool: &str, args: Value) -> Value {
@@ -340,6 +454,394 @@ mod tests {
     async fn call(f: &Fixture, body: Value) -> Value {
         let req = serde_json::from_value(body).unwrap();
         serde_json::to_value(handle(f.control.to_str().unwrap(), &req).await).unwrap()
+    }
+
+    fn ready_manual_wake(f: &Fixture) -> Store {
+        let root = crate::wake_protocol_client::wake_root_for_workspace(&f.control).unwrap();
+        // Controlled fixture times establish a past activation/target cutoff;
+        // no clock sleep or production metadata is involved.
+        let mut activation: catdesk_wake::runtime::Activation =
+            catdesk_wake::store::read(&root.join("activation.json")).unwrap();
+        activation.accept_after_utc = catdesk_wake::store::now() - 5;
+        fs::write(
+            root.join("activation.json"),
+            serde_json::to_vec(&activation).unwrap(),
+        )
+        .unwrap();
+        let mut config: catdesk_wake::store::Config =
+            catdesk_wake::store::read(&root.join("config.json")).unwrap();
+        for change in &mut config.history {
+            change.changed_utc = activation.accept_after_utc;
+        }
+        fs::write(
+            root.join("config.json"),
+            serde_json::to_vec(&config).unwrap(),
+        )
+        .unwrap();
+        Store::open(&root).unwrap()
+    }
+
+    fn manual_request(f: &Fixture, call_id: &str, turn: &str) -> Value {
+        request(
+            f,
+            call_id,
+            "wake.manual_end_turn",
+            json!({"sourceTurnId":turn,"priority":10,"ttlSeconds":300}),
+        )
+    }
+
+    #[test]
+    fn manual_wake_fixture_cleanup_is_exact_and_preserves_peer_key() {
+        let alpha = fixture("alpha");
+        let beta = fixture_with_manual_wake("beta", true);
+        let alpha_path = alpha.keys[0].path.clone();
+        let beta_path = beta.keys[0].path.clone();
+        let beta_bytes = fs::read(&beta_path).unwrap();
+        drop(alpha);
+        assert!(!alpha_path.try_exists().unwrap());
+        assert_eq!(fs::read(&beta_path).unwrap(), beta_bytes);
+        drop(beta);
+        assert!(!beta_path.try_exists().unwrap());
+    }
+
+    #[test]
+    fn manual_wake_grant_is_explicit_immutable_and_revocable() {
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase", deny_unknown_fields)]
+        #[allow(dead_code)]
+        struct LegacyGrant {
+            schema_version: u32,
+            project_id: String,
+            request_id: String,
+            source_event_id: String,
+            assignment: Value,
+            key_sha256: String,
+        }
+        let legacy = fixture("alpha");
+        let grant_path = legacy
+            .control
+            .join(".catdesk/project-mcp-tasks/alpha/task-fixture/execution-grant.json");
+        let saved = fs::read(&grant_path).unwrap();
+        let grant: Value = serde_json::from_slice(&saved).unwrap();
+        assert!(grant.get("allowManualWake").is_none());
+        assert!(serde_json::from_slice::<LegacyGrant>(&saved).is_ok());
+        let scope = resolve_registered_project_from_control_root(&legacy.control, "alpha").unwrap();
+        let record = crate::web_work_state::WorkLedger::open(&legacy.control, "alpha")
+            .unwrap()
+            .record("request-a")
+            .unwrap()
+            .unwrap();
+        let context =
+            crate::project_mcp_task::granted_handoff_context(&scope, &record, &record.target)
+                .unwrap()
+                .unwrap();
+        assert!(context.get("manualWake").is_none());
+        assert_eq!(
+            crate::web_work::execution_permission_with_manual_wake(
+                &legacy.control,
+                legacy.pins.clone(),
+                false,
+                true
+            )
+            .unwrap_err(),
+            "PROJECT_TASK_ARCHIVE_CONFLICT"
+        );
+        assert_eq!(fs::read(&grant_path).unwrap(), saved);
+        assert!(
+            crate::web_work::authorized_assignment(
+                &legacy.control,
+                legacy.pins.clone(),
+                &legacy.key
+            )
+            .is_ok()
+        );
+        let explicit = fixture_with_manual_wake("beta", true);
+        let grant: Value = serde_json::from_slice(
+            &fs::read(
+                explicit
+                    .control
+                    .join(".catdesk/project-mcp-tasks/beta/task-fixture/execution-grant.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(grant["allowManualWake"], true);
+        assert!(
+            serde_json::from_value::<LegacyGrant>(grant).is_err(),
+            "old runtime must refuse new capability rather than silently downgrade"
+        );
+        assert!(
+            crate::web_work::authorized_assignment(
+                &explicit.control,
+                explicit.pins.clone(),
+                &explicit.key
+            )
+            .is_ok()
+        );
+        let scope =
+            resolve_registered_project_from_control_root(&explicit.control, "beta").unwrap();
+        let record = crate::web_work_state::WorkLedger::open(&explicit.control, "beta")
+            .unwrap()
+            .record("request-a")
+            .unwrap()
+            .unwrap();
+        let context =
+            crate::project_mcp_task::granted_handoff_context(&scope, &record, &record.target)
+                .unwrap()
+                .unwrap();
+        assert_eq!(context["manualWake"]["allowed"], true);
+        crate::web_work::execution_permission(&explicit.control, explicit.pins.clone(), true)
+            .unwrap();
+        assert_eq!(
+            crate::web_work::authorized_assignment(
+                &explicit.control,
+                explicit.pins.clone(),
+                &explicit.key
+            )
+            .unwrap_err(),
+            "WEB_TASK_GRANT_REVOKED"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn manual_wake_checks_exact_capability_identity_and_never_claims_native_writer() {
+        let legacy = fixture("alpha");
+        ready_manual_wake(&legacy);
+        assert_eq!(
+            call(&legacy, manual_request(&legacy, "legacy-manual", "turn-1")).await["error"]["message"],
+            "WEB_TASK_MANUAL_WAKE_NOT_GRANTED"
+        );
+        assert!(
+            !legacy
+                .control
+                .join(".catdesk/project-mcp-tasks/alpha/task-fixture/journal")
+                .exists()
+        );
+        let f = fixture_with_manual_wake("beta", true);
+        let wake = ready_manual_wake(&f);
+        let body = manual_request(&f, "manual-first", "turn-1");
+        for (field, value) in [
+            ("executionKey", json!("b".repeat(64))),
+            ("taskId", json!("foreign-task")),
+            ("sourceEventId", json!("foreign-source")),
+            ("assignmentSha256", json!("b".repeat(64))),
+            ("expectedTargetGeneration", json!(999)),
+        ] {
+            let mut invalid = body.clone();
+            invalid["params"]["arguments"][field] = value;
+            assert!(call(&f, invalid).await.get("error").is_some());
+        }
+        for arguments in [
+            json!({"sourceTurnId":"turn-1","priority":10,"ttlSeconds":0}),
+            json!({"sourceTurnId":"turn-1","priority":256,"ttlSeconds":300}),
+            json!({"sourceTurnId":"turn-1","priority":10,"ttlSeconds":86401}),
+            json!({"sourceTurnId":"turn-1","priority":10,"ttlSeconds":300,"message":"arbitrary text"}),
+        ] {
+            let mut invalid = body.clone();
+            invalid["params"]["arguments"]["arguments"] = arguments;
+            assert_eq!(
+                call(&f, invalid).await["error"]["message"],
+                "WEB_TASK_MANUAL_WAKE_ARGUMENTS_INVALID"
+            );
+        }
+        let native_before = fs::read(f.native.join("src/lib.rs")).unwrap();
+        let writer =
+            crate::delegated::autonomy_runtime::acquire_project_writer_lock(&f.task).unwrap();
+        let result = call(&f, body).await;
+        assert!(result.get("error").is_none(), "{result}");
+        assert_eq!(
+            result["result"]["_meta"]["catdeskTaskLifecycle"]["isolatedWorktreeWriterClaimed"],
+            false
+        );
+        assert_eq!(
+            result["result"]["structuredContent"]["deliveryProved"],
+            false
+        );
+        let id = result["result"]["structuredContent"]["eventId"]
+            .as_str()
+            .unwrap();
+        let event = wake
+            .events()
+            .unwrap()
+            .into_iter()
+            .find(|event| event.event_id == id)
+            .unwrap();
+        assert_eq!(event.project_id, "beta");
+        assert_eq!(
+            event.wake_metadata().unwrap().unwrap().purpose,
+            protocol::WakePurpose::ManualEndTurn
+        );
+        assert!(!event.message.contains(&f.key));
+        assert!(!event.message.contains(f.native.to_str().unwrap()));
+        assert!(event.message.contains("Project: beta"));
+        assert_eq!(
+            fs::read(f.native.join("src/lib.rs")).unwrap(),
+            native_before
+        );
+        drop(writer);
+        let ordinary = call(
+            &f,
+            request(
+                &f,
+                "after-manual-read",
+                "read",
+                json!({"path":"src/lib.rs"}),
+            ),
+        )
+        .await;
+        assert!(
+            ordinary.get("error").is_none(),
+            "manual journal stranded normal task: {ordinary}"
+        );
+        crate::web_work::execution_permission(&f.control, f.pins.clone(), true).unwrap();
+        assert_eq!(
+            call(&f, manual_request(&f, "revoked-manual", "turn-2")).await["error"]["message"],
+            "WEB_TASK_GRANT_REVOKED"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn manual_wake_dedupes_restart_and_preserves_material_conflicts_and_unknown_delivery() {
+        let f = fixture_with_manual_wake("alpha", true);
+        let wake = ready_manual_wake(&f);
+        let first = call(&f, manual_request(&f, "manual-1", "turn-1")).await;
+        assert!(first.get("error").is_none(), "{first}");
+        let result = &first["result"]["structuredContent"];
+        let id = result["eventId"].as_str().unwrap();
+        let queued = wake.root().join("queue").join(format!("{id}.json"));
+        let saved = fs::read(&queued).unwrap();
+        assert_eq!(
+            call(&f, manual_request(&f, "manual-1", "turn-1")).await["error"]["message"],
+            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+        );
+        let cold = call(&f, manual_request(&f, "manual-2", "turn-1")).await;
+        assert_eq!(cold["result"]["structuredContent"], *result);
+        assert_eq!(fs::read(&queued).unwrap(), saved);
+        let mut conflict = manual_request(&f, "manual-conflict", "turn-1");
+        conflict["params"]["arguments"]["arguments"]["priority"] = json!(11);
+        assert_eq!(
+            call(&f, conflict).await["error"]["message"],
+            "QUEUE_EVENT_ID_CONFLICT"
+        );
+        let distinct = call(&f, manual_request(&f, "manual-next", "turn-2")).await;
+        assert!(distinct.get("error").is_none(), "{distinct}");
+        assert_ne!(
+            distinct["result"]["structuredContent"]["eventId"],
+            result["eventId"]
+        );
+        let event: protocol::Event = serde_json::from_slice(&saved).unwrap();
+        let host = wake.host_lock().unwrap();
+        let delivery = wake.claim(&event, &host).unwrap();
+        wake.transition(id, &delivery.owner, Phase::Submitting, None, None)
+            .unwrap();
+        drop(host);
+        let delivery_path = wake.root().join("deliveries").join(format!("{id}.json"));
+        let unknown = fs::read(&delivery_path).unwrap();
+        let retry = call(&f, manual_request(&f, "manual-known-identity", "turn-1")).await;
+        assert_eq!(retry["result"]["structuredContent"], *result);
+        assert_eq!(fs::read(&delivery_path).unwrap(), unknown);
+        assert_eq!(fs::read(&queued).unwrap(), saved);
+        assert_eq!(
+            wake.events()
+                .unwrap()
+                .iter()
+                .filter(|event| event.wake_metadata().unwrap().is_some())
+                .count(),
+            2
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn manual_wake_unknown_journal_fences_new_identities_and_budget_is_shared() {
+        use crate::delegated::{
+            contracts::{ExecutionContractV1, RunId, ToolCallId},
+            journal::{DelegatedJournal, ToolCallRecordV1, ToolCallStatus, ToolMutationKind},
+        };
+        let f = fixture_with_manual_wake("alpha", true);
+        let wake = ready_manual_wake(&f);
+        let first = call(&f, manual_request(&f, "manual-initial", "turn-1")).await;
+        assert!(first.get("error").is_none(), "{first}");
+        let journal = DelegatedJournal::open(
+            f.control
+                .join(".catdesk/project-mcp-tasks/alpha/task-fixture/journal"),
+        )
+        .unwrap();
+        let run = RunId::new("task-fixture").unwrap();
+        let add = |id: &str, completed: bool| {
+            let call = ToolCallId::new(id).unwrap();
+            journal
+                .record_tool_call_requested(ToolCallRecordV1 {
+                    schema_version: 1,
+                    run_id: run.clone(),
+                    tool_call_id: call.clone(),
+                    tool_name: "read".into(),
+                    request_hash: "fixture".into(),
+                    arguments_hash: "fixture".into(),
+                    mutation_kind: ToolMutationKind::ReadOnly,
+                    status: ToolCallStatus::Requested,
+                    result_hash: None,
+                    outcome_summary: None,
+                })
+                .unwrap();
+            for phase in [
+                ToolCallStatus::PolicyAllowed,
+                ToolCallStatus::Executing,
+                if completed {
+                    ToolCallStatus::Completed
+                } else {
+                    ToolCallStatus::OutcomeUnknown
+                },
+            ] {
+                journal
+                    .transition_tool_call(&run, &call, phase, None, None)
+                    .unwrap();
+            }
+        };
+        let contract: ExecutionContractV1 = journal.load_contract(&run).unwrap();
+        for index in 1..contract.max_tool_calls {
+            add(&format!("budget-{index}"), true);
+        }
+        let queue_before = wake.events().unwrap();
+        assert_eq!(
+            call(&f, manual_request(&f, "over-budget", "new-turn")).await["error"]["message"],
+            "PROJECT_TASK_TOOL_BUDGET_EXCEEDED"
+        );
+        assert_eq!(wake.events().unwrap(), queue_before);
+        // A separate task with budget headroom still fences a new identity
+        // when its earlier call has an ambiguous journal outcome.
+        let g = fixture_with_manual_wake("beta", true);
+        let beta = ready_manual_wake(&g);
+        let initial = call(&g, manual_request(&g, "manual-initial", "turn-1")).await;
+        assert!(initial.get("error").is_none(), "{initial}");
+        let beta_journal = DelegatedJournal::open(
+            g.control
+                .join(".catdesk/project-mcp-tasks/beta/task-fixture/journal"),
+        )
+        .unwrap();
+        beta_journal
+            .record_tool_call_requested(ToolCallRecordV1 {
+                schema_version: 1,
+                run_id: run.clone(),
+                tool_call_id: ToolCallId::new("ambiguous-prior").unwrap(),
+                tool_name: "wake.manual_end_turn".into(),
+                request_hash: "fixture".into(),
+                arguments_hash: "fixture".into(),
+                mutation_kind: ToolMutationKind::Mutating,
+                status: ToolCallStatus::Requested,
+                result_hash: None,
+                outcome_summary: None,
+            })
+            .unwrap();
+        let before = beta.events().unwrap();
+        assert_eq!(
+            call(
+                &g,
+                manual_request(&g, "new-call-to-evade", "new-turn-to-evade")
+            )
+            .await["error"]["message"],
+            "PROJECT_TASK_RECOVERY_REQUIRED"
+        );
+        assert_eq!(beta.events().unwrap(), before);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -662,8 +1164,8 @@ mod tests {
     }
 
     async fn central_http_route_fixture(cached: bool) {
-        let alpha = fixture("alpha");
-        let mut beta = fixture("beta");
+        let alpha = fixture_with_manual_wake("alpha", true);
+        let mut beta = fixture_with_manual_wake("beta", true);
         let path = alpha.control.join(".catdesk/projects/projects.json");
         let mut registry: AutonomousProjectRegistryV1 =
             serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
@@ -710,11 +1212,20 @@ mod tests {
         crate::web_work::associate(&alpha.control, beta.pins.clone(), &assignment).unwrap();
         sent(&wake, &event);
         beta.control = alpha.control.clone();
-        let grant =
-            crate::web_work::execution_permission(&beta.control, beta.pins.clone(), false).unwrap();
+        let expected_key = fresh_fixture_key_path(&beta.control, "beta");
+        let grant = crate::web_work::execution_permission_with_manual_wake(
+            &beta.control,
+            beta.pins.clone(),
+            false,
+            true,
+        )
+        .unwrap();
+        beta.keys
+            .push(OwnedFixtureKey::retain(expected_key, &grant));
         beta.key =
             serde_json::from_slice(&fs::read(grant["executionKeyFile"].as_str().unwrap()).unwrap())
                 .unwrap();
+        let shared_wake = ready_manual_wake(&alpha);
 
         let mut app = crate::state::AppState::new_isolated_fixture(
             0,
@@ -784,6 +1295,20 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(wrong.status(), reqwest::StatusCode::UNAUTHORIZED);
+        let manual_unauthorized = client
+            .post(&url)
+            .json(&transport(manual_request(
+                &alpha,
+                "manual-no-auth",
+                "manual-turn",
+            )))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            manual_unauthorized.status(),
+            reqwest::StatusCode::UNAUTHORIZED
+        );
         assert!(
             !alpha
                 .control
@@ -865,6 +1390,40 @@ mod tests {
                     .contains("{ 1 }")
             );
         }
+        let wake_a = manual_request(&alpha, "manual-concurrent", "manual-turn");
+        let wake_b = manual_request(&beta, "manual-concurrent", "manual-turn");
+        let (wa, wb) = tokio::join!(rpc(wake_a.clone()), rpc(wake_b));
+        let mut events = std::collections::BTreeSet::new();
+        for (expected, response) in [("alpha", wa), ("beta", wb)] {
+            let value: Value = response.unwrap().json().await.unwrap();
+            assert!(value.get("error").is_none(), "{value}");
+            assert_eq!(value["result"]["structuredContent"]["projectId"], expected);
+            assert_eq!(
+                value["result"]["_meta"]["catdeskTaskLifecycle"]["isolatedWorktreeWriterClaimed"],
+                false
+            );
+            events.insert(
+                value["result"]["structuredContent"]["eventId"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned(),
+            );
+        }
+        assert_eq!(events.len(), 2);
+        let duplicate: Value = rpc(wake_a).await.unwrap().json().await.unwrap();
+        assert_eq!(
+            duplicate["error"]["message"],
+            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+        );
+        assert_eq!(
+            shared_wake
+                .events()
+                .unwrap()
+                .iter()
+                .filter(|event| event.wake_metadata().unwrap().is_some())
+                .count(),
+            2
+        );
         let held = crate::operator_facade::acquire_web_work_lease(&alpha.control, "alpha").unwrap();
         let (blocked, useful) = tokio::join!(
             rpc(request(
@@ -879,6 +1438,14 @@ mod tests {
                 "read",
                 json!({"path":"src/lib.rs"})
             ))
+        );
+        let blocked: Value = blocked.unwrap().json().await.unwrap();
+        let useful: Value = useful.unwrap().json().await.unwrap();
+        assert_eq!(blocked["error"]["message"], "WEB_ROLLOVER_PROJECT_BUSY");
+        assert!(useful.get("error").is_none(), "{useful}");
+        let (blocked, useful) = tokio::join!(
+            rpc(manual_request(&alpha, "held-manual", "manual-held-turn")),
+            rpc(manual_request(&beta, "useful-manual", "manual-next-turn"))
         );
         let blocked: Value = blocked.unwrap().json().await.unwrap();
         let useful: Value = useful.unwrap().json().await.unwrap();

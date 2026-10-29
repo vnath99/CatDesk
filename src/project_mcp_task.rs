@@ -435,6 +435,12 @@ struct WebExecutionGrant {
     source_event_id: String,
     assignment: crate::web_work_state::WorkTaskAssignment,
     key_sha256: String,
+    #[serde(default, skip_serializing_if = "manual_wake_disabled")]
+    allow_manual_wake: bool,
+}
+
+fn manual_wake_disabled(value: &bool) -> bool {
+    !value
 }
 
 /// Explicit local opt-in. This permission follows only C46-proved source
@@ -445,6 +451,19 @@ pub(crate) fn grant_web_execution(
     current: &catdesk_wake::protocol::Target,
     revoke: bool,
 ) -> Result<Value, String> {
+    grant_web_execution_with_manual_wake(project, record, current, revoke, false)
+}
+
+pub(crate) fn grant_web_execution_with_manual_wake(
+    project: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    current: &catdesk_wake::protocol::Target,
+    revoke: bool,
+    allow_manual_wake: bool,
+) -> Result<Value, String> {
+    if revoke && allow_manual_wake {
+        return Err("WEB_TASK_GRANT_ARGUMENTS_INVALID".into());
+    }
     let prepared = prepare_work_resume(project, record, current)?;
     let link = record
         .task_assignment
@@ -495,19 +514,22 @@ pub(crate) fn grant_web_execution(
         source_event_id: record.event_id.clone(),
         assignment: link.clone(),
         key_sha256: catdesk_wake::protocol::digest(&key),
+        allow_manual_wake,
     };
     exact_file(
         &directory.join("execution-grant.json"),
         &serde_json::to_vec(&grant).map_err(|_| "WEB_TASK_GRANT_INVALID")?,
     )?;
-    Ok(
-        json!({"status":"EXECUTION_GRANTED","projectId":project.project.project_id,
+    let mut result = json!({"status":"EXECUTION_GRANTED","projectId":project.project.project_id,
         "requestId":record.request_id,"sourceEventId":record.event_id,"taskId":link.task_id,
         "executionKeyFile":key_path,"executionKeyDisclosed":false,
         "assignmentSha256":link.assignment_sha256,"scopeSha256":link.scope_sha256,
         "targetGeneration":prepared["targetGeneration"],"targetSha256":prepared["targetSha256"],
-        "executionBudgetSeconds":180,"executionAuthorized":true,"workerStarted":false,"nativeSessionAction":"NONE"}),
-    )
+        "executionBudgetSeconds":180,"executionAuthorized":true,"workerStarted":false,"nativeSessionAction":"NONE"});
+    if allow_manual_wake {
+        result["manualWakeAllowed"] = json!(true);
+    }
+    Ok(result)
 }
 
 fn execution_key_path(
@@ -565,7 +587,7 @@ pub(crate) fn granted_handoff_context(
         project, link, false,
     )?)?)
     .map_err(|_| "WEB_TASK_GRANT_INVALID")?;
-    authorized_web_assignment(project, record, &key)?;
+    let (_, allow_manual_wake) = authorized_web_grant(project, record, &key)?;
     let prepared = prepare_work_resume(project, record, current)?;
     let journal_root = directory.join("journal");
     let (calls, proposals, applications) = if journal_root
@@ -616,6 +638,11 @@ pub(crate) fn granted_handoff_context(
             "callId":application.tool_call_id,"status":application.status,"pathsChanged":application.actual_paths_changed})).collect::<Vec<_>>(),
         "completedCallReplayAllowed":false,"unknownCallReplayAllowed":false,"nativeSessionAction":"NONE"});
     context["cachedSchemaTransport"] = crate::web_task_dispatch::cached_transport_metadata();
+    if allow_manual_wake {
+        context["manualWake"] = json!({"tool":"wake.manual_end_turn", "allowed":true,
+            "arguments":["sourceTurnId","priority","ttlSeconds"], "maximumTtlSeconds":catdesk_wake::protocol::MAX_WAKE_TTL_SECONDS,
+            "budget":"SHARED_ASSIGNMENT_MAX_TOOL_CALLS", "fixedServerMessage":true, "queueOnly":true});
+    }
     if let Some(report) = &record.reported_status {
         // Snapshot metadata only; it cannot replace execution evidence, scope or
         // grant checks. Omit the field for legacy records to retain their shape.
@@ -640,6 +667,26 @@ pub(crate) fn authorized_web_assignment(
     record: &crate::web_work_state::WorkRecord,
     key: &str,
 ) -> Result<PathBuf, String> {
+    authorized_web_grant(project, record, key).map(|(archive, _)| archive)
+}
+
+pub(crate) fn authorized_manual_wake_assignment(
+    project: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    key: &str,
+) -> Result<PathBuf, String> {
+    let (archive, allowed) = authorized_web_grant(project, record, key)?;
+    if !allowed {
+        return Err("WEB_TASK_MANUAL_WAKE_NOT_GRANTED".into());
+    }
+    Ok(archive)
+}
+
+fn authorized_web_grant(
+    project: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    key: &str,
+) -> Result<(PathBuf, bool), String> {
     if !valid_execution_key(key) {
         return Err("WEB_TASK_GRANT_REQUIRED".into());
     }
@@ -666,6 +713,7 @@ pub(crate) fn authorized_web_assignment(
         source_event_id: record.event_id.clone(),
         assignment: link.clone(),
         key_sha256: catdesk_wake::protocol::digest(key),
+        allow_manual_wake: grant.allow_manual_wake,
     };
     // Compare fixed-size digests without exposing the key in errors or status.
     let key_matches = grant
@@ -692,7 +740,187 @@ pub(crate) fn authorized_web_assignment(
     if record.phase != "OPEN" || digest != link.assignment_sha256 {
         return Err("WEB_TASK_GRANT_SCOPE_MISMATCH".into());
     }
-    Ok(archive)
+    Ok((archive, grant.allow_manual_wake))
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ManualWakeRequest {
+    pub(crate) source_turn_id: String,
+    pub(crate) priority: u8,
+    pub(crate) ttl_seconds: u64,
+}
+
+impl ManualWakeRequest {
+    pub(crate) fn parse(arguments: Value) -> Result<Self, String> {
+        let request: Self = serde_json::from_value(arguments)
+            .map_err(|_| "WEB_TASK_MANUAL_WAKE_ARGUMENTS_INVALID")?;
+        if request.source_turn_id.len() > 128
+            || !catdesk_wake::protocol::valid_id(&request.source_turn_id)
+            || request.ttl_seconds == 0
+            || request.ttl_seconds > catdesk_wake::protocol::MAX_WAKE_TTL_SECONDS
+        {
+            return Err("WEB_TASK_MANUAL_WAKE_ARGUMENTS_INVALID".into());
+        }
+        Ok(request)
+    }
+}
+
+/// Called with the existing project lease and registry admission retained.
+/// It shares the assignment journal/budget, never the native/worktree writer.
+pub(crate) fn journal_manual_wake(
+    project: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    key: &str,
+    call_id: &str,
+    request: &ManualWakeRequest,
+    expected: &catdesk_wake::protocol::Target,
+    publish: impl FnOnce() -> Result<catdesk_wake::protocol::Event, String>,
+) -> Result<Value, String> {
+    use crate::delegated::journal::{ToolCallRecordV1, ToolMutationKind};
+    let archive = authorized_manual_wake_assignment(project, record, key)?;
+    let inspected = inspect_assignment(project, &archive, 180)?;
+    check_record_assignment(project, &inspected, record)?;
+    let tool_call_id = ToolCallId::new(call_id).map_err(|_| "PROJECT_TASK_CALL_INVALID")?;
+    let directory = task_directory(project, &inspected.contract.task_id, false)?;
+    let journal_root = directory.join("journal");
+    if !journal_root
+        .try_exists()
+        .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?
+    {
+        fs::create_dir(&journal_root).map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
+    }
+    plain_directory(&journal_root)?;
+    let existing = fs::read_dir(&journal_root)
+        .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?
+        .next()
+        .is_some();
+    let journal =
+        DelegatedJournal::open(&journal_root).map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
+    let run =
+        RunId::new(&inspected.contract.task_id).map_err(|_| "PROJECT_TASK_CONTRACT_INVALID")?;
+    if existing {
+        if journal
+            .load_contract(&run)
+            .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?
+            != inspected.contract
+        {
+            return Err("PROJECT_TASK_CONTRACT_CHANGED".into());
+        }
+    } else {
+        journal
+            .create_run(&inspected.contract)
+            .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
+    }
+    let calls = journal
+        .load_tool_calls(&run)
+        .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
+    let arguments_hash =
+        stable_text_hash(&serde_json::to_string(request).map_err(|_| "PROJECT_TASK_CALL_INVALID")?);
+    if let Some(prior) = calls.get(tool_call_id.as_str()) {
+        if prior.tool_name != "wake.manual_end_turn" || prior.arguments_hash != arguments_hash {
+            return Err("PROJECT_TASK_CALL_ID_CONFLICT".into());
+        }
+        return Err(if prior.status == ToolCallStatus::Completed {
+            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+        } else {
+            "PROJECT_TASK_CALL_RECORDED_NO_REPLAY"
+        }
+        .into());
+    }
+    // A new call/turn identity cannot route around an ambiguous earlier effect.
+    if calls.values().any(|call| {
+        !matches!(
+            call.status,
+            ToolCallStatus::Completed | ToolCallStatus::Failed
+        )
+    }) {
+        return Err("PROJECT_TASK_RECOVERY_REQUIRED".into());
+    }
+    if calls.len() >= inspected.contract.max_tool_calls as usize {
+        return Err("PROJECT_TASK_TOOL_BUDGET_EXCEEDED".into());
+    }
+    journal
+        .record_tool_call_requested(ToolCallRecordV1 {
+            schema_version: 1,
+            run_id: run.clone(),
+            tool_call_id: tool_call_id.clone(),
+            tool_name: "wake.manual_end_turn".into(),
+            request_hash: arguments_hash.clone(),
+            arguments_hash,
+            mutation_kind: ToolMutationKind::Mutating,
+            status: ToolCallStatus::Requested,
+            result_hash: None,
+            outcome_summary: None,
+        })
+        .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
+    for phase in [ToolCallStatus::PolicyAllowed, ToolCallStatus::Executing] {
+        journal
+            .transition_tool_call(&run, &tool_call_id, phase, None, None)
+            .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
+    }
+    let event = match publish() {
+        Ok(event) => event,
+        Err(reason) => {
+            // These failures are proved before a queue write. Any unclassified
+            // I/O/atomic-write outcome keeps the task's existing unknown fence.
+            let phase = if matches!(
+                reason.as_str(),
+                "TARGET_EXPECTATION_MISMATCH"
+                    | "CONFIG_PROJECT_RETIRED"
+                    | "QUEUE_WAKE_METADATA_INVALID"
+                    | "QUEUE_EVENT_INVALID"
+                    | "QUEUE_EVENT_ID_CONFLICT"
+                    | "QUEUE_CAPACITY_EXCEEDED"
+                    | "WAKE_PROJECT_TARGET_CHANGED"
+                    | "WAKE_PROJECT_TARGET_MISMATCH"
+                    | "WAKE_HISTORICAL_EVENT_RETAINED"
+                    | "WAKE_ACTIVATION_INVALID"
+            ) {
+                ToolCallStatus::Failed
+            } else {
+                ToolCallStatus::OutcomeUnknown
+            };
+            journal
+                .transition_tool_call(&run, &tool_call_id, phase, None, Some(reason.clone()))
+                .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
+            return Err(reason);
+        }
+    };
+    event.validate()?;
+    let metadata = event
+        .wake_metadata()?
+        .ok_or("QUEUE_WAKE_METADATA_INVALID")?;
+    if event.project_id != project.project.project_id
+        || event.target_generation != expected.generation
+        || metadata.purpose != catdesk_wake::protocol::WakePurpose::ManualEndTurn
+        || metadata.source_event_id != record.event_id
+        || metadata.source_turn_id != request.source_turn_id
+        || metadata.priority != request.priority
+        || metadata.expires_utc - event.created_utc != request.ttl_seconds
+    {
+        return Err("WEB_TASK_MANUAL_WAKE_EVENT_MISMATCH".into());
+    }
+    let result = json!({"status":"WAKE_INTENT_RECORDED", "projectId":event.project_id,
+        "eventId":event.event_id, "createdUtc":event.created_utc,
+        "targetGeneration":event.target_generation, "sourceTurnId":request.source_turn_id,
+        "expiresUtc":metadata.expires_utc,
+        "deliveryProved":false, "taskCompletionVerified":false,
+        "nativeSessionAction":"NONE", "browserStarted":false, "wakeHostStarted":false});
+    let result_hash = catdesk_wake::protocol::digest(&result.to_string());
+    journal
+        .transition_tool_call(
+            &run,
+            &tool_call_id,
+            ToolCallStatus::Completed,
+            Some(result_hash),
+            Some(format!(
+                "manual Wake intent {} recorded; delivery unverified",
+                event.event_id
+            )),
+        )
+        .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
+    Ok(result)
 }
 
 fn check_linked_assignment(

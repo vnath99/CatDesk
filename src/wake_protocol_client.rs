@@ -275,6 +275,31 @@ pub(crate) fn publish_registered_scoped_review(
     )
 }
 
+/// The explicit task grant authorizes only this fixed continuation template.
+/// Queue admission neither starts Wake/browser nor proves delivery or work.
+pub(crate) fn publish_registered_manual_wake(
+    control_workspace: &Path,
+    project: &str,
+    request_id: &str,
+    task_id: &str,
+    expected: &Target,
+    intent: catdesk_wake::store::WakeIntent<'_>,
+) -> Result<Event, String> {
+    if intent.purpose != catdesk_wake::protocol::WakePurpose::ManualEndTurn
+        || !catdesk_wake::protocol::valid_id(request_id)
+        || !catdesk_wake::protocol::valid_id(task_id)
+    {
+        return Err("WEB_TASK_MANUAL_WAKE_ARGUMENTS_INVALID".into());
+    }
+    preflight_registered_invitation(control_workspace, project, expected)?;
+    let message = format!(
+        "CatDesk manual continuation. Project: {project} Request: {request_id} Task: {task_id} Source event: {} Source turn: {} Continue this project's unfinished authorized task using its existing handoff and current grants. Preserve task ownership and reconcile unknown outcomes before further execution.",
+        intent.source_event_id, intent.source_turn_id
+    );
+    let store = Store::open(&wake_root_for_workspace(control_workspace)?)?;
+    store.produce_expected_wake(project, &message, expected, intent)
+}
+
 fn publication_target(
     store: &Store,
     activation: &Activation,

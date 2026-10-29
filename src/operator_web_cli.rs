@@ -124,6 +124,7 @@ pub(crate) enum WebAction {
         project_id: String,
         input_file: PathBuf,
         revoke: bool,
+        allow_manual_wake: bool,
     },
     ContextConfigure {
         project_id: String,
@@ -209,6 +210,18 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         .ok_or("WEB_USAGE: missing target action")?;
     let mut options = BTreeMap::new();
     let tail = &args[4..];
+    let manual_flags = tail
+        .iter()
+        .filter(|value| value.as_str() == "--allow-manual-wake")
+        .count();
+    if manual_flags > 1 || (manual_flags == 1 && (group != "work" || verb != "execution-grant")) {
+        return Err("WEB_USAGE: manual wake permission is execution-grant only".into());
+    }
+    let allow_manual_wake = manual_flags == 1;
+    let tail: Vec<_> = tail
+        .iter()
+        .filter(|value| value.as_str() != "--allow-manual-wake")
+        .collect();
     if !tail.len().is_multiple_of(2) {
         return Err("WEB_USAGE: each option requires one value".into());
     }
@@ -302,6 +315,7 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                     project_id: project_id.into(),
                     input_file: input_file.into(),
                     revoke: verb == "execution-revoke",
+                    allow_manual_wake,
                 })
             } else if let Some(assignment_file) = assignment_file {
                 Ok(WebAction::WorkAssociate {
@@ -1373,11 +1387,17 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             project_id,
             input_file,
             revoke,
-        } => crate::web_work::execution_permission(
-            &workspace,
-            read_work_input(&input_file, &project_id)?,
-            revoke,
-        ),
+            allow_manual_wake,
+        } => {
+            let input = read_work_input(&input_file, &project_id)?;
+            if allow_manual_wake {
+                crate::web_work::execution_permission_with_manual_wake(
+                    &workspace, input, revoke, true,
+                )
+            } else {
+                crate::web_work::execution_permission(&workspace, input, revoke)
+            }
+        }
         WebAction::ContextConfigure {
             project_id,
             input_file,
@@ -2140,7 +2160,8 @@ mod tests {
                 WebAction::WorkExecutionPermission {
                     project_id: "alpha".into(),
                     input_file: "pins.json".into(),
-                    revoke
+                    revoke,
+                    allow_manual_wake: false,
                 }
             );
             for option in [
@@ -2154,6 +2175,40 @@ mod tests {
                 assert!(parse(&invalid).is_err());
             }
         }
+    }
+
+    #[test]
+    fn manual_wake_permission_requires_explicit_local_grant_flag() {
+        let base = args(&[
+            "operator",
+            "web",
+            "work",
+            "execution-grant",
+            "--project-id",
+            "alpha",
+            "--input-file",
+            "pins.json",
+        ]);
+        let mut permitted = base.clone();
+        permitted.push("--allow-manual-wake".into());
+        assert!(matches!(
+            parse(&permitted),
+            Ok(WebAction::WorkExecutionPermission {
+                allow_manual_wake: true,
+                revoke: false,
+                ..
+            })
+        ));
+        let mut duplicate = permitted.clone();
+        duplicate.push("--allow-manual-wake".into());
+        assert!(parse(&duplicate).is_err());
+        let mut refused = permitted.clone();
+        refused[3] = "execution-revoke".into();
+        assert!(parse(&refused).is_err());
+        refused[3] = "request".into();
+        assert!(parse(&refused).is_err());
+        permitted.push("false".into());
+        assert!(parse(&permitted).is_err());
     }
 
     #[test]
