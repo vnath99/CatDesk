@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('install', 'start', 'status', 'diagnose', 'recover', 'stop', 'autostart', 'wake')]
+    [ValidateSet('install', 'start', 'status', 'diagnose', 'doctor', 'recover', 'stop', 'autostart', 'wake')]
     [string]$Command,
     [Parameter(Position = 1)]
     [string]$AutostartAction = '',
@@ -13,6 +13,10 @@ param(
     [string]$BuildFingerprintPath = '',
     [int]$ReadyTimeoutSeconds = 180,
     [switch]$BackendOnly,
+    [string]$ObservationFile = '',
+    [string]$ProjectWorkspace = '',
+    [string]$WakeRoot = '',
+    [switch]$Human,
     [hashtable]$TestSeams = @{}
 )
 
@@ -25,7 +29,8 @@ $ErrorActionPreference = 'Stop'
 # facade-relative defaults only after parameter binding has completed.
 if ([string]::IsNullOrWhiteSpace($Workspace)) { $Workspace = $PSScriptRoot }
 if ([string]::IsNullOrWhiteSpace($BuildFingerprintPath)) {
-    $BuildFingerprintPath = Join-Path $PSScriptRoot 'target\release\catdesk.exe.sha256'
+    if ($Command -eq 'doctor') { $BuildFingerprintPath = Join-Path $Workspace 'target\release\catdesk.exe.sha256' }
+    else { $BuildFingerprintPath = Join-Path $PSScriptRoot 'target\release\catdesk.exe.sha256' }
 }
 $script:LifecycleSeams = $TestSeams
 $engineExpectedPath = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'scripts\start-catdesk-stack.ps1'))
@@ -951,12 +956,18 @@ function Invoke-CatDeskOnlyStop {
 
 try {
     if ($BackendOnly -and $Command -notin @('start', 'recover')) { throw 'BackendOnly is limited to start and recover' }
+    if ($Command -ne 'doctor' -and ($ObservationFile -or $ProjectWorkspace -or $WakeRoot -or $Human)) { throw 'doctor options require doctor' }
     switch ($Command) {
         'install' { Invoke-InstallPreparation }
         'start' { Invoke-CanonicalRecovery -RequestedCommand 'start' }
         'recover' { Invoke-CanonicalRecovery -RequestedCommand 'recover' }
         'status' { Get-NonMutatingStatus }
         'diagnose' { Invoke-LayeredDiagnosis }
+        'doctor' {
+            $doctorPath = Resolve-TrustedBootstrapHelperPath -Path (Join-Path $PSScriptRoot 'scripts/catdesk-doctor.ps1') -FailureMessage 'doctor helper unavailable'
+            . $doctorPath
+            Invoke-CatDeskDoctor -ObservationFile $ObservationFile -ProjectWorkspace $ProjectWorkspace -WakeRoot $WakeRoot -Human:$Human
+        }
         'stop' { Invoke-CatDeskOnlyStop }
         'autostart' { Invoke-AutostartLifecycle }
         'wake' { Invoke-WakePolicyLifecycle }

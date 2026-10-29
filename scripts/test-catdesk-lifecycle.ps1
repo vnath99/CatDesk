@@ -76,7 +76,7 @@ $realCanonicalRoot = $null
 
 try {
     Require ($source -match [regex]::Escape('$PSScriptRoot')) 'facade resolves all internal paths from its own root'
-    Require ($source -match "ValidateSet\('install', 'start', 'status', 'diagnose', 'recover', 'stop', 'autostart', 'wake'\)") 'exact public command vocabulary is present'
+    Require ($source -match "ValidateSet\('install', 'start', 'status', 'diagnose', 'doctor', 'recover', 'stop', 'autostart', 'wake'\)") 'exact public command vocabulary is present'
     Require ($source -notmatch '(?i)provision-catdesk-release|cargo\s+(build|run|test)|tunnel-client.*(stop|remove)|runtimes\s+(stop|rm)') 'facade contains no compile/provision or tunnel stop/remove route'
     Require ($source -notmatch 'Stop-Process\s+-Id\s+\$processId') 'public stop never reacquires destructive authority by PID alone'
     Require ($source -match 'Stop-CatDeskListenerProcessForRecovery\s+-LocalMcp\s+\$endpoint\s+-Canonical\s+\$identity\s+-Candidate\s+\$candidate') 'public stop reuses the exact pinned listener process-instance mutation boundary'
