@@ -169,6 +169,11 @@ pub(crate) enum QueueAction {
         expected_thread_id: String,
     },
     Dispatch,
+    DispatchTask {
+        scope: CodexScope,
+        task_id: String,
+        expected_binding_sha256: String,
+    },
     Pause {
         scope: CodexScope,
         task_id: String,
@@ -181,7 +186,7 @@ pub(crate) enum QueueAction {
 
 pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
     let verb = args.get(3).map(String::as_str).ok_or_else(|| {
-        "CODEX_QUEUE_USAGE: expected preflight, add, status, receipt, review, verify, review-package, review-invite-prepare, advisory-review, operator-review, operator-review-receipt, review-disclosure-grant, review-disclosure-renew, review-disclosure-revoke, profile-bind, workspace-bind-preflight, dispatch, pause, or resume"
+        "CODEX_QUEUE_USAGE: expected preflight, add, status, receipt, review, verify, review-package, review-invite-prepare, advisory-review, operator-review, operator-review-receipt, review-disclosure-grant, review-disclosure-renew, review-disclosure-revoke, profile-bind, workspace-bind-preflight, dispatch, dispatch-task, pause, or resume"
             .to_string()
     })?;
     if !matches!(
@@ -203,6 +208,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
             | "profile-bind"
             | "workspace-bind-preflight"
             | "dispatch"
+            | "dispatch-task"
             | "pause"
             | "resume"
     ) {
@@ -246,6 +252,39 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
             return Err("CODEX_QUEUE_USAGE: an option is empty, oversized, or repeated".into());
         }
         index += 2;
+    }
+    if verb == "dispatch-task" {
+        let project_id = values
+            .remove("--project-id")
+            .ok_or("CODEX_QUEUE_USAGE: --project-id is required")?;
+        let workspace = PathBuf::from(
+            values
+                .remove("--workspace")
+                .ok_or("CODEX_QUEUE_USAGE: --workspace is required")?,
+        );
+        let task_id = values
+            .remove("--task-id")
+            .ok_or("CODEX_QUEUE_USAGE: --task-id is required")?;
+        let expected_binding_sha256 = values
+            .remove("--expected-binding-sha256")
+            .ok_or("CODEX_QUEUE_USAGE: --expected-binding-sha256 is required")?;
+        valid_slug(&project_id)?;
+        valid_slug(&task_id)?;
+        if !workspace.is_absolute()
+            || !valid_sha256_hex(&expected_binding_sha256)
+            || expected_binding_sha256 != expected_binding_sha256.to_ascii_lowercase()
+            || !values.is_empty()
+        {
+            return Err("CODEX_QUEUE_USAGE: exact dispatch requires absolute workspace and lowercase binding SHA-256 only".into());
+        }
+        return Ok(QueueAction::DispatchTask {
+            scope: CodexScope {
+                project_id,
+                workspace,
+            },
+            task_id,
+            expected_binding_sha256,
+        });
     }
     if matches!(verb, "status" | "dispatch") {
         if !values.is_empty() {
@@ -2518,7 +2557,19 @@ pub(crate) async fn execute_action(
                 json!({ "action":if pause { "codex_queue_pause" } else { "codex_queue_resume" }, "job":job.summary() }),
             )
         }
-        QueueAction::Dispatch => dispatch_one(&control.project).await,
+        QueueAction::Dispatch => dispatch_one(&control.project, &control.control_workspace).await,
+        QueueAction::DispatchTask {
+            scope,
+            task_id,
+            expected_binding_sha256,
+        } => {
+            dispatch_selected(
+                &control.project,
+                &control.control_workspace,
+                Some((&scope, &task_id, &expected_binding_sha256)),
+            )
+            .await
+        }
     }
 }
 
@@ -3383,8 +3434,29 @@ fn scheduler(control_workspace: &Path) -> Result<AutonomousProjectRegistryStoreV
         .map_err(|_| "CODEX_QUEUE: control registry is unavailable".to_string())
 }
 
+type DispatchSelection<'a> = Option<(&'a CodexScope, &'a str, &'a str)>;
+
+fn exact_dispatch_binding(control: &Path, selected: DispatchSelection<'_>) -> Result<(), String> {
+    if let Some((scope, _, expected)) = selected {
+        let project = registered_project(control, scope)?;
+        if project_binding_sha256(&project)? != expected {
+            return Err("CODEX_QUEUE_SCOPE: exact dispatch binding changed".into());
+        }
+    }
+    Ok(())
+}
+
 fn claim_one(control_workspace: &Path, queue: &QueueStore) -> Result<Option<QueueJob>, String> {
+    claim_selected(control_workspace, queue, None)
+}
+
+fn claim_selected(
+    control_workspace: &Path,
+    queue: &QueueStore,
+    selected: DispatchSelection<'_>,
+) -> Result<Option<QueueJob>, String> {
     let _lock = queue.lock()?;
+    exact_dispatch_binding(control_workspace, selected)?;
     let read_only_scheduler = scheduler(control_workspace)?;
     let registry = read_only_scheduler
         .load_registry()
@@ -3398,6 +3470,11 @@ fn claim_one(control_workspace: &Path, queue: &QueueStore) -> Result<Option<Queu
     }
     let mut ready = BTreeMap::<String, QueueJob>::new();
     for mut job in queue.jobs()? {
+        if let Some((scope, task_id, _)) = selected
+            && (job.binding.project_id != scope.project_id || job.task_id != task_id)
+        {
+            continue;
+        }
         if job.state != QueueState::Ready {
             continue;
         }
@@ -3409,6 +3486,9 @@ fn claim_one(control_workspace: &Path, queue: &QueueStore) -> Result<Option<Queu
             // No launch occurred. Leave the original authority snapshot and
             // prompt intact for a human to reconcile; do not migrate it to a
             // new root, target, or thread.
+            if selected.is_some() {
+                return Err("CODEX_QUEUE_SCOPE: selected task binding changed".into());
+            }
             job.state = QueueState::Attention;
             queue.save_job(&job)?;
             continue;
@@ -3467,6 +3547,7 @@ fn claim_one(control_workspace: &Path, queue: &QueueStore) -> Result<Option<Queu
         || lease.workspace != job.binding.workspace
         || lease.owner_id != owner
         || lease.provider != ScheduledProviderV1::Codex
+        || exact_dispatch_binding(control_workspace, selected).is_err()
         || !registered_project(control_workspace, &job.binding.scope())
             .as_ref()
             .is_ok_and(|project| job.binding.matches(project))
@@ -3474,8 +3555,10 @@ fn claim_one(control_workspace: &Path, queue: &QueueStore) -> Result<Option<Queu
         scheduler.release_workspace_lease(&lease).map_err(|_| {
             "CODEX_QUEUE: drifted scheduler grant could not be released".to_string()
         })?;
-        job.state = QueueState::Attention;
-        queue.save_job(&job)?;
+        if selected.is_none() {
+            job.state = QueueState::Attention;
+            queue.save_job(&job)?;
+        }
         return Err("CODEX_QUEUE_SCOPE: selected registry binding changed during claim".into());
     }
     job.state = QueueState::Claimed;
@@ -5341,19 +5424,36 @@ fn complete_attempt(
     }))
 }
 
-async fn dispatch_one(control: &AutonomousProjectV1) -> Result<Value, String> {
-    let control_workspace = &control.workspace;
+async fn dispatch_one(
+    control: &AutonomousProjectV1,
+    control_workspace: &Path,
+) -> Result<Value, String> {
+    dispatch_selected(control, control_workspace, None).await
+}
+
+async fn dispatch_selected(
+    control: &AutonomousProjectV1,
+    control_workspace: &Path,
+    selected: DispatchSelection<'_>,
+) -> Result<Value, String> {
+    exact_dispatch_binding(control_workspace, selected)?;
     let queue = QueueStore::open_for_operator(control, control_workspace)?;
-    if !queue
-        .jobs()?
-        .iter()
-        .any(|job| job.state == QueueState::Ready)
-    {
+    if !queue.jobs()?.iter().any(|job| {
+        job.state == QueueState::Ready
+            && selected.is_none_or(|(scope, task, _)| {
+                job.binding.project_id == scope.project_id && job.task_id == task
+            })
+    }) {
         return Ok(json!({ "action":"codex_queue_dispatch", "status":"no_ready_tasks" }));
     }
     let turn_limit = turn_timeout()?;
     let cli = preflight_native_cli(control_workspace).await?;
-    let Some(job) = claim_one(control_workspace, &queue)? else {
+    let claimed = if selected.is_some() {
+        claim_selected(control_workspace, &queue, selected)?
+    } else {
+        claim_one(control_workspace, &queue)?
+    };
+    let Some(job) = claimed else {
         return Ok(json!({ "action":"codex_queue_dispatch", "status":"no_ready_tasks" }));
     };
     let turn = run_queued_turn(&job, control_workspace, &cli, turn_limit)
@@ -11021,6 +11121,126 @@ mod tests {
             .expect("fixture scheduler")
             .release_workspace_lease(&claimed.attempt.expect("exact attempt").lease)
             .expect("release fixture lease");
+        cleanup(fixture);
+    }
+
+    #[test]
+    fn exact_dispatch_task_parser_requires_all_identity_pins_and_no_launch_overrides() {
+        let root = std::env::temp_dir().to_string_lossy().into_owned();
+        let hash = "a".repeat(64);
+        let base = [
+            "operator",
+            "codex",
+            "queue",
+            "dispatch-task",
+            "--project-id",
+            "alpha",
+            "--workspace",
+            &root,
+            "--task-id",
+            "job_alpha",
+            "--expected-binding-sha256",
+            &hash,
+        ];
+        assert!(matches!(parse(&base), Ok(QueueAction::DispatchTask { .. })));
+        for count in [4, 6, 8, 10] {
+            assert!(parse(&base[..count]).is_err());
+        }
+        for (flag, value) in [
+            ("--model", "gpt-6.1-sol"),
+            ("--task", "replacement"),
+            ("--effort", "medium"),
+            ("--windows-sandbox", "mxc"),
+        ] {
+            let mut args = base.to_vec();
+            args.extend([flag, value]);
+            assert!(parse(&args).is_err());
+        }
+        let mut bad = base;
+        bad[11] = "not-a-hash";
+        assert!(parse(&bad).is_err());
+    }
+
+    #[test]
+    fn exact_dispatch_task_claim_is_cold_durable_and_never_mutates_sibling_jobs() {
+        let (fixture, projects, queue) = three_project_fixture(2);
+        let control = &projects[0].workspace;
+        for (project, id) in [
+            (&projects[1], "alpha_first"),
+            (&projects[1], "alpha_second"),
+            (&projects[2], "beta_stale"),
+        ] {
+            let mut job =
+                QueueJob::new(id.into(), project, "fixture task".into(), None, None).unwrap();
+            if id == "beta_stale" {
+                job.binding.thread_id = Uuid::new_v4().to_string();
+            }
+            queue.save_job(&job).unwrap();
+        }
+        let foreign = fs::read(queue.job_path("beta", "beta_stale")).unwrap();
+        let earlier = fs::read(queue.job_path("alpha", "alpha_first")).unwrap();
+        let second = fs::read(queue.job_path("alpha", "alpha_second")).unwrap();
+        let scope = CodexScope {
+            project_id: "alpha".into(),
+            workspace: projects[1].workspace.clone(),
+        };
+        let hash = project_binding_sha256(&projects[1]).unwrap();
+        // No fallback to the native workspace or ambient current directory.
+        assert!(
+            claim_selected(
+                &projects[1].workspace,
+                &queue,
+                Some((&scope, "alpha_second", &hash))
+            )
+            .is_err()
+        );
+        assert!(
+            claim_selected(
+                control,
+                &queue,
+                Some((&scope, "alpha_second", &"a".repeat(64)))
+            )
+            .is_err()
+        );
+        assert_eq!(
+            fs::read(queue.job_path("alpha", "alpha_second")).unwrap(),
+            second
+        );
+        assert!(
+            claim_selected(control, &queue, Some((&scope, "missing", &hash)))
+                .unwrap()
+                .is_none()
+        );
+        let claimed = claim_selected(control, &queue, Some((&scope, "alpha_second", &hash)))
+            .unwrap()
+            .unwrap();
+        assert_eq!(claimed.task_id, "alpha_second");
+        assert_eq!(claimed.binding.project_id, "alpha");
+        assert_eq!(
+            fs::read(queue.job_path("beta", "beta_stale")).unwrap(),
+            foreign
+        );
+        assert_eq!(
+            fs::read(queue.job_path("alpha", "alpha_first")).unwrap(),
+            earlier
+        );
+        assert!(
+            claim_selected(control, &queue, Some((&scope, "alpha_second", &hash)))
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            queue
+                .load_job("alpha", "alpha_second")
+                .unwrap()
+                .unwrap()
+                .state,
+            QueueState::Claimed
+        );
+        scheduler(control)
+            .unwrap()
+            .release_workspace_lease(&claimed.attempt.unwrap().lease)
+            .unwrap();
         cleanup(fixture);
     }
 
