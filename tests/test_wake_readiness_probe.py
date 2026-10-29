@@ -168,6 +168,71 @@ class ReadinessProbeTests(unittest.TestCase):
         self.addCleanup(cdp.loop.close)
         return cdp, tabs
 
+    def test_loading_registered_tab_is_reselected_without_home_navigation(self):
+        target = "https://chatgpt.com/c/readiness-fixture"
+        home = "https://chatgpt.com/"
+        clock = [0]
+        selected_url = [home]
+        cdp = mock.Mock()
+        cdp.get_current_url.side_effect = lambda: selected_url[0]
+        cdp.is_element_visible.side_effect = lambda selector: selector == "#prompt-textarea"
+        # An unknown Home composer must remain untouched. Selecting a separate
+        # verified existing tab does not require reading or changing that draft.
+        cdp.evaluate.return_value = False
+        async def document_url():
+            return target if clock[0] >= 3 else home
+        tab = types.SimpleNamespace(target=types.SimpleNamespace(url=target), get_current_url=document_url)
+        cdp.get_tabs.return_value = [tab]
+        cdp.loop = asyncio.new_event_loop()
+        self.addCleanup(cdp.loop.close)
+        cdp.switch_to_tab.side_effect = lambda _: selected_url.__setitem__(0, target)
+        browser = mock.MagicMock()
+        browser.__enter__.return_value = browser
+        browser.cdp = cdp
+        def sleep(seconds):
+            clock[0] += seconds
+        with tempfile.TemporaryDirectory() as profile:
+            argv = ["probe", "--profile", profile, "--conversation-url", target, "--seconds", "5"]
+            output = io.StringIO()
+            with mock.patch.object(sys, "argv", argv), \
+                    mock.patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=lambda **kwargs: browser)}), \
+                    mock.patch.object(self.probe.time, "monotonic", side_effect=lambda: clock[0]), \
+                    mock.patch.object(self.probe.time, "sleep", side_effect=sleep), \
+                    contextlib.redirect_stdout(output):
+                self.assertEqual(self.probe.main(), 0)
+        self.assertIn("PROBE:TARGET_TAB_DRIFT\n", output.getvalue())
+        self.assertIn("PROBE:TARGET_TAB_EXACT\n", output.getvalue())
+        self.assertTrue(output.getvalue().endswith("PROBE:FINAL:EXACT_READY_IDLE\n"))
+        self.assertEqual(clock[0], 5)
+        cdp.switch_to_tab.assert_called_once_with(tab)
+        cdp.get.assert_not_called()
+
+    def test_tab_reinspection_is_bounded_when_target_remains_missing(self):
+        target = "https://chatgpt.com/c/readiness-fixture"
+        clock = [0]
+        cdp = mock.Mock()
+        cdp.get_current_url.return_value = "https://chatgpt.com/"
+        cdp.get_tabs.return_value = []
+        cdp.is_element_visible.return_value = False
+        cdp.evaluate.return_value = False
+        browser = mock.MagicMock()
+        browser.__enter__.return_value = browser
+        browser.cdp = cdp
+        def sleep(seconds):
+            clock[0] += seconds
+        with tempfile.TemporaryDirectory() as profile:
+            argv = ["probe", "--profile", profile, "--conversation-url", target, "--seconds", "30"]
+            with mock.patch.object(sys, "argv", argv), \
+                    mock.patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=lambda **kwargs: browser)}), \
+                    mock.patch.object(self.probe.time, "monotonic", side_effect=lambda: clock[0]), \
+                    mock.patch.object(self.probe.time, "sleep", side_effect=sleep), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(self.probe.main(), 0)
+        self.assertEqual(cdp.get_tabs.call_count, 4)
+        self.assertEqual(clock[0], 30)
+        cdp.switch_to_tab.assert_not_called()
+        cdp.get.assert_not_called()
+
     def test_unique_tab_requires_independent_metadata_and_document_agreement(self):
         target = "https://chatgpt.com/c/readiness-fixture"
         home = "https://chatgpt.com/"

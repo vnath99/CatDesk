@@ -156,8 +156,20 @@ def main():
         deadline = time.monotonic() + args.seconds
         recover_after = time.monotonic() + min(5.0, args.seconds / 2)
         recovery_attempted = False
+        # A returned tab can still be loading when the initial independent
+        # document check runs. Reinspect existing tabs within the same budget;
+        # select only the same unique, independently exact registered target.
+        selection_attempts = 1
+        select_after = recover_after
         while time.monotonic() < deadline:
             state = classify(cdp, url)
+            if (args.profile is not None and state in {"HOME", "TARGET_DRIFT"}
+                    and selection_attempts < 4 and time.monotonic() >= select_after):
+                selection_attempts += 1
+                selected = select_registered_target_tab(cdp, url)
+                print("PROBE:" + selected, flush=True)
+                state = classify(cdp, url)
+                select_after = time.monotonic() + 5.0
             if state != last:
                 print("PROBE:" + state, flush=True); last = state
                 if state == "CHROME_ERROR":
