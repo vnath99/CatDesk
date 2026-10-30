@@ -1,3 +1,24 @@
+## 2026-10-30 00:14 UTC (October29 local) — scoped normal-native Web MCP bridge — TESTED_SOURCE / LOCAL_HTTP_FIXTURE
+
+Source `13e1aad35a18c4cf0c630bb83d1a56acfbfb61bc` adds optional `nativeQueue` authority to the existing immutable Web execution grant. A fresh local `execution-grant --native-queue-task-id <ready-task>` freezes the existing queue task/request/binding and normal native turn bound. Existing grants retain their old bytes and permissions. Direct and cached task routes support `native.codex.dispatch` with empty arguments, using the stored selection and ordinary native CLI invocation, writer/scheduler gates and owned-child Job. The existing project Web lease spans native execution/finalization; shared registry/Wake locks end before native work. Caller prompt/model/root/sandbox/timeout overrides are refused.
+
+The same assignment journal and call budget suppress completed/unknown replay. A known CLI preflight refusal records FAILED before task claim/launch; ambiguous outcomes remain fenced. `native.codex.status` reads only that grant's task/receipt while the native project lease is held, changes no task journal, and recovers a completed receipt after a lost HTTP reply. Existing handoffs include the frozen selection and status snapshot. Metadata claims do not establish process liveness or verified task quality.
+
+Qualification:17 dispatcher tests plus11 assignment tests and1 parser test passed (29 distinct); two existing native-sandbox opt-ins were ignored. The four native cases were rerun after status/auth checks and passed. Strict all-target Clippy/formatting passed. Default broad-parallel timing/immediate-close failures are preserved; a bounded outer test run passed while retaining two-project concurrency inside HTTP tests. Six pinned critical files stayed identical; no fixture process remained. Tests used disposable Rust providers, with zero real model/Web calls. No installed release, existing project binding/session, browser, Wake, tunnel or recurring automation changed. Evidence: `docs/verification/NATIVE_WEB_MCP_2026_10_29.json`.
+
+Source reachability is improved; genuine native-provider, installed and two-Web-chat acceptance remain OPEN. Full native selections still pin the current project binding. Next READY source work is supported pending-native selection migration across a proved conversation rollover, preserving old grants/receipts and unknown-outcome fences, followed by development-runtime/native-provider qualification. Existing connector/profile gates were not retried; no new operator action is needed for source work.
+
+Source-qualified commands (the current installed release predates this feature):
+
+```text
+<qualified-source-binary> operator web work execution-grant --project-id <registered-id> --input-file <existing-assignment-pins.json> --native-queue-task-id <existing-ready-native-task>
+<qualified-source-binary> operator web work execution-revoke --project-id <registered-id> --input-file <existing-assignment-pins.json>
+```
+
+The usual project/request/source-event/assignment/paired-target/execution-key envelope carries `tool: "native.codex.dispatch"` or `tool: "native.codex.status"`, each with `arguments: {}`. Its top-level `taskId` remains the Web assignment ID; the stored `nativeQueue.selection.taskId` identifies the native queue task. Dispatch uses a stable call ID. Status reads can repeat without replaying execution or consuming the mutation journal budget. Source authentication/mode/plan checks and private-key non-disclosure remain active on the cached adapter.
+
+The native turn bound is frozen from `CATDESK_CODEX_QUEUE_TURN_TIMEOUT_SECS` (60–43200; default7200), with bounded preflight/prompt/drain overhead. The existing180-second budget still applies to ordinary isolated contract turns. Project leases serialize revocation/rollover with an already admitted native turn; status remains readable. Existing grants are immutable; added native permission needs a fresh assignment/grant. Standard native owner and clean-workspace checks decide eligibility. Native requests retain normal model/effort/sandbox behavior from their queued task and CLI profile.
+
 ## 2026-10-29 23:23 UTC — frozen native requests and independent scoped reads — TESTED_SOURCE
 
 Source `c9541810701905176efdafc41957125e1f033617` adds `requestSha256` to native queue summaries and an optional local `dispatch-task --expected-request-sha256` pin. The pin covers task/binding/prompt/model/effort/sandbox settings, stays stable across attempt/receipt/state changes, and is checked before CLI probes and again under the claim lock. It provides integrity selection, not execution authorization. Persisted job schema and legacy unpinned local dispatch remain compatible.
