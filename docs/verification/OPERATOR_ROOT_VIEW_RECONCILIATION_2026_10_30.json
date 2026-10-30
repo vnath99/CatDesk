@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T21:09:43.850906+00:00",
+  "classification": "CONFIRMED_CONTEXT_DEPENDENT_DIRECTORY_RESOLUTION_GATED_OPERATOR_PATH_PREPARED_NOT_BROWSER_ACCEPTANCE",
+  "sourceBaseCommit": "5e772889b097d8e321e01d7fa38a1a29555a022f",
+  "operatorEvidence": {
+    "observedUtc": "2026-10-30T21:04:42.2166682+00:00",
+    "powerShellVersion": "7.6.9",
+    "controllerHashMatches": true,
+    "directRootQuerySucceeded": true,
+    "directRootMatches": false,
+    "packageRootQuerySucceeded": true,
+    "packageRootMatches": true,
+    "recordedRootsSameObject": true,
+    "observedRootsSameObject": false,
+    "authorityBytesUnchanged": true,
+    "loginMarkerPresent": false,
+    "catdeskCommands": 0,
+    "browserStarts": 0,
+    "catdeskPersistentWrites": 0
+  },
+  "currentCodexContext": {
+    "bothRootsMatchRecordedIdentity": true,
+    "bothRootsResolveSameObject": true,
+    "newEntryPreflightPassed": true,
+    "preflightOnly": true,
+    "browserStarts": 0,
+    "catdeskCommands": 0
+  },
+  "diagnosis": {
+    "differentPhysicalDirectoryVisibleAtDirectPathAcrossContexts": true,
+    "packageLocalPathMatchesAuthorityInBoth": true,
+    "exactWindowsRedirectionMechanism": "NOT_INDEPENDENTLY_ATTRIBUTED",
+    "guardCorrectlyRefused": true
+  },
+  "supportedOperatorPath": {
+    "terminal": "THIS_CHAT_INTEGRATED_TERMINAL",
+    "terminalOpenedThroughAppTool": true,
+    "terminalReadbackPowerShellVersion": "7.6.9",
+    "terminalRootViewQualified": "NOT_YET_REQUIRES_ENTRY_PREFLIGHT",
+    "entryScriptSha256": "87f4491ef7655fa41d02063ab148e8de027c82b19c2052e916a1bc5680c46baa",
+    "underlyingControllerUnchanged": true,
+    "existingAuthorityChecksReexecutedByController": true,
+    "browserLaunchConditionalOnBothOriginalIdentitiesMatching": true,
+    "interactiveUserOwnsInspectionAndEnterCleanup": true
+  },
+  "preservation": {
+    "protectedPinsUnchangedInCodexView": 131,
+    "authorityOrFingerprintRewritten": false,
+    "rootsMergedOrRecreated": false,
+    "profilesRecreated": false,
+    "projectBindingsChanged": false,
+    "guardOrProducerAuthorityChanged": false,
+    "nativeSessionsChanged": false
+  },
+  "next": "RUN_ONE_GATED_ENTRY_IN_THIS_CHAT_TERMINAL_REPORT_HISTORY_EDITOR_DRAFT_STATE_THEN_ENTER_FOR_CLEANUP"
+}

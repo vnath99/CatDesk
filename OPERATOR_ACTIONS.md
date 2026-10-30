@@ -1,3 +1,9 @@
+## 2026-10-30 — root-view discrepancy confirmed; gated operator path prepared
+
+The operator's native Windows query proved direct LocalAppData differs from the recorded production object in the ordinary terminal, while the package-local root still matches. The same two paths match and resolve to one object in Codex. This confirms context-dependent directory resolution; the exact Windows redirection mechanism is not independently attributed. No authority rewrite or store merge is appropriate. The root identity guard correctly refused before browser launch.
+
+The existing app tool opened this chat's integrated terminal and read back PowerShell7.6.9. A private one-command entry now checks the unchanged inspector/controller hashes and both original directory identities before calling the unchanged supported login command in the existing workspace for `byovd`. It refuses without launching a browser on mismatch, an active login marker or redirected stdin. Its preflight-only invocation passed in the current Codex process; the integrated terminal's root view is not claimed qualified until that same preflight runs there. Inspection remains attended, with Enter in that same terminal for guarded browser close. No browser, profile, root, binding, fingerprint or producer/review authority was changed; all131 pins in the Codex view remain identical. Evidence: `docs/verification/OPERATOR_ROOT_VIEW_RECONCILIATION_2026_10_30.json`.
+
 ## 2026-10-30 — operator profile inspection refused before browser launch
 
 The supplied qualified-controller login command returned `DEV_PRODUCTION_ROOT_MISMATCH` in the operator's ordinary terminal. Do not retry it or rewrite authority metadata. Source checks compare recorded production-directory volume/file identities, or refuse overlap with the development runtime; both login preflight checks precede the login marker and browser spawn. This is a different prerequisite from editor readiness or connector429.
