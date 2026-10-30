@@ -181,24 +181,84 @@ pub(crate) fn prepare_native_dispatch(
     })
 }
 
-/// Scoped metadata read remains available while the admitted native turn owns
-/// its project lease. It does not acquire a writer, change a journal or replay.
+pub(crate) struct NativeStatusAdmission {
+    prepared: PreparedProjectScopeV1,
+    request: AssignmentRequest,
+    key: String,
+    task_id: String,
+    selection: crate::operator_codex_cli::NativeQueueSelection,
+}
+
+impl NativeStatusAdmission {
+    /// Slow Git/queue inspection occurs only after the shared admission locks
+    /// end. This remains a snapshot, not a writer/lease/liveness assertion.
+    pub(crate) fn snapshot(self) -> Result<Value, String> {
+        let result = crate::operator_codex_cli::native_queue_selection_status(
+            &self.prepared.scope().control_workspace,
+            &self.request.project_id,
+            &self.selection,
+        );
+        // An in-flight read is not durable permission: recheck bounded exact
+        // metadata before releasing data if authority changed during lookup.
+        let current =
+            authorize_native_status(&self.prepared, &self.request, &self.key, &self.task_id)?;
+        if current != self.selection {
+            return Err("WEB_TASK_NATIVE_REQUEST_CHANGED".into());
+        }
+        result
+    }
+}
+
+/// Authorize bounded metadata while retaining the paired target. Status takes
+/// no project writer/lease and changes no task journal. Queue inspection is a
+/// separate read, so a slow/missing queue cannot hold sibling admission locks.
 pub(crate) fn native_status(
     workspace: &Path,
     pins: Value,
     key: &str,
     task_id: &str,
-) -> Result<Value, String> {
+) -> Result<NativeStatusAdmission, String> {
+    native_status_with_preparation(workspace, pins, key, task_id, |root, project| {
+        PreparedProjectScopeV1::resolve(root, project)
+            .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE".into())
+    })
+}
+
+pub(crate) fn native_status_with_preparation(
+    workspace: &Path,
+    pins: Value,
+    key: &str,
+    task_id: &str,
+    prepare: impl FnOnce(&Path, &str) -> Result<PreparedProjectScopeV1, String>,
+) -> Result<NativeStatusAdmission, String> {
     let request = AssignmentRequest::parse(pins)?;
+    let prepared = prepare(workspace, &request.project_id)?;
+    let selection = authorize_native_status(&prepared, &request, key, task_id)?;
+    Ok(NativeStatusAdmission {
+        prepared,
+        request,
+        key: key.into(),
+        task_id: task_id.into(),
+        selection,
+    })
+}
+
+fn authorize_native_status(
+    prepared: &PreparedProjectScopeV1,
+    request: &AssignmentRequest,
+    key: &str,
+    task_id: &str,
+) -> Result<crate::operator_codex_cli::NativeQueueSelection, String> {
     mcp::with_current_project_web_target(
-        workspace,
+        &prepared.scope().control_workspace,
         &request.project_id,
         request.expected_target_generation,
         &request.expected_target_sha256,
         |workspace, paired| {
-            let scope =
-                resolve_registered_project_from_control_root(workspace, &request.project_id)
-                    .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
+            prepared
+                .revalidate_registration()
+                .map_err(|_| "WEB_WORK_PROJECT_REGISTRATION_CHANGED")?;
+            let scope = prepared.scope();
             let record = WorkLedger::open(workspace, &request.project_id)?
                 .record(&request.request_id)?
                 .ok_or("WEB_WORK_REQUEST_MISSING")?;
@@ -217,7 +277,7 @@ pub(crate) fn native_status(
                 &record,
                 record.target == current,
             )?;
-            crate::project_mcp_task::native_task_status(&scope, &record, key)
+            crate::project_mcp_task::native_status_selection(scope, &record, key)
         },
     )
 }

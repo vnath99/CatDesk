@@ -201,12 +201,19 @@ pub(crate) async fn handle(control: &str, request: &JsonRpcRequest) -> JsonRpcRe
             let selection = call.selection();
             let observed = json!({"name":TOOL,"arguments":call.task_args()});
             let root = control.clone();
-            let result = tokio::task::spawn_blocking(move || crate::web_work::native_status(
+            let admission = tokio::task::spawn_blocking(move || crate::web_work::native_status(
                 &root,call.pins(),&call.execution_key,&call.task_id)).await;
-            match result {
-                Ok(Ok(value)) => {
-                    let traffic = crate::project_mcp::TrafficObservation::start_scoped(control,&selection,observed).await;
-                    let mut response = JsonRpcResponse::success(response_id,json!({"content":[{"type":"text","text":"Native task snapshot; no execution or replay."}],"structuredContent":value,"isError":false}));
+            match admission {
+                Ok(Ok(admission)) => {
+                    let traffic = crate::project_mcp::TrafficObservation::start_scoped(control.clone(),&selection,observed).await;
+                    #[cfg(all(test,windows))]
+                    pause_started_test_turn(&control.join(format!("native-status-{}",selection.project_id))).await;
+                    let result = tokio::task::spawn_blocking(move || admission.snapshot()).await;
+                    let mut response = match result {
+                        Ok(Ok(value)) => JsonRpcResponse::success(response_id,json!({"content":[{"type":"text","text":"Native task snapshot; no execution or replay."}],"structuredContent":value,"isError":false})),
+                        Ok(Err(reason)) => JsonRpcResponse::error(response_id,-32002,reason),
+                        Err(_) => JsonRpcResponse::error(response_id,-32002,"WEB_TASK_NATIVE_STATUS_UNAVAILABLE".into()),
+                    };
                     traffic.finish(&mut response).await;
                     response
                 },
@@ -498,6 +505,256 @@ mod tests {
     }
     fn native_fixture(id: &str) -> Fixture {
         fixture_capabilities(id, false, true)
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn native_status_slow_lookup_releases_shared_locks_and_peer_can_patch() {
+        let (alpha, beta) = paired_fixtures(true);
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+        let gate_key = alpha.control.join("native-status-alpha");
+        TEST_GATES
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap()
+            .insert(gate_key.clone(), (entered.clone(), release.clone()));
+        let control = alpha.control.clone();
+        let body = request(&alpha, "slow-status", "native.codex.status", json!({}));
+        let slow = tokio::spawn(async move {
+            let req: JsonRpcRequest = serde_json::from_value(body).unwrap();
+            serde_json::to_value(handle(control.to_str().unwrap(), &req).await).unwrap()
+        });
+        tokio::time::timeout(Duration::from_secs(15), entered.notified())
+            .await
+            .unwrap();
+        let root = alpha.control.clone();
+        let shared_locks_free=tokio::task::spawn_blocking(move || {
+            let registry=crate::delegated::autonomy_projects::AutonomousProjectRegistryStoreV1::open_read_only(root.join(".catdesk/projects")).unwrap();
+            let wake=Store::open(&crate::wake_protocol_client::wake_root_for_workspace(&root).unwrap()).unwrap();
+            registry.with_registration_lock(||wake.with_config_read_only(|_|Ok(()))).is_ok()
+        }).await.unwrap();
+        let peer=tokio::time::timeout(Duration::from_secs(20),async {
+            let preview=call(&beta,request(&beta,"peer-preview","patch.preview",json!({"patchId":"peer-status-patch","operations":[{"path":"src/lib.rs","old":"{ 1 }","new":"{ 57 }"}]}))).await;
+            if preview.get("error").is_some(){return preview;}
+            call(&beta,request(&beta,"peer-apply","patch.apply",json!({"patchId":"peer-status-patch"}))).await
+        }).await;
+        release.notify_one();
+        let status = tokio::time::timeout(Duration::from_secs(20), slow)
+            .await
+            .unwrap()
+            .unwrap();
+        TEST_GATES.get().unwrap().lock().unwrap().remove(&gate_key);
+        assert!(
+            shared_locks_free,
+            "queue status lookup must not retain registry/Wake locks"
+        );
+        let peer = peer.expect("a paused peer status lookup cannot stall independent work");
+        assert!(peer.get("error").is_none(), "{peer}");
+        assert!(status.get("error").is_none(), "{status}");
+        assert_eq!(
+            status["result"]["structuredContent"]["journalChanged"],
+            false
+        );
+        assert!(
+            fs::read_to_string(beta.task.join("src/lib.rs"))
+                .unwrap()
+                .contains("{ 57 }")
+        );
+        for path in [
+            alpha.task.join("src/lib.rs"),
+            alpha.native.join("src/lib.rs"),
+            beta.native.join("src/lib.rs"),
+        ] {
+            assert!(fs::read_to_string(path).unwrap().contains("{ 1 }"));
+        }
+        assert!(
+            !alpha
+                .control
+                .join(".catdesk/project-mcp-tasks/alpha/task-fixture/journal")
+                .exists()
+        );
+        assert!(!native_proof(&alpha).exists() && !native_proof(&beta).exists());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn native_status_counts_authorized_failed_reads_without_foreign_or_revoked_traffic() {
+        fn pressure(f: &Fixture) -> crate::web_conversation_context::PressureStatus {
+            let store = crate::web_conversation_context::WebContextStore::open_read_only(
+                f.control.join(".catdesk/web-context"),
+            )
+            .unwrap();
+            let key = store
+                .active_key(f.pins["projectId"].as_str().unwrap())
+                .unwrap()
+                .unwrap();
+            store.pressure(&key).unwrap()
+        }
+        let (alpha, beta) = paired_fixtures(true);
+        for f in [&alpha, &beta] {
+            let ok = call(
+                f,
+                request(f, "initial-status", "native.codex.status", json!({})),
+            )
+            .await;
+            assert!(ok.get("error").is_none(), "{ok}");
+            assert_eq!(pressure(f).recorded_events, 2);
+        }
+        let peer = pressure(&beta);
+        let job = alpha._native_queue.as_ref().unwrap().job_file("alpha");
+        let held = job.with_extension("held-test-job");
+        fs::rename(&job, &held).unwrap();
+        let failed = call(
+            &alpha,
+            request(
+                &alpha,
+                "missing-queue-status",
+                "native.codex.status",
+                json!({}),
+            ),
+        )
+        .await;
+        fs::rename(&held, &job).unwrap();
+        assert_eq!(
+            failed["error"]["message"],
+            "WEB_TASK_NATIVE_TASK_UNAVAILABLE"
+        );
+        assert_eq!(pressure(&alpha).recorded_events, 4);
+        assert_eq!(pressure(&beta), peer);
+        let before = pressure(&alpha);
+        let mut foreign = request(&alpha, "foreign-status", "native.codex.status", json!({}));
+        foreign["params"]["arguments"]["executionKey"] = json!(beta.key);
+        assert!(call(&alpha, foreign).await.get("error").is_some());
+        assert_eq!(pressure(&alpha), before);
+        assert_eq!(pressure(&beta), peer);
+        crate::web_work::execution_permission(&alpha.control, alpha.pins.clone(), true).unwrap();
+        let revoked = call(
+            &alpha,
+            request(&alpha, "revoked-status", "native.codex.status", json!({})),
+        )
+        .await;
+        assert_eq!(revoked["error"]["message"], "WEB_TASK_GRANT_REVOKED");
+        assert_eq!(pressure(&alpha), before);
+        assert_eq!(pressure(&beta), peer);
+        assert!(
+            !alpha
+                .control
+                .join(".catdesk/project-mcp-tasks/alpha/task-fixture/journal")
+                .exists()
+        );
+        assert!(!native_proof(&alpha).exists() && !native_proof(&beta).exists());
+    }
+
+    #[test]
+    fn native_status_revalidates_prepared_project_and_controller_before_key_admission() {
+        for changed in ["alpha", "catdesk"] {
+            let f = native_fixture("alpha");
+            let error = crate::web_work::native_status_with_preparation(
+                &f.control,
+                f.pins.clone(),
+                &f.key,
+                "task-fixture",
+                |root, id| {
+                    let prepared =
+                        crate::delegated::autonomy_projects::PreparedProjectScopeV1::resolve(
+                            root, id,
+                        )
+                        .unwrap();
+                    let path = root.join(".catdesk/projects/projects.json");
+                    let mut registry: AutonomousProjectRegistryV1 =
+                        serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+                    // Keep Git/paired-target identity valid so the prepared
+                    // record check, rather than the earlier root check, refuses.
+                    registry
+                        .projects
+                        .iter_mut()
+                        .find(|p| p.project_id == changed)
+                        .unwrap()
+                        .chatgpt_target_history
+                        .push(format!("https://chatgpt.com/c/prepared-history-{changed}"));
+                    fs::write(path, serde_json::to_vec(&registry).unwrap()).unwrap();
+                    Ok(prepared)
+                },
+            )
+            .err()
+            .expect("changed registration must refuse");
+            assert_eq!(error, "WEB_WORK_PROJECT_REGISTRATION_CHANGED");
+            assert!(
+                !f.control
+                    .join(".catdesk/project-mcp-tasks/alpha/task-fixture/journal")
+                    .exists()
+            );
+            assert!(!native_proof(&f).exists());
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn native_status_rechecks_revocation_and_target_after_unlocked_lookup() {
+        for rollover in [false, true] {
+            let mut f = native_fixture("alpha");
+            let entered = Arc::new(tokio::sync::Notify::new());
+            let release = Arc::new(tokio::sync::Notify::new());
+            let gate = f.control.join("native-status-alpha");
+            TEST_GATES
+                .get_or_init(Default::default)
+                .lock()
+                .unwrap()
+                .insert(gate.clone(), (entered.clone(), release.clone()));
+            let root = f.control.clone();
+            let body = request(&f, "delayed-status", "native.codex.status", json!({}));
+            let pending = tokio::spawn(async move {
+                let request: JsonRpcRequest = serde_json::from_value(body).unwrap();
+                serde_json::to_value(handle(root.to_str().unwrap(), &request).await).unwrap()
+            });
+            tokio::time::timeout(Duration::from_secs(15), entered.notified())
+                .await
+                .unwrap();
+            if rollover {
+                native_rollover(&mut f);
+            } else {
+                crate::web_work::execution_permission(&f.control, f.pins.clone(), true).unwrap();
+            }
+            release.notify_one();
+            let response = tokio::time::timeout(Duration::from_secs(20), pending)
+                .await
+                .unwrap()
+                .unwrap();
+            TEST_GATES.get().unwrap().lock().unwrap().remove(&gate);
+            assert!(
+                response.get("result").is_none(),
+                "stale authority must not release its snapshot"
+            );
+            assert_eq!(
+                response["error"]["message"],
+                if rollover {
+                    "WEB_CONTEXT_TARGET_CHANGED"
+                } else {
+                    "WEB_TASK_GRANT_REVOKED"
+                }
+            );
+            if rollover {
+                let fresh = call(
+                    &f,
+                    request(
+                        &f,
+                        "current-target-status",
+                        "native.codex.status",
+                        json!({}),
+                    ),
+                )
+                .await;
+                assert!(fresh.get("error").is_none(), "{fresh}");
+                assert_eq!(
+                    fresh["result"]["structuredContent"]["job"]["state"],
+                    "READY"
+                );
+            }
+            assert!(
+                !f.control
+                    .join(".catdesk/project-mcp-tasks/alpha/task-fixture/journal")
+                    .exists()
+            );
+            assert!(!native_proof(&f).exists());
+        }
     }
     fn fixture_capabilities(id: &str, allow_manual_wake: bool, enable_native: bool) -> Fixture {
         let (control, assignment, wake, pins, event) =

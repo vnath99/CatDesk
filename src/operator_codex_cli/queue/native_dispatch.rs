@@ -230,6 +230,10 @@ impl NativeQueueFixture {
     pub(crate) fn image(&self) -> PathBuf {
         fixture_entry(&self.control).unwrap().1
     }
+    pub(crate) fn job_file(&self, project_id: &str) -> PathBuf {
+        let root = fixture_entry(&self.control).unwrap().0;
+        QueueStore { root }.job_path(project_id, "native-fixture")
+    }
 }
 #[cfg(all(test, windows))]
 impl Drop for NativeQueueFixture {

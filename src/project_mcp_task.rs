@@ -1046,18 +1046,13 @@ pub(crate) fn journal_manual_wake(
     Ok(result)
 }
 
-pub(crate) fn native_task_status(
+pub(crate) fn native_status_selection(
     project: &ResolvedProjectScopeV1,
     record: &crate::web_work_state::WorkRecord,
     key: &str,
-) -> Result<Value, String> {
+) -> Result<crate::operator_codex_cli::NativeQueueSelection, String> {
     let (_, _, selection) = authorized_web_grant(project, record, key)?;
-    let selection = selection.ok_or("WEB_TASK_NATIVE_NOT_GRANTED")?;
-    crate::operator_codex_cli::native_queue_selection_status(
-        &project.control_workspace,
-        &project.project.project_id,
-        &selection,
-    )
+    selection.ok_or_else(|| "WEB_TASK_NATIVE_NOT_GRANTED".into())
 }
 
 pub(crate) struct NativeTaskCall {
