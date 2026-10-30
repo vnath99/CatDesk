@@ -41,7 +41,8 @@
       "failedCode": "WEB_CONTEXT_REGISTRATION_BUSY",
       "focusedTwoClientRecheckPassed": 1,
       "distinctCasesPassedAcrossRuns": 19,
-      "fullOuterParallelRunQualified": false
+      "fullOuterParallelRunQualified": false,
+      "failureStage": "SIMULTANEOUS_MANUAL_WAKE_ADMISSION_AFTER_SUCCESSFUL_PREVIEWS_AND_PATCHES"
     }
   },
   "distinctPassedAcrossRuns": 138,
@@ -77,7 +78,7 @@
     "Compilation used two non-existent test state names; corrected to existing Unknown/Attention variants",
     "Initial queue suite:106 passed/1 failed/2 ignored. A Git-remote edit was refused earlier by the existing registry admission; corrected fixture to change native thread identity",
     "Initial dispatcher suite:18 passed/1 failed. Changed-request refusal was correct; old text assertion replaced with exact WEB_TASK_NATIVE_REQUEST_CHANGED",
-    "Final outer-parallel dispatcher suite:18 passed/1 failed with WEB_CONTEXT_REGISTRATION_BUSY during parallel patch preview. Same two-client case passed alone; the contention defect remains OPEN"
+    "Final outer-parallel dispatcher suite:18 passed/1 failed with WEB_CONTEXT_REGISTRATION_BUSY during simultaneous manual-Wake admission. Same two-client case passed alone; the contention defect remains OPEN"
   ],
   "logSha256": {
     "oct29-native-continuation-dispatcher-suite.log": "ed7bd1ccd560c27d3c340c99794443cfd24365ff80114e868d35044e3e11756d",
@@ -97,7 +98,17 @@
     "Existing unlinked jobs serialize without the optional metadata; pending linked jobs require a qualified writer, so do not downgrade an active queue writer to a controller that ignores these fields",
     "Lineage is bounded to64 records and existing queue capacity512; evidence loss, corruption or capacity require inspection, never blind resend or metadata deletion",
     "Connector/profile prerequisites unchanged; no completed/unknown canary replayed",
-    "Shared registration admission can refuse a parallel project preview before tool execution; focused recheck passes, but full outer-parallel acceptance remains OPEN",
+    "Shared registration admission can refuse a simultaneous manual-Wake request before tool execution; focused recheck passes, but full outer-parallel acceptance remains OPEN",
     "Hosted exact-commit CI remains UNVERIFIED pending independent readback"
-  ]
+  ],
+  "diagnosticStageCorrection": {
+    "observedUtc": "2026-10-30T01:40:04.982289+00:00",
+    "previousDescription": "parallel preview",
+    "actualStage": "SIMULTANEOUS_MANUAL_WAKE_ADMISSION_AFTER_SUCCESSFUL_PREVIEWS_AND_PATCHES",
+    "sourceCommit": "da2f5ac9ff41ce8ea1fe22783fbb7e3f892da445",
+    "sourceFile": "src/web_task_dispatch.rs",
+    "assertionLine": 2138,
+    "code": "WEB_CONTEXT_REGISTRATION_BUSY",
+    "failureLogSha256": "37b03b4692dacd27d50d61e82378d957fc2aeaaa76c70cd5e701f1d69f5f09b6"
+  }
 }

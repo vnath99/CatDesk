@@ -1,3 +1,9 @@
+## 2026-10-30 01:40 UTC (October29 local) — shared registration admission — TESTED_SOURCE / LOOPBACK_HTTP
+
+Source `f9679fab27dc265cb1b48601fa0fbeaae9a206fb`. Evidence: `docs/verification/REGISTRATION_PREPARATION_2026_10_29.json`.
+
+The preparation snapshot is ephemeral and uses the existing registry/lock; it changes no persisted registration, native job or release schema. It does not grant production promotion or select a development package. Exact project/controller identity and current Wake admission remain checked before effects. Source qualification is separate from the next development-candidate and installed acceptance steps.
+
 ## 2026-10-30 01:18 UTC (October29 local) — proved native continuation across Web rollover — TESTED_SOURCE
 
 Source `da2f5ac9ff41ce8ea1fe22783fbb7e3f892da445`. Evidence: `docs/verification/NATIVE_ROLLOVER_CONTINUATION_2026_10_29.json`.

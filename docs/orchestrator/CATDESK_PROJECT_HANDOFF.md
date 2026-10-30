@@ -1,3 +1,17 @@
+## 2026-10-30 01:40 UTC (October29 local) — shared registration admission — TESTED_SOURCE / LOOPBACK_HTTP
+
+Source `f9679fab27dc265cb1b48601fa0fbeaae9a206fb`. Evidence: `docs/verification/REGISTRATION_PREPARATION_2026_10_29.json`.
+
+Routine assignment authorization and manual-Wake publication now prepare Git-validated project/controller identity before shared admission, then compare those exact records under the existing registry lock. Publication still rechecks current activation, selected-root isolation, paired target/history/cutoff, source/key/grant and journal. No lock, permission or retry budget was added; no tool or publisher retry was introduced.
+
+Diagnostic correction: the earlier `WEB_CONTEXT_REGISTRATION_BUSY` assertion was at simultaneous manual-Wake admission, after both projects' previews and patches succeeded. The original failure/log hash and18-pass/1-failure result remain preserved; the prior “parallel preview” description was inaccurate. The new bounded source run passes that case.
+
+All21 dispatcher tests passed at the original outer concurrency of2, including simultaneous manual-Wake publication and both native rollover cases. Four Web-work,38 registry and6 publication tests passed (69 final distinct tests). Strict all-target Clippy and formatting passed. Six selected critical files stayed identical; no test-owned/Wake process remained.
+
+This is source/loopback qualification with synthetic projects and disposable providers. No real model/Web call, installed executable, selected development package, production/project binding, native session, browser, tunnel or recurring owner changed. Existing connector429 and retained-profile inspection gates were not retried. Genuine two-Web-chat coding remains OPEN.
+
+Next READY: build and qualify a commit-pinned development candidate containing the native MCP/continuation and admission fixes, using the existing development release/lifecycle procedures. Preserve the current trusted production release and previous working version. No new operator decision is needed for source/build work.
+
 ## 2026-10-30 01:18 UTC (October29 local) — proved native continuation across Web rollover — TESTED_SOURCE
 
 Source `da2f5ac9ff41ce8ea1fe22783fbb7e3f892da445`. Evidence: `docs/verification/NATIVE_ROLLOVER_CONTINUATION_2026_10_29.json`.
