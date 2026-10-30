@@ -225,7 +225,8 @@ fn has_capacity(queue: &QueueStore) -> Result<(), String> {
     Ok(())
 }
 
-pub(crate) fn continue_native_queue_selection(
+#[cfg(all(test, windows))]
+fn continue_native_queue_selection(
     control: &Path,
     project_id: &str,
     root: &native_dispatch::NativeQueueSelection,
@@ -255,9 +256,49 @@ struct ContinuationProof<'a> {
     source_event: &'a str,
 }
 
+/// No Git commands. Used only inside the existing paired-target transaction
+/// after its exact prepared registration has been revalidated.
+pub(crate) fn continue_native_queue_selection_prepared(
+    prepared: &crate::delegated::autonomy_projects::PreparedProjectScopeV1,
+    root: &native_dispatch::NativeQueueSelection,
+    lease: &crate::operator_facade::WebWorkLease,
+    original: &catdesk_wake::protocol::Target,
+    current: &catdesk_wake::protocol::Target,
+    source_event: &str,
+) -> Result<native_dispatch::NativeQueueSelection, String> {
+    continue_selection_for_projects(
+        prepared.controller(),
+        prepared.scope(),
+        root,
+        ContinuationProof {
+            lease,
+            original,
+            current,
+            source_event,
+        },
+        |_| Ok(()),
+    )
+}
+
+#[cfg(all(test, windows))]
 fn continue_selection(
     control: &Path,
     project_id: &str,
+    root: &native_dispatch::NativeQueueSelection,
+    proof: ContinuationProof<'_>,
+    checkpoint: impl Fn(&str) -> Result<(), String>,
+) -> Result<native_dispatch::NativeQueueSelection, String> {
+    root.validate()?;
+    let controller = resolve_registered_project_from_control_root(control, "catdesk")
+        .map_err(|_| "WEB_TASK_NATIVE_CONTROL_UNAVAILABLE")?;
+    let project = resolve_registered_project_from_control_root(control, project_id)
+        .map_err(|_| "WEB_TASK_NATIVE_PROJECT_UNAVAILABLE")?;
+    continue_selection_for_projects(&controller.project, &project, root, proof, checkpoint)
+}
+
+fn continue_selection_for_projects(
+    controller: &AutonomousProjectV1,
+    project: &crate::delegated::autonomy_projects::ResolvedProjectScopeV1,
     root: &native_dispatch::NativeQueueSelection,
     proof: ContinuationProof<'_>,
     checkpoint: impl Fn(&str) -> Result<(), String>,
@@ -269,12 +310,9 @@ fn continue_selection(
         source_event,
     } = proof;
     root.validate()?;
-    let controller = resolve_registered_project_from_control_root(control, "catdesk")
-        .map_err(|_| "WEB_TASK_NATIVE_CONTROL_UNAVAILABLE")?;
-    let project = resolve_registered_project_from_control_root(control, project_id)
-        .map_err(|_| "WEB_TASK_NATIVE_PROJECT_UNAVAILABLE")?;
-    let queue =
-        native_dispatch::selected_store(&controller.control_workspace, &controller.project)?;
+    let control = &project.control_workspace;
+    let project_id = project.project.project_id.as_str();
+    let queue = native_dispatch::selected_store(control, controller)?;
     let _lock = queue.lock()?;
     let (mut job, _) = follow(&queue, project_id, root, Some(source_event))?;
     let current_hash = project_binding_sha256(&project.project)?;

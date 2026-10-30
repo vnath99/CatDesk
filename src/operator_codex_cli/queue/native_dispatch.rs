@@ -77,30 +77,32 @@ pub(crate) fn freeze_native_queue_selection(
     })
 }
 
-pub(crate) fn check_native_queue_selection(
-    control: &Path,
-    project_id: &str,
+/// Metadata only. The caller retains the paired-target/registration transaction
+/// and has revalidated this exact Git-prepared project/controller snapshot.
+pub(crate) fn check_native_queue_selection_prepared(
+    prepared: &crate::delegated::autonomy_projects::PreparedProjectScopeV1,
     selected: &NativeQueueSelection,
 ) -> Result<(), String> {
     selected.validate()?;
-    let controller = resolve_registered_project_from_control_root(control, "catdesk")
-        .map_err(|_| "WEB_TASK_NATIVE_CONTROL_UNAVAILABLE")?;
-    let project = resolve_registered_project_from_control_root(control, project_id)
-        .map_err(|_| "WEB_TASK_NATIVE_PROJECT_UNAVAILABLE")?;
-    let queue = selected_store(&controller.control_workspace, &controller.project)?;
+    let project = prepared.scope();
+    let queue = selected_store(&project.control_workspace, prepared.controller())?;
     let _lock = queue.lock()?;
+    if project_binding_sha256(&project.project)? != selected.binding_sha256 {
+        return Err("CODEX_QUEUE_SCOPE: exact dispatch binding changed".into());
+    }
     let scope = CodexScope {
-        project_id: project_id.into(),
-        workspace: project.project.workspace,
+        project_id: project.project.project_id.clone(),
+        workspace: project.project.workspace.clone(),
     };
-    let pins = Some((
-        &scope,
-        selected.task_id.as_str(),
-        selected.binding_sha256.as_str(),
-        Some(selected.request_sha256.as_str()),
-    ));
-    exact_dispatch_binding(control, pins)?;
-    dispatch_jobs(&queue, pins)?;
+    dispatch_jobs(
+        &queue,
+        Some((
+            &scope,
+            &selected.task_id,
+            &selected.binding_sha256,
+            Some(&selected.request_sha256),
+        )),
+    )?;
     Ok(())
 }
 

@@ -1060,15 +1060,19 @@ pub(crate) struct NativeTaskCall {
     journal: JournaledTaskCall,
 }
 
-pub(crate) fn prepare_native_task_call(
+pub(crate) struct PreparedNativeTaskCall {
+    inspected: AssignmentInspection,
+    selection: crate::operator_codex_cli::NativeQueueSelection,
+}
+
+/// Read-only Git/worktree inspection. The caller holds only its project Web
+/// lease here, never shared registry/Wake admission. No queue/journal effect.
+pub(crate) fn inspect_native_task_call(
     project: &ResolvedProjectScopeV1,
     record: &crate::web_work_state::WorkRecord,
     key: &str,
     task_id: &str,
-    call_id: &str,
-    lease: &crate::operator_facade::WebWorkLease,
-    current: &catdesk_wake::protocol::Target,
-) -> Result<NativeTaskCall, String> {
+) -> Result<PreparedNativeTaskCall, String> {
     let (archive, _, selection) = authorized_web_grant(project, record, key)?;
     let selection = selection.ok_or("WEB_TASK_NATIVE_NOT_GRANTED")?;
     let inspected = inspect_assignment(project, &archive, 180)?;
@@ -1076,37 +1080,65 @@ pub(crate) fn prepare_native_task_call(
     if inspected.contract.task_id != task_id {
         return Err("WEB_TASK_GRANT_SCOPE_MISMATCH".into());
     }
-    // Keep call identity tied to the immutable grant, even after a proved
-    // continuation selects a linked native job. Check replay/unknown fences
-    // before changing queue metadata; record execution only after migration.
-    let hash = stable_text_hash(
-        &serde_json::to_string(&selection).map_err(|_| "WEB_TASK_NATIVE_SELECTION_INVALID")?,
-    );
-    prepare_journaled_task_call_checked(
-        project,
-        &inspected,
-        call_id,
-        "native.codex.dispatch",
-        hash.clone(),
-        false,
-    )?;
-    let selection = crate::operator_codex_cli::continue_native_queue_selection(
-        &project.control_workspace,
-        &project.project.project_id,
-        &selection,
-        lease,
-        &record.target,
-        current,
-        &record.event_id,
-    )?;
-    crate::operator_codex_cli::check_native_queue_selection(
-        &project.control_workspace,
-        &project.project.project_id,
-        &selection,
-    )?;
-    let journal =
-        prepare_journaled_task_call(project, &inspected, call_id, "native.codex.dispatch", hash)?;
-    Ok(NativeTaskCall { selection, journal })
+    Ok(PreparedNativeTaskCall {
+        inspected,
+        selection,
+    })
+}
+
+impl PreparedNativeTaskCall {
+    /// Commit metadata only while the caller retains the exact paired target,
+    /// current registration and project lease. Preserve replay-before-migration
+    /// and migration-before-execution journal ordering.
+    pub(crate) fn commit(
+        self,
+        prepared: &crate::delegated::autonomy_projects::PreparedProjectScopeV1,
+        record: &crate::web_work_state::WorkRecord,
+        key: &str,
+        call_id: &str,
+        lease: &crate::operator_facade::WebWorkLease,
+        current: &catdesk_wake::protocol::Target,
+    ) -> Result<NativeTaskCall, String> {
+        let project = prepared.scope();
+        let (_, _, selection) = authorized_web_grant(project, record, key)?;
+        if selection.as_ref() != Some(&self.selection) {
+            return Err("WEB_TASK_NATIVE_REQUEST_CHANGED".into());
+        }
+        check_record_assignment(project, &self.inspected, record)?;
+        let inspected = self.inspected;
+        let selection = self.selection;
+        // Keep call identity tied to the immutable grant, even after a proved
+        // continuation selects a linked native job. Check replay/unknown fences
+        // before changing queue metadata; record execution only after migration.
+        let hash = stable_text_hash(
+            &serde_json::to_string(&selection).map_err(|_| "WEB_TASK_NATIVE_SELECTION_INVALID")?,
+        );
+        prepare_journaled_task_call_checked(
+            project,
+            &inspected,
+            call_id,
+            "native.codex.dispatch",
+            hash.clone(),
+            false,
+        )?;
+        let selection = crate::operator_codex_cli::continue_native_queue_selection_prepared(
+            prepared,
+            &selection,
+            lease,
+            &record.target,
+            current,
+            &record.event_id,
+        )?;
+        crate::operator_codex_cli::check_native_queue_selection_prepared(prepared, &selection)?;
+        let journal = prepare_journaled_task_call(
+            project,
+            &inspected,
+            call_id,
+            "native.codex.dispatch",
+            hash,
+        )?;
+        Ok(NativeTaskCall { selection, journal })
+    }
 }
 
 impl NativeTaskCall {

@@ -353,6 +353,10 @@ impl PreparedProjectScopeV1 {
         &self.scope
     }
 
+    pub(crate) fn controller(&self) -> &AutonomousProjectV1 {
+        &self.controller
+    }
+
     /// Metadata only. The caller retains the existing registration lock.
     pub(crate) fn revalidate_registration(&self) -> Result<(), RuntimeError> {
         let registry = AutonomousProjectRegistryStoreV1::open_read_only(

@@ -53,11 +53,11 @@ mod owned_native;
 mod review_invite;
 mod review_reader;
 
-pub(crate) use native_continuation::continue_native_queue_selection;
+pub(crate) use native_continuation::continue_native_queue_selection_prepared;
 #[cfg(all(test, windows))]
 pub(crate) use native_dispatch::{NativeQueueFixture, native_queue_fixture};
 pub(crate) use native_dispatch::{
-    NativeQueueSelection, check_native_queue_selection, dispatch_native_queue_selection,
+    NativeQueueSelection, check_native_queue_selection_prepared, dispatch_native_queue_selection,
     freeze_native_queue_selection, native_queue_selection_status,
 };
 pub(crate) use review_invite::publish_for_mcp as publish_review_invitation_for_mcp;

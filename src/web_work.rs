@@ -133,21 +133,77 @@ pub(crate) fn prepare_native_dispatch(
     task_id: &str,
     call_id: &str,
 ) -> Result<NativeDispatchAdmission, String> {
+    prepare_native_dispatch_with_inspection(
+        workspace,
+        pins,
+        key,
+        task_id,
+        call_id,
+        crate::project_mcp_task::inspect_native_task_call,
+    )
+}
+
+pub(crate) fn prepare_native_dispatch_with_inspection(
+    workspace: &Path,
+    pins: Value,
+    key: &str,
+    task_id: &str,
+    call_id: &str,
+    inspect: impl FnOnce(
+        &crate::delegated::autonomy_projects::ResolvedProjectScopeV1,
+        &crate::web_work_state::WorkRecord,
+        &str,
+        &str,
+    ) -> Result<crate::project_mcp_task::PreparedNativeTaskCall, String>,
+) -> Result<NativeDispatchAdmission, String> {
     let request = AssignmentRequest::parse(pins)?;
-    let control = workspace
-        .canonicalize()
-        .map_err(|_| "WEB_WORK_CONTROL_UNAVAILABLE")?;
+    let prepared = PreparedProjectScopeV1::resolve(workspace, &request.project_id)
+        .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
+    let control = prepared.scope().control_workspace.clone();
     let lease = crate::operator_facade::acquire_web_work_lease(&control, &request.project_id)?;
-    let call = mcp::with_current_project_web_target(
-        &control,
+    let record =
+        with_native_dispatch_record(&prepared, &request, key, task_id, &lease, |record, _| {
+            Ok(record.clone())
+        })?;
+    // No shared registry/Wake lock spans Git/worktree inspection. This project's
+    // lease remains held; the second transaction rechecks authority before any
+    // continuation mutation or EXECUTING journal record.
+    let inspected = inspect(prepared.scope(), &record, key, task_id)?;
+    let call = with_native_dispatch_record(
+        &prepared,
+        &request,
+        key,
+        task_id,
+        &lease,
+        |record, current| inspected.commit(&prepared, record, key, call_id, &lease, current),
+    )?;
+    Ok(NativeDispatchAdmission {
+        _lease: lease,
+        control,
+        project_id: request.project_id,
+        call,
+    })
+}
+
+fn with_native_dispatch_record<T>(
+    prepared: &PreparedProjectScopeV1,
+    request: &AssignmentRequest,
+    key: &str,
+    task_id: &str,
+    lease: &crate::operator_facade::WebWorkLease,
+    operation: impl FnOnce(&crate::web_work_state::WorkRecord, &protocol::Target) -> Result<T, String>,
+) -> Result<T, String> {
+    mcp::with_current_project_web_target(
+        &prepared.scope().control_workspace,
         &request.project_id,
         request.expected_target_generation,
         &request.expected_target_sha256,
         |workspace, paired| {
             let current = protocol::Target::new(paired.generation, paired.url.clone())?;
-            let scope =
-                resolve_registered_project_from_control_root(workspace, &request.project_id)
-                    .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
+            prepared
+                .revalidate_registration()
+                .map_err(|_| "WEB_WORK_PROJECT_REGISTRATION_CHANGED")?;
+            let scope = prepared.scope();
             let record = WorkLedger::open(workspace, &request.project_id)?
                 .record(&request.request_id)?
                 .ok_or("WEB_WORK_REQUEST_MISSING")?;
@@ -166,19 +222,10 @@ pub(crate) fn prepare_native_dispatch(
                 &record,
                 record.target == current,
             )?;
-            crate::project_mcp_task::prepare_native_task_call(
-                &scope, &record, key, task_id, call_id, &lease, &current,
-            )
+            crate::project_mcp_task::native_status_selection(scope, &record, key)?;
+            operation(&record, &current)
         },
-    )?;
-    // Global registry/Wake locks ended above. Only this project's existing
-    // Web lease spans native execution, so sibling projects remain eligible.
-    Ok(NativeDispatchAdmission {
-        _lease: lease,
-        control,
-        project_id: request.project_id,
-        call,
-    })
+    )
 }
 
 pub(crate) struct NativeStatusAdmission {
