@@ -1,3 +1,7 @@
+## 2026-10-30 22:53 UTC — bounded login cleanup — TESTED_SOURCE
+
+The existing profile-login owner now expires its whole interaction after120s and follows existing exact Job cleanup.40 module tests passed (3 new), including actual Windows-process exit accounting; root/Wake strict Clippy and formatting passed. Previous interrupted markers stay preserved. Diagnostics source `f74693bae72f8ef6be71e49b54509d8456980609` is remote/PR verified; combined distinct tests across both increments:294. New installed/browser qualification remains OPEN pending supported owner reconciliation; no operator action now. See `docs/verification/BOUNDED_LOGIN_OWNER_2026_10_30.json`.
+
 ## 2026-10-30 22:46 UTC — browser observation and assistant recovery — TESTED_SOURCE
 
 Latest source adds structured read-only browser observation through the existing qualified SeleniumBase/CDP owner, selected bridge hash and registered target generation. `RESPONSE_LOAD_ERROR` remains distinct from navigation/readiness/submission failure. Existing timeout-card Retry is narrowly scoped; generic load-error/Regenerate is not authorized. All291 distinct local tests and strict root/Wake Clippy/formatting passed.

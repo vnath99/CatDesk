@@ -17,7 +17,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     ffi::{OsStr, c_void},
     fs::{self, File, OpenOptions},
-    io::{BufReader, IsTerminal, Read, Write},
+    io::{BufRead, BufReader, IsTerminal, Read, Write},
     os::windows::{
         ffi::OsStrExt,
         fs::MetadataExt,
@@ -27,7 +27,7 @@ use std::{
     process::{Child, Command, Stdio},
     sync::mpsc,
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 const PURPOSE: &str = "CATDESK_WAKE_DEVELOPMENT_UNPROTECTED_V1";
@@ -2063,6 +2063,37 @@ fn read_login_token(reader: &mut BufReader<impl Read>) -> Result<String> {
     Err("DEV_LOGIN_HELPER_OUTPUT_INVALID".into())
 }
 
+fn login_remaining(deadline: Instant, maximum: Duration) -> Result<Duration> {
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    if remaining.is_zero() {
+        Err("DEV_LOGIN_INTERACTION_TIMEOUT".into())
+    } else {
+        Ok(remaining.min(maximum))
+    }
+}
+
+fn wait_login_enter(reader: impl Read + Send + 'static, wait: Duration) -> Result<()> {
+    let (tx, rx) = mpsc::sync_channel(1);
+    thread::spawn(move || {
+        // Never retain or export arbitrary terminal input. Three bytes are
+        // sufficient to reject anything other than a single Enter.
+        let mut line = String::new();
+        let result = BufReader::new(reader.take(3))
+            .read_line(&mut line)
+            .map_err(|_| "DEV_LOGIN_TERMINAL_UNAVAILABLE".to_owned())
+            .and_then(|_| {
+                if matches!(line.as_str(), "\n" | "\r\n") {
+                    Ok(())
+                } else {
+                    Err("DEV_LOGIN_ENTER_REQUIRED".into())
+                }
+            });
+        let _ = tx.send(result);
+    });
+    rx.recv_timeout(wait)
+        .map_err(|_| "DEV_LOGIN_INTERACTION_TIMEOUT".to_owned())?
+}
+
 fn cleanup_login_child(
     mut child: Child,
     job: &crate::process_job::Job,
@@ -2214,6 +2245,10 @@ pub fn login(workspace: &Path, target_url: &str) -> Result<Value> {
             return Err(error);
         }
     };
+    // Bound the whole owned interaction, including browser opening, human
+    // acknowledgement and normal close. Expiry still takes the same retained
+    // Job cleanup path; it does not clear an earlier interrupted owner marker.
+    let interaction_deadline = Instant::now() + Duration::from_secs(120);
     let interaction = (|| -> Result<()> {
         let output = child
             .stdout
@@ -2237,30 +2272,33 @@ pub fn login(workspace: &Path, target_url: &str) -> Result<Value> {
             .and_then(|_| input.flush())
             .map_err(|_| "DEV_LOGIN_HELPER_INPUT_UNAVAILABLE")?;
         let opened = rx
-            .recv_timeout(Duration::from_secs(120))
+            .recv_timeout(login_remaining(
+                interaction_deadline,
+                Duration::from_secs(120),
+            )?)
             .map_err(|_| "DEV_LOGIN_BROWSER_OPEN_UNPROVEN")??;
         if opened != "LOGIN_BROWSER_OPEN" {
             return Err("DEV_LOGIN_BROWSER_OPEN_UNPROVEN".into());
         }
         println!(
-            "LOGIN_BROWSER_OPEN — sign in in the visible browser, then press Enter here to close it."
+            "LOGIN_BROWSER_OPEN — inspect/sign in in the visible browser, then press Enter here. This session has a 120-second interaction limit, followed by guarded cleanup."
         );
         std::io::stdout()
             .flush()
             .map_err(|_| "DEV_LOGIN_TERMINAL_UNAVAILABLE")?;
-        let mut acknowledgement = String::new();
-        std::io::stdin()
-            .read_line(&mut acknowledgement)
-            .map_err(|_| "DEV_LOGIN_TERMINAL_UNAVAILABLE")?;
-        if !matches!(acknowledgement.as_str(), "\n" | "\r\n") {
-            return Err("DEV_LOGIN_ENTER_REQUIRED".into());
-        }
+        wait_login_enter(
+            std::io::stdin(),
+            login_remaining(interaction_deadline, Duration::from_secs(120))?,
+        )?;
         input
             .write_all(b"\n")
             .and_then(|_| input.flush())
             .map_err(|_| "DEV_LOGIN_HELPER_INPUT_UNAVAILABLE")?;
         let closed = rx
-            .recv_timeout(Duration::from_secs(30))
+            .recv_timeout(login_remaining(
+                interaction_deadline,
+                Duration::from_secs(30),
+            )?)
             .map_err(|_| "DEV_LOGIN_BROWSER_CLOSE_UNPROVEN")??;
         if closed != "LOGIN_BROWSER_CLOSED" {
             return Err("DEV_LOGIN_BROWSER_CLOSE_UNPROVEN".into());
@@ -3661,6 +3699,94 @@ mod tests {
             read_login_token(&mut BufReader::new(oversized.as_bytes())).unwrap_err(),
             "DEV_LOGIN_HELPER_OUTPUT_INVALID"
         );
+    }
+
+    #[test]
+    fn login_enter_is_bounded_and_never_accepts_text_or_eof() {
+        for bytes in [b"\n".as_slice(), b"\r\n"] {
+            wait_login_enter(std::io::Cursor::new(bytes.to_vec()), Duration::from_secs(1)).unwrap();
+        }
+        for bytes in [b"".as_slice(), b"private input\n", b"\r", b"x\n"] {
+            assert_eq!(
+                wait_login_enter(std::io::Cursor::new(bytes.to_vec()), Duration::from_secs(1))
+                    .unwrap_err(),
+                "DEV_LOGIN_ENTER_REQUIRED"
+            );
+        }
+        assert_eq!(
+            login_remaining(
+                Instant::now() - Duration::from_secs(1),
+                Duration::from_secs(120)
+            )
+            .unwrap_err(),
+            "DEV_LOGIN_INTERACTION_TIMEOUT"
+        );
+    }
+
+    #[test]
+    fn absent_login_enter_expires_without_waiting_for_input_thread() {
+        struct HeldInput(mpsc::Receiver<()>, mpsc::Sender<()>);
+        impl Read for HeldInput {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                let _ = self.0.recv();
+                Ok(0)
+            }
+        }
+        impl Drop for HeldInput {
+            fn drop(&mut self) {
+                let _ = self.1.send(());
+            }
+        }
+        let (release, held) = mpsc::channel();
+        let (exited, exit) = mpsc::channel();
+        let start = Instant::now();
+        assert_eq!(
+            wait_login_enter(HeldInput(held, exited), Duration::from_millis(25)).unwrap_err(),
+            "DEV_LOGIN_INTERACTION_TIMEOUT"
+        );
+        assert!(start.elapsed() < Duration::from_secs(2));
+        release.send(()).unwrap();
+        exit.recv_timeout(Duration::from_secs(2)).unwrap();
+    }
+
+    #[test]
+    fn expired_login_uses_existing_exact_job_cleanup_before_retiring_own_marker() {
+        use std::os::windows::process::CommandExt;
+        let (parent, workspace, _, _) = fixture();
+        let marker = workspace.join("owned-login-test.json");
+        fs::write(&marker, b"retained fixture marker").unwrap();
+        let shell = PathBuf::from(std::env::var_os("SystemRoot").unwrap())
+            .join("System32/WindowsPowerShell/v1.0/powershell.exe");
+        let mut child = Command::new(shell)
+            .args(["-NoProfile", "-NonInteractive", "-Command",
+                "if([Console]::In.ReadLine() -cne 'START'){exit 2}; [Console]::Out.WriteLine('READY'); Start-Sleep -Seconds 600"])
+            .creation_flags(0x0800_0000)
+            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null())
+            .spawn().unwrap();
+        let job = crate::process_job::Job::assign(&child).unwrap();
+        let output = child.stdout.take().unwrap();
+        let (tx, rx) = mpsc::sync_channel(1);
+        thread::spawn(move || {
+            let _ = tx.send(read_login_token(&mut BufReader::new(output)));
+        });
+        let mut input = child.stdin.take().unwrap();
+        input.write_all(b"START\n").unwrap();
+        input.flush().unwrap();
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap(),
+            "READY"
+        );
+        assert!(marker.is_file());
+        assert!(job.active_processes().unwrap() >= 1);
+        let start = Instant::now();
+        let exit = cleanup_login_child(child, &job, &marker).unwrap();
+        assert!(!exit.success());
+        assert!(start.elapsed() < Duration::from_secs(25));
+        assert_eq!(job.active_processes().unwrap(), 0);
+        assert!(!marker.exists());
+        drop(input);
+        drop(job);
+        cleanup(&parent);
     }
 
     #[test]

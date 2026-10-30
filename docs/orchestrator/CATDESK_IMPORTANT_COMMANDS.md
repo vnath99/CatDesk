@@ -1,3 +1,7 @@
+## 2026-10-30 — attended login deadline (source-qualified; installation pending)
+
+The existing `operator web-dev-runtime login --project-id <registered-project>` retains its exact registered profile/target and interactive-terminal requirement. Its120s interaction budget includes browser open, Enter and normal close, followed by bounded retained-Job cleanup. A missing Enter yields `DEV_LOGIN_INTERACTION_TIMEOUT`; no authentication/delivery result is inferred. Own-marker retirement still requires proved tree exit. The current historical interrupted marker must remain preserved until supported reconciliation; this source correction does not clear it. Read-only readiness uses `inspect-readiness` and does not need manual classification. Evidence: `docs/verification/BOUNDED_LOGIN_OWNER_2026_10_30.json`.
+
 ## 2026-10-30 — qualified read-only browser observation (source-qualified; installation pending)
 
 `operator web-dev-runtime inspect-readiness --project-id <registered-project>` reuses the existing development authority/profile, host/browser leases and selected immutable bridge. It launches no host/scheduler, enters no text, performs no Retry/Regenerate, exports no conversation/draft content, and returns exact target digest/generation plus closed `browserObservation` fields. The existing native owner bounds and cleans the process tree. It does not establish authentication or event delivery. Current retained runtime must not be retried while its interrupted-login marker remains unresolved; preserve that marker and its original owned-test evidence.

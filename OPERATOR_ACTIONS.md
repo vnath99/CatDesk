@@ -1,3 +1,7 @@
+## 2026-10-30 22:53 UTC — bounded login cleanup — TESTED_SOURCE
+
+The existing profile-login owner now expires its whole interaction after120s and follows existing exact Job cleanup.40 module tests passed (3 new), including actual Windows-process exit accounting; root/Wake strict Clippy and formatting passed. Previous interrupted markers stay preserved. Diagnostics source `f74693bae72f8ef6be71e49b54509d8456980609` is remote/PR verified; combined distinct tests across both increments:294. New installed/browser qualification remains OPEN pending supported owner reconciliation; no operator action now. See `docs/verification/BOUNDED_LOGIN_OWNER_2026_10_30.json`.
+
 ## 2026-10-30 22:46 UTC — browser observation and assistant recovery — TESTED_SOURCE
 
 No operator screenshot, classification, terminal trial or sign-in is requested. The operator already observed the correct BYOVD conversation/history/editor, no visible draft and an existing assistant load failure. The attended console exceeded150s; exact cause is unproven. Scoped cleanup found zero test/profile processes, while the interrupted-login marker remains preserved. Next executable source task is bounded owner cleanup and supported reconciliation of this attributed read-only inspection; do not clear the marker, replay unknown sends or relax producer authority. New observer installation and two-Web-chat coding remain OPEN. All131 protected pins and completed connector evidence remain unchanged.
