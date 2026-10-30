@@ -76,8 +76,10 @@ class Element {
   }
   cloneNode() { return new Element(this.tagName, {...this.attrs}, this.text, this.children.map(c => c.cloneNode())); }
   remove() { this.parentElement.children = this.parentElement.children.filter(c => c !== this); }
+  click() { mutations++; }
 }
 const el = (tag, attrs = {}, text = '', children = []) => new Element(tag, attrs, text, children);
+const append = (parent, child) => { child.parentElement = parent; parent.children.push(child); };
 const button = label => el('button', {'aria-label':label}, label);
 const user = el('div', {'data-content-search-unit-key':'fallback-turn-0:0:user'}, '', [
   el('div', options.userClassOnly ? {class:'group/user-message'} : {'data-user-message-bubble':'true'}, '', [
@@ -121,6 +123,14 @@ const assistant = el('div', {'data-content-search-unit-key':'fallback-turn-0:2:a
     ]),
   ]),
 ]);
+if (options.timeoutCard) append(assistant, el('div', {role:'alert'}, '', [
+  el('p', {}, 'Message delivery timed out. Please try again.'),
+  ...Array.from({length:options.retryOnlyOutside ? 0 : (options.retryCount ?? 1)}, () => button(options.retryLabel || 'Retry')),
+]));
+if (options.userTimeoutQuote) {
+  append(user.children[0], el('p', {}, 'Message delivery timed out. Please try again.'));
+  append(user.children[0], button('Retry'));
+}
 const children = options.userOnly ? [user] : [user, assistant];
 if (options.duplicateUser) children.splice(1, 0, user.cloneNode());
 for (const control of options.submitControls || []) children.push(el('button', {
@@ -137,6 +147,25 @@ if (options.bareUser) {
   delete paired.attrs['data-content-search-turn-key'];
 }
 global.document = el('document', {}, '', [paired]);
+if (options.legacyTurns) {
+  delete user.attrs['data-content-search-unit-key'];
+  delete assistant.attrs['data-content-search-unit-key'];
+  user.attrs['data-message-author-role'] = 'user';
+  assistant.attrs['data-message-author-role'] = 'assistant';
+  document.children = [
+    el('div', {'data-testid':'conversation-turn-0'}, '', [user]),
+    el('div', {'data-testid':'conversation-turn-1'}, '', [assistant,
+      el('div', {class:'turn-action-controls'}, '', [el('button', {'data-testid':'copy-turn-action-button','aria-label':'Copy'}, 'Copy')])]),
+  ];
+}
+if (options.retryOnlyOutside) document.children.push(button('Retry'));
+if (options.historicalLoadError) document.children.unshift(el('div', {'data-message-author-role':'assistant'}, 'This response couldn’t load'));
+document.readyState = options.documentState || 'complete';
+if (options.observationEditor) document.children.push(el('div', {id:'prompt-textarea'}, options.observationDraft || ''));
+if (options.observationStop) document.children.push(el('button', {'data-testid':'stop-button'}));
+if (options.observationLogin) document.children.push(el('a', {href:'/auth/login'}));
+if (options.observationCaptcha) document.children.push(el('iframe', {title:'captcha'}));
+if (options.observationNetwork) document.children.push(el('div', {id:'main-frame-error'}), el('div', {id:'error-code'}));
 global.window = {getComputedStyle: () => ({visibility:'visible', display:'block'})};
 global.location = {href:options.location || 'https://chatgpt.com/c/current-dom'};
 if (options.composerCount !== undefined) {
@@ -196,7 +225,7 @@ const value = eval(fs.readFileSync(0, 'utf8'));
 const editor = document.querySelector('#prompt-textarea');
 process.stdout.write(JSON.stringify(options.normalizationTrace ? {
   value, mutations, commands, editorText:editor?.textContent || '', linked:Boolean(editor?.querySelector('a[href], [text-link-href]'))
-} : options.traceMutations ? {value, mutations} : value));
+} : (options.traceMutations || options.traceClicks) ? {value, mutations} : value));
 """
 
 
@@ -205,7 +234,7 @@ class CurrentDom:
         self.options = options
 
     def get_current_url(self):
-        return self.options.get("location", "https://chatgpt.com/c/current-dom")
+        return self.options.get("metadataLocation", self.options.get("location", "https://chatgpt.com/c/current-dom"))
 
     def get_attribute(self, selector, attribute, timeout):
         return self.evaluate(f"document.querySelector({json.dumps(selector)})?.getAttribute({json.dumps(attribute)}) ?? null")
@@ -230,7 +259,7 @@ class CurrentDom:
             if not observed["linked"]:
                 self.options.update(composerLink=False, composerText=observed["editorText"])
             return observed["value"]
-        if self.options.get("traceMutations"):
+        if self.options.get("traceMutations") or self.options.get("traceClicks"):
             self.mutations = observed["mutations"]
             return observed["value"]
         return observed
@@ -546,7 +575,7 @@ class CurrentDomTests(unittest.TestCase):
                                                             require_usable_body=True)[3])
 
     def test_error_placeholder_and_controls_only_are_not_usable(self):
-        with self.assertRaisesRegex(bridge.PostSubmitUnknown, "RESPONSE_COMPLETION_UNPROVEN"):
+        with self.assertRaisesRegex(bridge.PostSubmitUnknown, "RESPONSE_LOAD_ERROR"):
             self.sink.response_snapshot(CurrentDom(loadError=True), "exact wake message", require_usable_body=True)
         with self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_SOURCE_LOAD_ERROR_PLACEHOLDER"):
             self.sink.require_usable_latest_assistant(CurrentDom(loadError=True), source=True)
@@ -554,6 +583,108 @@ class CurrentDomTests(unittest.TestCase):
         self.assertFalse(observed["messages"][-1]["textComplete"])
         self.assertFalse(self.sink.response_snapshot(CurrentDom(controlsOnly=True), "exact wake message",
                                                    require_usable_body=True)[3])
+
+    def test_readonly_surface_separates_usable_conversation_and_unattributed_load_error(self):
+        result = self.sink.browser_surface_observation(CurrentDom(loadError=True, observationEditor=True))
+        self.assertEqual(result, dict(route="EXACT", document="COMPLETE", history="PRESENT",
+            editor="READY", composer="EMPTY", generation="IDLE", assistant="LOAD_ERROR",
+            exchange="UNATTRIBUTED", recovery="OBSERVATION_ONLY"))
+
+    def test_readonly_surface_exports_no_draft_or_assistant_text(self):
+        result = self.sink.browser_surface_observation(CurrentDom(observationEditor=True,
+            observationDraft="PRIVATE_DRAFT_MARKER", answer="PRIVATE_ANSWER_MARKER"))
+        self.assertEqual(result["composer"], "DRAFT_PRESENT")
+        self.assertEqual(result["assistant"], "PRESENT")
+        self.assertNotIn("PRIVATE_", json.dumps(result))
+
+    def test_readonly_surface_retains_exact_conversation_route_equivalence(self):
+        for path in ("/c/test", "/g/project/c/test"):
+            sink = bridge.CdpSink("https://chatgpt.com" + path, self.sink.profile, 30, 20)
+            for host in ("chatgpt.com", "chat.openai.com"):
+                for observed in ("/c/test", "/g/other-project/c/test"):
+                    self.assertEqual(sink.browser_surface_observation(
+                        CurrentDom(location="https://" + host + observed))["route"], "EXACT")
+            for observed in ("/c/other", "/g/project/c/other", "/c/test/", "/c/test?query=1"):
+                self.assertEqual(sink.browser_surface_observation(
+                    CurrentDom(location="https://chatgpt.com" + observed))["route"], "TARGET_DRIFT")
+
+    def test_readonly_surface_distinguishes_layers_without_recovery(self):
+        for options, key, expected in [
+            ({"observationStop": True}, "generation", "ACTIVE"),
+            ({"observationLogin": True}, "route", "AUTH_REQUIRED"),
+            ({"observationCaptcha": True}, "route", "SECURITY_CHECK"),
+            ({"observationNetwork": True}, "route", "NETWORK_ERROR"),
+            ({"location": "chrome-error://chromewebdata/"}, "route", "NETWORK_ERROR"),
+            ({"location": "https://chatgpt.com/"}, "route", "HOME"),
+            ({"location": "https://chatgpt.com/c/other"}, "route", "TARGET_DRIFT"),
+            ({"documentState": "loading"}, "document", "LOADING"),
+            ({}, "editor", "MISSING"),
+        ]:
+            with self.subTest(options=options):
+                result = self.sink.browser_surface_observation(CurrentDom(**options))
+                self.assertEqual(result[key], expected)
+                self.assertEqual(result["recovery"], "OBSERVATION_ONLY")
+
+    def test_historical_load_error_does_not_replace_current_completed_turn(self):
+        cdp = CurrentDom(historicalLoadError=True)
+        self.assertEqual(self.sink.browser_surface_observation(cdp)["assistant"], "PRESENT")
+        self.assertTrue(self.sink.response_snapshot(cdp, "exact wake message", require_usable_body=True)[3])
+
+    def test_answer_discussing_response_error_is_not_the_error_placeholder(self):
+        cdp = CurrentDom(answer="The UI may say This response couldn’t load. Preserve its receipt before recovery.", observationEditor=True)
+        self.assertEqual(self.sink.browser_surface_observation(cdp)["assistant"], "PRESENT")
+        self.assertTrue(self.sink.response_snapshot(cdp, "exact wake message", require_usable_body=True)[3])
+        self.sink.require_usable_latest_assistant(cdp, source=True)
+
+    def test_surface_uses_document_route_not_stale_driver_metadata(self):
+        cdp = CurrentDom(location="https://chatgpt.com/c/foreign", metadataLocation=self.sink.url,
+                         observationEditor=True)
+        self.assertEqual(self.sink.browser_surface_observation(cdp)["route"], "TARGET_DRIFT")
+
+    def test_unique_assistant_timeout_retry_is_scoped_and_not_a_user_submit(self):
+        for legacy in [False, True]:
+            with self.subTest(legacy=legacy):
+                cdp = CurrentDom(timeoutCard=True, observationEditor=True, traceClicks=True, legacyTurns=legacy)
+                self.assertEqual(self.sink.response_snapshot(cdp, "exact wake message")[:2], (1, 1))
+                self.sink.click_response_timeout_retry(cdp, "exact wake message")
+                self.assertEqual(cdp.mutations, 1)
+
+    def test_current_receipt_attribution_distinguishes_failed_history_and_duplicates(self):
+        for options, expected in [
+            ({"historicalLoadError": True}, "RESPONSE_COMPLETE"),
+            ({"loadError": True}, "RESPONSE_LOAD_ERROR"),
+            ({"loadError": True, "observationStop": True}, "RESPONSE_PENDING"),
+            ({"loadError": True, "duplicateUser": True}, "RESPONSE_EXPECTED_USER_DUPLICATED"),
+        ]:
+            with self.subTest(options=options):
+                cdp = CurrentDom(observationEditor=True, **options)
+                if expected in {"RESPONSE_COMPLETE", "RESPONSE_PENDING"}:
+                    self.assertEqual(self.sink.observe_cooperative_response(cdp, "exact wake message",
+                        bridge.digest("exact wake message")), expected)
+                else:
+                    with self.assertRaisesRegex(bridge.Attention, expected):
+                        self.sink.observe_cooperative_response(cdp, "exact wake message",
+                            bridge.digest("exact wake message"))
+
+    def test_retry_refuses_user_quotes_foreign_controls_drafts_and_route_drift(self):
+        for options, reason in [
+            ({"userTimeoutQuote": True}, "RESPONSE_RETRY_CONTROL_AMBIGUOUS"),
+            ({"timeoutCard": True, "retryOnlyOutside": True}, "RESPONSE_RETRY_CONTROL_AMBIGUOUS"),
+            ({"timeoutCard": True, "retryCount": 2}, "RESPONSE_RETRY_CONTROL_AMBIGUOUS"),
+            ({"timeoutCard": True, "retryLabel": "Regenerate"}, "RESPONSE_RETRY_CONTROL_AMBIGUOUS"),
+            ({"timeoutCard": True, "observationDraft": "PRIVATE_DRAFT"}, "RESPONSE_RETRY_BLOCKED_DRAFT"),
+            ({"timeoutCard": True, "observationStop": True}, "RESPONSE_RETRY_BLOCKED_GENERATION"),
+            ({"timeoutCard": True, "location": "https://chatgpt.com/c/foreign", "metadataLocation": self.sink.url}, "RESPONSE_TARGET_DRIFT"),
+        ]:
+            with self.subTest(options=options):
+                cdp = CurrentDom(observationEditor=True, traceClicks=True, **options)
+                with self.assertRaisesRegex(bridge.PostSubmitUnknown, reason):
+                    self.sink.click_response_timeout_retry(cdp, "exact wake message")
+                self.assertEqual(getattr(cdp, "mutations", 0), 0)
+
+    def test_user_timeout_quote_is_not_an_assistant_timeout_card(self):
+        cdp = CurrentDom(userTimeoutQuote=True)
+        self.assertEqual(self.sink.response_snapshot(cdp, "exact wake message")[:2], (0, 0))
 
 
 if __name__ == "__main__":

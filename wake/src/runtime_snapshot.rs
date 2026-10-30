@@ -95,6 +95,7 @@ fn diagnostic_failure(reason: &str) -> String {
         | "LOGIN_OR_PROFILE_REQUIRED"
         | "RESPONSE_STATE_QUERY_FAILED"
         | "RESPONSE_STATE_UNPROVEN"
+        | "RESPONSE_LOAD_ERROR"
         | "WEB_REVIEW_READ_TIMEOUT"
         | "WEB_REVIEW_TARGET_CHANGED"
         | "WEB_AUTO_OWNER_STOPPED" => code.into(),
@@ -551,6 +552,7 @@ mod tests {
     fn snapshot_diagnostic_error_vocabulary_matches_bounded_component_codes() {
         for reason in [
             "RESPONSE_STATE_QUERY_FAILED",
+            "RESPONSE_LOAD_ERROR",
             "SOURCE_SNAPSHOT_TIMEOUT",
             "CHATGPT_NOT_IDLE",
             "SELENIUMBASE_IMPORT_FAILED",

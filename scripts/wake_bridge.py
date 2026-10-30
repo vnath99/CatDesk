@@ -86,6 +86,35 @@ RESPONSE_RETRY_START_WINDOW_SECONDS = 15.0
 RESPONSE_GENERATION_WINDOW_SECONDS = 35.0 * 60.0
 RESPONSE_TOTAL_WINDOW_SECONDS = 90.0 * 60.0
 RESPONSE_MAX_RETRIES = 3
+RESPONSE_LOAD_ERROR_DETECTOR = """
+const assistantLoadError = element => {
+    if (!element || typeof element.cloneNode !== 'function') return false;
+    const clean = node => {
+        const copy = node.cloneNode(true);
+        copy.querySelectorAll('button, [role="button"], [role="toolbar"], [aria-hidden="true"], h4[data-conversation-role]')
+            .forEach(control => control.remove());
+        return String(copy.textContent || '').replace(/[‘’]/g, "'").replace(/\\s+/g, ' ').trim().toLowerCase().replace(/\\.$/, '');
+    };
+    const marker = "this response couldn't load";
+    const bodySelector = '[data-message-content], .markdown, [class~="prose"], [data-markdown-text-style="assistant-message"]';
+    const body = element.matches(bodySelector) ? element : element.querySelector(bodySelector);
+    // A normal answer discussing the error is not the UI error placeholder.
+    if (body && clean(body) && clean(body) !== marker) return false;
+    return [element, ...element.querySelectorAll('div, p, span')]
+        .some(node => visible(node) && clean(node) === marker);
+};
+"""
+# Shared by observation and the sole qualified assistant Retry action. Never
+# climb out of the wake's assistant/exchange boundary or borrow USER controls.
+RESPONSE_ASSISTANT_SCOPE = """
+const userNodeSelector = "[data-message-author-role='user'], [data-turn='user'], " +
+    "[data-user-message-bubble], [class~='group/user-message']";
+const responseBoundary = latestUser.matches('[data-content-search-turn-key]')
+    ? latestUser : (turnsAfterWake.length === 1 ? turnsAfterWake[0] : null);
+const assistantResponseNode = element => Boolean(element && responseBoundary &&
+    inWakeExchange(element) && responseBoundary.contains(element) &&
+    !element.closest(userNodeSelector));
+"""
 POST_SUBMIT_DIAGNOSTICS = frozenset({
     "SUBMIT_CLICK_UNKNOWN",
     "SUBMIT_ENTER_UNKNOWN",
@@ -125,6 +154,10 @@ POST_SUBMIT_DIAGNOSTICS = frozenset({
     "RESPONSE_NETWORK_ERROR",
     "RESPONSE_GENERATION_TIMEOUT",
     "RESPONSE_COMPLETION_UNPROVEN",
+    "RESPONSE_LOAD_ERROR",
+    "RESPONSE_RETRY_BLOCKED_DRAFT",
+    "RESPONSE_RETRY_BLOCKED_GENERATION",
+    "RESPONSE_RETRY_EDITOR_UNAVAILABLE",
     "RESPONSE_TIMEOUT_RETRY_AMBIGUOUS",
     "RESPONSE_RETRY_EXHAUSTED",
     "RESPONSE_TIMEOUT_STATE_LOST",
@@ -469,6 +502,85 @@ class CdpSink:
     def visible(cdp: Any, selector: str) -> bool:
         try: return bool(cdp.is_element_visible(selector))
         except Exception: return False
+    def browser_surface_observation(self, cdp: Any) -> dict[str, str]:
+        """Metadata only, with the route checked inside the same DOM read.
+
+        This is not a wake receipt or caller identity. An assistant failure on
+        an unbound inspection is unattributed; it never authorizes Retry/send.
+        Draft text and conversation bodies never cross the CDP return boundary.
+        """
+        vocab = {
+            "route": {"EXACT", "HOME", "AUTH_REQUIRED", "SECURITY_CHECK", "NETWORK_ERROR", "TARGET_DRIFT", "UNKNOWN"},
+            "document": {"COMPLETE", "LOADING", "UNKNOWN"},
+            "history": {"PRESENT", "ABSENT", "UNKNOWN"},
+            "editor": {"READY", "MISSING", "AMBIGUOUS", "UNKNOWN"},
+            "composer": {"EMPTY", "DRAFT_PRESENT", "UNKNOWN"},
+            "generation": {"ACTIVE", "IDLE", "UNKNOWN"},
+            "assistant": {"LOAD_ERROR", "DELIVERY_TIMEOUT", "PRESENT", "ABSENT", "UNKNOWN"},
+        }
+        script = f"""(() => {{
+            const result = {{route:'UNKNOWN',document:'UNKNOWN',history:'UNKNOWN',editor:'UNKNOWN',
+                composer:'UNKNOWN',generation:'UNKNOWN',assistant:'UNKNOWN'}};
+            const visible = node => {{
+                const style = node && window.getComputedStyle(node);
+                return Boolean(node && node.getClientRects().length &&
+                    style.visibility !== 'hidden' && style.display !== 'none');
+            }};
+            const any = selectors => selectors.some(s => Array.from(document.querySelectorAll(s)).some(visible));
+            {RESPONSE_LOAD_ERROR_DETECTOR}
+            let actual, expected;
+            try {{actual = new URL(location.href); expected = new URL({json.dumps(self.url)});}}
+            catch (_) {{return result;}}
+            if (actual.protocol === 'chrome-error:') {{result.route='NETWORK_ERROR';return result;}}
+            if (actual.protocol !== 'https:' || !['chatgpt.com','chat.openai.com'].includes(actual.hostname) ||
+                    actual.port || actual.username || actual.password || actual.search || actual.hash) {{
+                result.route='TARGET_DRIFT';return result;
+            }}
+            if (actual.pathname.startsWith('/auth/') || any({json.dumps(LOGIN)})) {{
+                result.route='AUTH_REQUIRED';return result;
+            }}
+            if (any({json.dumps(CAPTCHA)})) {{result.route='SECURITY_CHECK';return result;}}
+            if ({json.dumps(NETWORK)}.every(s => any([s]))) {{result.route='NETWORK_ERROR';return result;}}
+            const route = actual.pathname.match(new RegExp('^/(?:c/([A-Za-z0-9_-]{{1,200}})|g/[A-Za-z0-9_-]{{1,200}}/c/([A-Za-z0-9_-]{{1,200}}))$'));
+            result.route = route && (route[1] || route[2]) === expected.pathname.split('/').pop()
+                ? 'EXACT' : (['','/'].includes(actual.pathname) ? 'HOME' : 'TARGET_DRIFT');
+            if (!['EXACT','HOME'].includes(result.route)) return result;
+            result.document = document.readyState === 'complete' ? 'COMPLETE' :
+                (['loading','interactive'].includes(document.readyState) ? 'LOADING' : 'UNKNOWN');
+            const editors = Array.from(document.querySelectorAll({json.dumps(', '.join(EDITOR_SELECTORS))})).filter(visible);
+            result.editor = editors.length === 1 ? 'READY' : (editors.length ? 'AMBIGUOUS' : 'MISSING');
+            if (editors.length === 1) {{
+                const e = editors[0];
+                const text = typeof e.value === 'string' ? e.value : (e.textContent || '');
+                const media = e.querySelector('img,video,audio,input,[data-file-id]') ||
+                    document.querySelector('[data-testid*="attachment" i], [data-testid*="file-thumbnail" i]');
+                result.composer = text !== '' || media ? 'DRAFT_PRESENT' : 'EMPTY';
+            }}
+            result.generation = any({json.dumps(STOP)}) ? 'ACTIVE' : 'IDLE';
+            const roles = document.querySelectorAll('[data-message-author-role], [data-content-search-turn-key], [data-testid^="conversation-turn-"], article[data-turn]');
+            result.history = roles.length ? 'PRESENT' : 'ABSENT';
+            const raw = Array.from(document.querySelectorAll(
+                "[data-message-author-role='assistant'], [data-turn='assistant'], [data-content-search-unit-key]"
+            )).filter(node => visible(node) && (node.matches("[data-message-author-role='assistant'], [data-turn='assistant']") ||
+                node.querySelector('h4[data-conversation-role="assistant"]')));
+            const assistants = raw.filter(node => !raw.some(other => other !== node && other.contains(node)));
+            if (assistants.length > 128) return result;
+            if (!assistants.length) {{result.assistant='ABSENT';return result;}}
+            const text = String(assistants[assistants.length - 1].textContent || '');
+            const limited = text.slice(0, 16384).replace(/[‘’]/g, "'").toLowerCase();
+            result.assistant = assistantLoadError(assistants[assistants.length - 1]) ? 'LOAD_ERROR' :
+                (limited.includes('message delivery timed out. please try again.') ? 'DELIVERY_TIMEOUT' :
+                 (text.length > 16384 ? 'UNKNOWN' : 'PRESENT'));
+            return result;
+        }})()"""
+        try:
+            value = self.cdp_value(cdp.evaluate(script))
+        except Exception as error:
+            raise Attention("BROWSER_OBSERVATION_UNAVAILABLE") from error
+        if (not isinstance(value, dict) or set(value) != set(vocab) or
+                any(not isinstance(value[k], str) or value[k] not in allowed for k, allowed in vocab.items())):
+            raise Attention("BROWSER_OBSERVATION_INVALID")
+        return dict(value, exchange="UNATTRIBUTED", recovery="OBSERVATION_ONLY")
     def error(self, cdp: Any, current: str | None = None) -> bool:
         if current is None:
             try:
@@ -1139,8 +1251,9 @@ class CdpSink:
             const turnsAfterWake = turnContainers.filter(turn => followsLatestUser(turn));
             if (turnsAfterWake.length > 1)
                 return ['invalid', 0, 0, false, false];
+            {RESPONSE_ASSISTANT_SCOPE}
             const rawTimeouts = Array.from(document.querySelectorAll('div, span, p'))
-                .filter(element => visible(element) && inWakeExchange(element) &&
+                .filter(element => visible(element) && assistantResponseNode(element) &&
                     normalize(element.innerText || element.textContent) === timeoutText);
             const timeouts = rawTimeouts.filter(element =>
                 !Array.from(element.children).some(child =>
@@ -1148,9 +1261,9 @@ class CdpSink:
             const retryButtons = [];
             for (const timeout of timeouts) {{
                 let scope = timeout;
-                for (let depth = 0; depth < 7 && scope; depth += 1, scope = scope.parentElement) {{
+                for (let depth = 0; depth < 7 && scope && responseBoundary && responseBoundary.contains(scope); depth += 1, scope = scope.parentElement) {{
                     const candidates = Array.from(scope.querySelectorAll('button')).filter(button =>
-                        visible(button) &&
+                        visible(button) && assistantResponseNode(button) &&
                         (normalize(button.innerText || button.textContent) === retryLabel ||
                          normalize(button.getAttribute('aria-label')) === retryLabel));
                     if (candidates.length) {{
@@ -1203,7 +1316,8 @@ class CdpSink:
             // ChatGPT can render an old assistant as a load-error placeholder
             // while retaining Copy/Regenerate controls. Those controls alone
             // are not evidence of a usable completed response.
-            if (assistantRawText.toLowerCase().includes("this response couldn't load"))
+            {RESPONSE_LOAD_ERROR_DETECTOR}
+            if (assistantLoadError(latestAssistant))
                 return ['load-error', 0, 0, true, false];
             const latestAssistantTurn = latestAssistant
                 ? (latestAssistant.closest("[data-content-search-turn-key]") ||
@@ -1222,8 +1336,6 @@ class CdpSink:
             // cooperative completion, climb only inside an assistant-only
             // subtree; never treat a whole-turn control or a mounted message
             // selection id as proof that the assistant finished.
-            const userNodeSelector = "[data-message-author-role='user'], article[data-turn='user'], " +
-                "[data-user-message-bubble], [class~='group/user-message']";
             let assistantCompletionAction = null;
             for (let scope = latestAssistant; scope && scope !== latestUser; scope = scope.parentElement) {{
                 if (scope.querySelector(userNodeSelector)) break;
@@ -1283,7 +1395,7 @@ class CdpSink:
                 not isinstance(value[4], bool)):
             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
         if value[0] == "load-error":
-            raise PostSubmitUnknown("RESPONSE_COMPLETION_UNPROVEN")
+            raise PostSubmitUnknown("RESPONSE_LOAD_ERROR")
         if value[0] != "ready":
             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
         return value[1], value[2], value[3], value[4]
@@ -1339,6 +1451,8 @@ class CdpSink:
                 cdp, message, require_usable_body=True
             )
         except PostSubmitUnknown as error:
+            if str(error) == "RESPONSE_LOAD_ERROR":
+                raise Attention("RESPONSE_LOAD_ERROR") from error
             raise Attention("RESPONSE_STATE_UNPROVEN") from error
         if timeout_count:
             raise Attention("RESPONSE_TIMEOUT_RETRY_REQUIRED")
@@ -1346,7 +1460,14 @@ class CdpSink:
 
     def click_response_timeout_retry(self, cdp: Any, message: str) -> None:
         """Click exactly one Retry control tied to the exact Wake turn."""
+        try:
+            document_url = str(cdp.get_current_url())
+        except Exception as error:
+            raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED") from error
+        if not self.exact(document_url):
+            raise PostSubmitUnknown("RESPONSE_TARGET_DRIFT")
         script = f"""(() => {{
+            if (location.href !== {json.dumps(document_url)}) return 'target-drift';
             const timeoutText = {json.dumps("Message delivery timed out. Please try again.")};
             const retryLabel = {json.dumps("Retry")};
             const expectedWake = {json.dumps(normalize_message(message))};
@@ -1357,6 +1478,14 @@ class CdpSink:
                 return element.getClientRects().length > 0 &&
                     style.visibility !== 'hidden' && style.display !== 'none';
             }};
+            const any = selectors => selectors.some(s => Array.from(document.querySelectorAll(s)).some(visible));
+            if (any({json.dumps(STOP)})) return 'generation-active';
+            const editors = Array.from(document.querySelectorAll({json.dumps(', '.join(EDITOR_SELECTORS))})).filter(visible);
+            if (editors.length !== 1) return 'editor-unavailable';
+            const editor = editors[0];
+            const draft = typeof editor.value === 'string' ? editor.value : (editor.textContent || '');
+            if (draft !== '' || editor.querySelector('img,video,audio,input,[data-file-id]') ||
+                    document.querySelector('[data-testid*="attachment" i], [data-testid*="file-thumbnail" i]')) return 'draft-present';
             const turnCandidates = Array.from(document.querySelectorAll(
                 "[data-content-search-turn-key], " +
                 "[data-testid^='conversation-turn-'], article[id^='conversation-turn-'], " +
@@ -1383,9 +1512,11 @@ class CdpSink:
                 Boolean(latestUser.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING);
             const inWakeExchange = element =>
                 Boolean(element && (latestUser.contains(element) || followsLatestUser(element)));
-            if (turnContainers.filter(turn => followsLatestUser(turn)).length > 1) return 'ambiguous-user';
+            const turnsAfterWake = turnContainers.filter(turn => followsLatestUser(turn));
+            if (turnsAfterWake.length > 1) return 'ambiguous-user';
+            {RESPONSE_ASSISTANT_SCOPE}
             const rawTimeouts = Array.from(document.querySelectorAll('div, span, p'))
-                .filter(element => visible(element) && inWakeExchange(element) &&
+                .filter(element => visible(element) && assistantResponseNode(element) &&
                     normalize(element.innerText || element.textContent) === timeoutText);
             const timeouts = rawTimeouts.filter(element =>
                 !Array.from(element.children).some(child =>
@@ -1393,9 +1524,9 @@ class CdpSink:
             if (timeouts.length !== 1) return timeouts.length ? 'ambiguous-timeout' : 'missing-timeout';
             const retryButtons = [];
             let scope = timeouts[0];
-            for (let depth = 0; depth < 7 && scope; depth += 1, scope = scope.parentElement) {{
+            for (let depth = 0; depth < 7 && scope && responseBoundary && responseBoundary.contains(scope); depth += 1, scope = scope.parentElement) {{
                 const candidates = Array.from(scope.querySelectorAll('button')).filter(button =>
-                    visible(button) &&
+                    visible(button) && assistantResponseNode(button) &&
                     (normalize(button.innerText || button.textContent) === retryLabel ||
                      normalize(button.getAttribute('aria-label')) === retryLabel));
                 if (candidates.length) {{
@@ -1415,7 +1546,12 @@ class CdpSink:
         except Exception as error:
             raise PostSubmitUnknown("RESPONSE_RETRY_CLICK_FAILED") from error
         if value != "clicked":
-            raise PostSubmitUnknown("RESPONSE_RETRY_CONTROL_AMBIGUOUS")
+            raise PostSubmitUnknown({
+                "target-drift": "RESPONSE_TARGET_DRIFT",
+                "generation-active": "RESPONSE_RETRY_BLOCKED_GENERATION",
+                "editor-unavailable": "RESPONSE_RETRY_EDITOR_UNAVAILABLE",
+                "draft-present": "RESPONSE_RETRY_BLOCKED_DRAFT",
+            }.get(value if isinstance(value, str) else "", "RESPONSE_RETRY_CONTROL_AMBIGUOUS"))
 
     def reopen_submit_receipt_target(
         self,
@@ -2856,7 +2992,7 @@ class NewConversationSink(CdpSink):
         if not messages or messages[-1]["role"] != "ASSISTANT":
             raise error_type(unavailable)
         body = normalize_message(messages[-1]["text"]).replace("’", "'").replace("‘", "'")
-        if "this response couldn't load" in body.lower():
+        if body.lower().rstrip(".") == "this response couldn't load":
             raise error_type(load_error)
         if not body or not messages[-1]["textComplete"] or not messages[-1]["revisionComplete"]:
             raise error_type(unavailable)

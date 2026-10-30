@@ -1,3 +1,9 @@
+## 2026-10-30 22:46 UTC — browser observation and assistant recovery — TESTED_SOURCE
+
+No operator screenshot, classification, terminal trial or sign-in is requested. The operator already observed the correct BYOVD conversation/history/editor, no visible draft and an existing assistant load failure. The attended console exceeded150s; exact cause is unproven. Scoped cleanup found zero test/profile processes, while the interrupted-login marker remains preserved. Next executable source task is bounded owner cleanup and supported reconciliation of this attributed read-only inspection; do not clear the marker, replay unknown sends or relax producer authority. New observer installation and two-Web-chat coding remain OPEN. All131 protected pins and completed connector evidence remain unchanged.
+
+Evidence and full comparison: `docs/verification/BROWSER_RESPONSE_DIAGNOSTICS_2026_10_30.json` and `docs/OCTOBER_2026_MVP_ACCEPTANCE.md`.
+
 ## 2026-10-30 — owned native interactive console qualified — ACTUAL_WINDOWS_NO_BROWSER
 
 The app-terminal inspection refused the same direct-root identity as the ordinary terminal. Agent-side reproduction showed that packaged PowerShell and its bundled-PowerShell child retain that mismatched view; no more operator terminal retries are requested. A matching agent context therefore needs its own retained, bounded interactive console rather than a store/authority rewrite.

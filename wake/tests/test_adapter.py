@@ -759,6 +759,16 @@ class AdapterTests(unittest.TestCase):
             ):
                 with self.assertRaisesRegex(bridge.Attention, "RESPONSE_STATE_UNPROVEN"):
                     sink.observe_cooperative_response(cdp, "bounded wake", expected)
+            with patch.object(bridge.CdpSink, "post_submit_visible_any", return_value=False), patch.object(
+                bridge.CdpSink, "document_ready_state", return_value="complete"
+            ), patch.object(bridge.CdpSink, "trusted_turn_anchor_state", return_value=(1, 0)), patch.object(
+                bridge.CdpSink, "user_message_digests", return_value=[expected]
+            ), patch.object(bridge.CdpSink, "editor_state", return_value=("ready", True)), patch.object(
+                bridge.CdpSink, "response_snapshot", side_effect=bridge.PostSubmitUnknown("RESPONSE_LOAD_ERROR")
+            ), patch.object(bridge.CdpSink, "click_response_timeout_retry") as retry:
+                with self.assertRaisesRegex(bridge.Attention, "^RESPONSE_LOAD_ERROR$"):
+                    sink.observe_cooperative_response(cdp, "bounded wake", expected)
+                retry.assert_not_called()
 
     def test_controls_only_assistant_is_not_usable_or_complete(self):
         node_exe = shutil.which("node")

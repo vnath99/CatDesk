@@ -62,7 +62,7 @@ function Get-DoctorDefinitions {
         @('OFFICIAL_RUNTIME','EXISTING_OFFICIAL_OWNER','CONFIGURED_NATIVE_RUNTIME_PROFILE','RUN_EXISTING_OWNER_READONLY_STATUS',@('RUNTIME_CLIENT_UNAVAILABLE','RUNTIME_OWNER_UNVERIFIED','RUNTIME_OWNER_ABSENT','RUNTIME_PROFILE_ROUTE_MISMATCH','RUNTIME_LOCAL_READY')),
         @('UPSTREAM_CONTROL_PLANE','EXTERNAL_SERVICE','OFFICIAL_OWNER_POLL_OBSERVATION','WAIT_FOR_CHANGED_UPSTREAM_EVIDENCE',@('UPSTREAM_NOT_PROBED','UPSTREAM_RATE_OR_CONNECTOR_UNAVAILABLE','UPSTREAM_READY','UPSTREAM_UNAVAILABLE')),
         @('CONNECTOR','CHATGPT_CONNECTOR','CONNECTOR_RESPONSE_OBSERVATION','WAIT_FOR_CHANGED_CONNECTOR_EVIDENCE',@('CONNECTOR_NOT_PROBED','UPSTREAM_RATE_OR_CONNECTOR_UNAVAILABLE','CONNECTOR_TRANSPORT_NO_HTTP_STATUS','CONNECTOR_RESPONSE_VERIFIED')),
-        @('BROWSER','EXISTING_BROWSER_OWNER','APPROVED_PROFILE_READINESS_OBSERVATION','operator web-dev-runtime inspect-readiness --project-id <registered-project>',@('BROWSER_NOT_INSPECTED','HOME_EDITOR_MISSING','BROWSER_DRAFT_UNKNOWN','BROWSER_TARGET_MISSING','BROWSER_EXACT_READY')),
+        @('BROWSER','EXISTING_BROWSER_OWNER','APPROVED_PROFILE_READINESS_OBSERVATION','operator web-dev-runtime inspect-readiness --project-id <registered-project>',@('BROWSER_NOT_INSPECTED','HOME_EDITOR_MISSING','BROWSER_DRAFT_UNKNOWN','BROWSER_TARGET_MISSING','BROWSER_EXACT_READY','BROWSER_RESPONSE_LOAD_ERROR','BROWSER_AUTH_REQUIRED','BROWSER_OWNER_CLEANUP_UNVERIFIED')),
         @('PROJECT_REGISTRY','PROJECT_REGISTRY','.catdesk/projects/projects.json','operator web projects',@('REGISTRY_METADATA_PAIRED','PROJECT_WAKE_TARGET_MISMATCH','REGISTRY_UNAVAILABLE','REGISTRY_INVALID','WAKE_CONFIG_INVALID')),
         @('WAKE_QUEUE','EXISTING_WAKE_OWNER','WAKE_CONFIG_CONTROL_AND_DELIVERIES','operator web projects',@('WAKE_METADATA_OBSERVED','WAKE_METADATA_UNAVAILABLE','WAKE_METADATA_PARTIAL','WAKE_UNKNOWN_OUTCOME')),
         @('CODEX_CLI','CURRENT_USER_CODEX','TRUSTED_CODEX_COMMAND_DISCOVERY','operator codex diagnose --project-id <registered-project>',@('CODEX_PRESENT_AUTH_UNVERIFIED','CODEX_CLI_UNAVAILABLE')),
@@ -214,11 +214,25 @@ function Invoke-CatDeskDoctor([string]$ObservationFile = '', [string]$ProjectWor
             Set-DoctorLayer 'OBSERVATIONS' 'UNVERIFIED' 'OBSERVATIONS_IMPORTED_ADVISORY'
         }catch{Set-DoctorLayer 'OBSERVATIONS' 'FAIL' 'OBSERVATIONS_INVALID'}
     }else{Set-DoctorLayer 'OBSERVATIONS' 'NOT_RUN' 'OBSERVATIONS_NOT_SUPPLIED'}
-    # A known readiness refusal or unknown draft needs the existing profile's
-    # operator inspection, not another identical automated readiness attempt.
-    # This is advice only: do not open a browser, authenticate, or touch drafts.
+    # Coarse historical refusals cannot prove authentication or justify asking
+    # for a screenshot/login. Reconcile the owner and qualify the content-free
+    # observer before any new bounded inspection; this advice performs no action.
     if($layers['BROWSER'].code -cin @('HOME_EDITOR_MISSING','BROWSER_TARGET_MISSING','BROWSER_DRAFT_UNKNOWN')){
+        $layers['BROWSER'].nextDiagnostic='QUALIFIED_READONLY_PROFILE_OBSERVATION_AFTER_OWNER_RECONCILIATION'
+    }
+    if($layers['BROWSER'].code -ceq 'BROWSER_AUTH_REQUIRED'){
         $layers['BROWSER'].nextDiagnostic='operator web-dev-runtime login --project-id <registered-project>'
+    }
+    if($layers['BROWSER'].code -ceq 'BROWSER_OWNER_CLEANUP_UNVERIFIED'){
+        $layers['BROWSER'].nextDiagnostic='RECONCILE_EXISTING_BROWSER_OWNER_WITHOUT_MARKER_CLEAR_OR_RELAUNCH'
+    }
+    if($layers['BROWSER'].code -ceq 'BROWSER_RESPONSE_LOAD_ERROR'){
+        $layers['BROWSER'].nextDiagnostic='ATTRIBUTE_EXACT_WAKE_RESPONSE_WITHOUT_USER_RESEND'
+        $layers['BROWSER'].facts=[ordered]@{
+            conversationReadiness='SEPARATE_FROM_RESPONSE_FAILURE'; exchange='UNATTRIBUTED';
+            userResendAllowed=$false; genericLoadErrorRetryQualified=$false;
+            independentProjectsMayContinue=$true
+        }
     }
     if($layers['CONNECTOR'].code -ceq 'CONNECTOR_RESPONSE_VERIFIED'){
         # A retained transport response is neither current availability nor an

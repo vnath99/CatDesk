@@ -6,6 +6,50 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Whitelist metadata at the native boundary, even if a helper prints content.
+pub(crate) fn surface_observation(line: &str) -> Option<serde_json::Value> {
+    let text = line.strip_prefix("PROBE:SURFACE:")?;
+    if text.len() > 1024 {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_str(text).ok()?;
+    let object = value.as_object()?;
+    if object.len() != 9
+        || !object.iter().all(|(key, value)| {
+            let Some(word) = value.as_str() else {
+                return false;
+            };
+            match key.as_str() {
+                "route" => matches!(
+                    word,
+                    "EXACT"
+                        | "HOME"
+                        | "AUTH_REQUIRED"
+                        | "SECURITY_CHECK"
+                        | "NETWORK_ERROR"
+                        | "TARGET_DRIFT"
+                        | "UNKNOWN"
+                ),
+                "document" => matches!(word, "COMPLETE" | "LOADING" | "UNKNOWN"),
+                "history" => matches!(word, "PRESENT" | "ABSENT" | "UNKNOWN"),
+                "editor" => matches!(word, "READY" | "MISSING" | "AMBIGUOUS" | "UNKNOWN"),
+                "composer" => matches!(word, "EMPTY" | "DRAFT_PRESENT" | "UNKNOWN"),
+                "generation" => matches!(word, "ACTIVE" | "IDLE" | "UNKNOWN"),
+                "assistant" => matches!(
+                    word,
+                    "LOAD_ERROR" | "DELIVERY_TIMEOUT" | "PRESENT" | "ABSENT" | "UNKNOWN"
+                ),
+                "exchange" => word == "UNATTRIBUTED",
+                "recovery" => word == "OBSERVATION_ONLY",
+                _ => false,
+            }
+        })
+    {
+        return None;
+    }
+    Some(value)
+}
+
 pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<String>, &'static str> {
     #[cfg(windows)]
     {
@@ -79,6 +123,9 @@ pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<Strin
             let Some(state) = line.strip_prefix("PROBE:") else {
                 return false;
             };
+            if state.starts_with("SURFACE:") {
+                return surface_observation(line).is_some();
+            }
             if let Some(reason) = state.strip_prefix("HOME_CHECK:") {
                 return matches!(
                     reason,
@@ -132,6 +179,12 @@ pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<Strin
             matches!(
                 state,
                 "EXACT_READY_IDLE"
+                    | "EXACT_READY_RESPONSE_LOAD_ERROR"
+                    | "EXACT_READY_RESPONSE_TIMEOUT"
+                    | "EXACT_DRAFT_PRESENT"
+                    | "EXACT_DOCUMENT_LOADING"
+                    | "EXACT_EDITOR_AMBIGUOUS"
+                    | "OBSERVATION_UNAVAILABLE"
                     | "TARGET_TAB_EXACT"
                     | "TARGET_TAB_MISSING"
                     | "TARGET_TAB_AMBIGUOUS"
@@ -149,6 +202,69 @@ pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<Strin
             )
         })
         .take(64)
-        .map(str::to_owned)
+        .map(|line| {
+            // Return canonical whitelisted values, never raw JSON containing
+            // duplicate-key values or formatting from an untrusted helper.
+            surface_observation(line)
+                .map(|value| format!("PROBE:SURFACE:{value}"))
+                .unwrap_or_else(|| line.to_owned())
+        })
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn surface() -> serde_json::Value {
+        serde_json::json!({"route":"EXACT","document":"COMPLETE","history":"PRESENT",
+            "editor":"READY","composer":"EMPTY","generation":"IDLE","assistant":"LOAD_ERROR",
+            "exchange":"UNATTRIBUTED","recovery":"OBSERVATION_ONLY"})
+    }
+    #[test]
+    fn surface_protocol_accepts_only_closed_metadata_vocabulary() {
+        let value = surface();
+        assert_eq!(
+            surface_observation(&format!("PROBE:SURFACE:{value}")),
+            Some(value.clone())
+        );
+        for changed in [
+            serde_json::json!({"draft":"PRIVATE_CONTENT"}),
+            serde_json::json!([]),
+            serde_json::Value::Null,
+        ] {
+            assert!(surface_observation(&format!("PROBE:SURFACE:{changed}")).is_none());
+        }
+        for (key, bad) in [
+            ("composer", serde_json::json!("PRIVATE_DRAFT")),
+            ("route", serde_json::json!("https://chatgpt.com/c/private")),
+            ("generation", serde_json::json!(true)),
+            ("exchange", serde_json::json!("CURRENT_EXACT_USER")),
+        ] {
+            let mut changed = value.clone();
+            changed[key] = bad;
+            assert!(surface_observation(&format!("PROBE:SURFACE:{changed}")).is_none());
+        }
+        let mut extra = value;
+        extra["body"] = serde_json::json!("PRIVATE_ANSWER");
+        assert!(surface_observation(&format!("PROBE:SURFACE:{extra}")).is_none());
+    }
+    #[cfg(windows)]
+    #[test]
+    fn bounded_probe_accepts_near_limit_output_and_canonicalizes_metadata() {
+        let shell = std::path::PathBuf::from(std::env::var_os("SystemRoot").unwrap())
+            .join("System32/WindowsPowerShell/v1.0/powershell.exe");
+        let mut command = Command::new(shell);
+        let row = surface()
+            .to_string()
+            .replacen('{', "{\"composer\":\"PRIVATE_SENTINEL\",", 1);
+        let script = format!(
+            "if([Console]::In.ReadLine() -cne 'START'){{exit 2}}; for($i=0;$i -lt 90;$i++){{[Console]::Out.WriteLine(('x'*150))}}; [Console]::Out.WriteLine('PROBE:SURFACE:{row}'); [Console]::Out.WriteLine('PROBE:FINAL:EXACT_READY_RESPONSE_LOAD_ERROR')"
+        );
+        command.args(["-NoProfile", "-NonInteractive", "-Command", &script]);
+        let rows = run_bounded(&mut command, Duration::from_secs(5)).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(surface_observation(&rows[0]), Some(surface()));
+        assert_eq!(rows[1], "PROBE:FINAL:EXACT_READY_RESPONSE_LOAD_ERROR");
+        assert!(!rows.join(" ").contains("PRIVATE_SENTINEL"));
+    }
 }

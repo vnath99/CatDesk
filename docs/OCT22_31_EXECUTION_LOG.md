@@ -1,3 +1,14 @@
+## 2026-10-30 22:46 UTC — browser observation and assistant recovery — TESTED_SOURCE
+
+Implemented privacy-preserving shared CDP surface observation and precise task-attributed response-load diagnostics through the existing bounded development owner. Unique assistant timeout Retry stays inside the exact exchange and refuses draft/generation/route ambiguity; generic load-error Retry is unsupported without a unique qualified control. Local final qualification:291 distinct passing tests and strict root/Wake Clippy/formatting. Original failed fixture/taxonomy runs are retained.
+
+Compared two original Chat51 records: one exact USER receipt/SENT/COMPLETE, one preserved unknown submission/ATTENTION. No historical wake was replayed. The actual attended BYOVD inspection opened the correct conversation but its console timed out; zero scoped processes remained and the sticky marker was preserved. New observer installed/live qualification remains OPEN. All131 protected pins stayed unchanged; no production/package/binding/recurring-owner action occurred.
+
+Evidence and full comparison: `docs/verification/BROWSER_RESPONSE_DIAGNOSTICS_2026_10_30.json` and `docs/OCTOBER_2026_MVP_ACCEPTANCE.md`.
+
+
+Doctor now routes coarse Home/editor/draft evidence to qualified read-only observation after owner reconciliation, rather than manual classification. Confirmed auth, unresolved owner cleanup and assistant load failure have separate advice. Unknown observations cannot be labeled ready, and timeout-card surface state is distinct. All97 doctor assertions passed on PowerShell7 and Windows PowerShell5.1; imported evidence remains advisory and causes no browser/network/mutation action.
+
 ## 2026-10-30 — owned native interactive console qualified — ACTUAL_WINDOWS_NO_BROWSER
 
 The app-terminal inspection refused the same direct-root identity as the ordinary terminal. Agent-side reproduction showed that packaged PowerShell and its bundled-PowerShell child retain that mismatched view; no more operator terminal retries are requested. A matching agent context therefore needs its own retained, bounded interactive console rather than a store/authority rewrite.

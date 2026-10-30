@@ -1878,6 +1878,7 @@ class WakeBridgeTests(unittest.TestCase):
         self.assertIn("inWakeExchange", response.script)
 
         class RetryCdp:
+            def get_current_url(self): return "https://chatgpt.com/c/review-one"
             def evaluate(self, script):
                 self.script = script
                 return "clicked"
@@ -2530,6 +2531,10 @@ class WakeBridgeTests(unittest.TestCase):
                 "RESPONSE_NETWORK_ERROR",
                 "RESPONSE_GENERATION_TIMEOUT",
                 "RESPONSE_COMPLETION_UNPROVEN",
+                "RESPONSE_LOAD_ERROR",
+                "RESPONSE_RETRY_BLOCKED_DRAFT",
+                "RESPONSE_RETRY_BLOCKED_GENERATION",
+                "RESPONSE_RETRY_EDITOR_UNAVAILABLE",
                 "RESPONSE_TIMEOUT_RETRY_AMBIGUOUS",
                 "RESPONSE_RETRY_EXHAUSTED",
                 "RESPONSE_TIMEOUT_STATE_LOST",

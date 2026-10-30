@@ -1,3 +1,9 @@
+## 2026-10-30 22:46 UTC — browser observation and assistant recovery — TESTED_SOURCE
+
+Closed-metadata CDP observation now separates loaded editor/history from an assistant load failure. Exact-receipt response observation preserves `RESPONSE_LOAD_ERROR`; historical failures do not invalidate a newer complete turn. Existing unique assistant timeout Retry gained draft, generation, document and assistant-boundary guards. No new USER wake is permitted for assistant failure. All291 distinct tests, root/Wake strict Clippy and formatting passed. This source increment is not installed/live acceptance.
+
+Evidence and full comparison: `docs/verification/BROWSER_RESPONSE_DIAGNOSTICS_2026_10_30.json` and `docs/OCTOBER_2026_MVP_ACCEPTANCE.md`.
+
 ## 2026-10-30 — owned native interactive console qualified — ACTUAL_WINDOWS_NO_BROWSER
 
 The app-terminal inspection refused the same direct-root identity as the ordinary terminal. Agent-side reproduction showed that packaged PowerShell and its bundled-PowerShell child retain that mismatched view; no more operator terminal retries are requested. A matching agent context therefore needs its own retained, bounded interactive console rather than a store/authority rewrite.

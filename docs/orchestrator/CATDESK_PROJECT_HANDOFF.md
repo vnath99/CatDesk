@@ -1,3 +1,11 @@
+## 2026-10-30 22:46 UTC — browser observation and assistant recovery — TESTED_SOURCE
+
+Latest source adds structured read-only browser observation through the existing qualified SeleniumBase/CDP owner, selected bridge hash and registered target generation. `RESPONSE_LOAD_ERROR` remains distinct from navigation/readiness/submission failure. Existing timeout-card Retry is narrowly scoped; generic load-error/Regenerate is not authorized. All291 distinct local tests and strict root/Wake Clippy/formatting passed.
+
+BYOVD loaded its registered history/editor with no visible draft and an existing failed assistant response, per operator observation. The attended console timed out; exact cause is unknown. Cleanup found zero scoped processes; preserve its sticky marker and original evidence. Next source task is bounded login cleanup and a supported narrow reconciliation, followed by existing commit-pinned development qualification. No new operator action, unchanged dependency poll or USER resend. New observer installation, genuine two-Web coding and unattended acceptance remain OPEN.
+
+Evidence and full comparison: `docs/verification/BROWSER_RESPONSE_DIAGNOSTICS_2026_10_30.json` and `docs/OCTOBER_2026_MVP_ACCEPTANCE.md`.
+
 ## 2026-10-30 — connector success is distinct from project-task authorization — TESTED_SOURCE
 
 For retained `CONNECTOR_RESPONSE_VERIFIED` evidence, doctor now recommends `VERIFY_AUTHENTICATED_PROJECT_TASK_SCOPE`, rather than more connector polling. Structured facts explicitly leave project-task access and provider conversation identity UNVERIFIED and state that bearer/execution-mode checks plus an exact task grant are required. Existing server/dispatcher authorization is unchanged. A retained response still cannot become current availability, local MCP acceptance or genuine Web coding evidence.

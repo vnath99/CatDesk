@@ -1,3 +1,9 @@
+## 2026-10-30 — qualified read-only browser observation (source-qualified; installation pending)
+
+`operator web-dev-runtime inspect-readiness --project-id <registered-project>` reuses the existing development authority/profile, host/browser leases and selected immutable bridge. It launches no host/scheduler, enters no text, performs no Retry/Regenerate, exports no conversation/draft content, and returns exact target digest/generation plus closed `browserObservation` fields. The existing native owner bounds and cleans the process tree. It does not establish authentication or event delivery. Current retained runtime must not be retried while its interrupted-login marker remains unresolved; preserve that marker and its original owned-test evidence.
+
+`EXACT_READY_RESPONSE_LOAD_ERROR` means the editor is usable but the latest visible assistant is a load-error placeholder. Its exchange is UNATTRIBUTED until the existing exact USER receipt path establishes task identity. A confirmed delivery never permits a second USER wake for an assistant error. Only the existing unique exact-exchange timeout-card Retry is supported; generic load errors, Regenerate, ambiguous/foreign Retry, drafts, generation and route drift refuse mutation. See `docs/verification/BROWSER_RESPONSE_DIAGNOSTICS_2026_10_30.json` for source tests, historical comparison and the separate installed/live gap.
+
 ## 2026-10-30 — owned native interactive console qualified — ACTUAL_WINDOWS_NO_BROWSER
 
 The app-terminal inspection refused the same direct-root identity as the ordinary terminal. Agent-side reproduction showed that packaged PowerShell and its bundled-PowerShell child retain that mismatched view; no more operator terminal retries are requested. A matching agent context therefore needs its own retained, bounded interactive console rather than a store/authority rewrite.

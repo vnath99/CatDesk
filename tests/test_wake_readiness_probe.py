@@ -1,4 +1,5 @@
 import contextlib
+import hashlib
 import asyncio
 import importlib.util
 import io
@@ -35,6 +36,55 @@ class ReadinessProbeTests(unittest.TestCase):
                 cdp = types.SimpleNamespace(get_current_url=lambda: current,
                                             is_element_visible=lambda selector: selector in visible)
                 self.assertEqual(self.probe.classify(cdp, target), expected)
+
+    def test_verified_primitives_are_shared_and_rejected_before_execution_on_hash_drift(self):
+        path = Path(__file__).resolve().parents[1] / "scripts/wake_bridge.py"
+        content = path.read_bytes()
+        with tempfile.TemporaryDirectory() as profile:
+            sink = self.probe.load_observation_sink(path, hashlib.sha256(content).hexdigest(),
+                                                    Path(profile), "https://chatgpt.com/c/fixture")
+            self.assertTrue(callable(sink.browser_surface_observation))
+            with mock.patch("builtins.compile", side_effect=AssertionError("must not execute")):
+                with self.assertRaises(ValueError):
+                    self.probe.load_observation_sink(path, "0" * 64, Path(profile), "https://chatgpt.com/c/fixture")
+
+    def test_surface_error_is_not_home_or_missing_editor(self):
+        value = dict(route="EXACT", document="COMPLETE", editor="READY", composer="EMPTY", generation="IDLE", assistant="LOAD_ERROR")
+        self.assertEqual(self.probe.surface_state(value), "EXACT_READY_RESPONSE_LOAD_ERROR")
+        self.assertEqual(self.probe.surface_state(dict(value, generation="ACTIVE")), "EXACT_READY_BUSY")
+        self.assertEqual(self.probe.surface_state(dict(value, route="HOME")), "HOME")
+        self.assertEqual(self.probe.surface_state(dict(value, editor="MISSING")), "EXACT_NO_EDITOR")
+        self.assertEqual(self.probe.surface_state(dict(value, composer="DRAFT_PRESENT")), "EXACT_DRAFT_PRESENT")
+        self.assertEqual(self.probe.surface_state(dict(value, assistant="DELIVERY_TIMEOUT")), "EXACT_READY_RESPONSE_TIMEOUT")
+
+    def test_surface_unknown_state_cannot_be_reported_as_ready_idle(self):
+        value = dict(route="EXACT", document="COMPLETE", editor="READY", composer="EMPTY", generation="IDLE", assistant="PRESENT")
+        for key in ("document", "generation", "composer", "assistant"):
+            with self.subTest(key=key):
+                self.assertEqual(self.probe.surface_state(dict(value, **{key: "UNKNOWN"})), "OBSERVATION_UNAVAILABLE")
+
+    def test_readonly_inspection_never_recovers_home_or_exports_content(self):
+        target = "https://chatgpt.com/c/readiness-fixture"
+        cdp = mock.Mock()
+        cdp.get_current_url.return_value = "https://chatgpt.com/"
+        cdp.get_tabs.return_value = []
+        cdp.is_element_visible.return_value = False
+        browser = mock.MagicMock()
+        browser.cdp = cdp
+        factory = mock.Mock(return_value=mock.MagicMock(__enter__=mock.Mock(return_value=browser), __exit__=mock.Mock(return_value=False)))
+        elapsed = [0.0]
+        def sleep(seconds): elapsed[0] += seconds
+        with tempfile.TemporaryDirectory() as profile:
+            argv = ["probe", "--read-only", "--profile", profile, "--conversation-url", target, "--seconds", "5"]
+            output = io.StringIO()
+            with mock.patch.object(sys, "argv", argv), mock.patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=factory)}), \
+                    mock.patch.object(self.probe.time, "monotonic", side_effect=lambda: elapsed[0]), \
+                    mock.patch.object(self.probe.time, "sleep", side_effect=sleep), contextlib.redirect_stdout(output):
+                self.assertEqual(self.probe.main(), 0)
+            cdp.get.assert_not_called()
+            cdp.evaluate.assert_not_called()
+            self.assertNotIn("HOME_CHECK", output.getvalue())
+            self.assertIn("PROBE:FINAL:HOME", output.getvalue())
 
     def test_handshake_precedes_runtime_import_and_browser_creation(self):
         argv = ["probe", "--await-start", "--conversation-url", "https://chatgpt.com/c/readiness-fixture"]

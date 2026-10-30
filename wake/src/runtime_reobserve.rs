@@ -224,6 +224,48 @@ mod tests {
     }
 
     #[test]
+    fn failed_assistant_observations_preserve_delivery_and_allow_sibling_wake() {
+        for reason in [
+            "RESPONSE_LOAD_ERROR",
+            "RESPONSE_NETWORK_ERROR",
+            "RESPONSE_EXPECTED_USER_DUPLICATED",
+            "RESPONSE_PROBE_TIMEOUT",
+        ] {
+            let (store, delivery) = ready_fixture("failed-response-sibling-progress");
+            let before_timer = timer_bytes(&store);
+            let path = store.root().join("deliveries/alpha-1.json");
+            let before_delivery = std::fs::read(&path).unwrap();
+            let result = reobserve_with_observer(
+                &store,
+                "alpha",
+                &delivery.target,
+                "alpha-1",
+                &|| Ok(()),
+                |_| panic!("failed assistant must not commit completion"),
+                |_, _, _| Err(reason.into()),
+            );
+            assert_eq!(result.unwrap_err(), reason);
+            assert_eq!(timer_bytes(&store), before_timer);
+            assert_eq!(std::fs::read(&path).unwrap(), before_delivery);
+            assert!(!store.root().join("queue/alpha-1.json").exists());
+            let events = super::super::scheduler::fair_round(
+                &store,
+                &store.config().unwrap().targets,
+                None,
+                &std::collections::BTreeMap::new(),
+                crate::store::now(),
+            )
+            .unwrap();
+            let beta = events
+                .iter()
+                .find(|event| event.event_id == "beta-1")
+                .unwrap();
+            let lease = store.host_lock().unwrap();
+            assert_eq!(store.claim(beta, &lease).unwrap().phase, Phase::Claimed);
+        }
+    }
+
+    #[test]
     fn reobserve_scope_and_receipt_rejections_create_no_journal() {
         let (store, lease) = fixture("reobserve-scope");
         let mut delivery = sent(&store, &lease, "alpha-1");

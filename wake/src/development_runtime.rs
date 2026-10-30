@@ -1951,6 +1951,9 @@ struct LoginPreflight {
     root: PathBuf,
     python: PathBuf,
     profile: PathBuf,
+    primitives: PathBuf,
+    primitives_sha256: String,
+    target_generation: u64,
     _host: crate::store::HostLease,
     _browser: File,
 }
@@ -1977,6 +1980,21 @@ fn require_stopped_control(root: &Path) -> Result<()> {
     Ok(())
 }
 
+fn require_observed_target_generation(store: &Store, url: &str, expected: u64) -> Result<()> {
+    require_login_target(store, url)?;
+    if store
+        .config()?
+        .targets
+        .values()
+        .find(|target| target.url == url)
+        .map(|target| target.generation)
+        != Some(expected)
+    {
+        return Err("DEV_LOGIN_TARGET_GENERATION_CHANGED".into());
+    }
+    Ok(())
+}
+
 fn login_preflight(workspace: &Path, target_url: &str) -> Result<LoginPreflight> {
     protocol::validate_target(target_url)?;
     let (root, authority) = validated_authority(workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
@@ -1999,10 +2017,29 @@ fn login_preflight(workspace: &Path, target_url: &str) -> Result<LoginPreflight>
     let python = root.join("runtime/python.exe");
     let profile = root.join("browser-profile");
     plain(&profile, true)?;
+    let primitives = root
+        .join("versions")
+        .join(&checked_authority.package_id)
+        .join("wake_bridge.py");
+    let primitives_sha256 = checked_authority
+        .artifacts
+        .get("wake_bridge.py")
+        .cloned()
+        .ok_or("DEV_RUNTIME_PACKAGE_MANIFEST_MISMATCH")?;
+    let target_generation = store
+        .config()?
+        .targets
+        .values()
+        .find(|target| target.url == target_url)
+        .ok_or("DEV_LOGIN_TARGET_NOT_REGISTERED")?
+        .generation;
     Ok(LoginPreflight {
         root,
         python,
         profile,
+        primitives,
+        primitives_sha256,
+        target_generation,
         _host: host,
         _browser: browser,
     })
@@ -2083,6 +2120,11 @@ pub fn inspect_readiness(workspace: &Path, target_url: &str) -> Result<Value> {
         .arg(&prepared.profile)
         .arg("--conversation-url")
         .arg(target_url)
+        .arg("--primitives")
+        .arg(&prepared.primitives)
+        .arg("--primitives-sha256")
+        .arg(&prepared.primitives_sha256)
+        .arg("--read-only")
         .arg("--seconds")
         .arg("20")
         .current_dir(&prepared.root);
@@ -2099,10 +2141,23 @@ pub fn inspect_readiness(workspace: &Path, target_url: &str) -> Result<Value> {
         .and_then(|row| row.strip_prefix("PROBE:FINAL:"))
         .ok_or("DEV_READINESS_FINAL_UNOBSERVED")?;
     require_stopped_control(&prepared.root)?;
-    require_login_target(&Store::open(&prepared.root)?, target_url)?;
+    require_observed_target_generation(
+        &Store::open(&prepared.root)?,
+        target_url,
+        prepared.target_generation,
+    )?;
+    let browser_observation = if final_state == "OBSERVATION_UNAVAILABLE" {
+        None
+    } else {
+        rows.iter()
+            .rev()
+            .find_map(|line| crate::readiness_probe::surface_observation(line))
+    };
     Ok(
         json!({"mode":"DEVELOPMENT_UNPROTECTED","status":"BROWSER_READINESS_OBSERVED",
         "observations":rows,"finalState":final_state,"authenticationVerified":false,
+        "browserObservation":browser_observation,"registeredTargetSha256":protocol::digest(target_url),
+        "registeredTargetGeneration":prepared.target_generation,
         "advisory":true,"browserReadOnly":true,"sendAttempted":false,
         "hostStarted":false,"schedulerStarted":false,"ownedTreeExited":true}),
     )
@@ -3628,6 +3683,26 @@ mod tests {
         );
         let selected = login_preflight(&workspace, url).unwrap();
         assert_eq!(selected.root, root);
+        assert_eq!(selected.target_generation, 1);
+        assert_eq!(selected.primitives.file_name().unwrap(), "wake_bridge.py");
+        assert_eq!(
+            hash_file(&selected.primitives, MAX_PACKAGE_FILE).unwrap(),
+            selected.primitives_sha256
+        );
+        store
+            .set_target(
+                "canary-project",
+                1,
+                "https://chatgpt.com/c/intervening-generation",
+            )
+            .unwrap();
+        store.set_target("canary-project", 2, url).unwrap();
+        assert_eq!(
+            require_observed_target_generation(&store, url, selected.target_generation)
+                .unwrap_err(),
+            "DEV_LOGIN_TARGET_GENERATION_CHANGED"
+        );
+        require_observed_target_generation(&store, url, 3).unwrap();
         assert_eq!(
             login_preflight(&workspace, url).err().unwrap(),
             "HOST_ALREADY_RUNNING"
