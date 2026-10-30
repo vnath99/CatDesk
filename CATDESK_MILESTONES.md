@@ -1,3 +1,11 @@
+## 2026-10-30 01:57 UTC (October29 local) — native MCP development candidate built — BUILD_ONLY
+
+The normal optimized executable built successfully from clean, published source `3d1726ffbd1789259ac5298acf23fba417ee399d` (`cargo build --release --bin catdesk`, exit0,9m33s). Artifact SHA-256:`58b9e1615b9416459e9079f2ea2eb4c496be324758b34ecdbe25fbb0eb2300d3`; size:37758464 bytes. An exact read-only copy and private source/build provenance are retained. Public evidence:`docs/verification/DEVELOPMENT_NATIVE_CANDIDATE_BUILD_2026_10_29.json`.
+
+This build is not runtime qualification, package selection, independent release attestation or protected promotion. All six selected pinned critical files remained identical; prior build owners exited. Production, selected development package, project/native owners, browser, Wake, tunnel and recurring automation remain unchanged.
+
+Next READY: qualify the retained candidate through the existing bounded development lifecycle and normal native MCP path. Do not rebuild merely because later documentation commits advance HEAD. Preserve C254 and the verified previous release. Existing connector/profile gates remain separate; no new operator decision is required for local qualification.
+
 ## 2026-10-30 01:40 UTC (October29 local) — shared registration admission — TESTED_SOURCE / LOOPBACK_HTTP
 
 Source `f9679fab27dc265cb1b48601fa0fbeaae9a206fb`. Evidence: `docs/verification/REGISTRATION_PREPARATION_2026_10_29.json`.
