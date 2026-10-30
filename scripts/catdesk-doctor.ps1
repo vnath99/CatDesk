@@ -220,6 +220,16 @@ function Invoke-CatDeskDoctor([string]$ObservationFile = '', [string]$ProjectWor
     if($layers['BROWSER'].code -cin @('HOME_EDITOR_MISSING','BROWSER_TARGET_MISSING','BROWSER_DRAFT_UNKNOWN')){
         $layers['BROWSER'].nextDiagnostic='operator web-dev-runtime login --project-id <registered-project>'
     }
+    if($layers['CONNECTOR'].code -ceq 'CONNECTOR_RESPONSE_VERIFIED'){
+        # A retained transport response is neither current availability nor an
+        # authenticated project grant. Do not suggest more connector polling
+        # when the next distinct prerequisite is project-task authorization.
+        $layers['CONNECTOR'].nextDiagnostic='VERIFY_AUTHENTICATED_PROJECT_TASK_SCOPE'
+        $layers['CONNECTOR'].facts=[ordered]@{
+            projectTaskAccess='UNVERIFIED'; providerConversationIdentity='UNVERIFIED';
+            taskGrantRequired=$true; bearerAndExecutionModeRequired=$true
+        }
+    }
     $report=[pscustomobject][ordered]@{
         schemaVersion=1;command='doctor';readOnly=$true;observedUtc=$observedUtc;networkRequests=0;runtimeStarts=0;repairs=0;
         projectScope=if($ProjectWorkspace -ceq $Workspace){'RELEASE_WORKSPACE'}else{'EXPLICIT_OBSERVATION_WORKSPACE'};

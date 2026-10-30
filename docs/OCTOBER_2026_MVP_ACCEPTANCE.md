@@ -1,3 +1,9 @@
+## 2026-10-30 — connector success is distinct from project-task authorization — TESTED_SOURCE
+
+For retained `CONNECTOR_RESPONSE_VERIFIED` evidence, doctor now recommends `VERIFY_AUTHENTICATED_PROJECT_TASK_SCOPE`, rather than more connector polling. Structured facts explicitly leave project-task access and provider conversation identity UNVERIFIED and state that bearer/execution-mode checks plus an exact task grant are required. Existing server/dispatcher authorization is unchanged. A retained response still cannot become current availability, local MCP acceptance or genuine Web coding evidence.
+
+All87 assertions passed on PowerShell7 and Windows PowerShell5.1, including preservation of the unknown-Wake and unprobed-local-MCP states. All131 protected pins and completed connector evidence were unchanged. No credential read, network request, browser/Wake/runtime start, authentication/binding modification or protected review/producer change occurred. This independently eligible diagnostic correction does not repeat the external-blocker audit or execute the pending operator inspection. Evidence: `docs/verification/DOCTOR_CONNECTED_TASK_SCOPE_2026_10_30.json`.
+
 ## 2026-10-30 — existing-profile operator action clarified — TESTED_SOURCE
 
 Known `HOME_EDITOR_MISSING`, `BROWSER_TARGET_MISSING` and `BROWSER_DRAFT_UNKNOWN` observations now recommend the existing `operator web-dev-runtime login --project-id <registered-project>` inspection, rather than another identical automated readiness check. Uninspected browsers retain their first diagnostic; retained-ready evidence does not request login. Imported observations remain UNVERIFIED/advisory. No browser action or authentication change is performed by doctor.
