@@ -1,3 +1,11 @@
+## 2026-10-30 12:07 UTC — independent native status and context accounting — TESTED_SOURCE
+
+Source `9de76069f070ca94dfa2d4d4238903e5efafa8f5` separates exact native status admission from slow Git/queue snapshot inspection. Existing project/key/source/grant checks remain; current metadata, revocation, target and frozen selection are checked again before data is released. A slow read retains no shared admission lock or project writer/lease. Authorized lookup failures now count against their own conversation; foreign/revoked admission changes neither estimate. Task journals and native queue state remain unchanged.
+
+All25 dispatcher,7 context-observer and6 Web-work tests passed (38 distinct), with strict all-target Clippy and formatting. New cases prove sibling patch progress during a delayed status read, isolated failed-read accounting, stale project/controller refusal, and revocation/rollover during lookup. An initial test fixture correctly hit an earlier Git-root refusal; its failed log remains preserved and the fixture now exercises the intended registry-history check. Six selected critical files matched and no test-owned process remained. Evidence: `docs/verification/NATIVE_STATUS_INDEPENDENT_READ_2026_10_30.json`.
+
+This is source/Windows-loopback qualification, not installed or ChatGPT Web acceptance. The retained normal candidate `0b4240d1…` and production selection are unchanged and lack this new fix. No existing native session, browser, Wake, tunnel, recurring owner or completed live canary was started/replayed. Next READY: inspect remaining native dispatch preparation under shared admission while retaining its per-project lease and target/journal checks; batch source work before the next build. Connector429/profile gates remain separate, unchanged and unprobed.
+
 ## 2026-10-30 11:26 UTC / 07:26 EDT — changed registration package and actual recovery — TESTED_LOCAL_RUNTIME
 
 The normal optimized executable built once from clean published source `8020c7041859656bb4ca475c7cb937354efe4279` (Rust change `d7985f8c9034a583653dc047465113a7603257c1`), exit0 in 430.687s. SHA-256: `0b4240d1c125bedd68f7778134ad6dd39f35753a6dc0e28395a74d1c8e37fb06`. The earlier qualified `58b9e161…` copy remains unchanged. This build follows changed Rust source; no documentation-only rebuild occurred.
