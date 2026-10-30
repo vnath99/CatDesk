@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T12:33:19.991532+00:00",
+  "classification": "SOURCE_AND_WINDOWS_LOOPBACK_FIXTURES_NOT_INSTALLED_OR_CHATGPT_WEB",
+  "branch": "codex/web-rollover-oct17",
+  "implementationCommit": "e5fe983b330e9acb638570b7a92990d8c61ce20c",
+  "sourceBase": "0f4fa08b6750917eb488308512db6d8f4d70ffb7",
+  "behavior": [
+    "Git-validated project/controller scope and read-only assignment/worktree inspection run outside shared registry/Wake admission",
+    "Existing per-project Web lease spans preparation, native execution and journal finalization",
+    "Exact prepared records, paired generation/digest, source task, key/grant and assignment bytes are checked again before commit",
+    "Metadata-only continuation migration and execution-journal commit remain inside the existing paired-target/registration transaction",
+    "Replay/unknown/budget checks precede continuation mutation; the execution record follows migration",
+    "Actual native claim/launch retains its existing fresh Git, project writer, queue request, profile and process ownership checks",
+    "No new registry, authorization, lock, public command or persisted schema"
+  ],
+  "tests": {
+    "dispatcher": 27,
+    "continuation": 7,
+    "webWork": 4,
+    "distinctPassed": 38,
+    "newPreparationTests": 2,
+    "strictAllTargetClippy": "PASS",
+    "formatting": "PASS"
+  },
+  "newCaseEvidence": [
+    "Paused Alpha native preparation retains its project lease but releases shared registry/Wake locks; Beta previews/applies its own patch",
+    "No Alpha queue/journal effect occurs while paused; Alpha task and both native roots remain unchanged",
+    "Admission-only fixture is explicitly finalized with a controlled known no-launch result; queue bytes remain identical",
+    "Project history, controller history, assignment bytes and supported manual target binding changed after inspection each refuse before queue/journal effects",
+    "Manual binding uses the existing paired CAS while the project lease is held, exercising the final-generation guard directly"
+  ],
+  "logSha256": {
+    "dispatcher": "18c7c7d82ae9ad921a9be368ff0c8e4d05ef5311b09e488bcc9587617a0ffd51",
+    "continuation": "3c17e4269f45eacd888bdad3ad01b131915481ef58e62945ea0e9deb20497d45",
+    "webWork": "6bb900356c1221ae185605891328e8ab74829197bd2194852fc220bd598dc7cc",
+    "focused": "2e838ba1137b1c06a7f1bd18031d35f2221112cec1e4eb2d228c45607701a73c",
+    "strictClippy": "18cf78f78a18ae1b2942b02d2c4e191000e3b241c5bbdfece6dba00544d94925"
+  },
+  "preservation": {
+    "selectedCriticalFilesUnchanged": 6,
+    "remainingTestOwnedProcesses": 0,
+    "cleanupScope": "EXACT_SOURCE_TEST_EXECUTABLE_AND_NATIVE_QUEUE_FIXTURE_IMAGES",
+    "existingNativeSessionsResumed": 0,
+    "nativeModelTurns": 0,
+    "actualChatGPTWebCalls": 0,
+    "browserWakeTunnelOrRecurringStarts": 0,
+    "installedOrSelectedPackageChanged": false
+  },
+  "limitations": [
+    "Source and loopback fixture qualification only; no genuine Web conversation performed these calls",
+    "Retained candidate0b4240d1 and protected production do not contain this change or the preceding native-status fix",
+    "Hosted exact-source CI, installed feature qualification and normal unattended acceptance remain unverified",
+    "Last observed connector429 and retained-profile inspection remain separate prerequisites; neither was retried"
+  ],
+  "nextTask": "Build the changed status/dispatch source batch once from an exact published commit, retain candidate0b as the qualified previous version, then qualify the new candidate through the existing bounded disposable development lifecycle. No protected promotion or unchanged Web retry."
+}
