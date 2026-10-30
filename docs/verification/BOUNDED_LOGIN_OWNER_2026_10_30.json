@@ -66,5 +66,12 @@
   },
   "nextExecutableTask": "QUALIFY_SUPPORTED_NARROW_RECONCILIATION_OF_ATTRIBUTED_READONLY_LOGIN_THEN_EXISTING_COMMIT_PINNED_DEV_PACKAGE_OBSERVATION",
   "operatorActionRequired": false,
-  "goal": "ACTIVE"
+  "goal": "ACTIVE",
+  "publication": {
+    "verifiedUtc": "2026-10-30T22:55:00.288366+00:00",
+    "implementationCommit": "5b0d065b908eeaca7109feb6f2a7472f07bf84d7",
+    "remoteBranchHead": "5b0d065b908eeaca7109feb6f2a7472f07bf84d7",
+    "prHead": "5b0d065b908eeaca7109feb6f2a7472f07bf84d7",
+    "branch": "codex/web-rollover-oct17"
+  }
 }
