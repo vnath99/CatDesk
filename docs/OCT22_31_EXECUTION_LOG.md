@@ -1,3 +1,9 @@
+## 2026-10-30 — operator profile inspection refused before browser launch
+
+The supplied qualified-controller login command returned `DEV_PRODUCTION_ROOT_MISMATCH` in the operator's ordinary terminal. Do not retry it or rewrite authority metadata. Source checks compare recorded production-directory volume/file identities, or refuse overlap with the development runtime; both login preflight checks precede the login marker and browser spawn. This is a different prerequisite from editor readiness or connector429.
+
+The same qualified controller's read-only status passes in Codex with host STOPPED. Two native Windows handle queries in that context match both recorded roots, which resolve to the same object there; no login marker exists and all131 protected pins in that view are unchanged. A packaged-app filesystem-view difference is a hypothesis, not yet proof. One fixed-path read-only comparison script has been supplied privately for direct invocation in the SAME failing PowerShell window. It runs no CatDesk command and changes no authority, profile, root, binding or guard. Reconcile that result before choosing a supported launch/migration path. No replacement profile, reset, unknown-send replay or producer/review bypass is authorized by this diagnostic. Evidence: `docs/verification/OPERATOR_PROFILE_ROOT_MISMATCH_2026_10_30.json`.
+
 ## 2026-10-30 — connector success is distinct from project-task authorization — TESTED_SOURCE
 
 For retained `CONNECTOR_RESPONSE_VERIFIED` evidence, doctor now recommends `VERIFY_AUTHENTICATED_PROJECT_TASK_SCOPE`, rather than more connector polling. Structured facts explicitly leave project-task access and provider conversation identity UNVERIFIED and state that bearer/execution-mode checks plus an exact task grant are required. Existing server/dispatcher authorization is unchanged. A retained response still cannot become current availability, local MCP acceptance or genuine Web coding evidence.
