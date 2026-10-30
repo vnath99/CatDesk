@@ -1,3 +1,9 @@
+## 2026-10-30 11:26 UTC / 07:26 EDT — changed registration package and actual recovery — TESTED_LOCAL_RUNTIME
+
+The October30 normal candidate from `8020c7041859656bb4ca475c7cb937354efe4279`, SHA-256 `0b4240d1c125bedd68f7778134ad6dd39f35753a6dc0e28395a74d1c8e37fb06`, is now selected and health-qualified **only in a disposable development test runtime**, with the actually verified `58b9e161…` predecessor retained. Existing `record-verification`, `update-package` and bounded `run-backend` commands performed selection and automatic missing-current-image recovery. Startup selected the previous version once; restoring the held test image, reselecting current and restarting also passed. No fingerprint was rewritten and no protected promotion authority was created. Local verification records explicitly identify operator-provided self-review evidence.
+
+Reuse the retained candidate; do not rebuild for documentation-only HEAD changes. Do not apply the controlled file-removal test to real LIVE or protected installations. Those selections, authenticated profiles, real project bindings and existing native chats were untouched. Exact commands, failure injection, three backend receipts and cleanup: `docs/verification/REGISTRATION_DEVELOPMENT_CURRENT_PREVIOUS_2026_10_30.json`. Real Web and protected promotion acceptance remain separate.
+
 ## 2026-10-30 01:40 UTC (October29 local) — shared registration admission — TESTED_SOURCE / LOOPBACK_HTTP
 
 Source `f9679fab27dc265cb1b48601fa0fbeaae9a206fb`. Evidence: `docs/verification/REGISTRATION_PREPARATION_2026_10_29.json`.
