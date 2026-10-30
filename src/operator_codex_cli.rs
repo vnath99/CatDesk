@@ -9,6 +9,12 @@ mod recovery;
 
 pub(crate) use queue::publish_review_invitation_for_mcp;
 pub(crate) use queue::read_review_package_for_mcp;
+#[cfg(all(test, windows))]
+pub(crate) use queue::{NativeQueueFixture, native_queue_fixture};
+pub(crate) use queue::{
+    NativeQueueSelection, check_native_queue_selection, dispatch_native_queue_selection,
+    freeze_native_queue_selection, native_queue_selection_status,
+};
 
 use std::fs;
 use std::path::{Path, PathBuf};

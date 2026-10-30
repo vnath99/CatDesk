@@ -125,6 +125,7 @@ pub(crate) enum WebAction {
         input_file: PathBuf,
         revoke: bool,
         allow_manual_wake: bool,
+        native_queue_task_id: Option<String>,
     },
     ContextConfigure {
         project_id: String,
@@ -297,6 +298,20 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
             } else {
                 None
             };
+            let native_queue_task_id = if verb == "execution-grant" {
+                options
+                    .remove("--native-queue-task-id")
+                    .map(|id| {
+                        if catdesk_wake::protocol::valid_id(id) && id.len() <= 128 {
+                            Ok(id.to_owned())
+                        } else {
+                            Err("WEB_USAGE: native queue task ID is invalid")
+                        }
+                    })
+                    .transpose()?
+            } else {
+                None
+            };
             if !options.is_empty() {
                 return Err("WEB_USAGE: unexpected work option".into());
             }
@@ -316,6 +331,7 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                     input_file: input_file.into(),
                     revoke: verb == "execution-revoke",
                     allow_manual_wake,
+                    native_queue_task_id,
                 })
             } else if let Some(assignment_file) = assignment_file {
                 Ok(WebAction::WorkAssociate {
@@ -1388,9 +1404,18 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             input_file,
             revoke,
             allow_manual_wake,
+            native_queue_task_id,
         } => {
             let input = read_work_input(&input_file, &project_id)?;
-            if allow_manual_wake {
+            if native_queue_task_id.is_some() {
+                crate::web_work::execution_permission_with_capabilities(
+                    &workspace,
+                    input,
+                    revoke,
+                    allow_manual_wake,
+                    native_queue_task_id.as_deref(),
+                )
+            } else if allow_manual_wake {
                 crate::web_work::execution_permission_with_manual_wake(
                     &workspace, input, revoke, true,
                 )
@@ -2162,6 +2187,7 @@ mod tests {
                     input_file: "pins.json".into(),
                     revoke,
                     allow_manual_wake: false,
+                    native_queue_task_id: None,
                 }
             );
             for option in [
@@ -2174,6 +2200,30 @@ mod tests {
                 invalid.extend(args(&[option, "value"]));
                 assert!(parse(&invalid).is_err());
             }
+        }
+    }
+
+    #[test]
+    fn native_queue_permission_requires_exact_local_grant_option() {
+        let base = args(&[
+            "operator",
+            "web",
+            "work",
+            "execution-grant",
+            "--project-id",
+            "alpha",
+            "--input-file",
+            "pins.json",
+            "--native-queue-task-id",
+            "native-task",
+        ]);
+        assert!(
+            matches!(parse(&base), Ok(WebAction::WorkExecutionPermission { native_queue_task_id: Some(id), .. }) if id == "native-task")
+        );
+        for verb in ["execution-revoke", "resume-prepare", "request"] {
+            let mut refused = base.clone();
+            refused[3] = verb.into();
+            assert!(parse(&refused).is_err());
         }
     }
 

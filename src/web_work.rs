@@ -86,7 +86,17 @@ pub(crate) fn execution_permission_with_manual_wake(
     revoke: bool,
     allow_manual_wake: bool,
 ) -> Result<Value, String> {
-    if revoke && allow_manual_wake {
+    execution_permission_with_capabilities(workspace, args, revoke, allow_manual_wake, None)
+}
+
+pub(crate) fn execution_permission_with_capabilities(
+    workspace: &Path,
+    args: Value,
+    revoke: bool,
+    allow_manual_wake: bool,
+    native_queue_task_id: Option<&str>,
+) -> Result<Value, String> {
+    if revoke && (allow_manual_wake || native_queue_task_id.is_some()) {
         return Err("WEB_TASK_GRANT_ARGUMENTS_INVALID".into());
     }
     assigned_action(
@@ -95,6 +105,118 @@ pub(crate) fn execution_permission_with_manual_wake(
         AssignmentAction::Permission {
             revoke,
             allow_manual_wake,
+            native_queue_task_id,
+        },
+    )
+}
+
+pub(crate) struct NativeDispatchAdmission {
+    _lease: crate::operator_facade::WebWorkLease,
+    pub(crate) control: std::path::PathBuf,
+    pub(crate) project_id: String,
+    pub(crate) call: crate::project_mcp_task::NativeTaskCall,
+}
+
+impl NativeDispatchAdmission {
+    pub(crate) fn finish(self, result: &Result<Value, String>) -> Result<(), String> {
+        // Consume the complete admission so its project lease remains held
+        // until the exact journal outcome has been durably recorded.
+        self.call.finish(result)
+    }
+}
+
+pub(crate) fn prepare_native_dispatch(
+    workspace: &Path,
+    pins: Value,
+    key: &str,
+    task_id: &str,
+    call_id: &str,
+) -> Result<NativeDispatchAdmission, String> {
+    let request = AssignmentRequest::parse(pins)?;
+    let control = workspace
+        .canonicalize()
+        .map_err(|_| "WEB_WORK_CONTROL_UNAVAILABLE")?;
+    let lease = crate::operator_facade::acquire_web_work_lease(&control, &request.project_id)?;
+    let call = mcp::with_current_project_web_target(
+        &control,
+        &request.project_id,
+        request.expected_target_generation,
+        &request.expected_target_sha256,
+        |workspace, paired| {
+            let current = protocol::Target::new(paired.generation, paired.url.clone())?;
+            let scope =
+                resolve_registered_project_from_control_root(workspace, &request.project_id)
+                    .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
+            let record = WorkLedger::open(workspace, &request.project_id)?
+                .record(&request.request_id)?
+                .ok_or("WEB_WORK_REQUEST_MISSING")?;
+            if record.phase != "OPEN"
+                || record.event_id != request.source_event_id
+                || record.task_assignment.as_ref().is_none_or(|link| {
+                    link.task_id != task_id || link.assignment_sha256 != request.assignment_sha256
+                })
+            {
+                return Err("WEB_TASK_GRANT_SCOPE_MISMATCH".into());
+            }
+            lease.check_source_task(&record.target, &current, &record.event_id)?;
+            require_assignment_source(
+                workspace,
+                &request.project_id,
+                &record,
+                record.target == current,
+            )?;
+            crate::project_mcp_task::prepare_native_task_call(
+                &scope, &record, key, task_id, call_id,
+            )
+        },
+    )?;
+    // Global registry/Wake locks ended above. Only this project's existing
+    // Web lease spans native execution, so sibling projects remain eligible.
+    Ok(NativeDispatchAdmission {
+        _lease: lease,
+        control,
+        project_id: request.project_id,
+        call,
+    })
+}
+
+/// Scoped metadata read remains available while the admitted native turn owns
+/// its project lease. It does not acquire a writer, change a journal or replay.
+pub(crate) fn native_status(
+    workspace: &Path,
+    pins: Value,
+    key: &str,
+    task_id: &str,
+) -> Result<Value, String> {
+    let request = AssignmentRequest::parse(pins)?;
+    mcp::with_current_project_web_target(
+        workspace,
+        &request.project_id,
+        request.expected_target_generation,
+        &request.expected_target_sha256,
+        |workspace, paired| {
+            let scope =
+                resolve_registered_project_from_control_root(workspace, &request.project_id)
+                    .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
+            let record = WorkLedger::open(workspace, &request.project_id)?
+                .record(&request.request_id)?
+                .ok_or("WEB_WORK_REQUEST_MISSING")?;
+            if record.phase != "OPEN"
+                || record.event_id != request.source_event_id
+                || record.task_assignment.as_ref().is_none_or(|link| {
+                    link.task_id != task_id || link.assignment_sha256 != request.assignment_sha256
+                })
+            {
+                return Err("WEB_TASK_GRANT_SCOPE_MISMATCH".into());
+            }
+            let current = protocol::Target::new(paired.generation, paired.url.clone())?;
+            require_assignment_source(
+                workspace,
+                &request.project_id,
+                &record,
+                record.target == current,
+            )?;
+            crate::project_mcp_task::native_task_status(&scope, &record, key)
         },
     )
 }
@@ -258,6 +380,7 @@ enum AssignmentAction<'a> {
     Permission {
         revoke: bool,
         allow_manual_wake: bool,
+        native_queue_task_id: Option<&'a str>,
     },
     Authorize(&'a str),
 }
@@ -325,8 +448,18 @@ fn assigned_action(
                 AssignmentAction::Permission {
                     revoke,
                     allow_manual_wake,
+                    native_queue_task_id,
                 } => {
-                    if allow_manual_wake {
+                    if native_queue_task_id.is_some() {
+                        crate::project_mcp_task::grant_web_execution_with_capabilities(
+                            &scope,
+                            &record,
+                            &current,
+                            revoke,
+                            allow_manual_wake,
+                            native_queue_task_id,
+                        )
+                    } else if allow_manual_wake {
                         crate::project_mcp_task::grant_web_execution_with_manual_wake(
                             &scope, &record, &current, revoke, true,
                         )

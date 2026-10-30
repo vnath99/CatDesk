@@ -45,12 +45,19 @@ use super::{
 };
 
 mod advisory;
+mod native_dispatch;
 mod operator_review;
 #[cfg(windows)]
 mod owned_native;
 mod review_invite;
 mod review_reader;
 
+#[cfg(all(test, windows))]
+pub(crate) use native_dispatch::{NativeQueueFixture, native_queue_fixture};
+pub(crate) use native_dispatch::{
+    NativeQueueSelection, check_native_queue_selection, dispatch_native_queue_selection,
+    freeze_native_queue_selection, native_queue_selection_status,
+};
 pub(crate) use review_invite::publish_for_mcp as publish_review_invitation_for_mcp;
 pub(crate) use review_reader::read_for_mcp as read_review_package_for_mcp;
 
@@ -5656,7 +5663,7 @@ mod tests {
         }
     }
 
-    fn fake_native_cli(root: &Path) -> PathBuf {
+    pub(super) fn fake_native_cli(root: &Path) -> PathBuf {
         let source = root.join("fake-codex.rs");
         let executable = root.join(if cfg!(windows) {
             "fake-codex.exe"
