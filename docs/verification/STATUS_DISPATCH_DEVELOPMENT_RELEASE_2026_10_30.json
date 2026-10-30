@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T12:43:05.657485+00:00",
+  "classification": "ACTUAL_DISPOSABLE_DEVELOPMENT_RELEASE_NOT_PROTECTED_PRODUCTION_OR_CHATGPT_WEB",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "68b65bbc044587e621a7ac15093e70df503e459f",
+  "dispatchImplementationCommit": "e5fe983b330e9acb638570b7a92990d8c61ce20c",
+  "statusImplementationCommit": "9de76069f070ca94dfa2d4d4238903e5efafa8f5",
+  "build": {
+    "command": "cargo build --release --bin catdesk",
+    "exitCode": 0,
+    "elapsedSeconds": 440.484,
+    "sha256": "b322bd6131f146e1dfeb36a7d0ac66cd5c49cbcd7c2910b430d119f05f6ba31c",
+    "bytes": 37784576,
+    "cleanSourceAtStart": true,
+    "cleanSourceAtEnd": true,
+    "immutableRetainedCopy": true,
+    "buildLogSha256": "d62d2e2e5dfc088dd981c68ffdd0360540a51f7bc15e7fae7d4efb0e702a2ab2",
+    "cargoLockMatchesGitAfterCrLfNormalization": true,
+    "byteReproducibleRebuildPerformed": false
+  },
+  "previousVerifiedArtifactSha256": "0b4240d1c125bedd68f7778134ad6dd39f35753a6dc0e28395a74d1c8e37fb06",
+  "actualRuntime": {
+    "elapsedSeconds": 46.094,
+    "outerOwnerLimitSeconds": 180,
+    "selectedNewWithVerifiedPrevious": true,
+    "normalStartupRecoveredVerifiedPrevious": true,
+    "currentAndPreviousVerifiedRetained": true,
+    "healths": [
+      {
+        "label": "new-current",
+        "maximumRuntimeSeconds": 15,
+        "expectedSha256": "b322bd6131f146e1dfeb36a7d0ac66cd5c49cbcd7c2910b430d119f05f6ba31c",
+        "actualSha256": "b322bd6131f146e1dfeb36a7d0ac66cd5c49cbcd7c2910b430d119f05f6ba31c",
+        "recovery": "CURRENT_PACKAGE_VERIFIED",
+        "packageId": "1.0.0-dev.85-8c39353cc8dffff6a48ca4d80f665d39f70b90a52515f737722daaee6bb81f3b",
+        "unauthorizedStatus": 401,
+        "initializeStatus": 200,
+        "catalogStatus": 200,
+        "toolCount": 79,
+        "registeredProjectsRead": true,
+        "ownerExitCode": 0,
+        "readersClosed": true,
+        "ownedTreeExitProved": true,
+        "endpointClosed": true,
+        "observedUtc": "2026-10-30T12:41:54.376362+00:00"
+      },
+      {
+        "label": "automatic-previous-recovery",
+        "maximumRuntimeSeconds": 15,
+        "expectedSha256": "0b4240d1c125bedd68f7778134ad6dd39f35753a6dc0e28395a74d1c8e37fb06",
+        "actualSha256": "0b4240d1c125bedd68f7778134ad6dd39f35753a6dc0e28395a74d1c8e37fb06",
+        "recovery": "PACKAGE_PREVIOUS_RESTORED_STOPPED",
+        "packageId": "1.0.0-dev.85-208637edfdacbde52dd36eeba886a45e9b460e55664a1a5af453aca630eabcb9",
+        "unauthorizedStatus": 401,
+        "initializeStatus": 200,
+        "catalogStatus": 200,
+        "toolCount": 79,
+        "registeredProjectsRead": true,
+        "ownerExitCode": 0,
+        "readersClosed": true,
+        "ownedTreeExitProved": true,
+        "endpointClosed": true,
+        "observedUtc": "2026-10-30T12:42:10.903591+00:00"
+      },
+      {
+        "label": "healthy-current-restart",
+        "maximumRuntimeSeconds": 10,
+        "expectedSha256": "b322bd6131f146e1dfeb36a7d0ac66cd5c49cbcd7c2910b430d119f05f6ba31c",
+        "actualSha256": "b322bd6131f146e1dfeb36a7d0ac66cd5c49cbcd7c2910b430d119f05f6ba31c",
+        "recovery": "CURRENT_PACKAGE_VERIFIED",
+        "packageId": "1.0.0-dev.85-8c39353cc8dffff6a48ca4d80f665d39f70b90a52515f737722daaee6bb81f3b",
+        "unauthorizedStatus": 401,
+        "initializeStatus": 200,
+        "catalogStatus": 200,
+        "toolCount": 79,
+        "registeredProjectsRead": true,
+        "ownerExitCode": 0,
+        "readersClosed": true,
+        "ownedTreeExitProved": true,
+        "endpointClosed": true,
+        "observedUtc": "2026-10-30T12:42:22.425482+00:00"
+      }
+    ],
+    "fault": "Only the stopped disposable current-image copy was held aside with bytes preserved; normal startup selected the verified previous package; the exact current bytes were restored, reselected and restarted"
+  },
+  "authority": {
+    "classification": "LOCAL_OPERATOR_PROVIDED_SELF_REVIEW_AND_OBSERVED_HEALTH",
+    "independentAttestationCreated": false,
+    "protectedPromotionAuthorityCreated": false
+  },
+  "preservation": {
+    "realCriticalStatePinsUnchanged": 12,
+    "scopedStatePinsUnchanged": 15,
+    "nonUsageDevelopmentConfigUnchanged": true,
+    "usageAccountingRetained": true,
+    "remainingTestOwnedProcesses": 0,
+    "cleanupScope": "EXACT_RETAINED_CANDIDATE_SOURCE_IMAGE_AND_DISPOSABLE_RUNTIME_IMAGES",
+    "existingNativeSessionsResumed": 0,
+    "nativeModelTurns": 0,
+    "actualChatGPTWebCalls": 0,
+    "browserWakeTunnelOrRecurringStarts": 0,
+    "protectedOrRealLiveSelectionChanged": false
+  },
+  "privateEvidenceSha256": {
+    "buildResult": "50e56c0025b191b4246eb4775c314fdda338748bf1ad894f75f29c54132105c4",
+    "runtimeResult": "af278b1b812840956edcc1d2a52e9e260648f3d283505becb6208420fda4e529",
+    "runtimeOwner": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "cleanup": "9ed0c6ced7d971fde00a49182297e57bb3afa5648de522455983b22719271cea"
+  },
+  "limitations": [
+    "Startup/catalog/auth and recovery prove local development behavior; genuine Web-origin coding and installed feature acceptance remain open",
+    "Exact-source hosted CI remains unverified; this does not authorize protected promotion",
+    "Existing connector429 and retained-profile inspection were not retried; no completed Web canary was replayed"
+  ]
+}
