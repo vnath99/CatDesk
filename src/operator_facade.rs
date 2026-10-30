@@ -28,6 +28,8 @@ pub(crate) use installed_backend::{
 };
 
 pub(crate) use web::WebWorkLease;
+#[cfg(all(test, windows))]
+pub(crate) use web::native_continuation_fixture;
 
 #[cfg(test)]
 pub(crate) fn read_web_status(workspace: &Path) -> Result<serde_json::Value, String> {

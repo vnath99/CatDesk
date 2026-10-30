@@ -512,7 +512,7 @@ pub(crate) fn grant_web_execution_with_capabilities(
                     .native_queue
                     .filter(|selection| selection.task_id == id)
                 {
-                    crate::operator_codex_cli::check_native_queue_selection(
+                    crate::operator_codex_cli::native_queue_selection_status(
                         &project.control_workspace,
                         &project.project.project_id,
                         &selection,
@@ -848,6 +848,24 @@ fn prepare_journaled_task_call(
     tool_name: &str,
     arguments_hash: String,
 ) -> Result<JournaledTaskCall, String> {
+    prepare_journaled_task_call_checked(
+        project,
+        inspected,
+        call_id,
+        tool_name,
+        arguments_hash,
+        true,
+    )
+}
+
+fn prepare_journaled_task_call_checked(
+    project: &ResolvedProjectScopeV1,
+    inspected: &AssignmentInspection,
+    call_id: &str,
+    tool_name: &str,
+    arguments_hash: String,
+    record: bool,
+) -> Result<JournaledTaskCall, String> {
     use crate::delegated::journal::{ToolCallRecordV1, ToolMutationKind};
     let tool_call_id = ToolCallId::new(call_id).map_err(|_| "PROJECT_TASK_CALL_INVALID")?;
     let directory = task_directory(project, &inspected.contract.task_id, false)?;
@@ -905,6 +923,13 @@ fn prepare_journaled_task_call(
     }
     if calls.len() >= inspected.contract.max_tool_calls as usize {
         return Err("PROJECT_TASK_TOOL_BUDGET_EXCEEDED".into());
+    }
+    if !record {
+        return Ok(JournaledTaskCall {
+            journal,
+            run,
+            tool_call_id,
+        });
     }
     journal
         .record_tool_call_requested(ToolCallRecordV1 {
@@ -1046,6 +1071,8 @@ pub(crate) fn prepare_native_task_call(
     key: &str,
     task_id: &str,
     call_id: &str,
+    lease: &crate::operator_facade::WebWorkLease,
+    current: &catdesk_wake::protocol::Target,
 ) -> Result<NativeTaskCall, String> {
     let (archive, _, selection) = authorized_web_grant(project, record, key)?;
     let selection = selection.ok_or("WEB_TASK_NATIVE_NOT_GRANTED")?;
@@ -1054,14 +1081,34 @@ pub(crate) fn prepare_native_task_call(
     if inspected.contract.task_id != task_id {
         return Err("WEB_TASK_GRANT_SCOPE_MISMATCH".into());
     }
+    // Keep call identity tied to the immutable grant, even after a proved
+    // continuation selects a linked native job. Check replay/unknown fences
+    // before changing queue metadata; record execution only after migration.
+    let hash = stable_text_hash(
+        &serde_json::to_string(&selection).map_err(|_| "WEB_TASK_NATIVE_SELECTION_INVALID")?,
+    );
+    prepare_journaled_task_call_checked(
+        project,
+        &inspected,
+        call_id,
+        "native.codex.dispatch",
+        hash.clone(),
+        false,
+    )?;
+    let selection = crate::operator_codex_cli::continue_native_queue_selection(
+        &project.control_workspace,
+        &project.project.project_id,
+        &selection,
+        lease,
+        &record.target,
+        current,
+        &record.event_id,
+    )?;
     crate::operator_codex_cli::check_native_queue_selection(
         &project.control_workspace,
         &project.project.project_id,
         &selection,
     )?;
-    let hash = stable_text_hash(
-        &serde_json::to_string(&selection).map_err(|_| "WEB_TASK_NATIVE_SELECTION_INVALID")?,
-    );
     let journal =
         prepare_journaled_task_call(project, &inspected, call_id, "native.codex.dispatch", hash)?;
     Ok(NativeTaskCall { selection, journal })

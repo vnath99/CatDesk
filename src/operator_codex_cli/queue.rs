@@ -45,6 +45,7 @@ use super::{
 };
 
 mod advisory;
+mod native_continuation;
 mod native_dispatch;
 mod operator_review;
 #[cfg(windows)]
@@ -52,6 +53,7 @@ mod owned_native;
 mod review_invite;
 mod review_reader;
 
+pub(crate) use native_continuation::continue_native_queue_selection;
 #[cfg(all(test, windows))]
 pub(crate) use native_dispatch::{NativeQueueFixture, native_queue_fixture};
 pub(crate) use native_dispatch::{
@@ -693,6 +695,10 @@ struct QueueJob {
     review_package_sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     advisory_outcome_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    native_continuation: Option<native_continuation::NativeContinuationLink>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    native_origin: Option<native_continuation::NativeContinuationOrigin>,
 }
 
 impl QueueJob {
@@ -722,6 +728,8 @@ impl QueueJob {
             verification_sha256: None,
             review_package_sha256: None,
             advisory_outcome_sha256: None,
+            native_continuation: None,
+            native_origin: None,
         })
     }
     fn same_request(&self, other: &Self) -> bool {
@@ -769,6 +777,12 @@ impl QueueJob {
         }
         if let Some(implementation) = &self.windows_sandbox {
             summary["windowsSandbox"] = json!(implementation);
+        }
+        if let Some(link) = &self.native_continuation {
+            summary["nativeContinuation"] = json!(link);
+        }
+        if let Some(origin) = &self.native_origin {
+            summary["nativeOrigin"] = json!(origin);
         }
         summary
     }
@@ -2008,6 +2022,12 @@ fn create_new_record(path: &Path, bytes: &[u8]) -> Result<(), String> {
 }
 
 fn validate_job(job: &QueueJob) -> Result<(), String> {
+    if let Some(link) = &job.native_continuation {
+        link.validate(job)?;
+    }
+    if let Some(origin) = &job.native_origin {
+        origin.validate(job)?;
+    }
     valid_slug(&job.task_id)?;
     valid_slug(&job.binding.project_id)?;
     if job.schema_version != native_task_record_schema(job.windows_sandbox.as_deref())
@@ -2570,6 +2590,14 @@ pub(crate) async fn execute_action(
             let mut job = store
                 .load_job(&project.project_id, &task_id)?
                 .ok_or("CODEX_QUEUE: task ID is not queued for this project")?;
+            if job.native_continuation.is_some()
+                || job
+                    .native_origin
+                    .as_ref()
+                    .is_some_and(|origin| !origin.activated)
+            {
+                return Err("CODEX_QUEUE_STATE: superseded task remains paused; inspect its linked continuation".into());
+            }
             if !job.binding.matches(&project) {
                 return Err("CODEX_QUEUE_SCOPE: queued task binding drifted".into());
             }

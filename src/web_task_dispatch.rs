@@ -1460,11 +1460,8 @@ mod tests {
         altered["nativeQueue"]["requestSha256"] = json!("0".repeat(64));
         fs::write(&path, serde_json::to_vec(&altered).unwrap()).unwrap();
         let denied = call(&f, native_request(&f, "changed-payload")).await;
-        assert!(
-            denied["error"]["message"]
-                .as_str()
-                .unwrap()
-                .contains("request changed"),
+        assert_eq!(
+            denied["error"]["message"], "WEB_TASK_NATIVE_REQUEST_CHANGED",
             "{denied}"
         );
         assert!(!native_proof(&f).exists());
@@ -1552,6 +1549,150 @@ mod tests {
             "{peer}"
         );
         assert!(!native_proof(&alpha).exists());
+    }
+
+    fn native_rollover(f: &mut Fixture) {
+        let event = f.pins["sourceEventId"].as_str().unwrap();
+        let root = crate::wake_protocol_client::wake_root_for_workspace(&f.control).unwrap();
+        let wake = catdesk_wake::store::Store::open(&root).unwrap();
+        let (_, current) = crate::operator_facade::native_continuation_fixture(
+            &f.control,
+            &wake,
+            f.pins["projectId"].as_str().unwrap(),
+            event,
+        );
+        f.pins["expectedTargetGeneration"] = json!(current.generation);
+        f.pins["expectedTargetSha256"] = json!(current.digest);
+    }
+
+    #[tokio::test]
+    async fn native_rollover_keeps_grant_receipts_and_completed_call_fence() {
+        let (mut alpha, beta) = paired_fixtures(true);
+        let path = alpha
+            .control
+            .join(".catdesk/project-mcp-tasks/alpha/task-fixture/execution-grant.json");
+        let original = fs::read(&path).unwrap();
+        native_rollover(&mut alpha);
+        crate::web_work::execution_permission_with_capabilities(
+            &alpha.control,
+            alpha.pins.clone(),
+            false,
+            false,
+            Some("native-fixture"),
+        )
+        .unwrap();
+        assert_eq!(fs::read(&path).unwrap(), original);
+        let scope = resolve_registered_project_from_control_root(&alpha.control, "alpha").unwrap();
+        let record = crate::web_work_state::WorkLedger::open(&alpha.control, "alpha")
+            .unwrap()
+            .record("request-a")
+            .unwrap()
+            .unwrap();
+        let current = catdesk_wake::protocol::Target::new(
+            alpha.pins["expectedTargetGeneration"].as_u64().unwrap(),
+            scope.project.chatgpt_target_url.clone().unwrap(),
+        )
+        .unwrap();
+        let handed = crate::project_mcp_task::granted_handoff_context(&scope, &record, &current)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            handed["nativeQueue"]["snapshot"]["job"]["taskId"],
+            "native-fixture"
+        );
+        let result = call(&alpha, native_request(&alpha, "rollover-native-once")).await;
+        let result = &result["result"]["structuredContent"];
+        assert_eq!(result["job"]["state"], "NATIVE_EXITED_ZERO", "{result}");
+        let child = result["job"]["taskId"].as_str().unwrap().to_string();
+        assert!(child.starts_with("native-next-"));
+        assert_eq!(
+            fs::read(&path).unwrap(),
+            original,
+            "rollover cannot rewrite the grant"
+        );
+        let status = call(
+            &alpha,
+            request(&alpha, "rollover-status", "native.codex.status", json!({})),
+        )
+        .await;
+        let status = &status["result"]["structuredContent"];
+        assert_eq!(status["originTaskId"], "native-fixture");
+        assert_eq!(status["lineage"], json!(["native-fixture", child]));
+        assert_eq!(status["receipt"]["treeExitProven"], true);
+        assert_eq!(
+            fs::read_to_string(native_proof(&alpha)).unwrap(),
+            "native fixture task"
+        );
+        let replay = call(&alpha, native_request(&alpha, "rollover-native-once")).await;
+        assert_eq!(
+            replay["error"]["message"],
+            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+        );
+        // A second rollover must preserve the already completed native job,
+        // not create another task under a newer conversation identity.
+        native_rollover(&mut alpha);
+        let again = call(&alpha, native_request(&alpha, "rollover-native-once")).await;
+        assert_eq!(
+            again["error"]["message"],
+            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+        );
+        let separate = call(&alpha, native_request(&alpha, "already-ended-new-call")).await;
+        assert_eq!(
+            separate["result"]["structuredContent"]["status"], "no_ready_tasks",
+            "{separate}"
+        );
+        let status = call(
+            &alpha,
+            request(&alpha, "second-status", "native.codex.status", json!({})),
+        )
+        .await;
+        assert_eq!(
+            status["result"]["structuredContent"]["lineage"],
+            json!(["native-fixture", child])
+        );
+        let peer = call(&beta, native_request(&beta, "independent-peer")).await;
+        assert_eq!(
+            peer["result"]["structuredContent"]["job"]["state"], "NATIVE_EXITED_ZERO",
+            "{peer}"
+        );
+        assert_eq!(fs::read(&path).unwrap(), original);
+    }
+
+    #[tokio::test]
+    async fn native_rollover_cannot_route_around_ambiguous_call_or_block_peer() {
+        let (mut alpha, beta) = paired_fixtures(true);
+        let admission = crate::web_work::prepare_native_dispatch(
+            &alpha.control,
+            alpha.pins.clone(),
+            &alpha.key,
+            "task-fixture",
+            "unknown-before-rollover",
+        )
+        .unwrap();
+        admission
+            .finish(&Err("CONTROLLED_UNKNOWN_NATIVE_OUTCOME".into()))
+            .unwrap();
+        native_rollover(&mut alpha);
+        let blocked = call(&alpha, native_request(&alpha, "new-id-after-rollover")).await;
+        assert_eq!(
+            blocked["error"]["message"],
+            "PROJECT_TASK_RECOVERY_REQUIRED"
+        );
+        let status = call(
+            &alpha,
+            request(&alpha, "unknown-status", "native.codex.status", json!({})),
+        )
+        .await;
+        assert_eq!(
+            status["result"]["structuredContent"]["lineage"],
+            json!(["native-fixture"])
+        );
+        assert!(!native_proof(&alpha).exists());
+        let peer = call(&beta, native_request(&beta, "peer-after-rollover-fence")).await;
+        assert_eq!(
+            peer["result"]["structuredContent"]["job"]["state"], "NATIVE_EXITED_ZERO",
+            "{peer}"
+        );
     }
 
     #[test]

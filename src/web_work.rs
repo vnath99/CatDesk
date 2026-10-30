@@ -166,7 +166,7 @@ pub(crate) fn prepare_native_dispatch(
                 record.target == current,
             )?;
             crate::project_mcp_task::prepare_native_task_call(
-                &scope, &record, key, task_id, call_id,
+                &scope, &record, key, task_id, call_id, &lease, &current,
             )
         },
     )?;

@@ -1002,6 +1002,8 @@ pub(crate) fn registry_rollover_status(workspace: &Path, project: &str) -> Value
 }
 
 pub(crate) use rollover::WorkLease as WebWorkLease;
+#[cfg(all(test, windows))]
+pub(crate) use rollover::native_continuation_fixture;
 
 pub(crate) fn acquire_web_work_lease(
     workspace: &Path,

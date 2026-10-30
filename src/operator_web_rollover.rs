@@ -376,6 +376,35 @@ pub(crate) struct WorkLease {
 }
 
 impl WorkLease {
+    /// Native routing may follow only this lease's completed continuation.
+    /// The queue must also preserve its own no-effect and ownership evidence.
+    pub(crate) fn check_native_continuation(
+        &self,
+        workspace: &Path,
+        project: &str,
+        original: &Target,
+        current: &Target,
+        event_id: &str,
+    ) -> Result<(), String> {
+        self.check_source_task(original, current, event_id)?;
+        let root = workspace
+            .canonicalize()
+            .map_err(|_| "WEB_WORK_CONTINUATION_SOURCE_REQUIRED")?;
+        let store = self
+            ._store
+            .root
+            .canonicalize()
+            .map_err(|_| "WEB_WORK_CONTINUATION_SOURCE_REQUIRED")?;
+        if original == current
+            || store != root.join(".catdesk/web-rollovers").join(project)
+            || self.approved_target.as_ref() != Some(current)
+            || self.approved_source_task_id.as_deref() != Some(event_id)
+        {
+            return Err("WEB_WORK_CONTINUATION_SOURCE_REQUIRED".into());
+        }
+        Ok(())
+    }
+
     /// A completed continuation authorizes only its proved generation.
     /// Manual target binding does not take ProjectStore's lock, so the caller
     /// rechecks its selected target against this witness before changing work.
@@ -3754,9 +3783,135 @@ fn execute_with_mode(
     Ok(summary(&record))
 }
 
+#[cfg(all(test, windows))]
+pub(crate) fn native_continuation_fixture(
+    root: &Path,
+    wake: &Store,
+    project: &str,
+    source_event: &str,
+) -> (Target, Target) {
+    tests::native_continuation_fixture(root, wake, project, source_event)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Synthetic durable proof only: no browser, provider or native process.
+    #[cfg(windows)]
+    pub(super) fn native_continuation_fixture(
+        root: &Path,
+        wake: &Store,
+        project: &str,
+        source_event: &str,
+    ) -> (Target, Target) {
+        let registry_path = root.join(".catdesk/projects/projects.json");
+        let mut registry: crate::delegated::autonomy_projects::AutonomousProjectRegistryV1 =
+            serde_json::from_slice(&fs::read(&registry_path).unwrap()).unwrap();
+        let registered = registry
+            .projects
+            .iter_mut()
+            .find(|p| p.project_id == project)
+            .unwrap();
+        let source = wake.config().unwrap().targets[project].clone();
+        let current = wake
+            .set_target(
+                project,
+                source.generation,
+                &format!(
+                    "https://chatgpt.com/c/fixture-next-{}",
+                    uuid::Uuid::new_v4()
+                ),
+            )
+            .unwrap();
+        if !registered.chatgpt_target_history.contains(&source.url) {
+            registered.chatgpt_target_history.push(source.url.clone());
+        }
+        registered.chatgpt_target_history.push(current.url.clone());
+        registered.chatgpt_target_url = Some(current.url.clone());
+        registered.chatgpt_target_sha256 = Some(current.digest.clone());
+        let mut request = handoff_request(&registered.workspace);
+        request.project_id = project.into();
+        request.intent_id = uuid::Uuid::new_v4().to_string();
+        request.source_task_id = source_event.into();
+        request.source = source.clone();
+        request.native_thread_id = registered.codex_thread_id.clone();
+        request.event_id = format!("web-handoff-{}", request.intent_id);
+        request.message = handoff_request_message(
+            project,
+            &request.intent_id,
+            source_event,
+            &request.native_thread_id,
+        );
+        fs::write(registry_path, serde_json::to_vec(&registry).unwrap()).unwrap();
+        let mut record = record();
+        record.project_id = project.into();
+        record.source_task_id = source_event.into();
+        record.intent_id = request.intent_id.clone();
+        record.source = source.clone();
+        record.message_digest =
+            message_digest(project, &record.intent_id, &source.url, &record.handoff).unwrap();
+        record.phase = Phase::ContinuationQueued;
+        let mut bootstrap = receipt_for(&record);
+        bootstrap.destination_url = current.url.clone();
+        bootstrap.destination_digest = current.digest.clone();
+        record.receipt = Some(bootstrap);
+        record.bound_target = Some(current.clone());
+        record.handoff_event_id = Some(request.event_id.clone());
+        record.continuation_event_id = format!("web-continue-{}", record.intent_id);
+        record.context_meter_status = ContextMeterStatus::Recorded;
+        let store = ProjectStore::open(root, project).unwrap();
+        store.save_handoff_request(&request).unwrap();
+        store.save(&record).unwrap();
+        atomic(&store.root.join("active.json"), &record.intent_id).unwrap();
+        drop(store);
+        assert!(
+            acquire_web_work_lease(root, project).is_err(),
+            "pending continuation must fence work"
+        );
+        let message = continuation_message(&record, &current);
+        let event = wake
+            .produce_expected(
+                &record.continuation_event_id,
+                project,
+                "engineering_attention",
+                &message,
+                &current,
+            )
+            .unwrap();
+        let host = wake.host_lock().unwrap();
+        let claimed = wake.claim(&event, &host).unwrap();
+        wake.transition(
+            &event.event_id,
+            &claimed.owner,
+            DeliveryPhase::Submitting,
+            None,
+            None,
+        )
+        .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: event.event_id.clone(),
+            target_generation: current.generation,
+            target_digest: current.digest.clone(),
+            message_digest: digest(&message),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        wake.record_exact_receipt_timer(&event.event_id, &receipt)
+            .unwrap();
+        wake.transition(
+            &event.event_id,
+            &claimed.owner,
+            DeliveryPhase::Sent,
+            Some(receipt),
+            None,
+        )
+        .unwrap();
+        wake.complete_timer(&event.event_id).unwrap();
+        drop(acquire_web_work_lease(root, project).unwrap());
+        (source, current)
+    }
 
     #[test]
     fn cancelled_scheduler_cannot_prepare_collect_or_execute_a_project() {

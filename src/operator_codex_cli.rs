@@ -7,6 +7,7 @@
 mod queue;
 mod recovery;
 
+pub(crate) use queue::continue_native_queue_selection;
 pub(crate) use queue::publish_review_invitation_for_mcp;
 pub(crate) use queue::read_review_package_for_mcp;
 #[cfg(all(test, windows))]

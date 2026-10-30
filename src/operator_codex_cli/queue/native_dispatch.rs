@@ -28,7 +28,10 @@ impl NativeQueueSelection {
     }
 }
 
-fn selected_store(_control: &Path, controller: &AutonomousProjectV1) -> Result<QueueStore, String> {
+pub(super) fn selected_store(
+    _control: &Path,
+    controller: &AutonomousProjectV1,
+) -> Result<QueueStore, String> {
     #[cfg(all(test, windows))]
     if let Some((root, _)) = fixture_entry(_control) {
         return Ok(QueueStore { root });
@@ -112,19 +115,14 @@ pub(crate) fn native_queue_selection_status(
     let project = resolve_registered_project_from_control_root(control, project_id)
         .map_err(|_| "WEB_TASK_NATIVE_PROJECT_UNAVAILABLE")?;
     let queue = selected_store(&controller.control_workspace, &controller.project)?;
-    let job = queue
-        .load_job(project_id, &selected.task_id)?
-        .ok_or("WEB_TASK_NATIVE_TASK_UNAVAILABLE")?;
-    if job.request_sha256() != selected.request_sha256 {
-        return Err("WEB_TASK_NATIVE_REQUEST_CHANGED".into());
-    }
+    let (job, lineage) = super::native_continuation::follow(&queue, project_id, selected, None)?;
     let receipt = job
         .receipt_id
         .as_deref()
         .map(|id| -> Result<QueueReceipt, String> {
             let receipt = queue.read_receipt(id)?;
             if receipt.project_id != project_id
-                || receipt.task_id != selected.task_id
+                || receipt.task_id != job.task_id
                 || job
                     .attempt
                     .as_ref()
@@ -137,8 +135,9 @@ pub(crate) fn native_queue_selection_status(
         .transpose()?;
     Ok(
         json!({"job":job.summary(),"receipt":receipt,"snapshotOnly":true,
-        "bindingStillMatches":job.binding.matches(&project.project)
-            && project_binding_sha256(&project.project)? == selected.binding_sha256,
+        "originTaskId":selected.task_id,"lineage":lineage,
+        "bindingStillMatches":job.binding.matches(&project.project),
+        "originalBindingStillMatches":project_binding_sha256(&project.project)? == selected.binding_sha256,
         "processLiveness":"NOT_INFERRED_FROM_CLAIM_METADATA","taskCompletionVerified":false,
         "nativeTurnStarted":false,"journalChanged":false}),
     )
