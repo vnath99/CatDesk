@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T13:05:12.416426+00:00",
+  "classification": "SOURCE_HISTORY_RECONCILIATION_AND_ACTUAL_NATIVE_ADVICE_NOT_PROMOTION_OR_WEB_ACCEPTANCE",
+  "branch": "codex/web-rollover-oct17",
+  "historyReconciliation": {
+    "mergeCommit": "5746e786ff5e69955c01cc0a939b5927fe4f083d",
+    "developmentParent": "8e432c9ec1c08c8039afb58b0bb87c4d2083e9a0",
+    "retainedCanonicalParent": "4bec4d596f996089fdebb6f6cb1b846c6e23382b",
+    "treeBeforeAndAfter": "d1de0bb8e5745bdfc29cb7876d533cfed2837e42",
+    "ordinaryMergeStrategy": "ort",
+    "sourceTreeUnchanged": true,
+    "canonicalNowAncestorOfDevelopment": true,
+    "canonicalCheckoutStillAtOriginalHead": true,
+    "newHistoricalParentsAudited": 3,
+    "canonicalSourceOrInstalledRuntimeWrites": 0,
+    "unnecessaryTestsOrBuildsRepeated": 0
+  },
+  "nativeSourceAdvice": {
+    "candidateSha256": "b322bd6131f146e1dfeb36a7d0ac66cd5c49cbcd7c2910b430d119f05f6ba31c",
+    "reviewedSourceCommit": "68b65bbc044587e621a7ac15093e70df503e459f",
+    "reviewBaseCommit": "6a982d37710b7139f5c6e0b3543d3d63ce1cc645",
+    "elapsedSeconds": 73.329,
+    "nativeTurnLimitSeconds": 120,
+    "outerOwnerLimitSeconds": 180,
+    "model": "gpt-6.1-sol",
+    "effort": "medium",
+    "authoritativeProfileEvidenceSha256": "b4e6da6c4662abc043ee02e279011af96be289009bb0b3439f4764db42b628cf",
+    "sameTestOwnedThreadVerified": true,
+    "nativeExitCode": 0,
+    "treeExitProven": true,
+    "verdict": "NO_FINDINGS_REPORTED",
+    "findingsCount": 0,
+    "reviewedFiles": [
+      "src/delegated/autonomy_projects.rs",
+      "src/operator_codex_cli.rs",
+      "src/operator_codex_cli/queue.rs",
+      "src/operator_codex_cli/queue/native_continuation.rs",
+      "src/operator_codex_cli/queue/native_dispatch.rs",
+      "src/project_mcp_task.rs",
+      "src/web_task_dispatch.rs",
+      "src/web_work.rs"
+    ],
+    "frozenInputManifestSha256": "45e497596020f7e3c6ae5e10fb69180537bf67bf126c3e46bd2e3c6b8d39337a",
+    "reportSha256": "da563c7c381259414e30b67d83271701c2e5436386c58404c548d22493539fc2",
+    "onlyDesignatedReviewReportAdded": true,
+    "fixtureUtilityAndPublicInputsPreserved": true,
+    "scope": "Incremental status/dispatch change only; not the full release delta or managed completion authority"
+  },
+  "releaseRouteFindings": [
+    "The existing supervisor resolves acknowledged COMPLETED_VERIFIED CatDesk managed sessions, exact contract/task attribution, passing verification, final-review bytes and changed declared outputs. The resolver does not require a ChatGPT Web provider",
+    "A genuine supported native-managed completion can therefore be eligible in principle; its live qualification for the current full source remains unverified",
+    "An ordinary queue receipt, this incremental advisory report, root self-review, test logs or development record-verification are not that managed completion",
+    "Controlled producer validates the committed snapshot and produces its own pinned candidate/claim/result/attestation. A normal Cargo artifact cannot be retroactively attested by editing metadata",
+    "Current normal candidate remains qualified for development only; no current acknowledged managed review/snapshot/producer chain for its source was established in this slice",
+    "Canonical history is now a real ancestor, allowing a future guarded source-only fast-forward after its review/ownership/preservation gates pass; none was executed here"
+  ],
+  "sourceReferences": [
+    "src/delegated/autonomy_supervisor.rs:resolve_reviewed_promotion_review_authority",
+    "src/delegated/autonomous_controller.rs:reviewed_source_snapshot_expected",
+    "src/reviewed_build.rs:prepare_reviewed_build",
+    "src/reviewed_build.rs:validate_producer_attestation"
+  ],
+  "preservation": {
+    "realCriticalStatePinsUnchanged": 12,
+    "scopedInputPinsUnchanged": 21,
+    "remainingTestOwnedProcesses": 0,
+    "cleanupScope": "EXACT_CANDIDATE_AND_TEST_NATIVE_WORKSPACE_COMMAND_IDENTITIES",
+    "originalProjectNativeSessionsResumed": 0,
+    "testOwnedFixtureCheckpointedLocally": true,
+    "nativeModelTurns": 1,
+    "actualChatGPTWebCalls": 0,
+    "browserWakeTunnelOrRecurringStarts": 0,
+    "realProjectBindingsOrProductionChanged": false
+  },
+  "privateEvidenceSha256": {
+    "historyResult": "ffa0905494b0fba99224506a59a58d9de513034bddaaa9ad12d6c0336bcec267",
+    "nativeResult": "c08830d51a553b172a4f3f805145a770e968079f5372af972dbffb6bc742ae6e",
+    "nativeReceipt": "713273612da75e57c5ba2785b869fee9358dce9f3ac12049cac8eeacbec7aa9f",
+    "nativeOwner": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "cleanup": "4748b6e49971f3cffeef00ec22f42d9bb306633c9ab16936be2e15360607db4d"
+  },
+  "limitations": [
+    "No genuine two-Web-chat coding, new protected promotion or unattended acceptance",
+    "The static reviewer ran no tests; previously qualified source regressions and candidate health remain separate evidence",
+    "Last observed connector429 and existing-profile inspection were not retried; hosted exact-source CI remains unverified"
+  ],
+  "nextTask": "Qualify the existing native-managed review route for the full current source using read-only preflight and ownership/contract evidence before creating work. Reuse supported lifecycle, completion/ACK/snapshot/producer controls; do not import this advisory report as authority or recreate a known-blocked Web request."
+}
