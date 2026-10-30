@@ -1,3 +1,9 @@
+## 2026-10-30 14:01 UTC — latest connector prerequisite changed
+
+Existing-official-owner qualification and one actual connected transport-status response passed. Installed C254 identity matched, all131 protected pins/profile stayed unchanged, both owners stopped, and no test-owned runtime/listener remained. The earlier429 is historical; do not continue labeling the latest connector check unavailable or repeatedly probe it. No unattended serving was activated.
+
+Two genuine Web coding conversations remain OPEN. Next is the same existing registered-profile readiness inspection, then qualified bounded serving and project-task grants with correct scope. The default connection reports legacy no-bearer; its successful status call does not qualify central dispatch. No additional sign-in or new terminal experiment is requested. Managed current-source review/producer authority remains separate and unavailable; preserve its guards. See `docs/verification/EXISTING_OFFICIAL_OWNER_CONNECTOR_2026_10_30.json`.
+
 ## 2026-10-30 13:45 UTC — current dependencies after real development qualification
 
 | Task | Current state | Next supported action / ownership |
