@@ -56,6 +56,10 @@ const INVALID_HANDLE: *mut c_void = -1isize as *mut c_void;
 #[path = "development_foreground.rs"]
 mod foreground;
 
+#[path = "development_login_recovery.rs"]
+mod login_recovery;
+pub use login_recovery::reconcile_login;
+
 #[link(name = "kernel32")]
 unsafe extern "system" {
     fn CreateFileW(
@@ -1338,6 +1342,22 @@ fn validated_authority_options(
     allow_package_update: bool,
     allow_retiring_package_files: bool,
 ) -> Result<Option<(PathBuf, Authority)>> {
+    validated_authority_for_login_recovery(
+        workspace,
+        allow_package_update,
+        allow_retiring_package_files,
+        None,
+    )
+}
+
+// A matching marker hash is accepted only inside the explicit login-only
+// reconciliation path. Ordinary selection retains its unconditional fence.
+fn validated_authority_for_login_recovery(
+    workspace: &Path,
+    allow_package_update: bool,
+    allow_retiring_package_files: bool,
+    expected_login_marker: Option<&str>,
+) -> Result<Option<(PathBuf, Authority)>> {
     let workspace = canonical_workspace(workspace)?;
     let dev = dev_dir(&workspace);
     if !present(&dev)? {
@@ -1353,7 +1373,11 @@ fn validated_authority_options(
         return Ok(None);
     }
     plain(&dev, true)?;
-    if present(&dev.join("login-active.json"))? {
+    let login_marker = dev.join("login-active.json");
+    if present(&login_marker)?
+        && (expected_login_marker.is_none()
+            || expected_login_marker != Some(hash_file(&login_marker, 4096)?.as_str()))
+    {
         return Err("DEV_LOGIN_CLEANUP_UNVERIFIED".into());
     }
     if !allow_package_update && present(&dev.join(PACKAGE_UPDATE_ATTEMPT))? {
@@ -3869,6 +3893,290 @@ mod tests {
             "DEV_LOGIN_CLEANUP_UNVERIFIED"
         );
         cleanup(&parent);
+    }
+
+    fn recovery_login_fixture() -> (PathBuf, PathBuf, PathBuf, String) {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        Store::open(&root)
+            .unwrap()
+            .set_target("alpha", 0, "https://chatgpt.com/c/login-recovery-alpha")
+            .unwrap();
+        let marker = dev_dir(&workspace).join("login-active.json");
+        write_json_new(&marker, &json!({"schemaVersion":1,"purpose":"DEV_LOGIN_OWNED_BROWSER_V1",
+            "targetSha256":protocol::digest("https://chatgpt.com/c/login-recovery-alpha"),"startedUtc":now()})).unwrap();
+        let hash = hash_file(&marker, 4096).unwrap();
+        (parent, workspace, root, hash)
+    }
+
+    fn recovery_pair(store: &Store) -> Result<protocol::Target> {
+        store
+            .config()?
+            .targets
+            .get("alpha")
+            .cloned()
+            .ok_or("missing fixture target".into())
+    }
+
+    #[test]
+    fn login_recovery_preflight_preserves_fence_and_execute_archives_exact_bytes_only() {
+        let (parent, workspace, root, hash) = recovery_login_fixture();
+        let dev = dev_dir(&workspace);
+        let marker = dev.join("login-active.json");
+        let original = fs::read(&marker).unwrap();
+        let config = fs::read(root.join("config.json")).unwrap();
+        let pointer = fs::read(root.join("current.json")).unwrap();
+        let authority = fs::read(dev.join("authority.json")).unwrap();
+        let unknown = root.join("unknown-send-preserved.json");
+        fs::write(&unknown, b"unknown send must never be replayed or resolved").unwrap();
+        let preflight = login_recovery::reconcile_with_observer(
+            &workspace,
+            &hash,
+            false,
+            recovery_pair,
+            |_| Ok(()),
+        )
+        .unwrap();
+        assert_eq!(preflight["status"], "LOGIN_RECOVERY_PREFLIGHT_PASSED");
+        assert!(!preflight["markerArchived"].as_bool().unwrap());
+        assert_eq!(fs::read(&marker).unwrap(), original);
+        assert!(!dev.join(format!("login-recovery-{hash}.json")).exists());
+        assert_eq!(
+            root_for_workspace(&workspace).unwrap_err(),
+            "DEV_LOGIN_CLEANUP_UNVERIFIED"
+        );
+        let committed =
+            login_recovery::reconcile_with_observer(&workspace, &hash, true, recovery_pair, |_| {
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(committed["status"], "LOGIN_ONLY_MARKER_ARCHIVED");
+        assert_eq!(
+            committed["historicalSubmissionOutcome"],
+            "UNCHANGED_UNPROVEN"
+        );
+        assert_eq!(
+            fs::read(dev.join(format!("login-recovered-{hash}.json"))).unwrap(),
+            original
+        );
+        assert!(!marker.exists());
+        assert_eq!(fs::read(root.join("config.json")).unwrap(), config);
+        assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
+        assert_eq!(fs::read(dev.join("authority.json")).unwrap(), authority);
+        assert_eq!(
+            fs::read(unknown).unwrap(),
+            b"unknown send must never be replayed or resolved"
+        );
+        assert!(root_for_workspace(&workspace).unwrap().is_some());
+        assert!(
+            login_recovery::reconcile_with_observer(
+                &workspace,
+                &hash,
+                true,
+                recovery_pair,
+                |_| panic!("completed operation must not observe again")
+            )
+            .is_err()
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn login_recovery_refuses_unproven_inventory_without_mutation() {
+        for reason in [
+            "DEV_LOGIN_RECOVERY_HELPER_ACTIVE",
+            "DEV_LOGIN_RECOVERY_BROWSER_ACTIVE",
+            "DEV_LOGIN_RECOVERY_OWNER_UNATTRIBUTED",
+            "DEV_LOGIN_RECOVERY_INVENTORY_UNVERIFIED",
+        ] {
+            let (parent, workspace, _, hash) = recovery_login_fixture();
+            let marker = dev_dir(&workspace).join("login-active.json");
+            let before = fs::read(&marker).unwrap();
+            assert_eq!(
+                login_recovery::reconcile_with_observer(
+                    &workspace,
+                    &hash,
+                    true,
+                    recovery_pair,
+                    |_| Err(reason.into())
+                )
+                .unwrap_err(),
+                reason
+            );
+            assert_eq!(fs::read(marker).unwrap(), before);
+            assert!(
+                !dev_dir(&workspace)
+                    .join(format!("login-recovery-{hash}.json"))
+                    .exists()
+            );
+            cleanup(&parent);
+        }
+    }
+
+    #[test]
+    fn login_recovery_refuses_unknown_marker_and_wrong_hash_before_observation() {
+        for change in [
+            "wrong-hash",
+            "wrong-purpose",
+            "unknown-schema",
+            "future",
+            "extra-key",
+        ] {
+            let (parent, workspace, _, mut hash) = recovery_login_fixture();
+            let marker = dev_dir(&workspace).join("login-active.json");
+            let mut record: Value = read_json(&marker, 4096).unwrap();
+            match change {
+                "wrong-hash" => hash = "0".repeat(64),
+                "wrong-purpose" => record["purpose"] = json!("SEND_ATTEMPTED"),
+                "unknown-schema" => record["schemaVersion"] = json!(2),
+                "future" => record["startedUtc"] = json!(now() + 1000),
+                _ => record["unknown"] = json!("must preserve"),
+            }
+            if change != "wrong-hash" {
+                fs::write(&marker, serde_json::to_vec(&record).unwrap()).unwrap();
+                hash = hash_file(&marker, 4096).unwrap();
+            }
+            let before = fs::read(&marker).unwrap();
+            assert!(
+                login_recovery::reconcile_with_observer(
+                    &workspace,
+                    &hash,
+                    true,
+                    recovery_pair,
+                    |_| panic!("unsupported marker must not observe")
+                )
+                .is_err()
+            );
+            assert_eq!(fs::read(marker).unwrap(), before);
+            cleanup(&parent);
+        }
+    }
+
+    #[test]
+    fn login_recovery_requires_stopped_backend_host_and_browser_leases() {
+        for held in ["backend", "host", "browser", "running"] {
+            let (parent, workspace, root, hash) = recovery_login_fixture();
+            let store = Store::open(&root).unwrap();
+            let backend = (held == "backend").then(|| backend_lock(&workspace).unwrap());
+            let host = (held == "host").then(|| store.host_lock().unwrap());
+            let browser = (held == "browser")
+                .then(|| runtime::browser_session_lock(&root, Duration::ZERO).unwrap());
+            if held == "running" {
+                runtime::control(&store, "RUNNING").unwrap();
+            }
+            let marker = dev_dir(&workspace).join("login-active.json");
+            let before = fs::read(&marker).unwrap();
+            assert!(
+                login_recovery::reconcile_with_observer(
+                    &workspace,
+                    &hash,
+                    true,
+                    recovery_pair,
+                    |_| panic!("busy owner must not observe")
+                )
+                .is_err()
+            );
+            assert_eq!(fs::read(marker).unwrap(), before);
+            drop((backend, host, browser));
+            cleanup(&parent);
+        }
+    }
+
+    #[test]
+    fn login_recovery_rechecks_generation_and_marker_cas_after_observation() {
+        for change in ["target", "marker"] {
+            let (parent, workspace, root, hash) = recovery_login_fixture();
+            let marker = dev_dir(&workspace).join("login-active.json");
+            let observed = login_recovery::reconcile_with_observer(
+                &workspace,
+                &hash,
+                true,
+                recovery_pair,
+                |_| {
+                    if change == "target" {
+                        Store::open(&root)
+                            .unwrap()
+                            .set_target("alpha", 1, "https://chatgpt.com/c/changed-recovery-target")
+                            .unwrap();
+                    } else {
+                        fs::write(&marker, b"unknown replacement marker").unwrap();
+                    }
+                    Ok(())
+                },
+            );
+            assert!(observed.is_err());
+            assert!(marker.is_file());
+            assert!(
+                !dev_dir(&workspace)
+                    .join(format!("login-recovered-{hash}.json"))
+                    .exists()
+            );
+            cleanup(&parent);
+        }
+    }
+
+    #[test]
+    fn login_recovery_interrupted_archive_resumes_from_original_journal_without_overwrite() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let (parent, workspace, _, hash) = recovery_login_fixture();
+        let dev = dev_dir(&workspace);
+        let marker = dev.join("login-active.json");
+        let before = fs::read(&marker).unwrap();
+        let pinned = OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&marker)
+            .unwrap();
+        assert_eq!(
+            login_recovery::reconcile_with_observer(
+                &workspace,
+                &hash,
+                true,
+                recovery_pair,
+                |_| Ok(())
+            )
+            .unwrap_err(),
+            "DEV_LOGIN_RECOVERY_ARCHIVE_FAILED"
+        );
+        let journal = dev.join(format!("login-recovery-{hash}.json"));
+        let intent = fs::read(&journal).unwrap();
+        assert_eq!(fs::read(&marker).unwrap(), before);
+        assert_eq!(
+            root_for_workspace(&workspace).unwrap_err(),
+            "DEV_LOGIN_CLEANUP_UNVERIFIED"
+        );
+        drop(pinned);
+        login_recovery::reconcile_with_observer(&workspace, &hash, true, recovery_pair, |_| Ok(()))
+            .unwrap();
+        assert_eq!(fs::read(&journal).unwrap(), intent);
+        assert_eq!(
+            fs::read(dev.join(format!("login-recovered-{hash}.json"))).unwrap(),
+            before
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn login_recovery_never_overwrites_unknown_archive_or_journal() {
+        for filename in ["login-recovered", "login-recovery"] {
+            let (parent, workspace, _, hash) = recovery_login_fixture();
+            let conflict = dev_dir(&workspace).join(format!("{filename}-{hash}.json"));
+            fs::write(&conflict, b"unknown historical artifact").unwrap();
+            assert!(
+                login_recovery::reconcile_with_observer(
+                    &workspace,
+                    &hash,
+                    true,
+                    recovery_pair,
+                    |_| Ok(())
+                )
+                .is_err()
+            );
+            assert_eq!(fs::read(conflict).unwrap(), b"unknown historical artifact");
+            assert!(dev_dir(&workspace).join("login-active.json").exists());
+            cleanup(&parent);
+        }
     }
 
     #[test]

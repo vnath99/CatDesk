@@ -1,3 +1,7 @@
+## 2026-10-30 23:12 UTC — login-only owner recovery source qualified
+
+Supported hash-pinned `web-dev-runtime reconcile-login` preflight/commit now reuses the existing authority, project pairing and lifecycle/Job owners. It requires independent selected-profile quiescence and archives original marker bytes; historical sends and all other state remain untouched. Source scopes:47 native+10 Python+1 parser tests passed, strict root/Wake Clippy/formatting passed. Actual bounded OS metadata reported PROFILE_QUIESCENT with unrelated Chrome left running; no marker or installation changed. Next: commit-pinned development build and supported recovery qualification. No operator action now. Evidence: `docs/verification/LOGIN_ONLY_RECOVERY_SOURCE_2026_10_30.json`.
+
 ## 2026-10-30 22:53 UTC — bounded login cleanup — TESTED_SOURCE
 
 The existing profile-login owner now expires its whole interaction after120s and follows existing exact Job cleanup.40 module tests passed (3 new), including actual Windows-process exit accounting; root/Wake strict Clippy and formatting passed. Previous interrupted markers stay preserved. Diagnostics source `f74693bae72f8ef6be71e49b54509d8456980609` is remote/PR verified; combined distinct tests across both increments:294. New installed/browser qualification remains OPEN pending supported owner reconciliation; no operator action now. See `docs/verification/BOUNDED_LOGIN_OWNER_2026_10_30.json`.

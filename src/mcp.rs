@@ -4073,6 +4073,22 @@ pub(crate) fn operator_read_project_web_target_diagnosed(
     paired_project_target_readback_with_config_diagnosed(&control_workspace, project_id, &config)
 }
 
+/// Login-only recovery already pins and validates its development authority,
+/// while ordinary root selection must remain fenced by the interrupted marker.
+/// Reuse the normal registry/history pairing checks against that exact store.
+pub(crate) fn operator_read_login_recovery_target(
+    control_workspace: &Path,
+    project_id: &str,
+    selected_store: &catdesk_wake::store::Store,
+) -> Result<Option<ProjectWebTargetV1>, DesignatedChatTargetErrorV1> {
+    let lock = wake_target_lock(control_workspace)
+        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    let _guard = lock
+        .lock()
+        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    paired_project_target_readback_locked(control_workspace, selected_store, project_id)
+}
+
 pub(crate) fn operator_read_project_web_target_status(
     control_workspace: &Path,
     project_id: &str,

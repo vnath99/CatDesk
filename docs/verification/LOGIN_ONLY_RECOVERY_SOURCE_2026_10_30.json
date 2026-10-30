@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T23:12:52.534674+00:00",
+  "classification": "TESTED_SOURCE_AND_ACTUAL_NATIVE_METADATA_NO_RECOVERY_EXECUTED_YET",
+  "sourceBaseCommit": "301d81babe50d7ef72012a9947f6af64adcc9a15",
+  "implementation": {
+    "command": "operator web-dev-runtime reconcile-login --project-id <registered-project> --expected-marker-sha256 <exact-hash> [--execute]",
+    "preflightDefault": true,
+    "loginOnlySchemaAndPurposeRequired": true,
+    "matchingMarkerHashRequired": true,
+    "existingAuthorityProductionRootAndPackageChecksRetained": true,
+    "existingRegistryPairingReused": true,
+    "backendHostBrowserLeasesRequired": true,
+    "stoppedControlRequired": true,
+    "independentNativeProfileObservationRequired": true,
+    "arbitraryCommandLinesOrProfileContentsExported": false,
+    "unknownOwnerRefused": true,
+    "unrelatedAttributedBrowsersMayContinue": true,
+    "existingBoundedJobOwnerReused": true,
+    "nativeObservationMaximumSeconds": 15,
+    "originalMarkerBytesPreservedByNoReplaceSameDirectoryRename": true,
+    "preparedJournalIsNotCompletion": true,
+    "archiveExistenceAndExactBytesAreCommitWitness": true,
+    "historicalSubmissionOutcome": "UNCHANGED_UNPROVEN",
+    "queueRolloverReceiptBindingDraftOrAuthenticationMutations": false
+  },
+  "tests": {
+    "development47": {
+      "passed": 47,
+      "logSha256": "46b8f6ffeed9251b8ac9eca1d8d1631e2096095eb2132d51cfdd6f74133deeb0"
+    },
+    "cli": {
+      "passed": 1,
+      "logSha256": "af7c33ba0445a2714940385da796a18bb62e6bad46f1943673ff618ac35fef9d"
+    },
+    "python": {
+      "passed": 10,
+      "logSha256": "25ccb5d31f86b7d4b5e943afbee260f32bd3b53de2d2317959cf8461e666cf67"
+    },
+    "rootClippy": {
+      "allTargets": true,
+      "warningsDenied": true,
+      "passed": true,
+      "logSha256": "c6287622d268b31a5aafd698a6272d2257eb2b33f0cd9c111fe76a6124e66c50"
+    },
+    "wakeClippy": {
+      "allTargets": true,
+      "warningsDenied": true,
+      "passed": true,
+      "logSha256": "7fe288a2a196a5f167526a34af05fd9849b43f6c8c756cc358d825bde289af83"
+    }
+  },
+  "newDistinctTests": 18,
+  "fortyExistingModuleRerunsNotAddedAgain": true,
+  "coverage": [
+    "preflight retains fence",
+    "exact-byte archive and no duplicate execution",
+    "active or unattributed owner refusal",
+    "unknown marker schema/purpose/future/extra fields and wrong hash refused",
+    "busy backend/host/browser and running control refused",
+    "target-generation and marker CAS after observation",
+    "actual Windows archive-sharing failure retains journal/fence and cold retry finishes",
+    "unknown archive/journal never overwritten",
+    "profile aliases and malformed arguments",
+    "orphan children, cycles and reused parent PIDs",
+    "unrelated browser/project trees do not globally block"
+  ],
+  "actualNativeMetadata": {
+    "observedUtc": "2026-10-30T23:10:05.621502+00:00",
+    "state": "PROFILE_QUIESCENT",
+    "helperSha256": "36346cf14218efbdc61d7bb164ce1d8f01a783b9b7cd94883257f6a9b784543d",
+    "maximumMilliseconds": 20000,
+    "ownerExitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false,
+    "browserOpened": false,
+    "catdeskCommandExecuted": false,
+    "resultSha256": "ecca2f03955eeda2ae979c14be388a3511df68a318eda55c80ed830116d70b95"
+  },
+  "preservation": {
+    "protectedPinsUnchanged": 131,
+    "markerArchived": false,
+    "productionOrDevelopmentSelectionChanged": false,
+    "messagesSent": 0,
+    "projectBindingChanges": false,
+    "nativeSessionChanges": false,
+    "recurringOwnersStarted": false
+  },
+  "acceptance": {
+    "source": "PASS",
+    "nativeReadOnlyMetadata": "PASS",
+    "realLoginReconciliation": "NOT_RUN",
+    "newInstalledBrowserObservation": "OPEN",
+    "twoWebCoding": "OPEN"
+  },
+  "nextExecutableTask": "BUILD_EXACT_PUBLISHED_DEVELOPMENT_CANDIDATE_THEN_PREFLIGHT_AND_COMMIT_SUPPORTED_LOGIN_ONLY_RECONCILIATION",
+  "operatorActionRequired": false,
+  "goal": "ACTIVE"
+}

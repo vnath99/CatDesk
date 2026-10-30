@@ -179,6 +179,11 @@ pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<Strin
             matches!(
                 state,
                 "EXACT_READY_IDLE"
+                    | "PROFILE_QUIESCENT"
+                    | "PROFILE_HELPER_ACTIVE"
+                    | "PROFILE_BROWSER_ACTIVE"
+                    | "PROFILE_OWNER_UNATTRIBUTED"
+                    | "PROFILE_INVENTORY_UNVERIFIED"
                     | "EXACT_READY_RESPONSE_LOAD_ERROR"
                     | "EXACT_READY_RESPONSE_TIMEOUT"
                     | "EXACT_DRAFT_PRESENT"

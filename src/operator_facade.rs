@@ -169,6 +169,11 @@ pub(crate) enum WebDevelopmentAction {
     InspectReadiness {
         project_id: String,
     },
+    ReconcileLogin {
+        project_id: String,
+        marker_sha256: String,
+        execute: bool,
+    },
     Status,
     Start,
     Stop,
@@ -293,6 +298,14 @@ pub(crate) fn parse_operator_action(
 
 fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction, String> {
     match args.get(2).map(String::as_str) {
+        Some("reconcile-login") if matches!(args.len(), 7 | 8)
+            && args[3] == "--project-id" && args[5] == "--expected-marker-sha256"
+            && catdesk_wake::protocol::valid_id(&args[4])
+            && args[6].len() == 64
+            && args[6].bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            && (args.len() == 7 || args[7] == "--execute") => Ok(WebDevelopmentAction::ReconcileLogin {
+                project_id: args[4].clone(), marker_sha256: args[6].clone(), execute: args.len() == 8,
+            }),
         Some("inspect-readiness") if args.len()==5 && args[3]=="--project-id"
             && catdesk_wake::protocol::valid_id(&args[4]) => Ok(WebDevelopmentAction::InspectReadiness {project_id:args[4].clone()}),
         Some("login") if args.len() == 5
@@ -415,6 +428,27 @@ fn inspect_web_development_readiness(
     result["projectId"] = json!(project_id);
     result["targetGeneration"] = json!(target.generation);
     result["targetDigest"] = json!(target.sha256);
+    Ok(result)
+}
+
+fn reconcile_web_development_login(
+    workspace: &Path,
+    project: &str,
+    marker_sha256: &str,
+    execute: bool,
+) -> Result<serde_json::Value, String> {
+    let mut result = catdesk_wake::development_runtime::reconcile_login(
+        workspace,
+        marker_sha256,
+        execute,
+        |store| {
+            let target = mcp::operator_read_login_recovery_target(workspace, project, store)
+                .map_err(|_| "DEV_RUNTIME_PAIRED_TARGET_REQUIRED")?
+                .ok_or("DEV_RUNTIME_PAIRED_TARGET_REQUIRED")?;
+            catdesk_wake::protocol::Target::new(target.generation, target.url)
+        },
+    )?;
+    result["projectId"] = json!(project);
     Ok(result)
 }
 
@@ -963,6 +997,13 @@ pub(crate) async fn execute_operator_action(
                 }
                 WebDevelopmentAction::InspectReadiness { project_id } => {
                     inspect_web_development_readiness(workspace, &project_id)
+                }
+                WebDevelopmentAction::ReconcileLogin {
+                    project_id,
+                    marker_sha256,
+                    execute,
+                } => {
+                    reconcile_web_development_login(workspace, &project_id, &marker_sha256, execute)
                 }
                 WebDevelopmentAction::Status => development_runtime::status(workspace),
                 WebDevelopmentAction::Start => development_runtime::start(workspace),
@@ -2522,6 +2563,44 @@ mod tests {
             let mut args = valid.into_iter().map(str::to_string).collect::<Vec<_>>();
             args.extend([flag.into(), "override".into()]);
             assert!(parse_operator_action(args).is_err());
+        }
+    }
+
+    #[test]
+    fn web_development_login_reconciliation_requires_project_hash_and_explicit_commit() {
+        let mut args = [
+            "operator",
+            "web-dev-runtime",
+            "reconcile-login",
+            "--project-id",
+            "alpha",
+            "--expected-marker-sha256",
+        ]
+        .map(str::to_owned)
+        .to_vec();
+        args.push("a".repeat(64));
+        assert!(matches!(
+            parse_operator_action(args.clone()),
+            Ok(Some(OperatorAction::WebDevelopment(
+                WebDevelopmentAction::ReconcileLogin { execute: false, .. }
+            )))
+        ));
+        args.push("--execute".into());
+        assert!(matches!(
+            parse_operator_action(args.clone()),
+            Ok(Some(OperatorAction::WebDevelopment(
+                WebDevelopmentAction::ReconcileLogin { execute: true, .. }
+            )))
+        ));
+        for flag in ["--force", "--url", "--profile", "--send"] {
+            let mut invalid = args[..7].to_vec();
+            invalid.push(flag.into());
+            assert!(parse_operator_action(invalid).is_err());
+        }
+        for hash in ["a".repeat(63), "A".repeat(64), "z".repeat(64)] {
+            let mut invalid = args[..7].to_vec();
+            invalid[6] = hash;
+            assert!(parse_operator_action(invalid).is_err());
         }
     }
 
