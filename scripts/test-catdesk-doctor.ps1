@@ -65,6 +65,15 @@ try{
  Require ((Layer $recorded 'BROWSER').code -ceq 'HOME_EDITOR_MISSING' -and (Layer $recorded 'NATIVE_SESSION').code -ceq 'WORKER_GONE') 'independent retained gates lost'
  Require ((Layer $recorded 'WAKE_QUEUE').code -ceq 'WAKE_UNKNOWN_OUTCOME' -and (Layer $recorded 'WAKE_QUEUE').provenance -ceq 'CURRENT_PASSIVE_METADATA' -and (Layer $recorded 'WAKE_QUEUE').observedUtc -ceq $recorded.observedUtc) 'retained positive hid a current unknown send'
  Require ((Layer $recorded 'CODEX_CLI').code -ceq 'CODEX_PRESENT_AUTH_UNVERIFIED') 'retained absence hid current command discovery'
+ Require ((Layer $report 'BROWSER').nextDiagnostic -ceq 'operator web-dev-runtime inspect-readiness --project-id <registered-project>') 'uninspected browser lost its first diagnostic'
+ foreach($browserCode in @('HOME_EDITOR_MISSING','BROWSER_TARGET_MISSING','BROWSER_DRAFT_UNKNOWN')){
+  $import.observations=@(@{layer='BROWSER';code=$browserCode});Save $observation $import
+  $browserReport=Invoke-Doctor -Import;$browserLayer=Layer $browserReport 'BROWSER'
+  Require ($browserLayer.nextDiagnostic -ceq 'operator web-dev-runtime login --project-id <registered-project>') 'known browser refusal suggested repeating automation'
+  Require ($browserLayer.code -ceq $browserCode -and $browserLayer.status -ceq 'UNVERIFIED' -and $browserLayer.provenance -ceq 'IMPORTED_ADVISORY' -and $browserReport.runtimeStarts -eq 0 -and $browserReport.networkRequests -eq 0 -and $browserReport.repairs -eq 0) 'operator advice changed evidence or performed an action'
+ }
+ $import.observations=@(@{layer='BROWSER';code='BROWSER_EXACT_READY'});Save $observation $import
+ Require ((Layer (Invoke-Doctor -Import) 'BROWSER').nextDiagnostic -cne 'operator web-dev-runtime login --project-id <registered-project>') 'retained readiness unnecessarily requested operator login'
  $import.observations=@(@{layer='CONNECTOR';code='CONNECTOR_TRANSPORT_NO_HTTP_STATUS'});Save $observation $import
  Require ((Layer (Invoke-Doctor -Import) 'CONNECTOR').code -ceq 'CONNECTOR_TRANSPORT_NO_HTTP_STATUS') 'no-status failure relabeled 429'
  foreach($invalid in @('PRIVATE_MARKER',('x'*16385),'{"schemaVersion":true}',('{"schemaVersion":1,"source":"RETAINED_REPORT","observedUtc":"2999-01-01","observations":[]}'))){

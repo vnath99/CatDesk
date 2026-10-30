@@ -214,6 +214,12 @@ function Invoke-CatDeskDoctor([string]$ObservationFile = '', [string]$ProjectWor
             Set-DoctorLayer 'OBSERVATIONS' 'UNVERIFIED' 'OBSERVATIONS_IMPORTED_ADVISORY'
         }catch{Set-DoctorLayer 'OBSERVATIONS' 'FAIL' 'OBSERVATIONS_INVALID'}
     }else{Set-DoctorLayer 'OBSERVATIONS' 'NOT_RUN' 'OBSERVATIONS_NOT_SUPPLIED'}
+    # A known readiness refusal or unknown draft needs the existing profile's
+    # operator inspection, not another identical automated readiness attempt.
+    # This is advice only: do not open a browser, authenticate, or touch drafts.
+    if($layers['BROWSER'].code -cin @('HOME_EDITOR_MISSING','BROWSER_TARGET_MISSING','BROWSER_DRAFT_UNKNOWN')){
+        $layers['BROWSER'].nextDiagnostic='operator web-dev-runtime login --project-id <registered-project>'
+    }
     $report=[pscustomobject][ordered]@{
         schemaVersion=1;command='doctor';readOnly=$true;observedUtc=$observedUtc;networkRequests=0;runtimeStarts=0;repairs=0;
         projectScope=if($ProjectWorkspace -ceq $Workspace){'RELEASE_WORKSPACE'}else{'EXPLICIT_OBSERVATION_WORKSPACE'};
