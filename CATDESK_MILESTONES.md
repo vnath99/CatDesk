@@ -1,3 +1,9 @@
+## 2026-10-30 23:59 UTC — live recovery completed; navigation context remains open
+
+Supported login-only recovery archived the exact original marker. Actual selected development487 (source80ecc92) passed authenticated local MCP health, retains verified b322 as previous, and is STOPPED. Three bounded registered-project observations completed without manual classification or sends; all observed HOME, with target drift/missing. This proves the installed read-only protocol/cleanup, not exact-chat readiness, assistant recovery, independent Web coding or production promotion.128 unaffected critical/200 state pins, the later287-pin matrix,6 previous/7 older package files and every binding/history were preserved. Final native profile inventory is QUIESCENT.
+
+Next READY: bounded content-free target metadata/document-route/selection-stage diagnostics through the same owner. No operator screenshot, login or terminal trial is requested. Original unknown sends/quarantines remain unchanged. Evidence: `docs/verification/LOGIN_RECOVERY_INSTALLED_2026_10_30.json`.
+
 ## 2026-10-30 23:12 UTC — login-only owner recovery source qualified
 
 Supported hash-pinned `web-dev-runtime reconcile-login` preflight/commit now reuses the existing authority, project pairing and lifecycle/Job owners. It requires independent selected-profile quiescence and archives original marker bytes; historical sends and all other state remain untouched. Source scopes:47 native+10 Python+1 parser tests passed, strict root/Wake Clippy/formatting passed. Actual bounded OS metadata reported PROFILE_QUIESCENT with unrelated Chrome left running; no marker or installation changed. Next: commit-pinned development build and supported recovery qualification. No operator action now. Evidence: `docs/verification/LOGIN_ONLY_RECOVERY_SOURCE_2026_10_30.json`.

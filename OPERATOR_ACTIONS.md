@@ -1,3 +1,9 @@
+## 2026-10-30 23:59 UTC — live recovery completed; navigation context remains open
+
+Supported login-only recovery archived the exact original marker. Actual selected development487 (source80ecc92) passed authenticated local MCP health, retains verified b322 as previous, and is STOPPED. Three bounded registered-project observations completed without manual classification or sends; all observed HOME, with target drift/missing. This proves the installed read-only protocol/cleanup, not exact-chat readiness, assistant recovery, independent Web coding or production promotion.128 unaffected critical/200 state pins, the later287-pin matrix,6 previous/7 older package files and every binding/history were preserved. Final native profile inventory is QUIESCENT.
+
+Next READY: bounded content-free target metadata/document-route/selection-stage diagnostics through the same owner. No operator screenshot, login or terminal trial is requested. Original unknown sends/quarantines remain unchanged. Evidence: `docs/verification/LOGIN_RECOVERY_INSTALLED_2026_10_30.json`.
+
 ## 2026-10-30 23:33 UTC — no operator action: recovery self-fence fixed at source
 
 The first live recovery preflight refused before mutation because the new helper accidentally used normal root selection for its lock. Original marker,131 protected pins,200 state files and previous package remain unchanged. Corrected to use the already validated selected store, retaining pairing and ordinary-selection fences; integration regression and strict Clippy passed. Next is one changed-source controller build and fresh guarded qualification; do not rerun the terminal refused attempt or change any binding/marker manually. Evidence: `docs/verification/LOGIN_RECOVERY_LOCK_FIX_2026_10_30.json`.

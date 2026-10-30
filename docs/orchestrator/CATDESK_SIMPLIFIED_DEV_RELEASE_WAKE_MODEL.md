@@ -1,3 +1,9 @@
+## 2026-10-30 23:59 UTC — qualified development selection and completed owner recovery
+
+Current verified development app: `487382841885e236394782a0f1c5e020c58d5fb4a51e9eadf763bb3054d51b4a` from80ecc92; verified previous:b322, older df0 artifacts retained. Existing guarded `reconcile-login` preflight/commit completed and preserved the original marker as an exact archive; do not rerun the completed attempt. Existing `update-package`, finite `run-backend`, scoped `record-verification` and `inspect-readiness --project-id <registered-project>` were qualified in the retained control scope. No protected promotion/production authority was created; host and official runtime remain stopped.
+
+Use the qualified owner/current selection and original control workspace; ordinary-terminal root-view mismatches must not be rewritten or bypassed. Installed observation currently reports HOME with target drift/missing on three registered projects. Composer is UNKNOWN and no draft/response is touched. This requires tab/document-route diagnosis, not a new sign-in or manual screenshot. All cleanup and state-preservation evidence is in `docs/verification/LOGIN_RECOVERY_INSTALLED_2026_10_30.json`.
+
 ## 2026-10-30 14:01 UTC — supported official-owner qualification passed
 
 The existing public `catdesk.ps1 start -BackendOnly` and `stop`, plus the retained official client's existing `runtimes status`, `connect` and `stop` lifecycle, completed a finite qualification with no new tunnel or authentication change. Exactly one connected transport-status read returned installed C254 parity. Both owners then stopped and all131 protected pins/profile remained identical. Historical one-shot scripts/attempts remain immutable; do not rerun them or call their child entry directly. Any new qualification requires a new bounded, owned intent, preserved state and the existing authorization checks, not repeated polling of an unchanged dependency.
