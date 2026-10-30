@@ -443,8 +443,13 @@ fn reconcile_web_development_login(
         execute,
         |store| {
             let target = mcp::operator_read_login_recovery_target(workspace, project, store)
-                .map_err(|_| "DEV_RUNTIME_PAIRED_TARGET_REQUIRED")?
-                .ok_or("DEV_RUNTIME_PAIRED_TARGET_REQUIRED")?;
+                .map_err(|error| match error {
+                    mcp::DesignatedChatTargetErrorV1::ProtectedStateMismatch => {
+                        "DEV_LOGIN_RECOVERY_TARGET_PAIR_MISMATCH"
+                    }
+                    _ => "DEV_LOGIN_RECOVERY_TARGET_UNAVAILABLE",
+                })?
+                .ok_or("DEV_LOGIN_RECOVERY_PROJECT_TARGET_REQUIRED")?;
             catdesk_wake::protocol::Target::new(target.generation, target.url)
         },
     )?;

@@ -4081,7 +4081,7 @@ pub(crate) fn operator_read_login_recovery_target(
     project_id: &str,
     selected_store: &catdesk_wake::store::Store,
 ) -> Result<Option<ProjectWebTargetV1>, DesignatedChatTargetErrorV1> {
-    let lock = wake_target_lock(control_workspace)
+    let lock = wake_target_lock_at_root(selected_store.root())
         .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
     let _guard = lock
         .lock()
@@ -12483,6 +12483,57 @@ mod tests {
             .expect("wake store");
         wake.initialize().expect("wake initialize");
         (root, wake)
+    }
+
+    #[test]
+    fn login_recovery_target_uses_validated_store_while_normal_selection_stays_fenced() {
+        let (root, wake) = project_web_target_fixture("login-recovery-selected-lock");
+        let target = bind_project_web_target_locked(
+            &root,
+            &wake,
+            "alpha",
+            "https://chatgpt.com/c/recovery-alpha",
+            None,
+            0,
+        )
+        .unwrap();
+        let dev = root.join(".catdesk/web-development");
+        fs::create_dir(&dev).unwrap();
+        let marker = dev.join("login-active.json");
+        fs::write(&marker, b"preserved interrupted login").unwrap();
+        let selector = root.join(".catdesk/wake-bridge");
+        fs::create_dir(&selector).unwrap();
+        fs::write(
+            selector.join("owner.json"),
+            br#"{"schemaVersion":1,"owner":"independent_v1"}"#,
+        )
+        .unwrap();
+        let registry_path = root.join(".catdesk/projects/projects.json");
+        let config_path = wake.root().join("config.json");
+        let registry = fs::read(&registry_path).unwrap();
+        let config = fs::read(&config_path).unwrap();
+        assert_eq!(
+            crate::wake_protocol_client::wake_root_for_workspace(&root).unwrap_err(),
+            "DEV_LOGIN_CLEANUP_UNVERIFIED"
+        );
+        assert_eq!(
+            operator_read_login_recovery_target(&root, "alpha", &wake).unwrap(),
+            Some(target)
+        );
+        assert_eq!(fs::read(&registry_path).unwrap(), registry);
+        assert_eq!(fs::read(&config_path).unwrap(), config);
+        assert_eq!(fs::read(&marker).unwrap(), b"preserved interrupted login");
+        assert_eq!(
+            crate::wake_protocol_client::wake_root_for_workspace(&root).unwrap_err(),
+            "DEV_LOGIN_CLEANUP_UNVERIFIED"
+        );
+        wake.set_target("alpha", 1, "https://chatgpt.com/c/changed-recovery-alpha")
+            .unwrap();
+        assert_eq!(
+            operator_read_login_recovery_target(&root, "alpha", &wake),
+            Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch)
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

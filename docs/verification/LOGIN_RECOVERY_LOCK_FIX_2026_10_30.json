@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T23:33:42.664479+00:00",
+  "classification": "ACTUAL_SAFE_PREFLIGHT_REFUSAL_CORRECTED_AT_SOURCE_REQUALIFICATION_PENDING",
+  "sourceBaseCommit": "b22d23307e43d34253b3fe9a5d09e8f191c0f52b",
+  "failedCandidate": {
+    "appSha256": "7f9696c701f1cc38cb58395981e974840e3ede3913ad769c0541d89c666a28cf",
+    "sourceCommit": "b22d23307e43d34253b3fe9a5d09e8f191c0f52b",
+    "preflightError": "DEV_RUNTIME_PAIRED_TARGET_REQUIRED",
+    "markerArchived": false,
+    "developmentSelected": false,
+    "browserStarted": false,
+    "backendStarted": false,
+    "messagesSent": 0,
+    "elapsedSeconds": 0.406,
+    "evidenceSha256": "dd6849dcebe4e50d3ef67cd04fee95040fcc171d4a3e7e3b2dadf0ce784efed3"
+  },
+  "rootCause": "NEW_RECOVERY_PAIRING_HELPER_REQUESTED_NORMAL_ROOT_LOCK_WHICH_CORRECTLY_REFUSED_ACTIVE_MARKER",
+  "registryWakeMismatchEstablished": false,
+  "fix": "ACQUIRE_SAME_BINDING_LOCK_AT_THE_ALREADY_VALIDATED_SELECTED_STORE_THEN_REUSE_UNCHANGED_PAIRING_CHECKS",
+  "diagnostics": [
+    "DEV_LOGIN_RECOVERY_TARGET_PAIR_MISMATCH",
+    "DEV_LOGIN_RECOVERY_TARGET_UNAVAILABLE",
+    "DEV_LOGIN_RECOVERY_PROJECT_TARGET_REQUIRED"
+  ],
+  "tests": {
+    "newRootRegressionPassed": 1,
+    "logSha256": "9fd8d9e63c4b6f47b922a721a6d47c109a0de81650a2c55c3667ea4b61a7e55d",
+    "strictRootAllTargetsClippyPassed": true,
+    "clippyLogSha256": "a48624190eb98464c06dd31acde1a7c23fc37523b85db39669fb74fb4a2a9aff",
+    "normalSelectorStillRefusesMarker": true,
+    "registryConfigMarkerBytesUnchanged": true,
+    "registryWakeDriftStillRefused": true
+  },
+  "preservation": {
+    "protectedPinsUnchanged": 131,
+    "statePinsUnchanged": 200,
+    "oldPackageFilesUnchanged": 6,
+    "originalMarkerPreserved": true,
+    "oldReviewedWorkingDevelopmentStillSelected": true,
+    "productionChanged": false
+  },
+  "nextExecutableTask": "BUILD_CHANGED_CONTROLLER_ONLY_REUSE_BYTE_IDENTICAL_WAKE_COMPONENT_THEN_FRESH_SUPPORTED_PREFLIGHT",
+  "noReplayOfFailedAttempt": true,
+  "newBrowserObservation": "OPEN",
+  "operatorActionRequired": false,
+  "goal": "ACTIVE"
+}
