@@ -1,3 +1,15 @@
+## 2026-10-30 01:18 UTC (October29 local) — proved native continuation across Web rollover — TESTED_SOURCE
+
+Source `da2f5ac9ff41ce8ea1fe22783fbb7e3f892da445`. Evidence: `docs/verification/NATIVE_ROLLOVER_CONTINUATION_2026_10_29.json`.
+
+After a completed, proved rollover, continue using the original Web task key/grant and the replacement target generation/digest with `native.codex.dispatch`, empty `arguments` and a fresh call ID only when the existing journal permits it. No separate migration command is needed. The server preserves the original native job and creates a deterministic linked continuation only for work proved not to have run. A repeated completed/ambiguous call is refused before queue mutation.
+
+`native.codex.status` remains read-only and reports `originTaskId`, `lineage`, the effective `job`/`receipt`, `bindingStillMatches` and `originalBindingStillMatches`. A receipt/claim does not itself verify task quality or process liveness. A completed old-target job is retained; it does not spawn a new task merely because the conversation changed.
+
+Do not edit links, replace request hashes, resume a dormant/superseded record or recreate a missing committed child. Preserve it for supported recovery. Old unlinked records retain their bytes; linked metadata requires a qualified controller. Quiesce queue writers before a downgrade; an older controller that ignores these fields is not qualified to manage pending continuations. Chain/capacity bounds are64/512.
+
+Queue:107 passed/2 ignored; assignment:11 passed/2 ignored; original completed-continuation regression:1 passed. Final outer-parallel dispatcher run:18 passed/1 failed with `WEB_CONTEXT_REGISTRATION_BUSY` during parallel preview. The same two-client case passed alone; all19 dispatcher cases passed across scoped runs, but full outer-parallel qualification remains OPEN. Strict all-target Clippy and formatting passed. No installed release, production/project binding, native session, browser, Wake, tunnel or recurring process changed. These tests used synthetic continuation proof and disposable native providers; genuine two-Web-chat coding remains OPEN. Existing connector429 and retained-profile inspection gates were not retried.
+
 ## 2026-10-30 00:14 UTC (October29 local) — scoped normal-native Web MCP bridge — TESTED_SOURCE / LOCAL_HTTP_FIXTURE
 
 Source `13e1aad35a18c4cf0c630bb83d1a56acfbfb61bc` adds optional `nativeQueue` authority to the existing immutable Web execution grant. A fresh local `execution-grant --native-queue-task-id <ready-task>` freezes the existing queue task/request/binding and normal native turn bound. Existing grants retain their old bytes and permissions. Direct and cached task routes support `native.codex.dispatch` with empty arguments, using the stored selection and ordinary native CLI invocation, writer/scheduler gates and owned-child Job. The existing project Web lease spans native execution/finalization; shared registry/Wake locks end before native work. Caller prompt/model/root/sandbox/timeout overrides are refused.

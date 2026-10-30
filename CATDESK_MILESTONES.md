@@ -1,3 +1,15 @@
+## 2026-10-30 01:18 UTC (October29 local) — proved native continuation across Web rollover — TESTED_SOURCE
+
+Source `da2f5ac9ff41ce8ea1fe22783fbb7e3f892da445`. Evidence: `docs/verification/NATIVE_ROLLOVER_CONTINUATION_2026_10_29.json`.
+
+Native selection migration now reuses the completed-continuation lease, immutable grant and existing native queue. It preserves the source job/receipts, prepares a dormant linked child, pauses/links the parent, then activates the child. Only proved unexecuted work migrates. Completed/active/unknown/operator-paused jobs stay unchanged; missing committed child evidence refuses replay. Journal fences run before metadata changes.
+
+Queue:107 passed/2 ignored; assignment:11 passed/2 ignored; original completed-continuation regression:1 passed. Final outer-parallel dispatcher run:18 passed/1 failed with `WEB_CONTEXT_REGISTRATION_BUSY` during parallel preview. The same two-client case passed alone; all19 dispatcher cases passed across scoped runs, but full outer-parallel qualification remains OPEN. Strict all-target Clippy and formatting passed.
+
+No installed release, production/project binding, native session, browser, Wake, tunnel or recurring process changed. These tests used synthetic continuation proof and disposable native providers; genuine two-Web-chat coding remains OPEN. Existing connector429 and retained-profile inspection gates were not retried.
+
+Next READY: fix the observed shared-registration admission refusal for concurrent project previews without replaying tool mutations; then qualify a commit-pinned development candidate and its normal native MCP pathway. Preserve the selected production release and every native writer. No new operator decision is needed for source/build work.
+
 ## 2026-10-30 00:14 UTC (October29 local) — scoped normal-native Web MCP bridge — TESTED_SOURCE / LOCAL_HTTP_FIXTURE
 
 Source `13e1aad35a18c4cf0c630bb83d1a56acfbfb61bc` adds optional `nativeQueue` authority to the existing immutable Web execution grant. A fresh local `execution-grant --native-queue-task-id <ready-task>` freezes the existing queue task/request/binding and normal native turn bound. Existing grants retain their old bytes and permissions. Direct and cached task routes support `native.codex.dispatch` with empty arguments, using the stored selection and ordinary native CLI invocation, writer/scheduler gates and owned-child Job. The existing project Web lease spans native execution/finalization; shared registry/Wake locks end before native work. Caller prompt/model/root/sandbox/timeout overrides are refused.

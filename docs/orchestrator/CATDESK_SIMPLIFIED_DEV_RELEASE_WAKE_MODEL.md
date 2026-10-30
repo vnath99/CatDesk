@@ -1,3 +1,9 @@
+## 2026-10-30 01:18 UTC (October29 local) — proved native continuation across Web rollover — TESTED_SOURCE
+
+Source `da2f5ac9ff41ce8ea1fe22783fbb7e3f892da445`. Evidence: `docs/verification/NATIVE_ROLLOVER_CONTINUATION_2026_10_29.json`.
+
+The native continuation change is source-only and does not select/promote an executable or alter production release/rollback authority. Optional links preserve unlinked legacy serialization and original receipt identities. Pending links require a controller qualified for the three-stage protocol; quiesce active queue writers before any downgrade rather than letting a controller that ignores those fields manage them. Production and selected-development qualification remain separate.
+
 ## October 28 — installed-project controller accepts reviewed release succession
 
 Source `0a84508a4590d701d9704f4a0d809f354a8d3cf2` removes an actual controller compatibility defect: both installed-controller paths required the initial stopped migration's slot-b/generation2 receipt even after a legitimate native promotion. A read-only reproduction showed current C254 at slot-a/generation3 with a valid existing promotion receipt, while the old hash-specific check refused it. Both controllers now share a read-only selected-authority proof: pointer, slot artifact, canonical pair and the appropriate existing receipt must agree. Legacy migration constraints remain; pending promotion, unsupported authority and drift refuse. The selected current artifact/receipt stay pinned, and the second proof must exactly equal the first. No new authority record or recovery helper was introduced.
