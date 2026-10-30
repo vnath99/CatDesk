@@ -1259,7 +1259,9 @@ pub(crate) async fn execute_operator_action(
             let result = crate::delegated::autonomy_supervisor::handle_tool(
                 operation, arguments, &workspace,
             )
-            .map_err(|_| "reviewed project operation requires operator attention".to_string())?;
+            .map_err(|error| {
+                crate::delegated::codex_app_server::registration_error_code(&error).to_string()
+            })?;
             Ok(redacted_project_control_result(operation, result))
         }
     }

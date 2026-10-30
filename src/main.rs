@@ -2760,6 +2760,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         && args.get(1).is_some_and(|arg| arg == "web-dev-runtime");
     let operator_web = args.first().is_some_and(|arg| arg == "operator")
         && args.get(1).is_some_and(|arg| arg == "web");
+    let operator_project = args.first().is_some_and(|arg| arg == "operator")
+        && args.get(1).is_some_and(|arg| arg == "project");
     match operator_facade::parse_operator_action(args.clone()) {
         Ok(Some(action)) => {
             let workspace = std::env::current_dir()?;
@@ -2773,6 +2775,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!(
                             "{}",
                             serde_json::json!({"status":"attention","error":error})
+                        );
+                    } else if operator_project {
+                        println!(
+                            "{}",
+                            serde_json::json!({"status":"attention","errorCode":delegated::codex_app_server::registration_error_code(&error)})
                         );
                     } else if operator_web {
                         println!(
@@ -2792,6 +2799,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!(
                     "{}",
                     serde_json::json!({"status":"attention","error":error})
+                );
+            } else if operator_project {
+                println!(
+                    "{}",
+                    serde_json::json!({"status":"attention","errorCode":delegated::codex_app_server::registration_error_code(&error)})
                 );
             } else if operator_web {
                 println!(

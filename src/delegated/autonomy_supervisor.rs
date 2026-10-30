@@ -391,6 +391,14 @@ pub fn tool_schemas() -> Vec<Value> {
         .collect()
 }
 
+fn registration_runtime_error(error: super::runtime::RuntimeError) -> String {
+    let code = match &error {
+        super::runtime::RuntimeError::Validation(code) => code.as_str(),
+        _ => "",
+    };
+    super::codex_app_server::registration_error_code(code).into()
+}
+
 pub fn handle_tool(name: &str, args: Value, workspace: &Path) -> Result<Value, String> {
     let workspace = workspace
         .canonicalize()
@@ -1100,17 +1108,17 @@ impl AutonomousSupervisorV1 {
         model_id: Option<&str>,
     ) -> Result<Value, String> {
         let workspace = verified_external_git_workspace(workspace, git_identity)?;
+        let store = self.project_registry()?;
+        let _writer = super::autonomy_runtime::acquire_project_writer_lock(&workspace)
+            .map_err(|_| "CODEX_REGISTRATION_WRITER_BUSY".to_string())?;
         let evidence = super::autonomy_runtime::host_observe_registration_thread_for_model(
             &workspace,
             git_identity,
             supervisor_now_unix(),
             model_id.unwrap_or(super::codex_model_policy::LEGACY_TERRA_MODEL),
         )
-        .map_err(|_| {
-            "authoritative exact-CWD Codex registration evidence is unavailable".to_string()
-        })?;
-        let preflight = self
-            .project_registry()?
+        .map_err(registration_runtime_error)?;
+        let preflight = store
             .preflight_project_registration(
                 project_id,
                 verification_profile,
@@ -1159,9 +1167,7 @@ impl AutonomousSupervisorV1 {
             supervisor_now_unix(),
             &preflight.evidence.selected_model,
         )
-        .map_err(|_| {
-            "authoritative exact-CWD Codex confirmation evidence is unavailable".to_string()
-        })?;
+        .map_err(registration_runtime_error)?;
         let project = store
             .confirm_project_registration(confirmation_token, &evidence, supervisor_now_unix())
             .map_err(|_| "project registration confirmation was rejected".to_string())?;

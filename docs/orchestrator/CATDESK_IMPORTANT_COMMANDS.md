@@ -1,3 +1,9 @@
+## October 30 — source-qualified native project registration
+
+Use the existing `operator project registration preflight --project-id <id> --workspace <absolute-native-root> --git-identity <exact-origin> --verification-profile rust_full --model-id gpt-6.1-sol`, followed by `operator project registration confirm --confirmation-token <returned-token>` in the registered CatDesk control workspace. Both operations verify the exact persisted native conversation and Sol/medium metadata; writer/ownership ambiguity refuses. No caller-selected native ID or model fallback is accepted. This correction is source-qualified, not installed production acceptance.
+
+`CODEX_REGISTRATION_NATIVE_INITIALIZATION_REQUIRED` means no qualifying persisted native conversation was found. Reuse an existing authorized native chat where available. For a **fresh, test-owned workspace with no pending/unknown initialization**, normal Codex CLI initialization was qualified with `codex --cd <native-root> --sandbox read-only --ask-for-approval never exec --model gpt-6.1-sol -c 'model_reasoning_effort="medium"' --json -`, supplying a fixed no-tools/no-writes availability prompt through stdin. Verify terminal success and exact thread evidence before registration. Do not apply this recipe to replace an existing session, repeat an unknown turn, or fabricate a binding. Registration itself submits no thread/turn creation. Failed metadata-only experiment journals remain quarantined in their isolated workspace; do not clear them or retry their creation. Stage diagnostics are allowlisted and omit raw paths/provider messages. Evidence: `docs/verification/PERSISTED_NATIVE_REGISTRATION_2026_10_30.json`.
+
 ## 2026-10-30 01:40 UTC (October29 local) — shared registration admission — TESTED_SOURCE / LOOPBACK_HTTP
 
 Source `f9679fab27dc265cb1b48601fa0fbeaae9a206fb`. Evidence: `docs/verification/REGISTRATION_PREPARATION_2026_10_29.json`.

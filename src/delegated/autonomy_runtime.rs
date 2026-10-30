@@ -1152,12 +1152,12 @@ pub fn host_prepare_codex_app_server_thread(
     Ok(bound_thread)
 }
 
-/// Host-only observation/bootstrap for a never-registered external project.
+/// Host-only observation for a never-registered external project.
 /// The caller supplies no thread, prompt, executable, or authentication data.
 /// An exact-CWD app-server-visible Terra/High idle thread is preferred first.
-/// Zero candidates alone permits the fixed read-only bootstrap; ambiguity,
-/// ownership, or metadata mismatch fails closed rather than creating a
-/// parallel hidden thread.
+/// A missing persisted thread returns a native initialization prerequisite.
+/// This observer never creates threads or submits turns; ambiguity, ownership
+/// and metadata mismatch fail closed.
 pub fn host_observe_registration_thread(
     workspace: &Path,
     git_identity: &str,
@@ -1177,53 +1177,58 @@ pub fn host_observe_registration_thread_for_model(
     observed_at_unix: u64,
     expected_model: &str,
 ) -> Result<ProjectRegistrationEvidenceV1, RuntimeError> {
-    let effort = super::codex_model_policy::required_effort(expected_model).ok_or_else(|| {
-        RuntimeError::Validation("registration has no supported exact model profile".into())
-    })?;
-    let workspace = workspace.canonicalize().map_err(|_| {
-        RuntimeError::Validation("registration workspace canonicalization failed".into())
-    })?;
-    let mut transport = host_app_server_launch_config(&workspace)?.spawn_stdio_transport()?;
-    transport.initialize()?;
-    let cwd = workspace.to_string_lossy().into_owned();
-    let candidates = CodexAppServerReadClientV1::discover_registration_threads_for_model(
+    if super::codex_model_policy::required_effort(expected_model).is_none() {
+        return Err(RuntimeError::Validation(
+            "CODEX_REGISTRATION_PROFILE".into(),
+        ));
+    }
+    let workspace = workspace
+        .canonicalize()
+        .map_err(|_| RuntimeError::Validation("CODEX_REGISTRATION_WORKSPACE".into()))?;
+    let mut transport = host_app_server_launch_config(&workspace)
+        .and_then(|config| config.spawn_stdio_transport())
+        .map_err(|_| RuntimeError::Validation("CODEX_REGISTRATION_TRANSPORT".into()))?;
+    transport
+        .initialize()
+        .map_err(|_| RuntimeError::Validation("CODEX_REGISTRATION_INITIALIZE".into()))?;
+    observe_registration_thread(
         &mut transport,
-        &cwd,
+        &workspace,
+        git_identity,
         observed_at_unix,
         expected_model,
-    )?;
+    )
+}
+
+fn observe_registration_thread<T: CodexAppServerTransportV1>(
+    transport: &mut T,
+    workspace: &Path,
+    git_identity: &str,
+    observed_at_unix: u64,
+    expected_model: &str,
+) -> Result<ProjectRegistrationEvidenceV1, RuntimeError> {
+    if super::codex_model_policy::required_effort(expected_model).is_none() {
+        return Err(RuntimeError::Validation(
+            "CODEX_REGISTRATION_PROFILE".into(),
+        ));
+    }
+    let candidates = CodexAppServerReadClientV1::discover_registration_threads_for_model(
+        transport,
+        &workspace.to_string_lossy(),
+        observed_at_unix,
+        expected_model,
+    )
+    .map_err(|_| RuntimeError::Validation("CODEX_REGISTRATION_DISCOVERY".into()))?;
     let preparation = match candidates.as_slice() {
-        [preparation] => preparation.clone(),
+        [preparation] => preparation,
         [] => {
-            let response = transport.request(
-                "thread/start",
-                serde_json::json!({
-                    "cwd": cwd,
-                    "model": expected_model,
-                    "effort": effort,
-                    "approvalPolicy": "never",
-                    "sandboxPolicy": {"type":"readOnly", "networkAccess":false},
-                    "input": [{"type":"text", "text":"CatDesk registration bootstrap. Do not modify files, run commands, use tools, or access the network. Reply only that this exact workspace thread is available."}]
-                }),
-            )?;
-            let metadata = super::codex_app_server::parse_thread_metadata(&response)?;
-            if PathBuf::from(&metadata.cwd).canonicalize().ok().as_deref() != Some(&workspace) {
-                return Err(RuntimeError::Validation(
-                    "registration bootstrap returned a different workspace".into(),
-                ));
-            }
-            CodexAppServerReadClientV1::prepare_mutating_thread_for_model(
-                &mut transport,
-                &cwd,
-                None,
-                Some(&metadata.thread_id),
-                observed_at_unix,
-                expected_model,
-            )?
+            return Err(RuntimeError::Validation(
+                "CODEX_REGISTRATION_NATIVE_INITIALIZATION_REQUIRED".into(),
+            ));
         }
         _ => {
             return Err(RuntimeError::Validation(
-                "registration has multiple app-server-visible existing threads".into(),
+                "CODEX_REGISTRATION_AMBIGUOUS".into(),
             ));
         }
     };
@@ -1231,18 +1236,26 @@ pub fn host_observe_registration_thread_for_model(
         .canonicalize()
         .ok()
         .as_deref()
-        != Some(&workspace)
+        != Some(workspace)
     {
         return Err(RuntimeError::Validation(
-            "registration thread cwd drifted".into(),
+            "CODEX_REGISTRATION_WORKSPACE".into(),
         ));
     }
     Ok(ProjectRegistrationEvidenceV1 {
-        workspace,
+        workspace: workspace.to_path_buf(),
         git_identity: git_identity.into(),
-        codex_thread_id: preparation.thread.thread_id,
-        selected_model: preparation.thread.selected_model.unwrap_or_default(),
-        reasoning_effort: preparation.thread.reasoning_effort.unwrap_or_default(),
+        codex_thread_id: preparation.thread.thread_id.clone(),
+        selected_model: preparation
+            .thread
+            .selected_model
+            .clone()
+            .unwrap_or_default(),
+        reasoning_effort: preparation
+            .thread
+            .reasoning_effort
+            .clone()
+            .unwrap_or_default(),
     })
 }
 
@@ -4664,6 +4677,122 @@ mod tests {
     struct FakeTransport {
         replies: VecDeque<Value>,
         methods: Vec<String>,
+    }
+
+    #[test]
+    fn registration_missing_persisted_thread_requests_native_initialization_without_creating_anything()
+     {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-registration-missing-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let workspace = root.canonicalize().unwrap();
+        let mut transport = FakeTransport {
+            replies: VecDeque::from([json!({"data":[]}), json!({"data":[]})]),
+            methods: Vec::new(),
+        };
+        let error = observe_registration_thread(
+            &mut transport,
+            &workspace,
+            "fixture-git",
+            10,
+            SOL_MEDIUM_MODEL,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(error,RuntimeError::Validation(code) if code=="CODEX_REGISTRATION_NATIVE_INITIALIZATION_REQUIRED")
+        );
+        assert_eq!(transport.methods, ["thread/list", "thread/list"]);
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 0);
+        remove_writer_fixture(root);
+    }
+
+    #[test]
+    fn registration_reuses_persisted_native_thread_and_refuses_conflicting_writer_evidence() {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-registration-existing-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let workspace = root.canonicalize().unwrap();
+        let cwd = workspace.to_string_lossy();
+        for active_writer in [false, true] {
+            let thread = json!({"id":"existing-thread","cwd":cwd});
+            let mut resumed = json!({"thread":{"id":"existing-thread","cwd":cwd,"canAcceptDirectInput":true},"cwd":cwd,"model":"gpt-6.1-sol","reasoningEffort":"medium"});
+            resumed["thread"]["activeWriter"] = json!(active_writer);
+            let mut transport = FakeTransport {
+                replies: VecDeque::from([
+                    json!({"data":[thread.clone()]}),
+                    json!({"data":[]}),
+                    json!({"thread":thread}),
+                    json!({"rateLimits":[]}),
+                    resumed,
+                ]),
+                methods: Vec::new(),
+            };
+            let result = observe_registration_thread(
+                &mut transport,
+                &workspace,
+                "fixture-git",
+                10,
+                SOL_MEDIUM_MODEL,
+            );
+            assert_eq!(result.is_ok(), !active_writer);
+            if let Ok(evidence) = result {
+                assert_eq!(evidence.codex_thread_id, "existing-thread");
+                assert_eq!(evidence.selected_model, SOL_MEDIUM_MODEL);
+                assert_eq!(evidence.reasoning_effort, "medium");
+            }
+            assert_eq!(
+                transport.methods,
+                [
+                    "thread/list",
+                    "thread/list",
+                    "thread/read",
+                    "account/rateLimits/read",
+                    "thread/resume"
+                ]
+            );
+        }
+        for raw in [
+            "CODEX_REGISTRATION_DISCOVERY: private data",
+            "C:/private/runtime",
+            "CODEX_REGISTRATION_UNTRUSTED",
+        ] {
+            assert_eq!(
+                super::super::codex_app_server::registration_error_code(raw),
+                "CODEX_PROJECT_OPERATION_REFUSED"
+            );
+        }
+        remove_writer_fixture(root);
+    }
+
+    #[test]
+    #[ignore = "explicit bounded operator-local persisted native registration acceptance"]
+    fn live_operator_existing_registration_probe() {
+        let path = PathBuf::from(
+            std::env::var_os("CATDESK_REGISTRATION_LIVE_FIXTURE").expect("explicit test manifest"),
+        );
+        let manifest: Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+        assert_eq!(manifest["existingNativeThreadOnly"], true);
+        let control = PathBuf::from(manifest["controlWorkspace"].as_str().unwrap())
+            .canonicalize()
+            .unwrap();
+        let native = PathBuf::from(manifest["nativeWorkspace"].as_str().unwrap())
+            .canonicalize()
+            .unwrap();
+        assert_ne!(control, native);
+        let result=super::super::autonomy_supervisor::handle_tool("autonomy_project_registry_preflight",json!({
+            "projectId":"native-beta","workspace":native,"gitIdentity":"https://example.test/native-beta-fixture.git",
+            "verificationProfile":"rust_full","modelId":SOL_MEDIUM_MODEL
+        }),&control).expect("supported existing-thread preflight");
+        let confirmed = super::super::autonomy_supervisor::handle_tool(
+            "autonomy_project_registry_confirm",
+            json!({
+                "confirmationToken":result["confirmationToken"]
+            }),
+            &control,
+        )
+        .expect("existing-thread confirmation");
+        assert_eq!(confirmed["projectId"], "native-beta");
+        println!("LIVE_REGISTRATION_EXISTING_NATIVE_THREAD_CONFIRMED=true");
     }
     impl CodexAppServerTransportV1 for FakeTransport {
         fn request(&mut self, method: &str, _params: Value) -> Result<Value, RuntimeError> {
