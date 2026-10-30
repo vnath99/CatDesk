@@ -269,64 +269,111 @@ pub fn resolve_registered_project_from_control_root(
     control_workspace: &Path,
     project_id: &str,
 ) -> Result<ResolvedProjectScopeV1, RuntimeError> {
-    valid_slug(project_id, "project id")?;
-    let control_workspace = control_workspace
-        .canonicalize()
-        .map_err(|_| RuntimeError::Validation("CatDesk control workspace is unavailable".into()))?;
-    let store = AutonomousProjectRegistryStoreV1::open_read_only(
-        control_workspace.join(".catdesk").join("projects"),
-    )?;
-    let registry = store.load_registry()?;
-    let controller = registry
-        .projects
-        .iter()
-        .find(|project| project.project_id == CATDESK_PROJECT_ID_V1)
-        .ok_or_else(|| {
-            RuntimeError::Validation("CatDesk control project is not registered".into())
+    PreparedProjectScopeV1::resolve(control_workspace, project_id).map(|prepared| prepared.scope)
+}
+
+/// Git probes happen before shared admission. Recheck these exact two records
+/// under the existing registration lock before using the prepared scope.
+pub(crate) struct PreparedProjectScopeV1 {
+    scope: ResolvedProjectScopeV1,
+    controller: AutonomousProjectV1,
+}
+
+impl PreparedProjectScopeV1 {
+    pub(crate) fn resolve(
+        control_workspace: &Path,
+        project_id: &str,
+    ) -> Result<Self, RuntimeError> {
+        valid_slug(project_id, "project id")?;
+        let control_workspace = control_workspace.canonicalize().map_err(|_| {
+            RuntimeError::Validation("CatDesk control workspace is unavailable".into())
         })?;
-    if controller.workspace != control_workspace {
-        return Err(RuntimeError::Validation(
-            "CatDesk control registry is bound to a different workspace".into(),
-        ));
+        let store = AutonomousProjectRegistryStoreV1::open_read_only(
+            control_workspace.join(".catdesk").join("projects"),
+        )?;
+        let registry = store.load_registry()?;
+        let controller = registry
+            .projects
+            .iter()
+            .find(|project| project.project_id == CATDESK_PROJECT_ID_V1)
+            .cloned()
+            .ok_or_else(|| {
+                RuntimeError::Validation("CatDesk control project is not registered".into())
+            })?;
+        if controller.workspace != control_workspace {
+            return Err(RuntimeError::Validation(
+                "CatDesk control registry is bound to a different workspace".into(),
+            ));
+        }
+        let control_path = controller.workspace.to_str().ok_or_else(|| {
+            RuntimeError::Validation("CatDesk control workspace is not UTF-8".into())
+        })?;
+        let observed_control = super::autonomy_supervisor::verified_external_git_workspace(
+            control_path,
+            &controller.git_identity,
+        )
+        .map_err(|_| {
+            RuntimeError::Validation("CatDesk control Git identity is unavailable".into())
+        })?;
+        if observed_control != control_workspace {
+            return Err(RuntimeError::Validation(
+                "CatDesk control workspace identity drifted".into(),
+            ));
+        }
+        let project = registry
+            .projects
+            .into_iter()
+            .find(|project| project.project_id == project_id)
+            .ok_or_else(|| RuntimeError::Validation("project is not registered".into()))?;
+        let registered_path = project.workspace.to_str().ok_or_else(|| {
+            RuntimeError::Validation("registered project workspace is not UTF-8".into())
+        })?;
+        let observed_workspace = super::autonomy_supervisor::verified_external_git_workspace(
+            registered_path,
+            &project.git_identity,
+        )
+        .map_err(|_| {
+            RuntimeError::Validation("registered project Git identity is unavailable".into())
+        })?;
+        if observed_workspace != project.workspace {
+            return Err(RuntimeError::Validation(
+                "registered project workspace identity drifted".into(),
+            ));
+        }
+        Ok(Self {
+            scope: ResolvedProjectScopeV1 {
+                control_workspace,
+                project,
+            },
+            controller,
+        })
     }
-    let control_path = controller
-        .workspace
-        .to_str()
-        .ok_or_else(|| RuntimeError::Validation("CatDesk control workspace is not UTF-8".into()))?;
-    let observed_control = super::autonomy_supervisor::verified_external_git_workspace(
-        control_path,
-        &controller.git_identity,
-    )
-    .map_err(|_| RuntimeError::Validation("CatDesk control Git identity is unavailable".into()))?;
-    if observed_control != control_workspace {
-        return Err(RuntimeError::Validation(
-            "CatDesk control workspace identity drifted".into(),
-        ));
+
+    pub(crate) fn scope(&self) -> &ResolvedProjectScopeV1 {
+        &self.scope
     }
-    let project = registry
-        .projects
-        .into_iter()
-        .find(|project| project.project_id == project_id)
-        .ok_or_else(|| RuntimeError::Validation("project is not registered".into()))?;
-    let registered_path = project.workspace.to_str().ok_or_else(|| {
-        RuntimeError::Validation("registered project workspace is not UTF-8".into())
-    })?;
-    let observed_workspace = super::autonomy_supervisor::verified_external_git_workspace(
-        registered_path,
-        &project.git_identity,
-    )
-    .map_err(|_| {
-        RuntimeError::Validation("registered project Git identity is unavailable".into())
-    })?;
-    if observed_workspace != project.workspace {
-        return Err(RuntimeError::Validation(
-            "registered project workspace identity drifted".into(),
-        ));
+
+    /// Metadata only. The caller retains the existing registration lock.
+    pub(crate) fn revalidate_registration(&self) -> Result<(), RuntimeError> {
+        let registry = AutonomousProjectRegistryStoreV1::open_read_only(
+            self.scope.control_workspace.join(".catdesk/projects"),
+        )?
+        .load_registry()?;
+        if !registry
+            .projects
+            .iter()
+            .any(|current| current == &self.controller)
+            || !registry
+                .projects
+                .iter()
+                .any(|current| current == &self.scope.project)
+        {
+            return Err(RuntimeError::Validation(
+                "prepared project registration changed".into(),
+            ));
+        }
+        Ok(())
     }
-    Ok(ResolvedProjectScopeV1 {
-        control_workspace,
-        project,
-    })
 }
 
 impl AutonomousProjectRegistryStoreV1 {

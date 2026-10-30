@@ -1166,6 +1166,119 @@ mod tests {
     fn native_request(f: &Fixture, call_id: &str) -> Value {
         request(f, call_id, "native.codex.dispatch", json!({}))
     }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn manual_wake_slow_preparation_does_not_hold_shared_registration() {
+        let (alpha, beta) = paired_fixtures(false);
+        let wake = ready_manual_wake(&alpha);
+        let control = alpha.control.clone();
+        let pins = alpha.pins.clone();
+        let key = alpha.key.clone();
+        let (entered, waiting) = std::sync::mpsc::sync_channel(1);
+        let (release, released) = std::sync::mpsc::sync_channel(1);
+        let owner = tokio::task::spawn_blocking(move || {
+            crate::web_work::manual_wake_with_preparation(
+                &control,
+                pins,
+                &key,
+                "task-fixture",
+                "prepared-alpha",
+                json!({"sourceTurnId":"prepared-alpha-turn","priority":10,"ttlSeconds":300}),
+                |root, project| {
+                    // Stand in for a slow external Git identity probe. No
+                    // registry/Wake/project lock may span this preparation.
+                    entered.send(()).unwrap();
+                    released
+                        .recv_timeout(Duration::from_secs(30))
+                        .expect("bounded preparation release");
+                    crate::delegated::autonomy_projects::PreparedProjectScopeV1::resolve(
+                        root, project,
+                    )
+                    .map_err(|_| "TEST_PREPARATION_FAILED".into())
+                },
+            )
+        });
+        tokio::task::spawn_blocking(move || waiting.recv_timeout(Duration::from_secs(10)))
+            .await
+            .unwrap()
+            .unwrap();
+        let registry =
+            crate::delegated::autonomy_projects::AutonomousProjectRegistryStoreV1::open_read_only(
+                alpha.control.join(".catdesk/projects"),
+            )
+            .unwrap();
+        registry.with_registration_lock(|| Ok(())).unwrap();
+        let peer = call(
+            &beta,
+            manual_request(&beta, "prepared-peer", "prepared-peer-turn"),
+        )
+        .await;
+        release.send(()).unwrap();
+        let admitted = owner.await.unwrap().unwrap();
+        assert_eq!(
+            peer["result"]["structuredContent"]["projectId"], "beta",
+            "{peer}"
+        );
+        assert_eq!(admitted["projectId"], "alpha");
+        let a = admitted["eventId"].as_str().unwrap();
+        let b = peer["result"]["structuredContent"]["eventId"]
+            .as_str()
+            .unwrap();
+        assert_ne!(a, b);
+        assert!(wake.delivery(a).unwrap().is_none());
+        assert!(wake.delivery(b).unwrap().is_none());
+        for f in [&alpha, &beta] {
+            assert!(
+                fs::read_to_string(f.native.join("src/lib.rs"))
+                    .unwrap()
+                    .contains("{ 1 }")
+            );
+        }
+    }
+
+    #[test]
+    fn manual_wake_prepared_scope_refuses_changed_project_and_controller() {
+        for changed_id in ["alpha", "catdesk"] {
+            let f = fixture_with_manual_wake("alpha", true);
+            let wake = ready_manual_wake(&f);
+            let before = wake.events().unwrap();
+            let registry_path = f.control.join(".catdesk/projects/projects.json");
+            let original = fs::read(&registry_path).unwrap();
+            let result = crate::web_work::manual_wake_with_preparation(
+                &f.control,
+                f.pins.clone(),
+                &f.key,
+                "task-fixture",
+                "prepared-drift",
+                json!({"sourceTurnId":"prepared-drift-turn","priority":10,"ttlSeconds":300}),
+                |root, project| {
+                    let prepared =
+                        crate::delegated::autonomy_projects::PreparedProjectScopeV1::resolve(
+                            root, project,
+                        )
+                        .unwrap();
+                    let mut registry: AutonomousProjectRegistryV1 =
+                        serde_json::from_slice(&original).unwrap();
+                    registry
+                        .projects
+                        .iter_mut()
+                        .find(|p| p.project_id == changed_id)
+                        .unwrap()
+                        .verification_profile = "web_only_v1".into();
+                    fs::write(&registry_path, serde_json::to_vec(&registry).unwrap()).unwrap();
+                    Ok(prepared)
+                },
+            );
+            fs::write(&registry_path, original).unwrap();
+            assert_eq!(result.unwrap_err(), "WEB_WORK_PROJECT_REGISTRATION_CHANGED");
+            assert_eq!(wake.events().unwrap(), before);
+            assert!(
+                !f.control
+                    .join(".catdesk/project-mcp-tasks/alpha/task-fixture/journal")
+                    .exists()
+            );
+        }
+    }
     fn native_proof(f: &Fixture) -> PathBuf {
         let p = resolve_registered_project_from_control_root(
             &f.control,

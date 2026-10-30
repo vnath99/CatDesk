@@ -3,7 +3,8 @@
 
 use crate::{
     delegated::autonomy_projects::{
-        AutonomousProjectRegistryStoreV1, resolve_registered_project_from_control_root,
+        AutonomousProjectRegistryStoreV1, PreparedProjectScopeV1,
+        resolve_registered_project_from_control_root,
     },
     mcp, wake_protocol_client,
     web_work_state::WorkLedger,
@@ -282,8 +283,30 @@ fn manual_wake_once(
     task_id: &str,
     call_id: &str,
 ) -> Result<Value, String> {
-    resolve_registered_project_from_control_root(workspace, &request.project_id)
-        .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
+    manual_wake_once_with_preparation(
+        workspace,
+        request,
+        intent,
+        key,
+        task_id,
+        call_id,
+        |root, project| {
+            PreparedProjectScopeV1::resolve(root, project)
+                .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE".into())
+        },
+    )
+}
+
+fn manual_wake_once_with_preparation(
+    workspace: &Path,
+    request: &AssignmentRequest,
+    intent: &crate::project_mcp_task::ManualWakeRequest,
+    key: &str,
+    task_id: &str,
+    call_id: &str,
+    prepare: impl FnOnce(&Path, &str) -> Result<PreparedProjectScopeV1, String>,
+) -> Result<Value, String> {
+    let prepared = prepare(workspace, &request.project_id)?;
     let lease = crate::operator_facade::acquire_web_work_lease(workspace, &request.project_id)?;
     let paired = mcp::operator_read_project_web_target_diagnosed(workspace, &request.project_id)
         .map_err(|failure| {
@@ -307,9 +330,10 @@ fn manual_wake_once(
     registry
         .with_registration_lock(|| {
             entered = true;
-            let scope =
-                resolve_registered_project_from_control_root(workspace, &request.project_id)
-                    .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
+            prepared
+                .revalidate_registration()
+                .map_err(|_| "WEB_WORK_PROJECT_REGISTRATION_CHANGED")?;
+            let scope = prepared.scope();
             if scope.project.chatgpt_target_url.as_deref() != Some(expected.url.as_str())
                 || scope.project.chatgpt_target_sha256.as_deref() != Some(expected.digest.as_str())
             {
@@ -333,14 +357,10 @@ fn manual_wake_once(
                 &record,
                 record.target == expected,
             )?;
-            crate::project_mcp_task::authorized_manual_wake_assignment(&scope, &record, key)?;
-            wake_protocol_client::preflight_registered_invitation(
-                workspace,
-                &request.project_id,
-                &expected,
-            )?;
+            crate::project_mcp_task::authorized_manual_wake_assignment(scope, &record, key)?;
+            wake_protocol_client::preflight_prepared_invitation(&prepared, &expected)?;
             crate::project_mcp_task::journal_manual_wake(
-                &scope,
+                scope,
                 &record,
                 key,
                 call_id,
@@ -348,8 +368,7 @@ fn manual_wake_once(
                 &expected,
                 || {
                     wake_protocol_client::publish_registered_manual_wake(
-                        workspace,
-                        &request.project_id,
+                        &prepared,
                         &record.request_id,
                         task_id,
                         &expected,
@@ -373,6 +392,24 @@ fn manual_wake_once(
         })
 }
 
+#[cfg(all(test, windows))]
+pub(crate) fn manual_wake_with_preparation(
+    workspace: &Path,
+    pins: Value,
+    key: &str,
+    task_id: &str,
+    call_id: &str,
+    arguments: Value,
+    prepare: impl FnOnce(&Path, &str) -> Result<PreparedProjectScopeV1, String>,
+) -> Result<Value, String> {
+    let request = AssignmentRequest::parse(pins)?;
+    let intent = crate::project_mcp_task::ManualWakeRequest::parse(arguments)?;
+    let root = workspace
+        .canonicalize()
+        .map_err(|_| "WEB_WORK_CONTROL_UNAVAILABLE")?;
+    manual_wake_once_with_preparation(&root, &request, &intent, key, task_id, call_id, prepare)
+}
+
 #[derive(Clone, Copy)]
 enum AssignmentAction<'a> {
     Associate(&'a Path),
@@ -394,7 +431,7 @@ fn assigned_action(
     let workspace = workspace
         .canonicalize()
         .map_err(|_| "WEB_WORK_CONTROL_UNAVAILABLE")?;
-    resolve_registered_project_from_control_root(&workspace, &request.project_id)
+    let prepared = PreparedProjectScopeV1::resolve(&workspace, &request.project_id)
         .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
     let lease = crate::operator_facade::acquire_web_work_lease(&workspace, &request.project_id)?;
     mcp::with_current_project_web_target(
@@ -404,9 +441,10 @@ fn assigned_action(
         &request.expected_target_sha256,
         |workspace, paired| {
             let current = protocol::Target::new(paired.generation, paired.url.clone())?;
-            let scope =
-                resolve_registered_project_from_control_root(workspace, &request.project_id)
-                    .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
+            prepared
+                .revalidate_registration()
+                .map_err(|_| "WEB_WORK_PROJECT_REGISTRATION_CHANGED")?;
+            let scope = prepared.scope();
             let ledger = WorkLedger::open(workspace, &request.project_id)?;
             let record = ledger
                 .record(&request.request_id)?
@@ -423,7 +461,7 @@ fn assigned_action(
             )?;
             if let AssignmentAction::Associate(path) = action {
                 let link = crate::project_mcp_task::archive_work_assignment(
-                    &scope,
+                    scope,
                     path,
                     &request.assignment_sha256,
                     &request.request_id,
@@ -443,7 +481,7 @@ fn assigned_action(
             }
             match action {
                 AssignmentAction::Prepare => {
-                    crate::project_mcp_task::prepare_work_resume(&scope, &record, &current)
+                    crate::project_mcp_task::prepare_work_resume(scope, &record, &current)
                 }
                 AssignmentAction::Permission {
                     revoke,
@@ -452,7 +490,7 @@ fn assigned_action(
                 } => {
                     if native_queue_task_id.is_some() {
                         crate::project_mcp_task::grant_web_execution_with_capabilities(
-                            &scope,
+                            scope,
                             &record,
                             &current,
                             revoke,
@@ -461,17 +499,17 @@ fn assigned_action(
                         )
                     } else if allow_manual_wake {
                         crate::project_mcp_task::grant_web_execution_with_manual_wake(
-                            &scope, &record, &current, revoke, true,
+                            scope, &record, &current, revoke, true,
                         )
                     } else {
                         crate::project_mcp_task::grant_web_execution(
-                            &scope, &record, &current, revoke,
+                            scope, &record, &current, revoke,
                         )
                     }
                 }
                 AssignmentAction::Authorize(key) => {
                     let archive =
-                        crate::project_mcp_task::authorized_web_assignment(&scope, &record, key)?;
+                        crate::project_mcp_task::authorized_web_assignment(scope, &record, key)?;
                     // Do not acquire the task writer during authorization: stale or
                     // mismatched caller identity must refuse before task startup.
                     Ok(

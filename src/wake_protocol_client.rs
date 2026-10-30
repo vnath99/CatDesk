@@ -213,13 +213,25 @@ fn registered_publication_context(
         project,
     )
     .map_err(|_| "WAKE_PROJECT_NOT_REGISTERED".to_string())?;
+    registered_publication_context_for_scope(&scope)
+}
+
+fn registered_publication_context_for_scope(
+    scope: &crate::delegated::autonomy_projects::ResolvedProjectScopeV1,
+) -> Result<(Store, Activation, String, String), String> {
+    let control_workspace = &scope.control_workspace;
+    if !selected(control_workspace) {
+        return Err("WAKE_OWNER_NOT_SELECTED".into());
+    }
     let registered_url = scope
         .project
         .chatgpt_target_url
+        .clone()
         .ok_or("TARGET_NOT_CONFIGURED")?;
     let registered_sha256 = scope
         .project
         .chatgpt_target_sha256
+        .clone()
         .ok_or("TARGET_NOT_CONFIGURED")?;
     let root = wake_root_for_workspace(control_workspace)?;
     let activation: Activation = read(&root.join("activation.json"))?;
@@ -255,6 +267,31 @@ pub(crate) fn preflight_registered_invitation(
     Ok(())
 }
 
+/// Caller holds the existing registration lock. All Git work was done during
+/// scope preparation; retain exact controller/project and fresh Wake checks.
+pub(crate) fn preflight_prepared_invitation(
+    prepared: &crate::delegated::autonomy_projects::PreparedProjectScopeV1,
+    expected: &Target,
+) -> Result<(), String> {
+    prepared
+        .revalidate_registration()
+        .map_err(|_| "WAKE_PROJECT_REGISTRATION_CHANGED")?;
+    let scope = prepared.scope();
+    let (store, activation, url, digest) = registered_publication_context_for_scope(scope)?;
+    if publication_target(
+        &store,
+        &activation,
+        &scope.project.project_id,
+        &url,
+        &digest,
+        catdesk_wake::store::now(),
+    )? != *expected
+    {
+        return Err("WAKE_PROJECT_TARGET_CHANGED".into());
+    }
+    Ok(())
+}
+
 pub(crate) fn publish_registered_scoped_review(
     control_workspace: &Path,
     project: &str,
@@ -278,20 +315,22 @@ pub(crate) fn publish_registered_scoped_review(
 /// The explicit task grant authorizes only this fixed continuation template.
 /// Queue admission neither starts Wake/browser nor proves delivery or work.
 pub(crate) fn publish_registered_manual_wake(
-    control_workspace: &Path,
-    project: &str,
+    prepared: &crate::delegated::autonomy_projects::PreparedProjectScopeV1,
     request_id: &str,
     task_id: &str,
     expected: &Target,
     intent: catdesk_wake::store::WakeIntent<'_>,
 ) -> Result<Event, String> {
+    let scope = prepared.scope();
+    let control_workspace = &scope.control_workspace;
+    let project = &scope.project.project_id;
     if intent.purpose != catdesk_wake::protocol::WakePurpose::ManualEndTurn
         || !catdesk_wake::protocol::valid_id(request_id)
         || !catdesk_wake::protocol::valid_id(task_id)
     {
         return Err("WEB_TASK_MANUAL_WAKE_ARGUMENTS_INVALID".into());
     }
-    preflight_registered_invitation(control_workspace, project, expected)?;
+    preflight_prepared_invitation(prepared, expected)?;
     let message = format!(
         "CatDesk manual continuation. Project: {project} Request: {request_id} Task: {task_id} Source event: {} Source turn: {} Continue this project's unfinished authorized task using its existing handoff and current grants. Preserve task ownership and reconcile unknown outcomes before further execution.",
         intent.source_event_id, intent.source_turn_id
