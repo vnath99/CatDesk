@@ -135,6 +135,10 @@ pub(super) mod tests {
     };
 
     pub(crate) fn fixture(label: &str) -> (Store, HostLease) {
+        fixture_projects(label, &["alpha", "beta", "gamma"])
+    }
+
+    fn fixture_projects(label: &str, projects: &[&str]) -> (Store, HostLease) {
         let unique = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -146,7 +150,7 @@ pub(super) mod tests {
         std::fs::create_dir_all(&base).unwrap();
         let store = Store::open_scoped_for_test(&base.join("wake"), &base).unwrap();
         store.initialize().unwrap();
-        for (index, project) in ["alpha", "beta", "gamma"].iter().enumerate() {
+        for (index, project) in projects.iter().enumerate() {
             store
                 .set_target(
                     project,
@@ -224,6 +228,140 @@ pub(super) mod tests {
             ids(&store, Some("gamma"), &BTreeMap::new()),
             ["alpha-1", "beta-1", "gamma-1"]
         );
+    }
+
+    #[test]
+    fn five_project_concurrent_intents_and_mixed_holds_survive_restart() {
+        let projects = ["alpha", "beta", "gamma", "delta", "epsilon"];
+        let (store, lease) = fixture_projects("five-project-restart", &projects);
+        let barrier = std::sync::Barrier::new(projects.len());
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = projects
+                .iter()
+                .map(|project| {
+                    let store = &store;
+                    let barrier = &barrier;
+                    scope.spawn(move || {
+                        barrier.wait();
+                        store.produce(
+                            &format!("{project}-parallel"),
+                            project,
+                            "review_ready",
+                            &format!("Review concurrent {project} work"),
+                        )
+                    })
+                })
+                .collect();
+            for handle in handles {
+                handle.join().unwrap().unwrap();
+            }
+        });
+        assert_eq!(store.events().unwrap().len(), 15);
+        let concurrent_intents: Vec<_> = projects
+            .iter()
+            .map(|project| {
+                let id = format!("{project}-parallel");
+                let event = store
+                    .events()
+                    .unwrap()
+                    .into_iter()
+                    .find(|event| event.event_id == id)
+                    .unwrap();
+                assert_eq!(&event.project_id, project);
+                assert_eq!(event.target_generation, 1);
+                let path = store.root().join(format!("queue/{id}.json"));
+                let bytes = std::fs::read(&path).unwrap();
+                (path, bytes)
+            })
+            .collect();
+        assert_eq!(
+            ids(&store, Some("beta"), &BTreeMap::new()),
+            ["delta-1", "epsilon-1", "gamma-1", "alpha-1", "beta-1"]
+        );
+        let event = |id: &str| {
+            store
+                .events()
+                .unwrap()
+                .into_iter()
+                .find(|event| event.event_id == id)
+                .unwrap()
+        };
+        // Alpha's later ambiguous submission must retain its exact identity,
+        // rather than selecting the older queue entry or authorizing a resend.
+        store.claim(&event("alpha-2"), &lease).unwrap();
+        store
+            .transition("alpha-2", lease.owner(), Phase::Submitting, None, None)
+            .unwrap();
+        let beta = sent(&store, &lease, "beta-1");
+        // Gamma has a claimed draft and a durable pre-submit witness but no
+        // acceptance timer. The scheduler may not replace its owner or draft.
+        let gamma = event("gamma-1");
+        store.claim(&gamma, &lease).unwrap();
+        let gamma_target = store.config().unwrap().targets["gamma"].clone();
+        let witness = store.root().join("logs/submission-start-gamma-1.json");
+        std::fs::write(
+            &witness,
+            serde_json::to_vec(&serde_json::json!({
+                "schemaVersion":PROTOCOL_VERSION,"eventId":gamma.event_id,
+                "targetGeneration":gamma_target.generation,
+                "targetDigest":gamma_target.digest,"startedUtc":gamma.created_utc
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let witness_bytes = std::fs::read(&witness).unwrap();
+        store
+            .set_target(
+                "delta",
+                1,
+                "https://chatgpt.com/c/five-project-delta-successor",
+            )
+            .unwrap();
+        let deadlines = BTreeMap::from([("beta-1".into(), now() + 3600)]);
+        let held = ["alpha-2", "beta-1", "gamma-1"].map(|id| {
+            (
+                id,
+                std::fs::read(store.root().join(format!("deliveries/{id}.json"))).unwrap(),
+            )
+        });
+        assert_eq!(ids(&store, None, &deadlines), ["alpha-2", "epsilon-1"]);
+        drop(lease);
+        let reopened =
+            Store::open_scoped_for_test(store.root(), store.root().parent().unwrap()).unwrap();
+        assert_eq!(
+            ids(&reopened, Some("alpha"), &deadlines),
+            ["epsilon-1", "alpha-2"]
+        );
+        let next_owner = reopened.host_lock().unwrap();
+        // Only the unaffected project advances through the existing receipt /
+        // response protocol. The other four projects' outcomes stay preserved.
+        let epsilon = sent(&reopened, &next_owner, "epsilon-1");
+        reopened
+            .record_response_probe("epsilon-1", &epsilon.target, true)
+            .unwrap();
+        assert_eq!(
+            ids(&reopened, Some("alpha"), &deadlines),
+            ["epsilon-2", "alpha-2"]
+        );
+        for (id, bytes) in held {
+            assert_eq!(
+                std::fs::read(reopened.root().join(format!("deliveries/{id}.json"))).unwrap(),
+                bytes
+            );
+        }
+        assert_eq!(std::fs::read(&witness).unwrap(), witness_bytes);
+        for (path, bytes) in concurrent_intents {
+            assert_eq!(std::fs::read(path).unwrap(), bytes);
+        }
+        assert_eq!(reopened.config().unwrap().targets["delta"].generation, 2);
+        assert_eq!(
+            reopened.timer("beta-1").unwrap().unwrap().target_digest,
+            beta.target.digest
+        );
+        assert!(reopened.timer("alpha-2").unwrap().is_none());
+        assert!(reopened.timer("gamma-1").unwrap().is_none());
+        drop(next_owner);
+        std::fs::remove_dir_all(store.root().parent().unwrap()).unwrap();
     }
 
     #[test]
