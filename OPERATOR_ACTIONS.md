@@ -1,3 +1,15 @@
+## 2026-10-30 13:45 UTC — current dependencies after real development qualification
+
+| Task | Current state | Next supported action / ownership |
+| --- | --- | --- |
+| Existing five-project development package and local MCP | COMPLETED_VERIFIED_REAL_DEVELOPMENT | b322 is selected with health-verified df0cab retained as previous; host is STOPPED. No new operator decision. |
+| Genuine two-Web-chat coding | WAITING_FOR_EXTERNAL_SERVICE_AND_REGISTERED_PROFILE | Needs qualified serving/connector access and exact registered conversations. Local MCP results do not satisfy it. |
+| Managed Sol release-source review | BLOCKED_BY_EXISTING_POLICY | Host-authority overlap and unproven dedicated OS isolation refuse launch. No new session/approval request; preserve guards and genuine completion/ACK/snapshot/producer requirements. Normal queue advice is not substitute authority. |
+| REGISTERED_PROFILE_EDITOR_MISSING_INSPECTION | WAITING_FOR_OPERATOR / same existing profile owner | One finite inspection found target-tab drift and Home/editor missing. Computer Use could not verify browser URL and stopped before capture/input. Use the already supplied private retained-profile inspection procedure; do not create a profile, send a message, clear a draft or repeat sign-in unless the browser prompts. Finish through its existing guarded close. This is the same pending action, not a new approval request. |
+| Existing official serving owner / connector | READY_FOR_BOUNDED_OWNER_PREFLIGHT; connector WAITING_FOR_EXTERNAL_SERVICE | Inspect/use the already-authorized existing-owner lifecycle only. One read after verified bounded startup may establish a changed dependency; do not create a tunnel or infer that restart cures the last reported429. No probe occurred in this slice. |
+
+Evidence: `docs/verification/REAL_DEVELOPMENT_QUALIFICATION_2026_10_30.json`. All five bindings, ten paired targets,200 state pins, prior package, profile identity and protected C254 remained preserved; no test-owned process remains. No completed canary or ambiguous request was replayed. The goal remains ACTIVE.
+
 ## 2026-10-30 01:40 UTC (October29 local) — shared registration admission — TESTED_SOURCE / LOOPBACK_HTTP
 
 Source `f9679fab27dc265cb1b48601fa0fbeaae9a206fb`. Evidence: `docs/verification/REGISTRATION_PREPARATION_2026_10_29.json`.
