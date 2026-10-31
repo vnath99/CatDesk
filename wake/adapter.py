@@ -522,13 +522,24 @@ def bounded_response_observation(bridge, sink, cdp, message, message_digest,
     sleep = sleep or time.sleep
     deadline = clock() + timeout
     unmounted = object()
+    unmounted_reason = "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"
 
     def sample():
+        nonlocal unmounted_reason
         try:
             return sink.observe_cooperative_response(cdp, message, message_digest)
         except bridge.Attention as error:
-            if str(error) != "RESPONSE_USER_DOCUMENT_NOT_HYDRATED":
+            reason = str(error)
+            if reason == "RESPONSE_TARGET_DRIFT":
+                current = cdp.get_current_url()
+                if not isinstance(current, str) or current not in {
+                        "about:blank", "https://chatgpt.com/", "https://chat.openai.com/"}:
+                    raise
+                # CDP activation can return before navigation/hydration. Only
+                # wait: never select, navigate, reload or inspect a foreign chat.
+            elif reason != "RESPONSE_USER_DOCUMENT_NOT_HYDRATED":
                 raise
+            unmounted_reason = reason
             # This is not positive pending/receipt evidence. If the document
             # never mounts, preserve the refusal at the original deadline.
             if clock() >= deadline:
@@ -549,7 +560,7 @@ def bounded_response_observation(bridge, sink, cdp, message, message_digest,
         remaining = deadline - clock()
         if remaining <= 0:
             if stage is unmounted:
-                raise bridge.Attention("RESPONSE_USER_DOCUMENT_NOT_HYDRATED")
+                raise bridge.Attention(unmounted_reason)
             return stage
         sleep(min(.5, remaining))
 

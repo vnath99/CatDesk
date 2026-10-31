@@ -317,6 +317,39 @@ class AdapterTests(unittest.TestCase):
         self.assertFalse(cdp.sent)
         self.assertEqual(cdp.keys, [])
 
+    def test_response_probe_waits_readonly_through_transient_plain_home(self):
+        for initial in ["about:blank", "https://chatgpt.com/", "https://chat.openai.com/"]:
+            with self.subTest(initial=initial):
+                now=[0.0];cdp=FakeCdp();cdp.url=initial;samples=[]
+                class Sink:
+                    def observe_cooperative_response(self, browser, *_):
+                        samples.append(browser.url)
+                        if browser.url==initial:raise bridge.Attention("RESPONSE_TARGET_DRIFT")
+                        return "RESPONSE_COMPLETE"
+                def pause(seconds):
+                    now[0]+=seconds
+                    cdp.url="https://chatgpt.com/c/exact"
+                stage=adapter.bounded_response_observation(bridge,Sink(),cdp,"approved",bridge.digest("approved"),
+                    clock=lambda:now[0],sleep=pause)
+                self.assertEqual(stage,"RESPONSE_COMPLETE")
+                self.assertEqual(samples.count("https://chatgpt.com/c/exact"),2)
+                self.assertFalse(cdp.sent);self.assertEqual(cdp.keys,[])
+
+    def test_response_probe_never_accepts_persistent_home_or_waits_on_foreign_chat(self):
+        for initial,elapsed in [("https://chatgpt.com/",1),("https://chatgpt.com/c/foreign",0),
+                ("https://chatgpt.com/auth/login",0),("chrome-error://chromewebdata/",0),
+                ({"value":"https://chatgpt.com/"},0)]:
+            with self.subTest(initial=initial):
+                now=[0.0];cdp=FakeCdp();cdp.url=initial
+                class Sink:
+                    def observe_cooperative_response(self,*_):raise bridge.Attention("RESPONSE_TARGET_DRIFT")
+                def pause(seconds):now[0]+=seconds
+                with self.assertRaisesRegex(bridge.Attention,"RESPONSE_TARGET_DRIFT"):
+                    adapter.bounded_response_observation(bridge,Sink(),cdp,"approved",bridge.digest("approved"),
+                        timeout=1,clock=lambda:now[0],sleep=pause)
+                self.assertEqual(now[0],elapsed)
+                self.assertFalse(cdp.sent);self.assertEqual(cdp.keys,[])
+
     def test_fresh_document_probe_waits_within_one_browser_and_requires_stability(self):
         now = [0.0]
         sleeps = []
