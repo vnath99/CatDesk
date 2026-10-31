@@ -1,3 +1,19 @@
+## 2026-10-31T17:41:46.979955+00:00 - central task catalog and compatibility diagnostics (source qualified only)
+
+`catdesk_web_task_tool` is the central HTTP dispatcher name, conditionally advertised by `src/server.rs::post_mcp`: Computer/Both mode, MultiTools/SupervisorOnly and a valid configured central MCP bearer are all required. The generic MCP catalog alone omits this HTTP augmentation. A tool count or catalog from a different ChatGPT conversation does not establish affected-chat visibility, authentication or task authorization.
+
+| Surface | Intended role |
+| --- | --- |
+| `catdesk_web_task_tool` | Exact scoped central project/task dispatcher. |
+| Reserved `run_command` envelope beginning `CATDESK_WEB_TASK=` | Existing closed JSON compatibility transport to that same dispatcher/journal; no shell or new authority. |
+| `catdesk_project_task_tool` | Assigned-worktree task tool on a separately fixed-project endpoint; not a rename. |
+| Autonomy session/claim/inbox tools | Existing managed session ownership and review coordination. |
+| `catdesk_wake_bridge_run_once` | One confirmed project-local actionable review wake. |
+
+New source transport-status metadata reports `centralProjectExecution.publication` and `cachedSchemaTransport`, while keeping `clientCatalogVerified=false` and `executionAuthorized=false`. `serverConnectionReady` records bearer/mode readiness; `toolNameListedByMode` separately records whether generic `run_command` is advertised. SupervisorOnly can accept the reserved adapter without advertising ordinary shell execution. No secrets or actual task arguments are returned by this metadata.
+
+Do not invoke the adapter as a workaround for HTTP 429, missing publication or a reported platform restriction, and never replay C49/unknown calls. These findings authorize no connection refresh, transport change, service start or protected promotion. The reported upstream SSE 429 is separate from local pure-HTTP GET's intentional 405 and from source-review/producer authority. Inspect only the existing affected connection's tool presence and kind; unknown is a valid result where the UI exposes neither. See `docs/verification/WEB_TASK_PUBLICATION_AND_V4_429_2026_10_31.json` for dated source/local evidence and qualification limits.
+
 ## 2026-10-31T11:03:31.321482+00:00 - actual concurrent development MCP listeners and isolated edits pass
 
 The exact published `6cbc5e8620d359e489536d5f91f78f68b44379c7` controller built in 50.625 seconds (SHA `dda2ac4a...`), without changing the selected package or protected installation. A disposable runtime prepared through the supported command reused the known qualified `cba49d5f...` backend image from source `4237624`; no new production authority was inferred. One central and two fixed-project listeners ran simultaneously with process-scoped authentication and ephemeral loopback endpoints. All three rejected missing authentication with 401 and accepted authenticated initialization. The two project listeners separately verified their exact registered and assigned-worktree identities.

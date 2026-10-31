@@ -304,6 +304,11 @@ fn central_dispatch_readiness(
     } else {
         None
     };
+    let mut cached = crate::web_task_dispatch::cached_transport_metadata();
+    cached["serverConnectionReady"] = json!(blocker.is_none());
+    cached["toolNameListedByMode"] =
+        json!(mode.computer_enabled() && tool_mode.run_command_enabled());
+    cached["unknownOutcomeReplayAllowed"] = json!(false);
     json!({
         "tool":crate::web_task_dispatch::TOOL,
         "connectionReady":blocker.is_none(),
@@ -314,6 +319,12 @@ fn central_dispatch_readiness(
         "executionAuthorized":false,
         "providerConversationVerified":false,
         "installedWebAcceptance":"UNVERIFIED",
+        "publication":{
+            "basis":"CURRENT_CENTRAL_SERVER_CONFIGURATION",
+            "namedToolListed":blocker.is_none(),
+            "clientCatalogVerified":false,
+        },
+        "cachedSchemaTransport":cached,
     })
 }
 
@@ -1043,6 +1054,13 @@ mod tests {
                 .iter()
                 .any(|tool| tool["name"] == crate::web_task_dispatch::TOOL);
             assert_eq!(advertised, readiness["connectionReady"].as_bool().unwrap());
+            assert_eq!(readiness["publication"]["namedToolListed"], advertised);
+            assert_eq!(readiness["publication"]["clientCatalogVerified"], false);
+            assert_eq!(
+                readiness["cachedSchemaTransport"]["serverConnectionReady"],
+                advertised
+            );
+            assert_eq!(readiness["cachedSchemaTransport"]["shellExecuted"], false);
             assert!(!root.join("never-written.toml").exists());
             assert!(!root.join(".catdesk/project-mcp-tasks").exists());
             std::fs::remove_dir_all(root).unwrap();
@@ -1051,6 +1069,54 @@ mod tests {
             central_dispatch_readiness(Some("invalid"), Mode::Computer, ToolMode::MultiTools);
         assert_eq!(invalid["blocker"], "WEB_TASK_CENTRAL_AUTH_REQUIRED");
         assert_eq!(invalid["connectionReady"], false);
+    }
+
+    #[test]
+    fn central_readiness_distinguishes_publication_cached_adapter_and_client_visibility() {
+        let token = "readiness-publication-fixture-token-123456";
+        for (auth, mode, tools, ready, listed) in [
+            (None, Mode::Computer, ToolMode::MultiTools, false, true),
+            (
+                Some(token),
+                Mode::Browser,
+                ToolMode::MultiTools,
+                false,
+                false,
+            ),
+            (
+                Some(token),
+                Mode::Computer,
+                ToolMode::ReadOnly,
+                false,
+                false,
+            ),
+            (
+                Some(token),
+                Mode::Computer,
+                ToolMode::SupervisorOnly,
+                true,
+                false,
+            ),
+            (Some(token), Mode::Both, ToolMode::MultiTools, true, true),
+        ] {
+            let value = central_dispatch_readiness(auth, mode, tools);
+            assert_eq!(value["publication"]["namedToolListed"], ready);
+            assert_eq!(
+                value["publication"]["basis"],
+                "CURRENT_CENTRAL_SERVER_CONFIGURATION"
+            );
+            assert_eq!(value["publication"]["clientCatalogVerified"], false);
+            let cached = &value["cachedSchemaTransport"];
+            assert_eq!(cached["mcpTool"], "run_command");
+            assert_eq!(cached["commandPrefix"], "CATDESK_WEB_TASK=");
+            assert_eq!(cached["serverConnectionReady"], ready);
+            assert_eq!(cached["toolNameListedByMode"], listed);
+            assert_eq!(cached["shellExecuted"], false);
+            assert_eq!(cached["sameCallIdAndJournal"], true);
+            assert_eq!(cached["unknownOutcomeReplayAllowed"], false);
+            assert_eq!(value["executionAuthorized"], false);
+            assert!(!value.to_string().contains(token));
+        }
     }
 
     #[tokio::test]
