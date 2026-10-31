@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-29T02:24:15.505987+00:00",
+  "localDate": "2026-10-28",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "da501455efd91b725fafafe8ff5ea0ecbf2f3cfd",
+  "remoteSourceShaVerified": true,
+  "sourceCi": "UNVERIFIED_ZERO_EXACT_CHECKS_AND_RUNS",
+  "sourceChanges": {
+    "fixedHomeRecoveryReasonProtocol": true,
+    "draftTextExported": false,
+    "sameStrictEditorTextMediaAndAttachmentConditions": true,
+    "evaluationDocumentMustStillBeExactHttpsChatgptHome": true,
+    "unknownAndWrappedResultsRefused": true,
+    "routeAndBusyRecheckedBeforeNavigation": true,
+    "newNavigationAttemptsPermitted": false,
+    "independentAuthenticationAuthorityCreated": false,
+    "newUiCaptureMechanism": false
+  },
+  "tests": {
+    "pythonPassed": 17,
+    "actualWindowsProcessTestsPassed": 4,
+    "wakeFormat": "PASS",
+    "strictWakeAllTargetClippy": "PASS",
+    "logDigests": {
+      "home-recovery-reason-python-final.private.log": "0493ef839c31263916a413f85dd377930a7e0629ef40e8621b0aedb3930bf7bc",
+      "home-recovery-reason-native.private.log": "26a5783afedc4f6d3becc039679422ad47f8b2712fa98f157027d38926e6693c",
+      "home-recovery-reason-format.private.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "home-recovery-reason-clippy.private.log": "1e7cea59e63c48020dc3d2d1b1f5475bc6a59f097bab7aa3eba397481ae7a02e",
+      "home-recovery-reason-app-build.private.log": "d8c9854dcb6a26869064f17856c1c614db20e10a1ae6e44bc035da366334c0f6"
+    }
+  },
+  "controlledBrowser": {
+    "classification": "EXISTING_PROFILE_REGISTERED_TARGET_READONLY_NOT_WEB_CODING_ACCEPTANCE",
+    "startedUtc": "2026-10-29T02:15:08.1942670+00:00",
+    "finishedUtc": "2026-10-29T02:15:54.5347570+00:00",
+    "controllerSha256": "ead16003f89ec23b511b8d1310d001b9ccf58b42d2f5097c2b85d546c9272b77",
+    "outerMaximumSeconds": 180,
+    "browserObservationSeconds": 20,
+    "finalState": "HOME",
+    "observations": [
+      "PROBE:TARGET_TAB_MISSING",
+      "PROBE:HOME",
+      "PROBE:TARGET_TAB_MISSING",
+      "PROBE:HOME_CHECK:EDITOR_MISSING",
+      "PROBE:TARGET_TAB_MISSING",
+      "PROBE:TARGET_TAB_MISSING",
+      "PROBE:FINAL:HOME"
+    ],
+    "guardRefusalReason": "EDITOR_MISSING",
+    "authenticationVerified": false,
+    "providerToolsVerified": false,
+    "resultSha256": "993c781eaa031935c11a32747263fc72d3542a4fbf28cc03c83d501b76f2d3ef",
+    "outerResultSha256": "92e830623c1beebaab3636841d933181086143a2b776ddcb84c033118918817e",
+    "containmentSha256": "64d903d3909d663d621232d5f5fa23c31ecf2daa2c08d76267ece01af09d81d0"
+  },
+  "retainedOfficialLog": {
+    "readOnly": true,
+    "bytesInspected": 262144,
+    "matchingPriorTestLines": 188,
+    "warnRecords": 4,
+    "explicitErrorStatusCounts": {},
+    "nativeUpstreamAcceptanceProven": false,
+    "rawLogExported": false,
+    "newConnectorRequests": 0,
+    "newRuntimeStarts": 0
+  },
+  "preservation": {
+    "protectedFilesUnchanged": 313,
+    "changedProtectedFiles": 0,
+    "remainingOwners": 0,
+    "providerMessages": 0,
+    "draftMutations": 0,
+    "nativeSessionActions": 0,
+    "bindingChanges": 0,
+    "productionActions": 0,
+    "wakeStarts": 0,
+    "officialOwnerStarts": 0,
+    "recurringStarts": 0,
+    "selectedDevelopmentPackageChanged": false
+  },
+  "operatorAction": {
+    "id": "REGISTERED_PROFILE_EDITOR_MISSING_INSPECTION",
+    "state": "WAITING_FOR_OPERATOR",
+    "purpose": "Inspect the same guarded profile and registered destination; distinguish history, sign-in prompt, Home or error without sending or clearing drafts.",
+    "supportedCommand": "operator web-dev-runtime login --project-id <registered-project>",
+    "scope": "MANUAL_EXISTING_DEVELOPMENT_PROFILE_ONLY_NO_NEW_PROFILE_OR_AUTOMATION",
+    "credentialsInConversation": false,
+    "unconditionalReauthenticationRequested": false,
+    "expectedCleanup": "Press Enter in the same terminal; existing owner verifies browser descendant exit.",
+    "privateOperatorInstructionsSha256": "af565f75e80d77582bc5543f8abfc4018d241c338135f54cdf558a989e0b30f3"
+  },
+  "remaining": {
+    "exactHomeCause": "NOT_ESTABLISHED_BY_EDITOR_ABSENCE",
+    "twoConversationWebCoding": "OPEN",
+    "connector": "LAST_FRONTEND_TRANSPORT_FAILURE_WITHOUT_HTTP_STATUS_NO_RETRY",
+    "unattendedRuntime": "NOT_ACTIVATED",
+    "nextLiveBrowserAttempt": "WAIT_FOR_MATERIAL_NEW_OPERATOR_EVIDENCE_NO_UNCHANGED_RETRY"
+  },
+  "goal": "ACTIVE"
+}

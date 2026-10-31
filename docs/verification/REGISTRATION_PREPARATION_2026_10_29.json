@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T01:40:04.982289+00:00",
+  "activityDateLocal": "2026-10-29",
+  "timezone": "America/New_York",
+  "classification": "TESTED_SOURCE_LOOPBACK_HTTP_AND_METADATA_FIXTURES",
+  "sourceCommit": "f9679fab27dc265cb1b48601fa0fbeaae9a206fb",
+  "sourceBranch": "codex/web-rollover-oct17",
+  "sourceBlobSha256": {
+    "src/delegated/autonomy_projects.rs": "f247794bc795be1ea1912094317f611ae61843fa0ede04cd1b8a933d977b707a",
+    "src/wake_protocol_client.rs": "5a6bfc37f56f6d6154d5bdeb38de460e9eaa9d148c8c388f5c35dc997d301095",
+    "src/web_task_dispatch.rs": "e3e8537bf330494f81d9b76bedc71968f27e79d2f933b757b005f941b709f665",
+    "src/web_work.rs": "97c1e0ec7212501346e19c2bdf2fa8d18fdbbb43e7fa56a097f6aca3eff769de"
+  },
+  "diagnosticCorrection": {
+    "observedUtc": "2026-10-30T01:40:04.982289+00:00",
+    "previousDescription": "parallel preview",
+    "actualStage": "SIMULTANEOUS_MANUAL_WAKE_ADMISSION_AFTER_SUCCESSFUL_PREVIEWS_AND_PATCHES",
+    "sourceCommit": "da2f5ac9ff41ce8ea1fe22783fbb7e3f892da445",
+    "sourceFile": "src/web_task_dispatch.rs",
+    "assertionLine": 2138,
+    "code": "WEB_CONTEXT_REGISTRATION_BUSY",
+    "failureLogSha256": "37b03b4692dacd27d50d61e82378d957fc2aeaaa76c70cd5e701f1d69f5f09b6"
+  },
+  "tests": {
+    "dispatcher": {
+      "passed": 21,
+      "failed": 0,
+      "ignored": 0
+    },
+    "work": {
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    "registry": {
+      "passed": 38,
+      "failed": 0,
+      "ignored": 0
+    },
+    "wake": {
+      "passed": 6,
+      "failed": 0,
+      "ignored": 0
+    }
+  },
+  "finalDistinctPassed": 69,
+  "initialFocusedPassed": 8,
+  "initialFocusedOverlapsFinal": true,
+  "additionalInitialParserCheckPassed": 1,
+  "outerTestThreads": 2,
+  "parallelClientsWithinHttpCases": true,
+  "strictAllTargetClippy": "PASS",
+  "rustfmt": "PASS",
+  "verified": [
+    "Slow Git preparation retains no shared registration/Wake/project lease; another project queues its own manual Wake while preparation waits",
+    "Prepared controller/project records come from the exact Git-validated registry snapshot and remain private, non-deserializable metadata",
+    "Existing registration lock rechecks both exact records before journaling/publication; changed project or controller refuses with no event/journal",
+    "Routine assignment authorization and manual-Wake publication reuse the prepared scope instead of repeating Git subprocesses inside the shared registry critical section",
+    "Fresh selected-root/isolation, activation, paired target/history/cutoff, grant/key, source-task and journal checks remain in force",
+    "Pre-effect busy retry remains bounded and unchanged; no publisher/tool/ambiguous effect is automatically retried",
+    "Original simultaneous manual-Wake HTTP case now passes in the full21-test run with the original outer concurrency limit",
+    "Direct/cached HTTP, separate project patching, native continuation, unknown/completed fences and exact descendant cleanup regressions pass"
+  ],
+  "cleanup": {
+    "pinnedCriticalFilesUnchanged": 6,
+    "matchingTestOrWakeOwners": 0,
+    "scope": "Six selected existing baseline files; user browsers and native sessions preserved",
+    "browserWakeTunnelOrRecurringProcessesStarted": 0
+  },
+  "realModelCalls": 0,
+  "actualChatGPTWebCalls": 0,
+  "newInstalledRelease": false,
+  "newSelectedDevelopmentPackage": false,
+  "logSha256": {
+    "oct29-registration-preparation-clippy.log": "6f2cd71c38aa72348f5333539adb74dc49a488fece58dc5665c9277ec5797f36",
+    "oct29-registration-preparation-dispatcher-suite.log": "b2678ac342287acdf0ada3978d4d8dd046efe7040cc84f11058559e56f93065f",
+    "oct29-registration-preparation-initial-tests.log": "bce40a469b3f21e1d01a4f2131fb4f2772c0b8e2571ba1fe19e685c0651befa7",
+    "oct29-registration-preparation-registry-suite.log": "5c1eb449781fd14b02a25f47cf2579eec4f3cd69b45465b853a2e2d16c656b8a",
+    "oct29-registration-preparation-wake-suite.log": "28fc4502fd0df3a50c2420669aa7706237adf6e36d9f235408c606e05370af39",
+    "oct29-registration-preparation-work-suite.log": "1d10dc9ca5eeb6caf6094b1212ef45b587af766de89b8d34b2d1ac551405de29"
+  },
+  "limits": [
+    "Bounded outer-two-test qualification; default broad stress and hosted CI are not inferred",
+    "Preparation gate simulates a slow identity probe; real Git checks still run after release, but no actual hung Git process was injected",
+    "Only the affected authorization/manual-Wake hot paths were changed; no universal claim that every administrative callback is free of Git",
+    "Wake events in these fixtures are queued only; they provide no actual browser delivery or independent Web review authority",
+    "No installed/runtime package selection, production promotion or genuine Web caller acceptance in this slice",
+    "Existing connector429/profile inspection prerequisites remain unchanged and were not retried"
+  ],
+  "hostedCI": "UNVERIFIED"
+}

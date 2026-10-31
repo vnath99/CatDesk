@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T10:32:07.316636+00:00",
+  "classification": "ACTUAL_WINDOWS_TEST_PROCESS_EXIT_AND_COMPLETE_SOURCE_BRIDGE_SUITE_NOT_LIVE_WEB_ACCEPTANCE",
+  "sourceBaseCommit": "935cb8738128e3650baf0f063c8ca86ac1e9b38e",
+  "sourceFileSha256": "e33e235613e26b5747c376aa190c600d02f939cb2afe59c5e6e6e25b79f040a6",
+  "change": "WINDOWS_ADMISSION_TEST_ONLY_NO_PRODUCTION_ALGORITHM_OR_GUARD_CHANGE",
+  "windowsNativeProcess": {
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--offline",
+      "--bin",
+      "catdesk",
+      "rollover_admission_",
+      "--",
+      "--test-threads=1"
+    ],
+    "passingCases": 7,
+    "newCases": 1,
+    "ignoredHelper": "INVOKED_BY_PARENT_IN_A_SEPARATE_PROCESS_NOT_AN_EXTRA_ACCEPTANCE_CASE",
+    "actualKernelLeaseHeldAcrossProcesses": true,
+    "waitingSiblingDeniedBeforeOwnerExit": true,
+    "exactTestOwnedChildTerminatedWithoutUnwind": true,
+    "childHandleExitVerifiedBeforeSiblingAdmission": true,
+    "interruptedAdmissionQuarantined": true,
+    "unknownSourceJournalBytesUnchanged": true,
+    "quarantineGrantsCreationReceiptOrResendAuthority": false,
+    "siblingAdmissionCompletedIndependently": true,
+    "temporaryFixtureRemoved": true,
+    "elapsedQualificationSeconds": 111.969,
+    "maximumOwnerSeconds": 240,
+    "ownerExitCode": 0,
+    "ownerTimedOut": false,
+    "ownerTerminationFailed": false,
+    "steps": [
+      {
+        "name": "native",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "rollover_admission_",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "836743a1cef9bc4ed2594ab655ada4e254315cb6ebc0834a1e9ad6fb433c9e54"
+      },
+      {
+        "name": "clippy",
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--offline",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exitCode": 0,
+        "logSha256": "a906179bdc327d0cd14a32b3219b7e5db35753e4a3312c87a584ae16d9d83005"
+      },
+      {
+        "name": "format",
+        "command": [
+          "cargo",
+          "fmt",
+          "--check"
+        ],
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "finalFullBridgeSuite": {
+    "sourceCommit": "935cb8738128e3650baf0f063c8ca86ac1e9b38e",
+    "command": [
+      "python",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "tests",
+      "-p",
+      "test_wake_bridge.py"
+    ],
+    "passed": 126,
+    "exitCode": 0,
+    "elapsedSeconds": 177.078,
+    "maximumOwnerSeconds": 240,
+    "logSha256": "b88e1aa240247cfe03b953172c2d3b34e66903bd2b22807bab6a3d66ef0f1397",
+    "closesPreviouslyUnrerunFinalMockCorrection": true,
+    "priorFailedRunAndFocusedCorrectionEvidenceRetained": true
+  },
+  "failedAttemptRetained": {
+    "cause": "HARNESS_REQUESTED_NONEXISTENT_LIBRARY_TARGET",
+    "testsExecuted": 0,
+    "cargoExitCode": 101,
+    "correctedToExistingBinaryTarget": true,
+    "originalResultSha256": "d834fdb749cef9b5757e0454ad52eed93925a0a19e05740019f088275ab28f65",
+    "initialFormatCheckNeededFormatting": true
+  },
+  "preservation": {
+    "pinsCheckedPerWorkflow": 5121,
+    "pinChanges": 0,
+    "browserProviderBackendWakeOfficialOrRecurringStarts": 0,
+    "newUserMessagesOrHeldTaskRetries": 0,
+    "projectBindingsHistoriesNativeSessionsOrProtectedInstallationChanged": false,
+    "selectedDevelopmentPackageChanged": false
+  },
+  "acceptance": {
+    "crossProcessWindowsAdmissionOwnerExit": "PASS",
+    "fullFinalBridgeSuite": "PASS_SOURCE",
+    "actualTwoChatWakeOrRolloverCollision": "OPEN",
+    "uniqueLiveAssistantTimeoutRetry": "OPEN",
+    "currentSourceIndependentReviewProducerAuthority": "OPEN",
+    "twoWebFullNativeCoding": "OPEN"
+  },
+  "operatorActionRequiredNow": false,
+  "goal": "ACTIVE"
+}

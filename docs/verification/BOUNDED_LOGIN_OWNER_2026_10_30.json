@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T22:53:32.205017+00:00",
+  "classification": "SOURCE_AND_ACTUAL_WINDOWS_PROCESS_FIXTURE_NO_BROWSER",
+  "sourceBaseCommit": "f74693bae72f8ef6be71e49b54509d8456980609",
+  "priorDiagnosticsCommitPublishedAndRemotePrVerified": true,
+  "implementation": {
+    "existingLoginCommandAndJobCleanupReused": true,
+    "interactionMaximumSeconds": 120,
+    "includesOpeningEnterAndClosing": true,
+    "cleanupIsAdditionalAndBounded": true,
+    "terminalInputMaximumBytes": 3,
+    "rawTerminalInputExported": false,
+    "timeout": "DEV_LOGIN_INTERACTION_TIMEOUT",
+    "expiryConfirmsDeliveryOrAuthentication": false,
+    "markerRetirementOnlyAfterExactOwnedJobExitProof": true,
+    "oldInterruptedMarkersCleared": false,
+    "producerReviewOrSendAuthorityChanged": false
+  },
+  "tests": {
+    "developmentModule": {
+      "passed": 40,
+      "newTests": 3,
+      "logSha256": "e9058bab94e12325f6cda82e3bc40c2add7353392c1d08950997b1b58348bdc7"
+    },
+    "rootClippy": {
+      "passed": true,
+      "allTargets": true,
+      "warningsDenied": true,
+      "logSha256": "7674772139f85ea159af753a7e4e53f3dd6a79dab71c2fb397b408b3ff406c22"
+    },
+    "wakeClippy": {
+      "passed": true,
+      "allTargets": true,
+      "warningsDenied": true,
+      "logSha256": "992f997ba2582cedc599b9ca83f89be6b40e93b97c97c8fc818a7f5549f8245b"
+    }
+  },
+  "coverage": [
+    "normal LF and CRLF Enter",
+    "EOF and arbitrary input refused",
+    "expired deadline refused",
+    "held input expires without blocking owner and fixture reader exits after release",
+    "actual native Windows helper assigned before START, observed ready, killed only through retained Job, active count zero before own fixture marker removal",
+    "existing unresolved marker still refuses all normal authority selection"
+  ],
+  "uniqueTestAccounting": {
+    "priorDiagnosticsDistinctTests": 291,
+    "newTests": 3,
+    "combinedDistinctTests": 294,
+    "development37RerunsNotAddedAgain": true
+  },
+  "actualProfileQualification": "OPEN_OLD_OWNER_MARKER_REQUIRES_SUPPORTED_RECONCILIATION",
+  "exactPriorAttendedTimeoutCause": "UNPROVEN_NOT_ASSUMED_TO_BE_THIS_UNBOUNDED_INPUT_GAP",
+  "preservation": {
+    "protectedPinsUnchanged": 131,
+    "originalInterruptedMarkerPresent": true,
+    "markerSha256": "f4732909ef4dca082726a0b49393a5616eadb8f825c48a8228232daa1c152713",
+    "realBrowserStarts": 0,
+    "messagesSent": 0,
+    "bindingsChanged": false,
+    "selectedPackageChanged": false,
+    "productionChanged": false,
+    "recurringOwnersStarted": false,
+    "originalNativeSessionsInterrupted": false
+  },
+  "nextExecutableTask": "QUALIFY_SUPPORTED_NARROW_RECONCILIATION_OF_ATTRIBUTED_READONLY_LOGIN_THEN_EXISTING_COMMIT_PINNED_DEV_PACKAGE_OBSERVATION",
+  "operatorActionRequired": false,
+  "goal": "ACTIVE",
+  "publication": {
+    "verifiedUtc": "2026-10-30T22:55:00.288366+00:00",
+    "implementationCommit": "5b0d065b908eeaca7109feb6f2a7472f07bf84d7",
+    "remoteBranchHead": "5b0d065b908eeaca7109feb6f2a7472f07bf84d7",
+    "prHead": "5b0d065b908eeaca7109feb6f2a7472f07bf84d7",
+    "branch": "codex/web-rollover-oct17"
+  }
+}

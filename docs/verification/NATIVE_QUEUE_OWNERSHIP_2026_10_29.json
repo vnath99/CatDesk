@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-29T23:06:20.760563+00:00",
+  "classification": "TESTED_SOURCE_AND_DISPOSABLE_WINDOWS_PROCESSES_NOT_INSTALLED_OR_WEB_ACCEPTANCE",
+  "sourceBranch": "codex/web-rollover-oct17",
+  "sourceCommit": "d58cf08453f2b1fcbd9860592a99fb3e5ed3e099",
+  "sourceSha256": {
+    "src/operator_codex_cli/queue.rs": "529623c610fa332a3adff7f959766d9b34fa89cd96e5846db1a8811c02d0087d",
+    "src/operator_codex_cli/queue/owned_native.rs": "dbee6231be8082b1feb7c1b0999019542a93668736c466d08fd7e6d965e67565"
+  },
+  "tests": {
+    "queueAndSubmodulesPassed": 98,
+    "failed": 0,
+    "ignored": 2,
+    "newTests": 3,
+    "finalFunctionalBodyRetested": true,
+    "postTestChange": "cfg-only legacy helper availability; strict all-target Clippy compiled both production and tests"
+  },
+  "windowsProcessEvidence": [
+    "normal parent exit with retained live descendant handle",
+    "nonzero parent exit with retained live descendant handle",
+    "turn timeout",
+    "blocked prompt pipe",
+    "cancellation flag",
+    "dropped async caller requests owned cleanup"
+  ],
+  "cleanup": {
+    "privateJobQuiescence": "PASS",
+    "exactRetainedDescendantHandleExit": "PASS",
+    "fixtureProcessesRemaining": 0,
+    "pinnedProtectedFiles": 5858,
+    "pinnedProtectedFileMismatches": 0,
+    "inventoryLimit": "Existing pinned file set; not a fresh topology inventory"
+  },
+  "strictAllTargetClippy": "PASS",
+  "rustfmt": "PASS",
+  "logSha256": {
+    "oct29-owned-native-compile.log": "7dd99fe125e1ac85bdb3adc69e7ad05cb7cdefbe71cf1a08689e559c5f7a48cb",
+    "oct29-owned-native-process-tests.log": "f5940c7d782a365b1c1123f9634438b1333fce6c99a156f9d7dca399a9991858",
+    "oct29-owned-native-queue-tests.log": "2d4dd1ac56e8a3318c47bc88dadd24bf6ccc1469dd3eea1b1d5412a3a0144007",
+    "oct29-owned-native-final-tests.log": "ec71f258d32feb50b0c96dfed14f15d90a119d17ea31483f699c2766b0ac68ab",
+    "oct29-owned-native-clippy.log": "0931e8618942dc4a089ab0ff4c95e51f1cabfa624e4d886e961e19662f83fdc0",
+    "oct29-owned-native-clippy-final.log": "5c7e9f7d806b73b4b1d7342a6f4c8d69c99681d68368b038342e2a037937881b"
+  },
+  "failuresPreserved": [
+    "Initial test compilation: helper visibility and missing Debug derive, corrected",
+    "Initial strict Clippy: legacy helper unused on Windows production, cfg narrowed, final lint passed"
+  ],
+  "behavior": [
+    "Original normal native CLI arguments, model, effort, workspace-write sandbox, registration and writer gates preserved",
+    "Existing owned-child suspended assignment and private kill-on-close Job reused; no disarm or breakaway",
+    "Parent exit alone cannot release scheduler lease or publish a new review candidate",
+    "No-child prelaunch proof remains distinct from postlaunch tree cleanup",
+    "Cleaned-up interrupted turns retain writer marker and enter ATTENTION, never READY",
+    "Parent-only historical receipts default treeExitProven=false, stay readable, and cannot acquire new verification authority",
+    "Another project can use its independent queue slot while the first is unresolved",
+    "Async cancellation requests bounded cleanup; losing the receipt is not authority to replay"
+  ],
+  "limitations": [
+    "Windows owned transport qualified with disposable processes only; no real Codex model turn",
+    "Non-Windows legacy transport has no new descendant proof and cannot release on parent exit alone",
+    "Project-native execution not exposed through MCP yet; explicit scoped grant is next",
+    "No browser, Wake, tunnel, protected installation, binding or existing native project session changed",
+    "No connector/profile reprobe or completed canary replay",
+    "Two real ChatGPT Web coding conversations and new installed runtime acceptance remain OPEN"
+  ],
+  "hostedCI": "UNVERIFIED"
+}

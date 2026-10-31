@@ -1,0 +1,196 @@
+@@ -3409,6 +3574,9 @@ fn claim_one(control_workspace: &Path, queue: &QueueStore) -> Result<Option<Queu
+             // No launch occurred. Leave the original authority snapshot and
+             // prompt intact for a human to reconcile; do not migrate it to a
+             // new root, target, or thread.
++            if selected.is_some() {
++                return Err("CODEX_QUEUE_SCOPE: selected task binding changed".into());
++            }
+             job.state = QueueState::Attention;
+             queue.save_job(&job)?;
+             continue;
+@@ -3467,6 +3635,7 @@ fn claim_one(control_workspace: &Path, queue: &QueueStore) -> Result<Option<Queu
+         || lease.workspace != job.binding.workspace
+         || lease.owner_id != owner
+         || lease.provider != ScheduledProviderV1::Codex
++        || exact_dispatch_binding(control_workspace, selected).is_err()
+         || !registered_project(control_workspace, &job.binding.scope())
+             .as_ref()
+             .is_ok_and(|project| job.binding.matches(project))
+@@ -3474,8 +3643,10 @@ fn claim_one(control_workspace: &Path, queue: &QueueStore) -> Result<Option<Queu
+         scheduler.release_workspace_lease(&lease).map_err(|_| {
+             "CODEX_QUEUE: drifted scheduler grant could not be released".to_string()
+         })?;
+-        job.state = QueueState::Attention;
+-        queue.save_job(&job)?;
++        if selected.is_none() {
++            job.state = QueueState::Attention;
++            queue.save_job(&job)?;
++        }
+         return Err("CODEX_QUEUE_SCOPE: selected registry binding changed during claim".into());
+     }
+     job.state = QueueState::Claimed;
+@@ -3502,6 +3673,7 @@ struct TurnResult {
+     exit_code: Option<i32>,
+     child_exit_observed: bool,
+     child_absent_proven: bool,
++    tree_exit_proven: bool,
+     marker_retired: bool,
+     native_executable: Option<PathBuf>,
+     native_version: Option<String>,
+@@ -3519,6 +3691,7 @@ impl TurnResult {
+             exit_code: None,
+             child_exit_observed: false,
+             child_absent_proven: true,
++            tree_exit_proven: false,
+             marker_retired: true,
+             native_executable: None,
+             native_version: None,
+@@ -3529,12 +3702,14 @@ impl TurnResult {
+             review_after: None,
+         }
+     }
++    #[cfg(any(not(windows), test))]
+     fn unknown(outcome: &'static str) -> Self {
+         Self {
+             outcome,
+             exit_code: None,
+             child_exit_observed: false,
+             child_absent_proven: false,
++            tree_exit_proven: false,
+             marker_retired: false,
+             native_executable: None,
+             native_version: None,
+@@ -4901,6 +5076,7 @@ fn turn_timeout() -> Result<Duration, String> {
+     }
+ }
+ 
++#[cfg(not(windows))]
+ async fn drain_native_jsonl_stdout(
+     mut stdout: tokio::process::ChildStdout,
+     mut evidence: CodexCliNativeStdoutEvidenceV1,
+@@ -4945,6 +5121,7 @@ async fn drain_native_jsonl_stdout(
+     }
+ }
+ 
++#[cfg(any(not(windows), test))]
+ async fn write_queued_prompt(
+     child: &mut tokio::process::Child,
+     prompt: &str,
+@@ -5116,101 +5293,170 @@ async fn run_queued_turn(
+             ..TurnResult::before_spawn("WRITER_MARKER_BINDING_MISMATCH")
+         };
+     }
+-    let launched_at = SystemTime::now();
+-    let mut child = match command.spawn() {
+-        Ok(child) => child,
+-        Err(_) => {
+-            let retired = writer.finish_writer_turn().is_ok();
++    #[cfg(windows)]
++    {
++        let launched_at = SystemTime::now();
++        let transport = owned_native::run(
++            command.into_std(),
++            job.prompt.clone(),
++            stdout_evidence,
++            turn_limit,
++        )
++        .await;
++        if transport.no_child_created {
+             return TurnResult {
+-                marker_retired: retired,
+-                native_executable: Some(executable.clone()),
+-                ..TurnResult::before_spawn("NATIVE_SPAWN_FAILED")
++                marker_retired: writer.finish_writer_turn().is_ok(),
++                ..TurnResult::before_spawn(transport.outcome)
+             };
+         }
+-    };
+-    let Some(stdout) = child.stdout.take() else {
+-        let _ = tokio::time::timeout(KILL_TIMEOUT, child.kill()).await;
+-        return TurnResult::unknown("NATIVE_STDOUT_UNAVAILABLE");
+-    };
+-    let stdout_reader = tokio::spawn(drain_native_jsonl_stdout(stdout, stdout_evidence));
+-    let prompt_accepted = write_queued_prompt(&mut child, &job.prompt, PROMPT_TIMEOUT).await;
+-    if !prompt_accepted {
+-        let _ = tokio::time::timeout(KILL_TIMEOUT, child.kill()).await;
+-        // The native parent may have descendants. Keep the pending writer
+-        // marker and scheduler lease until an explicit proof-based recovery.
+-        return TurnResult::unknown("PROMPT_PIPE_DESCENDANTS_UNPROVEN");
+-    }
+-    let status = match tokio::time::timeout(turn_limit, child.wait()).await {
+-        Ok(Ok(status)) => status,
+-        Ok(Err(_)) => {
+-            let _ = tokio::time::timeout(KILL_TIMEOUT, child.kill()).await;
+-            return TurnResult::unknown("NATIVE_EXIT_UNOBSERVED");
+-        }
+-        Err(_) => {
+-            let _ = tokio::time::timeout(KILL_TIMEOUT, child.kill()).await;
+-            return TurnResult::unknown("NATIVE_TIMEOUT_DESCENDANTS_UNPROVEN");
++        let normal_exit = matches!(
++            transport.outcome,
++            "NATIVE_EXIT_ZERO" | "NATIVE_EXIT_NONZERO"
++        );
++        let successful = transport.outcome == "NATIVE_EXIT_ZERO" && transport.tree_exit_proven;
++        let (actual_profile, diagnostic) = if successful {
++            let (profile, diagnostic) = read_queued_native_profile(
++                profile_readback.as_ref(),
++                &job.binding.thread_id,
++                launched_at,
++                transport.exit_observed_at.unwrap_or_else(SystemTime::now),
++                transport.stdout.as_ref().expect("normal exit has stdout"),
++            );
++            (profile, Some(diagnostic))
++        } else {
++            (None, None)
++        };
++        let review_after = if successful {
++            capture_git_review_witness(&project.workspace, &git)
++                .await
++                .ok()
++        } else {
++            None
++        };
++        // Forced cleanup after timeout/cancellation proves process absence,
++        // not task completion. Preserve its marker and never auto-replay it.
++        let retired =
++            normal_exit && transport.tree_exit_proven && writer.finish_writer_turn().is_ok();
++        TurnResult {
++            outcome: if successful && review_after.is_none() {
++                "REVIEW_POST_SNAPSHOT_UNAVAILABLE"
++            } else {
++                transport.outcome
++            },
++            exit_code: transport.exit_code,
++            child_exit_observed: transport.child_exit_observed,
++            child_absent_proven: false,
++            tree_exit_proven: transport.tree_exit_proven,
++            marker_retired: retired,
++            native_executable: Some(executable.clone()),
++            native_version: None,
++            native_executable_sha256: None,
++            actual_profile,
++            profile_readback_diagnostic: diagnostic,
++            review_before: Some(review_before),
++            review_after,
+         }
+-    };
+-    let exit_observed_at = SystemTime::now();
+-    let stdout_evidence = match tokio::time::timeout(NATIVE_STDOUT_EOF_TIMEOUT, stdout_reader).await
++    }
++    #[cfg(not(windows))]
+     {
+-        Ok(Ok((evidence, true))) => evidence,
+-        _ => {
+-            return TurnResult {
+-                outcome: "NATIVE_STDOUT_EOF_UNOBSERVED",
+-                exit_code: status.code(),
+-                child_exit_observed: true,
+-                child_absent_proven: false,
+-                marker_retired: false,
+-                native_executable: Some(executable.clone()),
+-                native_version: None,
+-                native_executable_sha256: None,
+-                actual_profile: None,
+-                profile_readback_diagnostic: None,
+-                review_before: Some(review_before),
+-                review_after: None,

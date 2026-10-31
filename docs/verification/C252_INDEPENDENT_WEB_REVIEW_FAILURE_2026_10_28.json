@@ -1,0 +1,54 @@
+{
+  "sourceCommit": "9c1ace613a8949be6849e2b028bd069774b60ecf",
+  "nativeSol": {
+    "guardBypassed": false,
+    "workerLaunched": false,
+    "authenticationAvailabilityWasInsufficient": true,
+    "launchGuard": "SOL_WORKER_OS_ISOLATION_UNPROVEN"
+  },
+  "delivery": {
+    "bindingsAndNativeSessionsPreserved": true,
+    "otherProjectUnknownSubmissionPreserved": true,
+    "exactReceiptVerified": true,
+    "observedSubmissionPhaseSeconds": 3,
+    "ownersRemaining": 0,
+    "independentRegisteredProject": true,
+    "oneMessageSent": true
+  },
+  "checkpoint": "C252",
+  "classification": "GENUINE_INDEPENDENT_WEB_REVIEW_FAILED_SOURCE_ACCEPTANCE_WITHHELD",
+  "response": {
+    "toolInspectionProvenance": "ASSISTANT_REPORTED_NOT_INDEPENDENT_TOOL_TELEMETRY",
+    "focusPathsCovered": 6,
+    "bodyBytes": 3547,
+    "defectIndependentlyReproduced": true,
+    "strictSchemaValid": true,
+    "eventBound": true,
+    "verdict": "FAIL",
+    "findings": [
+      {
+        "path": "scripts/wake_bridge.py",
+        "line": 2402,
+        "reason": "Target-identity regression in the shared native editor CAS. CdpSink.exact() explicitly accepts validated /c/{id} and /g/{project}/c/{id} routes identifying the same conversation. However, the new native insertion requires location.href to equal self.url byte-for-byte at lines 2402, 2442 and 2487. A legitimate ChatGPT route canonicalization can therefore pass pre_typing_ready() but fail native insertion with PRE_HOME. Existing conversation delivery becomes blocked despite unchanged conversation identity. The new tests do not cover equivalent-route canonicalization. Cumulative acceptance is withheld."
+      }
+    ],
+    "responseSha256": "0bf263fa1b76fc9506b2ad4042d7824f8b841046250efa85ea24537888e8004c"
+  },
+  "productionActions": 0,
+  "date": "2026-10-28",
+  "branch": "codex/web-rollover-oct17",
+  "disposition": {
+    "priorC249UnknownPreserved": true,
+    "nativeReviewClaim": "CANCELLED",
+    "nativeStateVersion": 5,
+    "nativeClaimActive": false,
+    "sourceAcknowledged": false,
+    "historyPreserved": true,
+    "reviewTransportClosed": true,
+    "otherProtectedPinsPreserved": 8189,
+    "transportCompletionIsSourceAcceptance": false,
+    "nativeFinalized": false,
+    "releaseAuthorityCreated": false
+  },
+  "milestoneComplete": false
+}

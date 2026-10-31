@@ -213,13 +213,25 @@ fn registered_publication_context(
         project,
     )
     .map_err(|_| "WAKE_PROJECT_NOT_REGISTERED".to_string())?;
+    registered_publication_context_for_scope(&scope)
+}
+
+fn registered_publication_context_for_scope(
+    scope: &crate::delegated::autonomy_projects::ResolvedProjectScopeV1,
+) -> Result<(Store, Activation, String, String), String> {
+    let control_workspace = &scope.control_workspace;
+    if !selected(control_workspace) {
+        return Err("WAKE_OWNER_NOT_SELECTED".into());
+    }
     let registered_url = scope
         .project
         .chatgpt_target_url
+        .clone()
         .ok_or("TARGET_NOT_CONFIGURED")?;
     let registered_sha256 = scope
         .project
         .chatgpt_target_sha256
+        .clone()
         .ok_or("TARGET_NOT_CONFIGURED")?;
     let root = wake_root_for_workspace(control_workspace)?;
     let activation: Activation = read(&root.join("activation.json"))?;
@@ -230,6 +242,101 @@ fn registered_publication_context(
         &registered_url,
     )?;
     Ok((store, activation, registered_url, registered_sha256))
+}
+
+/// Apply the same activation, target and history admission used by publication
+/// before a scoped review consumes its one-shot reservation. No event is sent.
+pub(crate) fn preflight_registered_invitation(
+    control_workspace: &Path,
+    project: &str,
+    expected: &Target,
+) -> Result<(), String> {
+    let (store, activation, url, digest) =
+        registered_publication_context(control_workspace, project)?;
+    if publication_target(
+        &store,
+        &activation,
+        project,
+        &url,
+        &digest,
+        catdesk_wake::store::now(),
+    )? != *expected
+    {
+        return Err("WAKE_PROJECT_TARGET_CHANGED".into());
+    }
+    Ok(())
+}
+
+/// Caller holds the existing registration lock. All Git work was done during
+/// scope preparation; retain exact controller/project and fresh Wake checks.
+pub(crate) fn preflight_prepared_invitation(
+    prepared: &crate::delegated::autonomy_projects::PreparedProjectScopeV1,
+    expected: &Target,
+) -> Result<(), String> {
+    prepared
+        .revalidate_registration()
+        .map_err(|_| "WAKE_PROJECT_REGISTRATION_CHANGED")?;
+    let scope = prepared.scope();
+    let (store, activation, url, digest) = registered_publication_context_for_scope(scope)?;
+    if publication_target(
+        &store,
+        &activation,
+        &scope.project.project_id,
+        &url,
+        &digest,
+        catdesk_wake::store::now(),
+    )? != *expected
+    {
+        return Err("WAKE_PROJECT_TARGET_CHANGED".into());
+    }
+    Ok(())
+}
+
+pub(crate) fn publish_registered_scoped_review(
+    control_workspace: &Path,
+    project: &str,
+    event_id: &str,
+    message: &str,
+    expected: &Target,
+    grant_id: &str,
+) -> Result<Event, String> {
+    preflight_registered_invitation(control_workspace, project, expected)?;
+    let store = Store::open(&wake_root_for_workspace(control_workspace)?)?;
+    store.produce_expected_with_audit(
+        event_id,
+        project,
+        "source_review",
+        message,
+        expected,
+        &[format!("catdesk-review-v1:{grant_id}")],
+    )
+}
+
+/// The explicit task grant authorizes only this fixed continuation template.
+/// Queue admission neither starts Wake/browser nor proves delivery or work.
+pub(crate) fn publish_registered_manual_wake(
+    prepared: &crate::delegated::autonomy_projects::PreparedProjectScopeV1,
+    request_id: &str,
+    task_id: &str,
+    expected: &Target,
+    intent: catdesk_wake::store::WakeIntent<'_>,
+) -> Result<Event, String> {
+    let scope = prepared.scope();
+    let control_workspace = &scope.control_workspace;
+    let project = &scope.project.project_id;
+    if intent.purpose != catdesk_wake::protocol::WakePurpose::ManualEndTurn
+        || !catdesk_wake::protocol::valid_id(request_id)
+        || !catdesk_wake::protocol::valid_id(task_id)
+    {
+        return Err("WEB_TASK_MANUAL_WAKE_ARGUMENTS_INVALID".into());
+    }
+    preflight_prepared_invitation(prepared, expected)?;
+    let message = format!(
+        "CatDesk manual continuation. Project: {project} Request: {request_id} Task: {task_id} Source event: {} Source turn: {} Continue this project's unfinished authorized task using its existing handoff and current grants. Preserve task ownership and reconcile unknown outcomes before further execution.",
+        intent.source_event_id, intent.source_turn_id
+    );
+    let store = Store::open(&wake_root_for_workspace(control_workspace)?)?;
+    store.produce_expected_wake(project, &message, expected, intent)
 }
 
 fn publication_target(
@@ -332,16 +439,7 @@ fn publish_registered_with_store(
     } else {
         "engineering_attention"
     };
-    let message = if project == "catdesk" {
-        format!(
-            "CatDesk Wake: {purpose} for CatDesk review record {id}. Review the exact record and current wake/GUI repair plan through CatDesk. Ordinary autonomy remains frozen until wake acceptance completes."
-        )
-    } else {
-        format!(
-            "CatDesk Wake: {purpose} for project {project} review record {id}. Continue only this registered project's pending review in this conversation."
-        )
-    };
-    store.produce_expected(id, project, purpose, &message, target)?;
+    store.produce_review_expected(id, project, purpose, target)?;
     Ok(())
 }
 
@@ -452,6 +550,36 @@ mod tests {
         )
         .expect("beta progresses independently");
         assert_eq!(store.events().expect("events").len(), 2);
+        let catdesk = store
+            .set_target("catdesk", 0, "https://chatgpt.com/c/catdesk-review")
+            .unwrap();
+        publish_registered_with_store(
+            &store,
+            &activation,
+            "catdesk",
+            Some(&catdesk.url),
+            Some(&catdesk.digest),
+            "catdesk-review-record",
+            created,
+            true,
+        )
+        .unwrap();
+        let events = store.events().unwrap();
+        let review = events
+            .iter()
+            .find(|event| event.project_id == "catdesk")
+            .unwrap();
+        assert!(
+            review
+                .message
+                .contains("for project catdesk review record catdesk-review-record")
+        );
+        assert!(
+            review
+                .message
+                .contains("only this registered project's pending review")
+        );
+        assert!(!review.message.contains("autonomy remains frozen"));
         let _ = std::fs::remove_dir_all(root);
     }
 
@@ -559,6 +687,7 @@ mod tests {
         Config {
             schema_version: 1,
             targets: BTreeMap::from([("catdesk".to_string(), target.clone())]),
+            retired_targets: BTreeMap::new(),
             history: vec![TargetChange {
                 project_id: "catdesk".to_string(),
                 target,
@@ -610,6 +739,7 @@ mod tests {
         let config = Config {
             schema_version: 1,
             targets: BTreeMap::from([("catdesk".to_string(), target)]),
+            retired_targets: BTreeMap::new(),
             history: Vec::new(),
         };
         assert_eq!(

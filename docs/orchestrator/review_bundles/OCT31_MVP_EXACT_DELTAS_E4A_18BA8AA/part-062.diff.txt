@@ -1,0 +1,102 @@
++                "refusal mutated state: {case}"
++            );
++        }
++    }
++}
+diff --git a/src/web_task_dispatch.rs b/src/web_task_dispatch.rs
+index ce4aebb213bb37a3f21071f5259e979dca2724b6..ae3718722ecb0530c08a7914507dc30b77721967 100644
+--- a/src/web_task_dispatch.rs
++++ b/src/web_task_dispatch.rs
+@@ -114,16 +114,16 @@ async fn pause_started_test_turn(control: &Path) {
+ }
+ 
+ pub(crate) fn schema() -> Value {
+-    json!({"name":TOOL,"description":"Execute one operator-granted isolated project task through the central connection. Use the exact project/work/task identity, current paired target, private project executionKey and stable callId. The registry and archived assignment choose the workspace. Recorded calls never replay. This does not identify the provider conversation or take over a native checkout.",
++    json!({"name":TOOL,"description":"Execute one operator-granted isolated project task through the central connection. Use the exact project/work/task identity, current paired target, private project executionKey and stable callId. The registry and archived assignment choose the workspace. Recorded calls never replay. Ordinary tools use the isolated worktree; an additional frozen native-task grant permits normal native queue execution in the registered workspace under its existing ownership gates. This does not authenticate the provider conversation.",
+     "inputSchema":{"type":"object","properties":{
+         "projectId":{"type":"string"},"requestId":{"type":"string"},"sourceEventId":{"type":"string"},
+         "assignmentSha256":{"type":"string","pattern":"^[a-f0-9]{64}$"},
+         "expectedTargetGeneration":{"type":"integer","minimum":1},"expectedTargetSha256":{"type":"string","pattern":"^[a-f0-9]{64}$"},
+         "executionKey":{"type":"string","pattern":"^[a-f0-9]{64}$","description":"Private key from this task's LOCAL execution-grant; never use a sibling project's key."},
+         "taskId":{"type":"string"},"callId":{"type":"string"},
+-        "tool":{"type":"string","enum":["read","search","patch.preview","patch.apply","patch.compare","diff.actual","verify.command"]},"arguments":{"type":"object"}},
++        "tool":{"type":"string","enum":["read","search","patch.preview","patch.apply","patch.compare","diff.actual","verify.command","wake.manual_end_turn","native.codex.dispatch","native.codex.status"],"description":"wake.manual_end_turn requires an explicit local manual-wake grant and records one queue-only intent. native.codex.dispatch requires an additional exact frozen native-queue task grant; arguments must be {}. Native CLI arguments and runtime bound come from local authority, never this request. native.codex.status reads only that grant's task/receipt, including while dispatch owns its project lease; it never replays."},"arguments":{"type":"object"}},
+     "required":["projectId","requestId","sourceEventId","assignmentSha256","expectedTargetGeneration","expectedTargetSha256","executionKey","taskId","callId","tool","arguments"],"additionalProperties":false},
+-    "annotations":{"readOnlyHint":false,"destructiveHint":true,"openWorldHint":false}})
++    "annotations":{"readOnlyHint":false,"destructiveHint":true,"openWorldHint":true}})
+ }
+ 
+ #[derive(Deserialize)]
+@@ -192,6 +192,143 @@ pub(crate) async fn handle(control: &str, request: &JsonRpcRequest) -> JsonRpcRe
+         return JsonRpcResponse::error(id, -32602, "WEB_TASK_ARGUMENTS_INVALID".into());
+     }
+     let control = PathBuf::from(control);
++    if call.tool == "native.codex.status" {
++        if call.arguments != json!({}) {
++            return JsonRpcResponse::error(id, -32602, "WEB_TASK_NATIVE_ARGUMENTS_INVALID".into());
++        }
++        let response_id = id.clone();
++        return match tokio::spawn(async move {
++            let selection = call.selection();
++            let observed = json!({"name":TOOL,"arguments":call.task_args()});
++            let root = control.clone();
++            let admission = tokio::task::spawn_blocking(move || crate::web_work::native_status(
++                &root,call.pins(),&call.execution_key,&call.task_id)).await;
++            match admission {
++                Ok(Ok(admission)) => {
++                    let traffic = crate::project_mcp::TrafficObservation::start_scoped(control.clone(),&selection,observed).await;
++                    #[cfg(all(test,windows))]
++                    pause_started_test_turn(&control.join(format!("native-status-{}",selection.project_id))).await;
++                    let result = tokio::task::spawn_blocking(move || admission.snapshot()).await;
++                    let mut response = match result {
++                        Ok(Ok(value)) => JsonRpcResponse::success(response_id,json!({"content":[{"type":"text","text":"Native task snapshot; no execution or replay."}],"structuredContent":value,"isError":false})),
++                        Ok(Err(reason)) => JsonRpcResponse::error(response_id,-32002,reason),
++                        Err(_) => JsonRpcResponse::error(response_id,-32002,"WEB_TASK_NATIVE_STATUS_UNAVAILABLE".into()),
++                    };
++                    traffic.finish(&mut response).await;
++                    response
++                },
++                Ok(Err(reason)) => JsonRpcResponse::error(response_id,-32002,reason),
++                Err(_) => JsonRpcResponse::error(response_id,-32002,"WEB_TASK_NATIVE_STATUS_UNAVAILABLE".into()),
++            }
++        }).await { Ok(response)=>response, Err(_)=>JsonRpcResponse::error(id,-32002,"WEB_TASK_NATIVE_STATUS_UNAVAILABLE".into()) };
++    }
++    if call.tool == "native.codex.dispatch" {
++        if call.arguments != json!({}) {
++            return JsonRpcResponse::error(id, -32602, "WEB_TASK_NATIVE_ARGUMENTS_INVALID".into());
++        }
++        let response_id = id.clone();
++        return match tokio::spawn(async move {
++            let selection = call.selection();
++            let observed = json!({"name":TOOL,"arguments":call.task_args()});
++            let call = std::sync::Arc::new(call);
++            let owned = call.clone(); let root = control.clone();
++            match tokio::task::spawn_blocking(move || authorize(&root, &owned)).await {
++                Ok(Ok(_)) => {},
++                Ok(Err(reason)) => return JsonRpcResponse::error(response_id, -32002, reason),
++                Err(_) => return JsonRpcResponse::error(response_id, -32002, "WEB_TASK_AUTHORIZATION_UNAVAILABLE".into()),
++            }
++            let traffic = crate::project_mcp::TrafficObservation::start_scoped(control.clone(), &selection, observed).await;
++            let root = control.clone(); let owned = call.clone();
++            let admission = tokio::task::spawn_blocking(move || crate::web_work::prepare_native_dispatch(
++                &root, owned.pins(), &owned.execution_key, &owned.task_id, &owned.call_id)).await;
++            let result = match admission {
++                Ok(Ok(admission)) => {
++                    #[cfg(all(test,windows))]
++                    pause_started_test_turn(&control.join(format!("native-{}", call.project_id))).await;
++                    let result = crate::operator_codex_cli::dispatch_native_queue_selection(
++                        &admission.control, &admission.project_id, &admission.call.selection).await;
++                    let recorded = result.clone();
++                    match tokio::task::spawn_blocking(move || admission.finish(&recorded)).await {
++                        Ok(Ok(())) => result,
++                        _ => Err("PROJECT_TASK_RECOVERY_REQUIRED".into()),
++                    }
++                }
++                Ok(Err(reason)) => Err(reason),
++                Err(_) => Err("WEB_TASK_OUTCOME_UNKNOWN_NO_REPLAY".into()),
++            };
++            let mut response = match result {
++                Ok(result) => {
++                    let failed = result["status"] == "prelaunch_refused"
++                        || result["job"]["state"].as_str().is_some_and(|state| state != "NATIVE_EXITED_ZERO");
++                    let text = if failed { "Native task did not complete normally; inspect its exact result before any retry." }

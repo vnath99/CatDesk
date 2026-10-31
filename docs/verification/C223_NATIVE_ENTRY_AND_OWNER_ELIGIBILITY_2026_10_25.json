@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C223",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "9d674271f36292aacdb7417ffdf5e1f72733e151",
+  "status": "NORMAL_IMAGE_ENTRY_QUALIFIED_PRODUCTION_OWNER_INELIGIBLE",
+  "manualInheritance": {
+    "evidenceType": "OPERATOR_PROVIDED_API_JSON_SELECTED_FIELDS",
+    "startedUtc": "2026-10-25T21:55:39.5465464+00:00",
+    "finishedUtc": "2026-10-25T21:55:40.6949828+00:00",
+    "elapsedMilliseconds": 1167,
+    "parentInJob": true,
+    "childInJobAtEntry": true,
+    "childInJobBeforeExit": true,
+    "immediateLimitFlagsAtBothSamples": 6144,
+    "immediateKillOnJobClose": false,
+    "immediateSilentBreakawayAllowed": true,
+    "childUncontainedAtBothSamples": false,
+    "naturalExit": true,
+    "outputStreamsClosed": true,
+    "cleanupVerified": true,
+    "jobChanges": 0,
+    "catdeskCommands": 0,
+    "persistentWrites": 0,
+    "creatorOrOuterChainEstablished": false,
+    "conditionalWrapperLauncherEligible": false,
+    "evidenceSha256": "db3e25baa43b30256526c04ea8791ca40a700747817e669f9a7ffaee312bdf3e"
+  },
+  "ownerDiagnosis": {
+    "namedJobProvider": "Win32_NamedJobObjectProcess",
+    "querySucceeded": true,
+    "associations": 0,
+    "unnamedJobsExcluded": false,
+    "namedQueryEvidenceSha256": "f1d486cd481c4f837233f0ae18b1a62e32b4e91e2f95c17e84c3fb60369f619c",
+    "documentedScheduledTasksAbsentNativeCom": 2,
+    "stableSupervisorInstallationPresent": false,
+    "existingRunEntrySupportsReleasePairAction": false,
+    "runEntryLifetimeQualified": false,
+    "ownerInventoryEvidenceSha256": "297c1a12a5c2d6d35d1903b4493e62285f54e6875408d0bc0cc24124f22670ba",
+    "installedMetadataEvidenceSha256": "91f750e6aa1cbf9f37d19750a191f7af835759e305b94326b2abce2daa288d0f",
+    "metadataScope": "Installed Kernel-Process manifest includes Job start/end but no observed assignment caller/target pair. A separate classic System Process Job keyword is documented; the installed manifest is not exhaustive. No primary-source assignment template was established that justifies a new capture.",
+    "newTracesOrServicesStarted": 0,
+    "guardChanged": false,
+    "jobCreatorAttributed": false
+  },
+  "normalImageQualification": {
+    "evidenceType": "ACTUAL_WINDOWS_DEBUG_IMAGE_METADATA_AND_PRE_STATE_REFUSAL",
+    "profile": "ORDINARY_DEBUG_DIAGNOSTIC_ONLY",
+    "releaseAuthority": false,
+    "imageSha256": "17454c07b6b9f1c4b98aea97205d88ca53c22318e420bf43dc13cbccf7034cc7",
+    "imageBytes": 70993920,
+    "build": {
+      "command": "cargo build --locked --offline --bin catdesk",
+      "sourceClean": true,
+      "sourceAndLockPreserved": true,
+      "startedUtc": "2026-10-25T22:04:15.6885129Z",
+      "finishedUtc": "2026-10-25T22:05:11.0701305Z",
+      "elapsedMilliseconds": 55383,
+      "success": true
+    },
+    "nativeInvocations": 2,
+    "support": {
+      "arguments": [
+        "--catdesk-daemon",
+        "--backend-only",
+        "--check-support"
+      ],
+      "naturalExit": true,
+      "exitCode": 0,
+      "elapsedMilliseconds": 367,
+      "stderrEmpty": true,
+      "exactFiveFieldJsonVerified": true,
+      "stateCreated": false,
+      "servicesStarted": false,
+      "commandEvidenceSha256": "cbde505947d3b699da6c7eae2015f89e02e5e40e342474c91083443549d61010"
+    },
+    "missingConfig": {
+      "arguments": [
+        "--catdesk-daemon",
+        "--backend-only"
+      ],
+      "explicitAbsentFixtureConfig": true,
+      "naturalExit": true,
+      "exitCode": 1,
+      "elapsedMilliseconds": 37,
+      "stdoutEmpty": true,
+      "errorKind": "OS_ERROR_2_NOT_FOUND_BEFORE_APP_STATE",
+      "commandEvidenceSha256": "5336790ca49b178e72c79e5c80f051f998fca3bc0708c81d4e20452909ac6511"
+    },
+    "emptyWorkspacePreserved": true,
+    "protectedPinsMatched": 8,
+    "protectedScope": "C208 candidate, five authority files and canonical executable/sidecar; not a fresh full project-state manifest check.",
+    "probeWindowProcessAndPortSnapshotsUnchanged": true,
+    "snapshotScope": "SHORT_NATIVE_PROBE_WINDOW_NOT_WHOLE_BUILD",
+    "outerTestJobCeilingMilliseconds": 600000,
+    "parentPreservationReadsIncludedInCeiling": false,
+    "timeout": false,
+    "terminationFailure": false,
+    "resultSha256": "c65d2a905ad0cfffb341a4d8bf7b669714ae0760bee0bb5dfbd4fa28fdde83e3",
+    "outerEvidenceSha256": "c4cb2db044e61413b6507729b48e0fe122556d7733665d189d22536811f311fc",
+    "healthyBackendStarted": false,
+    "installedAcceptance": false
+  },
+  "retainedPrelaunchFailure": {
+    "cause": "PATH discovery returned three Git applications; the script stopped before its attempt marker, run directory, build or native probe. Corrected selection to the first effective application and validated leaf paths; failed script retained unchanged.",
+    "buildsStarted": 0,
+    "nativeProbesStarted": 0,
+    "productWrites": 0,
+    "failedScriptSha256": "26c114bc0e057664ba511ac5881e2a892bf5b09127300da9da04b0a5071e2a10",
+    "evidenceSha256": "f7175e19cc90ab8089d36161196223b2502f205d2b8094b14303fe46428111ae",
+    "correctedScriptSha256": "ff90ba1e592da5b1e7113fe34821e011109d5022273aeee4ea9cc4edfc7bf35c",
+    "independentStaticReview": "PASS"
+  },
+  "preservation": {
+    "productionPromotions": 0,
+    "newReleaseCandidates": 0,
+    "developmentPackageSelections": 0,
+    "browserOrWakeStarts": 0,
+    "recurringAutomationChanges": 0,
+    "projectBindingChanges": 0,
+    "nativeSessionActions": 0,
+    "existingWrapperAndNativeGuardsChanged": false
+  },
+  "remaining": [
+    "No supported production execution owner qualified. The ordinary-child conditional launcher is ineligible; do not retry it or infer eligibility from permissive immediate flags.",
+    "No installed startup, trusted previous-version rollback, connector or two-project Web coding acceptance. The diagnostic image cannot substitute for the C208 reviewed artifact.",
+    "No additional terminal, tracing or service action is justified by the recorded ownership metadata alone."
+  ],
+  "sources": [
+    "https://learn.microsoft.com/en-us/windows/win32/procthread/nested-jobs",
+    "https://learn.microsoft.com/en-us/previous-versions/windows/desktop/wmipjobobjprov/job-object-provider",
+    "https://learn.microsoft.com/en-us/windows/win32/etw/system-providers",
+    "https://learn.microsoft.com/en-us/windows/win32/api/evntcons/ns-evntcons-event_header"
+  ]
+}

@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T06:36:53.834197+00:00",
+  "classification": "TESTED_SOURCE_PRIVATE_INITIAL_TASK_CONTEXT_NOT_INSTALLED_OR_WEB_ACCEPTANCE",
+  "sourceBaseCommit": "4ac4fe57420c491e7c486a0a4bec223882d7a42b",
+  "workingSourceSha256": {
+    "src/operator_web_cli.rs": "dd0db3cfd954909dfb163246da4eef93f1125002960d110bb6496c0d095977a8",
+    "src/project_mcp_task.rs": "0ffd5c0e4c3e9625adbd4d07519b46cf2520b22f3d2bc026ed1078518dc5eda0",
+    "src/project_task_context.rs": "d40b97061db2280af92b1c4fc90bf55fe048cfccc980e2a46c06e105561511f5",
+    "src/web_work.rs": "47ab44eb7ef0a60662942d826612be47f88ec9849286cdce258631c50ebd2848",
+    "wake/src/runtime.rs": "be7d6d07975eb275b356c3fa06fa896fcb4a589fedfafe877ce2d4743335d613",
+    "wake/src/runtime_task_context.rs": "801b2b995e2ea161c14472fc7fe8af5ec7696b54027ed9ca9bb286a4958e35f4",
+    "wake/tests/test_adapter.py": "45323f3c5297b5eae888bc9b2ed42d71b1f104faa5ace4b2222c05df0f5358b7"
+  },
+  "tests": {
+    "distinctRustTests": 45,
+    "pythonAdapterTests": 39,
+    "distinctPassingTests": 84,
+    "newDistinctCases": 24,
+    "ignoredOlderOptInCases": 3,
+    "proofs": [
+      {
+        "kind": "task-regression",
+        "passingTests": 26,
+        "logSha256": "e9f2c6a9c3a68d64195b0390558e7d57b567b663a68296d883fca6f459a82b3c"
+      },
+      {
+        "kind": "root-qualified-final",
+        "passingTests": 12,
+        "logSha256": "2fffc08ff264f767439863c1ca2593f8db57ed33a7dbba631e9e695601128b6d"
+      },
+      {
+        "kind": "work-regression",
+        "passingTests": 6,
+        "logSha256": "80d28a0b64e11fd4eaf6df6e0e3169908c9b0fd0d1b8e191f01b40c5686a162b"
+      },
+      {
+        "kind": "native-qualified",
+        "passingTests": 11,
+        "logSha256": "887d704ac493c82ab0cfc769f385590f8014852c7b7379a7cd9ff54732873bb7"
+      },
+      {
+        "kind": "existingPythonAdapter",
+        "passingTests": 39,
+        "logSha256": "950340cab723afde9eb9e809905c7336a1496db9080873fd7115c52d99376953"
+      }
+    ]
+  },
+  "strictClippy": {
+    "root": {
+      "allTargets": true,
+      "warningsDenied": true,
+      "passed": true,
+      "logSha256": "6e7d0c2876fdcf171cb86523619b32f35586626add671a02a5cb501fe58156d9"
+    },
+    "wake": {
+      "allTargets": true,
+      "warningsDenied": true,
+      "passed": true,
+      "logSha256": "0429f88a4d173a146c5fec70c69e3219d2e8d3af42db3f0327fd2008fab74ae8"
+    }
+  },
+  "rootAndWakeFormatCheck": "PASS",
+  "implementation": {
+    "existingGrantRegistryTaskArchiveAndPrivateHandoffStoreReused": true,
+    "existingSeleniumBaseCdpAdapterAndNativeOwnerReused": true,
+    "adapterImplementationOrGenericWakeProtocolChanged": false,
+    "newBrowserOwnerSchedulerOrAuthorizationRegistry": false,
+    "sharedWorkspaceMetadata": "ROUTING_AND_ASSIGNMENT_IDENTITY_WITH_PAYLOAD_REFERENCE_HASHES_NO_KEY_OR_BODY",
+    "sharedQueueExecutionKeyOrContextBody": false,
+    "privatePayloadImmutableAndTargetBound": true,
+    "nativeMaximumSeconds": 120,
+    "requestWireMaximumBytes": 32768,
+    "messageMaximumBytes": 16384,
+    "maximumConfirmedPrewriteAttempts": 3,
+    "beforeFirstPossibleWrite": "DURABLE_SUBMITTING_BEFORE_ACK",
+    "unknownSubmission": "NO_RESEND_READONLY_EXACT_USER_RECONCILIATION_ONLY",
+    "knownPrewriteFailure": "EXPLICIT_SAME_PAYLOAD_RETRY_PREPARATION_ONLY",
+    "completionProof": "MATCHING_EXACT_USER_PERSISTENCE_AND_FINAL_RECEIPT",
+    "assistantResponseOrTaskCompletionInferredFromReceipt": false,
+    "continuation": "EXISTING_TARGET_BOUND_NEW_TASK_WAKE_INTENT_NO_KEY",
+    "continuationTtlSeconds": 600,
+    "continuationStartsHostOrBrowser": false,
+    "globalRegistryLocksHeldDuringBrowserIo": false,
+    "nativeSessionOrProjectOwnershipChanged": false,
+    "readOnlyReviewConsentUsedAsCodingAuthority": false
+  },
+  "commands": [
+    "context-prepare",
+    "context-send",
+    "context-reconcile",
+    "context-retry-prepare",
+    "context-continue"
+  ],
+  "failureEvidencePreserved": [
+    "Initial compile used project identity from the wrong record type; corrected to the registered scope.",
+    "Disposable source fixture attempted completion through a forbidden state setter; corrected to the existing receipt-checked completion API.",
+    "Same-URL target update is intentionally idempotent; generation regression now exercises supported away-and-back CAS instead of weakening that behavior.",
+    "Patch-context mismatches stopped before execution and were corrected; no live sender was started."
+  ],
+  "preservation": {
+    "criticalPinsMatched": 5107,
+    "mismatches": 0,
+    "selectedPackageUnchanged": true,
+    "hostStopped": true,
+    "loginMarkerPresent": false,
+    "browserProviderOrOfficialOwnerStarts": 0,
+    "newProviderMessages": 0,
+    "protectedProductionOrBindingChanges": 0,
+    "historicalRequestsReplayed": 0
+  },
+  "acceptance": {
+    "source": "PASS",
+    "newPrivateContextInstalledController": "NOT_BUILT",
+    "actualPrivateContextDelivery": "OPEN",
+    "newContextProcessInterruption": "SYNTHETIC_STATE_TESTS_ONLY",
+    "twoWebCodingConversations": "OPEN",
+    "productionPromotion": "NOT_PERFORMED"
+  },
+  "nextExecutableTask": "BUILD_COMMIT_BOUND_SEPARATE_CONTROLLER_THEN_QUALIFY_EXISTING_GRANTED_TASK_CONTEXT_PREPARATION_BEFORE_ONE_BOUNDED_DELIVERY",
+  "operatorActionRequired": false,
+  "hostedCi": "NOT_REQUESTED_LOCAL_TESTING_USED",
+  "goal": "ACTIVE"
+}

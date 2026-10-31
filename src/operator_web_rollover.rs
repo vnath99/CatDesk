@@ -4,7 +4,9 @@
 use crate::{
     delegated::autonomy_projects::{AutonomousProjectRegistryStoreV1, AutonomousProjectV1},
     mcp,
-    web_conversation_context::{ConversationKey, Observation, VisibleSourceKind, WebContextStore},
+    web_conversation_context::{
+        ConversationKey, Observation, PressureStatus, VisibleSourceKind, WebContextStore,
+    },
     web_work_state::WorkLedger,
 };
 use catdesk_wake::{
@@ -16,9 +18,63 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
     fs::{self, File, OpenOptions},
-    io::Read,
+    io::{Read, Write},
     path::{Path, PathBuf},
 };
+
+#[path = "web_rollover_admission.rs"]
+mod admission;
+#[path = "web_task_handoff.rs"]
+mod task_handoff;
+
+#[path = "operator_web_quarantine.rs"]
+mod disposition;
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub(super) enum GitStateBasis {
+    Unknown,
+    SourceReported,
+}
+
+/// A source conversation's observations, never an authoritative native Git read.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct HandoffGitState {
+    pub basis: GitStateBasis,
+    pub branch: Option<String>,
+    pub head_commit: Option<String>,
+    pub worktree_summary: Option<String>,
+    pub evidence: Vec<String>,
+}
+
+impl HandoffGitState {
+    fn validate(&self) -> Result<(), String> {
+        let known =
+            self.branch.is_some() || self.head_commit.is_some() || self.worktree_summary.is_some();
+        if (self.basis == GitStateBasis::Unknown && known)
+            || (self.basis == GitStateBasis::SourceReported && (!known || self.evidence.is_empty()))
+            || self.branch.as_ref().is_some_and(|s| {
+                s.trim().is_empty() || s.len() > 256 || s.chars().any(char::is_control)
+            })
+            || self.head_commit.as_ref().is_some_and(|s| {
+                !matches!(s.len(), 40 | 64) || !s.bytes().all(|b| b.is_ascii_hexdigit())
+            })
+            || self
+                .worktree_summary
+                .as_ref()
+                .is_some_and(|s| s.trim().is_empty() || s.len() > 2048 || s.contains('\0'))
+            || self.evidence.len() > 32
+            || self
+                .evidence
+                .iter()
+                .any(|s| s.trim().is_empty() || s.contains('\0'))
+        {
+            return Err("WEB_HANDOFF_GIT_STATE_INVALID".into());
+        }
+        Ok(())
+    }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -33,11 +89,16 @@ pub(super) struct Handoff {
     pub owned_paths: Vec<String>,
     pub verification: Vec<String>,
     pub blockers: Vec<String>,
+    // Omitted v1 fields stay omitted: historical handoff bytes/digests survive.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git_state: Option<HandoffGitState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub important_decisions: Option<Vec<String>>,
 }
 
 impl Handoff {
     fn validate(&self, project: &str) -> Result<(), String> {
-        if self.schema_version != 1
+        if !matches!(self.schema_version, 1 | 2)
             || self.project_id != project
             || !valid_id(&self.source_task_id)
             || self.objective.trim().is_empty()
@@ -55,6 +116,22 @@ impl Handoff {
         {
             return Err("WEB_HANDOFF_INVALID".into());
         }
+        if self.schema_version == 2
+            && (self.git_state.is_none() || self.important_decisions.is_none())
+        {
+            return Err("WEB_HANDOFF_CONTEXT_REQUIRED".into());
+        }
+        if let Some(state) = &self.git_state {
+            state.validate()?;
+        }
+        if self.important_decisions.as_ref().is_some_and(|items| {
+            items.len() > 32
+                || items
+                    .iter()
+                    .any(|s| s.trim().is_empty() || s.contains('\0'))
+        }) {
+            return Err("WEB_HANDOFF_DECISIONS_INVALID".into());
+        }
         let bytes = serde_json::to_vec(self).map_err(|_| "WEB_HANDOFF_INVALID")?;
         if bytes.len() > 10 * 1024 || bytes.contains(&0) {
             return Err("WEB_HANDOFF_TOO_LARGE".into());
@@ -68,6 +145,7 @@ impl Handoff {
 enum Phase {
     Prepared,
     Submitting,
+    Quarantined,
     ResponsePending,
     Created,
     Bound,
@@ -92,7 +170,13 @@ struct Record {
     source_task_id: String,
     source: Target,
     phase: Phase,
+    #[serde(default)]
+    bootstrap_progress: Option<runtime::BootstrapProgress>,
     handoff: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    task_handoff: Option<task_handoff::Reference>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    task_resume_event_id: Option<String>,
     message_digest: String,
     created_utc: u64,
     receipt: Option<runtime::BootstrapReceipt>,
@@ -109,6 +193,72 @@ struct Record {
     source_fingerprint: Option<String>,
     #[serde(default)]
     source_snapshot_verified: bool,
+    #[serde(default)]
+    quarantine: Option<Quarantine>,
+}
+
+/// Operator-observed incident evidence, never a bootstrap or binding receipt.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Quarantine {
+    observed_conversation_url: String,
+    recorded_utc: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DraftArchive {
+    schema_version: u32,
+    project_id: String,
+    intent_id: String,
+    source: Target,
+    message_digest: String,
+    expected_text: String,
+    actual_text: String,
+    observed_bytes: usize,
+    recorded_utc: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DraftArchiveReceipt {
+    schema_version: u32,
+    project_id: String,
+    intent_id: String,
+    source_digest: String,
+    message_digest: String,
+    archived_utc: u64,
+    evidence: String,
+}
+
+/// Separate from legacy full-draft archival: a reviewed raw witness authorizes
+/// at most one no-send replacement of this exact interrupted transaction.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DraftRepairWitness {
+    schema_version: u32,
+    project_id: String,
+    intent_id: String,
+    source_task_id: String,
+    source: Target,
+    message_digest: String,
+    expected_text: String,
+    actual_text: String,
+    actual_raw_digest: String,
+    recorded_utc: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DraftRepairCheckpoint {
+    schema_version: u32,
+    project_id: String,
+    intent_id: String,
+    source: Target,
+    message_digest: String,
+    actual_raw_digest: String,
+    evidence: String,
+    recorded_utc: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -128,10 +278,12 @@ struct HandoffRequest {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum AutoStage {
     Observe,
+    AwaitContinuation,
     CollectHandoff,
     Execute,
     SourceWitnessRequired,
     SubmissionUnknown,
+    Quarantined,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -143,17 +295,52 @@ struct AutoStatus {
     stage: String,
     target_generation: Option<u64>,
     reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    last_failure: Option<AutoFailure>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    retry: Option<AutoRetry>,
+}
+
+const AUTO_STATUS_SCHEMA_VERSION: u32 = 2;
+const AUTO_RETRY_BASE_SECONDS: u64 = 300;
+const AUTO_RETRY_MAX_SECONDS: u64 = 1800;
+const AUTO_RETRY_MAX_FAILURES: u32 = 16;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AutoRetry {
+    consecutive_failures: u32,
+    next_attempt_utc: u64,
+    target_generation: Option<u64>,
+}
+
+fn auto_retry_delay(failures: u32) -> u64 {
+    AUTO_RETRY_BASE_SECONDS
+        .saturating_mul(1u64 << failures.saturating_sub(1).min(3))
+        .min(AUTO_RETRY_MAX_SECONDS)
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AutoFailure {
+    reason: String,
+    tick_utc: u64,
+    target_generation: Option<u64>,
 }
 
 impl HandoffRequest {
     fn validate(&self, project: &str) -> Result<(), String> {
-        if self.schema_version != 1
-            || self.project_id != project
+        let expected = match self.schema_version {
+            1 => handoff_request_message,
+            2 => handoff_request_message_v2,
+            _ => return Err("WEB_HANDOFF_REQUEST_INVALID".into()),
+        };
+        if self.project_id != project
             || !valid_id(&self.intent_id)
             || !valid_id(&self.source_task_id)
             || self.event_id != format!("web-handoff-{}", self.intent_id)
             || self.message
-                != handoff_request_message(
+                != expected(
                     project,
                     &self.intent_id,
                     &self.source_task_id,
@@ -184,9 +371,40 @@ struct ProjectStore {
 pub(crate) struct WorkLease {
     _store: ProjectStore,
     approved_target: Option<Target>,
+    approved_source_task_id: Option<String>,
+    fenced_source_task_id: Option<String>,
 }
 
 impl WorkLease {
+    /// Native routing may follow only this lease's completed continuation.
+    /// The queue must also preserve its own no-effect and ownership evidence.
+    pub(crate) fn check_native_continuation(
+        &self,
+        workspace: &Path,
+        project: &str,
+        original: &Target,
+        current: &Target,
+        event_id: &str,
+    ) -> Result<(), String> {
+        self.check_source_task(original, current, event_id)?;
+        let root = workspace
+            .canonicalize()
+            .map_err(|_| "WEB_WORK_CONTINUATION_SOURCE_REQUIRED")?;
+        let store = self
+            ._store
+            .root
+            .canonicalize()
+            .map_err(|_| "WEB_WORK_CONTINUATION_SOURCE_REQUIRED")?;
+        if original == current
+            || store != root.join(".catdesk/web-rollovers").join(project)
+            || self.approved_target.as_ref() != Some(current)
+            || self.approved_source_task_id.as_deref() != Some(event_id)
+        {
+            return Err("WEB_WORK_CONTINUATION_SOURCE_REQUIRED".into());
+        }
+        Ok(())
+    }
+
     /// A completed continuation authorizes only its proved generation.
     /// Manual target binding does not take ProjectStore's lock, so the caller
     /// rechecks its selected target against this witness before changing work.
@@ -201,6 +419,27 @@ impl WorkLease {
         }
         Ok(())
     }
+
+    /// A historical work event may continue only through its own verified
+    /// rollover, whose proof and immutable journal remain fenced by this lease.
+    pub(crate) fn check_source_task(
+        &self,
+        original: &Target,
+        current: &Target,
+        event_id: &str,
+    ) -> Result<(), String> {
+        if self.fenced_source_task_id.as_deref() == Some(event_id) {
+            return Err("WEB_WORK_ABANDONED_SOURCE_TASK".into());
+        }
+        self.check_target(current)?;
+        if original != current
+            && (self.approved_target.as_ref() != Some(current)
+                || self.approved_source_task_id.as_deref() != Some(event_id))
+        {
+            return Err("WEB_WORK_CONTINUATION_SOURCE_REQUIRED".into());
+        }
+        Ok(())
+    }
 }
 
 fn continuation_ready_for_work(
@@ -212,9 +451,13 @@ fn continuation_ready_for_work(
     record: &Record,
 ) -> Result<(), String> {
     if record.phase != Phase::ContinuationQueued
-        || record.context_meter_status != ContextMeterStatus::Recorded
+        || record.context_meter_status == ContextMeterStatus::Pending
         || record.bound_target.as_ref() != Some(current)
         || record.handoff_event_id.is_none()
+        || (record.context_meter_status == ContextMeterStatus::RetryRequired
+            && (record.reconciliation_reason.is_some()
+                || !record.source_snapshot_verified
+                || record.source_fingerprint.is_none()))
     {
         return Err("WEB_WORK_ROLLOVER_PENDING".into());
     }
@@ -242,48 +485,148 @@ fn continuation_ready_for_work(
     Ok(())
 }
 
-pub(crate) fn acquire_web_work_lease(workspace: &Path, project: &str) -> Result<WorkLease, String> {
-    let store = ProjectStore::open(workspace, project)?;
-    // A new context intent can precede its handoff file, including after a
-    // previous rollover completed. Reserve either crash window for recovery.
-    let context_root = workspace.join(".catdesk/web-context");
-    if context_root
-        .try_exists()
-        .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
-    {
-        let meter =
-            WebContextStore::open(&context_root).map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
-        if let Some(key) = meter
-            .active_key(project)
-            .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
-            && meter
-                .pressure(&key)
-                .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
-                .rollover_intent
-                .is_some()
-        {
-            return Err("WEB_WORK_ROLLOVER_PENDING".into());
-        }
+fn completed_retry_context_allows_work(
+    pressure: Option<&PressureStatus>,
+    record: &Record,
+    current: &Target,
+) -> bool {
+    let Some(pressure) = pressure else {
+        return false;
+    };
+    // A failed advisory observation can leave the new key active. It must
+    // still be free of its own pending rollover before another task starts.
+    if pressure.key == key(&record.project_id, current) {
+        return pressure.rollover_intent.is_none();
     }
-    let approved_target = match store.active()? {
+    // If binding the meter failed, only the exact predecessor request may
+    // remain active. The caller has already proved the new paired target and
+    // completed continuation before this exception is considered.
+    pressure.key == key(&record.project_id, &record.source)
+        && pressure.rollover_intent.as_ref().is_some_and(|intent| {
+            intent.intent_id == record.intent_id
+                && intent.key == pressure.key
+                && intent.target_sha256 == record.source.digest
+                && intent.source_task_id == record.source_task_id
+                && intent.status == "REQUESTED"
+        })
+}
+
+pub(crate) fn acquire_web_work_lease(workspace: &Path, project: &str) -> Result<WorkLease, String> {
+    acquire_web_project_lease(workspace, project, |store, record| {
+        let current = paired(workspace, project).map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
+        let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)
+            .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
+        let wake = Store::open(&root).map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
+        continuation_ready_for_work(store, &wake, workspace, project, &current, record)?;
+        Ok(current)
+    })
+}
+
+/// Retirement may already have removed the Wake target after a durable intent.
+/// The caller verifies that exact active target or its matching tombstone;
+/// this fence still proves the original continuation and context quiescence.
+pub(super) fn acquire_web_retirement_lease(
+    workspace: &Path,
+    project: &str,
+    wake: &Store,
+    expected: Option<&Target>,
+) -> Result<WorkLease, String> {
+    if let Some(expected) = expected {
+        expected
+            .validate()
+            .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
+    }
+    acquire_web_project_lease(workspace, project, |store, record| {
+        let current = expected.ok_or("WEB_WORK_ROLLOVER_PENDING")?;
+        continuation_ready_for_work(store, wake, workspace, project, current, record)?;
+        Ok(current.clone())
+    })
+}
+
+fn acquire_web_project_lease(
+    workspace: &Path,
+    project: &str,
+    completed_target: impl FnOnce(&ProjectStore, &Record) -> Result<Target, String>,
+) -> Result<WorkLease, String> {
+    let store = ProjectStore::open(workspace, project)?;
+    let active = store.active()?;
+    let approved_target = match active.as_ref() {
         None if store.handoff_request()?.is_none() => None,
         Some(record) if record.phase == Phase::ContinuationQueued => {
-            let current = paired(workspace, project).map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
-            let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)
-                .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
-            let wake = Store::open(&root).map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
-            continuation_ready_for_work(&store, &wake, workspace, project, &current, &record)?;
-            Some(current)
+            Some(completed_target(&store, record)?)
+        }
+        Some(record)
+            if record.phase == Phase::Quarantined
+                && disposition::completed(&store, record)?.is_some() =>
+        {
+            Some(record.source.clone())
         }
         _ => return Err("WEB_WORK_ROLLOVER_PENDING".into()),
     };
+    // A new context intent can precede its handoff file, including after a
+    // previous rollover completed. Sample its active key and intent together.
+    let context_root = workspace.join(".catdesk/web-context");
+    let pressure = if context_root
+        .try_exists()
+        .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
+    {
+        // A sibling may briefly meter its result. Retry only this metadata
+        // read before admitting any tool; never replay a task operation.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            match WebContextStore::open_nonblocking(&context_root)
+                .and_then(|meter| meter.active_pressure(project))
+            {
+                Err(reason)
+                    if reason == "WEB_CONTEXT_BUSY" && std::time::Instant::now() < deadline =>
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(10))
+                }
+                result => break result.map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?,
+            }
+        }
+    } else {
+        None
+    };
+    match (active.as_ref(), approved_target.as_ref()) {
+        (Some(record), Some(current))
+            if record.phase == Phase::ContinuationQueued
+                && record.context_meter_status == ContextMeterStatus::RetryRequired =>
+        {
+            if !completed_retry_context_allows_work(pressure.as_ref(), record, current) {
+                return Err("WEB_WORK_ROLLOVER_PENDING".into());
+            }
+        }
+        _ if pressure
+            .as_ref()
+            .is_some_and(|value| value.rollover_intent.is_some())
+            && !active.as_ref().is_some_and(|record| {
+                disposition::context_allows_new_work(&store, record, pressure.as_ref()) == Ok(true)
+            }) =>
+        {
+            return Err("WEB_WORK_ROLLOVER_PENDING".into());
+        }
+        _ => {}
+    }
     Ok(WorkLease {
         _store: store,
+        // completed_target has already verified the exact continuation proof,
+        // including this source-task identity. Never infer it from a URL alone.
+        approved_source_task_id: approved_target.as_ref().and_then(|_| {
+            active
+                .as_ref()
+                .filter(|record| record.phase == Phase::ContinuationQueued)
+                .map(|record| record.source_task_id.clone())
+        }),
+        fenced_source_task_id: active
+            .as_ref()
+            .filter(|record| record.phase == Phase::Quarantined)
+            .map(|record| record.source_task_id.clone()),
         approved_target,
     })
 }
 
-fn plain(path: &Path, directory: bool) -> Result<(), String> {
+pub(super) fn plain(path: &Path, directory: bool) -> Result<(), String> {
     let metadata = fs::symlink_metadata(path).map_err(|_| "WEB_ROLLOVER_STATE_UNAVAILABLE")?;
     #[cfg(windows)]
     {
@@ -301,7 +644,7 @@ fn plain(path: &Path, directory: bool) -> Result<(), String> {
     Ok(())
 }
 
-fn directory(path: &Path) -> Result<(), String> {
+pub(super) fn directory(path: &Path) -> Result<(), String> {
     if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
         directory(parent)?;
     }
@@ -394,12 +737,23 @@ impl ProjectStore {
             return Err("WEB_ROLLOVER_STATE_INVALID".into());
         }
         record.source.validate()?;
+        if record.bootstrap_progress.is_some() && record.phase == Phase::Prepared {
+            return Err("WEB_ROLLOVER_STATE_INVALID".into());
+        }
+        task_handoff::validate_reference(self, &record)?;
+        if record.task_resume_event_id.as_ref().is_some_and(|id| {
+            record.task_handoff.is_none()
+                || record.phase != Phase::ContinuationQueued
+                || id != &task_resume_id(&record)
+        }) {
+            return Err("WEB_TASK_RESUME_STATE_INVALID".into());
+        }
         if record.message_digest
             != message_digest(
                 &record.project_id,
                 &record.intent_id,
                 &record.source.url,
-                &record.handoff,
+                &task_handoff::content(&record)?,
             )?
         {
             return Err("WEB_ROLLOVER_HANDOFF_CHANGED".into());
@@ -431,16 +785,428 @@ impl ProjectStore {
         }
         Ok(Some(request))
     }
+    fn preserve_recorded_handoff_request(
+        &self,
+        proposed: HandoffRequest,
+    ) -> Result<HandoffRequest, String> {
+        let project = self.root.file_name().and_then(|v| v.to_str()).unwrap_or("");
+        proposed.validate(project)?;
+        let path = self
+            .root
+            .join(format!("handoff-{}.json", proposed.intent_id));
+        if !path
+            .try_exists()
+            .map_err(|_| "WEB_HANDOFF_REQUEST_UNAVAILABLE")?
+        {
+            return Ok(proposed);
+        }
+        plain(&path, false)?;
+        let saved: HandoffRequest = read(&path)?;
+        saved.validate(project)?;
+        let mut comparable = saved.clone();
+        comparable.schema_version = proposed.schema_version;
+        comparable.message = proposed.message.clone();
+        if comparable != proposed {
+            return Err("WEB_HANDOFF_REQUEST_IDENTITY_CHANGED".into());
+        }
+        // A crash may leave the request file before its active pointer. Its
+        // exact prompt/version wins; never replace it with a newer template.
+        Ok(saved)
+    }
+
     fn save_handoff_request(&self, request: &HandoffRequest) -> Result<(), String> {
-        request.validate(&request.project_id)?;
-        atomic(
-            &self
-                .root
-                .join(format!("handoff-{}.json", request.intent_id)),
-            request,
-        )?;
+        if self.preserve_recorded_handoff_request(request.clone())? != *request {
+            return Err("WEB_HANDOFF_REQUEST_ALREADY_RECORDED".into());
+        }
+        let path = self
+            .root
+            .join(format!("handoff-{}.json", request.intent_id));
+        if !path
+            .try_exists()
+            .map_err(|_| "WEB_HANDOFF_REQUEST_UNAVAILABLE")?
+        {
+            atomic(&path, request)?;
+        }
         atomic(&self.root.join("handoff-active.json"), &request.intent_id)
     }
+}
+
+fn draft_artifact_path(
+    store: &ProjectStore,
+    record: &Record,
+    name: String,
+) -> Result<PathBuf, String> {
+    Ok(task_handoff::artifact_root(record)?
+        .unwrap_or_else(|| store.root.clone())
+        .join(name))
+}
+fn draft_archive_path(store: &ProjectStore, record: &Record) -> Result<PathBuf, String> {
+    draft_artifact_path(
+        store,
+        record,
+        format!("draft-archive-{}.json", record.intent_id),
+    )
+}
+fn draft_archive_receipt_path(store: &ProjectStore, record: &Record) -> Result<PathBuf, String> {
+    draft_artifact_path(
+        store,
+        record,
+        format!("draft-archive-complete-{}.json", record.intent_id),
+    )
+}
+
+fn read_draft_archive(
+    store: &ProjectStore,
+    record: &Record,
+) -> Result<Option<DraftArchive>, String> {
+    let path = draft_archive_path(store, record)?;
+    if !path
+        .try_exists()
+        .map_err(|_| "WEB_DRAFT_ARCHIVE_UNAVAILABLE")?
+    {
+        return Ok(None);
+    }
+    plain(&path, false)?;
+    let archive: DraftArchive = read(&path).map_err(|_| "WEB_DRAFT_ARCHIVE_INVALID")?;
+    let expected = runtime::compose_bootstrap_message(
+        &record.project_id,
+        &record.intent_id,
+        &record.source,
+        &task_handoff::content(record)?,
+    )?;
+    if archive.schema_version != 1
+        || archive.project_id != record.project_id
+        || archive.intent_id != record.intent_id
+        || archive.source != record.source
+        || archive.message_digest != record.message_digest
+        || archive.expected_text != expected
+        || archive.actual_text.len() > 16 * 1024
+        || archive.observed_bytes != archive.actual_text.len()
+        || digest(
+            &archive
+                .actual_text
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" "),
+        ) != record.message_digest
+    {
+        return Err("WEB_DRAFT_ARCHIVE_INVALID".into());
+    }
+    Ok(Some(archive))
+}
+
+pub(super) fn create_private_once<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
+    create_private_once_bounded(path, value, 40 * 1024)
+}
+
+pub(super) fn create_private_once_bounded<T: Serialize>(
+    path: &Path,
+    value: &T,
+    max_bytes: usize,
+) -> Result<(), String> {
+    let bytes = serde_json::to_vec(value).map_err(|_| "WEB_DRAFT_ARCHIVE_INVALID")?;
+    if bytes.len() > max_bytes {
+        return Err("WEB_DRAFT_ARCHIVE_TOO_LARGE".into());
+    }
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        options.custom_flags(0x0020_0000);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW);
+    }
+    let mut file = options
+        .open(path)
+        .map_err(|_| "WEB_DRAFT_ARCHIVE_UNAVAILABLE")?;
+    file.write_all(&bytes)
+        .and_then(|_| file.sync_all())
+        .map_err(|_| "WEB_DRAFT_ARCHIVE_UNAVAILABLE")?;
+    plain(path, false)?;
+    Ok(())
+}
+
+fn save_draft_archive(
+    store: &ProjectStore,
+    record: &Record,
+    actual_text: &str,
+    observed_bytes: usize,
+) -> Result<(), String> {
+    if actual_text.len() > 16 * 1024
+        || actual_text.len() != observed_bytes
+        || digest(&actual_text.split_whitespace().collect::<Vec<_>>().join(" "))
+            != record.message_digest
+    {
+        return Err("WEB_DRAFT_ARCHIVE_WITNESS_INVALID".into());
+    }
+    if let Some(existing) = read_draft_archive(store, record)? {
+        return if existing.actual_text == actual_text {
+            Ok(())
+        } else {
+            Err("WEB_DRAFT_ARCHIVE_WITNESS_CHANGED".into())
+        };
+    }
+    let archive = DraftArchive {
+        schema_version: 1,
+        project_id: record.project_id.clone(),
+        intent_id: record.intent_id.clone(),
+        source: record.source.clone(),
+        message_digest: record.message_digest.clone(),
+        expected_text: runtime::compose_bootstrap_message(
+            &record.project_id,
+            &record.intent_id,
+            &record.source,
+            &task_handoff::content(record)?,
+        )?,
+        actual_text: actual_text.into(),
+        observed_bytes,
+        recorded_utc: now(),
+    };
+    create_private_once(&draft_archive_path(store, record)?, &archive)?;
+    if read_draft_archive(store, record)?.as_ref() != Some(&archive) {
+        return Err("WEB_DRAFT_ARCHIVE_READBACK_FAILED".into());
+    }
+    Ok(())
+}
+
+fn read_draft_archive_receipt(
+    store: &ProjectStore,
+    record: &Record,
+) -> Result<Option<DraftArchiveReceipt>, String> {
+    let path = draft_archive_receipt_path(store, record)?;
+    if !path
+        .try_exists()
+        .map_err(|_| "WEB_DRAFT_ARCHIVE_UNAVAILABLE")?
+    {
+        return Ok(None);
+    }
+    plain(&path, false)?;
+    let receipt: DraftArchiveReceipt =
+        read(&path).map_err(|_| "WEB_DRAFT_ARCHIVE_RECEIPT_INVALID")?;
+    if receipt.schema_version != 1
+        || receipt.project_id != record.project_id
+        || receipt.intent_id != record.intent_id
+        || receipt.source_digest != record.source.digest
+        || receipt.message_digest != record.message_digest
+        || receipt.evidence != "ARCHIVE_RECORDED_HOME_EMPTY"
+        || read_draft_archive(store, record)?.is_none()
+    {
+        return Err("WEB_DRAFT_ARCHIVE_RECEIPT_INVALID".into());
+    }
+    Ok(Some(receipt))
+}
+
+fn draft_repair_path(store: &ProjectStore, record: &Record, kind: &str) -> Result<PathBuf, String> {
+    draft_artifact_path(
+        store,
+        record,
+        format!("draft-repair-{kind}-{}.json", record.intent_id),
+    )
+}
+
+fn require_draft_repair_record(record: &Record, intent: &str, raw: &str) -> Result<(), String> {
+    if record.intent_id != intent {
+        return Err("WEB_ROLLOVER_INTENT_CHANGED".into());
+    }
+    if raw.len() != 64
+        || !raw
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    {
+        return Err("WEB_DRAFT_REPAIR_RAW_DIGEST_INVALID".into());
+    }
+    if record.phase != Phase::Submitting
+        || record.bootstrap_progress != Some(runtime::BootstrapProgress::TextEntryAuthorized)
+        || record.receipt.is_some()
+        || record.bound_target.is_some()
+        || record.quarantine.is_some()
+        || record.reconciliation_reason.is_some()
+    {
+        return Err("WEB_DRAFT_REPAIR_PHASE_INVALID".into());
+    }
+    Ok(())
+}
+
+fn require_draft_repair_identity(record: &Record, actual: &str) -> Result<(), String> {
+    let has_identifier = |wanted: &str| {
+        actual
+            .split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_' && ch != '-')
+            .any(|token| token == wanted)
+    };
+    if !has_identifier(&record.project_id) || !has_identifier(&record.source_task_id) {
+        return Err("WEB_DRAFT_REPAIR_IDENTITY_WITNESS_REQUIRED".into());
+    }
+    Ok(())
+}
+
+fn read_draft_repair_witness(
+    store: &ProjectStore,
+    record: &Record,
+    raw: &str,
+) -> Result<Option<DraftRepairWitness>, String> {
+    let path = draft_repair_path(store, record, "witness")?;
+    if !path
+        .try_exists()
+        .map_err(|_| "WEB_DRAFT_REPAIR_UNAVAILABLE")?
+    {
+        return Ok(None);
+    }
+    plain(&path, false)?;
+    if fs::metadata(&path)
+        .map_err(|_| "WEB_DRAFT_REPAIR_UNAVAILABLE")?
+        .len()
+        > 40 * 1024
+    {
+        return Err("WEB_DRAFT_REPAIR_WITNESS_INVALID".into());
+    }
+    let witness: DraftRepairWitness =
+        read(&path).map_err(|_| "WEB_DRAFT_REPAIR_WITNESS_INVALID")?;
+    let expected = runtime::compose_bootstrap_message(
+        &record.project_id,
+        &record.intent_id,
+        &record.source,
+        &task_handoff::content(record)?,
+    )?;
+    if witness.schema_version != 1
+        || witness.project_id != record.project_id
+        || witness.intent_id != record.intent_id
+        || witness.source_task_id != record.source_task_id
+        || witness.source != record.source
+        || witness.message_digest != record.message_digest
+        || witness.expected_text != expected
+        || witness.actual_raw_digest != raw
+        || witness.recorded_utc == 0
+    {
+        return Err("WEB_DRAFT_REPAIR_WITNESS_INVALID".into());
+    }
+    runtime::validate_bootstrap_repair_witness(&witness.actual_text, &expected, raw)?;
+    require_draft_repair_identity(record, &witness.actual_text)?;
+    Ok(Some(witness))
+}
+
+fn save_draft_repair_witness(
+    store: &ProjectStore,
+    record: &Record,
+    raw: &str,
+    actual: &str,
+) -> Result<(), String> {
+    let expected = runtime::compose_bootstrap_message(
+        &record.project_id,
+        &record.intent_id,
+        &record.source,
+        &task_handoff::content(record)?,
+    )?;
+    runtime::validate_bootstrap_repair_witness(actual, &expected, raw)?;
+    require_draft_repair_identity(record, actual)?;
+    if let Some(previous) = read_draft_repair_witness(store, record, raw)? {
+        return if previous.actual_text == actual {
+            Ok(())
+        } else {
+            Err("WEB_DRAFT_REPAIR_WITNESS_CHANGED".into())
+        };
+    }
+    let witness = DraftRepairWitness {
+        schema_version: 1,
+        project_id: record.project_id.clone(),
+        intent_id: record.intent_id.clone(),
+        source_task_id: record.source_task_id.clone(),
+        source: record.source.clone(),
+        message_digest: record.message_digest.clone(),
+        expected_text: expected,
+        actual_text: actual.into(),
+        actual_raw_digest: raw.into(),
+        recorded_utc: now(),
+    };
+    create_private_once(&draft_repair_path(store, record, "witness")?, &witness)?;
+    if read_draft_repair_witness(store, record, raw)?.as_ref() != Some(&witness) {
+        return Err("WEB_DRAFT_REPAIR_READBACK_FAILED".into());
+    }
+    Ok(())
+}
+
+fn read_draft_repair_checkpoint(
+    store: &ProjectStore,
+    record: &Record,
+    raw: &str,
+    kind: &str,
+    evidence: &str,
+) -> Result<Option<DraftRepairCheckpoint>, String> {
+    let path = draft_repair_path(store, record, kind)?;
+    if !path
+        .try_exists()
+        .map_err(|_| "WEB_DRAFT_REPAIR_UNAVAILABLE")?
+    {
+        return Ok(None);
+    }
+    plain(&path, false)?;
+    if fs::metadata(&path)
+        .map_err(|_| "WEB_DRAFT_REPAIR_UNAVAILABLE")?
+        .len()
+        > 4096
+    {
+        return Err("WEB_DRAFT_REPAIR_CHECKPOINT_INVALID".into());
+    }
+    let checkpoint: DraftRepairCheckpoint =
+        read(&path).map_err(|_| "WEB_DRAFT_REPAIR_CHECKPOINT_INVALID")?;
+    if checkpoint.schema_version != 1
+        || checkpoint.project_id != record.project_id
+        || checkpoint.intent_id != record.intent_id
+        || checkpoint.source != record.source
+        || checkpoint.message_digest != record.message_digest
+        || checkpoint.actual_raw_digest != raw
+        || checkpoint.evidence != evidence
+        || checkpoint.recorded_utc == 0
+        || read_draft_repair_witness(store, record, raw)?.is_none()
+    {
+        return Err("WEB_DRAFT_REPAIR_CHECKPOINT_INVALID".into());
+    }
+    if kind == "complete"
+        && read_draft_repair_checkpoint(store, record, raw, "attempt", "WRITE_ATTEMPTED")?.is_none()
+    {
+        return Err("WEB_DRAFT_REPAIR_ATTEMPT_REQUIRED".into());
+    }
+    Ok(Some(checkpoint))
+}
+
+fn save_draft_repair_checkpoint(
+    store: &ProjectStore,
+    record: &Record,
+    raw: &str,
+    kind: &str,
+    evidence: &str,
+) -> Result<(), String> {
+    if read_draft_repair_witness(store, record, raw)?.is_none() {
+        return Err("WEB_DRAFT_REPAIR_WITNESS_REQUIRED".into());
+    }
+    if kind == "complete"
+        && read_draft_repair_checkpoint(store, record, raw, "attempt", "WRITE_ATTEMPTED")?.is_none()
+    {
+        return Err("WEB_DRAFT_REPAIR_ATTEMPT_REQUIRED".into());
+    }
+    if read_draft_repair_checkpoint(store, record, raw, kind, evidence)?.is_some() {
+        return Ok(());
+    }
+    let checkpoint = DraftRepairCheckpoint {
+        schema_version: 1,
+        project_id: record.project_id.clone(),
+        intent_id: record.intent_id.clone(),
+        source: record.source.clone(),
+        message_digest: record.message_digest.clone(),
+        actual_raw_digest: raw.into(),
+        evidence: evidence.into(),
+        recorded_utc: now(),
+    };
+    create_private_once(&draft_repair_path(store, record, kind)?, &checkpoint)?;
+    if read_draft_repair_checkpoint(store, record, raw, kind, evidence)?.as_ref()
+        != Some(&checkpoint)
+    {
+        return Err("WEB_DRAFT_REPAIR_READBACK_FAILED".into());
+    }
+    Ok(())
 }
 
 fn registered_project(workspace: &Path, project: &str) -> Result<AutonomousProjectV1, String> {
@@ -474,6 +1240,18 @@ fn handoff_request_message(
     )
 }
 
+fn handoff_request_message_v2(
+    project: &str,
+    intent: &str,
+    source_task: &str,
+    native_thread: &Option<String>,
+) -> String {
+    let owner = native_thread.as_deref().unwrap_or("UNBOUND");
+    format!(
+        "CatDesk handoff request for project {project}, task {source_task}, intent {intent}. Native Codex thread: {owner}. Reply with exactly one JSON object, no Markdown or surrounding prose, at most 3000 UTF-8 bytes: {{\"schemaVersion\":2,\"projectId\":\"{project}\",\"sourceTaskId\":\"{source_task}\",\"objective\":\"...\",\"completed\":[],\"remaining\":[\"...\"],\"nextAction\":\"...\",\"ownedPaths\":[],\"verification\":[],\"blockers\":[],\"gitState\":{{\"basis\":\"UNKNOWN\",\"branch\":null,\"headCommit\":null,\"worktreeSummary\":null,\"evidence\":[]}},\"importantDecisions\":[]}}. Retain important decisions. Git state is source-reported, not verified native state: use SOURCE_REPORTED only for observed fields with evidence; otherwise keep UNKNOWN and null fields. Report only your own observed work, evidence and unresolved steps. Do not infer native work completion from a process exit or queue status, claim native-owned paths, execute code, or repeat work owned by the native thread. This request is only for a durable handoff."
+    )
+}
+
 fn message_digest(
     project: &str,
     intent: &str,
@@ -492,14 +1270,82 @@ fn key(project: &str, target: &Target) -> ConversationKey {
 }
 
 fn paired(workspace: &Path, project: &str) -> Result<Target, String> {
-    let target = mcp::operator_read_project_web_target(workspace, project)
-        .map_err(|_| "WEB_ROLLOVER_PAIRED_TARGET_REQUIRED")?
+    let target = mcp::operator_read_project_web_target_diagnosed(workspace, project)
+        .map_err(|failure| failure.code)?
         .ok_or("WEB_ROLLOVER_TARGET_UNBOUND")?;
     Target::new(target.generation, target.url)
 }
 
+fn request_handoff_context(
+    workspace: &Path,
+    store: &ProjectStore,
+    meter: &WebContextStore,
+    project: &str,
+    source: &Target,
+    source_task: &str,
+) -> Result<Option<crate::web_conversation_context::RolloverIntent>, String> {
+    if let Some(previous) = store.active()?
+        && disposition::completed(store, &previous)?.is_some()
+    {
+        if previous.source != *source {
+            return Err("WEB_QUARANTINE_SOURCE_CHANGED".into());
+        }
+        let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
+            workspace,
+        )?)?;
+        return disposition::request_successor_context(
+            store,
+            &previous,
+            meter,
+            &wake,
+            source_task,
+            now(),
+        );
+    }
+    meter.request_rollover_if_due(
+        &key(project, source),
+        &source.digest,
+        source_task,
+        true,
+        now(),
+    )
+}
+
+/// Existing context intents stay REQUESTED for old readers. Do not let their
+/// historical task, or any pre-disposition task, become an automatic anchor.
+pub(super) fn source_task_after_disposition(
+    workspace: &Path,
+    wake: &Store,
+    project: &str,
+    source: &Target,
+    task: &str,
+) -> Result<bool, String> {
+    let root = workspace.join(".catdesk/web-rollovers").join(project);
+    if !root
+        .try_exists()
+        .map_err(|_| "WEB_ROLLOVER_STATE_UNAVAILABLE")?
+    {
+        return Ok(true);
+    }
+    let store = ProjectStore::open_existing(workspace, project)?;
+    let Some(previous) = store.active()? else {
+        return Ok(true);
+    };
+    if disposition::completed(&store, &previous)?.is_none() {
+        return Ok(true);
+    }
+    if previous.source != *source {
+        return Err("WEB_QUARANTINE_SOURCE_CHANGED".into());
+    }
+    match disposition::validate_new_source_task(&store, &previous, wake, task) {
+        Ok(()) => Ok(true),
+        Err(error) if error == "WEB_QUARANTINE_NEW_COMPLETED_TASK_REQUIRED" => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
 fn confirm_request_enabled(workspace: &Path, record: &Record) -> Result<(), String> {
-    let meter = WebContextStore::open(workspace.join(".catdesk/web-context"))?;
+    let meter = WebContextStore::open_nonblocking(workspace.join(".catdesk/web-context"))?;
     let intent = meter
         .request_rollover_if_due(
             &key(&record.project_id, &record.source),
@@ -519,6 +1365,7 @@ fn summary(record: &Record) -> Value {
     json!({"schemaVersion":1,"projectId":record.project_id,"intentId":record.intent_id,
         "sourceTaskId":record.source_task_id,"source":record.source,"phase":record.phase,
         "messageDigest":record.message_digest,"receipt":record.receipt,
+        "bootstrapProgress":record.bootstrap_progress,
         "continuationEventId":record.continuation_event_id,
         "boundTarget":record.bound_target,
         "reconciliationRequired":record.reconciliation_reason.is_some(),
@@ -527,7 +1374,67 @@ fn summary(record: &Record) -> Value {
         "handoffEventId":record.handoff_event_id,
         "sourceProgressFingerprint":record.source_fingerprint,
         "sourceSnapshotVerified":record.source_snapshot_verified,
-        "continuationProved":false,"oldConversationPreserved":true})
+        "grantedTaskContextPreserved":record.task_handoff.is_some(),
+        "taskResumeEventId":record.task_resume_event_id,
+        "quarantine":record.quarantine,
+        "continuationProved":false,"continuationProofStatus":"NOT_CHECKED",
+        "oldConversationPreserved":true})
+}
+
+fn resumable_bootstrap(record: &Record) -> bool {
+    record.phase == Phase::Submitting
+        && record.receipt.is_none()
+        && record.bound_target.is_none()
+        && (record.reconciliation_reason.is_none()
+            || (record.bootstrap_progress == Some(runtime::BootstrapProgress::DraftReady)
+                && record.reconciliation_reason.as_deref()
+                    == Some("WEB_BOOTSTRAP_PRE_SEND_AMBIGUOUS_NO_RESEND")))
+        && matches!(
+            record.bootstrap_progress,
+            Some(
+                runtime::BootstrapProgress::TextEntryAuthorized
+                    | runtime::BootstrapProgress::DraftReady
+            )
+        )
+}
+
+fn checkpoint_bootstrap_progress(
+    record: &mut Record,
+    stage: runtime::BootstrapProgress,
+) -> Result<(), String> {
+    use runtime::BootstrapProgress as Progress;
+    if !matches!(record.phase, Phase::Prepared | Phase::Submitting) {
+        return Err("WEB_BOOTSTRAP_PROGRESS_PHASE_INVALID".into());
+    }
+    let next = match record.bootstrap_progress {
+        None => Progress::TextEntryAuthorized,
+        Some(Progress::TextEntryAuthorized) => Progress::DraftReady,
+        Some(Progress::DraftReady) => Progress::SendAttempted,
+        Some(Progress::SendAttempted) => {
+            return Err("WEB_BOOTSTRAP_OUTCOME_UNKNOWN_NO_RESEND".into());
+        }
+    };
+    if stage > next {
+        return Err("WEB_BOOTSTRAP_PROGRESS_ORDER_INVALID".into());
+    }
+    let already_verified_ready = record.bootstrap_progress == Some(Progress::DraftReady);
+    record.phase = Phase::Submitting;
+    if record.bootstrap_progress.is_none_or(|saved| stage > saved) {
+        record.bootstrap_progress = Some(stage);
+    }
+    // A resumed helper emits DRAFT_READY only after rechecking the full owned
+    // home draft. Before SEND_ATTEMPTED only reads and guarded, text-preserving
+    // native formatting repair are permitted on resume; no keyboard/submit
+    // event is permitted until the durable SEND_ATTEMPTED acknowledgement.
+    // Repair only the overly broad v2 pre-send fence, never another incident.
+    if already_verified_ready
+        && stage == Progress::DraftReady
+        && record.reconciliation_reason.as_deref()
+            == Some("WEB_BOOTSTRAP_PRE_SEND_AMBIGUOUS_NO_RESEND")
+    {
+        record.reconciliation_reason = None;
+    }
+    Ok(())
 }
 
 fn handoff_request_summary(request: &HandoffRequest) -> Value {
@@ -544,15 +1451,36 @@ pub(super) fn auto_stage(
 ) -> Result<AutoStage, String> {
     let store = ProjectStore::open(workspace, project)?;
     if let Some(record) = store.active()? {
-        if matches!(
+        if (matches!(
             record.phase,
             Phase::Prepared | Phase::ResponsePending | Phase::Created | Phase::Bound
-        ) && (record.handoff_event_id.is_none() || record.source_fingerprint.is_none())
+        ) || resumable_bootstrap(&record))
+            && (record.handoff_event_id.is_none() || record.source_fingerprint.is_none())
         {
             return Ok(AutoStage::SourceWitnessRequired);
         }
         match record.phase {
-            Phase::Submitting => return Ok(AutoStage::SubmissionUnknown),
+            Phase::Submitting => {
+                return Ok(if resumable_bootstrap(&record) {
+                    AutoStage::Execute
+                } else {
+                    AutoStage::SubmissionUnknown
+                });
+            }
+            Phase::Quarantined => {
+                if disposition::completed(&store, &record)?.is_some() {
+                    return Ok(
+                        if store.handoff_request()?.is_some_and(|request| {
+                            request.intent_id != record.intent_id && request.source == *current
+                        }) {
+                            AutoStage::CollectHandoff
+                        } else {
+                            AutoStage::Observe
+                        },
+                    );
+                }
+                return Ok(AutoStage::Quarantined);
+            }
             Phase::Prepared | Phase::ResponsePending | Phase::Created | Phase::Bound => {
                 return Ok(AutoStage::Execute);
             }
@@ -563,6 +1491,24 @@ pub(super) fn auto_stage(
             }
             Phase::ContinuationQueued if record.source == *current => {
                 return Err("WEB_ROLLOVER_QUEUED_SOURCE_STILL_BOUND".into());
+            }
+            Phase::ContinuationQueued
+                if record.task_handoff.is_some() && record.task_resume_event_id.is_none() =>
+            {
+                let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
+                    workspace,
+                )?)?;
+                return Ok(
+                    if continuation_ready_for_work(
+                        &store, &wake, workspace, project, current, &record,
+                    )
+                    .is_ok()
+                    {
+                        AutoStage::Execute
+                    } else {
+                        AutoStage::AwaitContinuation
+                    },
+                );
             }
             Phase::ContinuationQueued => {}
         }
@@ -648,32 +1594,156 @@ pub(super) fn record_auto_status(
     target_generation: Option<u64>,
     reason: Option<&str>,
 ) -> Result<(), String> {
-    if !stage.bytes().all(|b| b.is_ascii_uppercase() || b == b'_') {
+    record_auto_status_at(workspace, project, stage, target_generation, reason, now())
+}
+
+fn record_auto_status_at(
+    workspace: &Path,
+    project: &str,
+    stage: &str,
+    target_generation: Option<u64>,
+    reason: Option<&str>,
+    tick_utc: u64,
+) -> Result<(), String> {
+    if !valid_auto_stage(stage) || tick_utc == 0 {
         return Err("WEB_AUTO_STATUS_INVALID".into());
     }
     let reason = reason.map(|value| {
-        if value.len() <= 128
-            && value
-                .bytes()
-                .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
-        {
+        if valid_auto_reason(value) {
             value.to_owned()
         } else {
-            "WEB_AUTO_ATTENTION".into()
+            let code = crate::operator_web_error_code(value);
+            if code == "WEB_OPERATION_REFUSED" {
+                "WEB_AUTO_ATTENTION".into()
+            } else {
+                code.into()
+            }
         }
     });
     let store = ProjectStore::open(workspace, project)?;
+    let previous = read_auto_status(&store).ok().flatten();
+    let previous_failure = previous.as_ref().and_then(retained_auto_failure);
+    let previous_retry = previous.as_ref().and_then(retained_auto_retry);
+    let last_failure = if matches!(stage, "AWAITING_RESPONSE" | "ROLLOVER_ADVANCED") {
+        None
+    } else if stage == "ATTENTION"
+        && let Some(code) = reason.as_deref()
+        && code != "WEB_ROLLOVER_NOT_DUE_OR_DISABLED"
+    {
+        Some(AutoFailure {
+            reason: code.into(),
+            tick_utc,
+            target_generation,
+        })
+    } else {
+        previous_failure
+    };
+    let retry = if stage == "ATTENTION"
+        && reason
+            .as_deref()
+            .is_some_and(|code| code != "WEB_ROLLOVER_NOT_DUE_OR_DISABLED")
+    {
+        let failures = previous_retry
+            .filter(|retry| retry.target_generation == target_generation)
+            .map_or(1, |retry| retry.consecutive_failures.saturating_add(1))
+            .min(AUTO_RETRY_MAX_FAILURES);
+        Some(AutoRetry {
+            consecutive_failures: failures,
+            next_attempt_utc: tick_utc.saturating_add(auto_retry_delay(failures)),
+            target_generation,
+        })
+    } else if matches!(
+        stage,
+        "OBSERVED"
+            | "HANDOFF_REQUESTED"
+            | "AWAITING_HANDOFF"
+            | "AWAITING_RESPONSE"
+            | "ROLLOVER_ADVANCED"
+    ) {
+        // A successful browser step clears delay, independently of retained
+        // failure diagnostics. Waiting/stopped/disabled ticks do not renew it.
+        None
+    } else {
+        previous_retry
+    };
     atomic(
         &store.root.join("auto-status.json"),
         &AutoStatus {
-            schema_version: 1,
+            schema_version: AUTO_STATUS_SCHEMA_VERSION,
             project_id: project.into(),
-            tick_utc: now(),
+            tick_utc,
             stage: stage.into(),
             target_generation,
             reason,
+            last_failure,
+            retry,
         },
     )
+}
+
+fn retained_auto_failure(status: &AutoStatus) -> Option<AutoFailure> {
+    status.last_failure.clone().or_else(|| {
+        (status.stage == "ATTENTION")
+            .then_some(status.reason.as_deref())
+            .flatten()
+            .filter(|reason| *reason != "WEB_ROLLOVER_NOT_DUE_OR_DISABLED")
+            .map(|reason| AutoFailure {
+                reason: reason.into(),
+                tick_utc: status.tick_utc,
+                target_generation: status.target_generation,
+            })
+    })
+}
+
+fn retained_auto_retry(status: &AutoStatus) -> Option<AutoRetry> {
+    status.retry.clone().or_else(|| {
+        // Read older attention records conservatively without rewriting them.
+        if status.schema_version != 1 || status.stage != "ATTENTION" {
+            return None;
+        }
+        let failure = retained_auto_failure(status)?;
+        Some(AutoRetry {
+            consecutive_failures: 1,
+            next_attempt_utc: failure.tick_utc.saturating_add(AUTO_RETRY_BASE_SECONDS),
+            target_generation: failure.target_generation,
+        })
+    })
+}
+
+pub(super) fn automatic_retry_after(
+    workspace: &Path,
+    project: &str,
+    generation: u64,
+) -> Result<Option<u64>, String> {
+    if !valid_id(project) {
+        return Err("WEB_PROJECT_INVALID".into());
+    }
+    let root = workspace.join(".catdesk/web-rollovers").join(project);
+    match fs::symlink_metadata(&root) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err("WEB_AUTO_STATUS_UNAVAILABLE".into()),
+        Ok(_) => {}
+    }
+    let store = ProjectStore::open_existing(workspace, project)?;
+    Ok(read_auto_status(&store)?
+        .as_ref()
+        .and_then(retained_auto_retry)
+        .filter(|retry| retry.target_generation == Some(generation))
+        .map(|retry| retry.next_attempt_utc))
+}
+
+fn valid_auto_stage(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value.bytes().all(|b| b.is_ascii_uppercase() || b == b'_')
+}
+
+fn valid_auto_reason(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
 }
 
 fn read_auto_status(store: &ProjectStore) -> Result<Option<AutoStatus>, String> {
@@ -685,7 +1755,8 @@ fn read_auto_status(store: &ProjectStore) -> Result<Option<AutoStatus>, String> 
         return Ok(None);
     }
     let status: AutoStatus = read(&path)?;
-    if status.schema_version != 1
+    if (status.schema_version != 1 && status.schema_version != AUTO_STATUS_SCHEMA_VERSION)
+        || (status.schema_version == 1 && status.retry.is_some())
         || status.project_id
             != store
                 .root
@@ -693,6 +1764,26 @@ fn read_auto_status(store: &ProjectStore) -> Result<Option<AutoStatus>, String> 
                 .and_then(|value| value.to_str())
                 .unwrap_or("")
         || status.tick_utc == 0
+        || !valid_auto_stage(&status.stage)
+        || status
+            .reason
+            .as_deref()
+            .is_some_and(|reason| !valid_auto_reason(reason))
+        || status
+            .last_failure
+            .as_ref()
+            .is_some_and(|failure| failure.tick_utc == 0 || !valid_auto_reason(&failure.reason))
+        || status.retry.as_ref().is_some_and(|retry| {
+            retry.consecutive_failures == 0
+                || retry.consecutive_failures > AUTO_RETRY_MAX_FAILURES
+                || retained_auto_failure(&status).is_none_or(|failure| {
+                    failure.target_generation != retry.target_generation
+                        || retry.next_attempt_utc
+                            != failure
+                                .tick_utc
+                                .saturating_add(auto_retry_delay(retry.consecutive_failures))
+                })
+        })
     {
         return Err("WEB_AUTO_STATUS_INVALID".into());
     }
@@ -701,7 +1792,37 @@ fn read_auto_status(store: &ProjectStore) -> Result<Option<AutoStatus>, String> 
 
 pub(super) fn status_read_only(workspace: &Path, project: &str) -> Result<Value, String> {
     let store = ProjectStore::open_existing(workspace, project)?;
-    status_from_store(&store, project)
+    let mut result = status_from_store(&store, project)?;
+    if let Some(record) = store.active()? {
+        result["creationAdmission"] =
+            match crate::wake_protocol_client::wake_root_for_workspace(workspace)
+                .and_then(|root| admission::status(&root, &creation_identity(&record)))
+            {
+                Ok(status) => status,
+                Err(_) => json!({"status":"UNAVAILABLE","liveOwnerVerified":false}),
+            };
+    }
+    if let Some(record) = store
+        .active()?
+        .filter(|record| record.phase == Phase::ContinuationQueued)
+    {
+        let proof = (|| -> Result<(), String> {
+            let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
+            let wake = Store::open_read_only(&root)?;
+            let current = mcp::operator_read_project_web_target_status(workspace, project)
+                .map_err(|_| "WEB_ROLLOVER_PAIRED_TARGET_REQUIRED")?
+                .ok_or("WEB_ROLLOVER_TARGET_UNBOUND")?;
+            let current = Target::new(current.generation, current.url)?;
+            continuation_ready_for_work(&store, &wake, workspace, project, &current, &record)
+        })();
+        result["continuationProved"] = json!(proof.is_ok());
+        result["continuationProofStatus"] = json!(match proof {
+            Ok(()) => "VERIFIED",
+            Err(ref reason) if reason == "WEB_WORK_ROLLOVER_PENDING" => "PENDING_OR_UNVERIFIED",
+            Err(_) => "UNAVAILABLE_OR_CHANGED",
+        });
+    }
+    Ok(result)
 }
 
 fn status_from_store(store: &ProjectStore, project: &str) -> Result<Value, String> {
@@ -710,6 +1831,11 @@ fn status_from_store(store: &ProjectStore, project: &str) -> Result<Value, Strin
         Some(record) => summary(record),
         None => json!({"projectId":project,"phase":"NONE"}),
     };
+    if let Some(record) = &active
+        && let Some(disposition) = disposition::status(store, record)?
+    {
+        result["operatorDisposition"] = disposition;
+    }
     if let Some(request) = store.handoff_request()? {
         let mut request_summary = handoff_request_summary(&request);
         let collected = active.as_ref().is_some_and(|record| {
@@ -761,6 +1887,12 @@ fn source_ready_for_handoff(snapshot: &Value) -> Result<(), String> {
     {
         return Err("WEB_HANDOFF_SOURCE_RESPONSE_REQUIRED".into());
     }
+    if super::observe::failed_assistant_placeholder(
+        "ASSISTANT",
+        latest.get("text").and_then(Value::as_str).unwrap_or(""),
+    ) {
+        return Err("WEB_HANDOFF_SOURCE_RESPONSE_FAILED".into());
+    }
     Ok(())
 }
 
@@ -796,6 +1928,16 @@ pub(super) fn request_handoff(
     project: &str,
     source_task_id: &str,
 ) -> Result<Value, String> {
+    request_handoff_guarded(workspace, project, source_task_id, &|| Ok(()))
+}
+
+pub(super) fn request_handoff_guarded(
+    workspace: &Path,
+    project: &str,
+    source_task_id: &str,
+    keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<Value, String> {
+    keep_running()?;
     if !valid_id(source_task_id) {
         return Err("WEB_HANDOFF_TASK_INVALID".into());
     }
@@ -812,18 +1954,22 @@ pub(super) fn request_handoff(
     let active = store.active()?;
     if let Some(active) = &active
         && (active.phase != Phase::ContinuationQueued || active.source == source)
+        && disposition::completed(&store, active)?.is_none()
     {
         return Err("WEB_ROLLOVER_EXISTING_INTENT_REQUIRES_RESUME".into());
     }
     let registered = registered_project(workspace, project)?;
     let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
     let wake = Store::open(&root)?;
+    if let Some(previous) = &active {
+        disposition::validate_new_source_task(&store, previous, &wake, source_task_id)?;
+    }
     catdesk_wake::development_runtime::validate_selected_target_isolation(
         workspace,
         wake.root(),
         &source.url,
     )?;
-    let meter = WebContextStore::open(workspace.join(".catdesk/web-context"))?;
+    let meter = WebContextStore::open_nonblocking(workspace.join(".catdesk/web-context"))?;
     if let Some(previous) =
         saved_current_handoff_request(&store, &source, source_task_id, &registered)?
     {
@@ -836,6 +1982,7 @@ pub(super) fn request_handoff(
             wake.root(),
             &source.url,
         )?;
+        keep_running()?;
         wake.produce_expected(
             &previous.event_id,
             project,
@@ -855,26 +2002,28 @@ pub(super) fn request_handoff(
 
     // The selected Wake browser owner observes the exact idle source before the
     // advisory context ledger claims a quiescent point. This is a private read.
-    let snapshot = runtime::snapshot_conversation(&wake, project, &source)?;
+    let snapshot = runtime::snapshot_conversation_guarded(&wake, project, &source, keep_running)?;
+    keep_running()?;
     source_ready_for_handoff(&snapshot)?;
     let source_key = key(project, &source);
     let previous = meter.active_key(project)?;
     meter.bind_observed_target(source_key.clone(), previous.as_ref())?;
     super::observe::ingest(&meter, &source_key, snapshot, now(), || {
+        keep_running()?;
         if paired(workspace, project)? == source {
             Ok(())
         } else {
             Err("WEB_HANDOFF_SOURCE_CHANGED".into())
         }
     })?;
-    let intent = meter
-        .request_rollover_if_due(&source_key, &source.digest, source_task_id, true, now())?
-        .ok_or("WEB_ROLLOVER_NOT_DUE_OR_DISABLED")?;
+    let intent =
+        request_handoff_context(workspace, &store, &meter, project, &source, source_task_id)?
+            .ok_or("WEB_ROLLOVER_NOT_DUE_OR_DISABLED")?;
     if intent.source_task_id != source_task_id {
         return Err("WEB_HANDOFF_TASK_CHANGED".into());
     }
     let request = HandoffRequest {
-        schema_version: 1,
+        schema_version: 2,
         project_id: project.into(),
         intent_id: intent.intent_id.clone(),
         source_task_id: source_task_id.into(),
@@ -882,7 +2031,7 @@ pub(super) fn request_handoff(
         native_workspace: registered.workspace.clone(),
         native_thread_id: registered.codex_thread_id.clone(),
         event_id: format!("web-handoff-{}", intent.intent_id),
-        message: handoff_request_message(
+        message: handoff_request_message_v2(
             project,
             &intent.intent_id,
             source_task_id,
@@ -890,8 +2039,10 @@ pub(super) fn request_handoff(
         ),
     };
     request.validate(project)?;
+    let request = store.preserve_recorded_handoff_request(request)?;
     // Save before queue publication. A retry after a crash republishes only
     // these exact bytes under the same Wake event ID.
+    keep_running()?;
     store.save_handoff_request(&request)?;
     if paired(workspace, project)? != request.source
         || !native_owner_matches(&request, &registered_project(workspace, project)?)
@@ -903,6 +2054,7 @@ pub(super) fn request_handoff(
         wake.root(),
         &request.source.url,
     )?;
+    keep_running()?;
     wake.produce_expected(
         &request.event_id,
         project,
@@ -922,6 +2074,15 @@ fn saved_current_handoff_request(
     let Some(previous) = store.handoff_request()? else {
         return Ok(None);
     };
+    if let Some(active) = store.active()?
+        && active.intent_id == previous.intent_id
+        && disposition::completed(store, &active)?.is_some()
+    {
+        if previous.source_task_id == source_task_id {
+            return Err("WEB_HANDOFF_ABANDONED_SOURCE_TASK".into());
+        }
+        return Ok(None);
+    }
     if previous.source != *source {
         return Ok(None);
     }
@@ -934,20 +2095,28 @@ fn saved_current_handoff_request(
     Ok(Some(previous))
 }
 
-pub(super) fn resume_saved_handoff_request(
+pub(super) fn resume_saved_handoff_request_guarded(
     workspace: &Path,
     project: &str,
+    keep_running: &dyn Fn() -> Result<(), String>,
 ) -> Result<Value, String> {
+    keep_running()?;
     let store = ProjectStore::open(workspace, project)?;
     let request = store
         .handoff_request()?
         .ok_or("WEB_HANDOFF_REQUEST_REQUIRED")?;
+    if let Some(active) = store.active()?
+        && active.intent_id == request.intent_id
+        && disposition::completed(&store, &active)?.is_some()
+    {
+        return Err("WEB_HANDOFF_ABANDONED_SOURCE_TASK".into());
+    }
     if paired(workspace, project)? != request.source {
         return Err("WEB_HANDOFF_SOURCE_CHANGED".into());
     }
     let task = request.source_task_id;
     drop(store);
-    request_handoff(workspace, project, &task)
+    request_handoff_guarded(workspace, project, &task, keep_running)
 }
 
 fn completed_request_delivery(
@@ -1040,6 +2209,9 @@ fn handoff_from_source_snapshot(
     let handoff: Handoff =
         serde_json::from_str(response).map_err(|_| "WEB_HANDOFF_JSON_REQUIRED")?;
     handoff.validate(&request.project_id)?;
+    if request.schema_version == 2 && handoff.schema_version != 2 {
+        return Err("WEB_HANDOFF_CONTEXT_REQUIRED".into());
+    }
     if handoff.source_task_id != request.source_task_id {
         return Err("WEB_HANDOFF_TASK_CHANGED".into());
     }
@@ -1050,6 +2222,15 @@ fn handoff_from_source_snapshot(
 }
 
 pub(super) fn collect_handoff(workspace: &Path, project: &str) -> Result<Value, String> {
+    collect_handoff_guarded(workspace, project, &|| Ok(()))
+}
+
+pub(super) fn collect_handoff_guarded(
+    workspace: &Path,
+    project: &str,
+    keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<Value, String> {
+    keep_running()?;
     let store = ProjectStore::open(workspace, project)?;
     let request = store
         .handoff_request()?
@@ -1059,6 +2240,9 @@ pub(super) fn collect_handoff(workspace: &Path, project: &str) -> Result<Value, 
         && existing.intent_id == request.intent_id
         && existing.source == request.source
     {
+        if disposition::completed(&store, &existing)?.is_some() {
+            return Err("WEB_HANDOFF_ABANDONED_SOURCE_TASK".into());
+        }
         return Ok(summary(&existing));
     }
     if paired(workspace, project)? != request.source {
@@ -1067,7 +2251,7 @@ pub(super) fn collect_handoff(workspace: &Path, project: &str) -> Result<Value, 
     if !native_owner_matches(&request, &registered_project(workspace, project)?) {
         return Err("WEB_HANDOFF_NATIVE_OWNER_CHANGED".into());
     }
-    let meter = WebContextStore::open(workspace.join(".catdesk/web-context"))?;
+    let meter = WebContextStore::open_nonblocking(workspace.join(".catdesk/web-context"))?;
     request_policy_still_due(&meter, &request)?;
     let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
     let wake = Store::open(&root)?;
@@ -1093,7 +2277,9 @@ pub(super) fn collect_handoff(workspace: &Path, project: &str) -> Result<Value, 
         wake.root(),
         &request.source.url,
     )?;
-    let snapshot = runtime::snapshot_conversation(&wake, project, &request.source)?;
+    let snapshot =
+        runtime::snapshot_conversation_guarded(&wake, project, &request.source, keep_running)?;
+    keep_running()?;
     let handoff = handoff_from_source_snapshot(&request, &snapshot)?;
     if wake.source_progress_fingerprint(project, &request.source, &request.event_id)?
         != source_fingerprint
@@ -1106,6 +2292,7 @@ pub(super) fn collect_handoff(workspace: &Path, project: &str) -> Result<Value, 
         snapshot,
         now(),
         || {
+            keep_running()?;
             if paired(workspace, project)? == request.source {
                 Ok(())
             } else {
@@ -1119,6 +2306,7 @@ pub(super) fn collect_handoff(workspace: &Path, project: &str) -> Result<Value, 
         return Err("WEB_HANDOFF_SOURCE_OR_OWNER_CHANGED".into());
     }
     drop(store);
+    keep_running()?;
     prepare_with_request(
         workspace,
         project,
@@ -1132,7 +2320,90 @@ pub(super) fn prepare(workspace: &Path, project: &str, handoff: Handoff) -> Resu
     prepare_with_request(workspace, project, handoff, None, None)
 }
 
+// ProjectStore already fences this project's tasks. Never acquire it again or
+// hold the shared registry transaction while inspecting Git/native ownership.
+fn locally_granted_task_context(
+    workspace: &Path,
+    project: &str,
+    source_task: &str,
+    current: &Target,
+    store: &ProjectStore,
+) -> Result<Option<Value>, String> {
+    let snapshot = WorkLedger::status(workspace, project);
+    if snapshot["status"] == "ATTENTION" {
+        return Err("WEB_WORK_LEDGER_UNAVAILABLE".into());
+    }
+    let Some(request) = snapshot["active"]["requestId"].as_str() else {
+        return Ok(None);
+    };
+    let work = WorkLedger::open(workspace, project)?
+        .record(request)?
+        .ok_or("WEB_WORK_REQUEST_MISSING")?;
+    if work.task_assignment.is_none() {
+        return Ok(None);
+    }
+    if work.event_id != source_task {
+        return Err("WEB_TASK_HANDOFF_SOURCE_CHANGED".into());
+    }
+    if work.target != *current {
+        let previous = store
+            .active()?
+            .ok_or("WEB_WORK_CONTINUATION_SOURCE_REQUIRED")?;
+        let request: HandoffRequest = read(
+            &store
+                .root
+                .join(format!("handoff-{}.json", previous.intent_id)),
+        )?;
+        request.validate(project)?;
+        let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
+            workspace,
+        )?)?;
+        let delivery = wake
+            .delivery(&previous.continuation_event_id)?
+            .ok_or("WEB_WORK_CONTINUATION_SOURCE_REQUIRED")?;
+        let timer = wake
+            .timer(&previous.continuation_event_id)?
+            .ok_or("WEB_WORK_CONTINUATION_SOURCE_REQUIRED")?;
+        if previous.phase != Phase::ContinuationQueued
+            || previous.context_meter_status == ContextMeterStatus::Pending
+            || continuation_task_from_proof(
+                &previous,
+                &request,
+                &registered_project(workspace, project)?,
+                current,
+                &delivery,
+                &timer,
+            )?
+            .as_deref()
+                != Some(source_task)
+        {
+            return Err("WEB_WORK_CONTINUATION_SOURCE_REQUIRED".into());
+        }
+    }
+    crate::web_work::require_assignment_source(workspace, project, &work, work.target == *current)?;
+    let scope = crate::delegated::autonomy_projects::resolve_registered_project_from_control_root(
+        workspace, project,
+    )
+    .map_err(|_| "WEB_TASK_PROJECT_UNAVAILABLE")?;
+    let context = crate::project_mcp_task::granted_handoff_context(&scope, &work, current)?;
+    if paired(workspace, project)? != *current {
+        return Err("WEB_HANDOFF_SOURCE_CHANGED".into());
+    }
+    Ok(context)
+}
+
 fn compose_handoff_content(
+    registered: &AutonomousProjectV1,
+    handoff: &Handoff,
+) -> Result<String, String> {
+    Ok(format!(
+        "{}{}",
+        runtime::JSON_BOOTSTRAP_HANDOFF_PREFIX,
+        compose_legacy_handoff_content(registered, handoff)?
+    ))
+}
+
+fn compose_legacy_handoff_content(
     registered: &AutonomousProjectV1,
     handoff: &Handoff,
 ) -> Result<String, String> {
@@ -1165,22 +2436,35 @@ fn prepare_with_request(
     let store = ProjectStore::open(workspace, project)?;
     let source = paired(workspace, project)?;
     if let Some(previous) = store.active()? {
-        if previous.phase != Phase::ContinuationQueued || previous.source == source {
+        if (previous.phase != Phase::ContinuationQueued || previous.source == source)
+            && disposition::completed(&store, &previous)?.is_none()
+        {
             return Err("WEB_ROLLOVER_EXISTING_INTENT_REQUIRES_RESUME".into());
         }
+        if disposition::completed(&store, &previous)?.is_some() {
+            let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
+                workspace,
+            )?)?;
+            disposition::validate_new_source_task(
+                &store,
+                &previous,
+                &wake,
+                &handoff.source_task_id,
+            )?;
+        }
     }
-    let meter = WebContextStore::open(workspace.join(".catdesk/web-context"))?;
+    let meter = WebContextStore::open_nonblocking(workspace.join(".catdesk/web-context"))?;
     // This is advisory scheduling only. The browser independently proves idle
     // before its submission callback, which rereads the paired authority.
-    let intent = meter
-        .request_rollover_if_due(
-            &key(project, &source),
-            &source.digest,
-            &handoff.source_task_id,
-            true,
-            now(),
-        )?
-        .ok_or("WEB_ROLLOVER_NOT_DUE_OR_DISABLED")?;
+    let intent = request_handoff_context(
+        workspace,
+        &store,
+        &meter,
+        project,
+        &source,
+        &handoff.source_task_id,
+    )?
+    .ok_or("WEB_ROLLOVER_NOT_DUE_OR_DISABLED")?;
     if intent.source_task_id != handoff.source_task_id {
         return Err("WEB_ROLLOVER_TASK_CHANGED".into());
     }
@@ -1189,7 +2473,21 @@ fn prepare_with_request(
         return Err("WEB_HANDOFF_NATIVE_OWNER_CHANGED".into());
     }
     let content = compose_handoff_content(&registered, &handoff)?;
-    let record = Record {
+    let context =
+        locally_granted_task_context(workspace, project, &handoff.source_task_id, &source, &store)?;
+    if context.is_some() && request.is_none() {
+        return Err("WEB_TASK_HANDOFF_AUTOMATIC_SOURCE_REQUIRED".into());
+    }
+    if let Some(request) = request {
+        request.validate(project)?;
+        if request.intent_id != intent.intent_id
+            || request.source != source
+            || request.source_task_id != handoff.source_task_id
+        {
+            return Err("WEB_TASK_HANDOFF_SOURCE_CHANGED".into());
+        }
+    }
+    let mut record = Record {
         schema_version: 1,
         intent_id: intent.intent_id.clone(),
         project_id: project.into(),
@@ -1197,7 +2495,10 @@ fn prepare_with_request(
         message_digest: message_digest(project, &intent.intent_id, &source.url, &content)?,
         source,
         phase: Phase::Prepared,
+        bootstrap_progress: None,
         handoff: content,
+        task_handoff: None,
+        task_resume_event_id: None,
         created_utc: now(),
         receipt: None,
         continuation_event_id: format!("web-continue-{}", intent.intent_id),
@@ -1207,7 +2508,17 @@ fn prepare_with_request(
         handoff_event_id: request.map(|request| request.event_id.clone()),
         source_fingerprint,
         source_snapshot_verified: false,
+        quarantine: None,
     };
+    if let Some(context) = context {
+        task_handoff::prepare(&store, &mut record, context)?;
+        record.message_digest = message_digest(
+            project,
+            &record.intent_id,
+            &record.source.url,
+            &task_handoff::content(&record)?,
+        )?;
+    }
     store.save(&record)?;
     atomic(&store.root.join("active.json"), &record.intent_id)?;
     Ok(summary(&record))
@@ -1273,7 +2584,9 @@ where
             record.source.generation,
         )
         .map_err(|reason| {
-            if reason == "WEB_ROLLOVER_SOURCE_PROGRESS_RECONCILIATION_REQUIRED" {
+            if reason == "WEB_ROLLOVER_SOURCE_PROGRESS_RECONCILIATION_REQUIRED"
+                || reason == "WEB_AUTO_OWNER_STOPPED"
+            {
                 reason
             } else {
                 "WEB_ROLLOVER_BINDING_REQUIRES_RECONCILIATION".into()
@@ -1321,6 +2634,9 @@ where
     {
         Ok(bound) => bound,
         Err(reason) => {
+            if reason == "WEB_AUTO_OWNER_STOPPED" {
+                return Err(reason);
+            }
             record.reconciliation_reason = Some(reason.clone());
             store.save(record)?;
             return Err(reason);
@@ -1337,12 +2653,26 @@ fn record_context_meter(workspace: &Path, record: &Record, bound: &Target) -> Re
     if !matches!(paired(workspace, &record.project_id), Ok(current) if current == *bound) {
         return Err("WEB_ROLLOVER_BOUND_TARGET_CHANGED_RECONCILIATION_REQUIRED".into());
     }
-    let meter = WebContextStore::open(workspace.join(".catdesk/web-context"))?;
+    let meter = WebContextStore::open_nonblocking(workspace.join(".catdesk/web-context"))?;
     let next_key = key(&record.project_id, bound);
     meter.bind_observed_target(
         next_key.clone(),
         Some(&key(&record.project_id, &record.source)),
     )?;
+    // Include the actual encoded wire text for new envelopes. Legacy events
+    // keep their old observation bytes and dedup identity on interrupted retry.
+    let handoff = task_handoff::content(record)?;
+    let encoded = handoff
+        .starts_with(runtime::JSON_BOOTSTRAP_HANDOFF_PREFIX)
+        .then(|| {
+            runtime::compose_bootstrap_message(
+                &record.project_id,
+                &record.intent_id,
+                &record.source,
+                &handoff,
+            )
+        })
+        .transpose()?;
     meter.record_observation(
         &next_key,
         Observation {
@@ -1350,7 +2680,7 @@ fn record_context_meter(workspace: &Path, record: &Record, bound: &Target) -> Re
             revision: 1,
             dedup_key: &record.intent_id,
             source_kind: VisibleSourceKind::Handoff,
-            visible_text: Some(&record.handoff),
+            visible_text: Some(encoded.as_deref().unwrap_or(&handoff)),
             observed_at_unix: now(),
         },
     )?;
@@ -1427,10 +2757,86 @@ where
 }
 
 fn continuation_message(record: &Record, bound: &Target) -> String {
-    format!(
+    let mut message = format!(
         "CatDesk continuation for project {}: rollover {} has verified the new conversation URL and paired Wake binding at generation {}. Resume task {} from the handoff in this conversation after checking current ownership and artifacts. Existing native sessions keep their tasks; do not duplicate their execution. Preserve predecessor history.",
         record.project_id, record.intent_id, bound.generation, record.source_task_id
+    );
+    if let Some(selection) = task_handoff::continuation(record, bound) {
+        message.push_str(&selection);
+    }
+    message
+}
+
+fn task_resume_id(record: &Record) -> String {
+    format!("web-task-resume-{}", record.intent_id)
+}
+
+fn enqueue_granted_task_resume(
+    workspace: &Path,
+    store: &ProjectStore,
+    record: &mut Record,
+    automatic: bool,
+    keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<(), String> {
+    if record.task_handoff.is_none() || record.task_resume_event_id.is_some() {
+        return Ok(());
+    }
+    keep_running()?;
+    let current = paired(workspace, &record.project_id)?;
+    let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
+        workspace,
+    )?)?;
+    // Waiting for an exact completed acknowledgement is expected. A separate
+    // stable event starts the work turn, after this admission fence can open.
+    if continuation_ready_for_work(
+        store,
+        &wake,
+        workspace,
+        &record.project_id,
+        &current,
+        record,
     )
+    .is_err()
+    {
+        return Ok(());
+    }
+    task_handoff::authorize(workspace, record)?;
+    automatic_wake_running(automatic, &wake, &record.project_id, &current)?;
+    let id = task_resume_id(record);
+    let message = format!(
+        "CatDesk granted task resume for project {}, rollover {}. The exact continuation acknowledgement completed. Continue the unfinished assigned task from this conversation's private bootstrap context and durable handoff. Recheck assigned artifacts using bounded reads. Preserve recorded call IDs; never replay completed or unknown operations, or native-owned work.{}",
+        record.project_id,
+        record.intent_id,
+        task_handoff::continuation(record, &current)
+            .ok_or("WEB_TASK_HANDOFF_REFERENCE_REQUIRED")?
+    );
+    keep_running()?;
+    // Match central work publication's lock order: read the paired target
+    // first, retain registration, then let Wake CAS under its own queue lock.
+    let registry =
+        AutonomousProjectRegistryStoreV1::open_read_only(workspace.join(".catdesk/projects"))
+            .map_err(|_| "WEB_WORK_REGISTRY_UNAVAILABLE")?;
+    registry.with_registration_lock(|| {
+        keep_running()?;
+        let registered = registered_project(workspace, &record.project_id)?;
+        if registered.chatgpt_target_url.as_deref() != Some(current.url.as_str())
+            || registered.chatgpt_target_sha256.as_deref() != Some(current.digest.as_str())
+        {
+            return Err("WEB_WORK_TARGET_CHANGED".into());
+        }
+        wake.produce_expected(
+            &id,
+            &record.project_id,
+            "engineering_attention",
+            &message,
+            &current,
+        )
+        .map(|_| ())
+    })?;
+    // Publish before the marker. Recovery uses the same exact event ID/body;
+    // a queued, submitted or archived event can never be duplicated.
+    record.task_resume_event_id = Some(id);
+    store.save(record)
 }
 
 fn continuation_task_from_proof(
@@ -1565,7 +2971,15 @@ fn source_snapshot_matches_record(
     }
     let handoff = handoff_from_source_snapshot(request, snapshot)
         .map_err(|_| "WEB_ROLLOVER_SOURCE_HANDOFF_CHANGED_RECONCILIATION_REQUIRED")?;
-    if compose_handoff_content(registered, &handoff)? != record.handoff {
+    let expected = if record
+        .handoff
+        .starts_with(runtime::JSON_BOOTSTRAP_HANDOFF_PREFIX)
+    {
+        compose_handoff_content(registered, &handoff)?
+    } else {
+        compose_legacy_handoff_content(registered, &handoff)?
+    };
+    if expected != record.handoff {
         return Err("WEB_ROLLOVER_SOURCE_HANDOFF_CHANGED_RECONCILIATION_REQUIRED".into());
     }
     Ok(())
@@ -1577,7 +2991,9 @@ fn verify_source_handoff_still_latest(
     wake: &Store,
     record: &mut Record,
     destination: &Target,
+    keep_running: &dyn Fn() -> Result<(), String>,
 ) -> Result<(), String> {
+    keep_running()?;
     // A prior guarded Wake-first commit can leave the registry one write
     // behind. Its source snapshot proof was saved before that commit, and the
     // old Wake target is no longer available for another source read.
@@ -1599,14 +3015,19 @@ fn verify_source_handoff_still_latest(
             wake.root(),
             &record.source.url,
         )?;
-        let snapshot = runtime::snapshot_conversation(wake, &record.project_id, &record.source)
-            .map_err(|reason| {
-                if reason == "BROWSER_SESSION_BUSY" {
-                    reason
-                } else {
-                    "WEB_ROLLOVER_SOURCE_SNAPSHOT_UNAVAILABLE_RECONCILIATION_REQUIRED".into()
-                }
-            })?;
+        let snapshot = runtime::snapshot_conversation_guarded(
+            wake,
+            &record.project_id,
+            &record.source,
+            keep_running,
+        )
+        .map_err(|reason| {
+            if reason == "BROWSER_SESSION_BUSY" || reason == "WEB_AUTO_OWNER_STOPPED" {
+                reason
+            } else {
+                "WEB_ROLLOVER_SOURCE_SNAPSHOT_UNAVAILABLE_RECONCILIATION_REQUIRED".into()
+            }
+        })?;
         source_snapshot_matches_record(&request, record, &registered, &snapshot)?;
         if paired(workspace, &record.project_id)? != record.source {
             return Err("WEB_ROLLOVER_SOURCE_CHANGED_RECONCILIATION_REQUIRED".into());
@@ -1614,20 +3035,534 @@ fn verify_source_handoff_still_latest(
         Ok(())
     })();
     if let Err(reason) = check {
+        if reason == "WEB_AUTO_OWNER_STOPPED" {
+            return Err(reason);
+        }
         record.reconciliation_reason = Some(reason.clone());
         store.save(record)?;
         return Err(reason);
     }
+    keep_running()?;
     record.source_snapshot_verified = true;
     store.save(record)?;
     Ok(())
 }
 
+fn quarantine_record(
+    store: &ProjectStore,
+    expected_intent: &str,
+    observed_url: &str,
+    current: &Target,
+) -> Result<Value, String> {
+    let mut record = store.active()?.ok_or("WEB_ROLLOVER_INTENT_REQUIRED")?;
+    let observed = Target::new(1, observed_url.into())?;
+    if record.intent_id != expected_intent || record.source != *current {
+        return Err("WEB_ROLLOVER_QUARANTINE_WITNESS_CHANGED".into());
+    }
+    if observed.url == record.source.url {
+        return Err("WEB_ROLLOVER_QUARANTINE_DESTINATION_INVALID".into());
+    }
+    if record.phase == Phase::Quarantined {
+        if record
+            .quarantine
+            .as_ref()
+            .map(|value| value.observed_conversation_url.as_str())
+            != Some(observed.url.as_str())
+        {
+            return Err("WEB_ROLLOVER_QUARANTINE_OBSERVATION_CHANGED".into());
+        }
+        return Ok(summary(&record));
+    }
+    if !matches!(record.phase, Phase::Prepared | Phase::Submitting)
+        || record.receipt.is_some()
+        || record.bound_target.is_some()
+    {
+        return Err("WEB_ROLLOVER_QUARANTINE_PHASE_INVALID".into());
+    }
+    record.phase = Phase::Quarantined;
+    record.quarantine = Some(Quarantine {
+        observed_conversation_url: observed.url,
+        recorded_utc: now(),
+    });
+    record.reconciliation_reason = Some("WEB_BOOTSTRAP_UNEXPECTED_SUBMISSION_OBSERVED".into());
+    store.save(&record)?;
+    Ok(summary(&record))
+}
+
+/// Stop replay after an operator observes an unexpected browser write. This
+/// preserves every existing record and target; it never fabricates a receipt.
+pub(super) fn quarantine(
+    workspace: &Path,
+    project: &str,
+    expected_intent: &str,
+    observed_url: &str,
+) -> Result<Value, String> {
+    let store = ProjectStore::open_existing(workspace, project)?;
+    let current = paired(workspace, project)?;
+    quarantine_record(&store, expected_intent, observed_url, &current)
+}
+
+pub(super) fn prepare_quarantine_disposition(
+    workspace: &Path,
+    project: &str,
+    intent: &str,
+    resolution: &str,
+    acknowledgement: &str,
+) -> Result<Value, String> {
+    disposition::prepare(workspace, project, intent, resolution, acknowledgement)
+}
+
+pub(super) fn confirm_quarantine_disposition(
+    workspace: &Path,
+    project: &str,
+    intent: &str,
+    resolution: &str,
+    token: &str,
+    acknowledgement: &str,
+) -> Result<Value, String> {
+    disposition::confirm(
+        workspace,
+        project,
+        intent,
+        resolution,
+        token,
+        acknowledgement,
+    )
+}
+
+/// Read only the saved intent's home draft. The exact intent and source are
+/// checked before a browser is launched; this never authorizes a replay.
+pub(super) fn inspect_draft(
+    workspace: &Path,
+    project: &str,
+    expected_intent_id: &str,
+) -> Result<Value, String> {
+    if !valid_id(expected_intent_id) {
+        return Err("WEB_ROLLOVER_INTENT_INVALID".into());
+    }
+    let store = ProjectStore::open_existing(workspace, project)?;
+    let record = store.active()?.ok_or("WEB_ROLLOVER_INTENT_REQUIRED")?;
+    if record.intent_id != expected_intent_id {
+        return Err("WEB_ROLLOVER_INTENT_CHANGED".into());
+    }
+    if !matches!(record.phase, Phase::Prepared | Phase::Submitting)
+        || record.receipt.is_some()
+        || record.bound_target.is_some()
+    {
+        return Err("WEB_ROLLOVER_DRAFT_INSPECTION_PHASE_INVALID".into());
+    }
+    if paired(workspace, project)? != record.source {
+        return Err("WEB_ROLLOVER_SOURCE_CHANGED".into());
+    }
+    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
+    let wake = Store::open(&root)?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        workspace,
+        wake.root(),
+        &record.source.url,
+    )?;
+    let result = runtime::inspect_bootstrap_draft(
+        &wake,
+        project,
+        &record.intent_id,
+        &record.source,
+        &task_handoff::content(&record)?,
+    )?;
+    Ok(json!({"projectId":project,"intentId":record.intent_id,
+        "sourceGeneration":record.source.generation,"sourceDigest":record.source.digest,
+        "bootstrapProgress":record.bootstrap_progress,"inspection":result,
+        "sendBoundaryKnown":record.bootstrap_progress.is_some(),
+        "sendAttemptRecorded":record.bootstrap_progress.map(|stage| stage == runtime::BootstrapProgress::SendAttempted),
+        "submissionVerified":false}))
+}
+
+pub(super) fn inspect_quarantine(
+    workspace: &Path,
+    project: &str,
+    expected_intent: &str,
+) -> Result<Value, String> {
+    if !valid_id(expected_intent) {
+        return Err("WEB_ROLLOVER_INTENT_INVALID".into());
+    }
+    let store = ProjectStore::open_existing(workspace, project)?;
+    let record = store.active()?.ok_or("WEB_ROLLOVER_INTENT_REQUIRED")?;
+    let source = paired(workspace, project)?;
+    let candidate = quarantine_inspection_candidate(&record, expected_intent, &source)?;
+    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
+    let wake = Store::open(&root)?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        workspace,
+        wake.root(),
+        &source.url,
+    )?;
+    let inspection = runtime::inspect_quarantined_bootstrap(
+        &wake,
+        project,
+        &record.intent_id,
+        &source,
+        &task_handoff::content(&record)?,
+        candidate,
+    )?;
+    if paired(workspace, project)? != source {
+        return Err("WEB_ROLLOVER_SOURCE_CHANGED".into());
+    }
+    Ok(json!({"projectId":project,"intentId":record.intent_id,
+        "sourceGeneration":source.generation,"sourceDigest":source.digest,
+        "sourceSnapshotVerified":record.source_snapshot_verified,"inspection":inspection,
+        "phase":"QUARANTINED","receiptCreated":false,"continuationAuthorized":false,
+        "workAdmissionChanged":false,"readOnly":true}))
+}
+
+fn quarantine_inspection_candidate<'a>(
+    record: &'a Record,
+    expected_intent: &str,
+    source: &Target,
+) -> Result<&'a str, String> {
+    if record.intent_id != expected_intent {
+        return Err("WEB_ROLLOVER_INTENT_CHANGED".into());
+    }
+    if record.phase != Phase::Quarantined
+        || record.receipt.is_some()
+        || record.bound_target.is_some()
+    {
+        return Err("WEB_ROLLOVER_QUARANTINE_INSPECTION_PHASE_INVALID".into());
+    }
+    if &record.source != source {
+        return Err("WEB_ROLLOVER_SOURCE_CHANGED".into());
+    }
+    let candidate = &record
+        .quarantine
+        .as_ref()
+        .ok_or("WEB_ROLLOVER_QUARANTINE_INSPECTION_PHASE_INVALID")?
+        .observed_conversation_url;
+    if crate::delegated::autonomy_projects::canonical_project_chat_target(candidate)
+        .ok()
+        .as_deref()
+        != Some(candidate.as_str())
+    {
+        return Err("WEB_ROLLOVER_QUARANTINE_INVALID".into());
+    }
+    if candidate == &source.url {
+        return Err("WEB_ROLLOVER_QUARANTINE_INVALID".into());
+    }
+    Ok(candidate)
+}
+
+/// Repair one explicitly witnessed interrupted edit, never submit it. A saved
+/// write-attempt marker permits only read-only full-draft reconciliation.
+pub(super) fn repair_draft(
+    workspace: &Path,
+    project: &str,
+    expected_intent_id: &str,
+    expected_raw_digest: &str,
+) -> Result<Value, String> {
+    if !valid_id(expected_intent_id) {
+        return Err("WEB_ROLLOVER_INTENT_INVALID".into());
+    }
+    let store = ProjectStore::open_existing(workspace, project)?;
+    let record = store.active()?.ok_or("WEB_ROLLOVER_INTENT_REQUIRED")?;
+    require_draft_repair_record(&record, expected_intent_id, expected_raw_digest)?;
+    let selected = catdesk_wake::development_runtime::root_for_workspace(workspace)?
+        .ok_or("WEB_DRAFT_REPAIR_DEVELOPMENT_REQUIRED")?;
+    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
+    let wake = Store::open(&root)?;
+    let verify = || -> Result<(), String> {
+        let current = store.active()?.ok_or("WEB_ROLLOVER_INTENT_REQUIRED")?;
+        require_draft_repair_record(&current, expected_intent_id, expected_raw_digest)?;
+        if serde_json::to_vec(&current).map_err(|_| "WEB_ROLLOVER_STATE_INVALID")?
+            != serde_json::to_vec(&record).map_err(|_| "WEB_ROLLOVER_STATE_INVALID")?
+            || paired(workspace, project)? != record.source
+            || root != selected
+        {
+            return Err("WEB_DRAFT_REPAIR_SCOPE_CHANGED".into());
+        }
+        catdesk_wake::development_runtime::validate_selected_target_isolation(
+            workspace,
+            wake.root(),
+            &record.source.url,
+        )?;
+        for control_path in [
+            root.join("control.json"),
+            runtime::default_root()?.join("control.json"),
+        ] {
+            if control_path != root.join("control.json")
+                && !control_path
+                    .try_exists()
+                    .map_err(|_| "WEB_DRAFT_REPAIR_CONTROL_UNAVAILABLE")?
+            {
+                continue;
+            }
+            plain(&control_path, false)?;
+            let control: runtime::Control = read(&control_path)?;
+            if control.schema_version != 1 || control.desired != "STOPPED" {
+                return Err("WEB_DRAFT_REPAIR_STOPPED_REQUIRED".into());
+            }
+        }
+        Ok(())
+    };
+    verify()?;
+    let attempted = read_draft_repair_checkpoint(
+        &store,
+        &record,
+        expected_raw_digest,
+        "attempt",
+        "WRITE_ATTEMPTED",
+    )?
+    .is_some();
+    if let Some(receipt) = read_draft_repair_checkpoint(
+        &store,
+        &record,
+        expected_raw_digest,
+        "complete",
+        "FULL_DRAFT_VERIFIED_NO_SEND",
+    )? {
+        if !attempted {
+            return Err("WEB_DRAFT_REPAIR_ATTEMPT_REQUIRED".into());
+        }
+        return Ok(json!({"projectId":project,"intentId":record.intent_id,
+            "status":"REPAIRED","currentComposerObserved":false,
+            "observedUtc":receipt.recorded_utc,"submissionVerified":false,"messagesSent":0}));
+    }
+    // Retain the existing global New Chat lease only for this browser edit;
+    // independent work and other projects' MCP operations remain unblocked.
+    let _creation = admission::try_acquire(wake.root(), creation_identity(&record), |head| {
+        queued_creation_eligible(workspace, head)
+    })?
+    .ok_or("WEB_ROLLOVER_CREATION_QUEUED")?;
+    verify()?;
+    let result = runtime::repair_bootstrap_draft(
+        &wake,
+        project,
+        &record.intent_id,
+        &record.source,
+        &task_handoff::content(&record)?,
+        expected_raw_digest,
+        attempted,
+        |actual| {
+            verify()?;
+            save_draft_repair_witness(&store, &record, expected_raw_digest, actual)?;
+            // This durable, immutable marker precedes the only edit ACK.
+            // A crash or ambiguous response can never authorize another write.
+            save_draft_repair_checkpoint(
+                &store,
+                &record,
+                expected_raw_digest,
+                "attempt",
+                "WRITE_ATTEMPTED",
+            )
+        },
+    )?;
+    verify()?;
+    if read_draft_repair_checkpoint(
+        &store,
+        &record,
+        expected_raw_digest,
+        "attempt",
+        "WRITE_ATTEMPTED",
+    )?
+    .is_none()
+    {
+        return Err("WEB_DRAFT_REPAIR_ATTEMPT_REQUIRED".into());
+    }
+    save_draft_repair_checkpoint(
+        &store,
+        &record,
+        expected_raw_digest,
+        "complete",
+        "FULL_DRAFT_VERIFIED_NO_SEND",
+    )?;
+    Ok(
+        json!({"projectId":project,"intentId":record.intent_id,"status":"REPAIRED",
+        "currentComposerObserved":true,"reconciled":result["reconciled"],
+        "bootstrapProgress":record.bootstrap_progress,"submissionVerified":false,"messagesSent":0}),
+    )
+}
+
+/// Release one unknown-submit home draft only after preserving its actual
+/// text under the project lock and proving an empty home afterward. Protocol-v2
+/// SEND_ATTEMPTED is uncertain, just like a legacy record without a boundary.
+/// Earlier v2 stages retain their exact-draft recovery path instead.
+/// The original SUBMITTING intent remains permanently non-replayable.
+pub(super) fn archive_draft(
+    workspace: &Path,
+    project: &str,
+    expected_intent_id: &str,
+) -> Result<Value, String> {
+    if !valid_id(expected_intent_id) {
+        return Err("WEB_ROLLOVER_INTENT_INVALID".into());
+    }
+    let store = ProjectStore::open_existing(workspace, project)?;
+    let mut record = store.active()?.ok_or("WEB_ROLLOVER_INTENT_REQUIRED")?;
+    if record.intent_id != expected_intent_id {
+        return Err("WEB_ROLLOVER_INTENT_CHANGED".into());
+    }
+    if record.phase != Phase::Submitting
+        || !matches!(
+            record.bootstrap_progress,
+            None | Some(runtime::BootstrapProgress::SendAttempted)
+        )
+        || record.receipt.is_some()
+        || record.bound_target.is_some()
+        || record.quarantine.is_some()
+    {
+        return Err("WEB_DRAFT_ARCHIVE_LEGACY_UNKNOWN_REQUIRED".into());
+    }
+    if paired(workspace, project)? != record.source {
+        return Err("WEB_ROLLOVER_SOURCE_CHANGED".into());
+    }
+    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
+    let wake = Store::open(&root)?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        workspace,
+        wake.root(),
+        &record.source.url,
+    )?;
+    if let Some(previous) = read_draft_archive_receipt(&store, &record)? {
+        if record.reconciliation_reason.as_deref() != Some("WEB_BOOTSTRAP_DRAFT_ARCHIVED_NO_RESEND")
+        {
+            record.reconciliation_reason = Some("WEB_BOOTSTRAP_DRAFT_ARCHIVED_NO_RESEND".into());
+            store.save(&record)?;
+        }
+        return Ok(json!({"projectId":project,"intentId":record.intent_id,
+            "status":"ARCHIVED","composerEmptyProved":true,
+            "composerEmptyObservedUtc":previous.archived_utc,"currentComposerObserved":false,
+            "submissionVerified":false,"resendAuthorized":false}));
+    }
+    let archive_recorded = read_draft_archive(&store, &record)?.is_some();
+    let result = runtime::archive_bootstrap_draft(
+        &wake,
+        project,
+        &record.intent_id,
+        &record.source,
+        &task_handoff::content(&record)?,
+        archive_recorded,
+        |actual, count| {
+            if paired(workspace, project)? != record.source {
+                return Err("WEB_ROLLOVER_SOURCE_CHANGED".into());
+            }
+            catdesk_wake::development_runtime::validate_selected_target_isolation(
+                workspace,
+                wake.root(),
+                &record.source.url,
+            )?;
+            save_draft_archive(&store, &record, actual, count)
+        },
+    )?;
+    if read_draft_archive(&store, &record)?.is_none() {
+        return Err("WEB_DRAFT_ARCHIVE_REQUIRED".into());
+    }
+    let receipt = DraftArchiveReceipt {
+        schema_version: 1,
+        project_id: project.into(),
+        intent_id: record.intent_id.clone(),
+        source_digest: record.source.digest.clone(),
+        message_digest: record.message_digest.clone(),
+        archived_utc: now(),
+        evidence: "ARCHIVE_RECORDED_HOME_EMPTY".into(),
+    };
+    create_private_once(&draft_archive_receipt_path(&store, &record)?, &receipt)?;
+    if read_draft_archive_receipt(&store, &record)?.as_ref() != Some(&receipt) {
+        return Err("WEB_DRAFT_ARCHIVE_RECEIPT_INVALID".into());
+    }
+    record.reconciliation_reason = Some("WEB_BOOTSTRAP_DRAFT_ARCHIVED_NO_RESEND".into());
+    store.save(&record)?;
+    Ok(json!({"projectId":project,"intentId":record.intent_id,
+        "status":"ARCHIVED","composerEmptyProved":result["composerEmptyProved"],
+        "composerEmptyObservedUtc":receipt.archived_utc,"currentComposerObserved":true,
+        "submissionVerified":false,"resendAuthorized":false}))
+}
+
+fn automatic_wake_running(
+    automatic: bool,
+    wake: &Store,
+    project: &str,
+    source: &Target,
+) -> Result<(), String> {
+    if !automatic {
+        return Ok(());
+    }
+    match super::auto::running_wake_state(wake, project, source)? {
+        "RUNNING" => Ok(()),
+        state => Err(state.into()),
+    }
+}
+
+fn authorize_automatic_submit(
+    automatic: bool,
+    wake: &Store,
+    project: &str,
+    source: &Target,
+    save_submitting: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    automatic_wake_running(automatic, wake, project, source)?;
+    save_submitting()
+}
+
 pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> {
+    execute_with_mode(workspace, project, false, &|| Ok(()))
+}
+
+fn creation_identity(record: &Record) -> admission::Identity {
+    admission::Identity {
+        project_id: record.project_id.clone(),
+        intent_id: record.intent_id.clone(),
+        source_generation: record.source.generation,
+        source_digest: record.source.digest.clone(),
+        message_digest: record.message_digest.clone(),
+    }
+}
+
+fn queued_creation_eligible(workspace: &Path, identity: &admission::Identity) -> bool {
+    let store = match ProjectStore::open_existing(workspace, &identity.project_id) {
+        Ok(store) => store,
+        // Another operation still owns this project. Do not retire its ticket.
+        Err(reason) if reason == "WEB_ROLLOVER_PROJECT_BUSY" => return true,
+        Err(_) => return false,
+    };
+    let Ok(Some(record)) = store.active() else {
+        return false;
+    };
+    if creation_identity(&record) != *identity
+        || !(record.phase == Phase::Prepared || resumable_bootstrap(&record))
+        || !matches!(paired(workspace, &identity.project_id), Ok(target) if target == record.source)
+    {
+        return false;
+    }
+    // Read the existing policy without requesting or rewriting its intent.
+    WebContextStore::open_read_only(workspace.join(".catdesk/web-context"))
+        .and_then(|meter| meter.rollover_readiness(&key(&record.project_id, &record.source)))
+        .is_ok_and(|(_, due)| due)
+}
+
+pub(super) fn execute_automatic(
+    workspace: &Path,
+    project: &str,
+    keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<Value, String> {
+    execute_with_mode(workspace, project, true, keep_running)
+}
+
+fn execute_with_mode(
+    workspace: &Path,
+    project: &str,
+    automatic: bool,
+    keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<Value, String> {
+    keep_running()?;
     let store = ProjectStore::open(workspace, project)?;
     let mut record = store.active()?.ok_or("WEB_ROLLOVER_INTENT_REQUIRED")?;
-    if record.phase == Phase::Submitting {
-        return Err("WEB_BOOTSTRAP_OUTCOME_UNKNOWN_NO_RESEND".into());
+    if record.phase == Phase::Quarantined {
+        return Err("WEB_ROLLOVER_QUARANTINED_NO_REPLAY".into());
+    }
+    if record.phase == Phase::Submitting && !resumable_bootstrap(&record) {
+        return Err(if record.reconciliation_reason.as_deref()
+            == Some("WEB_BOOTSTRAP_PRE_SEND_AMBIGUOUS_NO_RESEND")
+        {
+            "WEB_BOOTSTRAP_PRE_SEND_AMBIGUOUS_NO_RESEND"
+        } else {
+            "WEB_BOOTSTRAP_OUTCOME_UNKNOWN_NO_RESEND"
+        }
+        .into());
     }
     if record.phase == Phase::ContinuationQueued {
         if record.context_meter_status != ContextMeterStatus::Recorded {
@@ -1643,8 +3578,10 @@ pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> 
                 |record| store.save(record),
             )?;
         }
+        enqueue_granted_task_resume(workspace, &store, &mut record, automatic, keep_running)?;
         return Ok(summary(&record));
     }
+    task_handoff::authorize(workspace, &record)?;
     let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
     let wake = Store::open(&root)?;
     catdesk_wake::development_runtime::validate_selected_target_isolation(
@@ -1652,38 +3589,73 @@ pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> 
         wake.root(),
         &record.source.url,
     )?;
-    if record.phase == Phase::Prepared {
+    if matches!(record.phase, Phase::Prepared | Phase::Submitting) {
         confirm_request_enabled(workspace, &record)?;
         if paired(workspace, project)? != record.source {
             return Err("WEB_ROLLOVER_SOURCE_CHANGED".into());
         }
+        // Automatic work must retain its live Wake owner. If STOP released
+        // that owner while a handoff was being collected, do not acquire a
+        // standalone browser lease and start a replacement conversation.
+        automatic_wake_running(automatic, &wake, project, &record.source)?;
+        keep_running()?;
+        let creation = admission::try_acquire(wake.root(), creation_identity(&record), |head| {
+            queued_creation_eligible(workspace, head)
+        })?
+        .ok_or("WEB_ROLLOVER_CREATION_QUEUED")?;
+        keep_running()?;
         let source = record.source.clone();
         let intent_id = record.intent_id.clone();
-        let handoff = record.handoff.clone();
-        let receipt = runtime::bootstrap_submit_conversation(
+        let handoff = task_handoff::content(&record)?;
+        let resume = record.bootstrap_progress;
+        let receipt = runtime::bootstrap_submit_conversation_guarded(
             &wake,
             project,
             &intent_id,
             &source,
             &handoff,
-            || {
-                if paired(workspace, project)? != source {
-                    return Err("WEB_ROLLOVER_SOURCE_CHANGED".into());
-                }
-                catdesk_wake::development_runtime::validate_selected_target_isolation(
-                    workspace,
-                    wake.root(),
-                    &source.url,
-                )?;
-                confirm_request_enabled(workspace, &record)?;
-                record.phase = Phase::Submitting;
-                store.save(&record)
+            resume,
+            runtime::BootstrapCallbacks {
+                keep_running,
+                checkpoint: &mut |checkpoint| {
+                    keep_running()?;
+                    let stage = match checkpoint {
+                        runtime::BootstrapCheckpoint::PreSendUnknown => {
+                            if record.phase == Phase::Submitting
+                                && record.bootstrap_progress
+                                    == Some(runtime::BootstrapProgress::TextEntryAuthorized)
+                            {
+                                record.reconciliation_reason =
+                                    Some("WEB_BOOTSTRAP_PRE_SEND_AMBIGUOUS_NO_RESEND".into());
+                                return store.save(&record);
+                            }
+                            return Ok(());
+                        }
+                        runtime::BootstrapCheckpoint::Progress(stage) => stage,
+                    };
+                    if paired(workspace, project)? != source {
+                        return Err("WEB_ROLLOVER_SOURCE_CHANGED".into());
+                    }
+                    catdesk_wake::development_runtime::validate_selected_target_isolation(
+                        workspace,
+                        wake.root(),
+                        &source.url,
+                    )?;
+                    confirm_request_enabled(workspace, &record)?;
+                    authorize_automatic_submit(automatic, &wake, project, &source, || {
+                        checkpoint_bootstrap_progress(&mut record, stage)?;
+                        store.save(&record)
+                    })
+                },
             },
         )?;
         validate_receipt_stage(&record, &receipt, "RESPONSE_PENDING")?;
         record.receipt = Some(receipt);
         record.phase = Phase::ResponsePending;
         store.save(&record)?;
+        // Exact USER and independent issued URL are now durable. Release New
+        // Chat admission before completion probes and paired local commit.
+        creation.creation_recorded()?;
     }
     if record.phase == Phase::ResponsePending {
         let pending = record
@@ -1696,8 +3668,14 @@ pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> 
             wake.root(),
             &record.source.url,
         )?;
-        let Some(completed) =
-            runtime::bootstrap_probe_completion(&wake, &record.source, pending, &record.handoff)?
+        automatic_wake_running(automatic, &wake, project, &record.source)?;
+        let Some(completed) = runtime::bootstrap_probe_completion_guarded(
+            &wake,
+            &record.source,
+            pending,
+            &task_handoff::content(&record)?,
+            keep_running,
+        )?
         else {
             return Ok(summary(&record));
         };
@@ -1711,8 +3689,16 @@ pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> 
         .as_ref()
         .ok_or("WEB_BOOTSTRAP_RECEIPT_REQUIRED")?;
     let destination = validate_receipt(&record, receipt)?;
+    keep_running()?;
     if record.phase == Phase::Created && record.handoff_event_id.is_some() {
-        verify_source_handoff_still_latest(workspace, &store, &wake, &mut record, &destination)?;
+        verify_source_handoff_still_latest(
+            workspace,
+            &store,
+            &wake,
+            &mut record,
+            &destination,
+            keep_running,
+        )?;
     }
     let handoff_witness = record.handoff_event_id.clone();
     let source_fingerprint = record.source_fingerprint.clone();
@@ -1738,12 +3724,14 @@ pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> 
             return Err(reason.into());
         }
     }
+    keep_running()?;
     let bound = checkpoint_bound_with(
         &store,
         &mut record,
         &destination,
         || paired(workspace, project),
         |url, digest, generation| {
+            keep_running()?;
             let result = match handoff_witness.as_deref() {
                 Some(witness) => {
                     let fingerprint = source_fingerprint.as_deref().ok_or(
@@ -1790,6 +3778,7 @@ pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> 
         wake.root(),
         &bound.url,
     )?;
+    keep_running()?;
     queue_continuation_with(
         &wake,
         &mut record,
@@ -1800,15 +3789,1088 @@ pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> 
     Ok(summary(&record))
 }
 
+#[cfg(all(test, windows))]
+pub(crate) fn native_continuation_fixture(
+    root: &Path,
+    wake: &Store,
+    project: &str,
+    source_event: &str,
+) -> (Target, Target) {
+    tests::native_continuation_fixture(root, wake, project, source_event)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn handoff_source_error_card_is_not_a_completed_assistant_answer() {
+        for text in [
+            "This response couldn't load",
+            "This response couldn’t load.",
+            " \nThis\tresponse\ncouldn‘t load... ",
+            "THIS RESPONSE COULDN'T LOAD",
+        ] {
+            let snapshot = json!({"messages":[{"role":"ASSISTANT","text":text,
+                "textComplete":true,"revisionComplete":true}]});
+            assert_eq!(
+                source_ready_for_handoff(&snapshot).unwrap_err(),
+                "WEB_HANDOFF_SOURCE_RESPONSE_FAILED"
+            );
+        }
+    }
+
+    #[test]
+    fn handoff_source_historical_error_and_useful_error_explanation_remain_usable() {
+        for text in [
+            "The task is checkpointed; inspect the assigned tests next.",
+            "The UI says This response couldn't load; do not resend the request.",
+        ] {
+            let snapshot = json!({"messages":[
+                {"role":"ASSISTANT","text":"This response couldn’t load.","textComplete":true,"revisionComplete":true},
+                {"role":"USER","text":"Inspect the existing failure without resending.","textComplete":true,"revisionComplete":true},
+                {"role":"ASSISTANT","text":text,"textComplete":true,"revisionComplete":true}]});
+            source_ready_for_handoff(&snapshot).unwrap();
+        }
+        for last in [
+            json!({"role":"USER","text":"This response couldn't load","textComplete":true,"revisionComplete":true}),
+            json!({"role":"ASSISTANT","text":"Still generating","textComplete":false,"revisionComplete":true}),
+            json!({"role":"ASSISTANT","text":"Partial revision","textComplete":true,"revisionComplete":false}),
+        ] {
+            assert_eq!(
+                source_ready_for_handoff(&json!({"messages":[last]})).unwrap_err(),
+                "WEB_HANDOFF_SOURCE_RESPONSE_REQUIRED"
+            );
+        }
+    }
+
+    // Synthetic durable proof only: no browser, provider or native process.
+    #[cfg(windows)]
+    pub(super) fn native_continuation_fixture(
+        root: &Path,
+        wake: &Store,
+        project: &str,
+        source_event: &str,
+    ) -> (Target, Target) {
+        let registry_path = root.join(".catdesk/projects/projects.json");
+        let mut registry: crate::delegated::autonomy_projects::AutonomousProjectRegistryV1 =
+            serde_json::from_slice(&fs::read(&registry_path).unwrap()).unwrap();
+        let registered = registry
+            .projects
+            .iter_mut()
+            .find(|p| p.project_id == project)
+            .unwrap();
+        let source = wake.config().unwrap().targets[project].clone();
+        let current = wake
+            .set_target(
+                project,
+                source.generation,
+                &format!(
+                    "https://chatgpt.com/c/fixture-next-{}",
+                    uuid::Uuid::new_v4()
+                ),
+            )
+            .unwrap();
+        if !registered.chatgpt_target_history.contains(&source.url) {
+            registered.chatgpt_target_history.push(source.url.clone());
+        }
+        registered.chatgpt_target_history.push(current.url.clone());
+        registered.chatgpt_target_url = Some(current.url.clone());
+        registered.chatgpt_target_sha256 = Some(current.digest.clone());
+        let mut request = handoff_request(&registered.workspace);
+        request.project_id = project.into();
+        request.intent_id = uuid::Uuid::new_v4().to_string();
+        request.source_task_id = source_event.into();
+        request.source = source.clone();
+        request.native_thread_id = registered.codex_thread_id.clone();
+        request.event_id = format!("web-handoff-{}", request.intent_id);
+        request.message = handoff_request_message(
+            project,
+            &request.intent_id,
+            source_event,
+            &request.native_thread_id,
+        );
+        fs::write(registry_path, serde_json::to_vec(&registry).unwrap()).unwrap();
+        let mut record = record();
+        record.project_id = project.into();
+        record.source_task_id = source_event.into();
+        record.intent_id = request.intent_id.clone();
+        record.source = source.clone();
+        record.message_digest =
+            message_digest(project, &record.intent_id, &source.url, &record.handoff).unwrap();
+        record.phase = Phase::ContinuationQueued;
+        let mut bootstrap = receipt_for(&record);
+        bootstrap.destination_url = current.url.clone();
+        bootstrap.destination_digest = current.digest.clone();
+        record.receipt = Some(bootstrap);
+        record.bound_target = Some(current.clone());
+        record.handoff_event_id = Some(request.event_id.clone());
+        record.continuation_event_id = format!("web-continue-{}", record.intent_id);
+        record.context_meter_status = ContextMeterStatus::Recorded;
+        let store = ProjectStore::open(root, project).unwrap();
+        store.save_handoff_request(&request).unwrap();
+        store.save(&record).unwrap();
+        atomic(&store.root.join("active.json"), &record.intent_id).unwrap();
+        drop(store);
+        assert!(
+            acquire_web_work_lease(root, project).is_err(),
+            "pending continuation must fence work"
+        );
+        let message = continuation_message(&record, &current);
+        let event = wake
+            .produce_expected(
+                &record.continuation_event_id,
+                project,
+                "engineering_attention",
+                &message,
+                &current,
+            )
+            .unwrap();
+        let host = wake.host_lock().unwrap();
+        let claimed = wake.claim(&event, &host).unwrap();
+        wake.transition(
+            &event.event_id,
+            &claimed.owner,
+            DeliveryPhase::Submitting,
+            None,
+            None,
+        )
+        .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: event.event_id.clone(),
+            target_generation: current.generation,
+            target_digest: current.digest.clone(),
+            message_digest: digest(&message),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        wake.record_exact_receipt_timer(&event.event_id, &receipt)
+            .unwrap();
+        wake.transition(
+            &event.event_id,
+            &claimed.owner,
+            DeliveryPhase::Sent,
+            Some(receipt),
+            None,
+        )
+        .unwrap();
+        wake.complete_timer(&event.event_id).unwrap();
+        drop(acquire_web_work_lease(root, project).unwrap());
+        (source, current)
+    }
+
+    #[test]
+    fn cancelled_scheduler_cannot_prepare_collect_or_execute_a_project() {
+        let root =
+            std::env::temp_dir().join(format!("web-cancelled-rollover-{}", uuid::Uuid::new_v4()));
+        let stopped = || Err("WEB_AUTO_OWNER_STOPPED".to_string());
+        for result in [
+            request_handoff_guarded(&root, "alpha", "task-a", &stopped),
+            resume_saved_handoff_request_guarded(&root, "alpha", &stopped),
+            collect_handoff_guarded(&root, "alpha", &stopped),
+            execute_automatic(&root, "alpha", &stopped),
+        ] {
+            assert_eq!(result.unwrap_err(), "WEB_AUTO_OWNER_STOPPED");
+        }
+        assert!(
+            !root.exists(),
+            "retired owner must not initialize project state"
+        );
+    }
+    #[cfg(windows)]
+    use catdesk_wake::development_runtime;
     use catdesk_wake::{protocol::Event, store::Receipt};
     fn fixture() -> PathBuf {
         let path = std::env::temp_dir().join(format!("web-rollover-{}", uuid::Uuid::new_v4()));
         fs::create_dir(&path).unwrap();
         path
     }
+    #[cfg(windows)]
+    fn git_fixture(path: &Path, origin: &str) -> PathBuf {
+        fs::create_dir_all(path).unwrap();
+        for args in [
+            &["init", "-q"][..],
+            &["remote", "add", "origin", origin][..],
+        ] {
+            assert!(
+                std::process::Command::new("git")
+                    .arg("-C")
+                    .arg(path)
+                    .args(args)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        }
+        path.canonicalize().unwrap()
+    }
+    #[cfg(windows)]
+    fn prepared_dev_fixture(parent: &Path) -> (PathBuf, PathBuf) {
+        let control = parent.join("control");
+        let package = parent.join("package");
+        let python = parent.join("python");
+        fs::create_dir(&control).unwrap();
+        fs::create_dir(&package).unwrap();
+        fs::create_dir(&python).unwrap();
+        for (name, bytes) in [
+            ("CatDeskWakeHost.exe", b"fixture host".as_slice()),
+            ("CatDeskBinagotchy.exe", b"fixture gui".as_slice()),
+            (
+                "adapter.py",
+                include_bytes!("../wake/adapter.py").as_slice(),
+            ),
+            (
+                "wake_bridge.py",
+                include_bytes!("../scripts/wake_bridge.py").as_slice(),
+            ),
+        ] {
+            fs::write(package.join(name), bytes).unwrap();
+        }
+        fs::write(python.join("python.exe"), b"fixture Python").unwrap();
+        fs::write(python.join("__init__.py"), b"").unwrap();
+        development_runtime::prepare(&control, &package, &python).unwrap();
+        let control = git_fixture(&control, "https://example.test/catdesk.git");
+        let dev_root = development_runtime::root_for_workspace(&control)
+            .unwrap()
+            .unwrap();
+        (control, dev_root)
+    }
+    #[cfg(windows)]
+    pub(super) fn paired_handoff_fixture() -> (PathBuf, PathBuf, PathBuf, Target, Target) {
+        let parent = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("web-handoff-paired-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&parent).unwrap();
+        let (control, dev_root) = prepared_dev_fixture(&parent);
+        let registry =
+            AutonomousProjectRegistryStoreV1::open(control.join(".catdesk/projects")).unwrap();
+        registry.initialize(1, 1).unwrap();
+        let wake = Store::open(&dev_root).unwrap();
+        for project in ["catdesk", "alpha", "beta"] {
+            let origin = format!("https://example.test/{project}.git");
+            let workspace = if project == "catdesk" {
+                control.clone()
+            } else {
+                git_fixture(&parent.join(project), &origin)
+            };
+            let target = wake
+                .set_target(project, 0, &format!("https://chatgpt.com/c/{project}"))
+                .unwrap();
+            registry
+                .register_project(AutonomousProjectV1 {
+                    project_id: project.into(),
+                    workspace,
+                    git_identity: origin,
+                    verification_profile: "web_only_v1".into(),
+                    codex_thread_id: None,
+                    chatgpt_target_url: Some(target.url.clone()),
+                    chatgpt_target_sha256: Some(target.digest.clone()),
+                    chatgpt_target_history: vec![target.url],
+                })
+                .unwrap();
+        }
+        let alpha = paired(&control, "alpha").unwrap();
+        let beta = paired(&control, "beta").unwrap();
+        (parent, control, dev_root, alpha, beta)
+    }
+    #[cfg(windows)]
+    fn assert_no_handoff_actions(control: &Path, dev_root: &Path) {
+        for directory in ["queue", "archive", "deliveries", "turns", "logs"] {
+            assert_eq!(fs::read_dir(dev_root.join(directory)).unwrap().count(), 0);
+        }
+        let project = ProjectStore::open(control, "alpha").unwrap();
+        assert!(project.active().unwrap().is_none());
+        assert!(project.handoff_request().unwrap().is_none());
+        assert!(!control.join(".catdesk/web-context").exists());
+    }
+    #[cfg(windows)]
+    #[test]
+    fn handoff_target_config_writer_contention_preserves_code_and_recovers_without_actions() {
+        let (parent, control, dev_root, alpha, beta) = paired_handoff_fixture();
+        let registry_path = control.join(".catdesk/projects/projects.json");
+        let config_path = dev_root.join("config.json");
+        let registry_before = fs::read(&registry_path).unwrap();
+        let config_before = fs::read(&config_path).unwrap();
+        let held = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(dev_root.join("transaction.lock"))
+            .unwrap();
+        held.try_lock().unwrap();
+        let started = std::time::Instant::now();
+        assert_eq!(
+            paired(&control, "alpha").unwrap_err(),
+            "WEB_TARGET_WAKE_CONFIG_BUSY"
+        );
+        assert_eq!(
+            request_handoff_guarded(&control, "alpha", "task-a", &|| Ok(())).unwrap_err(),
+            "WEB_TARGET_WAKE_CONFIG_BUSY"
+        );
+        assert!(started.elapsed() < std::time::Duration::from_secs(5));
+        // The read failure must not release the writer's actual OS lock.
+        let contender = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(dev_root.join("transaction.lock"))
+            .unwrap();
+        assert!(contender.try_lock().is_err());
+        drop(contender);
+        assert_eq!(fs::read(&registry_path).unwrap(), registry_before);
+        assert_eq!(fs::read(&config_path).unwrap(), config_before);
+        assert_no_handoff_actions(&control, &dev_root);
+        drop(held);
+        assert_eq!(paired(&control, "alpha").unwrap(), alpha);
+        assert_eq!(paired(&control, "beta").unwrap(), beta);
+        assert_eq!(fs::read(&registry_path).unwrap(), registry_before);
+        assert_eq!(fs::read(&config_path).unwrap(), config_before);
+        assert_no_handoff_actions(&control, &dev_root);
+        fs::remove_dir_all(parent).unwrap();
+    }
+    #[cfg(windows)]
+    #[test]
+    fn handoff_target_permanent_mismatch_preserves_refusal_without_actions() {
+        let (parent, control, dev_root, alpha, beta) = paired_handoff_fixture();
+        // A valid Wake generation with a different URL is still unpaired.
+        let wake = Store::open(&dev_root).unwrap();
+        wake.set_target(
+            "alpha",
+            alpha.generation,
+            "https://chatgpt.com/c/alpha-drift",
+        )
+        .unwrap();
+        let registry_path = control.join(".catdesk/projects/projects.json");
+        let config_path = dev_root.join("config.json");
+        let registry_before = fs::read(&registry_path).unwrap();
+        let config_before = fs::read(&config_path).unwrap();
+        for _ in 0..2 {
+            assert_eq!(
+                paired(&control, "alpha").unwrap_err(),
+                "WEB_TARGET_REGISTRY_WAKE_MISMATCH"
+            );
+            assert_eq!(
+                request_handoff_guarded(&control, "alpha", "task-a", &|| Ok(())).unwrap_err(),
+                "WEB_TARGET_REGISTRY_WAKE_MISMATCH"
+            );
+            assert_eq!(paired(&control, "beta").unwrap(), beta);
+            assert_eq!(fs::read(&registry_path).unwrap(), registry_before);
+            assert_eq!(fs::read(&config_path).unwrap(), config_before);
+            assert_no_handoff_actions(&control, &dev_root);
+        }
+        fs::remove_dir_all(parent).unwrap();
+    }
+    fn private_context(root: &Path, record: &Record, secret: &str) -> Value {
+        json!({"projectId":record.project_id,"sourceEventId":record.source_task_id,"requestId":"request-a",
+            "taskId":"assigned-a","assignmentSha256":"a".repeat(64),"executionKey":secret,
+            "registeredWorkspace":root,"executionWorkspace":root,"journaledCalls":[{"callId":"done-a","status":"COMPLETED"}]})
+    }
+
+    #[test]
+    fn work_admission_retries_only_brief_context_metadata_contention_before_task_start() {
+        let root = fixture();
+        let meter_root = root.join(".catdesk/web-context");
+        let meter = WebContextStore::open(&meter_root).unwrap();
+        meter
+            .bind_observed_target(key("alpha", &record().source), None)
+            .unwrap();
+        let project_before =
+            fs::read(meter_root.join(format!("projects/{}.json", digest("alpha")))).unwrap();
+        let held = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(meter_root.join("ledger.lock"))
+            .unwrap();
+        held.lock().unwrap();
+        let other = root.clone();
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            acquire_web_work_lease(&other, "alpha").map(drop)
+        });
+        started_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        drop(held);
+        worker.join().unwrap().unwrap();
+        assert_eq!(
+            fs::read(meter_root.join(format!("projects/{}.json", digest("alpha")))).unwrap(),
+            project_before
+        );
+        assert!(!root.join(".catdesk/project-mcp-tasks").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    fn remove_private_handoff_fixture(record: &Record) {
+        if let Some(path) = task_handoff::artifact_root(record).unwrap() {
+            assert_eq!(
+                path.parent().unwrap().file_name().unwrap(),
+                "WebTaskHandoffs"
+            );
+            assert_eq!(path.file_name().unwrap().to_string_lossy().len(), 64);
+            fs::remove_dir_all(path).unwrap();
+        }
+    }
+
+    #[test]
+    fn granted_task_private_handoff_restarts_without_workspace_or_status_key_disclosure() {
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut saved = record();
+        let secret = "7".repeat(64);
+        task_handoff::prepare(
+            &store,
+            &mut saved,
+            private_context(&root, &record(), &secret),
+        )
+        .unwrap();
+        saved.message_digest = message_digest(
+            "alpha",
+            &saved.intent_id,
+            &saved.source.url,
+            &task_handoff::content(&saved).unwrap(),
+        )
+        .unwrap();
+        let bytes = serde_json::to_vec(&saved).unwrap();
+        assert!(!String::from_utf8(bytes.clone()).unwrap().contains(&secret));
+        assert!(!summary(&saved).to_string().contains(&secret));
+        assert!(task_handoff::content(&saved).unwrap().contains(&secret));
+        assert_eq!(
+            task_handoff::content(&saved).unwrap(),
+            task_handoff::content(&saved).unwrap()
+        );
+        let private = task_handoff::artifact_root(&saved).unwrap().unwrap();
+        assert!(!private.starts_with(root.canonicalize().unwrap()));
+        let archive = draft_archive_path(&store, &saved).unwrap();
+        let witness = draft_repair_path(&store, &saved, "witness").unwrap();
+        assert!(archive.starts_with(&private) && witness.starts_with(&private));
+        create_private_once(
+            &archive,
+            &json!({"expectedText":task_handoff::content(&saved).unwrap()}),
+        )
+        .unwrap();
+        store.save(&saved).unwrap();
+        atomic(&store.root.join("active.json"), &saved.intent_id).unwrap();
+        let before = fs::read(store.root.join(format!("{}.json", saved.intent_id))).unwrap();
+        drop(store);
+        let reopened = ProjectStore::open(&root, "alpha").unwrap();
+        let recovered = reopened.active().unwrap().unwrap();
+        assert_eq!(
+            before,
+            fs::read(reopened.root.join(format!("{}.json", saved.intent_id))).unwrap()
+        );
+        assert_eq!(
+            task_handoff::content(&recovered).unwrap(),
+            task_handoff::content(&saved).unwrap()
+        );
+        let bound = Target::new(2, "https://chatgpt.com/c/private-next".into()).unwrap();
+        let message = continuation_message(&recovered, &bound);
+        assert!(
+            message.contains(&bound.digest)
+                && message.contains("assigned-a")
+                && !message.contains(&secret)
+        );
+        let other_root = fixture();
+        let other = ProjectStore::open(&other_root, "alpha").unwrap();
+        other.save(&recovered).unwrap();
+        atomic(&other.root.join("active.json"), &recovered.intent_id).unwrap();
+        assert_eq!(
+            other.active().unwrap_err(),
+            "WEB_TASK_HANDOFF_CONTROL_SCOPE_CHANGED"
+        );
+        drop(other);
+        drop(reopened);
+        remove_private_handoff_fixture(&saved);
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_dir_all(other_root).unwrap();
+    }
+
+    #[test]
+    fn granted_task_private_handoff_tamper_missing_payload_and_wrong_project_never_regenerate() {
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut saved = record();
+        let secret = "8".repeat(64);
+        let legacy = serde_json::to_vec(&saved).unwrap();
+        assert!(!String::from_utf8(legacy).unwrap().contains("taskHandoff"));
+        assert_eq!(task_handoff::content(&saved).unwrap(), saved.handoff);
+        task_handoff::prepare(
+            &store,
+            &mut saved,
+            private_context(&root, &record(), &secret),
+        )
+        .unwrap();
+        let path = task_handoff::artifact_root(&saved)
+            .unwrap()
+            .unwrap()
+            .join("payload.json");
+        let before = fs::read(&path).unwrap();
+        fs::write(&path, b"{}").unwrap();
+        assert_eq!(
+            task_handoff::content(&saved).unwrap_err(),
+            "WEB_TASK_HANDOFF_PAYLOAD_CHANGED"
+        );
+        assert_eq!(fs::read(&path).unwrap(), b"{}");
+        fs::write(&path, &before).unwrap();
+        let hidden = path.with_extension("withheld");
+        fs::rename(&path, &hidden).unwrap();
+        assert!(task_handoff::content(&saved).is_err());
+        assert!(!path.exists());
+        fs::rename(&hidden, &path).unwrap();
+        let mut wrong = saved.clone();
+        wrong.project_id = "beta".into();
+        assert_eq!(
+            task_handoff::content(&wrong).unwrap_err(),
+            "WEB_TASK_HANDOFF_PAYLOAD_SCOPE_MISMATCH"
+        );
+        wrong = saved.clone();
+        wrong.intent_id = "other-intent".into();
+        assert!(task_handoff::content(&wrong).is_err());
+        let mut oversized = record();
+        oversized.handoff = "x".repeat(16000);
+        assert!(
+            task_handoff::prepare(
+                &store,
+                &mut oversized,
+                private_context(&root, &record(), &secret)
+            )
+            .is_err()
+        );
+        assert!(oversized.task_handoff.is_none());
+        let mut credential_source = record();
+        credential_source.handoff.push_str(&secret);
+        assert_eq!(
+            task_handoff::prepare(
+                &store,
+                &mut credential_source,
+                private_context(&root, &record(), &secret)
+            )
+            .unwrap_err(),
+            "WEB_TASK_HANDOFF_CREDENTIAL_IN_SOURCE_REFUSED"
+        );
+        assert!(credential_source.task_handoff.is_none());
+        assert_eq!(fs::read(&path).unwrap(), before);
+        drop(store);
+        remove_private_handoff_fixture(&saved);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn granted_task_automatic_preparation_transfers_exact_context_and_journal_without_new_authority()
+     {
+        let (control, assignment, wake, mut pins, event) =
+            crate::web_work::tests::assignment_fixture_for("alpha");
+        let mut assigned: Value = serde_json::from_slice(&fs::read(&assignment).unwrap()).unwrap();
+        assigned["contract"]["allowedCommandProfiles"] =
+            json!(["c49-verification", "not-installed"]);
+        let metadata_only_executable = std::env::current_exe().unwrap();
+        assigned["commandProfiles"] = json!([{"id":"c49-verification","timeoutSeconds":3,
+            "argv":[metadata_only_executable,"--never-execute-c49-metadata-fixture"]}]);
+        fs::write(&assignment, serde_json::to_vec(&assigned).unwrap()).unwrap();
+        pins["assignmentSha256"] = json!(digest(&fs::read_to_string(&assignment).unwrap()));
+        wake.publish(&event).unwrap();
+        crate::web_work::associate(&control, pins.clone(), &assignment).unwrap();
+        let target = wake.config().unwrap().targets["alpha"].clone();
+        let host = wake.host_lock().unwrap();
+        let delivery = wake.claim(&event, &host).unwrap();
+        wake.transition(
+            &event.event_id,
+            &delivery.owner,
+            DeliveryPhase::Submitting,
+            None,
+            None,
+        )
+        .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: event.event_id.clone(),
+            target_generation: target.generation,
+            target_digest: target.digest.clone(),
+            message_digest: digest(&event.message),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        wake.record_exact_receipt_timer(&event.event_id, &receipt)
+            .unwrap();
+        wake.transition(
+            &event.event_id,
+            &delivery.owner,
+            DeliveryPhase::Sent,
+            Some(receipt),
+            None,
+        )
+        .unwrap();
+        drop(host);
+        let store = ProjectStore::open(&control, "alpha").unwrap();
+        assert!(
+            locally_granted_task_context(&control, "alpha", &event.event_id, &target, &store)
+                .unwrap()
+                .is_none()
+        );
+        drop(store);
+        let grant = crate::web_work::execution_permission(&control, pins.clone(), false).unwrap();
+        let key_path = PathBuf::from(grant["executionKeyFile"].as_str().unwrap());
+        let secret: String = serde_json::from_slice(&fs::read(&key_path).unwrap()).unwrap();
+        let scope =
+            crate::delegated::autonomy_projects::resolve_registered_project_from_control_root(
+                &control, "alpha",
+            )
+            .unwrap();
+        let task = crate::project_mcp_task::ProjectTask::open_with_budget(&scope, &assignment, 60)
+            .unwrap();
+        let task_id = grant["taskId"].as_str().unwrap();
+        let native_before = fs::read(scope.project.workspace.join("src/lib.rs")).unwrap();
+        task.execute(json!({"taskId":task_id,"callId":"before-rollover-preview","tool":"patch.preview",
+            "arguments":{"patchId":"rollover-patch","operations":[{"path":"src/lib.rs","old":"{ 1 }","new":"{ 47 }"}]}})).await.unwrap();
+        task.execute(json!({"taskId":task_id,"callId":"before-rollover-read","tool":"read","arguments":{"path":"src/lib.rs"}})).await.unwrap();
+        task.close().await.unwrap();
+        drop(task);
+        let before_report_store = ProjectStore::open(&control, "alpha").unwrap();
+        let legacy_context = locally_granted_task_context(
+            &control,
+            "alpha",
+            &event.event_id,
+            &target,
+            &before_report_store,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(legacy_context.get("coordinatorReport").is_none());
+        drop(before_report_store);
+        let reported = crate::web_work::resolve(
+            &control,
+            json!({
+                "projectId":"alpha","requestId":pins["requestId"],
+                "expectedTargetGeneration":target.generation,"expectedTargetSha256":target.digest,
+                "outcome":"blocked","reasonCode":"REVIEW_DEPENDENCY",
+                "summary":"Private fixture blocker details that must not enter the handoff verbatim"
+            }),
+        )
+        .unwrap();
+        assert_eq!(reported["phase"], "OPEN");
+        let meter = WebContextStore::open(control.join(".catdesk/web-context")).unwrap();
+        let source_key = key("alpha", &target);
+        meter
+            .bind_observed_target(source_key.clone(), None)
+            .unwrap();
+        meter
+            .configure_policy(
+                "alpha",
+                crate::web_conversation_context::ContextPressurePolicy {
+                    configured_budget_tokens: 128,
+                    safety_headroom_tokens: 127,
+                    unknown_source_reserve_tokens: 0,
+                    automatic_rollover_enabled: true,
+                    incomplete_history_rollover: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        meter
+            .record_observation(
+                &source_key,
+                Observation {
+                    event_id: "pressure-a",
+                    revision: 1,
+                    dedup_key: "pressure-a",
+                    source_kind: VisibleSourceKind::Handoff,
+                    visible_text: Some("Recorded useful assigned work and pending continuation"),
+                    observed_at_unix: now(),
+                },
+            )
+            .unwrap();
+        let mut handoff = source_handoff();
+        handoff.source_task_id = event.event_id.clone();
+        assert_eq!(
+            prepare(&control, "alpha", handoff.clone()).unwrap_err(),
+            "WEB_TASK_HANDOFF_AUTOMATIC_SOURCE_REQUIRED"
+        );
+        let intent = meter
+            .pressure(&source_key)
+            .unwrap()
+            .rollover_intent
+            .unwrap();
+        let mut request = handoff_request(&scope.project.workspace);
+        request.intent_id = intent.intent_id;
+        request.source = target.clone();
+        request.source_task_id = event.event_id.clone();
+        request.native_thread_id = scope.project.codex_thread_id.clone();
+        request.event_id = format!("web-handoff-{}", request.intent_id);
+        request.message = handoff_request_message(
+            "alpha",
+            &request.intent_id,
+            &event.event_id,
+            &request.native_thread_id,
+        );
+        let source_store = ProjectStore::open(&control, "alpha").unwrap();
+        source_store.save_handoff_request(&request).unwrap();
+        drop(source_store);
+        let prepared = prepare_with_request(
+            &control,
+            "alpha",
+            handoff,
+            Some(&request),
+            Some("a".repeat(64)),
+        )
+        .unwrap();
+        assert_eq!(prepared["grantedTaskContextPreserved"], true);
+        let store = ProjectStore::open(&control, "alpha").unwrap();
+        let mut saved = store.active().unwrap().unwrap();
+        let text = task_handoff::content(&saved).unwrap();
+        assert!(
+            text.contains(&secret)
+                && text.contains("before-rollover-read")
+                && text.contains(task_id)
+        );
+        task_handoff::authorize(&control, &saved).unwrap();
+        let capsule: Value = serde_json::from_slice(
+            &fs::read(
+                task_handoff::artifact_root(&saved)
+                    .unwrap()
+                    .unwrap()
+                    .join("payload.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let pending_patch = capsule["context"]["patchProposals"][0]["patchId"].clone();
+        assert_eq!(pending_patch, "rollover-patch");
+        let report_snapshot = &capsule["context"]["coordinatorReport"];
+        assert_eq!(
+            report_snapshot["basis"],
+            "COORDINATOR_REPORTED_NOT_VERIFIED"
+        );
+        assert_eq!(report_snapshot["snapshot"], reported["reportedStatus"]);
+        assert_eq!(report_snapshot["taskCompletionVerified"], false);
+        assert_eq!(report_snapshot["ownershipReleased"], false);
+        assert!(!text.contains("Private fixture blocker details"));
+        let contract = &capsule["context"]["taskContract"];
+        for field in [
+            "objective",
+            "allowedPaths",
+            "forbiddenPaths",
+            "orderedSteps",
+            "acceptanceCriteria",
+            "expectedArtifacts",
+            "escalationConditions",
+            "verificationProfile",
+        ] {
+            assert_eq!(contract[field], assigned["contract"][field]);
+        }
+        assert_eq!(
+            contract["commandProfiles"],
+            json!([{"id":"c49-verification","timeoutSeconds":3}])
+        );
+        assert!(
+            contract["allowedTools"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("verify.command"))
+        );
+        assert!(!contract.to_string().contains("not-installed"));
+        assert!(
+            !contract
+                .to_string()
+                .contains("--never-execute-c49-metadata-fixture")
+        );
+        assert!(
+            !contract
+                .to_string()
+                .contains(metadata_only_executable.to_str().unwrap())
+        );
+        assert_eq!(contract["limitsRestartedByRollover"], false);
+        assert_eq!(
+            contract["contractLimits"]["maxToolCalls"],
+            assigned["contract"]["maxToolCalls"]
+        );
+        assert_eq!(
+            task_handoff::content(&store.active().unwrap().unwrap()).unwrap(),
+            text
+        );
+        for path in [
+            store.root.join(format!("{}.json", saved.intent_id)),
+            control.join(".catdesk/web-work/alpha.json"),
+        ] {
+            assert!(!fs::read_to_string(path).unwrap().contains(&secret));
+        }
+        // Synthetic receipt/response proof only: no browser or real message.
+        // Exercise the actual paired binder and task dispatcher after restart.
+        let bound = Target::new(
+            2,
+            "https://chatgpt.com/c/granted-task-synthetic-next".into(),
+        )
+        .unwrap();
+        mcp::operator_bind_project_web_target(
+            &control,
+            "alpha",
+            &bound.url,
+            Some(&target.digest),
+            target.generation,
+        )
+        .unwrap();
+        let mut receipt = receipt_for(&saved);
+        receipt.destination_url = bound.url.clone();
+        receipt.destination_digest = bound.digest.clone();
+        saved.receipt = Some(receipt);
+        saved.handoff_event_id = Some(request.event_id.clone());
+        saved.bound_target = Some(bound.clone());
+        saved.phase = Phase::ContinuationQueued;
+        saved.context_meter_status = ContextMeterStatus::Recorded;
+        saved.source_snapshot_verified = true;
+        saved.source_fingerprint = Some("a".repeat(64));
+        record_context_meter(&control, &saved, &bound).unwrap();
+        store.save(&saved).unwrap();
+        drop(store);
+        assert_eq!(
+            auto_stage(&control, "alpha", &bound).unwrap(),
+            AutoStage::AwaitContinuation
+        );
+        assert!(execute(&control, "alpha").unwrap()["taskResumeEventId"].is_null());
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        let message = continuation_message(&saved, &bound);
+        assert!(!message.contains(&secret));
+        let continued = wake
+            .produce_expected(
+                &saved.continuation_event_id,
+                "alpha",
+                "engineering_attention",
+                &message,
+                &bound,
+            )
+            .unwrap();
+        let host = wake.host_lock().unwrap();
+        let claimed = wake.claim(&continued, &host).unwrap();
+        wake.transition(
+            &continued.event_id,
+            &claimed.owner,
+            DeliveryPhase::Submitting,
+            None,
+            None,
+        )
+        .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: continued.event_id.clone(),
+            target_generation: bound.generation,
+            target_digest: bound.digest.clone(),
+            message_digest: digest(&message),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        wake.record_exact_receipt_timer(&continued.event_id, &receipt)
+            .unwrap();
+        wake.transition(
+            &continued.event_id,
+            &claimed.owner,
+            DeliveryPhase::Sent,
+            Some(receipt),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            auto_stage(&control, "alpha", &bound).unwrap(),
+            AutoStage::AwaitContinuation
+        );
+        wake.complete_timer(&continued.event_id).unwrap();
+        drop(host);
+        assert_eq!(
+            auto_stage(&control, "alpha", &bound).unwrap(),
+            AutoStage::Execute
+        );
+        let queued = execute(&control, "alpha").unwrap();
+        let resume_id = task_resume_id(&saved);
+        assert_eq!(queued["taskResumeEventId"], resume_id);
+        let resume_event = wake
+            .events()
+            .unwrap()
+            .into_iter()
+            .find(|event| event.event_id == resume_id)
+            .unwrap();
+        let event_bytes = fs::read(wake.root().join(format!("queue/{resume_id}.json"))).unwrap();
+        assert!(!resume_event.message.contains(&secret));
+        execute(&control, "alpha").unwrap();
+        // Crash window: publication persisted, local marker did not.
+        let retry_store = ProjectStore::open(&control, "alpha").unwrap();
+        let mut retry = retry_store.active().unwrap().unwrap();
+        retry.task_resume_event_id = None;
+        retry_store.save(&retry).unwrap();
+        drop(retry_store);
+        execute(&control, "alpha").unwrap();
+        assert_eq!(
+            event_bytes,
+            fs::read(wake.root().join(format!("queue/{resume_id}.json"))).unwrap()
+        );
+        assert_eq!(
+            wake.events()
+                .unwrap()
+                .iter()
+                .filter(|event| event.event_id == resume_id)
+                .count(),
+            1
+        );
+        let host = wake.host_lock().unwrap();
+        let claimed = wake.claim(&resume_event, &host).unwrap();
+        wake.transition(
+            &resume_id,
+            &claimed.owner,
+            DeliveryPhase::Submitting,
+            None,
+            None,
+        )
+        .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: resume_id.clone(),
+            target_generation: bound.generation,
+            target_digest: bound.digest.clone(),
+            message_digest: digest(&resume_event.message),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        wake.record_exact_receipt_timer(&resume_id, &receipt)
+            .unwrap();
+        wake.transition(
+            &resume_id,
+            &claimed.owner,
+            DeliveryPhase::Sent,
+            Some(receipt),
+            None,
+        )
+        .unwrap();
+        drop(host);
+        let mut current_pins = pins.clone();
+        current_pins["expectedTargetGeneration"] = json!(bound.generation);
+        current_pins["expectedTargetSha256"] = json!(bound.digest);
+        let rpc = |call_id: &str, tool: &str, arguments: Value| {
+            let mut args = current_pins.clone();
+            args["executionKey"] = json!(secret);
+            args["taskId"] = json!(task_id);
+            args["callId"] = json!(call_id);
+            args["tool"] = json!(tool);
+            args["arguments"] = arguments;
+            serde_json::from_value::<mcp::JsonRpcRequest>(
+                json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+                "params":{"name":crate::web_task_dispatch::TOOL,"arguments":args}}),
+            )
+            .unwrap()
+        };
+        let apply = rpc(
+            "apply-after-rollover",
+            "patch.apply",
+            json!({"patchId":pending_patch}),
+        );
+        let applied = crate::web_task_dispatch::handle(control.to_str().unwrap(), &apply).await;
+        let applied = serde_json::to_value(applied).unwrap();
+        assert!(applied.get("error").is_none(), "{applied}");
+        assert_eq!(
+            applied["result"]["_meta"]["catdeskTaskLifecycle"]["status"],
+            "CLOSED"
+        );
+        let replay = crate::web_task_dispatch::handle(control.to_str().unwrap(), &apply).await;
+        assert_eq!(
+            serde_json::to_value(replay).unwrap()["error"]["message"],
+            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+        );
+        assert_eq!(
+            fs::read(scope.project.workspace.join("src/lib.rs")).unwrap(),
+            native_before
+        );
+        let response = crate::web_task_dispatch::handle(
+            control.to_str().unwrap(),
+            &rpc(
+                "after-rollover-read",
+                "read",
+                json!({"path":"src/lib.rs","startLine":1,"endLine":1}),
+            ),
+        )
+        .await;
+        let response = serde_json::to_value(response).unwrap();
+        assert!(response.get("error").is_none(), "{response}");
+        assert_eq!(
+            response["result"]["_meta"]["catdeskTaskLifecycle"]["status"],
+            "CLOSED"
+        );
+        assert!(
+            response["result"]["structuredContent"]["payload"]["text"]
+                .as_str()
+                .unwrap()
+                .contains("{ 47 }")
+        );
+        let replay = crate::web_task_dispatch::handle(
+            control.to_str().unwrap(),
+            &rpc("before-rollover-read", "read", json!({"path":"src/lib.rs"})),
+        )
+        .await;
+        assert_eq!(
+            serde_json::to_value(replay).unwrap()["error"]["message"],
+            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+        );
+        let store = ProjectStore::open(&control, "alpha").unwrap();
+        let recovered = store.active().unwrap().unwrap();
+        // A later report may be included in a future handoff, but must never
+        // regenerate an already prepared private payload or change its digest.
+        let ledger = WorkLedger::open(&control, "alpha").unwrap();
+        ledger
+            .report(
+                pins["requestId"].as_str().unwrap(),
+                &target,
+                "in_progress",
+                "DEPENDENCY_RECOVERED",
+                "Fixture dependency is now available",
+            )
+            .unwrap();
+        let next = locally_granted_task_context(&control, "alpha", &event.event_id, &bound, &store)
+            .unwrap()
+            .unwrap();
+        assert_eq!(next["journaledCalls"].as_array().unwrap().len(), 4);
+        assert_eq!(
+            next["coordinatorReport"]["snapshot"]["state"],
+            "in_progress"
+        );
+        assert_eq!(task_handoff::content(&recovered).unwrap(), text);
+        assert_eq!(next["patchApplications"][0]["status"], "APPLIED");
+        let journal_root = control.join(format!(
+            ".catdesk/project-mcp-tasks/alpha/{task_id}/journal"
+        ));
+        let application_path = fs::read_dir(&journal_root)
+            .unwrap()
+            .map(|entry| entry.unwrap().path().join("patch_applications.json"))
+            .find(|path| path.is_file())
+            .unwrap();
+        let applications_before = fs::read(&application_path).unwrap();
+        let mut unknown: Value = serde_json::from_slice(&applications_before).unwrap();
+        unknown[0]["status"] = json!("OUTCOME_UNKNOWN");
+        fs::write(&application_path, serde_json::to_vec(&unknown).unwrap()).unwrap();
+        assert_eq!(
+            locally_granted_task_context(&control, "alpha", &event.event_id, &bound, &store)
+                .unwrap_err(),
+            "PROJECT_TASK_RECOVERY_REQUIRED"
+        );
+        fs::write(&application_path, applications_before).unwrap();
+        assert!(task_handoff::content(&recovered).unwrap().contains(&secret));
+        drop(store);
+        // Supported local revocation fences the frozen context on recovery.
+        crate::web_work::execution_permission(&control, current_pins, true).unwrap();
+        assert_eq!(
+            task_handoff::authorize(&control, &saved).unwrap_err(),
+            "WEB_TASK_GRANT_REVOKED"
+        );
+        let work = WorkLedger::open(&control, "alpha")
+            .unwrap()
+            .record(pins["requestId"].as_str().unwrap())
+            .unwrap()
+            .unwrap();
+        assert!(
+            crate::project_mcp_task::granted_handoff_context(&scope, &work, &target)
+                .unwrap()
+                .is_none()
+        );
+        remove_private_handoff_fixture(&saved);
+        assert!(!key_path.starts_with(&control));
+        fs::remove_file(key_path).unwrap();
+    }
+
     fn record() -> Record {
         let source = Target::new(1, "https://chatgpt.com/c/old".into()).unwrap();
         Record {
@@ -1820,7 +4882,10 @@ mod tests {
                 .unwrap(),
             source,
             phase: Phase::Prepared,
+            bootstrap_progress: None,
             handoff: "private handoff".into(),
+            task_handoff: None,
+            task_resume_event_id: None,
             created_utc: 10,
             receipt: None,
             continuation_event_id: "continue-a".into(),
@@ -1830,6 +4895,7 @@ mod tests {
             handoff_event_id: None,
             source_fingerprint: None,
             source_snapshot_verified: false,
+            quarantine: None,
         }
     }
     fn receipt_for(record: &Record) -> runtime::BootstrapReceipt {
@@ -1847,6 +4913,1248 @@ mod tests {
             evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
             completion: "RESPONSE_COMPLETED".into(),
         }
+    }
+
+    #[test]
+    fn bootstrap_progress_restart_only_resumes_before_send_attempt() {
+        use runtime::BootstrapProgress as Progress;
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut record = record();
+        record.handoff_event_id = Some("web-handoff-intent-a".into());
+        record.source_fingerprint = Some("saved-source-fingerprint".into());
+        store.save(&record).unwrap();
+        atomic(&store.root.join("active.json"), &record.intent_id).unwrap();
+        checkpoint_bootstrap_progress(&mut record, Progress::TextEntryAuthorized).unwrap();
+        store.save(&record).unwrap();
+        drop(store);
+        assert_eq!(
+            auto_stage(&root, "alpha", &record.source).unwrap(),
+            AutoStage::Execute
+        );
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut record = store.active().unwrap().unwrap();
+        checkpoint_bootstrap_progress(&mut record, Progress::TextEntryAuthorized).unwrap();
+        checkpoint_bootstrap_progress(&mut record, Progress::DraftReady).unwrap();
+        store.save(&record).unwrap();
+        drop(store);
+        assert_eq!(
+            auto_stage(&root, "alpha", &record.source).unwrap(),
+            AutoStage::Execute
+        );
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut record = store.active().unwrap().unwrap();
+        checkpoint_bootstrap_progress(&mut record, Progress::TextEntryAuthorized).unwrap();
+        assert_eq!(record.bootstrap_progress, Some(Progress::DraftReady));
+        checkpoint_bootstrap_progress(&mut record, Progress::SendAttempted).unwrap();
+        store.save(&record).unwrap();
+        drop(store);
+        assert_eq!(
+            auto_stage(&root, "alpha", &record.source).unwrap(),
+            AutoStage::SubmissionUnknown
+        );
+        let mut legacy = record.clone();
+        legacy.bootstrap_progress = None;
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        store.save(&legacy).unwrap();
+        drop(store);
+        assert_eq!(
+            auto_stage(&root, "alpha", &legacy.source).unwrap(),
+            AutoStage::SubmissionUnknown
+        );
+        let mut ambiguous = legacy.clone();
+        ambiguous.bootstrap_progress = Some(Progress::TextEntryAuthorized);
+        ambiguous.reconciliation_reason = Some("WEB_BOOTSTRAP_PRE_SEND_AMBIGUOUS_NO_RESEND".into());
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        store.save(&ambiguous).unwrap();
+        drop(store);
+        assert!(!resumable_bootstrap(&ambiguous));
+        assert_eq!(
+            auto_stage(&root, "alpha", &ambiguous.source).unwrap(),
+            AutoStage::SubmissionUnknown
+        );
+        assert_eq!(
+            auto_stage(&root, "beta", &ambiguous.source).unwrap(),
+            AutoStage::Observe
+        );
+        // The live v2 canary hit this broad fence after full draft readiness.
+        // Its only remaining action before a send ACK was a read/check.
+        ambiguous.bootstrap_progress = Some(Progress::DraftReady);
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        store.save(&ambiguous).unwrap();
+        drop(store);
+        assert!(resumable_bootstrap(&ambiguous));
+        assert_eq!(
+            auto_stage(&root, "alpha", &ambiguous.source).unwrap(),
+            AutoStage::Execute
+        );
+        checkpoint_bootstrap_progress(&mut ambiguous, Progress::TextEntryAuthorized).unwrap();
+        assert!(
+            ambiguous.reconciliation_reason.is_some(),
+            "first ACK is not full revalidation"
+        );
+        checkpoint_bootstrap_progress(&mut ambiguous, Progress::DraftReady).unwrap();
+        assert!(ambiguous.reconciliation_reason.is_none());
+        ambiguous.reconciliation_reason = Some("UNRELATED_SOURCE_DRIFT".into());
+        assert!(!resumable_bootstrap(&ambiguous));
+        checkpoint_bootstrap_progress(&mut ambiguous, Progress::DraftReady).unwrap();
+        assert_eq!(
+            ambiguous.reconciliation_reason.as_deref(),
+            Some("UNRELATED_SOURCE_DRIFT")
+        );
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        store.save(&legacy).unwrap();
+        drop(store);
+        assert_eq!(
+            inspect_draft(&root, "alpha", "wrong-intent").unwrap_err(),
+            "WEB_ROLLOVER_INTENT_CHANGED"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn legacy_draft_archive_preserves_actual_and_expected_before_clear_authority() {
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut record = record();
+        record.phase = Phase::Submitting;
+        store.save(&record).unwrap();
+        atomic(&store.root.join("active.json"), &record.intent_id).unwrap();
+        let expected = runtime::compose_bootstrap_message(
+            &record.project_id,
+            &record.intent_id,
+            &record.source,
+            &record.handoff,
+        )
+        .unwrap();
+        let actual = expected.split_whitespace().collect::<Vec<_>>().join(" ");
+        save_draft_archive(&store, &record, &actual, actual.len()).unwrap();
+        let archived = read_draft_archive(&store, &record).unwrap().unwrap();
+        assert_eq!(archived.expected_text, expected);
+        assert_eq!(archived.actual_text, actual);
+        assert_ne!(archived.expected_text, archived.actual_text);
+        save_draft_archive(&store, &record, &actual, actual.len()).unwrap();
+        assert_eq!(
+            save_draft_archive(&store, &record, &format!("{actual} "), actual.len() + 1)
+                .unwrap_err(),
+            "WEB_DRAFT_ARCHIVE_WITNESS_CHANGED"
+        );
+        drop(store);
+        assert_eq!(
+            archive_draft(&root, "alpha", "wrong-intent").unwrap_err(),
+            "WEB_ROLLOVER_INTENT_CHANGED"
+        );
+        record.source = Target::new(2, record.source.url.clone()).unwrap();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        assert_eq!(
+            read_draft_archive(&store, &record).unwrap_err(),
+            "WEB_DRAFT_ARCHIVE_INVALID"
+        );
+        drop(store);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn unknown_v2_archive_receipt_recovers_cold_without_browser_or_resend() {
+        let (parent, control, dev_root, alpha, beta) = paired_handoff_fixture();
+        let mut saved = record();
+        saved.source = alpha.clone();
+        saved.phase = Phase::Submitting;
+        saved.bootstrap_progress = Some(runtime::BootstrapProgress::SendAttempted);
+        saved.message_digest = message_digest(
+            &saved.project_id,
+            &saved.intent_id,
+            &saved.source.url,
+            &saved.handoff,
+        )
+        .unwrap();
+        let store = ProjectStore::open(&control, "alpha").unwrap();
+        store.save(&saved).unwrap();
+        atomic(&store.root.join("active.json"), &saved.intent_id).unwrap();
+        let expected = runtime::compose_bootstrap_message(
+            &saved.project_id,
+            &saved.intent_id,
+            &saved.source,
+            &saved.handoff,
+        )
+        .unwrap();
+        save_draft_archive(&store, &saved, &expected, expected.len()).unwrap();
+        // Fixture a crash after durable archive/empty-home receipt but before
+        // the journal records the permanent no-resend reason. No browser runs.
+        create_private_once(
+            &draft_archive_receipt_path(&store, &saved).unwrap(),
+            &DraftArchiveReceipt {
+                schema_version: 1,
+                project_id: saved.project_id.clone(),
+                intent_id: saved.intent_id.clone(),
+                source_digest: saved.source.digest.clone(),
+                message_digest: saved.message_digest.clone(),
+                archived_utc: 11,
+                evidence: "ARCHIVE_RECORDED_HOME_EMPTY".into(),
+            },
+        )
+        .unwrap();
+        let archive_path = draft_archive_path(&store, &saved).unwrap();
+        let receipt_path = draft_archive_receipt_path(&store, &saved).unwrap();
+        let record_path = store.root.join(format!("{}.json", saved.intent_id));
+        let pins = [
+            control.join(".catdesk/projects/projects.json"),
+            dev_root.join("config.json"),
+            archive_path,
+            receipt_path,
+        ]
+        .map(|path| {
+            let bytes = fs::read(&path).unwrap();
+            (path, bytes)
+        });
+        drop(store);
+        let browser = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(dev_root.join("browser-session.lock"))
+            .unwrap();
+        browser.try_lock().unwrap();
+        // A cached archive must never bypass eligibility: known pre-send
+        // drafts, completed receipts/bindings and quarantined records stay
+        // fenced even while the exact archive text and receipt are available.
+        let mut rejected_records = Vec::new();
+        for stage in [
+            runtime::BootstrapProgress::TextEntryAuthorized,
+            runtime::BootstrapProgress::DraftReady,
+        ] {
+            let mut rejected = saved.clone();
+            rejected.bootstrap_progress = Some(stage);
+            rejected_records.push(rejected);
+        }
+        let mut rejected = saved.clone();
+        rejected.phase = Phase::Prepared;
+        rejected_records.push(rejected);
+        let mut rejected = saved.clone();
+        rejected.receipt = Some(receipt_for(&rejected));
+        rejected_records.push(rejected);
+        let mut rejected = saved.clone();
+        rejected.bound_target = Some(saved.source.clone());
+        rejected_records.push(rejected);
+        let mut rejected = saved.clone();
+        rejected.quarantine = Some(Quarantine {
+            observed_conversation_url: "https://chatgpt.com/c/unknown".into(),
+            recorded_utc: 11,
+        });
+        rejected_records.push(rejected);
+        for rejected in rejected_records {
+            let store = ProjectStore::open(&control, "alpha").unwrap();
+            store.save(&rejected).unwrap();
+            drop(store);
+            let before = fs::read(&record_path).unwrap();
+            let reason = archive_draft(&control, "alpha", &saved.intent_id).unwrap_err();
+            assert!(
+                matches!(
+                    reason.as_str(),
+                    "WEB_DRAFT_ARCHIVE_LEGACY_UNKNOWN_REQUIRED" | "WEB_ROLLOVER_STATE_INVALID"
+                ),
+                "unexpected refusal for {:?}/{:?}: {reason}",
+                rejected.phase,
+                rejected.bootstrap_progress
+            );
+            assert_eq!(fs::read(&record_path).unwrap(), before);
+        }
+        let store = ProjectStore::open(&control, "alpha").unwrap();
+        store.save(&saved).unwrap();
+        drop(store);
+        let reply = archive_draft(&control, "alpha", &saved.intent_id).unwrap();
+        assert_eq!(reply["status"], "ARCHIVED");
+        assert_eq!(reply["currentComposerObserved"], false);
+        assert_eq!(reply["submissionVerified"], false);
+        assert_eq!(reply["resendAuthorized"], false);
+        let reopened = ProjectStore::open(&control, "alpha").unwrap();
+        let archived = reopened.active().unwrap().unwrap();
+        assert_eq!(archived.phase, Phase::Submitting);
+        assert_eq!(archived.bootstrap_progress, saved.bootstrap_progress);
+        assert!(archived.receipt.is_none() && archived.bound_target.is_none());
+        assert_eq!(
+            archived.reconciliation_reason.as_deref(),
+            Some("WEB_BOOTSTRAP_DRAFT_ARCHIVED_NO_RESEND")
+        );
+        assert!(!resumable_bootstrap(&archived));
+        drop(reopened);
+        let journal_before = fs::read(&record_path).unwrap();
+        assert_eq!(
+            archive_draft(&control, "alpha", &saved.intent_id).unwrap(),
+            reply
+        );
+        assert_eq!(fs::read(&record_path).unwrap(), journal_before);
+        assert_eq!(
+            execute(&control, "alpha").unwrap_err(),
+            "WEB_BOOTSTRAP_OUTCOME_UNKNOWN_NO_RESEND"
+        );
+        for (path, bytes) in pins {
+            assert_eq!(fs::read(path).unwrap(), bytes);
+        }
+        assert_eq!(paired(&control, "alpha").unwrap(), alpha);
+        assert_eq!(paired(&control, "beta").unwrap(), beta);
+        for directory in ["queue", "archive", "deliveries", "turns", "logs"] {
+            assert_eq!(fs::read_dir(dev_root.join(directory)).unwrap().count(), 0);
+        }
+        drop(browser);
+        assert!(
+            parent.canonicalize().unwrap().starts_with(
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("target")
+                    .canonicalize()
+                    .unwrap()
+            )
+        );
+        fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
+    fn draft_repair_refuses_wrong_intent_and_any_submit_or_quarantine_state() {
+        let mut saved = record();
+        saved.phase = Phase::Submitting;
+        saved.bootstrap_progress = Some(runtime::BootstrapProgress::TextEntryAuthorized);
+        let raw = "a".repeat(64);
+        assert!(require_draft_repair_record(&saved, &saved.intent_id, &raw).is_ok());
+        assert!(require_draft_repair_record(&saved, "another", &raw).is_err());
+        assert!(require_draft_repair_record(&saved, &saved.intent_id, "bad").is_err());
+        for stage in [
+            None,
+            Some(runtime::BootstrapProgress::DraftReady),
+            Some(runtime::BootstrapProgress::SendAttempted),
+        ] {
+            saved.bootstrap_progress = stage;
+            assert!(require_draft_repair_record(&saved, &saved.intent_id, &raw).is_err());
+        }
+        saved.bootstrap_progress = Some(runtime::BootstrapProgress::TextEntryAuthorized);
+        saved.quarantine = Some(Quarantine {
+            observed_conversation_url: saved.source.url.clone(),
+            recorded_utc: 1,
+        });
+        assert!(require_draft_repair_record(&saved, &saved.intent_id, &raw).is_err());
+        saved.quarantine = None;
+        saved.bound_target = Some(saved.source.clone());
+        assert!(require_draft_repair_record(&saved, &saved.intent_id, &raw).is_err());
+        saved.bound_target = None;
+        saved.reconciliation_reason = Some("UNKNOWN".into());
+        assert!(require_draft_repair_record(&saved, &saved.intent_id, &raw).is_err());
+    }
+
+    #[test]
+    fn draft_repair_witness_and_attempt_survive_restart_without_granting_a_second_write() {
+        let root = fixture();
+        let mut saved = record();
+        saved.phase = Phase::Submitting;
+        saved.bootstrap_progress = Some(runtime::BootstrapProgress::TextEntryAuthorized);
+        saved.handoff = format!(
+            "Source task: {}. Continue only after binding.",
+            saved.source_task_id
+        );
+        saved.message_digest = message_digest(
+            &saved.project_id,
+            &saved.intent_id,
+            &saved.source.url,
+            &saved.handoff,
+        )
+        .unwrap();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let expected = runtime::compose_bootstrap_message(
+            &saved.project_id,
+            &saved.intent_id,
+            &saved.source,
+            &saved.handoff,
+        )
+        .unwrap();
+        let actual = expected[..expected.find("Continue only after binding.").unwrap()]
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join("\r\n");
+        let raw = digest(&actual);
+        assert!(
+            save_draft_repair_checkpoint(&store, &saved, &raw, "attempt", "WRITE_ATTEMPTED")
+                .is_err()
+        );
+        save_draft_repair_witness(&store, &saved, &raw, &actual).unwrap();
+        assert!(
+            save_draft_repair_checkpoint(
+                &store,
+                &saved,
+                &raw,
+                "complete",
+                "FULL_DRAFT_VERIFIED_NO_SEND"
+            )
+            .is_err()
+        );
+        save_draft_repair_checkpoint(&store, &saved, &raw, "attempt", "WRITE_ATTEMPTED").unwrap();
+        let before = fs::read(draft_repair_path(&store, &saved, "attempt").unwrap()).unwrap();
+        drop(store);
+        let store = ProjectStore::open_existing(&root, "alpha").unwrap();
+        assert!(
+            read_draft_repair_checkpoint(&store, &saved, &raw, "attempt", "WRITE_ATTEMPTED")
+                .unwrap()
+                .is_some()
+        );
+        save_draft_repair_checkpoint(&store, &saved, &raw, "attempt", "WRITE_ATTEMPTED").unwrap();
+        assert_eq!(
+            fs::read(draft_repair_path(&store, &saved, "attempt").unwrap()).unwrap(),
+            before
+        );
+        assert!(read_draft_repair_witness(&store, &saved, &"0".repeat(64)).is_err());
+        let mut changed = saved.clone();
+        changed.source =
+            Target::new(saved.source.generation + 1, saved.source.url.clone()).unwrap();
+        assert!(read_draft_repair_witness(&store, &changed, &raw).is_err());
+        save_draft_repair_checkpoint(
+            &store,
+            &saved,
+            &raw,
+            "complete",
+            "FULL_DRAFT_VERIFIED_NO_SEND",
+        )
+        .unwrap();
+        assert!(
+            read_draft_repair_checkpoint(
+                &store,
+                &saved,
+                &raw,
+                "complete",
+                "FULL_DRAFT_VERIFIED_NO_SEND"
+            )
+            .unwrap()
+            .is_some()
+        );
+        assert_eq!(
+            saved.bootstrap_progress,
+            Some(runtime::BootstrapProgress::TextEntryAuthorized)
+        );
+        assert!(saved.receipt.is_none());
+        drop(store);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn draft_repair_identity_requires_complete_project_and_task_tokens_before_archival() {
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut saved = record();
+        saved.phase = Phase::Submitting;
+        saved.bootstrap_progress = Some(runtime::BootstrapProgress::TextEntryAuthorized);
+        saved.handoff = format!(
+            "Recorded task: {}-other. Actual task: {}. Continue after binding.",
+            saved.source_task_id, saved.source_task_id
+        );
+        saved.message_digest = message_digest(
+            &saved.project_id,
+            &saved.intent_id,
+            &saved.source.url,
+            &saved.handoff,
+        )
+        .unwrap();
+        let expected = runtime::compose_bootstrap_message(
+            &saved.project_id,
+            &saved.intent_id,
+            &saved.source,
+            &saved.handoff,
+        )
+        .unwrap();
+        let wrong_task = &expected[..expected.find(" Actual task:").unwrap()];
+        for actual in ["CatDesk project rollover", wrong_task] {
+            let raw = digest(actual);
+            runtime::validate_bootstrap_repair_witness(actual, &expected, &raw).unwrap();
+            assert_eq!(
+                save_draft_repair_witness(&store, &saved, &raw, actual).unwrap_err(),
+                "WEB_DRAFT_REPAIR_IDENTITY_WITNESS_REQUIRED"
+            );
+            assert!(
+                !draft_repair_path(&store, &saved, "witness")
+                    .unwrap()
+                    .exists()
+            );
+            assert!(
+                !draft_repair_path(&store, &saved, "attempt")
+                    .unwrap()
+                    .exists()
+            );
+        }
+        assert_eq!(
+            require_draft_repair_identity(&saved, "alpha-other task-a").unwrap_err(),
+            "WEB_DRAFT_REPAIR_IDENTITY_WITNESS_REQUIRED"
+        );
+        assert!(require_draft_repair_identity(&saved, "\"alpha\": \"task-a\"").is_ok());
+        let forged = DraftRepairWitness {
+            schema_version: 1,
+            project_id: saved.project_id.clone(),
+            intent_id: saved.intent_id.clone(),
+            source_task_id: saved.source_task_id.clone(),
+            source: saved.source.clone(),
+            message_digest: saved.message_digest.clone(),
+            expected_text: expected.clone(),
+            actual_text: wrong_task.into(),
+            actual_raw_digest: digest(wrong_task),
+            recorded_utc: 1,
+        };
+        create_private_once(
+            &draft_repair_path(&store, &saved, "witness").unwrap(),
+            &forged,
+        )
+        .unwrap();
+        assert_eq!(
+            read_draft_repair_witness(&store, &saved, &forged.actual_raw_digest).unwrap_err(),
+            "WEB_DRAFT_REPAIR_IDENTITY_WITNESS_REQUIRED"
+        );
+        assert!(
+            !draft_repair_path(&store, &saved, "attempt")
+                .unwrap()
+                .exists()
+        );
+        drop(store);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn automatic_retry_is_durable_bounded_and_scoped_without_extending_on_wait() {
+        let root = fixture();
+        for (index, delay) in [300, 600, 1200, 1800, 1800].into_iter().enumerate() {
+            let observed = 1000 + index as u64 * 2000;
+            record_auto_status_at(
+                &root,
+                "alpha",
+                "ATTENTION",
+                Some(7),
+                Some("EXISTING_DRAFT"),
+                observed,
+            )
+            .unwrap();
+            let expected = Some(observed + delay);
+            assert_eq!(automatic_retry_after(&root, "alpha", 7).unwrap(), expected);
+            assert_eq!(automatic_retry_after(&root, "alpha", 8).unwrap(), None);
+            assert_eq!(automatic_retry_after(&root, "beta", 7).unwrap(), None);
+            for (offset, stage) in [
+                (10, "IN_PROGRESS"),
+                (20, "OBSERVATION_DISABLED"),
+                (30, "WAKE_STOPPED"),
+            ] {
+                record_auto_status_at(&root, "alpha", stage, Some(7), None, observed + offset)
+                    .unwrap();
+                assert_eq!(automatic_retry_after(&root, "alpha", 7).unwrap(), expected);
+            }
+            let reopened = status_read_only(&root, "alpha").unwrap();
+            assert_eq!(reopened["automation"]["schemaVersion"], 2);
+            assert_eq!(
+                reopened["automation"]["retry"]["consecutiveFailures"],
+                index as u64 + 1
+            );
+            assert_eq!(
+                reopened["automation"]["lastFailure"]["reason"],
+                "EXISTING_DRAFT"
+            );
+        }
+        record_auto_status_at(&root, "alpha", "OBSERVED", Some(7), None, 10_000).unwrap();
+        assert_eq!(automatic_retry_after(&root, "alpha", 7).unwrap(), None);
+        let recovered = status_read_only(&root, "alpha").unwrap();
+        assert!(recovered["automation"]["retry"].is_null());
+        assert_eq!(
+            recovered["automation"]["lastFailure"]["reason"],
+            "EXISTING_DRAFT"
+        );
+        record_auto_status_at(
+            &root,
+            "alpha",
+            "ATTENTION",
+            Some(7),
+            Some("WEB_ROLLOVER_NOT_DUE_OR_DISABLED"),
+            10_001,
+        )
+        .unwrap();
+        assert_eq!(
+            automatic_retry_after(&root, "alpha", 7).unwrap(),
+            None,
+            "old diagnostics cannot resurrect a recovered retry"
+        );
+        record_auto_status_at(
+            &root,
+            "alpha",
+            "ATTENTION",
+            Some(8),
+            Some("COOPERATIVE_HOST_PROTOCOL_REQUIRED"),
+            11_000,
+        )
+        .unwrap();
+        assert_eq!(automatic_retry_after(&root, "alpha", 7).unwrap(), None);
+        assert_eq!(
+            automatic_retry_after(&root, "alpha", 8).unwrap(),
+            Some(11_300)
+        );
+        record_auto_status_at(&root, "alpha", "AWAITING_RESPONSE", Some(8), None, 11_001).unwrap();
+        assert_eq!(automatic_retry_after(&root, "alpha", 8).unwrap(), None);
+        assert!(status_read_only(&root, "alpha").unwrap()["automation"]["lastFailure"].is_null());
+        assert_eq!(auto_retry_delay(u32::MAX), AUTO_RETRY_MAX_SECONDS);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn automatic_retry_reads_legacy_attention_without_rewriting_and_refuses_corruption() {
+        let root = fixture();
+        assert_eq!(automatic_retry_after(&root, "missing", 7).unwrap(), None);
+        assert!(!root.join(".catdesk/web-rollovers/missing").exists());
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let path = store.root.join("auto-status.json");
+        atomic(
+            &path,
+            &json!({"schemaVersion":1,"projectId":"alpha","tickUtc":1000,
+            "stage":"ATTENTION","targetGeneration":7,"reason":"EXISTING_DRAFT"}),
+        )
+        .unwrap();
+        let original = fs::read(&path).unwrap();
+        drop(store);
+        assert_eq!(
+            automatic_retry_after(&root, "alpha", 7).unwrap(),
+            Some(1300)
+        );
+        assert_eq!(
+            fs::read(&path).unwrap(),
+            original,
+            "read-only gate must not renew a failure"
+        );
+        record_auto_status_at(&root, "alpha", "IN_PROGRESS", Some(7), None, 1100).unwrap();
+        assert_eq!(
+            automatic_retry_after(&root, "alpha", 7).unwrap(),
+            Some(1300)
+        );
+        for (count, deadline) in [(0, 1300), (17, 2800), (1, 999_999)] {
+            let store = ProjectStore::open(&root, "alpha").unwrap();
+            atomic(&path, &json!({"schemaVersion":2,"projectId":"alpha","tickUtc":1100,
+                "stage":"IN_PROGRESS","targetGeneration":7,"reason":null,
+                "lastFailure":{"reason":"EXISTING_DRAFT","tickUtc":1000,"targetGeneration":7},
+                "retry":{"consecutiveFailures":count,"nextAttemptUtc":deadline,"targetGeneration":7}})).unwrap();
+            let bytes = fs::read(&path).unwrap();
+            drop(store);
+            assert_eq!(
+                automatic_retry_after(&root, "alpha", 7).unwrap_err(),
+                "WEB_AUTO_STATUS_INVALID"
+            );
+            assert_eq!(fs::read(&path).unwrap(), bytes);
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn auto_status_keeps_draft_failure_through_disabled_tick_then_clears_on_receipt() {
+        let root = fixture();
+        record_auto_status(&root, "alpha", "ATTENTION", Some(7), Some("EXISTING_DRAFT")).unwrap();
+        record_auto_status(&root, "alpha", "IN_PROGRESS", Some(7), None).unwrap();
+        record_auto_status(
+            &root,
+            "alpha",
+            "ATTENTION",
+            Some(7),
+            Some("WEB_ROLLOVER_NOT_DUE_OR_DISABLED"),
+        )
+        .unwrap();
+        let status = status_read_only(&root, "alpha").unwrap();
+        assert_eq!(
+            status["automation"]["reason"],
+            "WEB_ROLLOVER_NOT_DUE_OR_DISABLED"
+        );
+        assert_eq!(
+            status["automation"]["lastFailure"]["reason"],
+            "EXISTING_DRAFT"
+        );
+        assert_eq!(status["automation"]["lastFailure"]["targetGeneration"], 7);
+        assert!(
+            status["automation"]["lastFailure"]["tickUtc"]
+                .as_u64()
+                .is_some_and(|tick| tick > 0)
+        );
+        record_auto_status(&root, "beta", "OBSERVED", Some(3), None).unwrap();
+        assert!(status_read_only(&root, "beta").unwrap()["automation"]["lastFailure"].is_null());
+        record_auto_status(&root, "alpha", "AWAITING_RESPONSE", Some(7), None).unwrap();
+        assert!(status_read_only(&root, "alpha").unwrap()["automation"]["lastFailure"].is_null());
+    }
+
+    #[test]
+    fn auto_status_legacy_record_and_corrupt_failure_are_handled_without_disclosure() {
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        atomic(
+            &store.root.join("auto-status.json"),
+            &json!({"schemaVersion":1,"projectId":"alpha","tickUtc":42,
+                "stage":"WAKE_STOPPED","targetGeneration":7,"reason":"WAKE_CONTROL_CHANGED"}),
+        )
+        .unwrap();
+        drop(store);
+        assert!(status_read_only(&root, "alpha").unwrap()["automation"]["lastFailure"].is_null());
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        atomic(
+            &store.root.join("auto-status.json"),
+            &json!({"schemaVersion":1,"projectId":"alpha","tickUtc":43,
+                "stage":"ATTENTION","targetGeneration":7,"reason":"EXISTING_DRAFT"}),
+        )
+        .unwrap();
+        drop(store);
+        record_auto_status(&root, "alpha", "IN_PROGRESS", Some(7), None).unwrap();
+        let status = status_read_only(&root, "alpha").unwrap();
+        assert_eq!(
+            status["automation"]["lastFailure"]["reason"],
+            "EXISTING_DRAFT"
+        );
+        assert_eq!(status["automation"]["lastFailure"]["tickUtc"], 43);
+        record_auto_status(&root, "alpha", "ATTENTION", Some(7), Some("private/path")).unwrap();
+        let status = status_read_only(&root, "alpha").unwrap();
+        assert_eq!(
+            status["automation"]["lastFailure"]["reason"],
+            "WEB_AUTO_ATTENTION"
+        );
+        assert!(!status.to_string().contains("private/path"));
+        record_auto_status(
+            &root,
+            "alpha",
+            "ATTENTION",
+            Some(7),
+            Some("WEB_CONTEXT_IO: C:\\private\\profile access denied"),
+        )
+        .unwrap();
+        let status = status_read_only(&root, "alpha").unwrap();
+        assert_eq!(status["automation"]["reason"], "WEB_CONTEXT_IO");
+        assert_eq!(
+            status["automation"]["lastFailure"]["reason"],
+            "WEB_CONTEXT_IO"
+        );
+        assert!(!status.to_string().contains("private"));
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        atomic(
+            &store.root.join("auto-status.json"),
+            &json!({"schemaVersion":1,"projectId":"alpha","tickUtc":43,
+                "stage":"ATTENTION","targetGeneration":7,"reason":"EXISTING_DRAFT",
+                "lastFailure":{"reason":"C:\\private\\secret.txt","tickUtc":42,
+                    "targetGeneration":7}}),
+        )
+        .unwrap();
+        drop(store);
+        assert!(status_read_only(&root, "alpha").is_err());
+        record_auto_status(&root, "alpha", "IN_PROGRESS", Some(7), None).unwrap();
+        let status = status_read_only(&root, "alpha").unwrap();
+        assert_eq!(status["automation"]["stage"], "IN_PROGRESS");
+        assert!(status["automation"]["lastFailure"].is_null());
+        assert!(!status.to_string().contains("private"));
+    }
+
+    #[test]
+    fn stopped_wake_refuses_automatic_pre_submit_ack_without_submitting_checkpoint() {
+        let root = fixture();
+        let wake = Store::open_scoped_for_test(&root.join("wake"), &root).unwrap();
+        wake.initialize().unwrap();
+        let source = wake
+            .set_target("alpha", 0, "https://chatgpt.com/c/old")
+            .unwrap();
+        runtime::control(&wake, "STOPPED").unwrap();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut pending = record();
+        store.save(&pending).unwrap();
+        atomic(&store.root.join("active.json"), &pending.intent_id).unwrap();
+        assert_eq!(
+            authorize_automatic_submit(true, &wake, "alpha", &source, || {
+                pending.phase = Phase::Submitting;
+                store.save(&pending)
+            })
+            .unwrap_err(),
+            "WAKE_STOPPED"
+        );
+        assert_eq!(pending.phase, Phase::Prepared);
+        assert_eq!(store.active().unwrap().unwrap().phase, Phase::Prepared);
+        // The explicit operator route retains its existing standalone mode.
+        authorize_automatic_submit(false, &wake, "alpha", &source, || {
+            pending.phase = Phase::Submitting;
+            store.save(&pending)
+        })
+        .unwrap();
+        assert_eq!(store.active().unwrap().unwrap().phase, Phase::Submitting);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn automatic_observation_reports_wake_state_changed_during_capture() {
+        use crate::web_conversation_context::ContextPressurePolicy;
+        let parent = fixture();
+        let (control, wake_root) = prepared_dev_fixture(&parent);
+        let wake = Store::open(&wake_root).unwrap();
+        let source = wake
+            .set_target("alpha", 0, "https://chatgpt.com/c/old")
+            .unwrap();
+        let source_key = key("alpha", &source);
+        let meter = WebContextStore::open(control.join(".catdesk/web-context")).unwrap();
+        meter
+            .bind_observed_target(source_key.clone(), None)
+            .unwrap();
+        meter
+            .configure_policy(
+                "alpha",
+                ContextPressurePolicy {
+                    configured_budget_tokens: 10,
+                    safety_headroom_tokens: 8,
+                    unknown_source_reserve_tokens: 0,
+                    automatic_rollover_enabled: true,
+                    ..ContextPressurePolicy::default()
+                },
+            )
+            .unwrap();
+        for (desired, expected) in [
+            ("PAUSED", "WAKE_PAUSED"),
+            ("STOPPED", "WAKE_STOPPED"),
+            ("RUNNING", "WAKE_HOST_NOT_RUNNING"),
+        ] {
+            let (stage, result) = super::super::auto::run_step_with_capture(
+                &control,
+                "alpha",
+                &source_key,
+                &source,
+                &|| Ok(()),
+                || {
+                    meter.record_observation(
+                        &source_key,
+                        Observation {
+                            event_id: "pressure",
+                            revision: 1,
+                            dedup_key: "pressure",
+                            source_kind: VisibleSourceKind::AssistantMessage,
+                            visible_text: Some("context growth above the configured trigger"),
+                            observed_at_unix: 20,
+                        },
+                    )?;
+                    // A bounded capture can finish after the operator changes
+                    // Wake control. No host or browser is started by this test.
+                    runtime::control(&wake, desired)?;
+                    Ok(json!({"captured":true}))
+                },
+            )
+            .unwrap();
+            assert_eq!(stage, expected);
+            assert_eq!(result["browserAction"], "NONE");
+            assert!(meter.pressure(&source_key).unwrap().near_capacity);
+            assert!(
+                !control
+                    .join(".catdesk/web-rollovers/alpha/handoff-request.json")
+                    .exists()
+            );
+        }
+        let cleanup = parent.canonicalize().unwrap();
+        assert_eq!(
+            cleanup.parent(),
+            Some(std::env::temp_dir().canonicalize().unwrap().as_path())
+        );
+        fs::remove_dir_all(cleanup).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn unknown_submission_observes_only_explicit_canonical_opt_in_without_advancing() {
+        use crate::web_conversation_context::ContextPressurePolicy;
+        let (parent, control, dev_root, alpha, beta) = paired_handoff_fixture();
+        let registry_path = control.join(".catdesk/projects/projects.json");
+        let config_path = dev_root.join("config.json");
+        let registry_before = fs::read(&registry_path).unwrap();
+        let config_before = fs::read(&config_path).unwrap();
+        let meter = WebContextStore::open(control.join(".catdesk/web-context")).unwrap();
+        let source_key = key("alpha", &alpha);
+        meter
+            .bind_observed_target(source_key.clone(), None)
+            .unwrap();
+        let beta_key = key("beta", &beta);
+        meter.bind_observed_target(beta_key.clone(), None).unwrap();
+        let beta_before = meter.project_history("beta").unwrap();
+        let store = ProjectStore::open(&control, "alpha").unwrap();
+        let mut pending = record();
+        pending.source = alpha.clone();
+        pending.message_digest =
+            message_digest("alpha", &pending.intent_id, &alpha.url, &pending.handoff).unwrap();
+        pending.phase = Phase::Submitting;
+        atomic(&store.root.join("active.json"), &pending.intent_id).unwrap();
+        let active_before = fs::read(store.root.join("active.json")).unwrap();
+        drop(store);
+        for (progress, reason) in [
+            (Some(runtime::BootstrapProgress::SendAttempted), None),
+            (None, None),
+            (
+                Some(runtime::BootstrapProgress::TextEntryAuthorized),
+                Some("WEB_BOOTSTRAP_PRE_SEND_AMBIGUOUS_NO_RESEND"),
+            ),
+        ] {
+            pending.bootstrap_progress = progress;
+            pending.reconciliation_reason = reason.map(str::to_owned);
+            let store = ProjectStore::open(&control, "alpha").unwrap();
+            store.save(&pending).unwrap();
+            let journal_before = fs::read(store.root.join("intent-a.json")).unwrap();
+            drop(store);
+            for (observe, rollover) in [(false, false), (false, true), (true, false), (true, true)]
+            {
+                meter
+                    .configure_policy(
+                        "alpha",
+                        ContextPressurePolicy {
+                            configured_budget_tokens: 10,
+                            safety_headroom_tokens: 8,
+                            unknown_source_reserve_tokens: 0,
+                            automatic_observation_enabled: observe,
+                            automatic_rollover_enabled: rollover,
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap();
+                let calls = std::cell::Cell::new(0);
+                let (stage, result) = super::super::auto::run_step_with_capture(
+                    &control,
+                    "alpha",
+                    &source_key,
+                    &alpha,
+                    &|| Ok(()),
+                    || {
+                        calls.set(calls.get() + 1);
+                        let pressure = meter.record_observation(
+                            &source_key,
+                            Observation {
+                                event_id: "unknown-held-observation",
+                                revision: 1,
+                                dedup_key: "unknown-held-observation",
+                                source_kind: VisibleSourceKind::AssistantMessage,
+                                visible_text: Some("observed pressure above the rollover trigger"),
+                                observed_at_unix: 20,
+                            },
+                        )?;
+                        assert!(pressure.near_capacity);
+                        Ok(json!({"captured":true,"userMessageSent":false}))
+                    },
+                )
+                .unwrap();
+                assert_eq!(stage, "SUBMISSION_UNKNOWN");
+                assert_eq!(result["reason"], "WEB_BOOTSTRAP_OUTCOME_UNKNOWN_NO_RESEND");
+                assert_eq!(
+                    calls.get(),
+                    usize::from(observe),
+                    "explicit observation opt-in"
+                );
+                assert_eq!(result["contextObservation"].is_null(), !observe);
+                if observe {
+                    assert_eq!(result["rolloverAdvanced"], false);
+                    assert_eq!(result["contextObservation"]["captured"], true);
+                    assert!(meter.pressure(&source_key).unwrap().near_capacity);
+                }
+            }
+            // Neither another conversation nor another source generation may
+            // borrow the enabled observation policy for this held project.
+            let stale = Target::new(alpha.generation + 1, alpha.url.clone()).unwrap();
+            let stale_key = key("alpha", &stale);
+            for (capture_key, source) in [
+                (&beta_key, &alpha),
+                (&source_key, &stale),
+                (&stale_key, &stale),
+            ] {
+                let (stage, result) = super::super::auto::run_step_with_capture(
+                    &control,
+                    "alpha",
+                    capture_key,
+                    source,
+                    &|| Ok(()),
+                    || panic!("mismatched identity must not enter the browser"),
+                )
+                .unwrap();
+                assert_eq!(stage, "SUBMISSION_UNKNOWN");
+                assert!(result["contextObservation"].is_null());
+            }
+            assert_eq!(
+                execute(&control, "alpha").unwrap_err(),
+                reason.unwrap_or("WEB_BOOTSTRAP_OUTCOME_UNKNOWN_NO_RESEND")
+            );
+            let store = ProjectStore::open(&control, "alpha").unwrap();
+            assert_eq!(
+                journal_before,
+                fs::read(store.root.join("intent-a.json")).unwrap()
+            );
+            assert_eq!(
+                active_before,
+                fs::read(store.root.join("active.json")).unwrap()
+            );
+            assert!(store.handoff_request().unwrap().is_none());
+            drop(store);
+        }
+        assert_eq!(registry_before, fs::read(registry_path).unwrap());
+        assert_eq!(config_before, fs::read(config_path).unwrap());
+        assert_eq!(paired(&control, "alpha").unwrap(), alpha);
+        assert_eq!(paired(&control, "beta").unwrap(), beta);
+        assert_eq!(meter.active_key("alpha").unwrap(), Some(source_key));
+        assert_eq!(beta_before, meter.project_history("beta").unwrap());
+        for directory in ["queue", "archive", "deliveries", "turns", "logs"] {
+            assert_eq!(fs::read_dir(dev_root.join(directory)).unwrap().count(), 0);
+        }
+        drop(acquire_web_work_lease(&control, "beta").unwrap());
+        let cleanup = parent.canonicalize().unwrap();
+        let target = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .canonicalize()
+            .unwrap();
+        assert_eq!(cleanup.parent(), Some(target.as_path()));
+        fs::remove_dir_all(cleanup).unwrap();
+    }
+
+    #[test]
+    fn unknown_submission_observation_honors_cancellation_and_capture_failure() {
+        use crate::web_conversation_context::ContextPressurePolicy;
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut pending = record();
+        pending.phase = Phase::Submitting;
+        pending.bootstrap_progress = Some(runtime::BootstrapProgress::SendAttempted);
+        store.save(&pending).unwrap();
+        atomic(&store.root.join("active.json"), &pending.intent_id).unwrap();
+        let journal_before = fs::read(store.root.join("intent-a.json")).unwrap();
+        drop(store);
+        let meter = WebContextStore::open(root.join(".catdesk/web-context")).unwrap();
+        let source_key = key("alpha", &pending.source);
+        meter
+            .bind_observed_target(source_key.clone(), None)
+            .unwrap();
+        meter
+            .configure_policy(
+                "alpha",
+                ContextPressurePolicy {
+                    automatic_observation_enabled: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        for cancel_during_capture in [false, true] {
+            let stopped = std::cell::Cell::new(!cancel_during_capture);
+            let captured = std::cell::Cell::new(false);
+            let result = super::super::auto::run_step_with_capture(
+                &root,
+                "alpha",
+                &source_key,
+                &pending.source,
+                &|| {
+                    if stopped.get() {
+                        Err("WEB_AUTO_OWNER_STOPPED".into())
+                    } else {
+                        Ok(())
+                    }
+                },
+                || {
+                    captured.set(true);
+                    stopped.set(true);
+                    Ok(json!({"captured":true}))
+                },
+            );
+            assert_eq!(result.unwrap_err(), "WEB_AUTO_OWNER_STOPPED");
+            assert_eq!(captured.get(), cancel_during_capture);
+        }
+        // A guard error returned inside best-effort receipt accounting must
+        // survive even if a subsequent guard call would return Ok again.
+        let checks = std::cell::Cell::new(0);
+        let captured = std::cell::Cell::new(false);
+        assert_eq!(
+            super::super::auto::run_step_with_capture(
+                &root,
+                "alpha",
+                &source_key,
+                &pending.source,
+                &|| {
+                    checks.set(checks.get() + 1);
+                    if checks.get() == 2 {
+                        Err("WEB_AUTO_OWNER_STOPPED".into())
+                    } else {
+                        Ok(())
+                    }
+                },
+                || {
+                    captured.set(true);
+                    Ok(json!({"captured":true}))
+                },
+            )
+            .unwrap_err(),
+            "WEB_AUTO_OWNER_STOPPED"
+        );
+        assert!(!captured.get());
+        assert_eq!(
+            super::super::auto::run_step_with_capture(
+                &root,
+                "alpha",
+                &source_key,
+                &pending.source,
+                &|| Ok(()),
+                || Err("BOUNDED_CAPTURE_FAILED".into()),
+            )
+            .unwrap_err(),
+            "BOUNDED_CAPTURE_FAILED"
+        );
+        assert_eq!(
+            journal_before,
+            fs::read(root.join(".catdesk/web-rollovers/alpha/intent-a.json")).unwrap()
+        );
+        assert_eq!(
+            execute(&root, "alpha").unwrap_err(),
+            "WEB_BOOTSTRAP_OUTCOME_UNKNOWN_NO_RESEND"
+        );
+        let cleanup = root.canonicalize().unwrap();
+        assert_eq!(
+            cleanup.parent(),
+            Some(std::env::temp_dir().canonicalize().unwrap().as_path())
+        );
+        fs::remove_dir_all(cleanup).unwrap();
+    }
+
+    #[test]
+    fn quarantine_preserves_uncertain_attempt_and_prevents_replay_after_reopen() {
+        use crate::web_conversation_context::ContextPressurePolicy;
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let original = record();
+        store.save(&original).unwrap();
+        atomic(&store.root.join("active.json"), &original.intent_id).unwrap();
+        let observed_url = "https://chatgpt.com/c/fragmented-orphan";
+        let result =
+            quarantine_record(&store, &original.intent_id, observed_url, &original.source).unwrap();
+        assert_eq!(result["phase"], "QUARANTINED");
+        assert_eq!(result["receipt"], Value::Null);
+        assert_eq!(result["boundTarget"], Value::Null);
+        let saved_bytes = fs::read(store.root.join("intent-a.json")).unwrap();
+        quarantine_record(&store, &original.intent_id, observed_url, &original.source).unwrap();
+        assert_eq!(
+            saved_bytes,
+            fs::read(store.root.join("intent-a.json")).unwrap()
+        );
+        let saved = store.active().unwrap().unwrap();
+        assert_eq!(saved.source, original.source);
+        assert_eq!(
+            quarantine_inspection_candidate(&saved, &original.intent_id, &original.source).unwrap(),
+            observed_url
+        );
+        assert!(quarantine_inspection_candidate(&saved, "other-intent", &original.source).is_err());
+        let changed_source = Target::new(2, "https://chatgpt.com/c/changed".into()).unwrap();
+        assert!(
+            quarantine_inspection_candidate(&saved, &original.intent_id, &changed_source).is_err()
+        );
+        assert!(
+            quarantine_inspection_candidate(&original, &original.intent_id, &original.source)
+                .is_err()
+        );
+        assert_eq!(saved.handoff, original.handoff);
+        assert_eq!(saved.message_digest, original.message_digest);
+        assert_eq!(saved.source_task_id, original.source_task_id);
+        drop(store);
+        assert_eq!(
+            auto_stage(&root, "alpha", &original.source).unwrap(),
+            AutoStage::Quarantined
+        );
+        let meter = WebContextStore::open(root.join(".catdesk/web-context")).unwrap();
+        let source_key = key("alpha", &original.source);
+        meter
+            .bind_observed_target(source_key.clone(), None)
+            .unwrap();
+        let run_observation = |capture: &dyn Fn() -> Result<Value, String>| {
+            super::super::auto::run_step_with_capture(
+                &root,
+                "alpha",
+                &source_key,
+                &original.source,
+                &|| Ok(()),
+                capture,
+            )
+        };
+        let disabled = run_observation(&|| panic!("observation requires separate opt-in")).unwrap();
+        assert_eq!(disabled.0, "QUARANTINED");
+        assert!(disabled.1["contextObservation"].is_null());
+        meter
+            .configure_policy(
+                "alpha",
+                ContextPressurePolicy {
+                    configured_budget_tokens: 10,
+                    safety_headroom_tokens: 8,
+                    unknown_source_reserve_tokens: 0,
+                    automatic_rollover_enabled: true,
+                    automatic_observation_enabled: true,
+                    ..ContextPressurePolicy::default()
+                },
+            )
+            .unwrap();
+        let observed = run_observation(&|| {
+            let pressure = meter.record_observation(
+                &source_key,
+                Observation {
+                    event_id: "large-observation",
+                    revision: 1,
+                    dedup_key: "large-observation",
+                    source_kind: VisibleSourceKind::AssistantMessage,
+                    visible_text: Some("context pressure above trigger with quarantine preserved"),
+                    observed_at_unix: 20,
+                },
+            )?;
+            assert!(pressure.near_capacity);
+            Ok(json!({"captured":true,"userMessageSent":false}))
+        })
+        .unwrap();
+        assert_eq!(observed.0, "QUARANTINED");
+        assert_eq!(observed.1["contextObservation"]["captured"], true);
+        assert_eq!(observed.1["rolloverAdvanced"], false);
+        assert_eq!(
+            saved_bytes,
+            fs::read(root.join(".catdesk/web-rollovers/alpha/intent-a.json")).unwrap()
+        );
+        assert!(
+            !root
+                .join(".catdesk/web-rollovers/alpha/handoff-request.json")
+                .exists()
+        );
+        assert_eq!(
+            execute(&root, "alpha").unwrap_err(),
+            "WEB_ROLLOVER_QUARANTINED_NO_REPLAY"
+        );
+        assert_eq!(
+            acquire_web_work_lease(&root, "alpha").err().unwrap(),
+            "WEB_WORK_ROLLOVER_PENDING"
+        );
+        // The quarantine is scoped; another project can still obtain its lease.
+        drop(acquire_web_work_lease(&root, "beta").unwrap());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn quarantine_refuses_stale_witness_and_does_not_reclassify_proved_submission() {
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut original = record();
+        store.save(&original).unwrap();
+        atomic(&store.root.join("active.json"), &original.intent_id).unwrap();
+        let observed_url = "https://chatgpt.com/c/fragmented-orphan";
+        let before = fs::read(store.root.join("intent-a.json")).unwrap();
+        for (intent, target, url) in [
+            ("another-intent", original.source.clone(), observed_url),
+            (
+                original.intent_id.as_str(),
+                Target::new(2, original.source.url.clone()).unwrap(),
+                observed_url,
+            ),
+            (
+                original.intent_id.as_str(),
+                original.source.clone(),
+                original.source.url.as_str(),
+            ),
+        ] {
+            assert!(quarantine_record(&store, intent, url, &target).is_err());
+            assert_eq!(before, fs::read(store.root.join("intent-a.json")).unwrap());
+        }
+        original.phase = Phase::ResponsePending;
+        original.receipt = Some(receipt_for(&original));
+        store.save(&original).unwrap();
+        assert_eq!(
+            quarantine_record(&store, &original.intent_id, observed_url, &original.source)
+                .unwrap_err(),
+            "WEB_ROLLOVER_QUARANTINE_PHASE_INVALID"
+        );
+        assert_eq!(
+            store.active().unwrap().unwrap().phase,
+            Phase::ResponsePending
+        );
+        drop(store);
+        fs::remove_dir_all(root).unwrap();
     }
     fn handoff_request(root: &Path) -> HandoffRequest {
         let project_id = "alpha";
@@ -1937,6 +6245,294 @@ mod tests {
             owned_paths: Vec::new(),
             verification: vec!["Source conversation report only".into()],
             blockers: Vec::new(),
+            git_state: None,
+            important_decisions: None,
+        }
+    }
+
+    fn context_handoff() -> Handoff {
+        let mut handoff = source_handoff();
+        handoff.schema_version = 2;
+        handoff.git_state = Some(HandoffGitState {
+            basis: GitStateBasis::Unknown,
+            branch: None,
+            head_commit: None,
+            worktree_summary: None,
+            evidence: Vec::new(),
+        });
+        handoff.important_decisions = Some(vec!["Preserve the native task owner".into()]);
+        handoff
+    }
+
+    fn context_request(root: &Path) -> HandoffRequest {
+        let mut request = handoff_request(root);
+        request.schema_version = 2;
+        request.message = handoff_request_message_v2(
+            &request.project_id,
+            &request.intent_id,
+            &request.source_task_id,
+            &request.native_thread_id,
+        );
+        request
+    }
+
+    #[test]
+    fn handoff_context_legacy_bytes_and_request_recovery_stay_exact() {
+        let original = r#"{"schemaVersion":1,"projectId":"alpha","sourceTaskId":"task-a","objective":"Finish the project MVP","completed":["Reviewed current project status"],"remaining":["Confirm task ownership"],"nextAction":"Read project status and check owners","ownedPaths":[],"verification":["Source conversation report only"],"blockers":[]}"#;
+        let parsed: Handoff = serde_json::from_str(original).unwrap();
+        parsed.validate("alpha").unwrap();
+        assert_eq!(serde_json::to_string(&parsed).unwrap(), original);
+        let root = fixture();
+        let request = handoff_request(&root);
+        request.validate("alpha").unwrap();
+        // Baseline digest independently captured from the pre-change prompt.
+        assert_eq!(
+            digest(&request.message),
+            "cb4b62811fec24640e1eb4d34b0bb822bdad7c5e3125ae6e4a904bfe92c09aa7"
+        );
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        store.save_handoff_request(&request).unwrap();
+        let path = store.root.join("handoff-intent-a.json");
+        let before = fs::read(&path).unwrap();
+        drop(store);
+        let reopened = ProjectStore::open_existing(&root, "alpha").unwrap();
+        assert_eq!(reopened.handoff_request().unwrap().unwrap(), request);
+        assert_eq!(fs::read(&path).unwrap(), before);
+    }
+
+    #[test]
+    fn handoff_context_interrupted_pointer_recovers_exact_legacy_request() {
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let old = handoff_request(&root);
+        let path = store.root.join("handoff-intent-a.json");
+        // Deliberately noncanonical whitespace proves recovery does not rewrite.
+        fs::write(
+            &path,
+            format!("\n{}\n", serde_json::to_string(&old).unwrap()),
+        )
+        .unwrap();
+        let before = fs::read(&path).unwrap();
+        assert!(store.handoff_request().unwrap().is_none());
+        drop(store);
+        let store = ProjectStore::open_existing(&root, "alpha").unwrap();
+        let new = context_request(&root);
+        let recovered = store
+            .preserve_recorded_handoff_request(new.clone())
+            .unwrap();
+        assert_eq!(recovered, old);
+        assert_eq!(
+            store.save_handoff_request(&new).unwrap_err(),
+            "WEB_HANDOFF_REQUEST_ALREADY_RECORDED"
+        );
+        assert_eq!(fs::read(&path).unwrap(), before);
+        store.save_handoff_request(&recovered).unwrap();
+        assert_eq!(store.handoff_request().unwrap().unwrap(), old);
+        assert_eq!(fs::read(&path).unwrap(), before);
+        let mut conflict = new;
+        conflict.source = Target::new(2, conflict.source.url.clone()).unwrap();
+        assert_eq!(
+            store
+                .preserve_recorded_handoff_request(conflict)
+                .unwrap_err(),
+            "WEB_HANDOFF_REQUEST_IDENTITY_CHANGED"
+        );
+        assert_eq!(fs::read(&path).unwrap(), before);
+    }
+
+    #[test]
+    fn handoff_context_malformed_interrupted_request_is_not_overwritten() {
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let path = store.root.join("handoff-intent-a.json");
+        let unknown = b"unknown retained request bytes";
+        fs::write(&path, unknown).unwrap();
+        assert!(
+            store
+                .preserve_recorded_handoff_request(context_request(&root))
+                .is_err()
+        );
+        assert_eq!(fs::read(&path).unwrap(), unknown);
+        assert!(!store.root.join("handoff-active.json").exists());
+    }
+
+    #[test]
+    fn handoff_context_versioned_prompt_is_bounded_and_cannot_downgrade() {
+        let root = fixture();
+        let legacy = handoff_request(&root);
+        let mut request = context_request(&root);
+        request.validate("alpha").unwrap();
+        assert_ne!(request.message, legacy.message);
+        request.message = legacy.message;
+        assert_eq!(
+            request.validate("alpha").unwrap_err(),
+            "WEB_HANDOFF_REQUEST_INVALID"
+        );
+        request = context_request(&root);
+        request.project_id = "p".repeat(128);
+        request.source_task_id = "t".repeat(128);
+        request.intent_id = "a".repeat(64);
+        request.native_thread_id = Some("n".repeat(128));
+        request.event_id = format!("web-handoff-{}", request.intent_id);
+        request.message = handoff_request_message_v2(
+            &request.project_id,
+            &request.intent_id,
+            &request.source_task_id,
+            &request.native_thread_id,
+        );
+        request.validate(&request.project_id).unwrap();
+        assert!(request.message.len() <= 2048);
+        let request = context_request(&root);
+        assert_eq!(
+            handoff_from_source_snapshot(
+                &request,
+                &source_snapshot(&request, &request.message, &source_handoff())
+            )
+            .unwrap_err(),
+            "WEB_HANDOFF_CONTEXT_REQUIRED"
+        );
+    }
+
+    #[test]
+    fn handoff_context_unknown_and_partial_observations_remain_explicit() {
+        let root = fixture();
+        let request = context_request(&root);
+        let mut handoff = context_handoff();
+        let unknown = handoff_from_source_snapshot(
+            &request,
+            &source_snapshot(&request, &request.message, &handoff),
+        )
+        .unwrap();
+        assert_eq!(unknown.git_state.unwrap().basis, GitStateBasis::Unknown);
+        // A source can know only the branch. Do not infer HEAD or cleanliness.
+        let git = handoff.git_state.as_mut().unwrap();
+        git.basis = GitStateBasis::SourceReported;
+        git.branch = Some("codex/observed-task".into());
+        git.evidence.push(
+            "Earlier source conversation branch observation; not a native Git attestation".into(),
+        );
+        let parsed = handoff_from_source_snapshot(
+            &request,
+            &source_snapshot(&request, &request.message, &handoff),
+        )
+        .unwrap();
+        let saved: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&parsed).unwrap()).unwrap();
+        assert_eq!(saved["gitState"]["branch"], "codex/observed-task");
+        assert!(saved["gitState"]["headCommit"].is_null());
+        assert!(saved["gitState"]["worktreeSummary"].is_null());
+        assert_eq!(
+            saved["importantDecisions"][0],
+            "Preserve the native task owner"
+        );
+    }
+
+    #[test]
+    fn handoff_context_rejects_missing_contradictory_or_oversized_context() {
+        let base = context_handoff();
+        for missing_git in [true, false] {
+            let mut handoff = base.clone();
+            if missing_git {
+                handoff.git_state = None;
+            } else {
+                handoff.important_decisions = None;
+            }
+            assert_eq!(
+                handoff.validate("alpha").unwrap_err(),
+                "WEB_HANDOFF_CONTEXT_REQUIRED"
+            );
+        }
+        let mut handoff = base.clone();
+        handoff.git_state.as_mut().unwrap().branch = Some("claimed-under-unknown".into());
+        assert_eq!(
+            handoff.validate("alpha").unwrap_err(),
+            "WEB_HANDOFF_GIT_STATE_INVALID"
+        );
+        handoff.git_state.as_mut().unwrap().basis = GitStateBasis::SourceReported;
+        assert_eq!(
+            handoff.validate("alpha").unwrap_err(),
+            "WEB_HANDOFF_GIT_STATE_INVALID"
+        );
+        handoff
+            .git_state
+            .as_mut()
+            .unwrap()
+            .evidence
+            .push("source report".into());
+        handoff.git_state.as_mut().unwrap().head_commit = Some("not-a-commit".into());
+        assert_eq!(
+            handoff.validate("alpha").unwrap_err(),
+            "WEB_HANDOFF_GIT_STATE_INVALID"
+        );
+        handoff = base.clone();
+        handoff.important_decisions = Some(vec!["decision".into(); 33]);
+        assert_eq!(
+            handoff.validate("alpha").unwrap_err(),
+            "WEB_HANDOFF_DECISIONS_INVALID"
+        );
+        handoff.important_decisions = Some(vec!["bad\0decision".into()]);
+        assert_eq!(
+            handoff.validate("alpha").unwrap_err(),
+            "WEB_HANDOFF_DECISIONS_INVALID"
+        );
+        handoff.important_decisions = Some(vec!["x".repeat(11 * 1024)]);
+        assert_eq!(
+            handoff.validate("alpha").unwrap_err(),
+            "WEB_HANDOFF_TOO_LARGE"
+        );
+    }
+
+    #[test]
+    fn handoff_context_git_and_decisions_are_bound_to_the_source_before_commit() {
+        let root = fixture();
+        let request = context_request(&root);
+        let registered = AutonomousProjectV1 {
+            project_id: "alpha".into(),
+            workspace: root,
+            git_identity: "fixture".into(),
+            verification_profile: "fixture".into(),
+            codex_thread_id: request.native_thread_id.clone(),
+            chatgpt_target_url: Some(request.source.url.clone()),
+            chatgpt_target_sha256: Some(request.source.digest.clone()),
+            chatgpt_target_history: vec![request.source.url.clone()],
+        };
+        let handoff = context_handoff();
+        let mut prepared = record();
+        prepared.handoff_event_id = Some(request.event_id.clone());
+        prepared.handoff = compose_handoff_content(&registered, &handoff).unwrap();
+        source_snapshot_matches_record(
+            &request,
+            &prepared,
+            &registered,
+            &source_snapshot(&request, &request.message, &handoff),
+        )
+        .unwrap();
+        for change_decision in [true, false] {
+            let mut changed = handoff.clone();
+            if change_decision {
+                changed
+                    .important_decisions
+                    .as_mut()
+                    .unwrap()
+                    .push("Changed decision after capture".into());
+            } else {
+                changed
+                    .git_state
+                    .as_mut()
+                    .unwrap()
+                    .evidence
+                    .push("New Git observation after capture".into());
+            }
+            assert_eq!(
+                source_snapshot_matches_record(
+                    &request,
+                    &prepared,
+                    &registered,
+                    &source_snapshot(&request, &request.message, &changed)
+                )
+                .unwrap_err(),
+                "WEB_ROLLOVER_SOURCE_HANDOFF_CHANGED_RECONCILIATION_REQUIRED"
+            );
         }
     }
 
@@ -1987,6 +6583,7 @@ mod tests {
             .record_browser_coverage(
                 &key,
                 BrowserCoverageObservation {
+                    observed_at_unix: 1,
                     initial_history_gap: true,
                     identity_gap: false,
                     text_gap: false,
@@ -2319,6 +6916,15 @@ mod tests {
         prepared.handoff = compose_handoff_content(&registered, &handoff).unwrap();
         let exact = source_snapshot(&request, &request.message, &handoff);
         source_snapshot_matches_record(&request, &prepared, &registered, &exact).unwrap();
+        assert!(
+            prepared
+                .handoff
+                .starts_with(runtime::JSON_BOOTSTRAP_HANDOFF_PREFIX)
+        );
+        let mut legacy = prepared.clone();
+        legacy.handoff = compose_legacy_handoff_content(&registered, &handoff).unwrap();
+        source_snapshot_matches_record(&request, &legacy, &registered, &exact).unwrap();
+        assert_ne!(legacy.handoff, prepared.handoff);
 
         let newer_user = source_snapshot(&request, "new work after handoff", &handoff);
         assert_eq!(
@@ -2504,22 +7110,82 @@ mod tests {
         );
     }
 
+    #[cfg(windows)]
     #[test]
     fn persisted_completed_continuation_anchors_next_generation() {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        let parent = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("target")
             .join(format!("web-continuation-{}", uuid::Uuid::new_v4()));
-        fs::create_dir_all(&root).unwrap();
-        let root = root.canonicalize().unwrap();
-        let request = handoff_request(&root);
+        fs::create_dir_all(&parent).unwrap();
+        let (root, dev_root) = prepared_dev_fixture(&parent);
+        let alpha_workspace = git_fixture(&parent.join("alpha"), "https://example.test/alpha.git");
         let current = Target::new(2, "https://chatgpt.com/c/new".into()).unwrap();
         let mut record = record();
+        let meter = WebContextStore::open(root.join(".catdesk/web-context")).unwrap();
+        meter
+            .configure_policy(
+                "alpha",
+                crate::web_conversation_context::ContextPressurePolicy {
+                    configured_budget_tokens: 128,
+                    safety_headroom_tokens: 127,
+                    unknown_source_reserve_tokens: 0,
+                    automatic_rollover_enabled: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let source_key = key("alpha", &record.source);
+        meter
+            .bind_observed_target(source_key.clone(), None)
+            .unwrap();
+        meter
+            .record_observation(
+                &source_key,
+                Observation {
+                    event_id: "source-message",
+                    revision: 1,
+                    dedup_key: "source-message",
+                    source_kind: VisibleSourceKind::UserMessage,
+                    visible_text: Some("source context before rollover"),
+                    observed_at_unix: 100,
+                },
+            )
+            .unwrap();
+        let intent = meter
+            .request_rollover_if_due(
+                &source_key,
+                &record.source.digest,
+                &record.source_task_id,
+                true,
+                101,
+            )
+            .unwrap()
+            .unwrap();
+        record.intent_id = intent.intent_id;
+        record.message_digest = message_digest(
+            &record.project_id,
+            &record.intent_id,
+            &record.source.url,
+            &record.handoff,
+        )
+        .unwrap();
+        let mut request = handoff_request(&alpha_workspace);
+        request.intent_id = record.intent_id.clone();
+        request.event_id = format!("web-handoff-{}", record.intent_id);
+        request.message = handoff_request_message(
+            "alpha",
+            &record.intent_id,
+            &record.source_task_id,
+            &request.native_thread_id,
+        );
         record.phase = Phase::ContinuationQueued;
         record.receipt = Some(receipt_for(&record));
         record.bound_target = Some(current.clone());
         record.handoff_event_id = Some(request.event_id.clone());
         record.continuation_event_id = format!("web-continue-{}", record.intent_id);
-        record.context_meter_status = ContextMeterStatus::Recorded;
+        record.context_meter_status = ContextMeterStatus::RetryRequired;
+        record.source_snapshot_verified = true;
+        record.source_fingerprint = Some("a".repeat(64));
         let project_store = ProjectStore::open(&root, "alpha").unwrap();
         project_store.save_handoff_request(&request).unwrap();
         project_store.save(&record).unwrap();
@@ -2531,9 +7197,21 @@ mod tests {
         registry.initialize(1, 1).unwrap();
         registry
             .register_project(AutonomousProjectV1 {
-                project_id: "alpha".into(),
+                project_id: "catdesk".into(),
                 workspace: root.clone(),
-                git_identity: "fixture".into(),
+                git_identity: "https://example.test/catdesk.git".into(),
+                verification_profile: "web_only_v1".into(),
+                codex_thread_id: None,
+                chatgpt_target_url: None,
+                chatgpt_target_sha256: None,
+                chatgpt_target_history: Vec::new(),
+            })
+            .unwrap();
+        registry
+            .register_project(AutonomousProjectV1 {
+                project_id: "alpha".into(),
+                workspace: alpha_workspace,
+                git_identity: "https://example.test/alpha.git".into(),
                 verification_profile: "fixture".into(),
                 codex_thread_id: Some("native-thread-a".into()),
                 chatgpt_target_url: Some(current.url.clone()),
@@ -2542,13 +7220,18 @@ mod tests {
             })
             .unwrap();
 
-        let wake = Store::open_scoped_for_test(&root.join("wake"), &root).unwrap();
-        wake.initialize().unwrap();
+        let wake = Store::open(&dev_root).unwrap();
         assert_eq!(
             wake.set_target("alpha", 0, &request.source.url).unwrap(),
             request.source
         );
         assert_eq!(wake.set_target("alpha", 1, &current.url).unwrap(), current);
+        let pending_status = status_read_only(&root, "alpha").unwrap();
+        assert_eq!(pending_status["continuationProved"], false);
+        assert_eq!(
+            pending_status["continuationProofStatus"],
+            "PENDING_OR_UNVERIFIED"
+        );
         let pending_store = ProjectStore::open(&root, "alpha").unwrap();
         assert_eq!(
             continuation_ready_for_work(&pending_store, &wake, &root, "alpha", &current, &record,)
@@ -2556,6 +7239,11 @@ mod tests {
             "WEB_WORK_ROLLOVER_PENDING"
         );
         drop(pending_store);
+        assert_eq!(
+            acquire_web_work_lease(&root, "alpha").err().unwrap(),
+            "WEB_WORK_ROLLOVER_PENDING"
+        );
+        drop(acquire_web_work_lease(&root, "beta").unwrap());
         let message = continuation_message(&record, &current);
         let event = wake
             .produce_expected(
@@ -2596,28 +7284,111 @@ mod tests {
         )
         .unwrap();
         wake.complete_timer(&event.event_id).unwrap();
+        let verified_status = status_read_only(&root, "alpha").unwrap();
+        assert_eq!(verified_status["continuationProved"], true);
+        assert_eq!(verified_status["continuationProofStatus"], "VERIFIED");
+        let missing_logs = wake.root().join("logs");
+        let saved_logs = wake.root().join("logs-saved-fixture");
+        fs::rename(&missing_logs, &saved_logs).unwrap();
+        let unavailable_status = status_read_only(&root, "alpha").unwrap();
+        assert_eq!(unavailable_status["continuationProved"], false);
+        assert_eq!(
+            unavailable_status["continuationProofStatus"],
+            "UNAVAILABLE_OR_CHANGED"
+        );
+        assert!(
+            !missing_logs.exists(),
+            "status must not recreate missing Wake state"
+        );
+        fs::rename(&saved_logs, &missing_logs).unwrap();
         let completed_store = ProjectStore::open(&root, "alpha").unwrap();
         continuation_ready_for_work(&completed_store, &wake, &root, "alpha", &current, &record)
             .unwrap();
+        let mut retry = record.clone();
+        retry.context_meter_status = ContextMeterStatus::RetryRequired;
+        retry.source_snapshot_verified = true;
+        retry.source_fingerprint = Some("a".repeat(64));
+        continuation_ready_for_work(&completed_store, &wake, &root, "alpha", &current, &retry)
+            .unwrap();
+        retry.reconciliation_reason = Some("WEB_ROLLOVER_BOUND_TARGET_CHANGED".into());
+        assert_eq!(
+            continuation_ready_for_work(&completed_store, &wake, &root, "alpha", &current, &retry)
+                .unwrap_err(),
+            "WEB_WORK_ROLLOVER_PENDING"
+        );
+        retry.reconciliation_reason = None;
+        retry.source_snapshot_verified = false;
+        assert!(
+            continuation_ready_for_work(&completed_store, &wake, &root, "alpha", &current, &retry)
+                .is_err()
+        );
+        retry.source_snapshot_verified = true;
+        retry.source_fingerprint = None;
+        assert!(
+            continuation_ready_for_work(&completed_store, &wake, &root, "alpha", &current, &retry)
+                .is_err()
+        );
+        retry.source_fingerprint = Some("a".repeat(64));
+        retry.context_meter_status = ContextMeterStatus::Pending;
+        assert!(
+            continuation_ready_for_work(&completed_store, &wake, &root, "alpha", &current, &retry)
+                .is_err()
+        );
+        retry.context_meter_status = ContextMeterStatus::RetryRequired;
+        let changed = Target::new(3, "https://chatgpt.com/c/later".into()).unwrap();
+        assert!(
+            continuation_ready_for_work(&completed_store, &wake, &root, "alpha", &changed, &retry)
+                .is_err()
+        );
         let approved = WorkLease {
             _store: completed_store,
             approved_target: Some(current.clone()),
+            approved_source_task_id: Some(record.source_task_id.clone()),
+            fenced_source_task_id: None,
         };
         approved.check_target(&current).unwrap();
-        let changed = Target::new(3, "https://chatgpt.com/c/later".into()).unwrap();
         assert_eq!(
             approved.check_target(&changed).unwrap_err(),
             "WEB_WORK_ROLLOVER_PENDING"
         );
         drop(approved);
+        let work = acquire_web_work_lease(&root, "alpha").unwrap();
+        work.check_target(&current).unwrap();
+        work.check_source_task(&record.source, &current, "task-a")
+            .unwrap();
+        assert_eq!(
+            work.check_source_task(&record.source, &current, "task-other")
+                .unwrap_err(),
+            "WEB_WORK_CONTINUATION_SOURCE_REQUIRED"
+        );
+        assert!(
+            work.check_source_task(&record.source, &changed, "task-a")
+                .is_err()
+        );
+        drop(work);
+        drop(acquire_web_work_lease(&root, "beta").unwrap());
+        let project_file = fs::read_dir(root.join(".catdesk/web-context/projects"))
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        let original_meter = fs::read(&project_file).unwrap();
+        fs::write(&project_file, b"corrupt").unwrap();
+        assert_eq!(
+            acquire_web_work_lease(&root, "alpha").err().unwrap(),
+            "WEB_WORK_ROLLOVER_PENDING"
+        );
+        drop(acquire_web_work_lease(&root, "beta").unwrap());
+        fs::write(&project_file, original_meter).unwrap();
+        drop(acquire_web_work_lease(&root, "alpha").unwrap());
         assert_eq!(
             completed_continuation_task_anchor(&root, &wake, "alpha", &current).unwrap(),
             Some("task-a".into())
         );
-        let meter = WebContextStore::open(root.join(".catdesk/web-context")).unwrap();
         let current_key = key("alpha", &current);
         meter
-            .bind_observed_target(current_key.clone(), None)
+            .bind_observed_target(current_key.clone(), Some(&source_key))
             .unwrap();
         let pressure = meter.pressure(&current_key).unwrap();
         assert!(pressure.rollover_intent.is_none());
@@ -2633,6 +7404,183 @@ mod tests {
             .unwrap(),
             Some("task-a".into())
         );
+        drop(lease);
+
+        // A crash after Wake retirement must not strand the registry half of
+        // a completed rollover. Ordinary work still requires an active pair.
+        wake.retire_target_if_quiescent("alpha", Some(&current), "retirement-fixture")
+            .unwrap();
+        assert_eq!(
+            acquire_web_work_lease(&root, "alpha").err().unwrap(),
+            "WEB_WORK_ROLLOVER_PENDING"
+        );
+        let retirement =
+            acquire_web_retirement_lease(&root, "alpha", &wake, Some(&current)).unwrap();
+        retirement.check_target(&current).unwrap();
+        assert_eq!(
+            acquire_web_retirement_lease(&root, "alpha", &wake, Some(&current))
+                .err()
+                .unwrap(),
+            "WEB_ROLLOVER_PROJECT_BUSY"
+        );
+        drop(retirement);
+        assert!(acquire_web_retirement_lease(&root, "alpha", &wake, None).is_err());
+        assert!(acquire_web_retirement_lease(&root, "alpha", &wake, Some(&changed)).is_err());
+
+        // The retirement-specific target source cannot bypass the same saved
+        // continuation proof or context validation used by ordinary work.
+        let proof_path = root
+            .join(".catdesk/web-rollovers/alpha")
+            .join(format!("{}.json", record.intent_id));
+        let original_proof = fs::read(&proof_path).unwrap();
+        let mut unproved = record.clone();
+        unproved.context_meter_status = ContextMeterStatus::Pending;
+        {
+            let store = ProjectStore::open(&root, "alpha").unwrap();
+            store.save(&unproved).unwrap();
+        }
+        assert!(acquire_web_retirement_lease(&root, "alpha", &wake, Some(&current)).is_err());
+        fs::write(&proof_path, original_proof).unwrap();
+        let original_meter = fs::read(&project_file).unwrap();
+        fs::write(&project_file, b"corrupt").unwrap();
+        assert!(acquire_web_retirement_lease(&root, "alpha", &wake, Some(&current)).is_err());
+        fs::write(&project_file, original_meter).unwrap();
+        drop(acquire_web_retirement_lease(&root, "alpha", &wake, Some(&current)).unwrap());
+        drop(wake);
+        drop(meter);
+        fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
+    fn completed_retry_context_accepts_only_exact_predecessor_or_unreserved_destination() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("web-retry-context-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let meter_root = root.join(".catdesk/web-context");
+        let meter = WebContextStore::open(&meter_root).unwrap();
+        meter
+            .configure_policy(
+                "alpha",
+                crate::web_conversation_context::ContextPressurePolicy {
+                    configured_budget_tokens: 128,
+                    safety_headroom_tokens: 127,
+                    unknown_source_reserve_tokens: 0,
+                    automatic_rollover_enabled: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let mut record = record();
+        let source_key = key("alpha", &record.source);
+        let current = Target::new(2, "https://chatgpt.com/c/new".into()).unwrap();
+        let current_key = key("alpha", &current);
+        assert!(meter.active_pressure("alpha").unwrap().is_none());
+        meter
+            .bind_observed_target(source_key.clone(), None)
+            .unwrap();
+        meter
+            .record_observation(
+                &source_key,
+                Observation {
+                    event_id: "user-a",
+                    revision: 1,
+                    dedup_key: "user-a",
+                    source_kind: VisibleSourceKind::UserMessage,
+                    visible_text: Some("A visible source message"),
+                    observed_at_unix: 100,
+                },
+            )
+            .unwrap();
+        let intent = meter
+            .request_rollover_if_due(
+                &source_key,
+                &record.source.digest,
+                &record.source_task_id,
+                true,
+                101,
+            )
+            .unwrap()
+            .unwrap();
+        record.intent_id = intent.intent_id.clone();
+        let pressure = meter.active_pressure("alpha").unwrap().unwrap();
+        assert_eq!(pressure.key, source_key);
+        assert_eq!(pressure.rollover_intent, Some(intent.clone()));
+        assert!(completed_retry_context_allows_work(
+            Some(&pressure),
+            &record,
+            &current
+        ));
+        assert!(!completed_retry_context_allows_work(
+            None, &record, &current
+        ));
+        let mut unrelated = pressure.clone();
+        unrelated.rollover_intent.as_mut().unwrap().intent_id = "another-intent".into();
+        assert!(!completed_retry_context_allows_work(
+            Some(&unrelated),
+            &record,
+            &current
+        ));
+        unrelated = pressure.clone();
+        unrelated.rollover_intent.as_mut().unwrap().source_task_id = "another-task".into();
+        assert!(!completed_retry_context_allows_work(
+            Some(&unrelated),
+            &record,
+            &current
+        ));
+        unrelated = pressure.clone();
+        unrelated.rollover_intent.as_mut().unwrap().target_sha256 = "0".repeat(64);
+        assert!(!completed_retry_context_allows_work(
+            Some(&unrelated),
+            &record,
+            &current
+        ));
+        meter
+            .bind_observed_target(current_key.clone(), Some(&source_key))
+            .unwrap();
+        let destination = meter.active_pressure("alpha").unwrap().unwrap();
+        assert_eq!(destination.key, current_key);
+        assert!(destination.rollover_intent.is_none());
+        assert!(completed_retry_context_allows_work(
+            Some(&destination),
+            &record,
+            &current
+        ));
+        meter
+            .record_observation(
+                &current_key,
+                Observation {
+                    event_id: "user-b",
+                    revision: 1,
+                    dedup_key: "user-b",
+                    source_kind: VisibleSourceKind::UserMessage,
+                    visible_text: Some("A new generation message"),
+                    observed_at_unix: 102,
+                },
+            )
+            .unwrap();
+        assert!(
+            meter
+                .request_rollover_if_due(&current_key, &current.digest, "task-b", true, 103)
+                .unwrap()
+                .is_some()
+        );
+        let new_intent = meter.active_pressure("alpha").unwrap().unwrap();
+        assert!(!completed_retry_context_allows_work(
+            Some(&new_intent),
+            &record,
+            &current
+        ));
+        let project_file = fs::read_dir(meter_root.join("projects"))
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        fs::write(project_file, b"corrupt").unwrap();
+        assert!(meter.active_pressure("alpha").is_err());
+        drop(meter);
+        fs::remove_dir_all(root).unwrap();
     }
     #[test]
     fn uncertain_submission_is_durable_and_other_project_lock_is_independent() {
@@ -2674,6 +7622,27 @@ mod tests {
         atomic(&store.root.join("active.json"), &record.intent_id).unwrap();
         let destination = validate_receipt(&record, record.receipt.as_ref().unwrap()).unwrap();
         let source_digest = record.source.digest.clone();
+        let receipt_before = serde_json::to_value(&record.receipt).unwrap();
+        assert_eq!(
+            checkpoint_bound_with(
+                &store,
+                &mut record,
+                &destination,
+                || Err("registry and Wake differ".into()),
+                |_, _, _| Err("WEB_ROLLOVER_BINDING_REQUIRES_RECONCILIATION".into()),
+            )
+            .unwrap_err(),
+            "WEB_ROLLOVER_BINDING_REQUIRES_RECONCILIATION"
+        );
+        drop(store);
+        let store = ProjectStore::open_existing(&root, "alpha").unwrap();
+        let mut record = store.active().unwrap().unwrap();
+        assert_eq!(record.phase, Phase::Created);
+        assert_eq!(
+            serde_json::to_value(&record.receipt).unwrap(),
+            receipt_before
+        );
+        assert!(record.bound_target.is_none());
         let bound = checkpoint_bound_with(
             &store,
             &mut record,
@@ -2692,6 +7661,36 @@ mod tests {
         assert_eq!(saved.phase, Phase::Bound);
         assert_eq!(saved.bound_target, Some(destination));
         assert!(saved.receipt.is_some());
+    }
+
+    #[test]
+    fn cancelled_owner_before_binding_preserves_receipt_without_reconciliation_fence() {
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut record = record();
+        record.phase = Phase::Created;
+        record.receipt = Some(receipt_for(&record));
+        store.save(&record).unwrap();
+        atomic(&store.root.join("active.json"), &record.intent_id).unwrap();
+        let before = serde_json::to_value(store.active().unwrap().unwrap()).unwrap();
+        let destination = validate_receipt(&record, record.receipt.as_ref().unwrap()).unwrap();
+        let source = record.source.clone();
+        assert_eq!(
+            checkpoint_bound_with(
+                &store,
+                &mut record,
+                &destination,
+                || Ok(source.clone()),
+                |_, _, _| Err("WEB_AUTO_OWNER_STOPPED".into())
+            )
+            .unwrap_err(),
+            "WEB_AUTO_OWNER_STOPPED"
+        );
+        assert!(record.reconciliation_reason.is_none());
+        assert_eq!(
+            serde_json::to_value(store.active().unwrap().unwrap()).unwrap(),
+            before
+        );
     }
 
     #[test]
@@ -2902,6 +7901,7 @@ mod tests {
             automatic_rollover_enabled: true,
             automatic_observation_enabled: false,
             incomplete_history_rollover: false,
+            ..Default::default()
         };
         meter.configure_policy("alpha", policy.clone()).unwrap();
         meter.bind_observed_target(key.clone(), None).unwrap();
@@ -2929,6 +7929,29 @@ mod tests {
             .unwrap()
             .unwrap()
             .intent_id;
+        confirm_request_enabled(&root, &record).unwrap();
+        let before = meter.project_history("alpha").unwrap();
+        let held = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(root.join(".catdesk/web-context/ledger.lock"))
+            .unwrap();
+        held.lock().unwrap();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let release = std::thread::spawn(move || {
+            let _ = release_rx.recv_timeout(std::time::Duration::from_secs(10));
+            drop(held);
+        });
+        let refused = confirm_request_enabled(&root, &record);
+        let released_before_timeout = release_tx.send(()).is_ok();
+        release.join().unwrap();
+        assert!(
+            released_before_timeout,
+            "rollover confirmation waited on metadata"
+        );
+        assert_eq!(refused.unwrap_err(), "WEB_CONTEXT_BUSY");
+        assert_eq!(record.phase, Phase::Prepared);
+        assert_eq!(meter.project_history("alpha").unwrap(), before);
         confirm_request_enabled(&root, &record).unwrap();
         policy.automatic_rollover_enabled = false;
         meter.configure_policy("alpha", policy).unwrap();

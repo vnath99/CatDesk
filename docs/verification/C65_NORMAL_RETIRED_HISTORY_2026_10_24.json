@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C65_NORMAL_RETIRED_HISTORY_AND_BOUNDED_MCP_LIFECYCLE",
+  "observedUtc": "2026-10-24T04:07:58.7597092+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "36b743aeaa9592bced1892caf06cfed0482cc803",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "NORMAL_DEVELOPMENT_EPHEMERAL_LOOPBACK_REAL_SAVED_PROJECT_METADATA_NOT_CHATGPT_CONNECTOR_EXECUTION",
+  "build": {
+    "imageBytes": 34875904,
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+    "sourceCommit": "36b743aeaa9592bced1892caf06cfed0482cc803",
+    "imageSha256": "950b87051a43bbc96728e8477ad8bd4d7fea1826b55576378f6c2df16652c995",
+    "elapsedSeconds": 399.1407334,
+    "exitCode": 0,
+    "sourceTree": "2ae8fb72d6d49a9c9b90e58de4cccf6a658d4b6a",
+    "maximumSeconds": 600,
+    "buildLogSha256": "307d528fab03a2c02d5ec2476ee0ec822214d445733463e9dd9f686de17dce5d"
+  },
+  "buildContainment": {
+    "timedOut": false,
+    "terminationFailed": false,
+    "exitCode": 0
+  },
+  "normalRead": {
+    "messagesSent": 0,
+    "listenerNaturalExit": true,
+    "activeProjectRows": 9,
+    "ownedProcesses": 0,
+    "browserWakeRecurringStarts": 0,
+    "expectedRetiredRows": 1,
+    "webAutoSchedulerStarted": false,
+    "actualChatGptWebExecution": false,
+    "listenerMaximumSeconds": 30,
+    "sourceCommit": "36b743aeaa9592bced1892caf06cfed0482cc803",
+    "httpRequests": 2,
+    "retiredProjectRows": 1,
+    "catalogToolCount": 79,
+    "classification": "C65_NORMAL_FIXED_ARCHIVE_READ_AND_NATURAL_LISTENER_EXIT",
+    "officialRuntimeAction": "NONE",
+    "retiredHistoryVisible": true,
+    "finishedUtc": "2026-10-24T04:07:43.1131142+00:00",
+    "registryReadSucceeded": true,
+    "changedRecords": 0,
+    "imageSha256": "950b87051a43bbc96728e8477ad8bd4d7fea1826b55576378f6c2df16652c995",
+    "startedUtc": "2026-10-24T04:07:11.6440882+00:00",
+    "externalConnectorCalled": false,
+    "elapsedSeconds": 31.4690367,
+    "centralProjectTaskToolAdvertised": true,
+    "failure": null,
+    "nativeActions": 0,
+    "recordsChecked": 282
+  },
+  "readContainment": {
+    "timedOut": false,
+    "terminationFailed": false,
+    "exitCode": 0
+  },
+  "connector": {
+    "observedUtc": "2026-10-24T04:02:44.1945075+00:00",
+    "identityAndCause": "NOT_ESTABLISHED",
+    "runtimeLifecycleActions": 0,
+    "retryCount": 0,
+    "errorCode": "UNAVAILABLE",
+    "readOnlyCalls": 1,
+    "message": "MCP SSE probe returned 429 from openai.org",
+    "httpStatus": 429,
+    "scopedTaskToolAdvertisedInThisSession": false
+  },
+  "remoteCi": {
+    "dispatches": 0,
+    "observedUtc": "2026-10-24T04:01:09.7841810+00:00",
+    "reads": [
+      {
+        "label": "actions",
+        "exitCode": 0,
+        "timedOut": false,
+        "ownerExited": true,
+        "count": 0
+      },
+      {
+        "label": "checks",
+        "exitCode": 0,
+        "timedOut": false,
+        "ownerExited": true,
+        "count": 0
+      }
+    ],
+    "acceptance": "REMOTE_CI_UNVERIFIED_UNLESS_EXACT_SUCCESSFUL_RUN_PRESENT",
+    "commit": "36b743aeaa9592bced1892caf06cfed0482cc803",
+    "settingsChanges": 0
+  },
+  "preservation": {
+    "retiredProjects": 1,
+    "originalFivePreserved": true,
+    "runtimeRecords": 282,
+    "allBytesExact": true,
+    "nativeSessionsChanged": false,
+    "completedCanariesReplayed": false,
+    "selectedPackageChanged": false,
+    "browserWakeRecurringStarts": 0,
+    "scopedOwners": 0,
+    "productionChanged": false,
+    "messagesSent": 0,
+    "activeProjects": 9
+  },
+  "acceptance": {
+    "protectedInstalled": "NOT_QUALIFIED",
+    "actualChatGptToolsBC": "OPEN",
+    "fullRuntimeRestart": "OPEN",
+    "normalBoundedListenerExit": "PASS_NATURAL_30_SECOND_DEADLINE_WITH_WEB_AUTO_OFF",
+    "fullOctoberMilestone": "OPEN",
+    "normalFixedRegistryRead": "PASS_ACTUAL_LOOPBACK_HTTP_AND_FULL_ARCHIVED_BINDING_HISTORY_COMPARISON",
+    "unattended": "NOT_ACTIVATED"
+  },
+  "nextTask": "Qualify the reviewed normal image through existing guarded stopped development package selection, preserving the existing host/profile/bindings. Actual Web coding requires resolving the primary connector HTTP429 and its missing scoped tool catalog through the supported owner path."
+}

@@ -1,0 +1,211 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T02:30:11.381134+00:00",
+  "classification": "ACTUAL_SELECTED_DEVELOPMENT_PASSIVE_RESPONSE_DIAGNOSTIC_QUALIFIED",
+  "sourceBaseCommit": "194983f0360c1a3c9bfd4837cfe5a3751ecc1e6b",
+  "tests": {
+    "currentDom": {
+      "passed": 47,
+      "logSha256": "250804c02f633a3a969f6309f4c5fb80152122b928f55834554d94ea5cbec7e5"
+    },
+    "adapter": {
+      "passed": 37,
+      "logSha256": "5b626e3538925031c8916947c8f6b6830900cd1a3525d9aed797f3bc6fcb4e58"
+    },
+    "bridgeResponse": {
+      "passed": 16,
+      "logSha256": "e2f2c8d3148239459736a287a593d1c5357534f08cbc1065c066440c5137f021"
+    },
+    "wakeLibrary": {
+      "passed": 479,
+      "logSha256": "5e41ac68fb09222997e2a8a242d3e1dbaf5688c91d6c846da7717f71a62d0146"
+    },
+    "rootClippy": {
+      "allTargets": true,
+      "warningsDenied": true,
+      "passed": true,
+      "logSha256": "34bc8a97ef050dcc139caee301ba197267fc90fb6052b58ad492e46b00501065"
+    },
+    "wakeClippy": {
+      "allTargets": true,
+      "warningsDenied": true,
+      "passed": true,
+      "logSha256": "36ad04c48b742c3bd3c8a89cda93b94f404e89a6d08b0cdbf5da32e52ddc5f64"
+    }
+  },
+  "distinctPassingTests": 579,
+  "implementation": {
+    "newOwnerOrScheduler": false,
+    "sameReceiptObservationAndCasPreserved": true,
+    "pendingReasons": [
+      "DOCUMENT_LOADING",
+      "GENERATION_ACTIVE",
+      "EDITOR_NOT_READY",
+      "ASSISTANT_NOT_MOUNTED",
+      "ASSISTANT_BODY_UNPROVEN",
+      "ASSISTANT_COMPLETION_ACTION_UNPROVEN"
+    ],
+    "unknownOrStageInconsistentDiagnosticRefused": true,
+    "oldFiveFieldWitnessCompatible": true,
+    "diagnosticIsCompletionAuthority": false,
+    "rawConversationOrDraftExport": false,
+    "newSendRetryRegenerateReload": false,
+    "pendingJournalPreservesExactTimerBytes": true,
+    "independentProjectIsolation": "PASS_SOURCE"
+  },
+  "priorActualSelectedDevelopment": {
+    "sourceCommit": "194983f0360c1a3c9bfd4837cfe5a3751ecc1e6b",
+    "candidateSha256": "42e9991ed99dd20ddb0adb07cb2f49772a3baa7879aa1f6226f485d86f09fadd",
+    "previousSha256": "1a27e9df9f72127fa5cf779fad9082ea643b8ddeb53fbfad166e30972976d10c",
+    "selectedPackageId": "1.0.0-dev.85-7b1f5a8979e1877136a1138114d87bde14bb280801642714093602aa3fe379f1",
+    "elapsedSeconds": 118.0,
+    "observedResponseState": "PENDING",
+    "criticalPinsChecked": 5069,
+    "criticalMismatchCount": 0,
+    "previousFilesChecked": 7,
+    "previousMismatchCount": 0,
+    "hostStopped": true
+  },
+  "review": {
+    "fullResponsePreviouslyVerified": true,
+    "verdict": "INCONCLUSIVE",
+    "sourceAccepted": false,
+    "nativeFinalized": false,
+    "producerStarted": false,
+    "messagesResent": 0
+  },
+  "sourceDiagnosticInstalled": true,
+  "newSourceProtectedProductionAcceptance": false,
+  "twoChatWebCodingAcceptance": "OPEN",
+  "broadBridgeSuite": "STOPPED_FOR_RUNTIME_BOUND_NOT_A_PASS; diagnostic trace found existing real idle-settle waits;16 focused response cases passed",
+  "nextExecutableTask": "ADD_BOUNDED_CONTENT_FREE_ASSISTANT_CONTROL_LAYOUT_DIAGNOSTICS_TO_EXISTING_OBSERVER_THEN_QUALIFY_EXACT_COMPLETION_PREDICATE_NO_RESEND",
+  "operatorActionRequired": false,
+  "goal": "ACTIVE",
+  "actualSelectedDevelopment": {
+    "sourceCommit": "5609ac29a1f4c23a03abc4ccb4dcf1f5414956a4",
+    "candidateSha256": "730a5683b0d5fc5b61542e480fc13f6cab1fae558fdcb2d82effc0949dec0086",
+    "previousSha256": "21f68ab7893be20767e7c635bc539d70be2aff09aa739b7a3a43c2988cd9291e",
+    "selectedPackageId": "1.0.0-dev.85-91f717eedb0f17623c67d5bba9f2814da968440b350dde57879eda8d9a25b219",
+    "elapsedSeconds": 121.094,
+    "reobserveExitCode": 0,
+    "hostStopped": true,
+    "previousVerifiedRetained": true,
+    "criticalPinsChecked": 5069,
+    "criticalMismatchCount": 0,
+    "previousFilesChecked": 7,
+    "previousMismatchCount": 0,
+    "observedResponseState": "PENDING",
+    "diagnosticReason": "ASSISTANT_COMPLETION_ACTION_UNPROVEN",
+    "timerCompleted": false,
+    "transportClosed": false,
+    "responseTimerState": "OBSERVING",
+    "health": [
+      {
+        "label": "installed-debug-health",
+        "maximumRuntimeSeconds": 15,
+        "expectedSha256": "730a5683b0d5fc5b61542e480fc13f6cab1fae558fdcb2d82effc0949dec0086",
+        "actualSha256": "730a5683b0d5fc5b61542e480fc13f6cab1fae558fdcb2d82effc0949dec0086",
+        "recovery": "CURRENT_PACKAGE_VERIFIED",
+        "packageId": "1.0.0-dev.85-91f717eedb0f17623c67d5bba9f2814da968440b350dde57879eda8d9a25b219",
+        "unauthorizedStatus": 401,
+        "initializeStatus": 200,
+        "catalogStatus": 200,
+        "toolCount": 79,
+        "registeredProjectsRead": true,
+        "ownerExitCode": 0,
+        "readersClosed": true,
+        "ownedTreeExitProved": true,
+        "endpointClosed": true,
+        "observedUtc": "2026-10-31T02:27:44.402574+00:00"
+      }
+    ]
+  },
+  "preservation": {
+    "timerStartedUtcPreserved": true,
+    "otherLedgerRecordsPreserved": true,
+    "allGrantsPreserved": true,
+    "adapterLogPrefixPreserved": true,
+    "profileIdentityPreserved": true,
+    "nonUsageConfigurationPreserved": true,
+    "messagesSent": 0,
+    "productionChanged": false,
+    "recurringOrTunnelOwnerStarts": 0,
+    "nativeTaskOrSessionCommandsInvoked": false
+  },
+  "cleanup": {
+    "state": "PROFILE_QUIESCENT",
+    "observedUtc": "2026-10-31T02:29:20.730865+00:00",
+    "testOwnedRemaining": 0
+  },
+  "privateEvidenceSha256": {
+    "oct31-assistant-unit-debug-build-result.private.json": "f392df01773bba7fb3d1ec81b989b8f7ace395bebe8536153e94b8a809117c2f",
+    "oct31-assistant-unit-debug-live-v2-result.private.json": "8ded362be6e3536f42e7f99fe5d927678f957788c147e33f521d2ad70f3d96b2",
+    "oct31-assistant-unit-debug-live-v2-owner.private.json": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "oct31-profile-quiescence-assistant-unit-cleanup-result.private.json": "28f67dacf3190fda672afa4511b88b582473672da23e5e54fd7465f2080e50d7"
+  },
+  "auxiliaryUnitCorrection": {
+    "classification": "ACTUAL_SELECTED_DEVELOPMENT_QUALIFIED",
+    "sourceBaseCommit": "54423e65292299471b7b58f8f15f9b066a2e5ed0",
+    "redFailures": 2,
+    "redLogSha256": "ac066f7167c4adda7b0817ca8e29eae12e2065a8c68d4783a87d02cf21184adf",
+    "currentDomTests": 47,
+    "greenDomLogSha256": "250804c02f633a3a969f6309f4c5fb80152122b928f55834554d94ea5cbec7e5",
+    "adapterTests": 37,
+    "greenAdapterLogSha256": "5b626e3538925031c8916947c8f6b6830900cd1a3525d9aed797f3bc6fcb4e58",
+    "requireExplicitAssistantRole": true,
+    "sharedToolbarExcludesAllSearchUnits": true,
+    "realInstalledPendingCauseEstablished": false,
+    "acceptNonAssistantCopy": false,
+    "retryReloadOrSendAdded": false,
+    "actualResponseState": "PENDING",
+    "actualDiagnosticReason": "ASSISTANT_COMPLETION_ACTION_UNPROVEN",
+    "actualCompletionRecovered": false
+  },
+  "previousActualSelectedDevelopment": {
+    "sourceCommit": "54423e65292299471b7b58f8f15f9b066a2e5ed0",
+    "candidateSha256": "21f68ab7893be20767e7c635bc539d70be2aff09aa739b7a3a43c2988cd9291e",
+    "previousSha256": "42e9991ed99dd20ddb0adb07cb2f49772a3baa7879aa1f6226f485d86f09fadd",
+    "selectedPackageId": "1.0.0-dev.85-8be8767d735ab08064669db7577fe63e60706be447b5332c1dbf3d1b0c082448",
+    "elapsedSeconds": 123.046,
+    "reobserveExitCode": 0,
+    "hostStopped": true,
+    "previousVerifiedRetained": true,
+    "criticalPinsChecked": 5069,
+    "criticalMismatchCount": 0,
+    "previousFilesChecked": 7,
+    "previousMismatchCount": 0,
+    "observedResponseState": "PENDING",
+    "diagnosticReason": "ASSISTANT_COMPLETION_ACTION_UNPROVEN",
+    "timerCompleted": false,
+    "transportClosed": false,
+    "responseTimerState": "OBSERVING",
+    "health": [
+      {
+        "label": "installed-debug-health",
+        "maximumRuntimeSeconds": 15,
+        "expectedSha256": "21f68ab7893be20767e7c635bc539d70be2aff09aa739b7a3a43c2988cd9291e",
+        "actualSha256": "21f68ab7893be20767e7c635bc539d70be2aff09aa739b7a3a43c2988cd9291e",
+        "recovery": "CURRENT_PACKAGE_VERIFIED",
+        "packageId": "1.0.0-dev.85-8be8767d735ab08064669db7577fe63e60706be447b5332c1dbf3d1b0c082448",
+        "unauthorizedStatus": 401,
+        "initializeStatus": 200,
+        "catalogStatus": 200,
+        "toolCount": 79,
+        "registeredProjectsRead": true,
+        "ownerExitCode": 0,
+        "readersClosed": true,
+        "ownedTreeExitProved": true,
+        "endpointClosed": true,
+        "observedUtc": "2026-10-31T02:19:44.070256+00:00"
+      }
+    ]
+  },
+  "acceptanceGaps": {
+    "currentReceiptPassiveCompletion": "ASSISTANT_COMPLETION_ACTION_UNPROVEN",
+    "auxiliaryUnitFixAloneRecoveredLiveCompletion": false,
+    "positiveSourceReview": "OPEN_PRIOR_VERDICT_INCONCLUSIVE",
+    "newSourceProtectedPromotion": "OPEN_REQUIRED_INDEPENDENT_REVIEW_ACK_AND_PRODUCER_AUTHORITY",
+    "twoIndependentWebCodingConversations": "OPEN",
+    "normalUnattendedOperation": "OPEN"
+  }
+}

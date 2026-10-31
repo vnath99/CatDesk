@@ -1,0 +1,209 @@
++        while let Some(dir) = pending.pop() {
++            for entry in fs::read_dir(dir).unwrap() {
++                let entry = entry.unwrap();
++                if entry.file_type().unwrap().is_dir() {
++                    pending.push(entry.path());
++                } else {
++                    files.insert(
++                        entry.path().strip_prefix(root).unwrap().to_path_buf(),
++                        fs::read(entry.path()).unwrap(),
++                    );
++                }
++            }
++        }
++        files
++    }
++
++    #[test]
++    fn retry_preserves_reserved_message_and_independent_project_without_browser() {
++        let fixture = Fixture::new(false);
++        let beta = fixture
++            .store
++            .set_target("beta", 0, "https://chatgpt.com/c/review-beta")
++            .unwrap();
++        let event = fixture
++            .store
++            .produce_expected(
++                "beta-blocked",
++                "beta",
++                "test",
++                "Other project is blocked",
++                &beta,
++            )
++            .unwrap();
++        let host = fixture.store.host_lock().unwrap();
++        fixture.store.claim(&event, &host).unwrap();
++        fixture
++            .store
++            .transition(
++                &event.event_id,
++                host.owner(),
++                Phase::Attention,
++                None,
++                Some("CHATGPT_NOT_IDLE".into()),
++            )
++            .unwrap();
++        drop(host);
++        let beta_before = fixture.store.delivery(&event.event_id).unwrap();
++        let ledger_path = fixture.root.0.join(".catdesk/web-work/alpha.json");
++        let ledger_before = fs::read(&ledger_path).unwrap();
++        let events_before = fixture.store.events().unwrap();
++        let before = fixture
++            .store
++            .delivery(&fixture.identity.event_id)
++            .unwrap()
++            .unwrap();
++        let result = fixture.prepare().unwrap();
++        assert_eq!(result["phase"], "CLAIMED");
++        assert_eq!(result["sendAttempted"], false);
++        assert_eq!(result["browserStarted"], false);
++        assert_eq!(result["hostStarted"], false);
++        let after = fixture
++            .store
++            .delivery(&fixture.identity.event_id)
++            .unwrap()
++            .unwrap();
++        assert_eq!(after.phase, Phase::Claimed);
++        assert_eq!(after.reason, None);
++        assert_eq!(after.event, before.event);
++        assert_eq!(after.target, before.target);
++        assert_eq!(after.owner, before.owner);
++        assert_eq!(after.message_digest, before.message_digest);
++        assert_eq!(fs::read(ledger_path).unwrap(), ledger_before);
++        assert_eq!(fixture.store.events().unwrap(), events_before);
++        assert_eq!(
++            fixture.store.delivery(&event.event_id).unwrap(),
++            beta_before
++        );
++        let prepared = bytes(&fixture.root.0);
++        assert!(
++            fixture.prepare().is_err(),
++            "already prepared retry must be refused"
++        );
++        assert_eq!(bytes(&fixture.root.0), prepared);
++    }
++
++    #[test]
++    fn retry_refuses_changed_expired_revoked_unknown_or_started_work_without_writes() {
++        for case in [
++            "expired",
++            "revoked",
++            "dispatch",
++            "project",
++            "target",
++            "message",
++            "key",
++            "grant",
++            "reason",
++            "queue",
++            "submitting",
++            "start",
++            "timer",
++            "archive",
++            "audit",
++        ] {
++            let mut fixture = Fixture::new(case == "expired");
++            match case {
++                "revoked" => {
++                    fixture
++                        .ledger
++                        .revoke_review(&fixture.input.grant_id, now())
++                        .unwrap();
++                }
++                "dispatch" => {
++                    let permit = fixture
++                        .ledger
++                        .resume_review(
++                            &fixture.input.grant_id,
++                            &fixture.identity,
++                            &fixture.target,
++                            now(),
++                        )
++                        .unwrap();
++                    fixture
++                        .ledger
++                        .mark_review_dispatch_started(&permit, now())
++                        .unwrap();
++                }
++                "project" => fixture.input.project_id = "beta".into(),
++                "target" => {
++                    fixture.target =
++                        protocol::Target::new(2, "https://chatgpt.com/c/other".into()).unwrap()
++                }
++                "message" => fixture.message.push_str(" material change"),
++                "key" => fixture.identity.review_key = "c".repeat(64),
++                "grant" => fixture.input.grant_id = "other-grant".into(),
++                "queue" => fs::remove_file(
++                    fixture
++                        .store
++                        .root()
++                        .join("queue")
++                        .join(format!("{}.json", fixture.identity.event_id)),
++                )
++                .unwrap(),
++                "submitting" => {
++                    let delivery = fixture
++                        .store
++                        .delivery(&fixture.identity.event_id)
++                        .unwrap()
++                        .unwrap();
++                    fixture
++                        .store
++                        .retry_pre_submit(&fixture.identity.event_id)
++                        .unwrap();
++                    fixture
++                        .store
++                        .transition(
++                            &fixture.identity.event_id,
++                            &delivery.owner,
++                            Phase::Submitting,
++                            None,
++                            None,
++                        )
++                        .unwrap();
++                }
++                "start" | "timer" | "archive" => {
++                    let path = match case {
++                        "start" => fixture.store.root().join("logs").join(format!(
++                            "submission-start-{}.json",
++                            fixture.identity.event_id
++                        )),
++                        "timer" => fixture
++                            .store
++                            .root()
++                            .join("turns")
++                            .join(format!("{}.json", fixture.identity.event_id)),
++                        _ => fixture
++                            .store
++                            .root()
++                            .join("archive")
++                            .join(format!("{}.json", fixture.identity.event_id)),
++                    };
++                    fs::write(path, b"{partial").unwrap();
++                }
++                "reason" | "audit" => {
++                    let path = fixture
++                        .store
++                        .root()
++                        .join("deliveries")
++                        .join(format!("{}.json", fixture.identity.event_id));
++                    let mut value: Value =
++                        serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
++                    if case == "reason" {
++                        value["reason"] = json!("UNKNOWN_SUBMISSION");
++                    } else {
++                        value["event"]["auditReferences"] =
++                            json!(["catdesk-review-v1:other-grant"]);
++                    }
++                    fs::write(path, serde_json::to_vec(&value).unwrap()).unwrap();
++                }
++                _ => {}
++            }
++            let before = bytes(&fixture.root.0);
++            assert!(
++                fixture.prepare().is_err(),
++                "unsafe recovery admitted: {case}"
++            );
++            assert_eq!(
++                bytes(&fixture.root.0),
++                before,

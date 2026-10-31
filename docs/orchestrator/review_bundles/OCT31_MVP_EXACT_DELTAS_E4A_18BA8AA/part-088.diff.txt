@@ -1,0 +1,215 @@
++    if validated_authority_for_login_recovery(&workspace, false, false, Some(expected))?
++        != Some((root.clone(), authority))
++        || paired(&store)? != target
++    {
++        return Err("DEV_LOGIN_RECOVERY_AUTHORITY_CHANGED".into());
++    }
++    require_stopped_control(&root)?;
++    marker_target(&marker, expected)?;
++    let result = json!({"schemaVersion":1,"mode":"DEVELOPMENT_UNPROTECTED",
++        "status":if execute {"LOGIN_ONLY_MARKER_ARCHIVED"} else {"LOGIN_RECOVERY_PREFLIGHT_PASSED"},
++        "markerSha256":expected,"targetSha256":target.digest,"targetGeneration":target.generation,
++        "currentProfileQuiescenceVerified":true,"historicalJobExitInferred":false,
++        "historicalSubmissionOutcome":"UNCHANGED_UNPROVEN","markerArchived":execute,
++        "browserStarted":false,"hostStarted":false,"messagesSent":0,
++        "bindingChanged":false,"draftsInspected":false,"releaseSelectionChanged":false});
++    if !execute {
++        return Ok(result);
++    }
++    let intent = json!({"schemaVersion":1,"purpose":"DEV_LOGIN_ONLY_RECOVERY_V1",
++        "markerSha256":expected,"targetSha256":target.digest,"targetGeneration":target.generation,
++        "phase":"PREPARED_ARCHIVE_EXISTENCE_IS_COMMIT_WITNESS",
++        "historicalSubmissionOutcome":"UNCHANGED_UNPROVEN"});
++    if present(&journal)? {
++        if read_json::<Value>(&journal, 4096)? != intent {
++            return Err("DEV_LOGIN_RECOVERY_JOURNAL_CHANGED".into());
++        }
++    } else {
++        write_json_new(&journal, &intent)?;
++    }
++    marker_target(&marker, expected)?;
++    // Same-directory, write-through, no replacement: preserve the original
++    // bytes as the commit witness. A crash before this leaves the active fence.
++    #[link(name = "kernel32")]
++    unsafe extern "system" {
++        fn MoveFileExW(from: *const u16, to: *const u16, flags: u32) -> i32;
++    }
++    if unsafe {
++        MoveFileExW(
++            wide(marker.as_os_str()).as_ptr(),
++            wide(archive.as_os_str()).as_ptr(),
++            8,
++        )
++    } == 0
++    {
++        return Err("DEV_LOGIN_RECOVERY_ARCHIVE_FAILED".into());
++    }
++    if hash_file(&archive, 4096)? != expected || present(&marker)? {
++        return Err("DEV_LOGIN_RECOVERY_COMMIT_UNVERIFIED".into());
++    }
++    Ok(result)
++}
+diff --git a/wake/src/development_runtime.rs b/wake/src/development_runtime.rs
+index b404980202cca4e46dba12ef0d4bc757601abe7a..54620c83a82d7206dc1fcf7825bc95e65a8f9ed9 100644
+--- a/wake/src/development_runtime.rs
++++ b/wake/src/development_runtime.rs
+@@ -17,7 +17,7 @@ use std::{
+     collections::{BTreeMap, BTreeSet},
+     ffi::{OsStr, c_void},
+     fs::{self, File, OpenOptions},
+-    io::{BufReader, IsTerminal, Read, Write},
++    io::{BufRead, BufReader, IsTerminal, Read, Write},
+     os::windows::{
+         ffi::OsStrExt,
+         fs::MetadataExt,
+@@ -27,7 +27,7 @@ use std::{
+     process::{Child, Command, Stdio},
+     sync::mpsc,
+     thread,
+-    time::Duration,
++    time::{Duration, Instant},
+ };
+ 
+ const PURPOSE: &str = "CATDESK_WAKE_DEVELOPMENT_UNPROTECTED_V1";
+@@ -56,6 +56,10 @@ const INVALID_HANDLE: *mut c_void = -1isize as *mut c_void;
+ #[path = "development_foreground.rs"]
+ mod foreground;
+ 
++#[path = "development_login_recovery.rs"]
++mod login_recovery;
++pub use login_recovery::reconcile_login;
++
+ #[link(name = "kernel32")]
+ unsafe extern "system" {
+     fn CreateFileW(
+@@ -1337,6 +1341,22 @@ fn validated_authority_options(
+     workspace: &Path,
+     allow_package_update: bool,
+     allow_retiring_package_files: bool,
++) -> Result<Option<(PathBuf, Authority)>> {
++    validated_authority_for_login_recovery(
++        workspace,
++        allow_package_update,
++        allow_retiring_package_files,
++        None,
++    )
++}
++
++// A matching marker hash is accepted only inside the explicit login-only
++// reconciliation path. Ordinary selection retains its unconditional fence.
++fn validated_authority_for_login_recovery(
++    workspace: &Path,
++    allow_package_update: bool,
++    allow_retiring_package_files: bool,
++    expected_login_marker: Option<&str>,
+ ) -> Result<Option<(PathBuf, Authority)>> {
+     let workspace = canonical_workspace(workspace)?;
+     let dev = dev_dir(&workspace);
+@@ -1353,7 +1373,11 @@ fn validated_authority_options(
+         return Ok(None);
+     }
+     plain(&dev, true)?;
+-    if present(&dev.join("login-active.json"))? {
++    let login_marker = dev.join("login-active.json");
++    if present(&login_marker)?
++        && (expected_login_marker.is_none()
++            || expected_login_marker != Some(hash_file(&login_marker, 4096)?.as_str()))
++    {
+         return Err("DEV_LOGIN_CLEANUP_UNVERIFIED".into());
+     }
+     if !allow_package_update && present(&dev.join(PACKAGE_UPDATE_ATTEMPT))? {
+@@ -1951,10 +1975,23 @@ struct LoginPreflight {
+     root: PathBuf,
+     python: PathBuf,
+     profile: PathBuf,
++    primitives: PathBuf,
++    primitives_sha256: String,
++    target_generation: u64,
+     _host: crate::store::HostLease,
+     _browser: File,
+ }
+ 
++fn browser_child_path(path: &Path, directory: bool) -> Result<PathBuf> {
++    let compatible = runtime::browser_process_root(path)?;
++    // Normal spelling must still resolve to the same approved object. A
++    // packaged-process root-view difference is a refusal, never a rebind.
++    if identity(&compatible, directory)? != identity(path, directory)? {
++        return Err("DEV_LOGIN_BROWSER_PATH_IDENTITY_MISMATCH".into());
++    }
++    Ok(compatible)
++}
++
+ fn require_login_target(store: &Store, url: &str) -> Result<()> {
+     let config = store.config()?;
+     let matched = config
+@@ -1977,6 +2014,21 @@ fn require_stopped_control(root: &Path) -> Result<()> {
+     Ok(())
+ }
+ 
++fn require_observed_target_generation(store: &Store, url: &str, expected: u64) -> Result<()> {
++    require_login_target(store, url)?;
++    if store
++        .config()?
++        .targets
++        .values()
++        .find(|target| target.url == url)
++        .map(|target| target.generation)
++        != Some(expected)
++    {
++        return Err("DEV_LOGIN_TARGET_GENERATION_CHANGED".into());
++    }
++    Ok(())
++}
++
+ fn login_preflight(workspace: &Path, target_url: &str) -> Result<LoginPreflight> {
+     protocol::validate_target(target_url)?;
+     let (root, authority) = validated_authority(workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+@@ -1996,13 +2048,32 @@ fn login_preflight(workspace: &Path, target_url: &str) -> Result<LoginPreflight>
+     validate_against_production(&checked_authority, target_url)?;
+     require_stopped_control(&root)?;
+     require_login_target(&store, target_url)?;
+-    let python = root.join("runtime/python.exe");
+-    let profile = root.join("browser-profile");
++    let python = browser_child_path(&root.join("runtime/python.exe"), false)?;
++    let profile = browser_child_path(&root.join("browser-profile"), true)?;
+     plain(&profile, true)?;
++    let primitives = root
++        .join("versions")
++        .join(&checked_authority.package_id)
++        .join("wake_bridge.py");
++    let primitives_sha256 = checked_authority
++        .artifacts
++        .get("wake_bridge.py")
++        .cloned()
++        .ok_or("DEV_RUNTIME_PACKAGE_MANIFEST_MISMATCH")?;
++    let target_generation = store
++        .config()?
++        .targets
++        .values()
++        .find(|target| target.url == target_url)
++        .ok_or("DEV_LOGIN_TARGET_NOT_REGISTERED")?
++        .generation;
+     Ok(LoginPreflight {
+         root,
+         python,
+         profile,
++        primitives,
++        primitives_sha256,
++        target_generation,
+         _host: host,
+         _browser: browser,
+     })
+@@ -2026,6 +2097,37 @@ fn read_login_token(reader: &mut BufReader<impl Read>) -> Result<String> {
+     Err("DEV_LOGIN_HELPER_OUTPUT_INVALID".into())
+ }
+ 
++fn login_remaining(deadline: Instant, maximum: Duration) -> Result<Duration> {
++    let remaining = deadline.saturating_duration_since(Instant::now());
++    if remaining.is_zero() {
++        Err("DEV_LOGIN_INTERACTION_TIMEOUT".into())
++    } else {
++        Ok(remaining.min(maximum))
++    }
++}
++
++fn wait_login_enter(reader: impl Read + Send + 'static, wait: Duration) -> Result<()> {

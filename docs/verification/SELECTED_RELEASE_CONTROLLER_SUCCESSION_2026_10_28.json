@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-29T01:38:27.512659+00:00",
+  "localDate": "2026-10-28",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "0a84508a4590d701d9704f4a0d809f354a8d3cf2",
+  "remoteSourceShaVerified": true,
+  "ci": "UNVERIFIED_ZERO_EXACT_COMMIT_CHECKS_AND_RUNS",
+  "classification": "TESTED_DEVELOPMENT_CONTROLLER_AND_ACTUAL_INSTALLED_PROJECT_READ_ONLY_RUNTIME",
+  "defect": {
+    "oldControllerRequiredSlot": "slot-b",
+    "oldControllerRequiredGeneration": 2,
+    "oldReceiptRejectedCurrentHash": true,
+    "selectedSlot": "slot-a",
+    "selectedGeneration": 3,
+    "existingNativePromotionReceiptAlreadyValid": true,
+    "newAuthorityNeeded": false
+  },
+  "sourceChange": {
+    "files": [
+      "src/operator_installed_backend.rs",
+      "src/operator_installed_project.rs"
+    ],
+    "sharedReadOnlySelectedAuthorityReader": true,
+    "ephemeralProofSchema": 2,
+    "existingPromotionAndLegacyVerifiersReused": true,
+    "legacySlotAndGenerationConstraintsRetained": true,
+    "pendingPromotionRefused": true,
+    "selectedArtifactAndReceiptPinned": true,
+    "pinnedProofMustEqualInitialProof": true,
+    "nativePromotionReceiptIncludedInHistoryReadback": true,
+    "recoveryHelperChanged": false,
+    "historicalAuthorityFilesRewritten": false,
+    "newReleaseAuthorityMinted": false
+  },
+  "tests": {
+    "existingControllerTestsPassed": 18,
+    "newNativeGuardFixtureTestsPassed": 1,
+    "nativeGuardFixtureCases": 7,
+    "nativeGuardCases": [
+      "valid reviewed promotion",
+      "wrong canonical receipt hash",
+      "incomplete promotion handoff",
+      "operational-only manifest",
+      "pointer generation drift",
+      "missing promotion receipt",
+      "pending promotion transaction"
+    ],
+    "actualInstalledAuthorityReadOnlyTestPassed": true,
+    "actualInstalledAuthorityReadSeconds": 6.93,
+    "actualInstalledAuthorityReadResultSha256": "bd3346712ee28aab9be66a4a6fab3fe7442d49eebfe1dcc89030ae9807a34f1c",
+    "format": "PASS",
+    "strictAllTargetClippy": "PASS",
+    "logDigests": [
+      {
+        "name": "selected-release-controller-regressions.private.log",
+        "sha256": "7b7fad18b3080e6d9ece6edfdd730affc3e4f21b97e533732b237d320e0b692b"
+      },
+      {
+        "name": "selected-release-native-guard-cases.private.log",
+        "sha256": "d06b3fe5871d6ce2f7609a342c085e27d2647ea7f59e2f804ea9bc1dcd216f9a"
+      },
+      {
+        "name": "selected-release-controller-format.private.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "selected-release-controller-clippy.private.log",
+        "sha256": "e5fa3c3ba294c4d16551252ccb838f3b917e4b45fa44c215e91586d50c2f0390"
+      },
+      {
+        "name": "selected-release-controller-debug-build.private.log",
+        "sha256": "e639c5989ce47c78fcd8e317378f745b575a81f0d9f09a4b1ab28da368d66b55"
+      }
+    ]
+  },
+  "developmentController": {
+    "sourceCommit": "0a84508a4590d701d9704f4a0d809f354a8d3cf2",
+    "sha256": "116946bcaa2f70bf0a470a6564d72be31eef8a75d70a925bf0b01a77040e1f80",
+    "qualifiedBuildProfile": "DEBUG_DEVELOPMENT_CONTROLLER_NOT_PROTECTED_SERVING_RELEASE",
+    "selectedIntoDevelopmentPackage": false,
+    "copiedIntoCanonicalInstallation": false
+  },
+  "actualInstalledRuntime": {
+    "reviewedSourceCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+    "sha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf",
+    "fingerprintMatches": true,
+    "canonicalBytesChanged": false,
+    "correctRegisteredProjectScope": true,
+    "privateRegisteredReadMatched": true,
+    "readOnly": true,
+    "nativeWriterClaimed": false,
+    "providerConversationAuthenticated": false,
+    "publicProviderCalls": 0,
+    "missingBearerRefused401": true,
+    "authorizedInitializeAndCatalogPassed": true,
+    "readOnlyCatalogToolCount": 11,
+    "globalStartupLeaseReleasedBeforeReady": true,
+    "controllerNaturalExitCode": 0,
+    "commandLimitSeconds": 100,
+    "outerLimitSeconds": 150,
+    "resultSha256": "21c8b3a74a6c9b83a276d01009bc0ecac00e1133ce452b4b5077d2220701d178",
+    "outerResultSha256": "6f6469afe8ce4a351a3846ba818a6dc88c6c081365c1720965003a8d1aa41d75",
+    "containmentSha256": "4b20f8db56b19c6a2330ef97a97bd5379f5e34ecec819fbfc9c8ba6062ec29d6"
+  },
+  "preservation": {
+    "protectedFiles": 130,
+    "changedProtectedFiles": 0,
+    "originalContextEvents": 44,
+    "finalContextEvents": 51,
+    "originalContextPrefixPreserved": true,
+    "onlyDeclaredLedgerAppended": true,
+    "releaseHistoryPreservedByController": true,
+    "newProjectSourceWrites": 0,
+    "nativeSessionActions": 0,
+    "providerMessages": 0,
+    "browserStarts": 0,
+    "wakeStarts": 0,
+    "officialRuntimeStarts": 0,
+    "recurringAutomationStarts": 0,
+    "projectBindingChanges": 0,
+    "remainingTestOwners": 0,
+    "remainingTestListeners": 0
+  },
+  "compatibility": {
+    "persistedLegacyAuthoritySchemaUnchanged": true,
+    "oldControllersAutomaticallyUpdated": false,
+    "newControllerReadsExistingReviewedAuthorityWithoutMigration": true,
+    "legacyHelperProvenanceAndPreviousVersionPinsStillRetained": true
+  },
+  "remaining": {
+    "actualTwoConversationWebCoding": "OPEN_NOT_THIS_OPERATOR_TEST",
+    "managedBearerForwarding": "STILL_UNVERIFIED_MANAGED_CONNECT_HANDOFF",
+    "ordinaryInstalledControllerUpdate": "SOURCE_FIX_NOT_EMBEDDED_IN_C254",
+    "connector": "LAST_SINGLE_REQUEST_FAILED_CHATGPT_BACKEND_MCP_TRANSPORT_NO_HTTP_STATUS_NOT_RETRIED"
+  },
+  "goal": "ACTIVE"
+}

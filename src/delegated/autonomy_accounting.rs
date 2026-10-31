@@ -255,9 +255,29 @@ impl ExecutionAccountingStoreV1 {
             .iter_mut()
             .find(|record| record.record_id == record_id)
         {
-            if record.project_id != project_id {
+            if record.project_id != project_id
+                || record.catdesk_session_id != session_id
+                || record.task_id != task_id
+            {
                 return Err(RuntimeError::Validation(
-                    "execution accounting record is bound to a different project".into(),
+                    "execution accounting record is bound to a different project, session or task"
+                        .into(),
+                ));
+            }
+            // Direct work has one logical claim per task. Its existing
+            // durable accounting record also permits finishing an interrupted
+            // claim before ownership is exposed; replay must not add a turn.
+            if provider_id == "chatgpt-direct" && record.provider_id == "chatgpt-direct" {
+                if record.ended_at_unix_millis.is_some() {
+                    return Err(RuntimeError::Validation(
+                        "completed direct claim cannot restart".into(),
+                    ));
+                }
+                return Ok(());
+            }
+            if record.provider_id == "chatgpt-direct" && record.ended_at_unix_millis.is_none() {
+                return Err(RuntimeError::Validation(
+                    "unresolved direct claim cannot change executor".into(),
                 ));
             }
             record.provider_turns = record.provider_turns.saturating_add(1);
@@ -1231,6 +1251,62 @@ pub fn normalized_tool_call_count(events: &[super::runtime::NormalizedProviderEv
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn direct_claim_replay_is_idempotent_and_identity_collisions_are_rejected() {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-direct-accounting-{}", Uuid::new_v4()));
+        let store = ExecutionAccountingStoreV1::open(&root).unwrap();
+        store
+            .record_task_started(
+                "project",
+                "b",
+                "s-a",
+                None,
+                "chatgpt-direct",
+                None,
+                None,
+                1000,
+            )
+            .unwrap();
+        store
+            .record_task_started(
+                "project",
+                "b",
+                "s-a",
+                None,
+                "chatgpt-direct",
+                None,
+                None,
+                2000,
+            )
+            .unwrap();
+        assert!(
+            store
+                .record_task_started(
+                    "project",
+                    "a-b",
+                    "s",
+                    None,
+                    "chatgpt-direct",
+                    None,
+                    None,
+                    3000
+                )
+                .is_err()
+        );
+        assert!(
+            store
+                .record_task_started("project", "b", "s-a", None, "codex-cli", None, None, 4000)
+                .is_err()
+        );
+        let records = store.list(None).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].provider_turns, 1);
+        assert_eq!(records[0].catdesk_session_id, "s-a");
+        assert_eq!(records[0].task_id, "b");
+        let _ = fs::remove_dir_all(root);
+    }
 
     fn sol_profile(turn_id: &str, digest_byte: char) -> CodexCliTurnProfileEvidenceV1 {
         CodexCliTurnProfileEvidenceV1 {

@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T08:28:12.692322+00:00",
+  "classification": "ACTUAL_LOCAL_RETAINED_RECEIPT_ACCOUNTING_NOT_NEW_WEB_OR_PRODUCTION_ACCEPTANCE",
+  "sourceCommit": "bbf72a78de481330220057f67b39b32f7dd146ec",
+  "controllerSha256": "ab9801483046d8dc35a7c2697a09ccffcde17c37dec7c936c4d4b660d50aa4f5",
+  "controllerRole": "SEPARATE_MATCHED_DEBUG_CONTROLLER",
+  "elapsedSeconds": 52.969,
+  "maximumSeconds": 180,
+  "owner": {
+    "exitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false
+  },
+  "accounting": {
+    "knownDeliveredUserMessages": 2,
+    "pairedCompleteBrowserMessages": 0,
+    "ambiguousUserGroups": 0,
+    "beforeObservedTokenProxy": 1846,
+    "afterObservedTokenProxy": 3197,
+    "addedObservedTokenProxy": 1351,
+    "addedKnownMessageTokenProxies": [
+      1025,
+      326
+    ],
+    "countSourceTimestampsAreOriginalReceiptTimes": true,
+    "idempotentMetadataRecovery": true,
+    "olderReaderAcceptedMetadata": true,
+    "olderReaderProvesNewCorrelation": false,
+    "configuredBudgetUnchanged": true,
+    "historyAndReserveUncertaintyPreserved": true
+  },
+  "actualBasis": "TWO_EXISTING_EXACT_USER_MESSAGE_APPENDED_RECEIPTS_FROM_PREVIOUSLY_COMPLETED_CONTEXT_AND_CONTINUATION_DELIVERIES",
+  "preservation": {
+    "criticalPinsChecked": 5107,
+    "unchangedCriticalPins": 5106,
+    "expectedActiveConversationLedgerChanges": 1,
+    "unexpectedCriticalChanges": 0,
+    "oldLedgerEventMetadataPreserved": true,
+    "payloadReceiptQueueArchiveAndBindingPinsUnchanged": true,
+    "privatePayloadUnchanged": true,
+    "priorBaselinesRetained": true,
+    "derivedForensicBaselineClaimsReleaseAuthority": false,
+    "newRawBodyOrExecutionKeyPersisted": false,
+    "privateEvidenceAndLedgerKeyScanFiles": 14,
+    "keyLeakFindings": 0
+  },
+  "operations": {
+    "browserBackendWakeOfficialOrRecurringStarts": 0,
+    "newProviderMessages": 0,
+    "projectTaskToolExecutions": 0,
+    "bindingChanges": 0,
+    "protectedPromotion": false,
+    "afterProfile": "PROFILE_QUIESCENT",
+    "hostStopped": true
+  },
+  "acceptance": {
+    "sourceRegressions": "PASS_57_DISTINCT_CASES",
+    "actualRetainedReceiptAccounting": "PASS",
+    "metadataRecoveryIdempotence": "PASS",
+    "retainedOlderReaderMetadataCompatibility": "PASS",
+    "actualBrowserOverlapCorrelation": "SOURCE_FIXTURES_ONLY",
+    "fullNativeTwoWebCoding": "OPEN",
+    "newSourceProductionPromotion": "NOT_PERFORMED"
+  },
+  "blockedWebOperation": "PREVIOUS_ASSISTANT_REPORTED_PLATFORM_SAFETY_CHECK_AND_UNESTABLISHED_TOOL_CALL_DELIVERY_NO_REPLAY",
+  "nextExecutableTask": "RECORD_EXISTING_RECEIPT_ATTRIBUTED_BLOCKED_WORK_REPORT_THROUGH_SUPPORTED_LEDGER_WITHOUT_RELEASING_OWNERSHIP_THEN_REUSE_EXISTING_AUTOMATIC_OBSERVER_FOR_OTHER_PROJECT_RECEIPTS",
+  "operatorActionRequiredNow": false,
+  "goal": "ACTIVE"
+}

@@ -38,6 +38,13 @@ fn manual_publication_rejects_wrong_generation_or_digest_without_queue_mutation(
             "TARGET_EXPECTATION_MISMATCH"
         );
         assert!(store.events().unwrap().is_empty());
+        assert_eq!(
+            store
+                .produce_review_expected("review-bound", "catdesk", "review_ready", &wrong)
+                .unwrap_err(),
+            "TARGET_EXPECTATION_MISMATCH"
+        );
+        assert!(store.events().unwrap().is_empty());
     }
     let first = store
         .produce_expected("manual-bound", "catdesk", "test", "MANUAL DEBUG", &target)
@@ -49,6 +56,18 @@ fn manual_publication_rejects_wrong_generation_or_digest_without_queue_mutation(
             .unwrap()
     );
     let next = store.set_target("catdesk", 1, CHAT_B).unwrap();
+    assert_eq!(
+        store
+            .produce_review_expected("review-bound", "catdesk", "review_ready", &target)
+            .unwrap_err(),
+        "TARGET_EXPECTATION_MISMATCH"
+    );
+    assert_eq!(
+        store
+            .produce_review_expected("review-bound", "catdesk", "test", &next)
+            .unwrap_err(),
+        "QUEUE_EVENT_INVALID"
+    );
     assert_eq!(
         store
             .produce_expected("manual-bound", "catdesk", "test", "MANUAL DEBUG", &next)
@@ -188,6 +207,39 @@ fn queue_is_durable_idempotent_and_rejects_changed_duplicate() {
     assert_eq!(f.store().events().unwrap(), vec![e.clone()]);
     e.message.push('!');
     assert_eq!(s.publish(&e).unwrap_err(), "QUEUE_EVENT_ID_CONFLICT");
+    let target = s.config().unwrap().targets["catdesk"].clone();
+    let legacy_message = "CatDesk Wake: review_ready for CatDesk review record legacy-queued. Review the exact record and current wake/GUI repair plan through CatDesk. Ordinary autonomy remains frozen until wake acceptance completes.";
+    let legacy = s
+        .produce_expected(
+            "legacy-queued",
+            "catdesk",
+            "review_ready",
+            legacy_message,
+            &target,
+        )
+        .unwrap();
+    let before = fs::read(f.root.join("queue/legacy-queued.json")).unwrap();
+    assert_eq!(
+        s.produce_review_expected("legacy-queued", "catdesk", "review_ready", &target)
+            .unwrap(),
+        legacy
+    );
+    assert_eq!(
+        fs::read(f.root.join("queue/legacy-queued.json")).unwrap(),
+        before
+    );
+    assert_eq!(s.events().unwrap().len(), 2);
+    let changed = format!(
+        "{} changed",
+        legacy_message.replace("legacy-queued", "legacy-wrong")
+    );
+    s.produce_expected("legacy-wrong", "catdesk", "review_ready", &changed, &target)
+        .unwrap();
+    assert_eq!(
+        s.produce_review_expected("legacy-wrong", "catdesk", "review_ready", &target)
+            .unwrap_err(),
+        "QUEUE_EVENT_ID_CONFLICT"
+    );
 }
 #[test]
 fn interrupted_temp_write_is_invisible_to_queue() {
@@ -391,7 +443,11 @@ fn rollover_allows_later_generation_progress_while_old_submission_stays_quaranti
 fn exact_receipt_survives_restart_and_prevents_replay() {
     let f = Fixture::new();
     let s = f.store();
-    let e = event();
+    let mut e = event();
+    e.message = format!(
+        "CatDesk Wake: review_ready for CatDesk review record {}. Review the exact record and current wake/GUI repair plan through CatDesk. Ordinary autonomy remains frozen until wake acceptance completes.",
+        e.event_id
+    );
     s.publish(&e).unwrap();
     let lease = s.host_lock().unwrap();
     let d = s.claim(&e, &lease).unwrap();
@@ -428,6 +484,21 @@ fn exact_receipt_survives_restart_and_prevents_replay() {
     );
     let lease = s.host_lock().unwrap();
     assert!(s.claim(&e, &lease).is_err());
+    let target = s.config().unwrap().targets["catdesk"].clone();
+    let before = fs::read(f.root.join("archive").join(format!("{}.json", e.event_id))).unwrap();
+    assert_eq!(
+        s.produce_review_expected(&e.event_id, "catdesk", "review_ready", &target)
+            .unwrap(),
+        e
+    );
+    assert!(
+        s.events().unwrap().is_empty(),
+        "archived notification is never requeued"
+    );
+    assert_eq!(
+        fs::read(f.root.join("archive").join(format!("{}.json", e.event_id))).unwrap(),
+        before
+    );
 }
 #[test]
 fn malformed_receipt_fails_closed() {
@@ -451,6 +522,43 @@ fn producer_replay_keeps_original_target_generation() {
     );
     let lease = s.host_lock().unwrap();
     assert!(s.claim(&first, &lease).is_err());
+}
+
+#[test]
+fn pre_submit_retry_refuses_surviving_submission_witnesses() {
+    for directory in ["logs", "turns", "archive"] {
+        let fixture = Fixture::new();
+        let store = fixture.store();
+        let event = event();
+        store.publish(&event).unwrap();
+        let lease = store.host_lock().unwrap();
+        store.claim(&event, &lease).unwrap();
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Attention,
+                None,
+                Some("LOGIN_OR_PROFILE_REQUIRED".into()),
+            )
+            .unwrap();
+        let name = if directory == "logs" {
+            format!("submission-start-{}.json", event.event_id)
+        } else {
+            format!("{}.json", event.event_id)
+        };
+        let witness = fixture.root.join(directory).join(name);
+        // Even an unreadable/partial witness cannot authorize another attempt.
+        fs::write(&witness, b"{partial").unwrap();
+        let before = store.delivery(&event.event_id).unwrap().unwrap();
+        assert_eq!(
+            store.retry_pre_submit(&event.event_id).unwrap_err(),
+            "SUBMISSION_RETRY_REFUSED",
+            "{directory}"
+        );
+        assert_eq!(store.delivery(&event.event_id).unwrap().unwrap(), before);
+        assert_eq!(fs::read(witness).unwrap(), b"{partial");
+    }
 }
 
 #[test]

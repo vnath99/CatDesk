@@ -16,12 +16,90 @@ use crate::mcp;
 #[path = "operator_web_cli.rs"]
 mod web;
 
+#[path = "operator_development_backend.rs"]
+mod development_backend;
+
+#[path = "operator_installed_backend.rs"]
+mod installed_backend;
+pub(crate) use installed_backend::diagnostic_error_code as installed_backend_error_code;
+
+#[cfg(windows)]
+pub(crate) use installed_backend::{
+    backend_command as promotion_source_command, verify_mcp_at as verify_promotion_source_mcp,
+};
+
+pub(crate) use web::WebWorkLease;
+#[cfg(all(test, windows))]
+pub(crate) use web::native_continuation_fixture;
+
+#[cfg(test)]
+pub(crate) fn read_web_status(workspace: &Path) -> Result<serde_json::Value, String> {
+    web::read_status(workspace)
+}
+
+pub(crate) fn read_web_summary(workspace: &Path) -> Result<serde_json::Value, String> {
+    web::read_summary(workspace)
+}
+
 pub(crate) fn start_web_auto_scheduler(state: crate::state::SharedState) {
     web::start_auto_scheduler(state);
 }
 
+pub(crate) fn start_scoped_web_auto_scheduler(
+    state: crate::state::SharedState,
+    projects: std::collections::BTreeSet<String>,
+) {
+    web::start_scoped_auto_scheduler(state, projects);
+}
+
+pub(crate) async fn stop_web_auto_scheduler(state: crate::state::SharedState) {
+    web::stop_auto_scheduler(state).await;
+}
+
+pub(crate) async fn join_web_auto_schedulers(tasks: Vec<tokio::task::JoinHandle<()>>) {
+    web::join_auto_schedulers(tasks).await;
+}
+
 pub(crate) fn registry_rollover_status(workspace: &Path, project: &str) -> serde_json::Value {
     web::registry_rollover_status(workspace, project)
+}
+
+pub(crate) fn capture_web_context_expected_guarded(
+    workspace: &Path,
+    project: &str,
+    expected: (u64, &str),
+    keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<serde_json::Value, String> {
+    web::capture_context_expected_guarded(workspace, project, expected, keep_running)
+}
+
+pub(crate) fn read_web_review_expected_guarded(
+    workspace: &Path,
+    project: &str,
+    event_id: &str,
+    expected: (u64, &str),
+    keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<serde_json::Value, String> {
+    web::read_review_guarded(workspace, project, event_id, Some(expected), keep_running)
+}
+
+#[cfg(test)]
+pub(crate) fn capture_web_context_with_snapshot<F>(
+    workspace: &Path,
+    project: &str,
+    expected: (u64, &str),
+    keep_running: &dyn Fn() -> Result<(), String>,
+    snapshot: F,
+) -> Result<serde_json::Value, String>
+where
+    F: FnOnce(
+        &catdesk_wake::store::Store,
+        &str,
+        &catdesk_wake::protocol::Target,
+        &dyn Fn() -> Result<(), String>,
+    ) -> Result<serde_json::Value, String>,
+{
+    web::capture_context_with_snapshot(workspace, project, Some(expected), keep_running, snapshot)
 }
 
 pub(crate) fn acquire_web_work_lease(
@@ -41,6 +119,11 @@ pub(crate) enum OperatorAction {
     Codex(crate::operator_codex_cli::OperatorCodexAction),
     Web(web::WebAction),
     WebDevelopment(WebDevelopmentAction),
+    InstalledBackend {
+        maximum_seconds: u64,
+    },
+    InstalledProject(installed_backend::ProjectOptions),
+    InstalledCentral(installed_backend::CentralOptions),
     SetWakeTarget {
         conversation_url: String,
         expected_current_target_sha256: Option<String>,
@@ -66,6 +149,13 @@ pub(crate) enum WebDevelopmentAction {
         package: PathBuf,
         python_runtime: PathBuf,
     },
+    UpdatePackage {
+        package: PathBuf,
+    },
+    RecoverPackage,
+    RecordVerification {
+        input_file: PathBuf,
+    },
     Enqueue {
         project_id: String,
         event_id: String,
@@ -78,10 +168,25 @@ pub(crate) enum WebDevelopmentAction {
     Login {
         project_id: String,
     },
+    InspectReadiness {
+        project_id: String,
+    },
+    ReconcileLogin {
+        project_id: String,
+        marker_sha256: String,
+        execute: bool,
+    },
     Status,
     Start,
     Stop,
     Run,
+    RunBounded {
+        maximum_seconds: u64,
+    },
+    RunBackend {
+        maximum_seconds: u64,
+    },
+    RunProjectBackend(development_backend::ProjectOptions),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,6 +205,32 @@ pub(crate) enum ReleasePairOperatorAction {
     },
     Confirm {
         confirmation_token: String,
+    },
+    PrepareStopped {
+        review_record_id: String,
+        build_path: PathBuf,
+        expected_sha256: String,
+    },
+    ConfirmStopped {
+        confirmation_token: String,
+    },
+    ResumeStopped {
+        transaction_id: String,
+    },
+    RollbackStopped {
+        transaction_id: String,
+    },
+    ResultStopped,
+    InspectFailedPromotion {
+        transaction_id: String,
+    },
+    RetireFailedPromotion {
+        transaction_id: String,
+        evidence_sha256: String,
+    },
+    QualifyPromotionSource {
+        transaction_id: String,
+        evidence_sha256: String,
     },
     Result,
 }
@@ -126,6 +257,27 @@ pub(crate) fn parse_operator_action(
         return Ok(None);
     }
     match args.get(1).map(String::as_str) {
+        Some("installed-backend") => {
+            if args.get(2).map(String::as_str) == Some("run-central") {
+                return installed_backend::parse_central_options(&args)
+                    .map(OperatorAction::InstalledCentral)
+                    .map(Some);
+            }
+            if args.get(2).map(String::as_str) == Some("run-project") {
+                return installed_backend::parse_project_options(&args)
+                    .map(OperatorAction::InstalledProject)
+                    .map(Some);
+            }
+            if args.len() != 5 || args[2] != "run" || args[3] != "--max-runtime-seconds" {
+                return Err("installed-backend requires run --max-runtime-seconds <1..180>".into());
+            }
+            let maximum_seconds = args[4]
+                .parse::<u64>()
+                .ok()
+                .filter(|value| (1..=180).contains(value))
+                .ok_or("installed-backend requires run --max-runtime-seconds <1..180>")?;
+            Ok(Some(OperatorAction::InstalledBackend { maximum_seconds }))
+        }
         Some("web-dev-runtime") => parse_web_development_action(&args)
             .map(OperatorAction::WebDevelopment)
             .map(Some),
@@ -154,6 +306,16 @@ pub(crate) fn parse_operator_action(
 
 fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction, String> {
     match args.get(2).map(String::as_str) {
+        Some("reconcile-login") if matches!(args.len(), 7 | 8)
+            && args[3] == "--project-id" && args[5] == "--expected-marker-sha256"
+            && catdesk_wake::protocol::valid_id(&args[4])
+            && args[6].len() == 64
+            && args[6].bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            && (args.len() == 7 || args[7] == "--execute") => Ok(WebDevelopmentAction::ReconcileLogin {
+                project_id: args[4].clone(), marker_sha256: args[6].clone(), execute: args.len() == 8,
+            }),
+        Some("inspect-readiness") if args.len()==5 && args[3]=="--project-id"
+            && catdesk_wake::protocol::valid_id(&args[4]) => Ok(WebDevelopmentAction::InspectReadiness {project_id:args[4].clone()}),
         Some("login") if args.len() == 5
             && args[3] == "--project-id"
             && catdesk_wake::protocol::valid_id(&args[4]) => Ok(WebDevelopmentAction::Login {
@@ -186,11 +348,39 @@ fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction,
                     package: PathBuf::from(&args[4]),
                     python_runtime: PathBuf::from(&args[6]),
                 }),
+        Some("update-package") if args.len() == 5
+            && args[3] == "--package"
+            && !args[4].is_empty() && args[4].len() <= 4096
+            && !args[4].chars().any(char::is_control) => Ok(WebDevelopmentAction::UpdatePackage {
+                package: PathBuf::from(&args[4]),
+            }),
         Some("status") if args.len() == 3 => Ok(WebDevelopmentAction::Status),
+        Some("recover-package") if args.len() == 3 => Ok(WebDevelopmentAction::RecoverPackage),
+        Some("record-verification") if args.len() == 5
+            && args[3] == "--input-file"
+            && !args[4].is_empty() && args[4].len() <= 4096
+            && !args[4].chars().any(char::is_control) => Ok(WebDevelopmentAction::RecordVerification {
+                input_file: PathBuf::from(&args[4]),
+            }),
         Some("start") if args.len() == 3 => Ok(WebDevelopmentAction::Start),
         Some("stop") if args.len() == 3 => Ok(WebDevelopmentAction::Stop),
         Some("run") if args.len() == 3 => Ok(WebDevelopmentAction::Run),
-        _ => Err("WEB_DEVELOPMENT_ARGUMENTS_INVALID: use prepare --package <directory> --python-runtime <directory>, login --project-id <id>, enqueue --project-id <id> --event-id <id> --message-file <file>, retry --project-id <id> --event-id dev-<id>, status, start, stop, or run".into()),
+        Some("run-backend") if args.len() == 3 => Ok(WebDevelopmentAction::RunBackend { maximum_seconds: 180 }),
+        Some("run-project-backend") => development_backend::parse_project_options(args)
+            .map(WebDevelopmentAction::RunProjectBackend),
+        Some("run-backend") if args.len() == 5 && args[3] == "--max-runtime-seconds" => {
+            let maximum_seconds = args[4].parse::<u64>().ok()
+                .filter(|seconds| (1..=900).contains(seconds))
+                .ok_or("DEV_BACKEND_BUDGET_INVALID")?;
+            Ok(WebDevelopmentAction::RunBackend { maximum_seconds })
+        }
+        Some("run") if args.len() == 5 && args[3] == "--max-runtime-seconds" => {
+            let maximum_seconds = args[4].parse::<u64>().ok()
+                .filter(|seconds| (1..=900).contains(seconds))
+                .ok_or("WEB_DEVELOPMENT_FOREGROUND_BUDGET_INVALID")?;
+            Ok(WebDevelopmentAction::RunBounded { maximum_seconds })
+        }
+        _ => Err("WEB_DEVELOPMENT_ARGUMENTS_INVALID: use prepare --package <directory> --python-runtime <directory>, update-package --package <directory>, recover-package, record-verification --input-file <file>, login --project-id <id>, enqueue --project-id <id> --event-id <id> --message-file <file>, retry --project-id <id> --event-id dev-<id>, status, start, stop, run, or run-backend [--max-runtime-seconds <1..900>]".into()),
     }
 }
 
@@ -209,6 +399,72 @@ fn login_web_development(workspace: &Path, project_id: &str) -> Result<serde_jso
         &target.url,
     )?;
     catdesk_wake::development_runtime::login(&workspace, &target.url)
+}
+
+fn inspect_web_development_readiness(
+    workspace: &Path,
+    project_id: &str,
+) -> Result<serde_json::Value, String> {
+    let workspace = workspace
+        .canonicalize()
+        .map_err(|_| "DEV_WORKSPACE_UNAVAILABLE")?;
+    let root = catdesk_wake::development_runtime::root_for_workspace(&workspace)?
+        .ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    let lease = acquire_web_work_lease(&workspace, project_id)?;
+    let target = mcp::operator_read_project_web_target(&workspace, project_id)
+        .map_err(|_| "DEV_RUNTIME_PAIRED_TARGET_REQUIRED")?
+        .ok_or("DEV_RUNTIME_PAIRED_TARGET_REQUIRED")?;
+    let expected = catdesk_wake::protocol::Target::new(target.generation, target.url.clone())?;
+    if expected.digest != target.sha256 {
+        return Err("DEV_READINESS_TARGET_CHANGED".into());
+    }
+    lease.check_target(&expected)?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        &workspace,
+        &root,
+        &target.url,
+    )?;
+    let mut result = catdesk_wake::development_runtime::inspect_readiness(&workspace, &target.url)?;
+    lease.check_target(&expected)?;
+    let after = mcp::operator_read_project_web_target(&workspace, project_id)
+        .map_err(|_| "DEV_READINESS_TARGET_CHANGED")?
+        .ok_or("DEV_READINESS_TARGET_CHANGED")?;
+    if after.generation != target.generation
+        || after.url != target.url
+        || after.sha256 != target.sha256
+    {
+        return Err("DEV_READINESS_TARGET_CHANGED".into());
+    }
+    result["projectId"] = json!(project_id);
+    result["targetGeneration"] = json!(target.generation);
+    result["targetDigest"] = json!(target.sha256);
+    Ok(result)
+}
+
+fn reconcile_web_development_login(
+    workspace: &Path,
+    project: &str,
+    marker_sha256: &str,
+    execute: bool,
+) -> Result<serde_json::Value, String> {
+    let mut result = catdesk_wake::development_runtime::reconcile_login(
+        workspace,
+        marker_sha256,
+        execute,
+        |store| {
+            let target = mcp::operator_read_login_recovery_target(workspace, project, store)
+                .map_err(|error| match error {
+                    mcp::DesignatedChatTargetErrorV1::ProtectedStateMismatch => {
+                        "DEV_LOGIN_RECOVERY_TARGET_PAIR_MISMATCH"
+                    }
+                    _ => "DEV_LOGIN_RECOVERY_TARGET_UNAVAILABLE",
+                })?
+                .ok_or("DEV_LOGIN_RECOVERY_PROJECT_TARGET_REQUIRED")?;
+            catdesk_wake::protocol::Target::new(target.generation, target.url)
+        },
+    )?;
+    result["projectId"] = json!(project);
+    Ok(result)
 }
 
 /// Explicit controlled work for live development tests. It uses the same
@@ -366,7 +622,7 @@ fn retry_web_development(
 
 fn parse_release_pair_action(args: &[String]) -> Result<Option<OperatorAction>, String> {
     let action = match args.get(2).map(String::as_str) {
-        Some("prepare")
+        Some("prepare" | "prepare-stopped")
             if args.len() == 9
                 && args[3] == "--review-record-id"
                 && args[5] == "--build-path"
@@ -376,10 +632,23 @@ fn parse_release_pair_action(args: &[String]) -> Result<Option<OperatorAction>, 
                 && args[8].len() == 64
                 && args[8].bytes().all(|byte| byte.is_ascii_hexdigit()) =>
         {
-            ReleasePairOperatorAction::Prepare {
-                review_record_id: args[4].clone(),
-                build_path: PathBuf::from(&args[6]),
-                expected_sha256: args[8].to_ascii_lowercase(),
+            let fields = (
+                args[4].clone(),
+                PathBuf::from(&args[6]),
+                args[8].to_ascii_lowercase(),
+            );
+            if args[2] == "prepare-stopped" {
+                ReleasePairOperatorAction::PrepareStopped {
+                    review_record_id: fields.0,
+                    build_path: fields.1,
+                    expected_sha256: fields.2,
+                }
+            } else {
+                ReleasePairOperatorAction::Prepare {
+                    review_record_id: args[4].clone(),
+                    build_path: PathBuf::from(&args[6]),
+                    expected_sha256: args[8].to_ascii_lowercase(),
+                }
             }
         }
         Some("confirm")
@@ -392,6 +661,73 @@ fn parse_release_pair_action(args: &[String]) -> Result<Option<OperatorAction>, 
             }
         }
         Some("result") if args.len() == 3 => ReleasePairOperatorAction::Result,
+        Some("confirm-stopped")
+            if args.len() == 5
+                && args[3] == "--confirmation-token"
+                && valid_reviewed_build_operator_value(&args[4]) =>
+        {
+            ReleasePairOperatorAction::ConfirmStopped {
+                confirmation_token: args[4].clone(),
+            }
+        }
+        Some("resume-stopped")
+            if args.len() == 5
+                && args[3] == "--transaction-id"
+                && args[4].len() == 32
+                && args[4].bytes().all(|b| b.is_ascii_hexdigit()) =>
+        {
+            ReleasePairOperatorAction::ResumeStopped {
+                transaction_id: args[4].clone(),
+            }
+        }
+        Some("rollback-stopped")
+            if args.len() == 5
+                && args[3] == "--transaction-id"
+                && args[4].len() == 32
+                && args[4].bytes().all(|b| b.is_ascii_hexdigit()) =>
+        {
+            ReleasePairOperatorAction::RollbackStopped {
+                transaction_id: args[4].clone(),
+            }
+        }
+        Some("result-stopped") if args.len() == 3 => ReleasePairOperatorAction::ResultStopped,
+        Some("inspect-failed-promotion")
+            if args.len() == 5
+                && args[3] == "--transaction-id"
+                && args[4].len() == 32
+                && args[4]
+                    .bytes()
+                    .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase()) =>
+        {
+            ReleasePairOperatorAction::InspectFailedPromotion {
+                transaction_id: args[4].clone(),
+            }
+        }
+        Some(command @ ("retire-failed-promotion" | "qualify-promotion-source"))
+            if args.len() == 7
+                && args[3] == "--transaction-id"
+                && args[5] == "--expected-evidence-sha256"
+                && args[4].len() == 32
+                && args[4]
+                    .bytes()
+                    .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase())
+                && args[6].len() == 64
+                && args[6]
+                    .bytes()
+                    .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase()) =>
+        {
+            if command == "qualify-promotion-source" {
+                ReleasePairOperatorAction::QualifyPromotionSource {
+                    transaction_id: args[4].clone(),
+                    evidence_sha256: args[6].clone(),
+                }
+            } else {
+                ReleasePairOperatorAction::RetireFailedPromotion {
+                    transaction_id: args[4].clone(),
+                    evidence_sha256: args[6].clone(),
+                }
+            }
+        }
         _ => return Err("operator release-pair accepts only fixed actions".into()),
     };
     Ok(Some(OperatorAction::ReleasePair(action)))
@@ -653,6 +989,15 @@ pub(crate) async fn execute_operator_action(
                     package,
                     python_runtime,
                 } => development_runtime::prepare(workspace, &package, &python_runtime),
+                WebDevelopmentAction::UpdatePackage { package } => {
+                    development_runtime::update_package(workspace, &package)
+                }
+                WebDevelopmentAction::RecoverPackage => {
+                    development_runtime::recover_package(workspace)
+                }
+                WebDevelopmentAction::RecordVerification { input_file } => {
+                    development_runtime::record_release_verification(workspace, &input_file)
+                }
                 WebDevelopmentAction::Enqueue {
                     project_id,
                     event_id,
@@ -665,13 +1010,41 @@ pub(crate) async fn execute_operator_action(
                 WebDevelopmentAction::Login { project_id } => {
                     login_web_development(workspace, &project_id)
                 }
+                WebDevelopmentAction::InspectReadiness { project_id } => {
+                    inspect_web_development_readiness(workspace, &project_id)
+                }
+                WebDevelopmentAction::ReconcileLogin {
+                    project_id,
+                    marker_sha256,
+                    execute,
+                } => {
+                    reconcile_web_development_login(workspace, &project_id, &marker_sha256, execute)
+                }
                 WebDevelopmentAction::Status => development_runtime::status(workspace),
                 WebDevelopmentAction::Start => development_runtime::start(workspace),
                 WebDevelopmentAction::Stop => development_runtime::stop(workspace),
                 WebDevelopmentAction::Run => development_runtime::run_foreground(workspace),
+                WebDevelopmentAction::RunBounded { maximum_seconds } => {
+                    development_runtime::run_foreground_bounded(workspace, maximum_seconds)
+                }
+                WebDevelopmentAction::RunBackend { maximum_seconds } => {
+                    development_backend::run(workspace, maximum_seconds).await
+                }
+                WebDevelopmentAction::RunProjectBackend(options) => {
+                    development_backend::run_project(workspace, options).await
+                }
             }
         }
-        OperatorAction::Web(action) => web::execute(action, workspace),
+        OperatorAction::Web(action) => web::execute(action, workspace).await,
+        OperatorAction::InstalledBackend { maximum_seconds } => {
+            installed_backend::run(workspace, maximum_seconds).await
+        }
+        OperatorAction::InstalledProject(options) => {
+            installed_backend::run_project(workspace, options).await
+        }
+        OperatorAction::InstalledCentral(options) => {
+            installed_backend::run_central(workspace, options).await
+        }
         OperatorAction::Codex(action) => {
             crate::operator_codex_cli::execute_action(action, workspace).await
         }
@@ -755,8 +1128,22 @@ pub(crate) async fn execute_operator_action(
             let workspace = workspace
                 .canonicalize()
                 .map_err(|_| "operator workspace is unavailable".to_string())?;
+            let stopped_prepare =
+                matches!(&action, ReleasePairOperatorAction::PrepareStopped { .. });
+            let stopped_transaction = if stopped_prepare {
+                Some(crate::daemon_reload::stopped::enter_controller(
+                    &workspace, "prepare", None,
+                )?)
+            } else {
+                None
+            };
             match action {
                 ReleasePairOperatorAction::Prepare {
+                    review_record_id,
+                    build_path,
+                    expected_sha256,
+                }
+                | ReleasePairOperatorAction::PrepareStopped {
                     review_record_id,
                     build_path,
                     expected_sha256,
@@ -768,6 +1155,20 @@ pub(crate) async fn execute_operator_action(
                         &workspace,
                     )
                     .map_err(|_| "independent reviewed build preflight was rejected".to_string())?;
+                    if stopped_prepare {
+                        let preflight = crate::daemon_reload::stopped::prepare(
+                            &workspace,
+                            &stopped_transaction
+                                .as_ref()
+                                .ok_or("stopped controller transaction unavailable")?
+                                .transaction_id,
+                        )?;
+                        return Ok(
+                            json!({"action":"release_pair_prepare_stopped","state":"PREFLIGHT_READY",
+                            "mode":"QUALIFIED_STOPPED","profile":"HEADLESS_LOCAL","confirmationToken":preflight.confirmation_token,
+                            "expiresAtUnix":preflight.expires_at_unix,"candidateSha256":preflight.candidate_sha256(),"tunnelAction":"none"}),
+                        );
+                    }
                     let preflight =
                         crate::daemon_reload::prepare_release_pair_reconcile(&workspace)?;
                     Ok(
@@ -799,6 +1200,101 @@ pub(crate) async fn execute_operator_action(
                         json!({"action":"release_pair_result","state":state,"candidateSha256":result.as_ref().map(|result| result.candidate_sha256.as_str()),"tunnelAction":"none"}),
                     )
                 }
+                ReleasePairOperatorAction::ConfirmStopped { confirmation_token } => {
+                    let result = tokio::task::spawn_blocking(move || {
+                        crate::daemon_reload::stopped::confirm(
+                            &workspace,
+                            Some(&confirmation_token),
+                            false,
+                        )
+                    })
+                    .await
+                    .map_err(|_| "stopped controller requires recovery")??;
+                    Ok(
+                        json!({"action":"release_pair_confirm_stopped","result":result,"tunnelAction":"none"}),
+                    )
+                }
+                ReleasePairOperatorAction::ResumeStopped { transaction_id } => {
+                    let result = tokio::task::spawn_blocking(move || {
+                        crate::daemon_reload::stopped::confirm(
+                            &workspace,
+                            Some(&transaction_id),
+                            true,
+                        )
+                    })
+                    .await
+                    .map_err(|_| "stopped controller requires recovery")??;
+                    Ok(
+                        json!({"action":"release_pair_resume_stopped","result":result,"tunnelAction":"none"}),
+                    )
+                }
+                ReleasePairOperatorAction::ResultStopped => {
+                    Ok(json!({"action":"release_pair_result_stopped",
+                    "result":crate::daemon_reload::stopped::result(&workspace)?,"tunnelAction":"none"}))
+                }
+                ReleasePairOperatorAction::RollbackStopped { transaction_id } => {
+                    let result = tokio::task::spawn_blocking(move || {
+                        crate::daemon_reload::stopped::rollback(&workspace, &transaction_id)
+                    })
+                    .await
+                    .map_err(|_| "stopped controller requires recovery")??;
+                    Ok(
+                        json!({"action":"release_pair_rollback_stopped","result":result,"tunnelAction":"none"}),
+                    )
+                }
+                ReleasePairOperatorAction::InspectFailedPromotion { transaction_id } => {
+                    #[cfg(windows)]
+                    return tokio::task::spawn_blocking(move || {
+                        crate::daemon_reload::retirement::inspect(&workspace, &transaction_id)
+                    })
+                    .await
+                    .map_err(|_| "promotion retirement inspection failed")?;
+                    #[cfg(not(windows))]
+                    {
+                        let _ = transaction_id;
+                        Err("promotion retirement requires Windows".into())
+                    }
+                }
+                ReleasePairOperatorAction::RetireFailedPromotion {
+                    transaction_id,
+                    evidence_sha256,
+                } => {
+                    #[cfg(windows)]
+                    return tokio::task::spawn_blocking(move || {
+                        crate::daemon_reload::retirement::retire(
+                            &workspace,
+                            &transaction_id,
+                            &evidence_sha256,
+                        )
+                    })
+                    .await
+                    .map_err(|_| "promotion retirement requires recovery")?;
+                    #[cfg(not(windows))]
+                    {
+                        let _ = (transaction_id, evidence_sha256);
+                        Err("promotion retirement requires Windows".into())
+                    }
+                }
+                ReleasePairOperatorAction::QualifyPromotionSource {
+                    transaction_id,
+                    evidence_sha256,
+                } => {
+                    #[cfg(windows)]
+                    return tokio::task::spawn_blocking(move || {
+                        crate::daemon_reload::retirement::qualify_stopped_source(
+                            &workspace,
+                            &transaction_id,
+                            &evidence_sha256,
+                        )
+                    })
+                    .await
+                    .map_err(|_| "promotion source qualification failed")?;
+                    #[cfg(not(windows))]
+                    {
+                        let _ = (transaction_id, evidence_sha256);
+                        Err("promotion source qualification requires Windows".into())
+                    }
+                }
             }
         }
         OperatorAction::RepairWakeBridgeEnvironment => {
@@ -825,7 +1321,9 @@ pub(crate) async fn execute_operator_action(
             let result = crate::delegated::autonomy_supervisor::handle_tool(
                 operation, arguments, &workspace,
             )
-            .map_err(|_| "reviewed project operation requires operator attention".to_string())?;
+            .map_err(|error| {
+                crate::delegated::codex_app_server::registration_error_code(&error).to_string()
+            })?;
             Ok(redacted_project_control_result(operation, result))
         }
     }
@@ -948,6 +1446,22 @@ pub(crate) fn reviewed_promotion_invocation(
     authorization_id: &str,
     transaction_id: &str,
 ) -> Result<RepairInvocation, String> {
+    reviewed_promotion_invocation_with_profile(
+        workspace,
+        candidate,
+        authorization_id,
+        transaction_id,
+        false,
+    )
+}
+
+pub(crate) fn reviewed_promotion_invocation_with_profile(
+    workspace: &Path,
+    candidate: &Path,
+    authorization_id: &str,
+    transaction_id: &str,
+    local_backend_only: bool,
+) -> Result<RepairInvocation, String> {
     if authorization_id.len() != 32
         || !authorization_id
             .bytes()
@@ -994,26 +1508,30 @@ pub(crate) fn reviewed_promotion_invocation(
     {
         return Err("reviewed promotion candidate is unsafe".into());
     }
+    let mut args = vec![
+        "-NoLogo".into(),
+        "-NoProfile".into(),
+        "-NonInteractive".into(),
+        "-ExecutionPolicy".into(),
+        "Bypass".into(),
+        "-File".into(),
+        script.to_string_lossy().into_owned(),
+        "-BuildPath".into(),
+        candidate.to_string_lossy().into_owned(),
+        "-Workspace".into(),
+        workspace.to_string_lossy().into_owned(),
+        "-Execute".into(),
+        "-AuthorizationToken".into(),
+        authorization_id.into(),
+        "-TransactionId".into(),
+        transaction_id.into(),
+    ];
+    if local_backend_only {
+        args.push("-BackendOnly".into());
+    }
     Ok(RepairInvocation {
         program: trusted_windows_powershell(&workspace)?,
-        args: vec![
-            "-NoLogo".into(),
-            "-NoProfile".into(),
-            "-NonInteractive".into(),
-            "-ExecutionPolicy".into(),
-            "Bypass".into(),
-            "-File".into(),
-            script.to_string_lossy().into_owned(),
-            "-BuildPath".into(),
-            candidate.to_string_lossy().into_owned(),
-            "-Workspace".into(),
-            workspace.to_string_lossy().into_owned(),
-            "-Execute".into(),
-            "-AuthorizationToken".into(),
-            authorization_id.into(),
-            "-TransactionId".into(),
-            transaction_id.into(),
-        ],
+        args,
         workspace,
     })
 }
@@ -1025,6 +1543,11 @@ pub(crate) enum ReleasePairPhase {
     Probe,
     Commit,
     Rollback,
+    StoppedEmpty,
+    StoppedStage,
+    StoppedProbe,
+    StoppedCommit,
+    StoppedRollback,
 }
 
 /// The detached native worker supplies only fixed phase/identity values. Each
@@ -1046,13 +1569,22 @@ pub(crate) fn release_pair_invocation(
     {
         return Err("release-pair worker identity is invalid".into());
     }
-    if matches!(phase, ReleasePairPhase::Probe | ReleasePairPhase::Commit) != owner_pid.is_some()
+    if matches!(
+        phase,
+        ReleasePairPhase::Probe | ReleasePairPhase::Commit | ReleasePairPhase::StoppedProbe
+    ) != owner_pid.is_some()
         || owner_started_at_utc
             .is_some_and(|value| value.len() > 64 || value.bytes().any(|b| !b.is_ascii_graphic()))
         || (phase == ReleasePairPhase::Commit && owner_started_at_utc.is_none())
         || (matches!(
             phase,
-            ReleasePairPhase::Empty | ReleasePairPhase::Stage | ReleasePairPhase::Rollback
+            ReleasePairPhase::Empty
+                | ReleasePairPhase::Stage
+                | ReleasePairPhase::Rollback
+                | ReleasePairPhase::StoppedEmpty
+                | ReleasePairPhase::StoppedStage
+                | ReleasePairPhase::StoppedCommit
+                | ReleasePairPhase::StoppedRollback
         ) && (owner_pid.is_some() || owner_started_at_utc.is_some()))
     {
         return Err("release-pair phase arguments are invalid".into());
@@ -1096,6 +1628,11 @@ pub(crate) fn release_pair_invocation(
             ReleasePairPhase::Probe => "Probe",
             ReleasePairPhase::Commit => "Commit",
             ReleasePairPhase::Rollback => "Rollback",
+            ReleasePairPhase::StoppedEmpty => "StoppedEmpty",
+            ReleasePairPhase::StoppedStage => "StoppedStage",
+            ReleasePairPhase::StoppedProbe => "StoppedProbe",
+            ReleasePairPhase::StoppedCommit => "StoppedCommit",
+            ReleasePairPhase::StoppedRollback => "StoppedRollback",
         }
         .into(),
         "-AuthorizationId".into(),
@@ -1446,10 +1983,236 @@ pub(crate) fn valid_repair_result(result: &CommandResult) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn failed_promotion_operator_commands_require_exact_identity_and_digest() {
+        let id = "a".repeat(32);
+        let hash = "b".repeat(64);
+        let inspect = vec![
+            "operator".into(),
+            "release-pair".into(),
+            "inspect-failed-promotion".into(),
+            "--transaction-id".into(),
+            id.clone(),
+        ];
+        assert!(super::parse_operator_action(inspect.clone()).is_ok());
+        let retire = vec![
+            "operator".into(),
+            "release-pair".into(),
+            "retire-failed-promotion".into(),
+            "--transaction-id".into(),
+            id,
+            "--expected-evidence-sha256".into(),
+            hash,
+        ];
+        assert!(super::parse_operator_action(retire.clone()).is_ok());
+        let mut qualify = retire.clone();
+        qualify[2] = "qualify-promotion-source".into();
+        assert!(super::parse_operator_action(qualify.clone()).is_ok());
+        qualify.push("--force".into());
+        assert!(super::parse_operator_action(qualify).is_err());
+        for index in [3, 4, 5, 6] {
+            let mut changed = retire.clone();
+            changed[index] = "../unscoped".into();
+            assert!(super::parse_operator_action(changed).is_err());
+        }
+        let mut extra = inspect;
+        extra.push("--force".into());
+        assert!(super::parse_operator_action(extra).is_err());
+    }
     use super::*;
     use serde_json::Value;
     use sha2::Digest;
     use uuid::Uuid;
+
+    #[test]
+    fn installed_backend_cli_has_only_a_finite_run_action() {
+        let args = |values: &[&str]| values.iter().map(|v| (*v).to_owned()).collect::<Vec<_>>();
+        for budget in ["1", "180"] {
+            assert!(matches!(
+                parse_operator_action(args(&[
+                    "operator",
+                    "installed-backend",
+                    "run",
+                    "--max-runtime-seconds",
+                    budget
+                ])),
+                Ok(Some(OperatorAction::InstalledBackend { .. }))
+            ));
+        }
+        for budget in ["0", "181", "forever", "-1"] {
+            assert!(
+                parse_operator_action(args(&[
+                    "operator",
+                    "installed-backend",
+                    "run",
+                    "--max-runtime-seconds",
+                    budget
+                ]))
+                .is_err()
+            );
+        }
+        for values in [
+            vec!["operator", "installed-backend", "run"],
+            vec!["operator", "installed-backend", "start"],
+            vec![
+                "operator",
+                "installed-backend",
+                "run",
+                "--max-runtime-seconds",
+                "60",
+                "--helper",
+                "anything",
+            ],
+        ] {
+            assert!(parse_operator_action(args(&values)).is_err());
+        }
+    }
+
+    #[test]
+    fn installed_central_cli_dispatches_only_the_closed_control_scope_command() {
+        let args = [
+            "operator",
+            "installed-backend",
+            "run-central",
+            "--control-workspace",
+            "C:/approved-control",
+            "--mcp-path",
+            "/existing-route/mcp",
+            "--max-runtime-seconds",
+            "180",
+        ]
+        .map(String::from)
+        .to_vec();
+        assert!(matches!(
+            parse_operator_action(args.clone()),
+            Ok(Some(OperatorAction::InstalledCentral(
+                installed_backend::CentralOptions {
+                    maximum_seconds: 180,
+                    ..
+                }
+            )))
+        ));
+        let mut extra = args.clone();
+        extra.push("--force".into());
+        assert!(parse_operator_action(extra).is_err());
+        let mut changed = args;
+        changed[6] = "https://other.invalid/mcp".into();
+        assert!(parse_operator_action(changed).is_err());
+    }
+
+    #[test]
+    fn installed_project_cli_is_closed_and_requires_exact_scope() {
+        let mut args = vec![
+            "operator",
+            "installed-backend",
+            "run-project",
+            "--control-workspace",
+            "C:/control",
+            "--project-id",
+            "alpha",
+            "--project-target-generation",
+            "1",
+            "--project-target-sha256",
+            "",
+            "--max-runtime-seconds",
+            "180",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect::<Vec<_>>();
+        args[10] = "a".repeat(64);
+        assert!(matches!(
+            parse_operator_action(args.clone()),
+            Ok(Some(OperatorAction::InstalledProject(_)))
+        ));
+        for (index, value) in [
+            (4, "relative"),
+            (6, "../other"),
+            (8, "0"),
+            (10, "ABC"),
+            (12, "181"),
+        ] {
+            let mut changed = args.clone();
+            changed[index] = value.into();
+            assert!(parse_operator_action(changed).is_err());
+        }
+        for extra in ["--project-task-contract", "--executable", "--force"] {
+            let mut changed = args.clone();
+            changed.push(extra.into());
+            assert!(parse_operator_action(changed).is_err());
+        }
+    }
+
+    #[test]
+    fn release_pair_stopped_cli_is_explicit_and_does_not_change_other_prepare_commands() {
+        let args = |values: &[&str]| values.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        let digest = "a".repeat(64);
+        assert!(matches!(
+            parse_operator_action(args(&[
+                "operator",
+                "release-pair",
+                "prepare-stopped",
+                "--review-record-id",
+                "review-1",
+                "--build-path",
+                "build/catdesk.exe",
+                "--expected-sha256",
+                &digest
+            ])),
+            Ok(Some(OperatorAction::ReleasePair(
+                ReleasePairOperatorAction::PrepareStopped { .. }
+            )))
+        ));
+        for action in ["confirm-stopped", "resume-stopped", "rollback-stopped"] {
+            let flag = if action == "confirm-stopped" {
+                "--confirmation-token"
+            } else {
+                "--transaction-id"
+            };
+            assert!(
+                parse_operator_action(args(&[
+                    "operator",
+                    "release-pair",
+                    action,
+                    flag,
+                    &"a".repeat(32)
+                ]))
+                .is_ok()
+            );
+            assert!(
+                parse_operator_action(args(&[
+                    "operator",
+                    "release-pair",
+                    action,
+                    "--outside-job-override",
+                    "yes"
+                ]))
+                .is_err()
+            );
+        }
+        assert!(
+            parse_operator_action(args(&[
+                "operator",
+                "web-dev-runtime",
+                "prepare-stopped",
+                "--package",
+                "x",
+                "--python-runtime",
+                "y"
+            ]))
+            .is_err()
+        );
+        assert!(
+            parse_operator_action(args(&[
+                "operator",
+                "release-pair",
+                "result-stopped",
+                "--workspace",
+                "other"
+            ]))
+            .is_err()
+        );
+    }
 
     #[test]
     fn web_development_requires_explicit_fixed_actions() {
@@ -1472,7 +2235,52 @@ mod tests {
                 WebDevelopmentAction::Prepare { .. }
             ))
         ));
-        for action in ["status", "start", "stop", "run"] {
+        assert!(matches!(
+            parse_operator_action(
+                ["operator", "web-dev-runtime", "update-package", "--package", "C:/dev/new-package"]
+                    .map(str::to_string)
+            ),
+            Ok(Some(OperatorAction::WebDevelopment(
+                WebDevelopmentAction::UpdatePackage { package }
+            ))) if package == Path::new("C:/dev/new-package")
+        ));
+        for invalid in [
+            vec!["operator", "web-dev-runtime", "update-package"],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "update-package",
+                "--package",
+                "",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "update-package",
+                "--package",
+                "C:/dev/package",
+                "--root",
+                "C:/production",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "update-package",
+                "--python-runtime",
+                "C:/dev/python",
+            ],
+        ] {
+            assert!(parse_operator_action(invalid.into_iter().map(str::to_string)).is_err());
+        }
+        assert!(matches!(
+            parse_operator_action(
+                ["operator", "web-dev-runtime", "recover-package"].map(str::to_string)
+            ),
+            Ok(Some(OperatorAction::WebDevelopment(
+                WebDevelopmentAction::RecoverPackage
+            )))
+        ));
+        for action in ["status", "start", "stop", "run", "recover-package"] {
             assert!(
                 parse_operator_action(["operator", "web-dev-runtime", action].map(str::to_string))
                     .expect("fixed action")
@@ -1486,6 +2294,39 @@ mod tests {
                         action,
                         "--root",
                         "C:/production"
+                    ]
+                    .map(str::to_string)
+                )
+                .is_err()
+            );
+        }
+        for value in ["1", "900"] {
+            assert!(matches!(
+                parse_operator_action(
+                    [
+                        "operator",
+                        "web-dev-runtime",
+                        "run",
+                        "--max-runtime-seconds",
+                        value
+                    ]
+                    .map(str::to_string)
+                )
+                .unwrap(),
+                Some(OperatorAction::WebDevelopment(
+                    WebDevelopmentAction::RunBounded { .. }
+                ))
+            ));
+        }
+        for value in ["0", "901", "-1", "abc", "18446744073709551616"] {
+            assert!(
+                parse_operator_action(
+                    [
+                        "operator",
+                        "web-dev-runtime",
+                        "run",
+                        "--max-runtime-seconds",
+                        value
                     ]
                     .map(str::to_string)
                 )
@@ -1620,12 +2461,241 @@ mod tests {
     }
 
     #[test]
+    fn web_development_verification_requires_one_explicit_local_input() {
+        assert_eq!(
+            parse_operator_action(
+                [
+                    "operator",
+                    "web-dev-runtime",
+                    "record-verification",
+                    "--input-file",
+                    "evidence.json"
+                ]
+                .map(str::to_string)
+            ),
+            Ok(Some(OperatorAction::WebDevelopment(
+                WebDevelopmentAction::RecordVerification {
+                    input_file: PathBuf::from("evidence.json"),
+                }
+            )))
+        );
+        for invalid in [
+            vec!["operator", "web-dev-runtime", "record-verification"],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "record-verification",
+                "--input-file",
+                "",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "record-verification",
+                "--input-file",
+                "bad\nfile",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "record-verification",
+                "--workspace",
+                "other",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "record-verification",
+                "--input-file",
+                "evidence.json",
+                "--force",
+            ],
+        ] {
+            assert!(parse_operator_action(invalid.into_iter().map(str::to_string)).is_err());
+        }
+    }
+
+    #[test]
+    fn development_project_backend_cli_preserves_fixed_scope() {
+        let args = [
+            "operator",
+            "web-dev-runtime",
+            "run-project-backend",
+            "--project-id",
+            "alpha",
+            "--project-target-generation",
+            "7",
+            "--project-target-sha256",
+            &"a".repeat(64),
+            "--max-runtime-seconds",
+            "9",
+        ]
+        .map(str::to_string);
+        let action = parse_operator_action(args).unwrap().unwrap();
+        let OperatorAction::WebDevelopment(WebDevelopmentAction::RunProjectBackend(options)) =
+            action
+        else {
+            panic!("wrong action");
+        };
+        assert_eq!(options.selection.project_id, "alpha");
+        assert_eq!(options.selection.target_generation, 7);
+        assert!(options.assignment.is_none());
+        assert_eq!(options.maximum_seconds, 9);
+    }
+
+    #[test]
+    fn development_backend_has_only_fixed_bounded_startup_options() {
+        assert_eq!(
+            parse_operator_action(
+                ["operator", "web-dev-runtime", "run-backend"].map(str::to_string)
+            ),
+            Ok(Some(OperatorAction::WebDevelopment(
+                WebDevelopmentAction::RunBackend {
+                    maximum_seconds: 180
+                }
+            )))
+        );
+        for (budget, expected) in [("1", 1), ("900", 900)] {
+            assert_eq!(
+                parse_operator_action(
+                    [
+                        "operator",
+                        "web-dev-runtime",
+                        "run-backend",
+                        "--max-runtime-seconds",
+                        budget
+                    ]
+                    .map(str::to_string)
+                ),
+                Ok(Some(OperatorAction::WebDevelopment(
+                    WebDevelopmentAction::RunBackend {
+                        maximum_seconds: expected
+                    }
+                )))
+            );
+        }
+        for args in [
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "run-backend",
+                "--max-runtime-seconds",
+                "0",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "run-backend",
+                "--max-runtime-seconds",
+                "901",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "run-backend",
+                "--max-runtime-seconds",
+                "unbounded",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "run-backend",
+                "--port",
+                "3200",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "run-backend",
+                "--workspace",
+                "other",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "run-backend",
+                "--auth-token",
+                "caller-token",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "run-backend",
+                "--max-runtime-seconds",
+                "1",
+                "--web-auto",
+            ],
+        ] {
+            assert!(parse_operator_action(args.into_iter().map(str::to_string)).is_err());
+        }
+    }
+
+    #[test]
+    fn web_development_inspect_readiness_requires_only_registered_project() {
+        let valid = [
+            "operator",
+            "web-dev-runtime",
+            "inspect-readiness",
+            "--project-id",
+            "alpha",
+        ];
+        assert!(parse_operator_action(valid.into_iter().map(str::to_string)).is_ok());
+        for flag in ["--profile", "--url", "--message", "--seconds", "--send"] {
+            let mut args = valid.into_iter().map(str::to_string).collect::<Vec<_>>();
+            args.extend([flag.into(), "override".into()]);
+            assert!(parse_operator_action(args).is_err());
+        }
+    }
+
+    #[test]
+    fn web_development_login_reconciliation_requires_project_hash_and_explicit_commit() {
+        let mut args = [
+            "operator",
+            "web-dev-runtime",
+            "reconcile-login",
+            "--project-id",
+            "alpha",
+            "--expected-marker-sha256",
+        ]
+        .map(str::to_owned)
+        .to_vec();
+        args.push("a".repeat(64));
+        assert!(matches!(
+            parse_operator_action(args.clone()),
+            Ok(Some(OperatorAction::WebDevelopment(
+                WebDevelopmentAction::ReconcileLogin { execute: false, .. }
+            )))
+        ));
+        args.push("--execute".into());
+        assert!(matches!(
+            parse_operator_action(args.clone()),
+            Ok(Some(OperatorAction::WebDevelopment(
+                WebDevelopmentAction::ReconcileLogin { execute: true, .. }
+            )))
+        ));
+        for flag in ["--force", "--url", "--profile", "--send"] {
+            let mut invalid = args[..7].to_vec();
+            invalid.push(flag.into());
+            assert!(parse_operator_action(invalid).is_err());
+        }
+        for hash in ["a".repeat(63), "A".repeat(64), "z".repeat(64)] {
+            let mut invalid = args[..7].to_vec();
+            invalid[6] = hash;
+            assert!(parse_operator_action(invalid).is_err());
+        }
+    }
+
+    #[test]
     fn web_development_login_requires_prepared_root_before_any_browser_action() {
         let workspace =
             std::env::temp_dir().join(format!("catdesk-login-unprepared-{}", Uuid::new_v4()));
         fs::create_dir(&workspace).unwrap();
         assert_eq!(
             login_web_development(&workspace, "alpha").unwrap_err(),
+            "DEV_RUNTIME_NOT_PREPARED"
+        );
+        assert_eq!(
+            inspect_web_development_readiness(&workspace, "alpha").unwrap_err(),
             "DEV_RUNTIME_NOT_PREPARED"
         );
         fs::remove_dir(workspace).unwrap();
@@ -1732,6 +2802,36 @@ mod tests {
         )
         .expect("fixture repair script");
         root
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn reviewed_promotion_local_backend_profile_changes_only_fixed_switch() {
+        let root = repair_fixture("promotion-backend-profile");
+        fs::write(
+            root.join("scripts/promote-reviewed-catdesk-build.ps1"),
+            "# fixture",
+        )
+        .unwrap();
+        let candidate = root.join("candidate.exe");
+        fs::write(&candidate, b"inert candidate").unwrap();
+        let legacy =
+            reviewed_promotion_invocation(&root, &candidate, &"a".repeat(32), &"b".repeat(32))
+                .unwrap();
+        let local = reviewed_promotion_invocation_with_profile(
+            &root,
+            &candidate,
+            &"a".repeat(32),
+            &"b".repeat(32),
+            true,
+        )
+        .unwrap();
+        assert_eq!(legacy.program, local.program);
+        assert_eq!(legacy.workspace, local.workspace);
+        assert_eq!(&local.args[..local.args.len() - 1], legacy.args.as_slice());
+        assert_eq!(local.args.last().unwrap(), "-BackendOnly");
+        assert!(!legacy.args.iter().any(|arg| arg == "-BackendOnly"));
+        fs::remove_dir_all(root).unwrap();
     }
 
     fn trusted_powershell_fixture(label: &str) -> (PathBuf, PathBuf, PathBuf) {

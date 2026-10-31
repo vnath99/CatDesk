@@ -1,0 +1,172 @@
++            "{} $lease=Enter-CatDeskStoppedLifecycleLease $root;try{{if(-not(Test-CatDeskStoppedReconciliationStartupReady -Root $root -HeldLifecycleLease $lease)){{throw 'startup authority'}};{}}}finally{{$lease.Dispose()}}",
++            prefix(&root, &helper),
++            selected_release_proof_script()
++        );
++        let proof = ps_once(&root, command).unwrap();
++        validate_trust(&proof, &hash(&image).unwrap()).unwrap();
++        assert_eq!(history_snapshot(&root).unwrap(), before);
++        println!(
++            "READ_ONLY_SELECTED_RELEASE_FACTS={}",
++            json!({"slot":proof["slot"],"generation":proof["generation"],"authorityKind":proof["authorityKind"],"sha256":proof["sha256"],"authorityWrites":0,"backendStarts":0})
++        );
+     }
+     #[test]
+     fn installed_backend_script_holds_real_lease_without_mutating_release() {
+         let s = trust_command(Path::new("C:/root'quoted"), Path::new("C:/root/helper.ps1"));
+         assert!(s.contains("Read-CatDeskLkgPointer"));
+         assert!(s.contains("Read-CatDeskLkgSlot"));
++        assert!(s.contains("Get-CatDeskReviewedPromotionAuthority"));
++        assert!(s.contains("promotion-transaction.json"));
+         assert!(s.contains("-HeldLifecycleLease $lease"));
+         assert!(s.contains("ReadLine()"));
+         assert!(s.contains("root''quoted"));
+diff --git a/src/operator_installed_project.rs b/src/operator_installed_project.rs
+index 7117362eba1b66f1d62b626462fb44834407a9af..32354772b7615e4356ab3f68fd51afe234e6e99b 100644
+--- a/src/operator_installed_project.rs
++++ b/src/operator_installed_project.rs
+@@ -191,8 +191,9 @@ async fn verify_mcp(endpoint: &str, token: &str, expected: &Value) -> Result<(),
+ 
+ fn read_trust(root: &Path, helper: &Path) -> String {
+     format!(
+-        "{} $p=Read-CatDeskLkgPointer $root;$s=Read-CatDeskLkgSlot $root $p.Slot;$c=Get-CatDeskCanonicalPairEvidence $root;if($p.Hash -cne $s.Hash -or $p.Generation -ne $s.Generation -or $p.Slot -cne $s.Slot -or $c.Hash -cne $s.Hash){{throw 'selected release'}};$r=Get-CatDeskQualifiedStoppedAuthority $root $s.Hash;[pscustomobject]@{{schemaVersion=1;state='TRUSTED_INSTALLED';sha256=$s.Hash;slot=$s.Slot;generation=$s.Generation;receiptTransaction=$r.transactionId}}|ConvertTo-Json -Compress",
+-        prefix(root, helper)
++        "{} {}",
++        prefix(root, helper),
++        selected_release_proof_script()
+     )
+ }
+ 
+@@ -331,6 +332,7 @@ fn verify_pins(expected: &[(PathBuf, String)]) -> Result<(), String> {
+ fn pin_inputs(
+     root: &Path,
+     control: &Path,
++    proof: &Value,
+ ) -> Result<(Vec<fs::File>, Vec<(PathBuf, String)>, PathBuf), String> {
+     use std::os::windows::fs::OpenOptionsExt;
+     let runtime = catdesk_wake::development_runtime::root_for_workspace(control)?
+@@ -379,6 +381,27 @@ fn pin_inputs(
+             12288,
+         )?);
+     }
++    // Legacy migration inputs remain retained for the previous version, but
++    // the current selected artifact and its native promotion receipt must also
++    // stay pinned while this independent project endpoint serves.
++    let slot = proof["slot"]
++        .as_str()
++        .filter(|slot| matches!(*slot, "slot-a" | "slot-b"))
++        .ok_or("INSTALLED_BACKEND_AUTHORITY_UNPROVEN")?;
++    for leaf in ["catdesk.exe", "catdesk.exe.sha256", "manifest.json"] {
++        paths.push(regular(
++            root,
++            &format!(".catdesk/release-recovery/{slot}/{leaf}"),
++            134217728,
++        )?);
++    }
++    if proof["authorityKind"] == "reviewed_promotion" {
++        paths.push(regular(
++            root,
++            ".catdesk/promotion-recovery/reviewed-promotion.json",
++            2048,
++        )?);
++    }
+     for relative in [
+         ".catdesk/web-development/prepare-attempt.json",
+         ".catdesk/wake-bridge/owner.json",
+@@ -605,15 +628,18 @@ pub(super) fn run_owned(
+         watch = Some(HolderWatch::start(
+             holder.as_mut().ok_or("INSTALLED_PROJECT_HANDOFF_FAILED")?,
+         )?);
+-        let (_pins, expected_inputs, config) = pin_inputs(&root, &control)?;
++        expected_hash = hash(&binary)?;
++        validate_trust(&proof, &expected_hash)?;
++        let (_pins, expected_inputs, config) = pin_inputs(&root, &control, &proof)?;
+         expected_hash = hash(&binary)?;
+         validate_trust(&proof, &expected_hash)?;
+         // Complete byte pins are already held. This second supported read
+         // binds the selected pointer/slot/receipt to those exact pinned bytes.
+-        validate_trust(
+-            &ps_once(&root, read_trust(&root, &recovery))?,
+-            &expected_hash,
+-        )?;
++        let pinned_proof = ps_once(&root, read_trust(&root, &recovery))?;
++        validate_trust(&pinned_proof, &expected_hash)?;
++        if pinned_proof != proof {
++            return Err("INSTALLED_BACKEND_AUTHORITY_CHANGED".into());
++        }
+         verify_pins(&expected_inputs)?;
+         let history = history_snapshot(&root)?;
+         let path = run_directory(&root, &id)?;
+diff --git a/src/operator_web_cli.rs b/src/operator_web_cli.rs
+index 5e745b1b58358769fc7107d068811428103c0a0e..b8fa5ce02bd6a7dd98e1ac311221ea52f7a4aef7 100644
+--- a/src/operator_web_cli.rs
++++ b/src/operator_web_cli.rs
+@@ -124,6 +124,8 @@ pub(crate) enum WebAction {
+         project_id: String,
+         input_file: PathBuf,
+         revoke: bool,
++        allow_manual_wake: bool,
++        native_queue_task_id: Option<String>,
+     },
+     ContextConfigure {
+         project_id: String,
+@@ -209,6 +211,18 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
+         .ok_or("WEB_USAGE: missing target action")?;
+     let mut options = BTreeMap::new();
+     let tail = &args[4..];
++    let manual_flags = tail
++        .iter()
++        .filter(|value| value.as_str() == "--allow-manual-wake")
++        .count();
++    if manual_flags > 1 || (manual_flags == 1 && (group != "work" || verb != "execution-grant")) {
++        return Err("WEB_USAGE: manual wake permission is execution-grant only".into());
++    }
++    let allow_manual_wake = manual_flags == 1;
++    let tail: Vec<_> = tail
++        .iter()
++        .filter(|value| value.as_str() != "--allow-manual-wake")
++        .collect();
+     if !tail.len().is_multiple_of(2) {
+         return Err("WEB_USAGE: each option requires one value".into());
+     }
+@@ -284,6 +298,20 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
+             } else {
+                 None
+             };
++            let native_queue_task_id = if verb == "execution-grant" {
++                options
++                    .remove("--native-queue-task-id")
++                    .map(|id| {
++                        if catdesk_wake::protocol::valid_id(id) && id.len() <= 128 {
++                            Ok(id.to_owned())
++                        } else {
++                            Err("WEB_USAGE: native queue task ID is invalid")
++                        }
++                    })
++                    .transpose()?
++            } else {
++                None
++            };
+             if !options.is_empty() {
+                 return Err("WEB_USAGE: unexpected work option".into());
+             }
+@@ -302,6 +330,8 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
+                     project_id: project_id.into(),
+                     input_file: input_file.into(),
+                     revoke: verb == "execution-revoke",
++                    allow_manual_wake,
++                    native_queue_task_id,
+                 })
+             } else if let Some(assignment_file) = assignment_file {
+                 Ok(WebAction::WorkAssociate {
+@@ -316,7 +346,10 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
+                 })
+             }
+         }
+-        ("review", "authorize" | "revoke" | "preflight" | "run" | "resume") => {
++        (
++            "review",
++            "authorize" | "revoke" | "preflight" | "run" | "resume" | "retry-pre-submit",
++        ) => {
+             let input_file = options
+                 .remove("--input-file")
+                 .ok_or("WEB_USAGE: --input-file is required")?;

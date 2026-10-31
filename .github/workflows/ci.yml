@@ -84,3 +84,8 @@ jobs:
         run: cargo clippy --keep-going --locked --manifest-path wake/Cargo.toml --all-targets --all-features -- -D warnings
       - name: Test Wake crate
         run: cargo test --locked --manifest-path wake/Cargo.toml --all-features
+      - name: Build normal release foreground host
+        run: cargo build --locked --release --manifest-path wake/Cargo.toml --bin CatDeskWakeHost
+      - name: Verify release marker and refuse unowned foreground startup
+        shell: pwsh
+        run: .\scripts\test-wake-foreground-release-gate.ps1 -Executable .\wake\target\release\CatDeskWakeHost.exe

@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T07:16:36.469869+00:00",
+  "classification": "ACTUAL_ONE_PRIVATE_CONTEXT_DELIVERY_AND_TESTED_SOURCE_FRAME_CORRECTION_NOT_WEB_CODING",
+  "delivery": {
+    "sourceCommit": "90030ce0d4c3642434f5200253224898f69bb330",
+    "controllerSha256": "3945841f810ad6733daad75886d89892449b9d24b0764a94b7803291c5ee2daf",
+    "elapsedSeconds": 79.578,
+    "wireBytes": 4469,
+    "effectiveInstalledFrameLimit": 8192,
+    "deliveryVerified": true,
+    "messageSubmissionsVerified": 1,
+    "phase": "SENT",
+    "attempts": 1,
+    "beforeProfile": "PROFILE_QUIESCENT",
+    "afterProfile": "PROFILE_QUIESCENT",
+    "pinsChecked": 5107,
+    "pinMismatchCount": 0,
+    "privatePayloadUnchanged": true,
+    "referenceUnchanged": true,
+    "controlStopped": true,
+    "continuationEnqueued": false,
+    "nativeTaskDispatches": 0
+  },
+  "receiptEvidence": "EXACT_USER_MESSAGE_APPENDED",
+  "owner": {
+    "exitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false,
+    "maximumSeconds": 180
+  },
+  "selectedBrowserPackageChanged": false,
+  "protectedProductionChanged": false,
+  "assistantAcknowledgmentVerified": false,
+  "taskExecutionVerified": false,
+  "sourceCompatibilityCorrection": {
+    "sourceBaseCommit": "90030ce0d4c3642434f5200253224898f69bb330",
+    "problem": "Initial context admitted up to 32 KiB, but the unchanged installed ordinary adapter frame accepts at most 8192 bytes.",
+    "fix": "Validate exact serialized Submit and Reconcile frames including JSON escaping and LF before private preparation writes or browser startup.",
+    "ordinaryFrameMaximumBytes": 8192,
+    "oversizeReason": "TASK_CONTEXT_REQUEST_TOO_LARGE",
+    "bootstrapFramePolicyChanged": false,
+    "adapterImplementationChanged": false,
+    "newCorrectionBuiltIntoLiveController": false,
+    "liveFrozenFrameIndependentlyPreflightedWithinExistingBound": true,
+    "sourceFilesSha256": {
+      "src/project_task_context.rs": "a64659269f2d683fd620a6c7f8de8afe329fdfe0785dc6e066c30c47e87447a4",
+      "wake/src/runtime_task_context.rs": "f7cf55133e4b2a2a29259148cb856c0e8ba3a7565e4b5a9368df26ec9180c200",
+      "wake/tests/test_adapter.py": "b7acde1ac9295d733d55fa0014b5845bc037b44891138f3730e7e2c2d245aede"
+    },
+    "currentFocusedPassingTests": 65,
+    "proofs": [
+      {
+        "kind": "root",
+        "passed": 12,
+        "logSha256": "071cfa01a8a417afa64f1796fcd5a03fa855aca5afe0a449f3528d0929467414"
+      },
+      {
+        "kind": "native",
+        "passed": 13,
+        "logSha256": "7f879f046564f20a9b86cba8f8cfea54a2b11b25440bfc5eb74fe336a5dfd59d"
+      },
+      {
+        "kind": "adapter",
+        "passed": 40,
+        "logSha256": "d2a7e17ab7ef371098c6c1e31b644681a886b451eb2cf1216ace8fbec22664e2"
+      }
+    ],
+    "strictClippy": {
+      "root": {
+        "allTargets": true,
+        "warningsDenied": true,
+        "passed": true,
+        "logSha256": "243540cebe42a369e9f744ca681b40913b525756a18a24dbe33c45fc9cc2d8dc"
+      },
+      "wake": {
+        "allTargets": true,
+        "warningsDenied": true,
+        "passed": true,
+        "logSha256": "0ad6318d2380a2b6e80cea9cc4bb28b7fcc23b77c0406d84ca26807b6f1468f2"
+      }
+    },
+    "rootAndWakeFormatCheck": "PASS",
+    "previousSourceBaselineDistinctPassingTests": 84,
+    "previousBaselineRerunInFull": false
+  },
+  "privacy": {
+    "ownedEvidenceFilesScannedForExactExecutionKey": 17,
+    "unexpectedKeyLiterals": 0,
+    "rawContextDraftConversationOrCredentialsPublished": false
+  },
+  "remaining": [
+    "Actual granted project tool calls from two independent ChatGPT Web conversations",
+    "Full native task capability through actual Web calls",
+    "Current-source independent release authority and guarded promotion",
+    "New context sender real-process interruption qualification",
+    "Qualified unique timeout Retry action on an eligible live card"
+  ],
+  "nextExecutableTask": "PREPARE_BOUNDED_CENTRAL_BACKEND_AND_EXISTING_OFFICIAL_OWNER_WINDOW_THEN_QUEUE_ONE_DISTINCT_GRANTED_TASK_CONTINUATION",
+  "unknownOrCompletedRequestReplayAllowed": false,
+  "operatorActionRequired": false,
+  "goal": "ACTIVE"
+}

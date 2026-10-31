@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C55_GUARDED_REGISTRY_COMMIT_FAILURE_RECOVERY",
+  "observedUtc": "2026-10-24T01:56:58.7772103+00:00",
+  "localDate": "2026-10-23_America_New_York",
+  "parentCommit": "8c594e7b990862cb36923ff435b9ee769bf036ba",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "SOURCE_NATIVE_FILESYSTEM_FAULT_AND_REOPEN_FIXTURES_ONLY",
+  "defect": {
+    "trigger": "Registry atomic replacement fails after guarded Wake successor commit",
+    "impact": "Compensation destroyed the adjacent source-to-successor history needed by automatic recovery.",
+    "redObservedCompensatedSourceGeneration": 3,
+    "redExpectedSuccessorGeneration": 2,
+    "redExitCode": 101
+  },
+  "change": "After the fixed guarded callback succeeds, preserve its Wake-first successor on registry-save failure. Return synchronization-required and let the existing exact-receipt/source/history recovery finish the registry commit. Unguarded operator compensation is unchanged.",
+  "invariants": [
+    "Incomplete paired reads refuse; sibling target remains readable.",
+    "Cold reopened recovery commits the same successor generation and appends its predecessor once.",
+    "Saved CREATED receipt survives a failed binding checkpoint and reopen; completion uses the exact original witness.",
+    "No new browser submission, generation reset, force flag, authority store or registry is introduced."
+  ],
+  "sourceTests": [
+    {
+      "filter": "project_web_",
+      "startedUtc": "2026-10-24T01:49:56.2182632+00:00",
+      "finishedUtc": "2026-10-24T01:50:41.2714652+00:00",
+      "elapsedSeconds": 45.0532099,
+      "timedOut": false,
+      "exitCode": 0,
+      "ownerExited": true,
+      "summary": "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 1670 filtered out; finished in 0.68s"
+    },
+    {
+      "filter": "operator_facade::web::rollover::tests",
+      "startedUtc": "2026-10-24T01:50:41.2984576+00:00",
+      "finishedUtc": "2026-10-24T01:51:17.5924638+00:00",
+      "elapsedSeconds": 36.2940111,
+      "timedOut": false,
+      "exitCode": 0,
+      "ownerExited": true,
+      "summary": "test result: ok. 53 passed; 0 failed; 0 ignored; 0 measured; 1623 filtered out; finished in 34.89s"
+    },
+    {
+      "filter": "three_projects_route_only_to_prepared_development_wake",
+      "startedUtc": "2026-10-24T01:51:17.5953942+00:00",
+      "finishedUtc": "2026-10-24T01:51:26.0609027+00:00",
+      "elapsedSeconds": 8.4655125,
+      "timedOut": false,
+      "exitCode": 0,
+      "ownerExited": true,
+      "summary": "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1675 filtered out; finished in 7.91s"
+    }
+  ],
+  "passed": 60,
+  "newRegressions": 1,
+  "enhancedExistingRegressions": 1,
+  "checks": [
+    {
+      "name": "strict-workspace-clippy",
+      "arguments": [
+        "clippy",
+        "--locked",
+        "--offline",
+        "--workspace",
+        "--all-targets",
+        "--all-features",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "startedUtc": "2026-10-24T01:52:45.6183973+00:00",
+      "finishedUtc": "2026-10-24T01:53:07.5671539+00:00",
+      "elapsedSeconds": 21.9487665,
+      "limitSeconds": 600,
+      "timedOut": false,
+      "exitCode": 0,
+      "ownerExited": true,
+      "stdoutSha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+      "stderrSha256": "a2c6a722b80a4800a09d57d5bb6d6a09a22b5a57a342d6016393a37783b87e50"
+    },
+    {
+      "name": "workspace-format",
+      "arguments": [
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "startedUtc": "2026-10-24T01:53:07.5869200+00:00",
+      "finishedUtc": "2026-10-24T01:53:12.1182202+00:00",
+      "elapsedSeconds": 4.5313049,
+      "limitSeconds": 120,
+      "timedOut": false,
+      "exitCode": 0,
+      "ownerExited": true,
+      "stdoutSha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+      "stderrSha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6"
+    },
+    {
+      "name": "diff-whitespace",
+      "arguments": [
+        "diff",
+        "--check"
+      ],
+      "startedUtc": "2026-10-24T01:53:12.1204671+00:00",
+      "finishedUtc": "2026-10-24T01:53:12.2179393+00:00",
+      "elapsedSeconds": 0.0974771,
+      "limitSeconds": 60,
+      "timedOut": false,
+      "exitCode": 0,
+      "ownerExited": true,
+      "stdoutSha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+      "stderrSha256": "ea48d866c43ea2e28546b8cad13864a3b5b020a1088c8655bc76ff715b04c470"
+    }
+  ],
+  "sourceHashes": [
+    {
+      "sha256": "4818293d9c5550853f8722e744a3578ee6b884b3bf7bc20eb8c80536065c99b5",
+      "path": "src/mcp.rs"
+    },
+    {
+      "sha256": "a47d60e5386e0276565d543993b39e2be5ec84675a1c83dd4fc7272f48d911d9",
+      "path": "src/operator_web_rollover.rs"
+    }
+  ],
+  "preservation": {
+    "browserWakeStarts": 0,
+    "changedRuntimeRecords": 0,
+    "selectedDevelopment": "C54_V67_C53_STOPPED_UNCHANGED",
+    "completedCanaryReplayed": false,
+    "newMessages": 0,
+    "C50TaskGrantAndHistory": "UNCHANGED",
+    "productionChanged": false,
+    "scopedProcesses": 0,
+    "recurringStarts": 0,
+    "originalNineBindings": "UNCHANGED",
+    "runtimeRecordsChecked": 266,
+    "nativeActions": 0
+  },
+  "acceptance": {
+    "installedRuntime": "NOT_QUALIFIED_FOR_C55",
+    "actualBrowserPairedCommitCrash": "OPEN",
+    "fullOctoberMilestone": "OPEN",
+    "normalExecutable": "NOT_QUALIFIED_FOR_C55",
+    "actualParallelWebMcp": "OPEN",
+    "guardedCommitFailureSource": "PASS_RED_THEN_GREEN_NATIVE_WINDOWS_FILE_SHARING_FAULT",
+    "fullRuntimeRestart": "OPEN"
+  },
+  "audit": {
+    "remainingPrimaryLiveGaps": "Actual concurrent Web coding B/C plus critical browser crash/full restart and unattended/protected acceptance.",
+    "sharedBrowserConcurrency": "C23 two actual serialized creations preserved; no replay.",
+    "newIndependentSourceGap": "C55 fixes the native paired-commit write-failure recovery found during this audit.",
+    "registryAndRouting": "Existing source and nine selected pairs, not reimplemented.",
+    "contextAndRollover": "C50 actual collector, verified replacement, paired generation5 and continuation delivery preserved; no coding pass."
+  },
+  "nextTask": "Build C55 normal executable and qualify the existing guarded Wake-first recovery in disposable state; keep live startup-owner dependency separate and do not replay C50."
+}

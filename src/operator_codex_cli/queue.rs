@@ -45,14 +45,26 @@ use super::{
 };
 
 mod advisory;
+mod native_continuation;
+mod native_dispatch;
 mod operator_review;
+#[cfg(windows)]
+mod owned_native;
 mod review_invite;
 mod review_reader;
 
+pub(crate) use native_continuation::continue_native_queue_selection_prepared;
+#[cfg(all(test, windows))]
+pub(crate) use native_dispatch::{NativeQueueFixture, native_queue_fixture};
+pub(crate) use native_dispatch::{
+    NativeQueueSelection, check_native_queue_selection_prepared, dispatch_native_queue_selection,
+    freeze_native_queue_selection, native_queue_selection_status,
+};
 pub(crate) use review_invite::publish_for_mcp as publish_review_invitation_for_mcp;
 pub(crate) use review_reader::read_for_mcp as read_review_package_for_mcp;
 
 const QUEUE_SCHEMA_VERSION: u32 = 1;
+const WINDOWS_SANDBOX_TASK_SCHEMA_VERSION: u32 = 2;
 const MAX_TASK_BYTES: usize = 24 * 1024;
 const MAX_JOB_BYTES: u64 = 64 * 1024;
 const MAX_JOBS: usize = 512;
@@ -85,6 +97,14 @@ const KILL_TIMEOUT: Duration = Duration::from_secs(20);
 const DEFAULT_TURN_TIMEOUT: Duration = Duration::from_secs(2 * 60 * 60);
 const SUPPORTED_CYBER_ACCESS_PROGRAM: &str = "standard";
 
+fn native_task_record_schema(windows_sandbox: Option<&str>) -> u32 {
+    if windows_sandbox.is_some() {
+        WINDOWS_SANDBOX_TASK_SCHEMA_VERSION
+    } else {
+        QUEUE_SCHEMA_VERSION
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum QueueAction {
     Preflight {
@@ -97,6 +117,7 @@ pub(crate) enum QueueAction {
         model: Option<String>,
         effort: Option<String>,
         cyber_access_program: Option<String>,
+        windows_sandbox: Option<String>,
     },
     Status,
     Receipt {
@@ -159,6 +180,12 @@ pub(crate) enum QueueAction {
         expected_thread_id: String,
     },
     Dispatch,
+    DispatchTask {
+        scope: CodexScope,
+        task_id: String,
+        expected_binding_sha256: String,
+        expected_request_sha256: Option<String>,
+    },
     Pause {
         scope: CodexScope,
         task_id: String,
@@ -171,7 +198,7 @@ pub(crate) enum QueueAction {
 
 pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
     let verb = args.get(3).map(String::as_str).ok_or_else(|| {
-        "CODEX_QUEUE_USAGE: expected preflight, add, status, receipt, review, verify, review-package, review-invite-prepare, advisory-review, operator-review, operator-review-receipt, review-disclosure-grant, review-disclosure-renew, review-disclosure-revoke, profile-bind, workspace-bind-preflight, dispatch, pause, or resume"
+        "CODEX_QUEUE_USAGE: expected preflight, add, status, receipt, review, verify, review-package, review-invite-prepare, advisory-review, operator-review, operator-review-receipt, review-disclosure-grant, review-disclosure-renew, review-disclosure-revoke, profile-bind, workspace-bind-preflight, dispatch, dispatch-task, pause, or resume"
             .to_string()
     })?;
     if !matches!(
@@ -193,6 +220,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
             | "profile-bind"
             | "workspace-bind-preflight"
             | "dispatch"
+            | "dispatch-task"
             | "pause"
             | "resume"
     ) {
@@ -211,12 +239,14 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
                 | "--model"
                 | "--effort"
                 | "--cyber-access-program"
+                | "--windows-sandbox"
                 | "--receipt-id"
                 | "--expected-package-sha256"
                 | "--decision"
                 | "--expected-profile"
                 | "--new-profile"
                 | "--expected-binding-sha256"
+                | "--expected-request-sha256"
                 | "--confirm-chat-quiescent"
                 | "--new-workspace"
                 | "--expected-old-head"
@@ -235,6 +265,44 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
             return Err("CODEX_QUEUE_USAGE: an option is empty, oversized, or repeated".into());
         }
         index += 2;
+    }
+    if verb == "dispatch-task" {
+        let project_id = values
+            .remove("--project-id")
+            .ok_or("CODEX_QUEUE_USAGE: --project-id is required")?;
+        let workspace = PathBuf::from(
+            values
+                .remove("--workspace")
+                .ok_or("CODEX_QUEUE_USAGE: --workspace is required")?,
+        );
+        let task_id = values
+            .remove("--task-id")
+            .ok_or("CODEX_QUEUE_USAGE: --task-id is required")?;
+        let expected_binding_sha256 = values
+            .remove("--expected-binding-sha256")
+            .ok_or("CODEX_QUEUE_USAGE: --expected-binding-sha256 is required")?;
+        let expected_request_sha256 = values.remove("--expected-request-sha256");
+        valid_slug(&project_id)?;
+        valid_slug(&task_id)?;
+        if !workspace.is_absolute()
+            || !valid_sha256_hex(&expected_binding_sha256)
+            || expected_binding_sha256 != expected_binding_sha256.to_ascii_lowercase()
+            || expected_request_sha256
+                .as_ref()
+                .is_some_and(|hash| !valid_sha256_hex(hash) || hash != &hash.to_ascii_lowercase())
+            || !values.is_empty()
+        {
+            return Err("CODEX_QUEUE_USAGE: exact dispatch requires absolute workspace and lowercase binding/request SHA-256".into());
+        }
+        return Ok(QueueAction::DispatchTask {
+            scope: CodexScope {
+                project_id,
+                workspace,
+            },
+            task_id,
+            expected_binding_sha256,
+            expected_request_sha256,
+        });
     }
     if matches!(verb, "status" | "dispatch") {
         if !values.is_empty() {
@@ -483,15 +551,19 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
     let model = values.remove("--model");
     let effort = values.remove("--effort");
     let cyber_access_program = values.remove("--cyber-access-program");
+    let windows_sandbox = values.remove("--windows-sandbox");
     if model.as_deref().is_some_and(|value| !valid_model(value))
         || effort.as_deref().is_some_and(|value| !valid_effort(value))
         || cyber_access_program
             .as_deref()
             .is_some_and(|value| value != SUPPORTED_CYBER_ACCESS_PROGRAM)
+        || windows_sandbox
+            .as_deref()
+            .is_some_and(|value| value != "mxc")
         || !values.is_empty()
     {
         return Err(
-            "CODEX_QUEUE_USAGE: invalid model, effort, cyber access program, or option".into(),
+            "CODEX_QUEUE_USAGE: invalid model, effort, cyber access program, Windows sandbox, or option".into(),
         );
     }
     Ok(QueueAction::Add {
@@ -501,6 +573,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
         model,
         effort,
         cyber_access_program,
+        windows_sandbox,
     })
 }
 
@@ -607,6 +680,9 @@ struct QueueJob {
     effort: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     cyber_access_program: Option<String>,
+    /// Explicit implementation override only; native managed policy still applies.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    windows_sandbox: Option<String>,
     state: QueueState,
     created_at_unix: u64,
     attempt: Option<QueueAttempt>,
@@ -619,6 +695,10 @@ struct QueueJob {
     review_package_sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     advisory_outcome_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    native_continuation: Option<native_continuation::NativeContinuationLink>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    native_origin: Option<native_continuation::NativeContinuationOrigin>,
 }
 
 impl QueueJob {
@@ -639,6 +719,7 @@ impl QueueJob {
             model,
             effort,
             cyber_access_program: None,
+            windows_sandbox: None,
             state: QueueState::Ready,
             created_at_unix: unix_now()?,
             attempt: None,
@@ -647,6 +728,8 @@ impl QueueJob {
             verification_sha256: None,
             review_package_sha256: None,
             advisory_outcome_sha256: None,
+            native_continuation: None,
+            native_origin: None,
         })
     }
     fn same_request(&self, other: &Self) -> bool {
@@ -656,6 +739,21 @@ impl QueueJob {
             && self.model == other.model
             && self.effort == other.effort
             && self.cyber_access_program == other.cyber_access_program
+            && self.windows_sandbox == other.windows_sandbox
+    }
+    fn request_sha256(&self) -> String {
+        let identity = serde_json::to_vec(&(
+            self.schema_version,
+            &self.task_id,
+            &self.binding,
+            &self.prompt_sha256,
+            &self.model,
+            &self.effort,
+            &self.cyber_access_program,
+            &self.windows_sandbox,
+        ))
+        .expect("serializable queued native request");
+        format!("{:x}", Sha256::digest(identity))
     }
     fn summary(&self) -> Value {
         let mut summary = json!({
@@ -664,6 +762,7 @@ impl QueueJob {
             "targetSha256": self.binding.target_sha256,
             "gitIdentitySha256": format!("{:x}", Sha256::digest(self.binding.git_identity.as_bytes())),
             "verificationProfile": self.binding.verification_profile,
+            "requestSha256": self.request_sha256(),
             "promptSha256": self.prompt_sha256, "state": self.state,
             "createdAtUnix": self.created_at_unix,
             "attemptId": self.attempt.as_ref().map(|attempt| &attempt.attempt_id),
@@ -675,6 +774,15 @@ impl QueueJob {
         });
         if let Some(program) = &self.cyber_access_program {
             summary["cyberAccessProgram"] = json!(program);
+        }
+        if let Some(implementation) = &self.windows_sandbox {
+            summary["windowsSandbox"] = json!(implementation);
+        }
+        if let Some(link) = &self.native_continuation {
+            summary["nativeContinuation"] = json!(link);
+        }
+        if let Some(origin) = &self.native_origin {
+            summary["nativeOrigin"] = json!(origin);
         }
         summary
     }
@@ -697,6 +805,9 @@ struct QueueReceipt {
     /// Requested CLI override only; the native rollout profile does not attest this program.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     requested_cyber_access_program: Option<String>,
+    /// Requested CLI implementation only, not native policy or runtime attestation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    requested_windows_sandbox: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     actual_profile: Option<CodexCliTurnProfileEvidenceV1>,
     /// Diagnostic facts only. The verifier still requires `actual_profile`.
@@ -708,6 +819,9 @@ struct QueueReceipt {
     evidence_level: String,
     exit_code: Option<i32>,
     child_exit_observed: bool,
+    /// Absent in historical parent-only receipts; never inferred on readback.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    tree_exit_proven: bool,
     binding_still_matches: bool,
     outcome: String,
     recorded_at_unix: u64,
@@ -756,6 +870,8 @@ struct QueueReviewCandidate {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     requested_cyber_access_program: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    requested_windows_sandbox: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     actual_profile: Option<CodexCliTurnProfileEvidenceV1>,
     before: GitReviewWitness,
     after: GitReviewWitness,
@@ -778,7 +894,7 @@ impl QueueReviewCandidate {
         let (baseline_dirty, head_changed, changed_during_turn) =
             derived_review_fields(&before, &after);
         Self {
-            schema_version: QUEUE_SCHEMA_VERSION,
+            schema_version: native_task_record_schema(job.windows_sandbox.as_deref()),
             receipt_id: receipt.receipt_id.clone(),
             receipt_sha256,
             project_id: job.binding.project_id.clone(),
@@ -789,6 +905,7 @@ impl QueueReviewCandidate {
             requested_model: job.model.clone(),
             requested_effort: job.effort.clone(),
             requested_cyber_access_program: job.cyber_access_program.clone(),
+            requested_windows_sandbox: job.windows_sandbox.clone(),
             actual_profile: receipt.actual_profile.clone(),
             baseline_dirty,
             head_changed,
@@ -966,7 +1083,193 @@ struct QueueStore {
     root: PathBuf,
 }
 
+struct VerificationRuntime {
+    root: PathBuf,
+    uv_cache: PathBuf,
+}
+
+impl VerificationRuntime {
+    fn prepare(root: PathBuf, uv_cache: PathBuf, projects: &[PathBuf]) -> Result<Self, String> {
+        if !root.is_absolute() || !uv_cache.is_absolute() {
+            return Err("CODEX_QUEUE_VERIFY: runtime paths must be absolute".into());
+        }
+        for project in projects {
+            reject_overlap(&root, project)?;
+            reject_overlap(&uv_cache, project)?;
+        }
+        checked_dir(&root)?;
+        for name in [
+            "tmp",
+            "cache",
+            "ruff",
+            "mypy",
+            "pycache",
+            "pytest",
+            "hypothesis",
+        ] {
+            checked_dir(&root.join(name))?;
+        }
+        checked_dir(
+            uv_cache
+                .parent()
+                .ok_or("CODEX_QUEUE_VERIFY: cache parent is absent")?,
+        )?;
+        checked_dir(&uv_cache)?;
+        let root = root
+            .canonicalize()
+            .map_err(|_| "CODEX_QUEUE_VERIFY: runtime is unavailable")?;
+        let uv_cache = uv_cache
+            .canonicalize()
+            .map_err(|_| "CODEX_QUEUE_VERIFY: cache is unavailable")?;
+        for project in projects {
+            reject_overlap(&root, project)?;
+            reject_overlap(&uv_cache, project)?;
+        }
+        let runtime = Self { root, uv_cache };
+        runtime.revalidate()?;
+        Ok(runtime)
+    }
+
+    fn revalidate(&self) -> Result<(), String> {
+        for path in std::iter::once(self.root.clone())
+            .chain(
+                [
+                    "tmp",
+                    "cache",
+                    "ruff",
+                    "mypy",
+                    "pycache",
+                    "pytest",
+                    "hypothesis",
+                ]
+                .map(|name| self.root.join(name)),
+            )
+            .chain([
+                self.uv_cache
+                    .parent()
+                    .ok_or("CODEX_QUEUE_VERIFY: cache parent is absent")?
+                    .to_path_buf(),
+                self.uv_cache.clone(),
+            ])
+        {
+            let metadata = fs::symlink_metadata(&path)
+                .map_err(|_| "CODEX_QUEUE_VERIFY: runtime directory is unavailable")?;
+            if !metadata.is_dir() || redirected(&metadata) {
+                return Err("CODEX_QUEUE_VERIFY: runtime directory is redirected or unsafe".into());
+            }
+        }
+        match fs::symlink_metadata(self.root.join("venv")) {
+            Ok(metadata) if !metadata.is_dir() || redirected(&metadata) => {
+                return Err(
+                    "CODEX_QUEUE_VERIFY: virtual environment is redirected or unsafe".into(),
+                );
+            }
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                return Err("CODEX_QUEUE_VERIFY: virtual environment is unavailable".into());
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn environment(&self) -> Result<Vec<(OsString, OsString)>, String> {
+        // Canonical Windows paths retain a verbatim prefix internally, but
+        // Python consumers can classify \\?\C:\ as a UNC drive. Supply the
+        // existing normalized spelling only at the child environment boundary;
+        // revalidation and overlap checks keep the retained canonical paths.
+        let root = crate::command::normalize_windows_verbatim_path(self.root.clone());
+        let uv_cache = crate::command::normalize_windows_verbatim_path(self.uv_cache.clone());
+        let pytest_cache = root.join("pytest");
+        let cache_option = format!(
+            "cache_dir={}",
+            pytest_cache
+                .to_str()
+                .ok_or("CODEX_QUEUE_VERIFY: runtime path is not Unicode")?
+        );
+        // pytest parses PYTEST_ADDOPTS with shlex, not a Windows command line.
+        // Quote the entire internally derived option, including apostrophes.
+        let quoted_option = format!("'{}'", cache_option.replace('\'', "'\"'\"'"));
+        let mut variables = vec![
+            (
+                "UV_PROJECT_ENVIRONMENT".into(),
+                root.join("venv").into_os_string(),
+            ),
+            ("UV_CACHE_DIR".into(), uv_cache.into_os_string()),
+            ("RUFF_CACHE_DIR".into(), root.join("ruff").into_os_string()),
+            ("MYPY_CACHE_DIR".into(), root.join("mypy").into_os_string()),
+            (
+                "PYTHONPYCACHEPREFIX".into(),
+                root.join("pycache").into_os_string(),
+            ),
+            (
+                "PYTEST_ADDOPTS".into(),
+                format!("-o {quoted_option}").into(),
+            ),
+            (
+                "HYPOTHESIS_STORAGE_DIRECTORY".into(),
+                root.join("hypothesis").into_os_string(),
+            ),
+            ("XDG_CACHE_HOME".into(), root.join("cache").into_os_string()),
+        ];
+        for name in ["TEMP", "TMP", "TMPDIR"] {
+            variables.push((name.into(), root.join("tmp").into_os_string()));
+        }
+        Ok(variables)
+    }
+}
+
 impl QueueStore {
+    fn verification_runtime(
+        &self,
+        receipt_id: &str,
+        projects: &[PathBuf],
+    ) -> Result<VerificationRuntime, String> {
+        if !Uuid::parse_str(receipt_id).is_ok_and(|id| id.to_string() == receipt_id) {
+            return Err("CODEX_QUEUE_VERIFY: runtime receipt identity is invalid".into());
+        }
+        // Keep DLL paths below legacy native loader limits even when Windows
+        // redirects LocalAppData into an MSIX package. The full hash still
+        // binds both this queue namespace and the exact receipt, without
+        // repeating those long components in every site-packages path.
+        let state = if cfg!(test) {
+            self.root.join("fixture-user-state")
+        } else {
+            fixed_current_user_catdesk_state_root_path()
+                .map_err(|_| "CODEX_QUEUE_VERIFY: fixed runtime state root is unavailable")?
+        };
+        let parent = state.join("v");
+        for project in projects {
+            reject_overlap(&parent, project)?;
+        }
+        checked_dir(&state)?;
+        checked_dir(&parent)?;
+        let runtime_id = format!(
+            "{:x}",
+            Sha256::digest(
+                format!(
+                    "catdesk-verification-runtime-v2\0{}\0{receipt_id}",
+                    self.root.display()
+                )
+                .as_bytes()
+            )
+        );
+        // Production uses the OS-derived user location, never UV_/XDG_ caller
+        // settings. Unit fixtures must not create or populate the real cache.
+        let uv_cache = if cfg!(test) {
+            self.root.join("fixture-uv-cache")
+        } else {
+            let user = state
+                .parent()
+                .ok_or("CODEX_QUEUE_VERIFY: fixed cache parent is absent")?;
+            #[cfg(windows)]
+            let cache = user.join("uv").join("cache");
+            #[cfg(not(windows))]
+            let cache = user.join(".cache").join("uv");
+            cache
+        };
+        VerificationRuntime::prepare(parent.join(runtime_id), uv_cache, projects)
+    }
+
     fn namespaced_path(
         control: &AutonomousProjectV1,
         project_workspace: &Path,
@@ -1243,7 +1546,10 @@ impl QueueStore {
         let observed_sha = format!("{:x}", Sha256::digest(&bytes));
         let (baseline_dirty, head_changed, changed_during_turn) =
             derived_review_fields(&candidate.before, &candidate.after);
-        if candidate.schema_version != QUEUE_SCHEMA_VERSION
+        if candidate.schema_version
+            != native_task_record_schema(candidate.requested_windows_sandbox.as_deref())
+            || candidate.schema_version != job.schema_version
+            || candidate.schema_version != receipt.schema_version
             || job.review_candidate_sha256.as_deref() != Some(observed_sha.as_str())
             || candidate.receipt_id != receipt.receipt_id
             || candidate.receipt_sha256 != format!("{:x}", Sha256::digest(&receipt_bytes))
@@ -1255,6 +1561,8 @@ impl QueueStore {
             || candidate.requested_model != receipt.requested_model
             || candidate.requested_effort != receipt.requested_effort
             || candidate.requested_cyber_access_program != receipt.requested_cyber_access_program
+            || candidate.requested_windows_sandbox != receipt.requested_windows_sandbox
+            || candidate.requested_windows_sandbox != job.windows_sandbox
             || candidate.actual_profile != receipt.actual_profile
             || candidate.baseline_dirty != baseline_dirty
             || candidate.head_changed != head_changed
@@ -1493,7 +1801,8 @@ impl QueueStore {
             .ok_or("CODEX_QUEUE: receipt is unavailable")?;
         let receipt: QueueReceipt = serde_json::from_slice(&bytes)
             .map_err(|_| "CODEX_QUEUE: receipt is corrupt".to_string())?;
-        if receipt.schema_version != QUEUE_SCHEMA_VERSION
+        if receipt.schema_version
+            != native_task_record_schema(receipt.requested_windows_sandbox.as_deref())
             || receipt.receipt_id != receipt_id
             || !Uuid::parse_str(&receipt.attempt_id)
                 .is_ok_and(|id| id.to_string() == receipt.attempt_id)
@@ -1503,11 +1812,13 @@ impl QueueStore {
         let job = self
             .load_job(&receipt.project_id, &receipt.task_id)?
             .ok_or("CODEX_QUEUE: receipt task is unavailable")?;
-        if job.binding.workspace != receipt.workspace
+        if receipt.schema_version != job.schema_version
+            || job.binding.workspace != receipt.workspace
             || job.binding.thread_id != receipt.thread_id
             || job.binding.target_sha256 != receipt.target_sha256
             || job.prompt_sha256 != receipt.prompt_sha256
             || job.cyber_access_program != receipt.requested_cyber_access_program
+            || job.windows_sandbox != receipt.requested_windows_sandbox
         {
             return Err("CODEX_QUEUE: receipt task binding changed".into());
         }
@@ -1711,9 +2022,15 @@ fn create_new_record(path: &Path, bytes: &[u8]) -> Result<(), String> {
 }
 
 fn validate_job(job: &QueueJob) -> Result<(), String> {
+    if let Some(link) = &job.native_continuation {
+        link.validate(job)?;
+    }
+    if let Some(origin) = &job.native_origin {
+        origin.validate(job)?;
+    }
     valid_slug(&job.task_id)?;
     valid_slug(&job.binding.project_id)?;
-    if job.schema_version != QUEUE_SCHEMA_VERSION
+    if job.schema_version != native_task_record_schema(job.windows_sandbox.as_deref())
         || job.prompt.is_empty()
         || job.prompt.len() > MAX_TASK_BYTES
         || job.prompt.contains('\0')
@@ -1732,6 +2049,10 @@ fn validate_job(job: &QueueJob) -> Result<(), String> {
             .cyber_access_program
             .as_deref()
             .is_some_and(|value| value != SUPPORTED_CYBER_ACCESS_PROGRAM)
+        || job
+            .windows_sandbox
+            .as_deref()
+            .is_some_and(|value| value != "mxc")
         || job.binding.workspace.as_os_str().is_empty()
         || job
             .review_candidate_sha256
@@ -2067,12 +2388,16 @@ pub(crate) async fn execute_action(
             model,
             effort,
             cyber_access_program,
+            windows_sandbox,
         } => {
             let project = registered_project(&control.control_workspace, &scope)?;
             let store = QueueStore::open_for_operator(&control.project, &project.workspace)?;
             let _lock = store.lock()?;
             let mut proposed = QueueJob::new(task_id, &project, task, model, effort)?;
             proposed.cyber_access_program = cyber_access_program;
+            proposed.windows_sandbox = windows_sandbox;
+            proposed.schema_version =
+                native_task_record_schema(proposed.windows_sandbox.as_deref());
             if let Some(existing) =
                 store.load_job(&proposed.binding.project_id, &proposed.task_id)?
             {
@@ -2265,6 +2590,14 @@ pub(crate) async fn execute_action(
             let mut job = store
                 .load_job(&project.project_id, &task_id)?
                 .ok_or("CODEX_QUEUE: task ID is not queued for this project")?;
+            if job.native_continuation.is_some()
+                || job
+                    .native_origin
+                    .as_ref()
+                    .is_some_and(|origin| !origin.activated)
+            {
+                return Err("CODEX_QUEUE_STATE: superseded task remains paused; inspect its linked continuation".into());
+            }
             if !job.binding.matches(&project) {
                 return Err("CODEX_QUEUE_SCOPE: queued task binding drifted".into());
             }
@@ -2286,7 +2619,25 @@ pub(crate) async fn execute_action(
                 json!({ "action":if pause { "codex_queue_pause" } else { "codex_queue_resume" }, "job":job.summary() }),
             )
         }
-        QueueAction::Dispatch => dispatch_one(&control.project).await,
+        QueueAction::Dispatch => dispatch_one(&control.project, &control.control_workspace).await,
+        QueueAction::DispatchTask {
+            scope,
+            task_id,
+            expected_binding_sha256,
+            expected_request_sha256,
+        } => {
+            dispatch_selected(
+                &control.project,
+                &control.control_workspace,
+                Some((
+                    &scope,
+                    &task_id,
+                    &expected_binding_sha256,
+                    expected_request_sha256.as_deref(),
+                )),
+            )
+            .await
+        }
     }
 }
 
@@ -2912,6 +3263,9 @@ async fn verify_receipt_in_store_with_executable(
     let (receipt, candidate, job) = {
         let _queue_lock = store.lock()?;
         let receipt = store.read_receipt(receipt_id)?;
+        if !receipt.tree_exit_proven {
+            return Err("CODEX_QUEUE_VERIFY_TREE_EXIT_UNPROVEN: parent exit is not descendant-exit proof; historical evidence remains readable and must not be replayed".into());
+        }
         let candidate = store.read_review_candidate(&receipt)?;
         let job = store
             .load_job(&receipt.project_id, &receipt.task_id)?
@@ -2926,6 +3280,7 @@ async fn verify_receipt_in_store_with_executable(
             || receipt.exit_code != Some(0)
             || receipt.outcome != "NATIVE_EXIT_ZERO"
             || !receipt.child_exit_observed
+            || !receipt.tree_exit_proven
             || !receipt.binding_still_matches
             || !actual_profile_matches_receipt(&receipt)
         {
@@ -3042,6 +3397,18 @@ async fn verify_receipt_in_store_with_executable(
         &job.binding.verification_profile,
         &candidate.after.changed_paths,
     )?;
+    let runtime = if profile.tool == VerificationTool::Uv {
+        let roots = scheduler(control_workspace)?
+            .load_registry()
+            .map_err(|_| "CODEX_QUEUE_VERIFY: registered runtime scope is unavailable")?
+            .projects
+            .into_iter()
+            .map(|project| project.workspace)
+            .collect::<Vec<_>>();
+        Some(store.verification_runtime(receipt_id, &roots)?)
+    } else {
+        None
+    };
     writer
         .begin_writer_turn()
         .map_err(|_| "CODEX_QUEUE_VERIFY: writer marker could not be persisted".to_string())?;
@@ -3052,6 +3419,7 @@ async fn verify_receipt_in_store_with_executable(
             &executable,
             profile.tool,
             &job.binding.verification_profile,
+            runtime.as_ref(),
             argv,
             verification_command_timeout(&job.binding.verification_profile, argv),
         )
@@ -3127,6 +3495,7 @@ async fn verify_receipt_in_store_with_executable(
         "action":"codex_queue_verify", "idempotent":false,
         "verification":artifact.summary(&digest),
         "artifactPath":store.verification_path(receipt_id),
+        "runtimeRoot":runtime.as_ref().map(|runtime| &runtime.root),
         "historicalReadback":false,
         "meaning":"Fixed local command exits and source recheck at recording time only; descendants, independent review, and Wake are not proven.",
     }))
@@ -3137,8 +3506,50 @@ fn scheduler(control_workspace: &Path) -> Result<AutonomousProjectRegistryStoreV
         .map_err(|_| "CODEX_QUEUE: control registry is unavailable".to_string())
 }
 
+type DispatchSelection<'a> = Option<(&'a CodexScope, &'a str, &'a str, Option<&'a str>)>;
+
+fn dispatch_jobs(
+    queue: &QueueStore,
+    selected: DispatchSelection<'_>,
+) -> Result<Vec<QueueJob>, String> {
+    let Some((scope, task, _, expected)) = selected else {
+        return queue.jobs();
+    };
+    // A scoped invocation must not decode unrelated records: a corrupt or
+    // unresolved sibling is not authority to block this project's task.
+    let job = queue.load_job(&scope.project_id, task)?;
+    if let Some(expected) = expected {
+        let job = job
+            .as_ref()
+            .ok_or("CODEX_QUEUE_SCOPE: selected native request is unavailable")?;
+        if job.request_sha256() != expected {
+            return Err("CODEX_QUEUE_SCOPE: selected native request changed".into());
+        }
+    }
+    Ok(job.into_iter().collect())
+}
+
+fn exact_dispatch_binding(control: &Path, selected: DispatchSelection<'_>) -> Result<(), String> {
+    if let Some((scope, _, expected, _)) = selected {
+        let project = registered_project(control, scope)?;
+        if project_binding_sha256(&project)? != expected {
+            return Err("CODEX_QUEUE_SCOPE: exact dispatch binding changed".into());
+        }
+    }
+    Ok(())
+}
+
 fn claim_one(control_workspace: &Path, queue: &QueueStore) -> Result<Option<QueueJob>, String> {
+    claim_selected(control_workspace, queue, None)
+}
+
+fn claim_selected(
+    control_workspace: &Path,
+    queue: &QueueStore,
+    selected: DispatchSelection<'_>,
+) -> Result<Option<QueueJob>, String> {
     let _lock = queue.lock()?;
+    exact_dispatch_binding(control_workspace, selected)?;
     let read_only_scheduler = scheduler(control_workspace)?;
     let registry = read_only_scheduler
         .load_registry()
@@ -3151,7 +3562,7 @@ fn claim_one(control_workspace: &Path, queue: &QueueStore) -> Result<Option<Queu
         }
     }
     let mut ready = BTreeMap::<String, QueueJob>::new();
-    for mut job in queue.jobs()? {
+    for mut job in dispatch_jobs(queue, selected)? {
         if job.state != QueueState::Ready {
             continue;
         }
@@ -3163,6 +3574,9 @@ fn claim_one(control_workspace: &Path, queue: &QueueStore) -> Result<Option<Queu
             // No launch occurred. Leave the original authority snapshot and
             // prompt intact for a human to reconcile; do not migrate it to a
             // new root, target, or thread.
+            if selected.is_some() {
+                return Err("CODEX_QUEUE_SCOPE: selected task binding changed".into());
+            }
             job.state = QueueState::Attention;
             queue.save_job(&job)?;
             continue;
@@ -3221,6 +3635,7 @@ fn claim_one(control_workspace: &Path, queue: &QueueStore) -> Result<Option<Queu
         || lease.workspace != job.binding.workspace
         || lease.owner_id != owner
         || lease.provider != ScheduledProviderV1::Codex
+        || exact_dispatch_binding(control_workspace, selected).is_err()
         || !registered_project(control_workspace, &job.binding.scope())
             .as_ref()
             .is_ok_and(|project| job.binding.matches(project))
@@ -3228,8 +3643,10 @@ fn claim_one(control_workspace: &Path, queue: &QueueStore) -> Result<Option<Queu
         scheduler.release_workspace_lease(&lease).map_err(|_| {
             "CODEX_QUEUE: drifted scheduler grant could not be released".to_string()
         })?;
-        job.state = QueueState::Attention;
-        queue.save_job(&job)?;
+        if selected.is_none() {
+            job.state = QueueState::Attention;
+            queue.save_job(&job)?;
+        }
         return Err("CODEX_QUEUE_SCOPE: selected registry binding changed during claim".into());
     }
     job.state = QueueState::Claimed;
@@ -3256,6 +3673,7 @@ struct TurnResult {
     exit_code: Option<i32>,
     child_exit_observed: bool,
     child_absent_proven: bool,
+    tree_exit_proven: bool,
     marker_retired: bool,
     native_executable: Option<PathBuf>,
     native_version: Option<String>,
@@ -3273,6 +3691,7 @@ impl TurnResult {
             exit_code: None,
             child_exit_observed: false,
             child_absent_proven: true,
+            tree_exit_proven: false,
             marker_retired: true,
             native_executable: None,
             native_version: None,
@@ -3283,12 +3702,14 @@ impl TurnResult {
             review_after: None,
         }
     }
+    #[cfg(any(not(windows), test))]
     fn unknown(outcome: &'static str) -> Self {
         Self {
             outcome,
             exit_code: None,
             child_exit_observed: false,
             child_absent_proven: false,
+            tree_exit_proven: false,
             marker_retired: false,
             native_executable: None,
             native_version: None,
@@ -3915,8 +4336,13 @@ fn verification_env_key_allowed(tool: VerificationTool, profile: &str, upper: &s
         }
         VerificationTool::Uv => {
             !upper.starts_with("UV_")
+                && !matches!(
+                    upper,
+                    "TEMP" | "TMP" | "TMPDIR" | "XDG_CACHE_HOME" | "MYPY_CACHE_DIR"
+                )
                 && !upper.starts_with("PYTHON")
                 && !upper.starts_with("PYTEST_")
+                && upper != "HYPOTHESIS_STORAGE_DIRECTORY"
                 && !upper.starts_with("PIP_")
                 && !upper.starts_with("RUFF_")
                 && !upper.starts_with("CONDA_")
@@ -3933,6 +4359,7 @@ fn verification_env_key_allowed(tool: VerificationTool, profile: &str, upper: &s
 fn verification_command_environment(
     tool: VerificationTool,
     profile: &str,
+    runtime: Option<&VerificationRuntime>,
 ) -> Result<(Vec<(OsString, OsString)>, String), String> {
     const MAX_ENV_BYTES: usize = 256 * 1024;
     const MAX_ENV_ENTRIES: usize = 512;
@@ -3942,6 +4369,11 @@ fn verification_command_environment(
             verification_env_key_allowed(tool, profile, &upper)
         })
         .collect::<Vec<_>>();
+    if tool == VerificationTool::Uv {
+        let runtime = runtime.ok_or("CODEX_QUEUE_VERIFY: Python runtime scope is absent")?;
+        runtime.revalidate()?;
+        variables.extend(runtime.environment()?);
+    }
     if variables.len() > MAX_ENV_ENTRIES {
         return Err("CODEX_QUEUE_VERIFY: command environment has too many entries".into());
     }
@@ -4040,6 +4472,7 @@ async fn execute_fixed_verification_command(
     executable: &TrustedVerificationExecutable,
     tool: VerificationTool,
     profile: &str,
+    runtime: Option<&VerificationRuntime>,
     argv: &[String],
     timeout: Duration,
 ) -> Result<QueueVerificationCommand, VerifyCommandError> {
@@ -4053,7 +4486,8 @@ async fn execute_fixed_verification_command(
         ));
     }
     let (environment, environment_sha256) =
-        verification_command_environment(tool, profile).map_err(VerifyCommandError::Safe)?;
+        verification_command_environment(tool, profile, runtime)
+            .map_err(VerifyCommandError::Safe)?;
     let mut command = Command::new(&executable.executable);
     command
         .args(&argv[1..])
@@ -4642,6 +5076,7 @@ fn turn_timeout() -> Result<Duration, String> {
     }
 }
 
+#[cfg(not(windows))]
 async fn drain_native_jsonl_stdout(
     mut stdout: tokio::process::ChildStdout,
     mut evidence: CodexCliNativeStdoutEvidenceV1,
@@ -4686,6 +5121,7 @@ async fn drain_native_jsonl_stdout(
     }
 }
 
+#[cfg(any(not(windows), test))]
 async fn write_queued_prompt(
     child: &mut tokio::process::Child,
     prompt: &str,
@@ -4753,6 +5189,15 @@ fn queued_native_invocation_args(
         }
         args.insert(resume_index + 2, "--cyber-access-program".into());
         args.insert(resume_index + 3, program.into());
+    }
+    if let Some(implementation) = job.windows_sandbox.as_deref() {
+        if implementation != "mxc" || !cfg!(windows) {
+            return Err("CODEX_QUEUE: requested Windows sandbox is unsupported".into());
+        }
+        // Opt in only for this task. Keep both workspace-write assertions and
+        // approval policy intact; the native CLI still applies managed policy
+        // and refuses unsupported MXC without a legacy/full-access fallback.
+        args.splice(0..0, ["-c".into(), "windows.sandbox=\"mxc\"".into()]);
     }
     Ok(args)
 }
@@ -4848,101 +5293,170 @@ async fn run_queued_turn(
             ..TurnResult::before_spawn("WRITER_MARKER_BINDING_MISMATCH")
         };
     }
-    let launched_at = SystemTime::now();
-    let mut child = match command.spawn() {
-        Ok(child) => child,
-        Err(_) => {
-            let retired = writer.finish_writer_turn().is_ok();
-            return TurnResult {
-                marker_retired: retired,
-                native_executable: Some(executable.clone()),
-                ..TurnResult::before_spawn("NATIVE_SPAWN_FAILED")
-            };
-        }
-    };
-    let Some(stdout) = child.stdout.take() else {
-        let _ = tokio::time::timeout(KILL_TIMEOUT, child.kill()).await;
-        return TurnResult::unknown("NATIVE_STDOUT_UNAVAILABLE");
-    };
-    let stdout_reader = tokio::spawn(drain_native_jsonl_stdout(stdout, stdout_evidence));
-    let prompt_accepted = write_queued_prompt(&mut child, &job.prompt, PROMPT_TIMEOUT).await;
-    if !prompt_accepted {
-        let _ = tokio::time::timeout(KILL_TIMEOUT, child.kill()).await;
-        // The native parent may have descendants. Keep the pending writer
-        // marker and scheduler lease until an explicit proof-based recovery.
-        return TurnResult::unknown("PROMPT_PIPE_DESCENDANTS_UNPROVEN");
-    }
-    let status = match tokio::time::timeout(turn_limit, child.wait()).await {
-        Ok(Ok(status)) => status,
-        Ok(Err(_)) => {
-            let _ = tokio::time::timeout(KILL_TIMEOUT, child.kill()).await;
-            return TurnResult::unknown("NATIVE_EXIT_UNOBSERVED");
-        }
-        Err(_) => {
-            let _ = tokio::time::timeout(KILL_TIMEOUT, child.kill()).await;
-            return TurnResult::unknown("NATIVE_TIMEOUT_DESCENDANTS_UNPROVEN");
-        }
-    };
-    let exit_observed_at = SystemTime::now();
-    let stdout_evidence = match tokio::time::timeout(NATIVE_STDOUT_EOF_TIMEOUT, stdout_reader).await
+    #[cfg(windows)]
     {
-        Ok(Ok((evidence, true))) => evidence,
-        _ => {
+        let launched_at = SystemTime::now();
+        let transport = owned_native::run(
+            command.into_std(),
+            job.prompt.clone(),
+            stdout_evidence,
+            turn_limit,
+        )
+        .await;
+        if transport.no_child_created {
             return TurnResult {
-                outcome: "NATIVE_STDOUT_EOF_UNOBSERVED",
-                exit_code: status.code(),
-                child_exit_observed: true,
-                child_absent_proven: false,
-                marker_retired: false,
-                native_executable: Some(executable.clone()),
-                native_version: None,
-                native_executable_sha256: None,
-                actual_profile: None,
-                profile_readback_diagnostic: None,
-                review_before: Some(review_before),
-                review_after: None,
+                marker_retired: writer.finish_writer_turn().is_ok(),
+                ..TurnResult::before_spawn(transport.outcome)
             };
         }
-    };
-    let (actual_profile, profile_readback_diagnostic) = if status.success() {
-        let (profile, diagnostic) = read_queued_native_profile(
-            profile_readback.as_ref(),
-            &job.binding.thread_id,
-            launched_at,
-            exit_observed_at,
-            &stdout_evidence,
+        let normal_exit = matches!(
+            transport.outcome,
+            "NATIVE_EXIT_ZERO" | "NATIVE_EXIT_NONZERO"
         );
-        (profile, Some(diagnostic))
-    } else {
-        (None, None)
-    };
-    let review_after = if status.success() {
-        capture_git_review_witness(&project.workspace, &git)
-            .await
-            .ok()
-    } else {
-        None
-    };
-    let retired = writer.finish_writer_turn().is_ok();
-    TurnResult {
-        outcome: if status.success() && review_after.is_none() {
-            "REVIEW_POST_SNAPSHOT_UNAVAILABLE"
-        } else if status.success() {
-            "NATIVE_EXIT_ZERO"
+        let successful = transport.outcome == "NATIVE_EXIT_ZERO" && transport.tree_exit_proven;
+        let (actual_profile, diagnostic) = if successful {
+            let (profile, diagnostic) = read_queued_native_profile(
+                profile_readback.as_ref(),
+                &job.binding.thread_id,
+                launched_at,
+                transport.exit_observed_at.unwrap_or_else(SystemTime::now),
+                transport.stdout.as_ref().expect("normal exit has stdout"),
+            );
+            (profile, Some(diagnostic))
         } else {
-            "NATIVE_EXIT_NONZERO"
-        },
-        exit_code: status.code(),
-        child_exit_observed: true,
-        child_absent_proven: false,
-        marker_retired: retired,
-        native_executable: Some(executable.clone()),
-        native_version: None,
-        native_executable_sha256: None,
-        actual_profile,
-        profile_readback_diagnostic,
-        review_before: Some(review_before),
-        review_after,
+            (None, None)
+        };
+        let review_after = if successful {
+            capture_git_review_witness(&project.workspace, &git)
+                .await
+                .ok()
+        } else {
+            None
+        };
+        // Forced cleanup after timeout/cancellation proves process absence,
+        // not task completion. Preserve its marker and never auto-replay it.
+        let retired =
+            normal_exit && transport.tree_exit_proven && writer.finish_writer_turn().is_ok();
+        TurnResult {
+            outcome: if successful && review_after.is_none() {
+                "REVIEW_POST_SNAPSHOT_UNAVAILABLE"
+            } else {
+                transport.outcome
+            },
+            exit_code: transport.exit_code,
+            child_exit_observed: transport.child_exit_observed,
+            child_absent_proven: false,
+            tree_exit_proven: transport.tree_exit_proven,
+            marker_retired: retired,
+            native_executable: Some(executable.clone()),
+            native_version: None,
+            native_executable_sha256: None,
+            actual_profile,
+            profile_readback_diagnostic: diagnostic,
+            review_before: Some(review_before),
+            review_after,
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let launched_at = SystemTime::now();
+        let mut child = match command.spawn() {
+            Ok(child) => child,
+            Err(_) => {
+                let retired = writer.finish_writer_turn().is_ok();
+                return TurnResult {
+                    marker_retired: retired,
+                    native_executable: Some(executable.clone()),
+                    ..TurnResult::before_spawn("NATIVE_SPAWN_FAILED")
+                };
+            }
+        };
+        let Some(stdout) = child.stdout.take() else {
+            let _ = tokio::time::timeout(KILL_TIMEOUT, child.kill()).await;
+            return TurnResult::unknown("NATIVE_STDOUT_UNAVAILABLE");
+        };
+        let stdout_reader = tokio::spawn(drain_native_jsonl_stdout(stdout, stdout_evidence));
+        let prompt_accepted = write_queued_prompt(&mut child, &job.prompt, PROMPT_TIMEOUT).await;
+        if !prompt_accepted {
+            let _ = tokio::time::timeout(KILL_TIMEOUT, child.kill()).await;
+            // The native parent may have descendants. Keep the pending writer
+            // marker and scheduler lease until an explicit proof-based recovery.
+            return TurnResult::unknown("PROMPT_PIPE_DESCENDANTS_UNPROVEN");
+        }
+        let status = match tokio::time::timeout(turn_limit, child.wait()).await {
+            Ok(Ok(status)) => status,
+            Ok(Err(_)) => {
+                let _ = tokio::time::timeout(KILL_TIMEOUT, child.kill()).await;
+                return TurnResult::unknown("NATIVE_EXIT_UNOBSERVED");
+            }
+            Err(_) => {
+                let _ = tokio::time::timeout(KILL_TIMEOUT, child.kill()).await;
+                return TurnResult::unknown("NATIVE_TIMEOUT_DESCENDANTS_UNPROVEN");
+            }
+        };
+        let exit_observed_at = SystemTime::now();
+        let stdout_evidence =
+            match tokio::time::timeout(NATIVE_STDOUT_EOF_TIMEOUT, stdout_reader).await {
+                Ok(Ok((evidence, true))) => evidence,
+                _ => {
+                    return TurnResult {
+                        outcome: "NATIVE_STDOUT_EOF_UNOBSERVED",
+                        exit_code: status.code(),
+                        child_exit_observed: true,
+                        child_absent_proven: false,
+                        tree_exit_proven: false,
+                        marker_retired: false,
+                        native_executable: Some(executable.clone()),
+                        native_version: None,
+                        native_executable_sha256: None,
+                        actual_profile: None,
+                        profile_readback_diagnostic: None,
+                        review_before: Some(review_before),
+                        review_after: None,
+                    };
+                }
+            };
+        let (actual_profile, profile_readback_diagnostic) = if status.success() {
+            let (profile, diagnostic) = read_queued_native_profile(
+                profile_readback.as_ref(),
+                &job.binding.thread_id,
+                launched_at,
+                exit_observed_at,
+                &stdout_evidence,
+            );
+            (profile, Some(diagnostic))
+        } else {
+            (None, None)
+        };
+        let review_after = if status.success() {
+            capture_git_review_witness(&project.workspace, &git)
+                .await
+                .ok()
+        } else {
+            None
+        };
+        let retired = writer.finish_writer_turn().is_ok();
+        TurnResult {
+            outcome: if status.success() && review_after.is_none() {
+                "REVIEW_POST_SNAPSHOT_UNAVAILABLE"
+            } else if status.success() {
+                "NATIVE_EXIT_ZERO"
+            } else {
+                "NATIVE_EXIT_NONZERO"
+            },
+            exit_code: status.code(),
+            child_exit_observed: true,
+            child_absent_proven: false,
+            tree_exit_proven: false,
+            marker_retired: retired,
+            native_executable: Some(executable.clone()),
+            native_version: None,
+            native_executable_sha256: None,
+            actual_profile,
+            profile_readback_diagnostic,
+            review_before: Some(review_before),
+            review_after,
+        }
     }
 }
 
@@ -4971,7 +5485,7 @@ fn complete_attempt(
     // receipt at the same ID, without replaying the native turn.
     let receipt_id = attempt.attempt_id.clone();
     let receipt = QueueReceipt {
-        schema_version: QUEUE_SCHEMA_VERSION,
+        schema_version: native_task_record_schema(job.windows_sandbox.as_deref()),
         receipt_id: receipt_id.clone(),
         attempt_id: attempt.attempt_id.clone(),
         project_id: job.binding.project_id.clone(),
@@ -4983,6 +5497,7 @@ fn complete_attempt(
         requested_model: job.model.clone(),
         requested_effort: job.effort.clone(),
         requested_cyber_access_program: job.cyber_access_program.clone(),
+        requested_windows_sandbox: job.windows_sandbox.clone(),
         actual_profile: turn.actual_profile.clone(),
         profile_readback_diagnostic: turn.profile_readback_diagnostic.clone(),
         native_executable: turn.native_executable.clone(),
@@ -4998,6 +5513,7 @@ fn complete_attempt(
         .into(),
         exit_code: turn.exit_code,
         child_exit_observed: turn.child_exit_observed,
+        tree_exit_proven: turn.tree_exit_proven,
         binding_still_matches,
         outcome: turn.outcome.into(),
         recorded_at_unix: unix_now()?,
@@ -5006,28 +5522,31 @@ fn complete_attempt(
     job.receipt_id = Some(receipt_id);
     // Preserve the process receipt even if evidence capture or sidecar
     // publication fails. A review candidate is never a completion verdict.
-    job.review_candidate_sha256 =
-        if turn.outcome == "NATIVE_EXIT_ZERO" && binding_still_matches && turn.marker_retired {
-            turn.review_before
-                .clone()
-                .zip(turn.review_after.clone())
-                .and_then(|(before, after)| {
-                    let receipt_sha = queue.persisted_receipt_sha256(&receipt).ok()?;
-                    let candidate = QueueReviewCandidate::from_observed_turn(
-                        &job,
-                        &receipt,
-                        receipt_sha,
-                        before,
-                        after,
-                    );
-                    queue.write_review_candidate(&candidate).ok()
-                })
-        } else {
-            None
-        };
+    job.review_candidate_sha256 = if turn.outcome == "NATIVE_EXIT_ZERO"
+        && turn.tree_exit_proven
+        && binding_still_matches
+        && turn.marker_retired
+    {
+        turn.review_before
+            .clone()
+            .zip(turn.review_after.clone())
+            .and_then(|(before, after)| {
+                let receipt_sha = queue.persisted_receipt_sha256(&receipt).ok()?;
+                let candidate = QueueReviewCandidate::from_observed_turn(
+                    &job,
+                    &receipt,
+                    receipt_sha,
+                    before,
+                    after,
+                );
+                queue.write_review_candidate(&candidate).ok()
+            })
+    } else {
+        None
+    };
     let review_missing =
         turn.outcome == "NATIVE_EXIT_ZERO" && job.review_candidate_sha256.is_none();
-    let final_state = if !turn.child_exit_observed && !turn.child_absent_proven {
+    let final_state = if !turn.tree_exit_proven && !turn.child_absent_proven {
         QueueState::Unknown
     } else if !binding_still_matches
         || !turn.marker_retired
@@ -5043,7 +5562,7 @@ fn complete_attempt(
     } else {
         QueueState::Failed
     };
-    let release_safe = turn.child_exit_observed || turn.child_absent_proven;
+    let release_safe = turn.tree_exit_proven || turn.child_absent_proven;
     // Stage attention while the lease is still held. A failed release or a
     // crash between receipt and release cannot masquerade as a completed job.
     job.state = if release_safe {
@@ -5072,19 +5591,38 @@ fn complete_attempt(
     }))
 }
 
-async fn dispatch_one(control: &AutonomousProjectV1) -> Result<Value, String> {
-    let control_workspace = &control.workspace;
+async fn dispatch_one(
+    control: &AutonomousProjectV1,
+    control_workspace: &Path,
+) -> Result<Value, String> {
+    dispatch_selected(control, control_workspace, None).await
+}
+
+async fn dispatch_selected(
+    control: &AutonomousProjectV1,
+    control_workspace: &Path,
+    selected: DispatchSelection<'_>,
+) -> Result<Value, String> {
+    exact_dispatch_binding(control_workspace, selected)?;
     let queue = QueueStore::open_for_operator(control, control_workspace)?;
-    if !queue
-        .jobs()?
-        .iter()
-        .any(|job| job.state == QueueState::Ready)
-    {
+    // Validate the frozen request before probes and again under the claim lock.
+    let ready = {
+        let _lock = queue.lock()?;
+        dispatch_jobs(&queue, selected)?
+            .iter()
+            .any(|job| job.state == QueueState::Ready)
+    };
+    if !ready {
         return Ok(json!({ "action":"codex_queue_dispatch", "status":"no_ready_tasks" }));
     }
     let turn_limit = turn_timeout()?;
     let cli = preflight_native_cli(control_workspace).await?;
-    let Some(job) = claim_one(control_workspace, &queue)? else {
+    let claimed = if selected.is_some() {
+        claim_selected(control_workspace, &queue, selected)?
+    } else {
+        claim_one(control_workspace, &queue)?
+    };
+    let Some(job) = claimed else {
         return Ok(json!({ "action":"codex_queue_dispatch", "status":"no_ready_tasks" }));
     };
     let turn = run_queued_turn(&job, control_workspace, &cli, turn_limit)
@@ -5125,7 +5663,7 @@ mod tests {
         }
     }
 
-    fn fixture_root() -> PathBuf {
+    pub(super) fn fixture_root() -> PathBuf {
         let root = std::env::temp_dir().join(format!("catdesk-operator-queue-{}", Uuid::new_v4()));
         fs::create_dir(&root).expect("fixture root");
         root
@@ -5153,7 +5691,7 @@ mod tests {
         }
     }
 
-    fn fake_native_cli(root: &Path) -> PathBuf {
+    pub(super) fn fake_native_cli(root: &Path) -> PathBuf {
         let source = root.join("fake-codex.rs");
         let executable = root.join(if cfg!(windows) {
             "fake-codex.exe"
@@ -6164,6 +6702,7 @@ mod tests {
             requested_model: None,
             requested_effort: None,
             requested_cyber_access_program: None,
+            requested_windows_sandbox: None,
             actual_profile: None,
             baseline_dirty: before.head_commit.is_none() || !before.changed_paths.is_empty(),
             head_changed: before.head_commit != after.head_commit,
@@ -6236,6 +6775,17 @@ mod tests {
                 if args.first().map(String::as_str) != Some("run") {
                     std::process::exit(41);
                 }
+                let cwd = std::env::current_dir().unwrap();
+                let environment = std::path::PathBuf::from(std::env::var_os("UV_PROJECT_ENVIRONMENT").expect("fixed environment"));
+                let runtime = environment.parent().unwrap();
+                assert!(environment.is_absolute() && !environment.starts_with(&cwd) && !cwd.starts_with(&environment));
+                for name in ["UV_CACHE_DIR", "RUFF_CACHE_DIR", "MYPY_CACHE_DIR", "PYTHONPYCACHEPREFIX", "HYPOTHESIS_STORAGE_DIRECTORY", "XDG_CACHE_HOME", "TEMP", "TMP", "TMPDIR"] {
+                    let path = std::path::PathBuf::from(std::env::var_os(name).expect("fixed external state"));
+                    assert!(path.is_absolute() && !path.starts_with(&cwd) && !cwd.starts_with(&path));
+                    if name != "UV_CACHE_DIR" { assert!(path.starts_with(runtime)); }
+                }
+                assert!(std::env::var("PYTEST_ADDOPTS").unwrap().starts_with("-o 'cache_dir="));
+                std::fs::write(runtime.join("fixture-child-observed-scope"), b"observed external runtime").unwrap();
                 for flag in ["--locked", "--offline", "--no-python-downloads", "--no-env-file", "--no-config"] {
                     if !args.iter().any(|arg| arg == flag) { std::process::exit(42); }
                 }
@@ -6401,6 +6951,7 @@ mod tests {
             requested_model: claimed.model.clone(),
             requested_effort: claimed.effort.clone(),
             requested_cyber_access_program: None,
+            requested_windows_sandbox: None,
             actual_profile: Some(CodexCliTurnProfileEvidenceV1 {
                 codex_thread_id: claimed.binding.thread_id.clone(),
                 codex_turn_id: Uuid::new_v4().to_string(),
@@ -6415,6 +6966,7 @@ mod tests {
             evidence_level: "NATIVE_EXIT_OBSERVED".into(),
             exit_code: Some(0),
             child_exit_observed: true,
+            tree_exit_proven: true,
             binding_still_matches: true,
             outcome: "NATIVE_EXIT_ZERO".into(),
             recorded_at_unix: unix_now().unwrap(),
@@ -8236,6 +8788,272 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn uv_verification_runtime_is_scoped_and_environment_bound() {
+        let (fixture, projects, queue) = three_project_fixture(1);
+        let roots = projects
+            .iter()
+            .map(|project| project.workspace.clone())
+            .collect::<Vec<_>>();
+        let first = queue
+            .verification_runtime(&Uuid::new_v4().to_string(), &roots)
+            .unwrap();
+        let second = queue
+            .verification_runtime(&Uuid::new_v4().to_string(), &roots)
+            .unwrap();
+        assert_ne!(first.root, second.root);
+        assert_eq!(first.root.file_name().unwrap().to_str().unwrap().len(), 64);
+        assert_eq!(first.root.parent().unwrap().file_name().unwrap(), "v");
+        assert_eq!(first.uv_cache, second.uv_cache);
+        let (variables, first_hash) =
+            verification_command_environment(VerificationTool::Uv, WAKE2_PROFILE, Some(&first))
+                .unwrap();
+        let (_, second_hash) =
+            verification_command_environment(VerificationTool::Uv, WAKE2_PROFILE, Some(&second))
+                .unwrap();
+        assert_ne!(
+            first_hash, second_hash,
+            "receipt runtime must be bound into the command environment"
+        );
+        let environment = variables
+            .into_iter()
+            .collect::<std::collections::BTreeMap<_, _>>();
+        assert_eq!(
+            environment.get(std::ffi::OsStr::new("UV_PROJECT_ENVIRONMENT")),
+            Some(
+                &crate::command::normalize_windows_verbatim_path(first.root.join("venv"))
+                    .into_os_string()
+            )
+        );
+        for (name, value) in &first.environment().unwrap() {
+            if name == "PYTEST_ADDOPTS" {
+                continue;
+            }
+            let path = PathBuf::from(value);
+            assert!(path.is_absolute());
+            #[cfg(windows)]
+            assert!(matches!(
+                path.components().next(),
+                Some(std::path::Component::Prefix(prefix))
+                    if matches!(prefix.kind(), std::path::Prefix::Disk(_))
+            ));
+            let actual = if name == "UV_PROJECT_ENVIRONMENT" {
+                path.parent().unwrap().canonicalize().unwrap()
+            } else {
+                path.canonicalize().unwrap()
+            };
+            assert!(actual == first.uv_cache || actual.starts_with(&first.root));
+        }
+        for name in [
+            "UV_PROJECT_ENVIRONMENT",
+            "UV_CACHE_DIR",
+            "RUFF_CACHE_DIR",
+            "MYPY_CACHE_DIR",
+            "PYTHONPYCACHEPREFIX",
+            "XDG_CACHE_HOME",
+            "TEMP",
+            "TMP",
+            "TMPDIR",
+            "PYTEST_ADDOPTS",
+            "HYPOTHESIS_STORAGE_DIRECTORY",
+        ] {
+            assert!(!verification_env_key_allowed(
+                VerificationTool::Uv,
+                WAKE2_PROFILE,
+                name
+            ));
+        }
+        assert!(
+            verification_command_environment(VerificationTool::Uv, WAKE2_PROFILE, None).is_err()
+        );
+        assert!(
+            verification_command_environment(VerificationTool::Cargo, "rust_full", None).is_ok()
+        );
+        assert!(
+            queue
+                .verification_runtime("../not-a-receipt", &roots)
+                .is_err()
+        );
+        let forbidden = projects[1].workspace.join("runtime");
+        assert!(
+            VerificationRuntime::prepare(forbidden.clone(), first.uv_cache.clone(), &roots)
+                .is_err()
+        );
+        assert!(!forbidden.exists());
+        let hypothesis = environment
+            .get(std::ffi::OsStr::new("HYPOTHESIS_STORAGE_DIRECTORY"))
+            .unwrap();
+        assert_eq!(
+            hypothesis,
+            &crate::command::normalize_windows_verbatim_path(first.root.join("hypothesis"))
+                .into_os_string()
+        );
+        fs::remove_dir(first.root.join("hypothesis")).unwrap();
+        assert!(
+            verification_command_environment(VerificationTool::Uv, WAKE2_PROFILE, Some(&first))
+                .is_err()
+        );
+        fs::create_dir(first.root.join("hypothesis")).unwrap();
+        fs::write(first.root.join("venv"), b"not a virtual environment").unwrap();
+        assert!(
+            verification_command_environment(VerificationTool::Uv, WAKE2_PROFILE, Some(&first))
+                .is_err()
+        );
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    #[ignore = "opt-in bounded offline test requires approved existing Python with Hypothesis"]
+    async fn real_hypothesis_uses_external_verification_runtime() {
+        let python = PathBuf::from(
+            std::env::var_os("CATDESK_TEST_PYTHON").expect("approved existing Python path"),
+        );
+        assert!(python.is_absolute());
+        let fixture = std::env::temp_dir().join(format!("catdesk hypothesis {}", Uuid::new_v4()));
+        fs::create_dir(&fixture).unwrap();
+        let workspace = fixture.join("project");
+        fs::create_dir(&workspace).unwrap();
+        let queue = QueueStore::open_at(fixture.join("operator-state")).unwrap();
+        let runtime = queue
+            .verification_runtime(
+                &Uuid::new_v4().to_string(),
+                std::slice::from_ref(&workspace),
+            )
+            .unwrap();
+        let (variables, _) =
+            verification_command_environment(VerificationTool::Uv, WAKE2_PROFILE, Some(&runtime))
+                .unwrap();
+        let script = "import os,pathlib; from hypothesis.configuration import storage_directory; from hypothesis.database import DirectoryBasedExampleDatabase; expected=pathlib.Path(os.environ['HYPOTHESIS_STORAGE_DIRECTORY']); storage=storage_directory('examples'); assert storage.path==expected/'examples'; storage.create_if_missing(); db=DirectoryBasedExampleDatabase(storage.path); db.save(b'catdesk-placement',b'bounded-canary'); assert list(db.fetch(b'catdesk-placement'))==[b'bounded-canary']; assert not pathlib.Path('.hypothesis').exists(); print('EXTERNAL_HYPOTHESIS_STORAGE_OK')";
+        let output = tokio::time::timeout(
+            Duration::from_secs(60),
+            tokio::process::Command::new(&python)
+                .args(["-B", "-c", script])
+                .current_dir(&workspace)
+                .env_clear()
+                .envs(variables)
+                .kill_on_drop(true)
+                .output(),
+        )
+        .await
+        .expect("bounded Hypothesis probe")
+        .expect("Python starts");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("EXTERNAL_HYPOTHESIS_STORAGE_OK"));
+        assert!(!workspace.join(".hypothesis").exists());
+        assert!(runtime.root.join("hypothesis/examples").is_dir());
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    #[ignore = "opt-in bounded offline test requires approved existing UV and Python executables"]
+    async fn real_uv_uses_external_verification_runtime() {
+        let uv =
+            PathBuf::from(std::env::var_os("CATDESK_TEST_UV").expect("approved existing UV path"));
+        let python = PathBuf::from(
+            std::env::var_os("CATDESK_TEST_PYTHON").expect("approved existing Python path"),
+        );
+        assert!(uv.is_absolute() && python.is_absolute());
+        let fixture = std::env::temp_dir().join(format!("catdesk uv runtime's {}", Uuid::new_v4()));
+        fs::create_dir(&fixture).unwrap();
+        let workspace = fixture.join("project");
+        fs::create_dir(&workspace).unwrap();
+        fs::write(workspace.join("pyproject.toml"), "[project]\nname = \"catdesk-runtime-canary\"\nversion = \"0.0.0\"\nrequires-python = \">=3.12\"\ndependencies = []\n[tool.uv]\npackage = false\n").unwrap();
+        let queue = QueueStore::open_at(fixture.join("operator state")).unwrap();
+        let runtime = queue
+            .verification_runtime(
+                &Uuid::new_v4().to_string(),
+                std::slice::from_ref(&workspace),
+            )
+            .unwrap();
+        let executable = TrustedVerificationExecutable {
+            sha256: native_executable_sha256(&uv).unwrap(),
+            executable: uv,
+        };
+        let lock = [
+            "uv",
+            "lock",
+            "--offline",
+            "--no-python-downloads",
+            "--no-config",
+            "--python",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .chain([python.to_string_lossy().into_owned()])
+        .collect::<Vec<_>>();
+        let prepared = execute_fixed_verification_command(
+            &workspace,
+            &executable,
+            VerificationTool::Uv,
+            WAKE2_PROFILE,
+            Some(&runtime),
+            &lock,
+            Duration::from_secs(60),
+        )
+        .await
+        .unwrap();
+        assert_eq!(prepared.exit_code, Some(0));
+        let script = "import os,sys,pathlib,shlex; root=pathlib.Path(os.environ['UV_PROJECT_ENVIRONMENT']).parent; assert os.path.samefile(sys.prefix,root/'venv'); assert os.path.samefile(pathlib.Path(os.environ['TEMP']).parent,root); assert not pathlib.Path(os.environ['TEMP']).drive.startswith(chr(92)*2); assert shlex.split(os.environ['PYTEST_ADDOPTS'])==['-o','cache_dir='+str(root/'pytest')]; assert not pathlib.Path('.venv').exists(); (root/'real-uv-observed-scope').write_text(sys.prefix); print('EXTERNAL_UV_RUNTIME_OK')";
+        let mut argv = [
+            "uv",
+            "run",
+            "--locked",
+            "--offline",
+            "--no-python-downloads",
+            "--no-env-file",
+            "--no-config",
+            "--python",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+        argv.extend([
+            python.to_string_lossy().into_owned(),
+            "--".into(),
+            "python".into(),
+            "-I".into(),
+            "-B".into(),
+            "-c".into(),
+            script.into(),
+        ]);
+        let result = execute_fixed_verification_command(
+            &workspace,
+            &executable,
+            VerificationTool::Uv,
+            WAKE2_PROFILE,
+            Some(&runtime),
+            &argv,
+            Duration::from_secs(60),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.exit_code, Some(0));
+        let observed_prefix =
+            fs::read_to_string(runtime.root.join("real-uv-observed-scope")).unwrap();
+        assert_eq!(
+            PathBuf::from(observed_prefix).canonicalize().unwrap(),
+            runtime.root.join("venv").canonicalize().unwrap()
+        );
+        for path in [
+            ".venv",
+            ".ruff_cache",
+            ".mypy_cache",
+            ".pytest_cache",
+            "__pycache__",
+        ] {
+            assert!(!workspace.join(path).exists());
+        }
+        println!(
+            "REAL_UV_EXTERNAL_RUNTIME_PASS executableSha256={} environmentSha256={} sourceCachesAbsent=true",
+            executable.sha256, result.environment_sha256
+        );
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
     async fn fixed_python_profiles_capture_source_command_exits_and_refuse_rebound_argv() {
         for profile in ["python_uv_group_dev_v1", "python_uv_extras_dev_lab_v1"] {
             let (fixture, projects, queue, receipt_id, uv) =
@@ -8258,6 +9076,9 @@ mod tests {
             );
             assert_eq!(result["verification"]["independentReview"], "PENDING");
             assert_eq!(result["verification"]["wakeReady"], false);
+            let runtime = PathBuf::from(result["runtimeRoot"].as_str().unwrap());
+            assert!(runtime.join("fixture-child-observed-scope").is_file());
+            assert!(!projects[1].workspace.join(".venv").exists());
             let receipt = queue.read_receipt(&receipt_id).unwrap();
             let candidate = queue.read_review_candidate(&receipt).unwrap();
             let (artifact, _) = queue
@@ -9095,6 +9916,7 @@ mod tests {
             requested_model: claimed.model.clone(),
             requested_effort: claimed.effort.clone(),
             requested_cyber_access_program: None,
+            requested_windows_sandbox: None,
             actual_profile: Some(actual_profile),
             profile_readback_diagnostic: None,
             native_executable: None,
@@ -9103,6 +9925,7 @@ mod tests {
             evidence_level: "NATIVE_EXIT_OBSERVED".into(),
             exit_code: Some(0),
             child_exit_observed: true,
+            tree_exit_proven: true,
             binding_still_matches: true,
             outcome: "NATIVE_EXIT_ZERO".into(),
             recorded_at_unix: unix_now().unwrap(),
@@ -9354,6 +10177,30 @@ mod tests {
             "edit a test",
         ];
         assert!(matches!(parse(&add), Ok(QueueAction::Add { .. })));
+        assert!(matches!(
+            parse(&[&add[..], &["--windows-sandbox", "mxc"]].concat()),
+            Ok(QueueAction::Add { windows_sandbox: Some(mode), .. }) if mode == "mxc"
+        ));
+        for unsupported in [
+            "MXC",
+            "elevated",
+            "unelevated",
+            "danger-full-access",
+            "mxc;evil",
+        ] {
+            assert!(parse(&[&add[..], &["--windows-sandbox", unsupported]].concat()).is_err());
+        }
+        assert!(
+            parse(&[
+                "operator",
+                "codex",
+                "queue",
+                "dispatch",
+                "--windows-sandbox",
+                "mxc"
+            ])
+            .is_err()
+        );
         assert!(matches!(
             parse(&[&add[..], &["--cyber-access-program", "standard"]].concat()),
             Ok(QueueAction::Add {
@@ -9952,6 +10799,100 @@ mod tests {
     }
 
     #[test]
+    fn queued_mxc_is_explicit_preserves_workspace_policy_and_changes_request_identity() {
+        let (fixture, projects, queue) = three_project_fixture(1);
+        let project = &projects[1];
+        let legacy = QueueJob::new(
+            "mxc-opt-in".into(),
+            project,
+            "fixture".into(),
+            Some("gpt-6.1-sol".into()),
+            Some("medium".into()),
+        )
+        .unwrap();
+        let old_wire = serde_json::to_value(&legacy).unwrap();
+        assert!(old_wire.get("windowsSandbox").is_none());
+        let reopened: QueueJob = serde_json::from_value(old_wire).unwrap();
+        assert!(reopened.windows_sandbox.is_none());
+        assert!(legacy.same_request(&reopened));
+        let default_args = queued_native_invocation_args(&legacy, project).unwrap();
+        assert!(
+            !default_args
+                .iter()
+                .any(|arg| arg.starts_with("windows.sandbox="))
+        );
+
+        let mut opted_in = legacy.clone();
+        opted_in.windows_sandbox = Some("mxc".into());
+        opted_in.schema_version = WINDOWS_SANDBOX_TASK_SCHEMA_VERSION;
+        opted_in.cyber_access_program = Some("standard".into());
+        assert!(!legacy.same_request(&opted_in));
+        queue.save_job(&opted_in).unwrap();
+        let loaded = queue
+            .load_job(&project.project_id, "mxc-opt-in")
+            .unwrap()
+            .unwrap();
+        assert_eq!(loaded.windows_sandbox.as_deref(), Some("mxc"));
+        assert_eq!(loaded.schema_version, WINDOWS_SANDBOX_TASK_SCHEMA_VERSION);
+        let mut field_lost = serde_json::to_value(&loaded).unwrap();
+        field_lost.as_object_mut().unwrap().remove("windowsSandbox");
+        let field_lost: QueueJob = serde_json::from_value(field_lost).unwrap();
+        assert!(
+            validate_job(&field_lost).is_err(),
+            "dropping the implementation request cannot produce a legacy task"
+        );
+        let mut legacy_schema = loaded.clone();
+        legacy_schema.schema_version = QUEUE_SCHEMA_VERSION;
+        assert!(
+            validate_job(&legacy_schema).is_err(),
+            "MXC must never be serialized as an old-reader executable task"
+        );
+        assert_eq!(loaded.summary()["windowsSandbox"], "mxc");
+        let invocation = queued_native_invocation_args(&loaded, project);
+        if cfg!(windows) {
+            let args = invocation.unwrap();
+            assert_eq!(&args[..2], &["-c", "windows.sandbox=\"mxc\""]);
+            assert!(
+                args.windows(2)
+                    .any(|pair| pair == ["--sandbox", "workspace-write"])
+            );
+            assert!(
+                args.windows(2)
+                    .any(|pair| pair == ["-c", "sandbox_mode=\"workspace-write\""])
+            );
+            assert!(
+                args.windows(2)
+                    .any(|pair| pair == ["--ask-for-approval", "never"])
+            );
+            assert!(
+                args.windows(2)
+                    .any(|pair| pair == ["--model", "gpt-6.1-sol"])
+            );
+            assert!(
+                args.windows(2)
+                    .any(|pair| pair == ["--cyber-access-program", "standard"])
+            );
+            assert!(args.contains(&"model_reasoning_effort=medium".to_string()));
+            assert_eq!(
+                &args[args.len() - 2..],
+                &[loaded.binding.thread_id.as_str(), "-"]
+            );
+            assert!(
+                !args
+                    .iter()
+                    .any(|arg| arg.contains("danger-full-access") || arg == "--yolo")
+            );
+        } else {
+            assert!(invocation.is_err());
+        }
+        let mut unsupported = opted_in;
+        unsupported.windows_sandbox = Some("unelevated".into());
+        assert!(queue.save_job(&unsupported).is_err());
+        assert!(queued_native_invocation_args(&unsupported, project).is_err());
+        cleanup(fixture);
+    }
+
+    #[test]
     fn opted_in_receipt_and_review_bind_requested_program_without_effective_claim() {
         let (fixture, projects, queue) = three_project_fixture(1);
         let mut job = QueueJob::new(
@@ -9963,6 +10904,8 @@ mod tests {
         )
         .expect("job");
         job.cyber_access_program = Some(SUPPORTED_CYBER_ACCESS_PROGRAM.into());
+        job.windows_sandbox = Some("mxc".into());
+        job.schema_version = WINDOWS_SANDBOX_TASK_SCHEMA_VERSION;
         queue.save_job(&job).expect("persist opted-in job");
         let claimed = claim_one(&projects[0].workspace, &queue)
             .expect("claim")
@@ -9971,6 +10914,7 @@ mod tests {
             outcome: "NATIVE_EXIT_ZERO",
             exit_code: Some(0),
             child_exit_observed: true,
+            tree_exit_proven: true,
             child_absent_proven: false,
             marker_retired: true,
             native_executable: None,
@@ -9996,6 +10940,9 @@ mod tests {
             "standard"
         );
         assert!(receipt.actual_profile.is_none());
+        assert_eq!(receipt.requested_windows_sandbox.as_deref(), Some("mxc"));
+        assert_eq!(receipt.schema_version, WINDOWS_SANDBOX_TASK_SCHEMA_VERSION);
+        assert_eq!(completed["receipt"]["requestedWindowsSandbox"], "mxc");
         let candidate = queue
             .read_review_candidate(&receipt)
             .expect("bound review candidate");
@@ -10003,9 +10950,25 @@ mod tests {
             candidate.requested_cyber_access_program.as_deref(),
             Some("standard")
         );
+        assert_eq!(candidate.requested_windows_sandbox.as_deref(), Some("mxc"));
+        assert_eq!(
+            candidate.schema_version,
+            WINDOWS_SANDBOX_TASK_SCHEMA_VERSION
+        );
         let mut unbound = receipt.clone();
         unbound.requested_cyber_access_program = None;
         assert!(queue.read_review_candidate(&unbound).is_err());
+        let mut missing_mode = receipt.clone();
+        missing_mode.requested_windows_sandbox = None;
+        assert!(queue.read_review_candidate(&missing_mode).is_err());
+        let mut changed_job = queue
+            .load_job(&projects[1].project_id, "standard_receipt")
+            .unwrap()
+            .unwrap();
+        changed_job.windows_sandbox = None;
+        changed_job.schema_version = QUEUE_SCHEMA_VERSION;
+        queue.save_job(&changed_job).unwrap();
+        assert!(queue.read_review_candidate(&receipt).is_err());
         cleanup(fixture);
     }
 
@@ -10104,6 +11067,7 @@ mod tests {
                 },
                 exit_code: Some(if iteration == 0 { 1 } else { 0 }),
                 child_exit_observed: true,
+                tree_exit_proven: true,
                 child_absent_proven: false,
                 marker_retired: true,
                 native_executable: None,
@@ -10149,6 +11113,91 @@ mod tests {
         assert!(!projects[1].workspace.join(".catdesk").exists());
         assert!(!projects[2].workspace.join(".catdesk").exists());
         cleanup(fixture);
+    }
+
+    #[test]
+    fn parent_exit_is_not_tree_authority_and_cleaned_timeouts_never_requeue() {
+        for (tree_exit_proven, marker_retired, outcome, expected, released) in [
+            (false, true, "NATIVE_EXIT_ZERO", "UNKNOWN", false),
+            (false, true, "NATIVE_EXIT_NONZERO", "UNKNOWN", false),
+            (true, false, "NATIVE_TIMEOUT", "ATTENTION", true),
+            (true, false, "NATIVE_PROMPT_PIPE_FAILED", "ATTENTION", true),
+            (true, true, "NATIVE_EXIT_NONZERO", "FAILED", true),
+        ] {
+            let (fixture, projects, queue) = three_project_fixture(2);
+            let control = &projects[0].workspace;
+            for project in projects.iter().skip(1) {
+                queue
+                    .save_job(
+                        &QueueJob::new(
+                            format!("job_{}", project.project_id),
+                            project,
+                            "fixture".into(),
+                            None,
+                            None,
+                        )
+                        .unwrap(),
+                    )
+                    .unwrap();
+            }
+            let claimed = claim_one(control, &queue).unwrap().unwrap();
+            assert_eq!(claimed.binding.project_id, "alpha");
+            let result = complete_attempt(
+                control,
+                &queue,
+                &claimed,
+                TurnResult {
+                    outcome,
+                    exit_code: Some(if outcome == "NATIVE_EXIT_ZERO" { 0 } else { 1 }),
+                    child_exit_observed: true,
+                    child_absent_proven: false,
+                    tree_exit_proven,
+                    marker_retired,
+                    native_executable: None,
+                    native_version: None,
+                    native_executable_sha256: None,
+                    actual_profile: None,
+                    profile_readback_diagnostic: None,
+                    review_before: Some(mock_git_witness()),
+                    review_after: Some(mock_git_witness()),
+                },
+            )
+            .unwrap();
+            assert_eq!(result["job"]["state"], expected);
+            assert_eq!(result["leaseReleased"], released);
+            assert!(result["job"]["reviewCandidateSha256"].is_null());
+            let receipt = queue
+                .read_receipt(&claimed.attempt.as_ref().unwrap().attempt_id)
+                .unwrap();
+            assert_eq!(receipt.tree_exit_proven, tree_exit_proven);
+            let mut old = serde_json::to_value(&receipt).unwrap();
+            old.as_object_mut().unwrap().remove("treeExitProven");
+            assert!(
+                !serde_json::from_value::<QueueReceipt>(old)
+                    .unwrap()
+                    .tree_exit_proven
+            );
+            // Cold reopen cannot reinterpret this as READY, and another project
+            // can still obtain the independent slot while alpha is unresolved.
+            let reopened = QueueStore::open_at(queue.root.clone()).unwrap();
+            let next = claim_one(control, &reopened).unwrap().unwrap();
+            assert_eq!(next.binding.project_id, "beta");
+            assert_eq!(
+                reopened
+                    .load_job("alpha", "job_alpha")
+                    .unwrap()
+                    .unwrap()
+                    .state,
+                if expected == "UNKNOWN" {
+                    QueueState::Unknown
+                } else if expected == "FAILED" {
+                    QueueState::Failed
+                } else {
+                    QueueState::Attention
+                }
+            );
+            cleanup(fixture);
+        }
     }
 
     #[test]
@@ -10330,6 +11379,236 @@ mod tests {
             .expect("fixture scheduler")
             .release_workspace_lease(&claimed.attempt.expect("exact attempt").lease)
             .expect("release fixture lease");
+        cleanup(fixture);
+    }
+
+    #[test]
+    fn exact_dispatch_task_parser_requires_all_identity_pins_and_no_launch_overrides() {
+        let root = std::env::temp_dir().to_string_lossy().into_owned();
+        let hash = "a".repeat(64);
+        let base = [
+            "operator",
+            "codex",
+            "queue",
+            "dispatch-task",
+            "--project-id",
+            "alpha",
+            "--workspace",
+            &root,
+            "--task-id",
+            "job_alpha",
+            "--expected-binding-sha256",
+            &hash,
+        ];
+        assert!(matches!(parse(&base), Ok(QueueAction::DispatchTask { .. })));
+        for count in [4, 6, 8, 10] {
+            assert!(parse(&base[..count]).is_err());
+        }
+        for (flag, value) in [
+            ("--model", "gpt-6.1-sol"),
+            ("--task", "replacement"),
+            ("--effort", "medium"),
+            ("--windows-sandbox", "mxc"),
+        ] {
+            let mut args = base.to_vec();
+            args.extend([flag, value]);
+            assert!(parse(&args).is_err());
+        }
+        let mut bad = base;
+        bad[11] = "not-a-hash";
+        assert!(parse(&bad).is_err());
+    }
+
+    #[test]
+    fn frozen_native_request_pin_refuses_material_substitution_but_not_state_changes() {
+        let (fixture, projects, queue) = three_project_fixture(2);
+        let project = &projects[1];
+        let job = QueueJob::new(
+            "frozen_native".into(),
+            project,
+            "approved prompt".into(),
+            Some("gpt-6.1-sol".into()),
+            Some("medium".into()),
+        )
+        .unwrap();
+        let pin = job.request_sha256();
+        assert_eq!(job.summary()["requestSha256"], pin);
+        let mut changed = job.clone();
+        changed.state = QueueState::Attention;
+        changed.receipt_id = Some(Uuid::new_v4().to_string());
+        assert_eq!(changed.request_sha256(), pin);
+        for change in ["prompt", "model", "effort", "sandbox", "cyber", "binding"] {
+            let mut changed = job.clone();
+            match change {
+                "prompt" => {
+                    changed.prompt = "substituted".into();
+                    changed.prompt_sha256 =
+                        format!("{:x}", Sha256::digest(changed.prompt.as_bytes()));
+                }
+                "model" => changed.model = Some("gpt-6.1-terra".into()),
+                "effort" => changed.effort = Some("high".into()),
+                "sandbox" => changed.windows_sandbox = Some("mxc".into()),
+                "cyber" => changed.cyber_access_program = Some("standard".into()),
+                _ => changed.binding.thread_id = Uuid::new_v4().to_string(),
+            }
+            assert_ne!(changed.request_sha256(), pin, "{change}");
+        }
+        queue.save_job(&job).unwrap();
+        let foreign_path = queue.job_path("beta", "malformed_foreign");
+        fs::write(&foreign_path, b"{malformed sibling retained").unwrap();
+        assert!(queue.jobs().is_err());
+        let bytes = fs::read(queue.job_path("alpha", "frozen_native")).unwrap();
+        let scope = job.binding.scope();
+        let binding = project_binding_sha256(project).unwrap();
+        let bad = "0".repeat(64);
+        assert!(
+            claim_selected(
+                &projects[0].workspace,
+                &queue,
+                Some((&scope, &job.task_id, &binding, Some(&bad)))
+            )
+            .unwrap_err()
+            .contains("request changed")
+        );
+        assert_eq!(
+            fs::read(queue.job_path("alpha", "frozen_native")).unwrap(),
+            bytes
+        );
+        assert_eq!(
+            fs::read_dir(projects[0].workspace.join(".catdesk/projects/leases"))
+                .unwrap()
+                .count(),
+            0
+        );
+        let claimed = claim_selected(
+            &projects[0].workspace,
+            &queue,
+            Some((&scope, &job.task_id, &binding, Some(&pin))),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(claimed.request_sha256(), pin);
+        assert_eq!(
+            fs::read(foreign_path).unwrap(),
+            b"{malformed sibling retained"
+        );
+        cleanup(fixture);
+    }
+
+    #[test]
+    fn exact_dispatch_parser_accepts_only_a_valid_optional_request_pin() {
+        let root = std::env::temp_dir().to_string_lossy().into_owned();
+        let binding = "b".repeat(64);
+        let request = "c".repeat(64);
+        let base = [
+            "catdesk",
+            "codex",
+            "queue",
+            "dispatch-task",
+            "--project-id",
+            "alpha",
+            "--workspace",
+            root.as_str(),
+            "--task-id",
+            "frozen_native",
+            "--expected-binding-sha256",
+            binding.as_str(),
+        ];
+        let mut args = base.to_vec();
+        args.extend(["--expected-request-sha256", request.as_str()]);
+        assert!(
+            matches!(parse(&args), Ok(QueueAction::DispatchTask { expected_request_sha256: Some(pin), .. }) if pin == request)
+        );
+        for invalid in [
+            "not-a-hash",
+            "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+        ] {
+            let mut args = base.to_vec();
+            args.extend(["--expected-request-sha256", invalid]);
+            assert!(parse(&args).is_err());
+        }
+    }
+
+    #[test]
+    fn exact_dispatch_task_claim_is_cold_durable_and_never_mutates_sibling_jobs() {
+        let (fixture, projects, queue) = three_project_fixture(2);
+        let control = &projects[0].workspace;
+        for (project, id) in [
+            (&projects[1], "alpha_first"),
+            (&projects[1], "alpha_second"),
+            (&projects[2], "beta_stale"),
+        ] {
+            let mut job =
+                QueueJob::new(id.into(), project, "fixture task".into(), None, None).unwrap();
+            if id == "beta_stale" {
+                job.binding.thread_id = Uuid::new_v4().to_string();
+            }
+            queue.save_job(&job).unwrap();
+        }
+        let foreign = fs::read(queue.job_path("beta", "beta_stale")).unwrap();
+        let earlier = fs::read(queue.job_path("alpha", "alpha_first")).unwrap();
+        let second = fs::read(queue.job_path("alpha", "alpha_second")).unwrap();
+        let scope = CodexScope {
+            project_id: "alpha".into(),
+            workspace: projects[1].workspace.clone(),
+        };
+        let hash = project_binding_sha256(&projects[1]).unwrap();
+        // No fallback to the native workspace or ambient current directory.
+        assert!(
+            claim_selected(
+                &projects[1].workspace,
+                &queue,
+                Some((&scope, "alpha_second", &hash, None))
+            )
+            .is_err()
+        );
+        assert!(
+            claim_selected(
+                control,
+                &queue,
+                Some((&scope, "alpha_second", &"a".repeat(64), None))
+            )
+            .is_err()
+        );
+        assert_eq!(
+            fs::read(queue.job_path("alpha", "alpha_second")).unwrap(),
+            second
+        );
+        assert!(
+            claim_selected(control, &queue, Some((&scope, "missing", &hash, None)))
+                .unwrap()
+                .is_none()
+        );
+        let claimed = claim_selected(control, &queue, Some((&scope, "alpha_second", &hash, None)))
+            .unwrap()
+            .unwrap();
+        assert_eq!(claimed.task_id, "alpha_second");
+        assert_eq!(claimed.binding.project_id, "alpha");
+        assert_eq!(
+            fs::read(queue.job_path("beta", "beta_stale")).unwrap(),
+            foreign
+        );
+        assert_eq!(
+            fs::read(queue.job_path("alpha", "alpha_first")).unwrap(),
+            earlier
+        );
+        assert!(
+            claim_selected(control, &queue, Some((&scope, "alpha_second", &hash, None)))
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            queue
+                .load_job("alpha", "alpha_second")
+                .unwrap()
+                .unwrap()
+                .state,
+            QueueState::Claimed
+        );
+        scheduler(control)
+            .unwrap()
+            .release_workspace_lease(&claimed.attempt.unwrap().lease)
+            .unwrap();
         cleanup(fixture);
     }
 
@@ -10682,6 +11961,7 @@ mod tests {
             requested_model: None,
             requested_effort: None,
             requested_cyber_access_program: None,
+            requested_windows_sandbox: None,
             actual_profile: None,
             native_executable: None,
             native_version: None,
@@ -10690,6 +11970,7 @@ mod tests {
             profile_readback_diagnostic: None,
             exit_code: Some(0),
             child_exit_observed: true,
+            tree_exit_proven: true,
             binding_still_matches: true,
             outcome: "NATIVE_EXIT_ZERO".into(),
             recorded_at_unix: unix_now().unwrap(),
@@ -10743,6 +12024,7 @@ mod tests {
                 outcome: "NATIVE_EXIT_ZERO",
                 exit_code: Some(0),
                 child_exit_observed: true,
+                tree_exit_proven: true,
                 child_absent_proven: false,
                 marker_retired: true,
                 native_executable: None,
@@ -10794,6 +12076,7 @@ mod tests {
             requested_model: None,
             requested_effort: None,
             requested_cyber_access_program: None,
+            requested_windows_sandbox: None,
             actual_profile: None,
             native_executable: None,
             native_version: None,
@@ -10802,6 +12085,7 @@ mod tests {
             profile_readback_diagnostic: None,
             exit_code: None,
             child_exit_observed: false,
+            tree_exit_proven: false,
             binding_still_matches: false,
             outcome: "FIXTURE".into(),
             recorded_at_unix: unix_now().unwrap(),
@@ -10836,6 +12120,7 @@ mod tests {
                     outcome: "REVIEW_POST_SNAPSHOT_UNAVAILABLE",
                     exit_code: Some(0),
                     child_exit_observed: true,
+                    tree_exit_proven: true,
                     child_absent_proven: false,
                     marker_retired: true,
                     native_executable: None,
@@ -10908,6 +12193,7 @@ mod tests {
                     outcome: "NATIVE_EXIT_ZERO",
                     exit_code: Some(0),
                     child_exit_observed: true,
+                    tree_exit_proven: true,
                     child_absent_proven: false,
                     marker_retired: drift,
                     native_executable: None,

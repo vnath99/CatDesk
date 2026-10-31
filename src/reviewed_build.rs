@@ -51,7 +51,8 @@ use crate::reviewed_source_snapshot::{
     validate_committed_snapshot, write_new_regular_in,
 };
 use crate::windows_protected_fs::{
-    ProtectedDirectoryGuard, read_optional_relative_regular, validate_protected_component,
+    DeleteOnCloseRegularLock, ProtectedDirectoryGuard, create_delete_on_close_regular_lock,
+    read_optional_relative_regular, validate_protected_component,
     write_unique_regular_for_atomic_replace,
 };
 
@@ -134,6 +135,9 @@ const CONTROL_CHILDREN: &[&str] = &[
 ];
 const ACTIVE_GENERATION_FILE: &str = "active-generation.json";
 const RETRY_HISTORY_DIRECTORY: &str = "terminal-history";
+const SUCCESS_HISTORY_DIRECTORY: &str = "successful-history";
+const SUCCESS_AUDIT_DOMAIN: &str = "CATDESK_REVIEWED_BUILD_ATTESTED_SUCCESSION_V1";
+const MAX_REVIEWED_BUILD_GENERATIONS: usize = 4096;
 const RETRY_PLAN_DIRECTORY: &str = "retry-plans";
 const RETRY_GENERATION_DIRECTORY: &str = "generations";
 
@@ -5059,8 +5063,22 @@ struct ReviewedBuildTerminalAuditV1 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReviewedBuildSuccessAuditV1 {
+    schema_version: u8,
+    domain: String,
+    attempt: ReviewedBuildAttemptV1,
+    claim: ReviewedBuildClaimV1,
+    owner: ReviewedBuildOwnerProofV1,
+    result: ReviewedBuildResultV1,
+    attestation: ReviewedBuildAttestationV2,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ReviewedBuildRetryPlanV1 {
+    // V1 retains failed/unclaimed predecessors. V2 retains an independently
+    // revalidated successful producer; success is never a retryable failure.
     schema_version: u8,
     source_attempt_id: String,
     source_attempt_digest: String,
@@ -5083,6 +5101,24 @@ impl std::ops::Deref for BuildControlRoot {
     fn deref(&self) -> &Self::Target {
         self.guard.path()
     }
+}
+
+// One existing crash-safe filesystem lock coordinates only this workspace's
+// short producer admission transitions. Independent project execution and the
+// owned build itself do not hold it. Re-resolve the active generation AFTER
+// acquisition so a waiter cannot claim a superseded generation.
+fn admitted_control_root(
+    workspace: &Path,
+) -> Result<(BuildControlRoot, DeleteOnCloseRegularLock), String> {
+    let initial = control_root(workspace)?;
+    let lock = create_delete_on_close_regular_lock(
+        &initial.base_guard,
+        "admission.lock",
+        "reviewed build admission",
+    )
+    .map_err(|_| "REVIEWED_BUILD_ADMISSION_BUSY".to_string())?;
+    let current = control_root(workspace)?;
+    Ok((current, lock))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -5108,35 +5144,71 @@ pub fn validate_producer_attestation(
     {
         return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
     }
-    let control = existing_control_root(workspace)?;
+    let candidate_attempt = candidate_attempt_id(candidate_relative_path)
+        .ok_or_else(|| "REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".to_string())?;
+    let control = reachable_producer_control(workspace, candidate_attempt)?;
     let attempt: ReviewedBuildAttemptV1 = control_read_json(&control, "attempt.json")?;
-    validate_attempt(
-        workspace,
+    if !exact_attempt_basics(
         &attempt,
         review_record_id,
         review_authority_sha256,
         expected,
-    )?;
-    let result: ReviewedBuildResultV1 = control_read_json(&control, "result.json")?;
+    ) || attempt.review_session_id != review_session_id
+    {
+        return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+    }
+    validate_historical_terminal_attempt(workspace, &attempt)?;
+    let audit = read_successful_producer(workspace, &control, &attempt)?;
+    if audit.attestation.candidate_relative_path != candidate_relative_path
+        || audit.attestation.candidate_sha256 != candidate_sha256
+    {
+        return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+    }
+    Ok(audit.attestation)
+}
+
+fn candidate_attempt_id(path: &str) -> Option<&str> {
+    let id = path
+        .strip_prefix("target/reviewed-builds/")?
+        .strip_suffix("/catdesk.exe")?;
+    (valid_attempt_id(id) && id == id.to_ascii_lowercase()).then_some(id)
+}
+
+/// Read the complete immutable producer family and re-open its exact candidate.
+/// Snapshot/tool authority is validated by the caller before this read.
+fn read_successful_producer(
+    workspace: &Path,
+    control: &BuildControlRoot,
+    attempt: &ReviewedBuildAttemptV1,
+) -> Result<ReviewedBuildSuccessAuditV1, String> {
+    let result: ReviewedBuildResultV1 = control_read_json(control, "result.json")?;
     if result.schema_version != RESULT_SCHEMA_VERSION
         || result.build_attempt_id != attempt.build_attempt_id
         || result.state != "BUILD_ATTESTED"
+        || result.failure_code.is_some()
+        || result.failure_diagnostic.is_some()
     {
         return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
     }
-    let claim: ReviewedBuildClaimV1 = control_read_json(&control, "claim.json")?;
-    if !valid_claim(&claim, &attempt)
+    let claim: ReviewedBuildClaimV1 = control_read_json(control, "claim.json")?;
+    let owner: ReviewedBuildOwnerProofV1 = control_read_json(control, "worker-owner.json")?;
+    if !valid_claim(&claim, attempt)
         || claim.owner_id != result.owner_id
-        || !control_has_valid_owner_proof(&control, &claim)?
+        || !valid_owner_proof(&owner, &claim)
     {
         return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
     }
-    let attestation: ReviewedBuildAttestationV2 = control_read_json(&control, "attestation.json")?;
+    let attestation: ReviewedBuildAttestationV2 = control_read_json(control, "attestation.json")?;
+    if candidate_attempt_id(&attestation.candidate_relative_path)
+        != Some(attempt.build_attempt_id.as_str())
+    {
+        return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+    }
     validate_attestation(
         &attestation,
-        &attempt,
-        candidate_relative_path,
-        candidate_sha256,
+        attempt,
+        &attestation.candidate_relative_path,
+        &attestation.candidate_sha256,
     )?;
     if result.attestation_digest.as_deref() != Some(attestation.attestation_digest.as_str()) {
         return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
@@ -5150,7 +5222,15 @@ pub fn validate_producer_attestation(
     {
         return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
     }
-    Ok(attestation)
+    Ok(ReviewedBuildSuccessAuditV1 {
+        schema_version: 1,
+        domain: SUCCESS_AUDIT_DOMAIN.into(),
+        attempt: attempt.clone(),
+        claim,
+        owner,
+        result,
+        attestation,
+    })
 }
 
 pub fn prepare_reviewed_build(
@@ -5169,7 +5249,7 @@ pub fn prepare_reviewed_build(
         .map_err(|_| "REVIEWED_SOURCE_SNAPSHOT_REQUIRED".to_string())?;
     let policy = fixed_policy();
     let (cargo, rustc) = trusted_toolchain()?;
-    let control = control_root(workspace)?;
+    let (control, _admission) = admitted_control_root(workspace)?;
     let mut attempt = ReviewedBuildAttemptV1 {
         schema_version: ATTEMPT_SCHEMA_VERSION,
         build_attempt_id: Uuid::new_v4().simple().to_string(),
@@ -5194,6 +5274,26 @@ pub fn prepare_reviewed_build(
         )),
         Err(_) => {
             let existing: ReviewedBuildAttemptV1 = control_read_json(&control, "attempt.json")?;
+            if same_review_binding(&existing, &attempt)
+                && successful_producer_audit(workspace, &control, &existing).is_ok()
+            {
+                return Ok((
+                    existing.confirmation_token,
+                    ReviewedBuildPublicOutcomeV1 {
+                        state: "BUILD_ATTESTED",
+                    },
+                ));
+            }
+            if !same_review_binding(&existing, &attempt)
+                && let Some(retained) = retained_successful_binding(workspace, &attempt)?
+            {
+                return Ok((
+                    retained.confirmation_token,
+                    ReviewedBuildPublicOutcomeV1 {
+                        state: "BUILD_ATTESTED",
+                    },
+                ));
+            }
             if exact_attempt_matches(
                 &existing,
                 review_record_id,
@@ -5221,14 +5321,17 @@ pub fn prepare_reviewed_build(
                 }
             } else {
                 // A different acknowledged binding may supersede an exact
-                // active family only before any worker ownership/execution
-                // evidence exists, or after the existing fully-audited
-                // retryable terminal failure path. The prior attempt remains
-                // immutable in both cases.
+                // active family before ownership, after an audited failure,
+                // or after full successful-producer revalidation. Every
+                // predecessor remains immutable.
                 validate_historical_terminal_attempt(workspace, &existing)
                     .map_err(|_| "REVIEWED_BUILD_BINDING_IMMUTABLE".to_string())?;
                 if unclaimed_prepared_attempt(&control, &existing)? {
                     prepare_unclaimed_prepared_supersession(&control, &existing, attempt)
+                } else if !same_review_binding(&existing, &attempt)
+                    && let Ok(audit) = successful_producer_audit(workspace, &control, &existing)
+                {
+                    prepare_successful_succession(&control, &existing, audit, attempt)
                 } else {
                     terminal_failure_audit(&control, &existing)
                         .map_err(|_| "REVIEWED_BUILD_BINDING_IMMUTABLE".to_string())
@@ -5246,7 +5349,7 @@ pub fn confirm_reviewed_build(
     confirmation_token: &str,
     spawn: impl FnOnce(&ReviewedBuildAttemptV1, &str) -> Result<(), String>,
 ) -> Result<ReviewedBuildPublicOutcomeV1, String> {
-    let control = control_root(workspace)?;
+    let (control, _admission) = admitted_control_root(workspace)?;
     let attempt: ReviewedBuildAttemptV1 = control_read_json(&control, "attempt.json")?;
     if attempt.confirmation_token != confirmation_token {
         return Err("REVIEWED_BUILD_CONFIRMATION_UNAVAILABLE".into());
@@ -5344,6 +5447,17 @@ fn sanitized_build_failure_category(
             Some("CARGO_COMPILATION_FAILED") => "CARGO_COMPILATION_FAILED",
             Some("CARGO_EXIT_NONZERO") => "CARGO_EXIT_NONZERO",
             _ => "CARGO_CLASSIFICATION_UNAVAILABLE",
+        }
+    } else if phase == "CARGO_TIMEOUT" {
+        match result
+            .failure_diagnostic
+            .as_ref()
+            .map(|diagnostic| diagnostic.classification.as_str())
+        {
+            Some("ROOT_RUNNING") => "ROOT_RUNNING",
+            Some("DESCENDANTS_ACTIVE") => "DESCENDANTS_ACTIVE",
+            Some("STDERR_EOF_PENDING") => "STDERR_EOF_PENDING",
+            _ => "NOT_APPLICABLE",
         }
     } else {
         "NOT_APPLICABLE"
@@ -5488,6 +5602,7 @@ pub fn run_reviewed_build_worker(
             &cargo_home,
             &rustc_pin.evidence.absolute_path,
         )?;
+        let native_helper = pin_msvc_helper_for_configured_cargo(&command)?;
         // The job is allocated before process creation.  Windows starts Cargo
         // suspended, attaches its process to the job, then resumes it through
         // the process handle.  Cargo cannot execute a build script before the
@@ -5506,47 +5621,54 @@ pub fn run_reviewed_build_worker(
         // is retained and it is reduced to a redacted classification/digest
         // below, so diagnostic capture cannot change Cargo pipe behavior or
         // persist paths, credentials, or raw compiler output.
-        let mut stderr_reader = Some(std::thread::spawn(move || {
-            read_bounded_cargo_stderr(stderr)
-        }));
+        let stderr_reader = std::thread::spawn(move || read_bounded_cargo_stderr(stderr));
         // Kill-on-close binds Cargo and all inherited compiler/linker/build
         // script descendants to this closed worker, rather than trusting a
         // single Cargo PID.  Platforms without this reviewed ownership
         // primitive fail closed before a build can become authority.
         job.assign(&child)?;
         job.resume(&child)?;
-        let started = std::time::Instant::now();
-        loop {
-            if let Some(status) = child
-                .try_wait()
-                .map_err(|_| "REVIEWED_BUILD_FAILED".to_string())?
-            {
-                if !status.success() {
-                    let captured_stderr = stderr_reader
-                        .take()
-                        .and_then(|reader| reader.join().ok())
-                        .and_then(Result::ok)
-                        .unwrap_or_default();
-                    failure_diagnostic =
-                        Some(summarize_cargo_failure(status.code(), captured_stderr));
-                    return Err("REVIEWED_BUILD_FAILED".into());
-                }
-                break;
-            }
-            if started.elapsed() > BUILD_TIMEOUT {
-                let _ = child.kill();
-                let _ = job.terminate();
-                let _ = child.wait();
-                return Err("REVIEWED_BUILD_TIMEOUT".into());
-            }
-            std::thread::sleep(Duration::from_millis(50));
+        let mut helper_cleanup = Vec::new();
+        let mut timeout_observation = None;
+        let waited = wait_for_owned_build_exit_with_observation(
+            &mut child,
+            &job,
+            &stderr_reader,
+            BUILD_TIMEOUT,
+            native_helper.as_ref(),
+            &mut helper_cleanup,
+            &mut timeout_observation,
+        );
+        if !helper_cleanup.is_empty() {
+            // Audit only: this file grants no build, candidate or release authority.
+            let bytes = serde_json::to_vec(&helper_cleanup)
+                .map_err(|_| "REVIEWED_BUILD_PROCESS_UNAVAILABLE")?;
+            write_new_regular_in(
+                &target_guard,
+                "native-helper-cleanup.json",
+                &bytes,
+                "reviewed build native helper cleanup",
+            )?;
         }
-        // The child has exited successfully; complete the drain before moving
-        // to tool remeasurement.  Success retains no diagnostic material.
-        let _ = stderr_reader
-            .take()
-            .and_then(|reader| reader.join().ok())
-            .and_then(Result::ok);
+        let status = match waited {
+            Ok(status) => status,
+            Err(error) => {
+                failure_diagnostic =
+                    diagnostic_after_confirmed_timeout(&error, timeout_observation, stderr_reader);
+                return Err(error);
+            }
+        };
+        // The deadline covers root exit, whole-Job quiescence and pipe EOF.
+        // Joining is safe only after is_finished; neither root exit nor EOF
+        // alone admits release bytes while compiler descendants can run.
+        let captured_stderr = stderr_reader
+            .join()
+            .map_err(|_| "REVIEWED_BUILD_FAILED")?
+            .map_err(|_| "REVIEWED_BUILD_FAILED")?;
+        if !status.success() {
+            failure_diagnostic = Some(summarize_cargo_failure(status.code(), captured_stderr));
+            return Err("REVIEWED_BUILD_FAILED".into());
+        }
         // Revalidate the exact pinned tool evidence after all compiler children exit.
         if cargo_pin.evidence != attempt.cargo
             || rustc_pin.evidence != attempt.rustc
@@ -5878,13 +6000,20 @@ fn apply_exact_worker_cargo_command(
     if attempt.policy != fixed_policy() {
         return Err("REVIEWED_BUILD_EVIDENCE_DRIFTED".into());
     }
+    // Cargo forwards these paths to native tools such as MSVC, which reject
+    // verbatim-prefixed source filenames. Normalize only their command/env
+    // representation; the caller's pinned paths and identity checks stay intact.
+    let tool_source = crate::command::normalize_windows_verbatim_path(source.to_path_buf());
+    let tool_target = crate::command::normalize_windows_verbatim_path(target.to_path_buf());
+    let tool_temp = crate::command::normalize_windows_verbatim_path(temp.to_path_buf());
+    let tool_cargo_home = crate::command::normalize_windows_verbatim_path(cargo_home.to_path_buf());
     command
         .args(&attempt.policy.argv)
-        .current_dir(source)
+        .current_dir(tool_source)
         .env_clear()
-        .env("CARGO_TARGET_DIR", target)
+        .env("CARGO_TARGET_DIR", tool_target)
         .env("RUSTC", rustc)
-        .env("CARGO_HOME", cargo_home)
+        .env("CARGO_HOME", tool_cargo_home)
         .env("PATH", &toolchain.path)
         .env("CC", &toolchain.cc)
         .env("AR", &toolchain.ar)
@@ -5893,8 +6022,8 @@ fn apply_exact_worker_cargo_command(
         .env("INCLUDE", &toolchain.include)
         .env("SystemDrive", os_system_drive()?)
         .env("SystemRoot", os_system_root()?)
-        .env("TEMP", temp)
-        .env("TMP", temp)
+        .env("TEMP", &tool_temp)
+        .env("TMP", tool_temp)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
@@ -5920,11 +6049,13 @@ fn configure_exact_worker_cargo_command(
     )
 }
 
-// This runner is intentionally compiled only into unit tests. It has no MCP,
-// CLI, environment, path, attempt, target, toolchain, or classification input.
-// The ignored test below is the sole manual trigger and uses the compile-time
-// workspace root. It is not a reviewed-build retry and never writes control
-// records, a candidate, or an attestation.
+// These helpers are compiled only into unit tests, with ignored manual triggers
+// and no MCP/CLI, command, toolchain, target, attempt or classification override.
+// The fixed linker diagnostic uses the compile-time workspace. Only the active
+// unclassified diagnostic permits an explicit existing local control root via
+// its ignored test; it revalidates that root's terminal and snapshot authority.
+// Neither diagnostic retries a reviewed build or writes control records, a
+// candidate, or an attestation.
 #[cfg(all(test, windows))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct FixedV5HostLinkerDiagnosticOutcome {
@@ -6116,6 +6247,14 @@ fn fixed_v5_host_linker_diagnostic_outcome(
     if exit_code.is_none_or(|code| code == 0) {
         return Err("REVIEWED_BUILD_HOST_LINKER_DIAGNOSTIC_UNEXPECTED_SUCCESS".into());
     }
+    Ok(fixed_cargo_diagnostic_details(exit_code, captured_stderr))
+}
+
+#[cfg(all(test, windows))]
+fn fixed_cargo_diagnostic_details(
+    exit_code: Option<i32>,
+    captured_stderr: BoundedCargoStderr,
+) -> FixedV5HostLinkerDiagnosticOutcome {
     let linker_error_codes = captured_stderr.diagnostic_linker_error_codes.clone();
     let cargo_failure_signals = captured_stderr.diagnostic_cargo_failure_signals.clone();
     let custom_build_crate = captured_stderr.diagnostic_custom_build_crate.clone();
@@ -6133,7 +6272,7 @@ fn fixed_v5_host_linker_diagnostic_outcome(
         "CARGO_LINK_OUT_OF_MEMORY" => "LINK_OUT_OF_MEMORY",
         _ => "OTHER_LINKER_EXIT",
     };
-    Ok(FixedV5HostLinkerDiagnosticOutcome {
+    FixedV5HostLinkerDiagnosticOutcome {
         classification,
         cargo_classification: diagnostic.classification.clone(),
         cargo_failure_signals,
@@ -6148,7 +6287,7 @@ fn fixed_v5_host_linker_diagnostic_outcome(
         captured_stderr_sha256: diagnostic.captured_stderr_sha256,
         captured_stderr_length: diagnostic.captured_stderr_length,
         stderr_truncated: diagnostic.stderr_truncated,
-    })
+    }
 }
 
 #[cfg(all(test, windows))]
@@ -6282,43 +6421,102 @@ fn run_fixed_v5_cargo_cache_seed_diagnostic() -> Result<FixedV5CargoCacheSeedDia
 }
 
 #[cfg(all(test, windows))]
-fn fixed_short_cargo_diagnostic_root(workspace: &Path) -> Result<ProtectedDirectoryGuard, String> {
-    // Diagnostic-only workspace path: no reviewed build/promotion authority.
-    // Keep the registry source path short enough for native MSVC include lookup.
-    let mut root = ProtectedDirectoryGuard::acquire(workspace, "short cargo diagnostic workspace")?;
-    root.descend_or_create("target-verify", "short cargo diagnostic root")?;
-    root.descend_or_create("sc", "short cargo diagnostic root")?;
+const WORKER_DIAGNOSTIC_SOURCE_PADDING: &str = "source-path-length-padding";
+
+#[cfg(all(test, windows))]
+fn fixed_worker_shaped_cargo_diagnostic_root(
+    workspace: &Path,
+) -> Result<ProtectedDirectoryGuard, String> {
+    // Disposable, non-authority sibling of rb. Its equal-length name and full
+    // nonce preserve native tool path lengths without touching worker outputs.
+    let mut root = ProtectedDirectoryGuard::acquire(workspace, "cargo diagnostic workspace")?;
+    root.descend_or_create("target-verify", "cargo diagnostic root")?;
+    root.descend_or_create("rl", "cargo diagnostic root")?;
     let nonce = Uuid::new_v4().simple().to_string();
-    root.create_child(&nonce[..8], "short cargo diagnostic root")?;
-    root.assert_stable("short cargo diagnostic root")?;
+    root.create_child(&nonce, "cargo diagnostic root")?;
+    root.assert_stable("cargo diagnostic root")?;
     Ok(root)
 }
 
 #[cfg(all(test, windows))]
-fn run_active_unclassified_cargo_diagnostic() -> Result<FixedV5HostLinkerDiagnosticOutcome, String>
-{
-    // Host-only diagnostic reproduction, NEVER an attestation or release build.
-    // Refuse any other generation, review or classified failure.
-    const EXACT_REVIEW: &str = "review-adc-t0462r1-wake-stop-recovery-diagnose-gateway-20261010-6-independent_final_review";
-    let workspace = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let control = existing_control_root(workspace)?;
-    let attempt: ReviewedBuildAttemptV1 = control_read_json(&control, "attempt.json")?;
-    let active = read_active_pointer(&control.base_guard)?;
-    if active.active_attempt_id != attempt.build_attempt_id
-        || active.active_attempt_digest != attempt.attempt_digest
-        || attempt.review_record_id != EXACT_REVIEW
-        || attempt.policy != fixed_policy()
-    {
-        return Err("REVIEWED_BUILD_CARGO_REPRODUCTION_GATE_REFUSED".into());
+fn validate_worker_shaped_cargo_diagnostic_paths(
+    workspace: &Path,
+    attempt: &str,
+    paths: [&Path; 4],
+) -> Result<[usize; 4], String> {
+    let worker_output = workspace.join("target-verify/rb").join(attempt);
+    let expected = [
+        workspace
+            .join(".catdesk/reviewed-build-control/generations")
+            .join(attempt)
+            .join("source"),
+        worker_output.join("target"),
+        worker_output.join("cargo-home"),
+        worker_output.join("target/tmp"),
+    ];
+    let mut lengths = [0; 4];
+    for (index, (actual, expected)) in paths.into_iter().zip(expected).enumerate() {
+        let actual = actual.as_os_str().encode_wide().collect::<Vec<_>>();
+        let expected = expected.as_os_str().encode_wide().collect::<Vec<_>>();
+        if actual.len() != expected.len()
+            || actual
+                .iter()
+                .filter(|unit| **unit == u16::from(b' '))
+                .count()
+                != expected
+                    .iter()
+                    .filter(|unit| **unit == u16::from(b' '))
+                    .count()
+        {
+            return Err("REVIEWED_BUILD_CARGO_DIAGNOSTIC_PATH_SHAPE_MISMATCH".into());
+        }
+        lengths[index] = actual.len();
     }
-    let audit = terminal_failure_audit(&control, &attempt)
-        .map_err(|_| "REVIEWED_BUILD_CARGO_REPRODUCTION_GATE_REFUSED".to_string())?;
-    let diagnostic = audit
-        .result
-        .failure_diagnostic
-        .as_ref()
-        .ok_or("REVIEWED_BUILD_CARGO_REPRODUCTION_GATE_REFUSED")?;
-    if audit.result.failure_code.as_deref() != Some("REVIEWED_BUILD_FAILED")
+    Ok(lengths)
+}
+
+#[cfg(all(test, windows))]
+fn partial_cargo_diagnostic_summary(error: &str, captured: BoundedCargoStderr) -> String {
+    let wait_outcome = if error == "REVIEWED_BUILD_TIMEOUT" {
+        "TIMED_OUT"
+    } else {
+        "FAILED"
+    };
+    // None is deliberate: terminating a timed-out build does not establish its
+    // natural exit status. Preserve only fixed signals from the observed stream.
+    let details = fixed_cargo_diagnostic_details(None, captured);
+    format!(
+        "ACTIVE_UNCLASSIFIED_CARGO_PARTIAL exitCode=UNAVAILABLE waitOutcome={wait_outcome} {}",
+        fixed_v5_host_linker_diagnostic_summary_line(&details)
+    )
+}
+
+#[cfg(all(test, windows))]
+fn validate_active_unclassified_cargo_diagnostic_audit(
+    attempt: &ReviewedBuildAttemptV1,
+    audit: &ReviewedBuildTerminalAuditV1,
+) -> Result<(), String> {
+    let refused = "REVIEWED_BUILD_CARGO_REPRODUCTION_GATE_REFUSED";
+    let diagnostic = audit.result.failure_diagnostic.as_ref().ok_or(refused)?;
+    if audit.schema_version != 1
+        || audit.attempt != *attempt
+        || digest_attempt(attempt)
+            .map(|digest| digest != attempt.attempt_digest)
+            .unwrap_or(true)
+        || !valid_claim(&audit.claim, attempt)
+        || !valid_owner_proof(&audit.owner, &audit.claim)
+        || audit.result.schema_version != RESULT_SCHEMA_VERSION
+        || audit.result.build_attempt_id != attempt.build_attempt_id
+        || audit.result.owner_id != audit.claim.owner_id
+        || attempt.snapshot_expected.project_id != "catdesk"
+        || attempt.review_session_id != attempt.snapshot_expected.session_id
+        || attempt.review_record_id.is_empty()
+        || !valid_sha256(&attempt.review_authority_sha256)
+        || attempt.policy != fixed_policy()
+        || audit.result.state != "BUILD_FAILED_OR_AMBIGUOUS"
+        || audit.result.attestation_digest.is_some()
+        || audit.result.failure_code.as_deref() != Some("REVIEWED_BUILD_FAILED")
+        || diagnostic.schema_version != 1
         || diagnostic.phase != "CARGO_BUILD"
         || diagnostic.exit_code != Some(101)
         || diagnostic.classification != "CARGO_EXIT_NONZERO"
@@ -6326,8 +6524,56 @@ fn run_active_unclassified_cargo_diagnostic() -> Result<FixedV5HostLinkerDiagnos
         || diagnostic.captured_stderr_length != MAX_CARGO_FAILURE_DIAGNOSTIC_BYTES
         || !valid_sha256(&diagnostic.captured_stderr_sha256)
     {
+        return Err(refused.into());
+    }
+    Ok(())
+}
+
+/// Only the ignored host diagnostic reads this selector. It selects an existing
+/// local control root, never a command, toolchain, source tree or Cargo option.
+/// The runner independently verifies its active terminal audit and committed
+/// reviewed snapshot before creating any disposable diagnostic output.
+#[cfg(all(test, windows))]
+fn manual_cargo_diagnostic_workspace(value: Option<&std::ffi::OsStr>) -> Result<PathBuf, String> {
+    let workspace = value
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+    let mut components = workspace.components();
+    if !matches!(
+        components.next(),
+        Some(std::path::Component::Prefix(prefix))
+            if matches!(prefix.kind(), std::path::Prefix::Disk(_) | std::path::Prefix::VerbatimDisk(_))
+    ) || !workspace.is_absolute()
+        || components.any(|part| {
+            matches!(
+                part,
+                std::path::Component::ParentDir | std::path::Component::CurDir
+            )
+        })
+        || !workspace.is_dir()
+    {
+        return Err("REVIEWED_BUILD_CARGO_DIAGNOSTIC_WORKSPACE_REFUSED".into());
+    }
+    Ok(workspace)
+}
+
+#[cfg(all(test, windows))]
+fn run_active_unclassified_cargo_diagnostic(
+    workspace: &Path,
+) -> Result<FixedV5HostLinkerDiagnosticOutcome, String> {
+    // Host-only diagnostic reproduction, NEVER an attestation or release build.
+    // Only the current independently validated CatDesk terminal failure qualifies.
+    let control = existing_control_root(workspace)?;
+    let attempt: ReviewedBuildAttemptV1 = control_read_json(&control, "attempt.json")?;
+    let active = read_active_pointer(&control.base_guard)?;
+    if active.active_attempt_id != attempt.build_attempt_id
+        || active.active_attempt_digest != attempt.attempt_digest
+    {
         return Err("REVIEWED_BUILD_CARGO_REPRODUCTION_GATE_REFUSED".into());
     }
+    let audit = terminal_failure_audit(&control, &attempt)
+        .map_err(|_| "REVIEWED_BUILD_CARGO_REPRODUCTION_GATE_REFUSED".to_string())?;
+    validate_active_unclassified_cargo_diagnostic_audit(&attempt, &audit)?;
     let snapshot = validate_attempt(
         workspace,
         &attempt,
@@ -6335,18 +6581,31 @@ fn run_active_unclassified_cargo_diagnostic() -> Result<FixedV5HostLinkerDiagnos
         &attempt.review_authority_sha256,
         &attempt.snapshot_expected,
     )?;
-    let mut diagnostic_root = fixed_short_cargo_diagnostic_root(workspace)?;
+    let mut diagnostic_root = fixed_worker_shaped_cargo_diagnostic_root(workspace)?;
     let mut source_guard = diagnostic_root.try_clone("cargo reproduction source")?;
+    source_guard.create_child(
+        WORKER_DIAGNOSTIC_SOURCE_PADDING,
+        "cargo reproduction source",
+    )?;
     source_guard.create_child("source", "cargo reproduction source")?;
     materialize_snapshot_into(&snapshot, &mut source_guard)?;
     let source = source_guard.path().to_path_buf();
     let mut target_guard = diagnostic_root.try_clone("cargo reproduction target")?;
     target_guard.create_child("target", "cargo reproduction target")?;
     let target = target_guard.path().to_path_buf();
-    let mut temp_guard = diagnostic_root.try_clone("cargo reproduction temp")?;
+    let mut temp_guard = target_guard.try_clone("cargo reproduction temp")?;
     temp_guard.create_child("tmp", "cargo reproduction temp")?;
     let temp = temp_guard.path().to_path_buf();
     let cargo_home = seed_isolated_cargo_home_into(&mut diagnostic_root, &source)?;
+    let lengths = validate_worker_shaped_cargo_diagnostic_paths(
+        workspace,
+        &attempt.build_attempt_id,
+        [&source, &target, &cargo_home, &temp],
+    )?;
+    println!(
+        "ACTIVE_CARGO_PATH_SHAPE sourceUnits={} targetUnits={} cargoHomeUnits={} tempUnits={}",
+        lengths[0], lengths[1], lengths[2], lengths[3]
+    );
     let cargo_pin = open_attested_tool(&attempt.cargo, "cargo")?;
     let rustc_pin = open_attested_tool(&attempt.rustc, "rustc")?;
     let mut command = Command::new(&cargo_pin.evidence.absolute_path);
@@ -6373,21 +6632,21 @@ fn run_active_unclassified_cargo_diagnostic() -> Result<FixedV5HostLinkerDiagnos
     let reader = std::thread::spawn(move || read_bounded_cargo_stderr(stderr));
     job.assign(&child)?;
     job.resume(&child)?;
-    let started = std::time::Instant::now();
-    let exit = loop {
-        if let Some(status) = child
-            .try_wait()
-            .map_err(|_| "REVIEWED_BUILD_CARGO_REPRODUCTION_UNAVAILABLE".to_string())?
-        {
-            break status;
+    // The existing worker wait bounds the root, all Job descendants and pipe
+    // EOF together. Root exit alone must not leave a diagnostic reader hanging.
+    let exit = match wait_for_owned_build_exit(&mut child, &job, &reader, Duration::from_secs(95)) {
+        Ok(exit) => exit,
+        Err(error) => {
+            // Never block on an unproven reader. The worker wait has attempted
+            // cleanup; independently confirm both the Job and pipe are done.
+            if job.active_processes().is_ok_and(|count| count == 0)
+                && reader.is_finished()
+                && let Ok(Ok(captured)) = reader.join()
+            {
+                println!("{}", partial_cargo_diagnostic_summary(&error, captured));
+            }
+            return Err(error);
         }
-        if started.elapsed() > Duration::from_secs(95) {
-            let _ = child.kill();
-            let _ = job.terminate();
-            let _ = child.wait();
-            return Err("REVIEWED_BUILD_CARGO_REPRODUCTION_TIMEOUT".into());
-        }
-        std::thread::sleep(Duration::from_millis(50));
     };
     let captured = reader
         .join()
@@ -6533,6 +6792,235 @@ fn require_trusted_final_link_handoff() -> Result<(), String> {
 struct BuildJob(*mut c_void);
 
 #[cfg(windows)]
+struct PinnedMsvcHelper {
+    directory: ProtectedDirectoryGuard,
+    image: fs::File,
+    path: PathBuf,
+    identity: String,
+    sha256: String,
+}
+
+#[cfg(not(windows))]
+type PinnedMsvcHelper = ();
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeHelperCleanup {
+    process_id: u32,
+    creation_time: u64,
+    image_sha256: String,
+    role: &'static str,
+    termination_requested_at_unix: u64,
+    exit_confirmed: bool,
+}
+
+#[cfg(windows)]
+fn pin_msvc_helper_directory(directory: &Path) -> Result<Option<PinnedMsvcHelper>, String> {
+    let path = directory.join("VCTIP.EXE");
+    if !path
+        .try_exists()
+        .map_err(|_| "REVIEWED_BUILD_TOOLCHAIN_UNAVAILABLE")?
+    {
+        return Ok(None);
+    }
+    let directory =
+        ProtectedDirectoryGuard::acquire_read_only(directory, "reviewed MSVC helper directory")?;
+    let mut image = open_relative_regular_file(&directory, "VCTIP.EXE", "reviewed MSVC helper")?;
+    let evidence = evidence_from_open_regular(&mut image, "reviewed MSVC helper")?;
+    Ok(Some(PinnedMsvcHelper {
+        directory,
+        image,
+        path,
+        identity: evidence.identity,
+        sha256: evidence.sha256,
+    }))
+}
+
+#[cfg(windows)]
+fn pin_msvc_helper_for_configured_cargo(
+    command: &Command,
+) -> Result<Option<PinnedMsvcHelper>, String> {
+    // CC was just supplied by the fixed-root toolchain resolver, not inherited
+    // from the environment. Keep its exact sibling image pinned before launch.
+    let compiler = command
+        .get_envs()
+        .find_map(|(name, value)| (name == "CC").then_some(value).flatten().map(PathBuf::from))
+        .ok_or("REVIEWED_BUILD_TOOLCHAIN_UNAVAILABLE")?;
+    let directory = compiler
+        .parent()
+        .ok_or("REVIEWED_BUILD_TOOLCHAIN_UNAVAILABLE")?;
+    require_reviewed_toolchain_file(&compiler)?;
+    pin_msvc_helper_directory(directory)
+}
+
+#[cfg(not(windows))]
+fn pin_msvc_helper_for_configured_cargo(
+    _command: &Command,
+) -> Result<Option<PinnedMsvcHelper>, String> {
+    Ok(None)
+}
+
+#[cfg(windows)]
+fn request_known_helper_stop(process: *mut c_void) -> Result<bool, String> {
+    unsafe extern "system" {
+        fn TerminateProcess(process: *mut c_void, code: u32) -> i32;
+        fn WaitForSingleObject(handle: *mut c_void, milliseconds: u32) -> u32;
+    }
+    if unsafe { TerminateProcess(process, 0) } != 0 {
+        return Ok(true);
+    }
+    // The already-validated, retained process may have exited naturally after
+    // its preceding liveness check. Only its signaled handle proves that race.
+    if unsafe { WaitForSingleObject(process, 0) } == 0 {
+        Ok(false)
+    } else {
+        Err("REVIEWED_BUILD_HELPER_STOP_FAILED".into())
+    }
+}
+
+#[cfg(all(test, windows))]
+fn wait_for_owned_build_exit(
+    child: &mut std::process::Child,
+    job: &BuildJob,
+    stderr: &std::thread::JoinHandle<std::io::Result<BoundedCargoStderr>>,
+    budget: Duration,
+) -> Result<std::process::ExitStatus, String> {
+    wait_for_owned_build_exit_with_helper(child, job, stderr, budget, None, &mut Vec::new())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BuildWaitTimeoutPhase {
+    RootRunning,
+    DescendantsActive,
+    StderrEofPending,
+}
+
+impl BuildWaitTimeoutPhase {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::RootRunning => "ROOT_RUNNING",
+            Self::DescendantsActive => "DESCENDANTS_ACTIVE",
+            Self::StderrEofPending => "STDERR_EOF_PENDING",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct BuildWaitTimeoutObservation {
+    phase: BuildWaitTimeoutPhase,
+    root_exit_code: Option<i32>,
+}
+
+fn diagnostic_after_confirmed_timeout(
+    error: &str,
+    observation: Option<BuildWaitTimeoutObservation>,
+    reader: std::thread::JoinHandle<std::io::Result<BoundedCargoStderr>>,
+) -> Option<ReviewedBuildFailureDiagnosticV1> {
+    // The timeout return proves root exit, zero Job membership and EOF. Never
+    // join an unfinished reader or reinterpret a different failure as timeout.
+    if error != "REVIEWED_BUILD_TIMEOUT" || !reader.is_finished() {
+        return None;
+    }
+    let observation = observation?;
+    let captured = reader.join().ok()?.ok()?;
+    let mut diagnostic = summarize_cargo_failure(observation.root_exit_code, captured);
+    diagnostic.classification = observation.phase.as_str().into();
+    Some(diagnostic)
+}
+
+#[cfg(test)]
+fn wait_for_owned_build_exit_with_helper(
+    child: &mut std::process::Child,
+    job: &BuildJob,
+    stderr: &std::thread::JoinHandle<std::io::Result<BoundedCargoStderr>>,
+    budget: Duration,
+    helper: Option<&PinnedMsvcHelper>,
+    cleanup_evidence: &mut Vec<NativeHelperCleanup>,
+) -> Result<std::process::ExitStatus, String> {
+    wait_for_owned_build_exit_with_observation(
+        child,
+        job,
+        stderr,
+        budget,
+        helper,
+        cleanup_evidence,
+        &mut None,
+    )
+}
+
+fn wait_for_owned_build_exit_with_observation(
+    child: &mut std::process::Child,
+    job: &BuildJob,
+    stderr: &std::thread::JoinHandle<std::io::Result<BoundedCargoStderr>>,
+    budget: Duration,
+    helper: Option<&PinnedMsvcHelper>,
+    cleanup_evidence: &mut Vec<NativeHelperCleanup>,
+    timeout_observation: &mut Option<BuildWaitTimeoutObservation>,
+) -> Result<std::process::ExitStatus, String> {
+    let started = std::time::Instant::now();
+    let mut status = None;
+    let mut exited_at = None;
+    let mut last_helper_check = None;
+    *timeout_observation = None;
+    loop {
+        if status.is_none() {
+            status = child.try_wait().map_err(|_| "REVIEWED_BUILD_FAILED")?;
+            if status.is_some() {
+                exited_at = Some(std::time::Instant::now());
+            }
+        }
+        let active_processes = job.active_processes()?;
+        let stderr_finished = stderr.is_finished();
+        if let Some(exited) = status
+            && active_processes == 0
+            && stderr_finished
+        {
+            return Ok(exited);
+        }
+        if started.elapsed() >= budget {
+            *timeout_observation = Some(BuildWaitTimeoutObservation {
+                phase: if status.is_none() {
+                    BuildWaitTimeoutPhase::RootRunning
+                } else if active_processes != 0 {
+                    BuildWaitTimeoutPhase::DescendantsActive
+                } else {
+                    BuildWaitTimeoutPhase::StderrEofPending
+                },
+                root_exit_code: status.and_then(|value| value.code()),
+            });
+            job.terminate()?;
+            let cleanup = std::time::Instant::now();
+            while cleanup.elapsed() < Duration::from_secs(5) {
+                if child
+                    .try_wait()
+                    .map_err(|_| "REVIEWED_BUILD_FAILED")?
+                    .is_some()
+                    && job.active_processes()? == 0
+                    && stderr.is_finished()
+                {
+                    return Err("REVIEWED_BUILD_TIMEOUT".into());
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            return Err("REVIEWED_BUILD_PROCESS_QUIESCENCE_UNPROVEN".into());
+        }
+        if status.is_some_and(|value| value.success())
+            && active_processes != 0
+            && exited_at.is_some_and(|at| at.elapsed() >= Duration::from_secs(1))
+            && last_helper_check
+                .is_none_or(|at: std::time::Instant| at.elapsed() >= Duration::from_millis(250))
+            && let Some(helper) = helper
+        {
+            last_helper_check = Some(std::time::Instant::now());
+            // Every retry revalidates the complete membership and exact pinned
+            // image. Mixed/unknown members are never stopped; their later exit
+            // only permits a fresh, independent check within the same deadline.
+            job.stop_only_pinned_helper(helper, cleanup_evidence)?;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+#[cfg(windows)]
 impl BuildJob {
     fn new() -> Result<Self, String> {
         #[repr(C)]
@@ -6617,6 +7105,199 @@ impl BuildJob {
         }
         Ok(())
     }
+    fn active_processes(&self) -> Result<u32, String> {
+        #[repr(C)]
+        #[derive(Default)]
+        struct Accounting {
+            total_user_time: i64,
+            total_kernel_time: i64,
+            this_period_user_time: i64,
+            this_period_kernel_time: i64,
+            total_page_fault_count: u32,
+            total_processes: u32,
+            active_processes: u32,
+            total_terminated_processes: u32,
+        }
+        unsafe extern "system" {
+            fn QueryInformationJobObject(
+                job: *mut c_void,
+                class: i32,
+                information: *mut c_void,
+                length: u32,
+                returned: *mut u32,
+            ) -> i32;
+        }
+        let mut accounting = Accounting::default();
+        if unsafe {
+            QueryInformationJobObject(
+                self.0,
+                1, // JobObjectBasicAccountingInformation
+                (&mut accounting as *mut Accounting).cast(),
+                std::mem::size_of::<Accounting>() as u32,
+                std::ptr::null_mut(),
+            )
+        } == 0
+        {
+            return Err("REVIEWED_BUILD_PROCESS_UNAVAILABLE".into());
+        }
+        Ok(accounting.active_processes)
+    }
+    fn stop_only_pinned_helper(
+        &self,
+        helper: &PinnedMsvcHelper,
+        evidence: &mut Vec<NativeHelperCleanup>,
+    ) -> Result<(), String> {
+        use std::os::windows::io::OwnedHandle;
+        #[repr(C)]
+        struct ProcessIds {
+            assigned: u32,
+            listed: u32,
+            ids: [usize; 128],
+        }
+        #[repr(C)]
+        #[derive(Default)]
+        struct FileTime {
+            low: u32,
+            high: u32,
+        }
+        unsafe extern "system" {
+            fn QueryInformationJobObject(
+                job: *mut c_void,
+                class: i32,
+                information: *mut c_void,
+                length: u32,
+                returned: *mut u32,
+            ) -> i32;
+            fn OpenProcess(access: u32, inherit: i32, process_id: u32) -> *mut c_void;
+            fn IsProcessInJob(process: *mut c_void, job: *mut c_void, result: *mut i32) -> i32;
+            fn QueryFullProcessImageNameW(
+                process: *mut c_void,
+                flags: u32,
+                name: *mut u16,
+                size: *mut u32,
+            ) -> i32;
+            fn GetProcessTimes(
+                process: *mut c_void,
+                created: *mut FileTime,
+                exited: *mut FileTime,
+                kernel: *mut FileTime,
+                user: *mut FileTime,
+            ) -> i32;
+            fn WaitForSingleObject(handle: *mut c_void, milliseconds: u32) -> u32;
+        }
+        helper
+            .directory
+            .assert_stable("reviewed MSVC helper directory")?;
+        if opened_regular_identity(&helper.image, "reviewed MSVC helper")? != helper.identity {
+            return Err("REVIEWED_BUILD_HELPER_IDENTITY_CHANGED".into());
+        }
+        let mut members: ProcessIds = unsafe { std::mem::zeroed() };
+        if unsafe {
+            QueryInformationJobObject(
+                self.0,
+                3,
+                (&mut members as *mut ProcessIds).cast(),
+                std::mem::size_of::<ProcessIds>() as u32,
+                std::ptr::null_mut(),
+            )
+        } == 0
+            || members.listed > 128
+            || members.assigned != members.listed
+        {
+            return Ok(()); // Incomplete membership never authorizes termination.
+        }
+        let expected = crate::command::normalize_windows_verbatim_path(helper.path.clone());
+        // The pinned compiler directory may contain a `bin/Hostx64/x64`
+        // suffix; Windows reports the same image using backslashes.
+        let expected = expected.to_string_lossy().replace('/', "\\");
+        let mut verified = Vec::new();
+        for &pid in &members.ids[..members.listed as usize] {
+            let Ok(pid) = u32::try_from(pid) else {
+                return Ok(());
+            };
+            // Retaining a kernel handle binds identity across PID reuse.
+            let raw = unsafe { OpenProcess(0x0010_0000 | 0x1000 | 1, 0, pid) };
+            if raw.is_null() {
+                return Ok(());
+            }
+            let handle = unsafe { OwnedHandle::from_raw_handle(raw) };
+            if unsafe { WaitForSingleObject(raw, 0) } == 0 {
+                continue;
+            }
+            let mut member = 0;
+            let mut name = [0u16; 1024];
+            let mut size = name.len() as u32;
+            if unsafe { IsProcessInJob(raw, self.0, &mut member) } == 0
+                || member == 0
+                || unsafe { QueryFullProcessImageNameW(raw, 0, name.as_mut_ptr(), &mut size) } == 0
+            {
+                return Ok(());
+            }
+            let actual = crate::command::normalize_windows_verbatim_path(PathBuf::from(
+                OsString::from_wide(&name[..size as usize]),
+            ));
+            if !actual
+                .to_string_lossy()
+                .replace('/', "\\")
+                .eq_ignore_ascii_case(&expected)
+            {
+                return Ok(()); // Mixed or unknown writers: stop none of them.
+            }
+            let mut created = FileTime::default();
+            let mut exited = FileTime::default();
+            let mut kernel = FileTime::default();
+            let mut user = FileTime::default();
+            if unsafe { GetProcessTimes(raw, &mut created, &mut exited, &mut kernel, &mut user) }
+                == 0
+            {
+                return Ok(());
+            }
+            verified.push((
+                handle,
+                pid,
+                (u64::from(created.high) << 32) | u64::from(created.low),
+            ));
+        }
+        // Validate the complete snapshot before mutating any member. New or
+        // unknown members still prevent the normal zero-Job/EOF completion gate.
+        let cleanup_started = std::time::Instant::now();
+        for (handle, pid, created) in verified {
+            let raw = handle.as_raw_handle().cast();
+            let mut member = 0;
+            if unsafe { IsProcessInJob(raw, self.0, &mut member) } == 0 || member == 0 {
+                return Err("REVIEWED_BUILD_HELPER_MEMBERSHIP_CHANGED".into());
+            }
+            if unsafe { WaitForSingleObject(raw, 0) } == 0 {
+                continue;
+            }
+            if !request_known_helper_stop(raw)? {
+                continue;
+            }
+            evidence.push(NativeHelperCleanup {
+                process_id: pid,
+                creation_time: created,
+                image_sha256: helper.sha256.clone(),
+                role: "MSVC_VCTIP",
+                termination_requested_at_unix: SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+                exit_confirmed: false,
+            });
+            let remaining = Duration::from_secs(5).saturating_sub(cleanup_started.elapsed());
+            if unsafe {
+                WaitForSingleObject(raw, remaining.as_millis().min(u128::from(u32::MAX)) as u32)
+            } != 0
+            {
+                return Err("REVIEWED_BUILD_HELPER_EXIT_UNPROVEN".into());
+            }
+            evidence
+                .last_mut()
+                .expect("recorded helper stop")
+                .exit_confirmed = true;
+        }
+        Ok(())
+    }
     fn resume(&self, child: &std::process::Child) -> Result<(), String> {
         unsafe extern "system" {
             fn NtResumeProcess(process: *mut c_void) -> i32;
@@ -6687,6 +7368,16 @@ impl BuildJob {
     }
     fn terminate(&self) -> Result<(), String> {
         Ok(())
+    }
+    fn stop_only_pinned_helper(
+        &self,
+        _helper: &PinnedMsvcHelper,
+        _evidence: &mut Vec<NativeHelperCleanup>,
+    ) -> Result<(), String> {
+        Ok(())
+    }
+    fn active_processes(&self) -> Result<u32, String> {
+        Err("REVIEWED_BUILD_PROCESS_UNAVAILABLE".into())
     }
     fn resume(&self, _child: &std::process::Child) -> Result<(), String> {
         Err("REVIEWED_BUILD_PROCESS_UNAVAILABLE".into())
@@ -7010,6 +7701,28 @@ fn terminal_failure_audit(
     })
 }
 
+fn successful_producer_audit(
+    workspace: &Path,
+    control: &BuildControlRoot,
+    attempt: &ReviewedBuildAttemptV1,
+) -> Result<ReviewedBuildSuccessAuditV1, String> {
+    validate_historical_terminal_attempt(workspace, attempt)?;
+    if attempt.review_session_id != attempt.snapshot_expected.session_id {
+        return Err("REVIEWED_BUILD_EVIDENCE_DRIFTED".into());
+    }
+    read_successful_producer(workspace, control, attempt)
+}
+
+fn same_review_binding(a: &ReviewedBuildAttemptV1, b: &ReviewedBuildAttemptV1) -> bool {
+    a.review_session_id == b.review_session_id
+        && a.review_record_id == b.review_record_id
+        && a.review_authority_sha256 == b.review_authority_sha256
+        && a.snapshot_expected == b.snapshot_expected
+        && a.snapshot_id == b.snapshot_id
+        && a.snapshot_authority_digest == b.snapshot_authority_digest
+        && a.snapshot_manifest_digest == b.snapshot_manifest_digest
+}
+
 fn unclaimed_prepared_attempt(
     control: &BuildControlRoot,
     attempt: &ReviewedBuildAttemptV1,
@@ -7058,7 +7771,7 @@ fn prepare_unclaimed_prepared_supersession(
     let mut plans = control.base_guard.try_clone("reviewed build retry plans")?;
     plans.descend_or_create(RETRY_PLAN_DIRECTORY, "reviewed build retry plans")?;
     if let Some(existing) = read_optional_retry_plan(&plans, &prior_name)? {
-        return resume_retry_plan(control, prior, &evidence_digest, existing, &fresh);
+        return resume_retry_plan(control, prior, &evidence_digest, existing, &fresh, 1);
     }
 
     let fresh_bytes = serialize_control_record(&fresh)?;
@@ -7100,7 +7813,7 @@ fn prepare_unclaimed_prepared_supersession(
         Err(_) => {
             let existing: ReviewedBuildRetryPlanV1 =
                 read_control_record(&plans, &prior_name, "reviewed build retry plans")?;
-            return resume_retry_plan(control, prior, &plan.audit_digest, existing, &fresh);
+            return resume_retry_plan(control, prior, &plan.audit_digest, existing, &fresh, 1);
         }
     }
     Ok((
@@ -7165,17 +7878,62 @@ fn prepare_terminal_retry(
     fresh: ReviewedBuildAttemptV1,
 ) -> Result<(String, ReviewedBuildPublicOutcomeV1), String> {
     let audit_bytes = serialize_control_record(&audit)?;
-    let audit_digest = sha256(&audit_bytes);
+    prepare_generation_transition(
+        control,
+        prior,
+        &audit_bytes,
+        fresh,
+        1,
+        RETRY_HISTORY_DIRECTORY,
+    )
+}
+
+fn prepare_successful_succession(
+    control: &BuildControlRoot,
+    prior: &ReviewedBuildAttemptV1,
+    audit: ReviewedBuildSuccessAuditV1,
+    fresh: ReviewedBuildAttemptV1,
+) -> Result<(String, ReviewedBuildPublicOutcomeV1), String> {
+    if audit.schema_version != 1
+        || audit.domain != SUCCESS_AUDIT_DOMAIN
+        || audit.attempt != *prior
+        || audit.result.state != "BUILD_ATTESTED"
+        || same_review_binding(prior, &fresh)
+    {
+        return Err("REVIEWED_BUILD_BINDING_IMMUTABLE".into());
+    }
+    let audit_bytes = serialize_control_record(&audit)?;
+    prepare_generation_transition(
+        control,
+        prior,
+        &audit_bytes,
+        fresh,
+        2,
+        SUCCESS_HISTORY_DIRECTORY,
+    )
+}
+
+// Both transitions share one create-once plan and atomic selection mechanism.
+// Their audit domains and plan versions remain distinct.
+fn prepare_generation_transition(
+    control: &BuildControlRoot,
+    prior: &ReviewedBuildAttemptV1,
+    audit_bytes: &[u8],
+    fresh: ReviewedBuildAttemptV1,
+    plan_version: u8,
+    history_directory: &str,
+) -> Result<(String, ReviewedBuildPublicOutcomeV1), String> {
+    let audit_digest = sha256(audit_bytes);
     let prior_name = retry_child_name(&prior.build_attempt_id)?;
 
     let mut history = control
         .base_guard
         .try_clone("reviewed build terminal history")?;
-    history.descend_or_create(RETRY_HISTORY_DIRECTORY, "reviewed build terminal history")?;
+    history.descend_or_create(history_directory, "reviewed build terminal history")?;
     write_or_validate_new_control_record(
         &history,
         &prior_name,
-        &audit_bytes,
+        audit_bytes,
         "reviewed build terminal history",
     )?;
 
@@ -7186,7 +7944,14 @@ fn prepare_terminal_retry(
     // lineage; an exact replay converges, while a competing new review record
     // cannot borrow the first lineage's confirmation token.
     if let Some(existing) = read_optional_retry_plan(&plans, &prior_name)? {
-        return resume_retry_plan(control, prior, &audit_digest, existing, &fresh);
+        return resume_retry_plan(
+            control,
+            prior,
+            &audit_digest,
+            existing,
+            &fresh,
+            plan_version,
+        );
     }
 
     let fresh_digest = fresh.attempt_digest.clone();
@@ -7215,7 +7980,7 @@ fn prepare_terminal_retry(
     }
 
     let plan = ReviewedBuildRetryPlanV1 {
-        schema_version: 1,
+        schema_version: plan_version,
         source_attempt_id: prior.build_attempt_id.clone(),
         source_attempt_digest: prior.attempt_digest.clone(),
         audit_digest,
@@ -7234,7 +7999,14 @@ fn prepare_terminal_retry(
         Err(_) => {
             let existing: ReviewedBuildRetryPlanV1 =
                 read_control_record(&plans, &prior_name, "reviewed build retry plans")?;
-            return resume_retry_plan(control, prior, &plan.audit_digest, existing, &fresh);
+            return resume_retry_plan(
+                control,
+                prior,
+                &plan.audit_digest,
+                existing,
+                &fresh,
+                plan_version,
+            );
         }
     }
     Ok((
@@ -7270,8 +8042,9 @@ fn resume_retry_plan(
     audit_digest: &str,
     plan: ReviewedBuildRetryPlanV1,
     requested: &ReviewedBuildAttemptV1,
+    expected_schema: u8,
 ) -> Result<(String, ReviewedBuildPublicOutcomeV1), String> {
-    if plan.schema_version != 1
+    if plan.schema_version != expected_schema
         || plan.source_attempt_id != prior.build_attempt_id
         || plan.source_attempt_digest != prior.attempt_digest
         || plan.audit_digest != audit_digest
@@ -7306,7 +8079,7 @@ fn retry_plan_target(
     control: &BuildControlRoot,
     plan: &ReviewedBuildRetryPlanV1,
 ) -> Result<ReviewedBuildAttemptV1, String> {
-    if plan.schema_version != 1
+    if !matches!(plan.schema_version, 1 | 2)
         || !valid_attempt_id(&plan.fresh_attempt_id)
         || !valid_attempt_id(&plan.fresh_confirmation_token)
         || !valid_sha256(&plan.fresh_attempt_digest)
@@ -8243,6 +9016,223 @@ fn existing_control_root(workspace: &Path) -> Result<BuildControlRoot, String> {
         .and_then(|_| guard.assert_stable("reviewed build control"))
         .map_err(|_| "REVIEWED_BUILD_STATE_UNAVAILABLE".to_string())?;
     resolve_active_control_root(guard)
+}
+
+/// Historical selection is not a directory lookup. Follow only the immutable
+/// predecessor plans from the original family to the current selected family,
+/// and return a retained producer only after that complete chain is proved.
+fn reachable_producer_control(
+    workspace: &Path,
+    requested_attempt: &str,
+) -> Result<BuildControlRoot, String> {
+    reachable_control_matching(workspace, |_, attempt| {
+        Ok(attempt.build_attempt_id == requested_attempt)
+    })?
+    .ok_or_else(|| "REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into())
+}
+
+fn retained_successful_binding(
+    workspace: &Path,
+    requested: &ReviewedBuildAttemptV1,
+) -> Result<Option<ReviewedBuildAttemptV1>, String> {
+    let selected = reachable_control_matching(workspace, |control, attempt| {
+        if !same_review_binding(attempt, requested) {
+            return Ok(false);
+        }
+        let result = read_optional_relative_regular(
+            &control.guard,
+            "result.json",
+            MAX_STATE_BYTES as u64,
+            "reviewed build retained result",
+        )?;
+        let Some(bytes) = result else {
+            return Ok(false);
+        };
+        let result: ReviewedBuildResultV1 = serde_json::from_slice(&bytes)
+            .map_err(|_| "REVIEWED_BUILD_STATE_UNAVAILABLE".to_string())?;
+        if result.state != "BUILD_ATTESTED" {
+            return Ok(false);
+        }
+        successful_producer_audit(workspace, control, attempt)?;
+        Ok(true)
+    })?;
+    selected
+        .map(|control| control_read_json(&control, "attempt.json"))
+        .transpose()
+}
+
+fn reachable_control_matching(
+    workspace: &Path,
+    mut matches: impl FnMut(&BuildControlRoot, &ReviewedBuildAttemptV1) -> Result<bool, String>,
+) -> Result<Option<BuildControlRoot>, String> {
+    let active = existing_control_root(workspace)?;
+    let current: ReviewedBuildAttemptV1 = control_read_json(&active, "attempt.json")?;
+    if active.guard.path() == active.base_guard.path() {
+        return Ok(matches(&active, &current)?.then_some(active));
+    }
+    let pointer = read_active_pointer(&active.base_guard)?;
+    let mut next = BuildControlRoot {
+        guard: active
+            .base_guard
+            .try_clone("reviewed build original family")?,
+        base_guard: active.base_guard.try_clone("reviewed build lineage")?,
+    };
+    let mut selected = None;
+    let mut visited = BTreeSet::new();
+    for _ in 0..MAX_REVIEWED_BUILD_GENERATIONS {
+        let attempt: ReviewedBuildAttemptV1 = control_read_json(&next, "attempt.json")?;
+        if digest_attempt(&attempt)? != attempt.attempt_digest
+            || !visited.insert(attempt.build_attempt_id.clone())
+        {
+            return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+        }
+        if matches(&next, &attempt)? {
+            if selected.is_some() {
+                return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+            }
+            selected = Some(BuildControlRoot {
+                guard: next.guard.try_clone("reviewed build retained producer")?,
+                base_guard: next
+                    .base_guard
+                    .try_clone("reviewed build retained producer")?,
+            });
+        }
+        let mut plans = next.base_guard.try_clone("reviewed build lineage plans")?;
+        plans.descend_existing(RETRY_PLAN_DIRECTORY, "reviewed build lineage plans")?;
+        let plan: ReviewedBuildRetryPlanV1 = read_control_record(
+            &plans,
+            &retry_child_name(&attempt.build_attempt_id)?,
+            "reviewed build lineage plan",
+        )?;
+        validate_predecessor_plan(workspace, &next, &attempt, &plan)?;
+        let target = retry_plan_target(&next, &plan)?;
+        if target.build_attempt_id == current.build_attempt_id {
+            if pointer.source_attempt_id != attempt.build_attempt_id
+                || pointer.source_attempt_digest != attempt.attempt_digest
+                || pointer.active_attempt_id != target.build_attempt_id
+                || pointer.active_attempt_digest != target.attempt_digest
+                || target != current
+                || read_active_pointer(&active.base_guard)? != pointer
+            {
+                return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+            }
+            if matches(&active, &target)? {
+                if selected.is_some() {
+                    return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+                }
+                selected = Some(active);
+            }
+            return Ok(selected);
+        }
+        let mut guard = next.base_guard.try_clone("reviewed build lineage family")?;
+        guard.descend_existing(RETRY_GENERATION_DIRECTORY, "reviewed build lineage family")?;
+        guard.descend_existing(&target.build_attempt_id, "reviewed build lineage family")?;
+        next = BuildControlRoot {
+            guard,
+            base_guard: next.base_guard,
+        };
+    }
+    Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into())
+}
+
+fn validate_predecessor_plan(
+    workspace: &Path,
+    control: &BuildControlRoot,
+    attempt: &ReviewedBuildAttemptV1,
+    plan: &ReviewedBuildRetryPlanV1,
+) -> Result<(), String> {
+    if plan.source_attempt_id != attempt.build_attempt_id
+        || plan.source_attempt_digest != attempt.attempt_digest
+        || plan.source_attempt_id == plan.fresh_attempt_id
+    {
+        return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+    }
+    let (history_directory, bytes) = match plan.schema_version {
+        1 if unclaimed_prepared_attempt(control, attempt)? => {
+            if unclaimed_prepared_evidence_digest(attempt)? != plan.audit_digest {
+                return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+            }
+            return Ok(());
+        }
+        1 => {
+            let audit = terminal_failure_audit(control, attempt)
+                .map_err(|_| "REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".to_string())?;
+            (RETRY_HISTORY_DIRECTORY, serialize_control_record(&audit)?)
+        }
+        2 => {
+            if same_review_binding(attempt, &retry_plan_target(control, plan)?) {
+                return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+            }
+            let audit = successful_producer_audit(workspace, control, attempt)?;
+            (SUCCESS_HISTORY_DIRECTORY, serialize_control_record(&audit)?)
+        }
+        _ => return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into()),
+    };
+    let mut history = control
+        .base_guard
+        .try_clone("reviewed build predecessor history")?;
+    history.descend_existing(history_directory, "reviewed build predecessor history")?;
+    let stored = read_relative_regular(
+        &history,
+        &retry_child_name(&attempt.build_attempt_id)?,
+        MAX_STATE_BYTES as u64,
+        "reviewed build predecessor history",
+    )?;
+    if sha256(&stored) != plan.audit_digest {
+        return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+    }
+    if stored != bytes
+        && !(plan.schema_version == 1 && legacy_terminal_audit_omission_matches(&stored, &bytes))
+    {
+        return Err("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE".into());
+    }
+    Ok(())
+}
+
+/// Early V1 terminal results predate the optional diagnostic field. Preserve
+/// their original bytes/digest; accept only its omission when today's exact
+/// reconstructed value is null. Typed parsing rejects duplicate known fields,
+/// and complete JSON equality also rejects unknown fields at every depth.
+fn legacy_terminal_audit_omission_matches(stored: &[u8], expected: &[u8]) -> bool {
+    let Ok(actual_audit) = serde_json::from_slice::<ReviewedBuildTerminalAuditV1>(stored) else {
+        return false;
+    };
+    let Ok(expected_audit) = serde_json::from_slice::<ReviewedBuildTerminalAuditV1>(expected)
+    else {
+        return false;
+    };
+    if actual_audit != expected_audit
+        || expected_audit.schema_version != 1
+        || !retryable_terminal_result(&expected_audit.result)
+        || expected_audit.result.failure_diagnostic.is_some()
+    {
+        return false;
+    }
+    let Ok(actual_json) = serde_json::from_slice::<serde_json::Value>(stored) else {
+        return false;
+    };
+    let Ok(mut expected_json) = serde_json::from_slice::<serde_json::Value>(expected) else {
+        return false;
+    };
+    let Some(actual_result) = actual_json
+        .get("result")
+        .and_then(serde_json::Value::as_object)
+    else {
+        return false;
+    };
+    if actual_result.contains_key("failureDiagnostic") {
+        return false;
+    }
+    let Some(expected_result) = expected_json
+        .get_mut("result")
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return false;
+    };
+    if expected_result.remove("failureDiagnostic") != Some(serde_json::Value::Null) {
+        return false;
+    }
+    actual_json == expected_json
 }
 
 /// Resolve the one product-owned active generation.  A missing pointer is the
@@ -9263,6 +10253,654 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn admission_excludes_confirmation_across_unclaimed_supersession() {
+        let (root, initial, prior) = unclaimed_prepared_control_fixture();
+        let (control, admission) = admitted_control_root(&root).unwrap();
+        assert!(unclaimed_prepared_attempt(&control, &prior).unwrap());
+        // This is exactly the old check/activation gap. A concurrent public
+        // CONFIRM must not reserve or spawn the previously selected attempt.
+        let concurrent_root = root.clone();
+        let token = prior.confirmation_token.clone();
+        let refused = std::thread::spawn(move || {
+            confirm_reviewed_build(&concurrent_root, &token, |_, _| {
+                panic!("busy admission must never spawn the old worker")
+            })
+            .unwrap_err()
+        })
+        .join()
+        .unwrap();
+        assert_eq!(refused, "REVIEWED_BUILD_ADMISSION_BUSY");
+        assert!(unclaimed_prepared_attempt(&control, &prior).unwrap());
+        let fresh = fresh_attempt_for_authority(&prior, 'b', 'c', "fresh-acknowledged-review");
+        prepare_unclaimed_prepared_supersession(&control, &prior, fresh.clone()).unwrap();
+        drop(admission);
+        // Delete-on-close release needs no stale-file deletion, and a new
+        // admission resolves the new pointer rather than retaining the old one.
+        let (selected, next_admission) = admitted_control_root(&root).unwrap();
+        let observed: ReviewedBuildAttemptV1 =
+            control_read_json(&selected, "attempt.json").unwrap();
+        assert_eq!(observed.build_attempt_id, fresh.build_attempt_id);
+        drop(next_admission);
+        drop(selected);
+        drop(control);
+        drop(initial);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    // Deliberately exit this fixture root before its descendant. The calling
+    // test owns the entire Job and proves termination and pipe EOF afterward.
+    #[allow(clippy::zombie_processes)]
+    fn producer_root_exit_fixture() {
+        if std::env::var("CATDESK_BUILD_ROOT_FIXTURE").as_deref() != Ok("1") {
+            return;
+        }
+        let stderr = if std::env::var("CATDESK_BUILD_PIPE_FIXTURE").as_deref() == Ok("1") {
+            Stdio::inherit()
+        } else {
+            Stdio::null()
+        };
+        let _child = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "reviewed_build::tests::producer_descendant_wait_fixture",
+                "--nocapture",
+            ])
+            .env("CATDESK_BUILD_DESCENDANT_FIXTURE", "1")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(stderr)
+            .spawn()
+            .unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn producer_descendant_wait_fixture() {
+        if std::env::var("CATDESK_BUILD_DESCENDANT_FIXTURE").as_deref() == Ok("1") {
+            std::thread::sleep(Duration::from_secs(30));
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn producer_failure_exit_fixture() {
+        if std::env::var("CATDESK_BUILD_FAILURE_FIXTURE").as_deref() == Ok("1") {
+            std::process::exit(17);
+        }
+    }
+
+    #[cfg(windows)]
+    fn pinned_helper_fixture() -> (PathBuf, PinnedMsvcHelper) {
+        let root = std::env::temp_dir().join(format!("catdesk-msvc-helper-{}", Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        fs::copy(std::env::current_exe().unwrap(), root.join("VCTIP.EXE")).unwrap();
+        let helper = pin_msvc_helper_directory(&root).unwrap().unwrap();
+        (root, helper)
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn msvc_helper_read_only_pin_preserves_exact_file_and_directory() {
+        let root = std::env::temp_dir().join(format!("catdesk-msvc-read-pin-{}", Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        let path = root.join("VCTIP.EXE");
+        let bytes = b"read-only MSVC helper pin fixture";
+        fs::write(&path, bytes).unwrap();
+        let helper = pin_msvc_helper_directory(&root).unwrap().unwrap();
+        assert_eq!(helper.path, path);
+        assert_eq!(helper.sha256, format!("{:x}", Sha256::digest(bytes)));
+        assert_eq!(
+            opened_regular_identity(&helper.image, "MSVC fixture").unwrap(),
+            helper.identity
+        );
+        helper.directory.assert_stable("MSVC fixture").unwrap();
+        assert!(OpenOptions::new().write(true).open(&path).is_err());
+        assert!(fs::rename(&path, root.join("replaced.exe")).is_err());
+        assert!(fs::rename(&root, root.with_extension("moved")).is_err());
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+        drop(helper);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn msvc_helper_read_only_pin_keeps_absence_non_mutating() {
+        let root = std::env::temp_dir().join(format!("catdesk-msvc-no-helper-{}", Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        assert!(pin_msvc_helper_directory(&root).unwrap().is_none());
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 0);
+        fs::remove_dir(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    fn start_waiting_helper_fixture(path: &Path, job: &BuildJob) -> std::process::Child {
+        let child = Command::new(path)
+            .args([
+                "--exact",
+                "reviewed_build::tests::producer_descendant_wait_fixture",
+            ])
+            .env("CATDESK_BUILD_DESCENDANT_FIXTURE", "1")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .creation_flags(CREATE_SUSPENDED)
+            .spawn()
+            .unwrap();
+        job.assign(&child).unwrap();
+        job.resume(&child).unwrap();
+        child
+    }
+
+    #[test]
+    fn timeout_diagnostic_requires_a_finished_reader_and_known_timeout() {
+        let (release, wait) = std::sync::mpsc::channel();
+        let (done, completed) = std::sync::mpsc::channel();
+        let reader = std::thread::spawn(move || {
+            wait.recv().unwrap();
+            done.send(()).unwrap();
+            Ok(BoundedCargoStderr::default())
+        });
+        assert!(!reader.is_finished());
+        assert!(
+            diagnostic_after_confirmed_timeout(
+                "REVIEWED_BUILD_TIMEOUT",
+                Some(BuildWaitTimeoutObservation {
+                    phase: BuildWaitTimeoutPhase::StderrEofPending,
+                    root_exit_code: Some(0),
+                }),
+                reader,
+            )
+            .is_none()
+        );
+        release.send(()).unwrap();
+        completed.recv_timeout(Duration::from_secs(1)).unwrap();
+        let reader = std::thread::spawn(|| Ok(BoundedCargoStderr::default()));
+        assert!(
+            diagnostic_after_confirmed_timeout(
+                "REVIEWED_BUILD_PROCESS_QUIESCENCE_UNPROVEN",
+                None,
+                reader,
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn timeout_diagnostic_preserves_measured_digest_and_fixed_projection() {
+        for phase in [
+            BuildWaitTimeoutPhase::RootRunning,
+            BuildWaitTimeoutPhase::DescendantsActive,
+            BuildWaitTimeoutPhase::StderrEofPending,
+        ] {
+            let bytes = b"private path and token must stay out of the diagnostic";
+            let reader =
+                std::thread::spawn(move || read_bounded_cargo_stderr(std::io::Cursor::new(bytes)));
+            let until = std::time::Instant::now() + Duration::from_secs(1);
+            while !reader.is_finished() && std::time::Instant::now() < until {
+                std::thread::yield_now();
+            }
+            let diagnostic = diagnostic_after_confirmed_timeout(
+                "REVIEWED_BUILD_TIMEOUT",
+                Some(BuildWaitTimeoutObservation {
+                    phase,
+                    root_exit_code: Some(0),
+                }),
+                reader,
+            )
+            .unwrap();
+            assert_eq!(diagnostic.classification, phase.as_str());
+            assert_eq!(diagnostic.exit_code, Some(0));
+            assert_eq!(diagnostic.captured_stderr_length, bytes.len());
+            assert_eq!(diagnostic.captured_stderr_sha256, sha256(bytes));
+            assert!(
+                !serde_json::to_string(&diagnostic)
+                    .unwrap()
+                    .contains("private path")
+            );
+            let result = ReviewedBuildResultV1 {
+                schema_version: 1,
+                build_attempt_id: "fixture".into(),
+                owner_id: "fixture".into(),
+                state: "BUILD_FAILED_OR_AMBIGUOUS".into(),
+                attestation_digest: None,
+                failure_code: Some("REVIEWED_BUILD_TIMEOUT".into()),
+                failure_diagnostic: Some(diagnostic),
+            };
+            assert_eq!(
+                sanitized_build_failure_category(&result),
+                ("CARGO_TIMEOUT", phase.as_str())
+            );
+            assert!(retryable_terminal_result(&result));
+            let round_trip: ReviewedBuildResultV1 =
+                serde_json::from_str(&serde_json::to_string(&result).unwrap()).unwrap();
+            assert_eq!(result, round_trip);
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_timeout_diagnostic_distinguishes_running_root_from_pending_reader() {
+        for pending_reader in [false, true] {
+            let job = BuildJob::new().unwrap();
+            let fixture = if pending_reader {
+                "reviewed_build::tests::producer_root_exit_fixture"
+            } else {
+                "reviewed_build::tests::producer_descendant_wait_fixture"
+            };
+            let mut command = Command::new(std::env::current_exe().unwrap());
+            command
+                .args(["--exact", fixture])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped())
+                .creation_flags(CREATE_SUSPENDED);
+            if !pending_reader {
+                command.env("CATDESK_BUILD_DESCENDANT_FIXTURE", "1");
+            }
+            let mut child = command.spawn().unwrap();
+            job.assign(&child).unwrap();
+            let stderr = child.stderr.take().unwrap();
+            let reader = std::thread::spawn(move || {
+                let captured = read_bounded_cargo_stderr(stderr);
+                if pending_reader {
+                    std::thread::sleep(Duration::from_millis(250));
+                }
+                captured
+            });
+            job.resume(&child).unwrap();
+            if pending_reader {
+                assert!(child.wait().unwrap().success());
+            }
+            let mut observation = None;
+            assert_eq!(
+                wait_for_owned_build_exit_with_observation(
+                    &mut child,
+                    &job,
+                    &reader,
+                    Duration::from_millis(75),
+                    None,
+                    &mut Vec::new(),
+                    &mut observation
+                )
+                .unwrap_err(),
+                "REVIEWED_BUILD_TIMEOUT"
+            );
+            assert_eq!(job.active_processes().unwrap(), 0);
+            assert!(reader.is_finished());
+            let expected = if pending_reader {
+                BuildWaitTimeoutPhase::StderrEofPending
+            } else {
+                BuildWaitTimeoutPhase::RootRunning
+            };
+            assert_eq!(observation.unwrap().phase, expected);
+            let diagnostic =
+                diagnostic_after_confirmed_timeout("REVIEWED_BUILD_TIMEOUT", observation, reader)
+                    .unwrap();
+            assert_eq!(diagnostic.classification, expected.as_str());
+            child.wait().unwrap();
+        }
+    }
+    #[cfg(windows)]
+    #[test]
+    fn producer_transient_unknown_exit_fixture() {
+        if std::env::var("CATDESK_BUILD_TRANSIENT_UNKNOWN_FIXTURE").as_deref() == Ok("1") {
+            std::thread::sleep(Duration::from_millis(2_100));
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_helper_cleanup_rechecks_after_transient_unknown_exit() {
+        let (root, helper) = pinned_helper_fixture();
+        let job = BuildJob::new().unwrap();
+        let mut known = start_waiting_helper_fixture(&helper.path, &job);
+        let mut unknown = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "reviewed_build::tests::producer_transient_unknown_exit_fixture",
+            ])
+            .env("CATDESK_BUILD_TRANSIENT_UNKNOWN_FIXTURE", "1")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .creation_flags(CREATE_SUSPENDED)
+            .spawn()
+            .unwrap();
+        job.assign(&unknown).unwrap();
+        job.resume(&unknown).unwrap();
+        let mut cargo = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "reviewed_build::tests::producer_root_exit_fixture",
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .creation_flags(CREATE_SUSPENDED)
+            .spawn()
+            .unwrap();
+        job.assign(&cargo).unwrap();
+        let stderr = cargo.stderr.take().unwrap();
+        let reader = std::thread::spawn(move || read_bounded_cargo_stderr(stderr));
+        job.resume(&cargo).unwrap();
+        let mut evidence = Vec::new();
+        let outcome = wait_for_owned_build_exit_with_helper(
+            &mut cargo,
+            &job,
+            &reader,
+            Duration::from_secs(4),
+            Some(&helper),
+            &mut evidence,
+        );
+        // Always finish this fixture's exact Job before asserting the regression.
+        // The transient process must exit naturally; only the known helper may
+        // appear in the selective-cleanup evidence.
+        job.terminate().unwrap();
+        let unknown_exit = unknown.wait().unwrap();
+        known.wait().unwrap();
+        cargo.wait().unwrap();
+        let quiescent = job.active_processes().unwrap() == 0;
+        let eof = reader.is_finished();
+        reader.join().unwrap().unwrap();
+        drop(helper);
+        drop(job);
+        fs::remove_dir_all(root).unwrap();
+        assert!(quiescent && eof);
+        assert!(unknown_exit.success(), "unknown child must exit naturally");
+        assert!(
+            outcome.is_ok(),
+            "later all-known membership must be rechecked: {outcome:?}"
+        );
+        assert!(outcome.unwrap().success());
+        assert_eq!(evidence.len(), 1);
+        assert_eq!(evidence[0].process_id, known.id());
+        assert!(evidence[0].exit_confirmed);
+    }
+    #[cfg(windows)]
+    #[test]
+    fn native_helper_cleanup_after_success_keeps_zero_job_and_eof_required() {
+        let (root, helper) = pinned_helper_fixture();
+        let job = BuildJob::new().unwrap();
+        let mut auxiliary = start_waiting_helper_fixture(&helper.path, &job);
+        let mut cargo = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "reviewed_build::tests::producer_root_exit_fixture",
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .creation_flags(CREATE_SUSPENDED)
+            .spawn()
+            .unwrap();
+        job.assign(&cargo).unwrap();
+        let stderr = cargo.stderr.take().unwrap();
+        let reader = std::thread::spawn(move || read_bounded_cargo_stderr(stderr));
+        job.resume(&cargo).unwrap();
+        let mut evidence = Vec::new();
+        let exit = wait_for_owned_build_exit_with_helper(
+            &mut cargo,
+            &job,
+            &reader,
+            Duration::from_secs(5),
+            Some(&helper),
+            &mut evidence,
+        )
+        .unwrap();
+        assert!(exit.success());
+        assert_eq!(job.active_processes().unwrap(), 0);
+        assert!(reader.is_finished());
+        reader.join().unwrap().unwrap();
+        auxiliary.wait().unwrap();
+        assert_eq!(evidence.len(), 1);
+        assert_eq!(evidence[0].process_id, auxiliary.id());
+        assert!(evidence[0].exit_confirmed);
+        assert_eq!(evidence[0].image_sha256, helper.sha256);
+        drop(helper);
+        drop(job);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_helper_cleanup_accepts_mixed_separator_pin_without_widening_ownership() {
+        let root = std::env::temp_dir().join(format!("catdesk-msvc-mixed-{}", Uuid::new_v4()));
+        let directory = root.join("tool/bin");
+        fs::create_dir_all(&directory).unwrap();
+        fs::copy(
+            std::env::current_exe().unwrap(),
+            directory.join("VCTIP.EXE"),
+        )
+        .unwrap();
+        let helper = pin_msvc_helper_directory(&directory).unwrap().unwrap();
+        assert!(helper.path.to_string_lossy().contains("tool/bin"));
+        let job = BuildJob::new().unwrap();
+        let outside_job = BuildJob::new().unwrap();
+        let mut known = start_waiting_helper_fixture(&helper.path, &job);
+        let mut outside = start_waiting_helper_fixture(&helper.path, &outside_job);
+        let mut evidence = Vec::new();
+        let outcome = job.stop_only_pinned_helper(&helper, &mut evidence);
+        let known_exited = known.try_wait().unwrap().is_some();
+        let outside_preserved = outside.try_wait().unwrap().is_none();
+        // Cleanup precedes assertions, including on the expected RED result.
+        job.terminate().unwrap();
+        outside_job.terminate().unwrap();
+        known.wait().unwrap();
+        outside.wait().unwrap();
+        drop(helper);
+        drop(job);
+        drop(outside_job);
+        fs::remove_dir_all(root).unwrap();
+        outcome.unwrap();
+        assert!(outside_preserved);
+        assert_eq!(
+            evidence.len(),
+            1,
+            "equivalent Windows separators must match"
+        );
+        assert!(known_exited && evidence[0].exit_confirmed);
+        assert_eq!(evidence[0].process_id, known.id());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_helper_cleanup_refuses_mixed_wrong_path_and_outside_job_processes() {
+        let (root, helper) = pinned_helper_fixture();
+        let (other_root, other_helper) = pinned_helper_fixture();
+        let job = BuildJob::new().unwrap();
+        let outside_job = BuildJob::new().unwrap();
+        let mut known = start_waiting_helper_fixture(&helper.path, &job);
+        let mut wrong_path = start_waiting_helper_fixture(&other_helper.path, &job);
+        let mut outside = start_waiting_helper_fixture(&helper.path, &outside_job);
+        let mut evidence = Vec::new();
+        job.stop_only_pinned_helper(&helper, &mut evidence).unwrap();
+        assert!(evidence.is_empty());
+        assert!(known.try_wait().unwrap().is_none());
+        assert!(wrong_path.try_wait().unwrap().is_none());
+        assert!(outside.try_wait().unwrap().is_none());
+        // Once the unknown writer exits, only the in-Job helper may be stopped.
+        wrong_path.kill().unwrap();
+        wrong_path.wait().unwrap();
+        job.stop_only_pinned_helper(&helper, &mut evidence).unwrap();
+        known.wait().unwrap();
+        assert_eq!(evidence.len(), 1);
+        assert!(outside.try_wait().unwrap().is_none());
+        job.terminate().unwrap();
+        outside_job.terminate().unwrap();
+        known.wait().unwrap();
+        wrong_path.wait().unwrap();
+        outside.wait().unwrap();
+        drop(helper);
+        drop(other_helper);
+        drop(job);
+        drop(outside_job);
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_dir_all(other_root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_helper_cleanup_does_not_run_after_cargo_failure() {
+        let (root, helper) = pinned_helper_fixture();
+        let job = BuildJob::new().unwrap();
+        let mut auxiliary = start_waiting_helper_fixture(&helper.path, &job);
+        let mut cargo = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "reviewed_build::tests::producer_failure_exit_fixture",
+            ])
+            .env("CATDESK_BUILD_FAILURE_FIXTURE", "1")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .creation_flags(CREATE_SUSPENDED)
+            .spawn()
+            .unwrap();
+        job.assign(&cargo).unwrap();
+        let stderr = cargo.stderr.take().unwrap();
+        let reader = std::thread::spawn(move || read_bounded_cargo_stderr(stderr));
+        job.resume(&cargo).unwrap();
+        let mut evidence = Vec::new();
+        assert_eq!(
+            wait_for_owned_build_exit_with_helper(
+                &mut cargo,
+                &job,
+                &reader,
+                Duration::from_secs(2),
+                Some(&helper),
+                &mut evidence
+            )
+            .unwrap_err(),
+            "REVIEWED_BUILD_TIMEOUT"
+        );
+        assert!(evidence.is_empty());
+        assert_eq!(cargo.wait().unwrap().code(), Some(17));
+        auxiliary.wait().unwrap();
+        reader.join().unwrap().unwrap();
+        drop(helper);
+        drop(job);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_helper_pin_denies_same_name_replacement() {
+        let (root, helper) = pinned_helper_fixture();
+        assert!(fs::rename(&helper.path, root.join("moved.exe")).is_err());
+        assert_eq!(
+            opened_regular_identity(&helper.image, "pinned helper").unwrap(),
+            helper.identity
+        );
+        drop(helper);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_helper_termination_failure_accepts_only_confirmed_exit() {
+        use std::os::windows::io::OwnedHandle;
+        unsafe extern "system" {
+            fn OpenProcess(access: u32, inherit: i32, process_id: u32) -> *mut c_void;
+        }
+        // An already-exited retained handle deterministically exercises the
+        // same state as a natural exit after the cleanup liveness check.
+        let mut ended = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "reviewed_build::tests::producer_root_exit_fixture",
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        assert!(ended.wait().unwrap().success());
+        assert!(!request_known_helper_stop(ended.as_raw_handle().cast()).unwrap());
+
+        let job = BuildJob::new().unwrap();
+        let mut live = start_waiting_helper_fixture(&std::env::current_exe().unwrap(), &job);
+        // No PROCESS_TERMINATE right: termination fails while the process is
+        // genuinely alive. A failure alone must never count as quiescence.
+        let raw = unsafe { OpenProcess(0x0010_0000 | 0x1000, 0, live.id()) };
+        assert!(!raw.is_null());
+        let restricted = unsafe { OwnedHandle::from_raw_handle(raw) };
+        assert_eq!(
+            request_known_helper_stop(restricted.as_raw_handle().cast()).unwrap_err(),
+            "REVIEWED_BUILD_HELPER_STOP_FAILED"
+        );
+        assert!(live.try_wait().unwrap().is_none());
+        job.terminate().unwrap();
+        live.wait().unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn producer_deadline_covers_descendants_with_and_without_inherited_stderr() {
+        for inherited_pipe in [false, true] {
+            let mut child = Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "reviewed_build::tests::producer_root_exit_fixture",
+                    "--nocapture",
+                ])
+                .env("CATDESK_BUILD_ROOT_FIXTURE", "1")
+                .env(
+                    "CATDESK_BUILD_PIPE_FIXTURE",
+                    if inherited_pipe { "1" } else { "0" },
+                )
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped())
+                .creation_flags(CREATE_SUSPENDED)
+                .spawn()
+                .unwrap();
+            let job = BuildJob::new().unwrap();
+            job.assign(&child).unwrap();
+            let stderr = child.stderr.take().unwrap();
+            let reader = std::thread::spawn(move || read_bounded_cargo_stderr(stderr));
+            job.resume(&child).unwrap();
+            let root_budget = std::time::Instant::now();
+            while child.try_wait().unwrap().is_none()
+                && root_budget.elapsed() < Duration::from_secs(5)
+            {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert!(child.try_wait().unwrap().unwrap().success());
+            assert!(
+                job.active_processes().unwrap() > 0,
+                "root exit must leave a real descendant"
+            );
+            let started = std::time::Instant::now();
+            let mut observation = None;
+            assert_eq!(
+                wait_for_owned_build_exit_with_observation(
+                    &mut child,
+                    &job,
+                    &reader,
+                    Duration::from_millis(200),
+                    None,
+                    &mut Vec::new(),
+                    &mut observation
+                )
+                .unwrap_err(),
+                "REVIEWED_BUILD_TIMEOUT"
+            );
+            assert_eq!(
+                observation.unwrap().phase,
+                BuildWaitTimeoutPhase::DescendantsActive
+            );
+            assert!(started.elapsed() < Duration::from_secs(6));
+            assert_eq!(job.active_processes().unwrap(), 0);
+            assert!(reader.is_finished());
+            reader.join().unwrap().unwrap();
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn unclaimed_prepared_new_authority_supersedes_once_and_replay_converges() {
         let (root, control, prior) = unclaimed_prepared_control_fixture();
         assert!(unclaimed_prepared_attempt(&control, &prior).unwrap());
@@ -9955,6 +11593,568 @@ mod tests {
     }
 
     #[cfg(windows)]
+    fn complete_successful_fixture(
+        root: &Path,
+        control: &BuildControlRoot,
+        attempt: &ReviewedBuildAttemptV1,
+    ) {
+        let parent = candidate_parent_for_create(root, &attempt.build_attempt_id).unwrap();
+        let mut file = create_candidate_file(&parent).unwrap();
+        file.write_all(b"next-qualified-candidate").unwrap();
+        file.sync_all().unwrap();
+        let evidence = evidence_from_open_regular(&mut file, "success fixture").unwrap();
+        let mut attestation = test_attestation(attempt);
+        attestation.candidate_relative_path = format!(
+            "target/reviewed-builds/{}/catdesk.exe",
+            attempt.build_attempt_id
+        );
+        attestation.candidate_sha256 = evidence.sha256;
+        attestation.candidate_length = evidence.length;
+        attestation.candidate_identity = evidence.identity;
+        attestation.attestation_digest = digest_attestation(&attestation).unwrap();
+        let claim = ReviewedBuildClaimV1 {
+            schema_version: 1,
+            build_attempt_id: attempt.build_attempt_id.clone(),
+            owner_id: "9".repeat(32),
+            spawn_generation: 1,
+            state: "SPAWN_OWNER_RESERVED".into(),
+        };
+        let owner = ReviewedBuildOwnerProofV1 {
+            schema_version: 1,
+            build_attempt_id: attempt.build_attempt_id.clone(),
+            owner_id: claim.owner_id.clone(),
+            spawn_generation: 1,
+        };
+        let result = ReviewedBuildResultV1 {
+            schema_version: 1,
+            build_attempt_id: attempt.build_attempt_id.clone(),
+            owner_id: claim.owner_id.clone(),
+            state: "BUILD_ATTESTED".into(),
+            attestation_digest: Some(attestation.attestation_digest.clone()),
+            failure_code: None,
+            failure_diagnostic: None,
+        };
+        control_create_json(control, "claim.json", &claim).unwrap();
+        control_create_json(control, "worker-owner.json", &owner).unwrap();
+        control_create_json(control, "attestation.json", &attestation).unwrap();
+        control_create_json(control, "result.json", &result).unwrap();
+    }
+
+    #[test]
+    fn historical_producer_path_is_an_exact_attempt_not_an_arbitrary_generation() {
+        let id = "a".repeat(32);
+        assert_eq!(
+            candidate_attempt_id(&format!("target/reviewed-builds/{id}/catdesk.exe")),
+            Some(id.as_str())
+        );
+        for path in [
+            format!("target/reviewed-builds/{id}/../catdesk.exe"),
+            format!("target/reviewed-builds/{id}/other.exe"),
+            format!("target\\reviewed-builds\\{id}\\catdesk.exe"),
+            format!("target/reviewed-builds/{}/catdesk.exe", "A".repeat(32)),
+            format!("target/reviewed-builds/{id}/catdesk.exe/"),
+        ] {
+            assert!(candidate_attempt_id(&path).is_none(), "{path}");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn successful_producer_succession_preserves_and_replays_two_older_generations() {
+        let (root, expected, prior, attestation, _) = end_to_end_attestation_fixture().unwrap();
+        let control = existing_control_root(&root).unwrap();
+        let before = CONTROL_CHILDREN
+            .iter()
+            .map(|name| {
+                (
+                    *name,
+                    read_relative_regular(&control.guard, name, MAX_STATE_BYTES as u64, "fixture")
+                        .unwrap(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let (token, outcome) = prepare_reviewed_build(
+            &root,
+            &prior.review_record_id,
+            &prior.review_authority_sha256,
+            &expected,
+        )
+        .unwrap();
+        assert_eq!(token, prior.confirmation_token);
+        assert_eq!(outcome.state, "BUILD_ATTESTED");
+        let fresh = fresh_attempt_for_authority(&prior, 'b', 'c', "second-review");
+        let audit = successful_producer_audit(&root, &control, &prior).unwrap();
+        prepare_successful_succession(&control, &prior, audit.clone(), fresh.clone()).unwrap();
+        let replay = fresh_attempt_for_authority(&prior, 'd', 'e', "second-review");
+        assert_eq!(
+            prepare_successful_succession(&control, &prior, audit.clone(), replay)
+                .unwrap()
+                .0,
+            fresh.confirmation_token
+        );
+        let competing = fresh_attempt_for_authority(&prior, 'd', 'e', "competing-review");
+        assert_eq!(
+            prepare_successful_succession(&control, &prior, audit, competing).unwrap_err(),
+            "REVIEWED_BUILD_BINDING_IMMUTABLE"
+        );
+        for (name, bytes) in before {
+            assert_eq!(
+                read_relative_regular(&control.guard, name, MAX_STATE_BYTES as u64, "fixture")
+                    .unwrap(),
+                bytes
+            );
+        }
+        let active = existing_control_root(&root).unwrap();
+        complete_successful_fixture(&root, &active, &fresh);
+        let pointer_before =
+            fs::read(control.base_guard.path().join(ACTIVE_GENERATION_FILE)).unwrap();
+        let count_before = fs::read_dir(control.base_guard.path().join(RETRY_GENERATION_DIRECTORY))
+            .unwrap()
+            .count();
+        let old = prepare_reviewed_build(
+            &root,
+            &prior.review_record_id,
+            &prior.review_authority_sha256,
+            &expected,
+        )
+        .unwrap();
+        assert_eq!(old.0, prior.confirmation_token);
+        assert_eq!(old.1.state, "BUILD_ATTESTED");
+        assert_eq!(
+            fs::read(control.base_guard.path().join(ACTIVE_GENERATION_FILE)).unwrap(),
+            pointer_before
+        );
+        assert_eq!(
+            fs::read_dir(control.base_guard.path().join(RETRY_GENERATION_DIRECTORY))
+                .unwrap()
+                .count(),
+            count_before
+        );
+        assert_eq!(
+            confirm_reviewed_build(&root, &prior.confirmation_token, |_, _| panic!(
+                "old success must not spawn"
+            ))
+            .unwrap_err(),
+            "REVIEWED_BUILD_CONFIRMATION_UNAVAILABLE"
+        );
+        let third = fresh_attempt_for_authority(&fresh, 'd', 'e', "third-review");
+        let audit = successful_producer_audit(&root, &active, &fresh).unwrap();
+        prepare_successful_succession(&active, &fresh, audit, third).unwrap();
+        for old in [&prior, &fresh] {
+            let path = format!(
+                "target/reviewed-builds/{}/catdesk.exe",
+                old.build_attempt_id
+            );
+            let retained = reachable_producer_control(&root, &old.build_attempt_id).unwrap();
+            let record: ReviewedBuildAttestationV2 =
+                control_read_json(&retained, "attestation.json").unwrap();
+            assert!(
+                validate_producer_attestation(
+                    &root,
+                    &expected.session_id,
+                    &old.review_record_id,
+                    &old.review_authority_sha256,
+                    &expected,
+                    &path,
+                    &record.candidate_sha256
+                )
+                .is_ok()
+            );
+        }
+        assert_eq!(
+            validate_producer_attestation(
+                &root,
+                &expected.session_id,
+                "wrong-review",
+                &prior.review_authority_sha256,
+                &expected,
+                &attestation.candidate_relative_path,
+                &attestation.candidate_sha256
+            )
+            .unwrap_err(),
+            "REVIEWED_BUILD_ATTESTATION_UNAVAILABLE"
+        );
+        // A complete but unlinked generation is not release authority.
+        let orphan = fresh_attempt_for_authority(&prior, 'a', '8', "orphan-review");
+        let mut orphan_guard = control.base_guard.try_clone("orphan fixture").unwrap();
+        orphan_guard
+            .descend_existing(RETRY_GENERATION_DIRECTORY, "orphan fixture")
+            .unwrap();
+        orphan_guard
+            .create_child(&orphan.build_attempt_id, "orphan fixture")
+            .unwrap();
+        let orphan_control = BuildControlRoot {
+            guard: orphan_guard,
+            base_guard: control.base_guard.try_clone("orphan fixture").unwrap(),
+        };
+        control_create_json(&orphan_control, "attempt.json", &orphan).unwrap();
+        complete_successful_fixture(&root, &orphan_control, &orphan);
+        assert!(reachable_producer_control(&root, &orphan.build_attempt_id).is_err());
+        drop(orphan_control);
+        drop(active);
+        drop(control);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn successful_producer_succession_rejects_failed_or_drifted_family() {
+        let (root, _, prior, _, _) = end_to_end_attestation_fixture().unwrap();
+        let control = existing_control_root(&root).unwrap();
+        let original: ReviewedBuildResultV1 = control_read_json(&control, "result.json").unwrap();
+        let result_path = control.guard.path().join("result.json");
+        let mut mixed = original.clone();
+        mixed.failure_code = Some("BUILD_FAILED".into());
+        fs::write(&result_path, serde_json::to_vec(&mixed).unwrap()).unwrap();
+        assert!(successful_producer_audit(&root, &control, &prior).is_err());
+        for state in [
+            "BUILD_FAILED_OR_AMBIGUOUS",
+            "WORKER_OWNED_PENDING",
+            "UNKNOWN",
+        ] {
+            mixed.state = state.into();
+            fs::write(&result_path, serde_json::to_vec(&mixed).unwrap()).unwrap();
+            assert!(successful_producer_audit(&root, &control, &prior).is_err());
+        }
+        fs::write(&result_path, serde_json::to_vec(&original).unwrap()).unwrap();
+        let candidate = root.join(format!(
+            "target/reviewed-builds/{}/catdesk.exe",
+            prior.build_attempt_id
+        ));
+        fs::write(candidate, b"changed-candidate!!").unwrap();
+        assert!(successful_producer_audit(&root, &control, &prior).is_err());
+        drop(control);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn successful_producer_history_requires_exact_plan_and_audit_chain() {
+        let (root, _, prior, _, _) = end_to_end_attestation_fixture().unwrap();
+        let control = existing_control_root(&root).unwrap();
+        let fresh = fresh_attempt_for_authority(&prior, 'b', 'c', "second-review");
+        let audit = successful_producer_audit(&root, &control, &prior).unwrap();
+        prepare_successful_succession(&control, &prior, audit, fresh).unwrap();
+        let history = control
+            .base_guard
+            .path()
+            .join(SUCCESS_HISTORY_DIRECTORY)
+            .join(retry_child_name(&prior.build_attempt_id).unwrap());
+        let bytes = fs::read(&history).unwrap();
+        fs::write(&history, b"{}").unwrap();
+        assert!(reachable_producer_control(&root, &prior.build_attempt_id).is_err());
+        fs::write(&history, bytes).unwrap();
+        let plan_path = control
+            .base_guard
+            .path()
+            .join(RETRY_PLAN_DIRECTORY)
+            .join(retry_child_name(&prior.build_attempt_id).unwrap());
+        let bytes = fs::read(&plan_path).unwrap();
+        let mut plan: ReviewedBuildRetryPlanV1 = serde_json::from_slice(&bytes).unwrap();
+        plan.source_attempt_digest = "0".repeat(64);
+        fs::write(&plan_path, serde_json::to_vec(&plan).unwrap()).unwrap();
+        assert!(reachable_producer_control(&root, &prior.build_attempt_id).is_err());
+        fs::write(&plan_path, &bytes).unwrap();
+        assert!(reachable_producer_control(&root, &prior.build_attempt_id).is_ok());
+        let mut cycle: ReviewedBuildRetryPlanV1 = serde_json::from_slice(&bytes).unwrap();
+        cycle.fresh_attempt_id = prior.build_attempt_id.clone();
+        fs::write(&plan_path, serde_json::to_vec(&cycle).unwrap()).unwrap();
+        assert!(reachable_producer_control(&root, &prior.build_attempt_id).is_err());
+        fs::write(&plan_path, &bytes).unwrap();
+        fs::rename(&plan_path, plan_path.with_extension("saved")).unwrap();
+        assert!(reachable_producer_control(&root, &prior.build_attempt_id).is_err());
+        fs::rename(plan_path.with_extension("saved"), &plan_path).unwrap();
+        let pointer_path = control.base_guard.path().join(ACTIVE_GENERATION_FILE);
+        let pointer_bytes = fs::read(&pointer_path).unwrap();
+        let mut pointer: ReviewedBuildActiveGenerationV1 =
+            serde_json::from_slice(&pointer_bytes).unwrap();
+        pointer.source_attempt_digest = "0".repeat(64);
+        fs::write(&pointer_path, serde_json::to_vec(&pointer).unwrap()).unwrap();
+        assert!(reachable_producer_control(&root, &prior.build_attempt_id).is_err());
+        fs::write(pointer_path, pointer_bytes).unwrap();
+        drop(control);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn successful_producer_succession_recovers_plan_before_pointer_without_duplicate() {
+        let (root, _, prior, _, _) = end_to_end_attestation_fixture().unwrap();
+        let control = existing_control_root(&root).unwrap();
+        let fresh = fresh_attempt_for_authority(&prior, 'b', 'c', "second-review");
+        let audit = successful_producer_audit(&root, &control, &prior).unwrap();
+        let audit_bytes = serialize_control_record(&audit).unwrap();
+        let mut history = control
+            .base_guard
+            .try_clone("success crash fixture")
+            .unwrap();
+        history
+            .descend_or_create(SUCCESS_HISTORY_DIRECTORY, "success crash fixture")
+            .unwrap();
+        let name = retry_child_name(&prior.build_attempt_id).unwrap();
+        write_or_validate_new_control_record(
+            &history,
+            &name,
+            &audit_bytes,
+            "success crash fixture",
+        )
+        .unwrap();
+        let mut generation = control
+            .base_guard
+            .try_clone("success crash fixture")
+            .unwrap();
+        generation
+            .descend_or_create(RETRY_GENERATION_DIRECTORY, "success crash fixture")
+            .unwrap();
+        generation
+            .create_child(&fresh.build_attempt_id, "success crash fixture")
+            .unwrap();
+        write_or_validate_new_control_record(
+            &generation,
+            "attempt.json",
+            &serialize_control_record(&fresh).unwrap(),
+            "success crash fixture",
+        )
+        .unwrap();
+        let plan = ReviewedBuildRetryPlanV1 {
+            schema_version: 2,
+            source_attempt_id: prior.build_attempt_id.clone(),
+            source_attempt_digest: prior.attempt_digest.clone(),
+            audit_digest: sha256(&audit_bytes),
+            fresh_attempt_id: fresh.build_attempt_id.clone(),
+            fresh_attempt_digest: fresh.attempt_digest.clone(),
+            fresh_confirmation_token: fresh.confirmation_token.clone(),
+        };
+        let mut plans = control
+            .base_guard
+            .try_clone("success crash fixture")
+            .unwrap();
+        plans
+            .descend_or_create(RETRY_PLAN_DIRECTORY, "success crash fixture")
+            .unwrap();
+        write_or_validate_new_control_record(
+            &plans,
+            &name,
+            &serialize_control_record(&plan).unwrap(),
+            "success crash fixture",
+        )
+        .unwrap();
+        let selected_before: ReviewedBuildAttemptV1 =
+            control_read_json(&existing_control_root(&root).unwrap(), "attempt.json").unwrap();
+        assert_eq!(selected_before, prior);
+        let replay = fresh_attempt_for_authority(&prior, 'd', 'e', "second-review");
+        assert_eq!(
+            prepare_successful_succession(&control, &prior, audit, replay)
+                .unwrap()
+                .0,
+            fresh.confirmation_token
+        );
+        let selected_after: ReviewedBuildAttemptV1 =
+            control_read_json(&existing_control_root(&root).unwrap(), "attempt.json").unwrap();
+        assert_eq!(selected_after, fresh);
+        drop(plans);
+        drop(generation);
+        drop(history);
+        drop(control);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn successful_producer_concurrent_prepares_converge_on_one_fresh_family() {
+        let (root, expected, prior, _, _) = end_to_end_attestation_fixture().unwrap();
+        let start = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let workers = (0..2)
+            .map(|_| {
+                let root = root.clone();
+                let expected = expected.clone();
+                let digest = prior.review_authority_sha256.clone();
+                let start = start.clone();
+                std::thread::spawn(move || {
+                    start.wait();
+                    prepare_reviewed_build(&root, "second-review", &digest, &expected)
+                })
+            })
+            .collect::<Vec<_>>();
+        // An admission loser may receive BUSY rather than wait. It may only
+        // repeat preparation, never confirmation; the durable winner is reused.
+        let results = workers
+            .into_iter()
+            .map(|w| w.join().unwrap())
+            .collect::<Vec<_>>();
+        let winner = results.iter().find_map(|r| r.as_ref().ok()).unwrap();
+        for result in &results {
+            match result {
+                Ok(value) => assert_eq!(value.0, winner.0),
+                Err(error) => assert_eq!(error, "REVIEWED_BUILD_ADMISSION_BUSY"),
+            }
+        }
+        let replay = prepare_reviewed_build(
+            &root,
+            "second-review",
+            &prior.review_authority_sha256,
+            &expected,
+        )
+        .unwrap();
+        assert_eq!(replay.0, winner.0);
+        let control = existing_control_root(&root).unwrap();
+        assert!(!control.guard.path().join("claim.json").exists());
+        assert_eq!(
+            fs::read_dir(control.base_guard.path().join(RETRY_GENERATION_DIRECTORY))
+                .unwrap()
+                .count(),
+            1
+        );
+        drop(control);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn legacy_terminal_omission_replays_mixed_lineage_without_rewriting_authority() {
+        let (root, expected, failed, _, _) = end_to_end_attestation_fixture().unwrap();
+        let original = existing_control_root(&root).unwrap();
+        let mut result: ReviewedBuildResultV1 =
+            control_read_json(&original, "result.json").unwrap();
+        result.state = "BUILD_FAILED_OR_AMBIGUOUS".into();
+        result.attestation_digest = None;
+        result.failure_code = Some("fixture-terminal".into());
+        let mut legacy_result = serde_json::to_value(&result).unwrap();
+        legacy_result
+            .as_object_mut()
+            .unwrap()
+            .remove("failureDiagnostic");
+        fs::write(
+            original.guard.path().join("result.json"),
+            serde_json::to_vec(&legacy_result).unwrap(),
+        )
+        .unwrap();
+        fs::remove_file(original.guard.path().join("attestation.json")).unwrap();
+        let retry = fresh_attempt_for_authority(&failed, 'b', 'c', "retry-review");
+        let audit = terminal_failure_audit(&original, &failed).unwrap();
+        prepare_terminal_retry(&original, &failed, audit, retry.clone()).unwrap();
+        let retry_control = existing_control_root(&root).unwrap();
+        let successful = fresh_attempt_for_authority(&retry, 'd', 'e', "successful-review");
+        prepare_unclaimed_prepared_supersession(&retry_control, &retry, successful.clone())
+            .unwrap();
+        let successful_control = existing_control_root(&root).unwrap();
+        complete_successful_fixture(&root, &successful_control, &successful);
+        let attestation: ReviewedBuildAttestationV2 =
+            control_read_json(&successful_control, "attestation.json").unwrap();
+        let next = fresh_attempt_for_authority(&successful, 'a', '8', "new-review");
+        let audit = successful_producer_audit(&root, &successful_control, &successful).unwrap();
+        prepare_successful_succession(&successful_control, &successful, audit, next).unwrap();
+
+        let history = original
+            .base_guard
+            .path()
+            .join(RETRY_HISTORY_DIRECTORY)
+            .join(retry_child_name(&failed.build_attempt_id).unwrap());
+        let plan_path = original
+            .base_guard
+            .path()
+            .join(RETRY_PLAN_DIRECTORY)
+            .join(retry_child_name(&failed.build_attempt_id).unwrap());
+        let mut legacy: serde_json::Value =
+            serde_json::from_slice(&fs::read(&history).unwrap()).unwrap();
+        legacy["result"]
+            .as_object_mut()
+            .unwrap()
+            .remove("failureDiagnostic");
+        let legacy_bytes = serde_json::to_vec(&legacy).unwrap();
+        let mut plan: ReviewedBuildRetryPlanV1 =
+            serde_json::from_slice(&fs::read(&plan_path).unwrap()).unwrap();
+        plan.audit_digest = sha256(&legacy_bytes);
+        let legacy_plan = serde_json::to_vec(&plan).unwrap();
+        fs::write(&history, &legacy_bytes).unwrap();
+        fs::write(&plan_path, &legacy_plan).unwrap();
+        let validate = || {
+            validate_producer_attestation(
+                &root,
+                &expected.session_id,
+                &successful.review_record_id,
+                &successful.review_authority_sha256,
+                &expected,
+                &attestation.candidate_relative_path,
+                &attestation.candidate_sha256,
+            )
+        };
+        assert!(validate().is_ok());
+        assert_eq!(fs::read(&history).unwrap(), legacy_bytes);
+        assert_eq!(fs::read(&plan_path).unwrap(), legacy_plan);
+
+        let mut bad_cases = Vec::new();
+        let mut extra = legacy.clone();
+        extra["unexpected"] = serde_json::json!(true);
+        bad_cases.push(serde_json::to_vec(&extra).unwrap());
+        let mut changed = legacy.clone();
+        changed["result"]["failureCode"] = serde_json::json!("changed");
+        bad_cases.push(serde_json::to_vec(&changed).unwrap());
+        let mut nonnull = legacy.clone();
+        nonnull["result"]["failureDiagnostic"] = serde_json::json!({
+            "schemaVersion":1,"phase":"build","exitCode":1,"classification":"BUILD_FAILED",
+            "capturedStderrSha256":"0".repeat(64),"capturedStderrLength":1,"stderrTruncated":false
+        });
+        bad_cases.push(serde_json::to_vec(&nonnull).unwrap());
+        let duplicate = String::from_utf8(legacy_bytes.clone())
+            .unwrap()
+            .replace(
+                "\"failureCode\":\"fixture-terminal\"",
+                "\"failureCode\":\"fixture-terminal\",\"failureCode\":\"fixture-terminal\"",
+            )
+            .into_bytes();
+        assert_ne!(duplicate, legacy_bytes);
+        bad_cases.push(duplicate);
+        for bytes in bad_cases {
+            // Even a matching raw digest cannot authorize changed or extra fields.
+            plan.audit_digest = sha256(&bytes);
+            fs::write(&plan_path, serde_json::to_vec(&plan).unwrap()).unwrap();
+            fs::write(&history, bytes).unwrap();
+            assert!(validate().is_err());
+        }
+        fs::write(&plan_path, &legacy_plan).unwrap();
+        let mut wrong_raw = legacy_bytes.clone();
+        wrong_raw.push(b' ');
+        fs::write(&history, wrong_raw).unwrap();
+        assert!(validate().is_err());
+        fs::write(&history, &legacy_bytes).unwrap();
+        assert!(validate().is_ok());
+
+        // V2 successful predecessor evidence never uses legacy omission compatibility.
+        let success_history = original
+            .base_guard
+            .path()
+            .join(SUCCESS_HISTORY_DIRECTORY)
+            .join(retry_child_name(&successful.build_attempt_id).unwrap());
+        let success_plan_path = original
+            .base_guard
+            .path()
+            .join(RETRY_PLAN_DIRECTORY)
+            .join(retry_child_name(&successful.build_attempt_id).unwrap());
+        let mut success_bytes: serde_json::Value =
+            serde_json::from_slice(&fs::read(&success_history).unwrap()).unwrap();
+        success_bytes["result"]
+            .as_object_mut()
+            .unwrap()
+            .remove("failureDiagnostic");
+        let success_bytes = serde_json::to_vec(&success_bytes).unwrap();
+        let mut success_plan: ReviewedBuildRetryPlanV1 =
+            serde_json::from_slice(&fs::read(&success_plan_path).unwrap()).unwrap();
+        success_plan.audit_digest = sha256(&success_bytes);
+        fs::write(&success_history, success_bytes).unwrap();
+        fs::write(
+            success_plan_path,
+            serde_json::to_vec(&success_plan).unwrap(),
+        )
+        .unwrap();
+        assert!(validate().is_err());
+        drop(successful_control);
+        drop(retry_control);
+        drop(original);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
     #[test]
     fn replay_preopen_producer_attestation_rejects_same_length_swap() {
         use std::sync::Arc;
@@ -10439,7 +12639,8 @@ mod tests {
         assert!(worker.contains("configure_exact_worker_cargo_command("));
         assert!(worker.contains("&cargo_home,"));
         assert!(command_body.contains(".env_clear()"));
-        assert!(command_body.contains(".env(\"CARGO_HOME\", cargo_home)"));
+        assert!(command_body.contains("normalize_windows_verbatim_path(cargo_home.to_path_buf())"));
+        assert!(command_body.contains(".env(\"CARGO_HOME\", tool_cargo_home)"));
         assert!(!worker.contains(".env(\"CARGO_HOME\", profile.join"));
         assert!(!command_body.contains(".env(\"CARGO_HOME\", profile.join"));
 
@@ -11199,6 +13400,125 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn worker_native_paths_make_normal_and_verbatim_commands_equivalent() {
+        let attempt = test_attempt();
+        let original = attempt.clone();
+        let toolchain = test_windows_toolchain_environment();
+        let rustc = r"\\?\C:\trusted tools\rustc.exe";
+        for base in [r"C:\fixture", r"C:\fixture with spaces"] {
+            let normal = PathBuf::from(base);
+            let verbatim = PathBuf::from(format!(r"\\?\{base}"));
+            let mut commands = Vec::new();
+            for root in [&normal, &verbatim] {
+                let mut command = Command::new("not-executed-cargo.exe");
+                apply_exact_worker_cargo_command(
+                    &mut command,
+                    &attempt,
+                    &root.join("source"),
+                    &root.join("target"),
+                    &root.join("target").join("tmp"),
+                    &root.join("cargo-home"),
+                    rustc,
+                    &toolchain,
+                )
+                .unwrap();
+                let environment = command
+                    .get_envs()
+                    .map(|(name, value)| (name.to_os_string(), value.map(OsString::from)))
+                    .collect::<std::collections::BTreeMap<_, _>>();
+                assert_eq!(
+                    environment.get(std::ffi::OsStr::new("RUSTC")),
+                    Some(&Some(OsString::from(rustc)))
+                );
+                assert_eq!(
+                    environment.get(std::ffi::OsStr::new("CARGO_TARGET_DIR")),
+                    Some(&Some(normal.join("target").into_os_string()))
+                );
+                assert_eq!(
+                    environment.get(std::ffi::OsStr::new("CARGO_HOME")),
+                    Some(&Some(normal.join("cargo-home").into_os_string()))
+                );
+                assert_eq!(
+                    environment.get(std::ffi::OsStr::new("TEMP")),
+                    Some(&Some(normal.join("target").join("tmp").into_os_string()))
+                );
+                assert_eq!(
+                    environment.get(std::ffi::OsStr::new("TMP")),
+                    environment.get(std::ffi::OsStr::new("TEMP"))
+                );
+                assert_eq!(
+                    command.get_current_dir(),
+                    Some(normal.join("source").as_path())
+                );
+                commands.push((
+                    environment,
+                    command.get_args().map(OsString::from).collect::<Vec<_>>(),
+                ));
+            }
+            assert_eq!(commands[0], commands[1]);
+        }
+        assert_eq!(attempt, original);
+        assert_eq!(
+            attempt.policy,
+            fixed_policy(),
+            "representation normalization cannot change policy authority"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn worker_native_paths_preserve_pinned_identity_and_authority() {
+        let root = std::env::temp_dir().join(format!("catdesk native paths {}", Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        let sentinel = root.join("authority-sentinel.json");
+        fs::write(&sentinel, b"unchanged original authority").unwrap();
+        let canonical = fs::canonicalize(&root).unwrap();
+        let canonical_before = canonical.clone();
+        let guard = ProtectedDirectoryGuard::acquire(&canonical, "native path fixture").unwrap();
+        let original = fs::File::open(canonical.join("authority-sentinel.json")).unwrap();
+        let identity = opened_regular_identity(&original, "native path sentinel").unwrap();
+        let attempt = test_attempt();
+        let before = attempt.clone();
+        let mut command = Command::new("not-executed-cargo.exe");
+        apply_exact_worker_cargo_command(
+            &mut command,
+            &attempt,
+            &canonical,
+            &canonical.join("target"),
+            &canonical.join("target").join("tmp"),
+            &canonical.join("cargo-home"),
+            r"\\?\C:\trusted\rustc.exe",
+            &test_windows_toolchain_environment(),
+        )
+        .unwrap();
+        let native_source = command.get_current_dir().unwrap();
+        assert!(!native_source.to_string_lossy().starts_with(r"\\?\"));
+        let reopened = fs::File::open(native_source.join("authority-sentinel.json")).unwrap();
+        assert_eq!(
+            opened_regular_identity(&reopened, "native path sentinel").unwrap(),
+            identity
+        );
+        guard.assert_stable("native path fixture").unwrap();
+        assert_eq!(guard.path(), canonical_before);
+        assert_eq!(canonical, canonical_before);
+        assert_eq!(attempt, before);
+        assert_eq!(
+            fs::read(&sentinel).unwrap(),
+            b"unchanged original authority"
+        );
+        assert_eq!(
+            fs::read_dir(&root).unwrap().count(),
+            1,
+            "command preparation must create no files"
+        );
+        drop(reopened);
+        drop(original);
+        drop(guard);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn fixed_v5_cargo_cache_seed_diagnostic_vocabulary_and_components_are_closed() {
         let package = LockedRegistryCrate {
             name: "serde".into(),
@@ -11295,7 +13615,12 @@ mod tests {
             .as_ref()
             .expect("bounded recorded cargo diagnostic");
         assert_eq!(audit.result.state, "BUILD_FAILED_OR_AMBIGUOUS");
-        assert_eq!(diagnostic.phase, phase);
+        if audit.result.failure_code.as_deref() == Some("REVIEWED_BUILD_TIMEOUT") {
+            assert_eq!(phase, "CARGO_TIMEOUT");
+            assert_eq!(diagnostic.phase, "CARGO_BUILD");
+        } else {
+            assert_eq!(diagnostic.phase, phase);
+        }
         assert_eq!(diagnostic.classification, classification);
         assert!(diagnostic.captured_stderr_length <= MAX_CARGO_FAILURE_DIAGNOSTIC_BYTES);
         println!(
@@ -11309,14 +13634,258 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    #[ignore = "manual disposable reproduction of exact T-0462 unclassified Cargo failure"]
+    #[ignore = "manual disposable reproduction of the verified active CatDesk Cargo failure"]
     fn active_unclassified_cargo_diagnostic_is_manual_only() {
-        let outcome =
-            run_active_unclassified_cargo_diagnostic().expect("bounded cargo reproduction");
+        let selected = std::env::var_os("CATDESK_REVIEWED_DIAGNOSTIC_WORKSPACE");
+        let workspace = manual_cargo_diagnostic_workspace(selected.as_deref())
+            .expect("existing local diagnostic workspace");
+        let outcome = run_active_unclassified_cargo_diagnostic(&workspace)
+            .expect("bounded cargo reproduction");
         println!(
             "ACTIVE_UNCLASSIFIED_CARGO_REPRODUCTION {}",
             fixed_v5_host_linker_diagnostic_summary_line(&outcome)
         );
+    }
+
+    #[cfg(windows)]
+    fn active_unclassified_cargo_diagnostic_fixture()
+    -> (ReviewedBuildAttemptV1, ReviewedBuildTerminalAuditV1) {
+        let (mut attempt, mut audit) = fixed_v5_linker_diagnostic_audit_fixture();
+        attempt.snapshot_expected.project_id = "catdesk".into();
+        attempt.attempt_digest = digest_attempt(&attempt).unwrap();
+        audit.attempt = attempt.clone();
+        audit.result.failure_diagnostic = Some(summarize_cargo_failure(
+            Some(101),
+            read_bounded_cargo_stderr(std::io::Cursor::new(vec![
+                b'x';
+                MAX_CARGO_FAILURE_DIAGNOSTIC_BYTES
+                    + 1
+            ]))
+            .unwrap(),
+        ));
+        (attempt, audit)
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn active_unclassified_cargo_diagnostic_requires_exact_terminal_authority() {
+        let (attempt, audit) = active_unclassified_cargo_diagnostic_fixture();
+        let before = audit.clone();
+        assert!(validate_active_unclassified_cargo_diagnostic_audit(&attempt, &audit).is_ok());
+
+        let mut wrong = audit.clone();
+        wrong.owner.owner_id = "f".repeat(32);
+        assert!(validate_active_unclassified_cargo_diagnostic_audit(&attempt, &wrong).is_err());
+        let mut wrong = audit.clone();
+        wrong.result.attestation_digest = Some("a".repeat(64));
+        assert!(validate_active_unclassified_cargo_diagnostic_audit(&attempt, &wrong).is_err());
+        let mut wrong = audit.clone();
+        wrong.result.state = "BUILD_RUNNING".into();
+        assert!(validate_active_unclassified_cargo_diagnostic_audit(&attempt, &wrong).is_err());
+        let mut wrong = audit.clone();
+        wrong.attempt.snapshot_manifest_digest = "9".repeat(64);
+        assert!(validate_active_unclassified_cargo_diagnostic_audit(&attempt, &wrong).is_err());
+        for change in ["project", "session", "policy", "review", "digest"] {
+            let mut other = attempt.clone();
+            match change {
+                "project" => other.snapshot_expected.project_id = "other-project".into(),
+                "session" => other.review_session_id = "other-session".into(),
+                "policy" => other.policy.version = LEGACY_BUILD_POLICY_V4_VERSION.into(),
+                "review" => other.review_authority_sha256 = "invalid".into(),
+                "digest" => other.snapshot_manifest_digest = "8".repeat(64),
+                _ => unreachable!(),
+            }
+            if change != "digest" {
+                other.attempt_digest = digest_attempt(&other).unwrap();
+            }
+            let mut wrong = audit.clone();
+            wrong.attempt = other.clone();
+            assert!(
+                validate_active_unclassified_cargo_diagnostic_audit(&other, &wrong).is_err(),
+                "{change}"
+            );
+        }
+        assert_eq!(
+            audit, before,
+            "diagnostic validation cannot mutate authority"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn active_unclassified_cargo_diagnostic_requires_truncated_unclassified_failure() {
+        let (attempt, audit) = active_unclassified_cargo_diagnostic_fixture();
+        for change in ["code", "phase", "classified", "short", "complete", "hash"] {
+            let mut wrong = audit.clone();
+            let diagnostic = wrong.result.failure_diagnostic.as_mut().unwrap();
+            match change {
+                "code" => diagnostic.exit_code = Some(1),
+                "phase" => diagnostic.phase = "START".into(),
+                "classified" => diagnostic.classification = "CARGO_LINK_FAILED".into(),
+                "short" => diagnostic.captured_stderr_length -= 1,
+                "complete" => diagnostic.stderr_truncated = false,
+                "hash" => diagnostic.captured_stderr_sha256 = "invalid".into(),
+                _ => unreachable!(),
+            }
+            assert!(
+                validate_active_unclassified_cargo_diagnostic_audit(&attempt, &wrong).is_err(),
+                "{change}"
+            );
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn active_unclassified_cargo_diagnostic_workspace_selection_is_local_and_explicit() {
+        let default = manual_cargo_diagnostic_workspace(None).unwrap();
+        assert_eq!(default, PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+        assert_eq!(
+            manual_cargo_diagnostic_workspace(Some(default.as_os_str())).unwrap(),
+            default
+        );
+        for bad in [
+            "",
+            ".",
+            "..",
+            r"relative\workspace",
+            r"\\server\share\workspace",
+            r"C:\missing-catdesk-diagnostic-workspace",
+        ] {
+            assert!(manual_cargo_diagnostic_workspace(Some(std::ffi::OsStr::new(bad))).is_err());
+        }
+        let source = include_str!("reviewed_build.rs");
+        let start = source
+            .find("fn run_active_unclassified_cargo_diagnostic(")
+            .unwrap();
+        let end = start
+            + source[start..]
+                .find("fn run_fixed_v5_host_linker_diagnostic()")
+                .unwrap();
+        let runner = &source[start..end];
+        for required in [
+            "terminal_failure_audit(",
+            "validate_active_unclassified_cargo_diagnostic_audit(",
+            "validate_attempt(",
+            "configure_exact_worker_cargo_command(",
+            "ensure_exact_active_pointer(",
+            "wait_for_owned_build_exit(",
+            "Duration::from_secs(95)",
+        ] {
+            assert!(runner.contains(required), "missing {required}");
+        }
+        for forbidden in [
+            "EXACT_REVIEW",
+            "std::env::",
+            "control_create_json(",
+            "atomic_json(",
+            "attestation.json",
+            "Command::new(\"",
+            "--release",
+        ] {
+            assert!(!runner.contains(forbidden), "unexpected {forbidden}");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn active_unclassified_cargo_diagnostic_paths_match_worker_without_authority_writes() {
+        let root = std::env::temp_dir().join(format!("catdesk-path-shape-{}", Uuid::new_v4()));
+        let attempt = "a".repeat(32);
+        let authority = root
+            .join(".catdesk/reviewed-build-control/generations")
+            .join(&attempt);
+        fs::create_dir_all(&authority).unwrap();
+        let sentinel = authority.join("result.json");
+        fs::write(&sentinel, b"original terminal authority").unwrap();
+        let disposable = fixed_worker_shaped_cargo_diagnostic_root(&root).unwrap();
+        assert_eq!(WORKER_DIAGNOSTIC_SOURCE_PADDING.len(), 26);
+        assert_eq!(disposable.path().file_name().unwrap().len(), 32);
+        assert_eq!(
+            disposable.path().parent().unwrap().file_name().unwrap(),
+            "rl"
+        );
+        assert!(!disposable.path().starts_with(&authority));
+        let mut source = disposable.try_clone("fixture source").unwrap();
+        source
+            .create_child(WORKER_DIAGNOSTIC_SOURCE_PADDING, "fixture source")
+            .unwrap();
+        source.create_child("source", "fixture source").unwrap();
+        let mut target = disposable.try_clone("fixture target").unwrap();
+        target.create_child("target", "fixture target").unwrap();
+        let mut temp = target.try_clone("fixture temp").unwrap();
+        temp.create_child("tmp", "fixture temp").unwrap();
+        let mut cargo_home = disposable.try_clone("fixture cargo home").unwrap();
+        cargo_home
+            .create_child("cargo-home", "fixture cargo home")
+            .unwrap();
+        let paths = [source.path(), target.path(), cargo_home.path(), temp.path()];
+        assert!(validate_worker_shaped_cargo_diagnostic_paths(&root, &attempt, paths).is_ok());
+        assert_eq!(temp.path(), target.path().join("tmp"));
+        assert!(
+            validate_worker_shaped_cargo_diagnostic_paths(
+                &root,
+                &attempt,
+                [
+                    source.path(),
+                    target.path(),
+                    cargo_home.path(),
+                    disposable.path()
+                ]
+            )
+            .is_err()
+        );
+        assert_eq!(fs::read(&sentinel).unwrap(), b"original terminal authority");
+        assert_eq!(fs::read_dir(&authority).unwrap().count(), 1);
+        assert!(!disposable.path().join("attestation.json").exists());
+
+        // A sanitized 59-unit workspace prefix reproduces the observed worker's
+        // exact dimensions without embedding a person's machine path.
+        let workspace = PathBuf::from(format!(r"C:\fixture\{}", "x".repeat(48)));
+        assert_eq!(workspace.as_os_str().encode_wide().count(), 59);
+        let base = workspace.join("target-verify/rl").join("b".repeat(32));
+        let source_path = base.join(WORKER_DIAGNOSTIC_SOURCE_PADDING).join("source");
+        let target_path = base.join("target");
+        let cargo_path = base.join("cargo-home");
+        let temp_path = target_path.join("tmp");
+        assert_eq!(
+            validate_worker_shaped_cargo_diagnostic_paths(
+                &workspace,
+                &attempt,
+                [&source_path, &target_path, &cargo_path, &temp_path]
+            )
+            .unwrap(),
+            [143, 116, 120, 120]
+        );
+        drop(cargo_home);
+        drop(temp);
+        drop(target);
+        drop(source);
+        drop(disposable);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn active_unclassified_cargo_diagnostic_timeout_retains_only_partial_fixed_signals() {
+        let mut stderr = vec![b'x'; MAX_CARGO_FAILURE_DIAGNOSTIC_BYTES + 12];
+        stderr.extend_from_slice(b"\nerror: failed to run custom build command for `ring v0.17.14`\nerror occurred in cc-rs: C:\\private\\compiler.c: fatal error C1083: Cannot open include file: 'prefix_symbols.h': No such file or directory\n");
+        let capture = || read_bounded_cargo_stderr(std::io::Cursor::new(stderr.clone())).unwrap();
+        let summary = partial_cargo_diagnostic_summary("REVIEWED_BUILD_TIMEOUT", capture());
+        assert!(summary.starts_with(
+            "ACTIVE_UNCLASSIFIED_CARGO_PARTIAL exitCode=UNAVAILABLE waitOutcome=TIMED_OUT "
+        ));
+        assert!(summary.contains("CUSTOM_BUILD_COMMAND_FAILED"));
+        assert!(summary.contains("customBuildCrate=Some(\"ring\")"));
+        assert!(summary.contains("MSVC_C1083"));
+        assert!(summary.contains("stderrTruncated=true"));
+        for forbidden in ["C:\\private", "compiler.c", "exitCode=101", "SUCCESS"] {
+            assert!(!summary.contains(forbidden), "leaked {forbidden}");
+        }
+        assert!(
+            partial_cargo_diagnostic_summary("private failure detail", capture())
+                .contains("waitOutcome=FAILED")
+        );
+        assert!(fixed_v5_host_linker_diagnostic_outcome(None, capture()).is_err());
     }
 
     #[cfg(windows)]
@@ -14000,5 +16569,159 @@ mod tests {
         assert!(!script.contains("cargo build --release\n"));
         assert!(!script.contains("$manifest=\"$binary.sha256\""));
         assert!(!script.contains("Move-Item -LiteralPath $temporary -Destination $manifest"));
+    }
+}
+
+#[cfg(all(test, windows))]
+mod owned_msvc_probe_tests {
+    use super::*;
+    use std::os::windows::io::OwnedHandle;
+
+    fn observed_members(job: &BuildJob) -> serde_json::Value {
+        #[repr(C)]
+        struct ProcessIds {
+            assigned: u32,
+            listed: u32,
+            ids: [usize; 128],
+        }
+        unsafe extern "system" {
+            fn QueryInformationJobObject(
+                job: *mut c_void,
+                class: i32,
+                information: *mut c_void,
+                length: u32,
+                returned: *mut u32,
+            ) -> i32;
+            fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut c_void;
+            fn IsProcessInJob(process: *mut c_void, job: *mut c_void, result: *mut i32) -> i32;
+            fn QueryFullProcessImageNameW(
+                process: *mut c_void,
+                flags: u32,
+                name: *mut u16,
+                size: *mut u32,
+            ) -> i32;
+        }
+        let mut members: ProcessIds = unsafe { std::mem::zeroed() };
+        let queried = unsafe {
+            QueryInformationJobObject(
+                job.0,
+                3,
+                (&mut members as *mut ProcessIds).cast(),
+                std::mem::size_of::<ProcessIds>() as u32,
+                std::ptr::null_mut(),
+            )
+        } != 0;
+        assert!(queried && members.listed <= 128 && members.assigned == members.listed);
+        let rows: Vec<_> = members.ids[..members.listed as usize].iter().map(|pid| {
+            let pid = u32::try_from(*pid).unwrap();
+            let raw = unsafe { OpenProcess(0x0010_0000 | 0x1000, 0, pid) };
+            if raw.is_null() { return serde_json::json!({"pid":pid,"querySucceeded":false}); }
+            let handle = unsafe { OwnedHandle::from_raw_handle(raw) };
+            let mut member = 0;
+            let mut name = [0u16; 2048];
+            let mut size = name.len() as u32;
+            let valid = unsafe { IsProcessInJob(handle.as_raw_handle().cast(), job.0, &mut member) } != 0 && member != 0 && unsafe { QueryFullProcessImageNameW(handle.as_raw_handle().cast(), 0, name.as_mut_ptr(), &mut size) } != 0;
+            serde_json::json!({"pid":pid,"querySucceeded":valid,"imagePath":valid.then(||String::from_utf16_lossy(&name[..size as usize]))})
+        }).collect();
+        serde_json::json!({"activeProcesses":job.active_processes().unwrap(),"members":rows})
+    }
+
+    #[test]
+    #[ignore = "manual bounded benign MSVC Job-member probe; no release/control authority"]
+    fn current_host_benign_compile_and_link_job_members() {
+        let (cargo, rustc) = trusted_toolchain().unwrap();
+        let environment =
+            reviewed_windows_toolchain_environment(Path::new(&cargo.absolute_path)).unwrap();
+        let compiler = PathBuf::from(&environment.cc);
+        require_reviewed_toolchain_file(&compiler).unwrap();
+        let helper = pin_msvc_helper_directory(compiler.parent().unwrap()).unwrap();
+        let root =
+            std::env::temp_dir().join(format!("catdesk-msvc-members-{}", Uuid::new_v4().simple()));
+        fs::create_dir(&root).unwrap();
+        fs::write(root.join("probe.c"), b"int main(void) { return 0; }\n").unwrap();
+        fs::write(root.join("probe.rs"), b"fn main() {}\n").unwrap();
+        for probe in ["CL_COMPILE", "CL_LINK", "RUST_LINK"] {
+            let mut command = Command::new(if probe == "RUST_LINK" {
+                Path::new(&rustc.absolute_path)
+            } else {
+                &compiler
+            });
+            command
+                .current_dir(&root)
+                .env_clear()
+                .env("PATH", &environment.path)
+                .env("INCLUDE", &environment.include)
+                .env("LIB", &environment.lib)
+                .env("LIBPATH", &environment.libpath)
+                .env("SystemRoot", os_system_root().unwrap())
+                .env("SystemDrive", os_system_drive().unwrap())
+                .env("TEMP", &root)
+                .env("TMP", &root)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped())
+                .creation_flags(CREATE_SUSPENDED);
+            if probe == "RUST_LINK" {
+                command.args([
+                    "--edition=2024",
+                    "-C",
+                    "opt-level=2",
+                    "probe.rs",
+                    "-o",
+                    "probe-rust.exe",
+                ]);
+            } else {
+                command
+                    .args(["/nologo", "probe.c"])
+                    .arg(if probe == "CL_LINK" {
+                        "/Feprobe.exe"
+                    } else {
+                        "/c"
+                    });
+            }
+            let job = BuildJob::new().unwrap();
+            let mut child = command.spawn().unwrap();
+            let stderr = child.stderr.take().unwrap();
+            let reader = std::thread::spawn(move || read_bounded_cargo_stderr(stderr));
+            job.assign(&child).unwrap();
+            job.resume(&child).unwrap();
+            let deadline = std::time::Instant::now() + Duration::from_secs(20);
+            let status = loop {
+                if let Some(status) = child.try_wait().unwrap() {
+                    break Some(status);
+                }
+                if std::time::Instant::now() >= deadline {
+                    break None;
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            };
+            std::thread::sleep(Duration::from_millis(1100));
+            let before = observed_members(&job);
+            let mut evidence = Vec::new();
+            let helper_result = if status.is_some_and(|s| s.success()) {
+                helper
+                    .as_ref()
+                    .map(|pinned| job.stop_only_pinned_helper(pinned, &mut evidence))
+            } else {
+                None
+            };
+            let after = observed_members(&job);
+            job.terminate().unwrap();
+            let cleanup = std::time::Instant::now() + Duration::from_secs(5);
+            while job.active_processes().unwrap() != 0 && std::time::Instant::now() < cleanup {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert_eq!(job.active_processes().unwrap(), 0);
+            child.wait().unwrap();
+            while !reader.is_finished() && std::time::Instant::now() < cleanup {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert!(reader.is_finished());
+            let stderr = reader.join().unwrap().unwrap();
+            println!(
+                "{}",
+                serde_json::json!({"probe":probe,"rootExit":status.and_then(|s|s.code()),"before":before,"afterHelper":after,"pinnedHelper":helper.as_ref().map(|p|p.path.to_string_lossy()),"helperResult":format!("{helper_result:?}"),"helperCleanupRecords":evidence,"capturedStderrBytes":stderr.captured.len(),"ownedTreeExited":true,"artifactExecuted":false,"productionActions":0})
+            );
+        }
     }
 }

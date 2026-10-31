@@ -1,0 +1,225 @@
++                .produce_expected_wake("alpha", "Continue alpha", &target, intent)
++                .unwrap(),
++            event
++        );
++        assert!(event.is_expired_at(now()).unwrap());
++        assert_eq!(
++            fs::read(store.event_path(&event.event_id)).unwrap(),
++            saved_queue
++        );
++        assert_eq!(
++            fs::read(store.delivery_path(&event.event_id)).unwrap(),
++            saved_delivery
++        );
++        let recovered_lease = reopened.host_lock().unwrap();
++        assert_eq!(
++            reopened.claim(&event, &recovered_lease).unwrap_err(),
++            "SUBMISSION_RECONCILIATION_REQUIRED"
++        );
++        drop(recovered_lease);
++        // Even incomplete historical evidence cannot cause a new queue write.
++        fs::remove_file(store.event_path(&event.event_id)).unwrap();
++        assert_eq!(
++            reopened
++                .produce_expected_wake("alpha", "Continue alpha", &target, intent)
++                .unwrap(),
++            event
++        );
++        assert!(!store.event_path(&event.event_id).exists());
++        assert!(!store.archive_path(&event.event_id).exists());
++        assert_eq!(
++            fs::read(store.delivery_path(&event.event_id)).unwrap(),
++            saved_delivery
++        );
++        assert_eq!(
++            reopened.delivery(&event.event_id).unwrap(),
++            Some(historical)
++        );
++        assert_eq!(
++            reopened.retry_pre_submit(&event.event_id).unwrap_err(),
++            "SUBMISSION_RETRY_REFUSED"
++        );
++        fs::remove_dir_all(base).unwrap();
++    }
++
++    #[test]
++    fn semantic_wake_archived_delivery_reuses_all_original_bytes_without_queue_republication() {
++        let (base, store, target) = fixture();
++        let event = store
++            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
++            .unwrap();
++        let lease = store.host_lock().unwrap();
++        let delivery = store.claim(&event, &lease).unwrap();
++        store
++            .transition(
++                &event.event_id,
++                lease.owner(),
++                Phase::Submitting,
++                None,
++                None,
++            )
++            .unwrap();
++        let receipt = Receipt {
++            schema_version: PROTOCOL_VERSION,
++            event_id: event.event_id.clone(),
++            target_generation: target.generation,
++            target_digest: target.digest.clone(),
++            message_digest: delivery.message_digest,
++            sent_utc: now(),
++            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
++        };
++        store
++            .record_exact_receipt_timer(&event.event_id, &receipt)
++            .unwrap();
++        store
++            .transition(
++                &event.event_id,
++                lease.owner(),
++                Phase::Sent,
++                Some(receipt),
++                None,
++            )
++            .unwrap();
++        let saved = [
++            store.archive_path(&event.event_id),
++            store.delivery_path(&event.event_id),
++            store.timer_path(&event.event_id),
++        ]
++        .into_iter()
++        .map(|path| {
++            let bytes = fs::read(&path).unwrap();
++            (path, bytes)
++        })
++        .collect::<Vec<_>>();
++        drop(lease);
++        let reopened =
++            Store::open_scoped_for_test(store.root(), store.root().parent().unwrap()).unwrap();
++        assert_eq!(
++            reopened
++                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
++                .unwrap(),
++            event
++        );
++        for (path, bytes) in saved {
++            assert_eq!(fs::read(path).unwrap(), bytes);
++        }
++        assert!(reopened.events().unwrap().is_empty());
++        fs::remove_dir_all(base).unwrap();
++    }
++
++    #[test]
++    fn semantic_wake_wrong_or_stale_target_cannot_publish_or_retarget_an_existing_intent() {
++        let (base, store, target) = fixture();
++        let original = store
++            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
++            .unwrap();
++        let saved = fs::read(store.event_path(&original.event_id)).unwrap();
++        for wrong in [
++            Target::new(target.generation, "https://chatgpt.com/c/wrong".into()).unwrap(),
++            Target::new(target.generation + 1, target.url.clone()).unwrap(),
++        ] {
++            assert_eq!(
++                store
++                    .produce_expected_wake("alpha", "Continue alpha", &wrong, intent())
++                    .unwrap_err(),
++                "TARGET_EXPECTATION_MISMATCH"
++            );
++        }
++        let next = store
++            .set_target("alpha", target.generation, "https://chatgpt.com/c/next")
++            .unwrap();
++        for expected in [&target, &next] {
++            assert_eq!(
++                store
++                    .produce_expected_wake("alpha", "Continue alpha", expected, intent())
++                    .unwrap_err(),
++                "TARGET_EXPECTATION_MISMATCH"
++            );
++        }
++        assert_eq!(
++            fs::read(store.event_path(&original.event_id)).unwrap(),
++            saved
++        );
++        assert_eq!(store.events().unwrap(), [original]);
++        fs::remove_dir_all(base).unwrap();
++    }
++
++    #[test]
++    fn semantic_wake_refuses_unbounded_input_and_read_only_writes() {
++        let (base, store, target) = fixture();
++        for invalid in [
++            WakeIntent {
++                ttl_seconds: 0,
++                ..intent()
++            },
++            WakeIntent {
++                ttl_seconds: MAX_WAKE_TTL_SECONDS + 1,
++                ..intent()
++            },
++            WakeIntent {
++                source_event_id: "foreign/event",
++                ..intent()
++            },
++            WakeIntent {
++                source_turn_id: "",
++                ..intent()
++            },
++        ] {
++            assert_eq!(
++                store
++                    .produce_expected_wake("alpha", "Continue alpha", &target, invalid)
++                    .unwrap_err(),
++                "QUEUE_WAKE_METADATA_INVALID"
++            );
++        }
++        for message in [
++            "".to_owned(),
++            "not  normalized".into(),
++            "x\0y".into(),
++            "x".repeat(2049),
++        ] {
++            assert_eq!(
++                store
++                    .produce_expected_wake("alpha", &message, &target, intent())
++                    .unwrap_err(),
++                "QUEUE_EVENT_INVALID"
++            );
++        }
++        let read_only = Store::open_read_only(store.root()).unwrap();
++        assert_eq!(
++            read_only
++                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
++                .unwrap_err(),
++            "STATE_READ_ONLY"
++        );
++        assert!(store.events().unwrap().is_empty());
++        fs::remove_dir_all(base).unwrap();
++    }
++
++    #[test]
++    fn semantic_wake_conflicting_durable_witnesses_are_preserved_without_repair() {
++        let (base, store, target) = fixture();
++        let event = store
++            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
++            .unwrap();
++        let conflicting = Event {
++            message: "Different historical content".into(),
++            ..event.clone()
++        };
++        atomic(&store.archive_path(&event.event_id), &conflicting).unwrap();
++        let queue_bytes = fs::read(store.event_path(&event.event_id)).unwrap();
++        let archive_bytes = fs::read(store.archive_path(&event.event_id)).unwrap();
++        assert_eq!(
++            store
++                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
++                .unwrap_err(),
++            "QUEUE_EVENT_ID_CONFLICT"
++        );
++        assert_eq!(
++            fs::read(store.event_path(&event.event_id)).unwrap(),
++            queue_bytes
++        );
++        assert_eq!(
++            fs::read(store.archive_path(&event.event_id)).unwrap(),
++            archive_bytes
++        );

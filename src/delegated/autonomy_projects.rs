@@ -21,6 +21,7 @@ use super::codex_model_policy::required_effort;
 use super::runtime::RuntimeError;
 
 pub const PROJECT_REGISTRY_SCHEMA_VERSION: u32 = 1;
+pub const PROJECT_REGISTRY_RETIREMENT_SCHEMA_VERSION: u32 = 2;
 const MAX_PROJECT_REGISTRY_BYTES: u64 = 1024 * 1024;
 const MAX_SCHEDULER_LEASE_BYTES: u64 = 128 * 1024;
 const MAX_SCHEDULER_CURSOR_BYTES: u64 = 4 * 1024;
@@ -141,6 +142,18 @@ pub struct AutonomousProjectRegistryV1 {
     pub maximum_qwen_workers: u32,
     #[serde(default)]
     pub projects: Vec<AutonomousProjectV1>,
+    /// Introduced only by explicit retirement. Schema 2 prevents older writers
+    /// from accepting and then silently discarding these reserved identities.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub retired_projects: Vec<RetiredProjectV1>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RetiredProjectV1 {
+    pub retirement_id: String,
+    pub retired_utc: u64,
+    pub project: AutonomousProjectV1,
 }
 
 /// Non-secret, host-observed facts which bind a registration confirmation to
@@ -256,64 +269,115 @@ pub fn resolve_registered_project_from_control_root(
     control_workspace: &Path,
     project_id: &str,
 ) -> Result<ResolvedProjectScopeV1, RuntimeError> {
-    valid_slug(project_id, "project id")?;
-    let control_workspace = control_workspace
-        .canonicalize()
-        .map_err(|_| RuntimeError::Validation("CatDesk control workspace is unavailable".into()))?;
-    let store = AutonomousProjectRegistryStoreV1::open_read_only(
-        control_workspace.join(".catdesk").join("projects"),
-    )?;
-    let registry = store.load_registry()?;
-    let controller = registry
-        .projects
-        .iter()
-        .find(|project| project.project_id == CATDESK_PROJECT_ID_V1)
-        .ok_or_else(|| {
-            RuntimeError::Validation("CatDesk control project is not registered".into())
+    PreparedProjectScopeV1::resolve(control_workspace, project_id).map(|prepared| prepared.scope)
+}
+
+/// Git probes happen before shared admission. Recheck these exact two records
+/// under the existing registration lock before using the prepared scope.
+pub(crate) struct PreparedProjectScopeV1 {
+    scope: ResolvedProjectScopeV1,
+    controller: AutonomousProjectV1,
+}
+
+impl PreparedProjectScopeV1 {
+    pub(crate) fn resolve(
+        control_workspace: &Path,
+        project_id: &str,
+    ) -> Result<Self, RuntimeError> {
+        valid_slug(project_id, "project id")?;
+        let control_workspace = control_workspace.canonicalize().map_err(|_| {
+            RuntimeError::Validation("CatDesk control workspace is unavailable".into())
         })?;
-    if controller.workspace != control_workspace {
-        return Err(RuntimeError::Validation(
-            "CatDesk control registry is bound to a different workspace".into(),
-        ));
+        let store = AutonomousProjectRegistryStoreV1::open_read_only(
+            control_workspace.join(".catdesk").join("projects"),
+        )?;
+        let registry = store.load_registry()?;
+        let controller = registry
+            .projects
+            .iter()
+            .find(|project| project.project_id == CATDESK_PROJECT_ID_V1)
+            .cloned()
+            .ok_or_else(|| {
+                RuntimeError::Validation("CatDesk control project is not registered".into())
+            })?;
+        if controller.workspace != control_workspace {
+            return Err(RuntimeError::Validation(
+                "CatDesk control registry is bound to a different workspace".into(),
+            ));
+        }
+        let control_path = controller.workspace.to_str().ok_or_else(|| {
+            RuntimeError::Validation("CatDesk control workspace is not UTF-8".into())
+        })?;
+        let observed_control = super::autonomy_supervisor::verified_external_git_workspace(
+            control_path,
+            &controller.git_identity,
+        )
+        .map_err(|_| {
+            RuntimeError::Validation("CatDesk control Git identity is unavailable".into())
+        })?;
+        if observed_control != control_workspace {
+            return Err(RuntimeError::Validation(
+                "CatDesk control workspace identity drifted".into(),
+            ));
+        }
+        let project = registry
+            .projects
+            .into_iter()
+            .find(|project| project.project_id == project_id)
+            .ok_or_else(|| RuntimeError::Validation("project is not registered".into()))?;
+        let registered_path = project.workspace.to_str().ok_or_else(|| {
+            RuntimeError::Validation("registered project workspace is not UTF-8".into())
+        })?;
+        let observed_workspace = super::autonomy_supervisor::verified_external_git_workspace(
+            registered_path,
+            &project.git_identity,
+        )
+        .map_err(|_| {
+            RuntimeError::Validation("registered project Git identity is unavailable".into())
+        })?;
+        if observed_workspace != project.workspace {
+            return Err(RuntimeError::Validation(
+                "registered project workspace identity drifted".into(),
+            ));
+        }
+        Ok(Self {
+            scope: ResolvedProjectScopeV1 {
+                control_workspace,
+                project,
+            },
+            controller,
+        })
     }
-    let control_path = controller
-        .workspace
-        .to_str()
-        .ok_or_else(|| RuntimeError::Validation("CatDesk control workspace is not UTF-8".into()))?;
-    let observed_control = super::autonomy_supervisor::verified_external_git_workspace(
-        control_path,
-        &controller.git_identity,
-    )
-    .map_err(|_| RuntimeError::Validation("CatDesk control Git identity is unavailable".into()))?;
-    if observed_control != control_workspace {
-        return Err(RuntimeError::Validation(
-            "CatDesk control workspace identity drifted".into(),
-        ));
+
+    pub(crate) fn scope(&self) -> &ResolvedProjectScopeV1 {
+        &self.scope
     }
-    let project = registry
-        .projects
-        .into_iter()
-        .find(|project| project.project_id == project_id)
-        .ok_or_else(|| RuntimeError::Validation("project is not registered".into()))?;
-    let registered_path = project.workspace.to_str().ok_or_else(|| {
-        RuntimeError::Validation("registered project workspace is not UTF-8".into())
-    })?;
-    let observed_workspace = super::autonomy_supervisor::verified_external_git_workspace(
-        registered_path,
-        &project.git_identity,
-    )
-    .map_err(|_| {
-        RuntimeError::Validation("registered project Git identity is unavailable".into())
-    })?;
-    if observed_workspace != project.workspace {
-        return Err(RuntimeError::Validation(
-            "registered project workspace identity drifted".into(),
-        ));
+
+    pub(crate) fn controller(&self) -> &AutonomousProjectV1 {
+        &self.controller
     }
-    Ok(ResolvedProjectScopeV1 {
-        control_workspace,
-        project,
-    })
+
+    /// Metadata only. The caller retains the existing registration lock.
+    pub(crate) fn revalidate_registration(&self) -> Result<(), RuntimeError> {
+        let registry = AutonomousProjectRegistryStoreV1::open_read_only(
+            self.scope.control_workspace.join(".catdesk/projects"),
+        )?
+        .load_registry()?;
+        if !registry
+            .projects
+            .iter()
+            .any(|current| current == &self.controller)
+            || !registry
+                .projects
+                .iter()
+                .any(|current| current == &self.scope.project)
+        {
+            return Err(RuntimeError::Validation(
+                "prepared project registration changed".into(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 impl AutonomousProjectRegistryStoreV1 {
@@ -354,10 +418,17 @@ impl AutonomousProjectRegistryStoreV1 {
             maximum_codex_workers,
             maximum_qwen_workers,
             projects: Vec::new(),
+            retired_projects: Vec::new(),
         })
     }
 
     pub fn load_registry(&self) -> Result<AutonomousProjectRegistryV1, RuntimeError> {
+        let registry = self.read_registry_snapshot()?;
+        validate_registry(&registry)?;
+        Ok(registry)
+    }
+
+    fn read_registry_snapshot(&self) -> Result<AutonomousProjectRegistryV1, RuntimeError> {
         let file = checked_registry_file(
             &self.registry_path(),
             MAX_PROJECT_REGISTRY_BYTES,
@@ -369,12 +440,9 @@ impl AutonomousProjectRegistryStoreV1 {
             MAX_PROJECT_REGISTRY_BYTES,
             "project registry file is oversized",
         )?;
-        let registry: AutonomousProjectRegistryV1 =
-            serde_json::from_slice(&bytes).map_err(|error| {
-                RuntimeError::Validation(format!("project registry is corrupted: {error}"))
-            })?;
-        validate_registry(&registry)?;
-        Ok(registry)
+        serde_json::from_slice(&bytes).map_err(|error| {
+            RuntimeError::Validation(format!("project registry is corrupted: {error}"))
+        })
     }
 
     /// Repair exactly one invalid CatDesk target digest when the canonical URL
@@ -401,19 +469,8 @@ impl AutonomousProjectRegistryStoreV1 {
             RuntimeError::Validation("designated target workspace unavailable".into())
         })?;
         let _lock = self.acquire_registration_lock()?;
-        let file = OpenOptions::new()
-            .read(true)
-            .open(self.registry_path())
-            .map_err(io_error)?;
-        if file.metadata().map_err(io_error)?.len() > 1024 * 1024 {
-            return Err(RuntimeError::Validation(
-                "designated target registry is oversized".into(),
-            ));
-        }
-        let mut registry: AutonomousProjectRegistryV1 =
-            serde_json::from_reader(file).map_err(|_| {
-                RuntimeError::Validation("designated target registry is malformed".into())
-            })?;
+        let mut registry = self.read_registry_snapshot()?;
+        let observed = registry.clone();
         let matching: Vec<usize> = registry
             .projects
             .iter()
@@ -443,16 +500,38 @@ impl AutonomousProjectRegistryStoreV1 {
         project.chatgpt_target_sha256 = Some(expected_wake_sha256.to_owned());
         // The regular validator checks every field of every project, including
         // duplicates. Only the single CatDesk digest discrepancy may be healed.
-        validate_registry(&registry)?;
-        self.save_registry(&registry)
+        let encoded = encoded_registry(&registry)?;
+        if self.read_registry_snapshot()? != observed {
+            return Err(RuntimeError::Validation(
+                "designated target registry changed before reconciliation".into(),
+            ));
+        }
+        self.write_encoded_registry(&encoded)
     }
 
     pub fn register_project(&self, mut project: AutonomousProjectV1) -> Result<(), RuntimeError> {
+        let _lock = self.acquire_registration_lock()?;
+        self.register_project_locked(&mut project)
+    }
+
+    fn register_project_locked(
+        &self,
+        project: &mut AutonomousProjectV1,
+    ) -> Result<(), RuntimeError> {
         project.workspace = project.workspace.canonicalize().map_err(|_| {
             RuntimeError::Validation("registered project workspace canonicalization failed".into())
         })?;
-        validate_project(&project)?;
+        validate_project(project)?;
         let mut registry = self.load_registry()?;
+        if registry
+            .retired_projects
+            .iter()
+            .any(|retired| retired.project.project_id == project.project_id)
+        {
+            return Err(RuntimeError::Validation(
+                "retired project id is reserved".into(),
+            ));
+        }
         if registry
             .projects
             .iter()
@@ -471,7 +550,7 @@ impl AutonomousProjectRegistryStoreV1 {
                 "workspace is already registered".into(),
             ));
         }
-        registry.projects.push(project);
+        registry.projects.push(project.clone());
         registry
             .projects
             .sort_by(|a, b| a.project_id.cmp(&b.project_id));
@@ -548,7 +627,7 @@ impl AutonomousProjectRegistryStoreV1 {
             expected_git_identity,
         )
         .map_err(|_| RuntimeError::Validation("Web project Git identity is unavailable".into()))?;
-        let project = AutonomousProjectV1 {
+        let mut project = AutonomousProjectV1 {
             project_id: project_id.into(),
             workspace,
             git_identity: expected_git_identity.into(),
@@ -558,8 +637,100 @@ impl AutonomousProjectRegistryStoreV1 {
             chatgpt_target_sha256: None,
             chatgpt_target_history: Vec::new(),
         };
-        self.register_project(project.clone())?;
+        self.register_project_locked(&mut project)?;
         Ok(project)
+    }
+
+    pub(crate) fn retired_project(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<RetiredProjectV1>, RuntimeError> {
+        valid_slug(project_id, "project id")?;
+        Ok(self
+            .load_registry()?
+            .retired_projects
+            .into_iter()
+            .find(|retired| retired.project.project_id == project_id))
+    }
+
+    /// The caller's fixed callback retires matching Wake authority. Validate
+    /// the complete candidate before calling it; publication failure leaves
+    /// the original active snapshot available for that caller's recovery.
+    pub(crate) fn retire_web_project_after<F>(
+        &self,
+        observed: &AutonomousProjectV1,
+        retirement_id: &str,
+        retired_utc: u64,
+        before_commit: F,
+    ) -> Result<(RetiredProjectV1, bool), RuntimeError>
+    where
+        F: FnOnce() -> Result<(), RuntimeError>,
+    {
+        validate_project(observed)?;
+        valid_slug(retirement_id, "retirement id")?;
+        if observed.project_id == CATDESK_PROJECT_ID_V1
+            || observed.codex_thread_id.is_some()
+            || observed.verification_profile != "web_only_v1"
+            || retired_utc == 0
+        {
+            return Err(RuntimeError::Validation(
+                "project retirement scope is invalid".into(),
+            ));
+        }
+        let _scheduler_lock = self.acquire_scheduler_lock()?;
+        let _registration_lock = self.acquire_registration_lock()?;
+        let registry = self.load_registry()?;
+        if let Some(retired) = registry
+            .retired_projects
+            .iter()
+            .find(|retired| retired.project.project_id == observed.project_id)
+        {
+            return if retired.retirement_id == retirement_id && retired.project == *observed {
+                Ok((retired.clone(), true))
+            } else {
+                Err(RuntimeError::Validation(
+                    "project retirement identity changed".into(),
+                ))
+            };
+        }
+        let index = registry
+            .projects
+            .iter()
+            .position(|project| project.project_id == observed.project_id)
+            .ok_or_else(|| RuntimeError::Validation("project is not registered".into()))?;
+        if registry.projects[index] != *observed {
+            return Err(RuntimeError::Validation(
+                "project retirement snapshot changed".into(),
+            ));
+        }
+        if self.all_leases()?.iter().any(|lease| {
+            lease.project_id == observed.project_id || lease.workspace == observed.workspace
+        }) {
+            return Err(RuntimeError::Validation(
+                "project retirement requires no workspace lease".into(),
+            ));
+        }
+        let retired = RetiredProjectV1 {
+            retirement_id: retirement_id.into(),
+            retired_utc,
+            project: observed.clone(),
+        };
+        let mut candidate = registry.clone();
+        candidate.schema_version = PROJECT_REGISTRY_RETIREMENT_SCHEMA_VERSION;
+        candidate.projects.remove(index);
+        candidate.retired_projects.push(retired.clone());
+        candidate
+            .retired_projects
+            .sort_by(|a, b| a.project.project_id.cmp(&b.project.project_id));
+        encoded_registry(&candidate)?;
+        before_commit()?;
+        if self.load_registry()? != registry {
+            return Err(RuntimeError::Validation(
+                "project retirement registry changed before publication".into(),
+            ));
+        }
+        self.save_registry(&candidate)?;
+        Ok((retired, false))
     }
 
     /// Change only a CatDesk queue/writer-idle project's fixed verification
@@ -636,6 +807,7 @@ impl AutonomousProjectRegistryStoreV1 {
     pub fn bind_codex_thread(&self, project_id: &str, thread_id: &str) -> Result<(), RuntimeError> {
         valid_slug(project_id, "project id")?;
         valid_slug(thread_id, "Codex thread id")?;
+        let _lock = self.acquire_registration_lock()?;
         let mut registry = self.load_registry()?;
         if registry.projects.iter().any(|project| {
             project.project_id != project_id
@@ -1169,6 +1341,18 @@ impl AutonomousProjectRegistryStoreV1 {
         }
         let _lock = self.acquire_registration_lock()?;
         let mut registry = self.load_registry()?;
+        if registry.retired_projects.iter().any(|retired| {
+            retired
+                .project
+                .chatgpt_target_url
+                .iter()
+                .chain(retired.project.chatgpt_target_history.iter())
+                .any(|url| url.rsplit('/').next() == target_url.rsplit('/').next())
+        }) {
+            return Err(RuntimeError::Validation(
+                "retired project conversation is reserved".into(),
+            ));
+        }
         let project = registry
             .projects
             .iter_mut()
@@ -1179,18 +1363,26 @@ impl AutonomousProjectRegistryStoreV1 {
                 "project target compare-and-swap did not match".into(),
             ));
         }
-        before_commit()?;
+        // Check capacity before the caller updates paired Wake authority. A
+        // bounded registry may refuse another predecessor, never evict one.
+        if project.chatgpt_target_url.as_deref() != Some(target_url.as_str())
+            && project.chatgpt_target_url.is_some()
+            && project.chatgpt_target_history.len() >= MAX_PROJECT_CHAT_TARGET_HISTORY
+        {
+            return Err(RuntimeError::Validation(
+                "project ChatGPT target history capacity reached; predecessors preserved".into(),
+            ));
+        }
         if project.chatgpt_target_url.as_deref() != Some(target_url.as_str()) {
             if let Some(previous) = project.chatgpt_target_url.take() {
                 project.chatgpt_target_history.push(previous);
-                if project.chatgpt_target_history.len() > MAX_PROJECT_CHAT_TARGET_HISTORY {
-                    project.chatgpt_target_history.remove(0);
-                }
             }
         }
         project.chatgpt_target_url = Some(target_url);
         project.chatgpt_target_sha256 = Some(target_sha256);
         let bound = project.clone();
+        encoded_registry(&registry)?;
+        before_commit()?;
         self.save_registry(&registry)?;
         Ok(bound)
     }
@@ -1271,6 +1463,10 @@ impl AutonomousProjectRegistryStoreV1 {
                 .projects
                 .iter()
                 .any(|project| project.project_id == cursor.last_granted_project_id)
+                && !registry
+                    .retired_projects
+                    .iter()
+                    .any(|retired| retired.project.project_id == cursor.last_granted_project_id)
             {
                 return Err(RuntimeError::Validation(
                     "scheduler cursor project is not registered".into(),
@@ -1325,19 +1521,28 @@ impl AutonomousProjectRegistryStoreV1 {
             });
         }
         let start = match self.load_round_robin_cursor()? {
-            Some(cursor) => {
-                registry
-                    .projects
-                    .iter()
-                    .position(|project| project.project_id == cursor.last_granted_project_id)
-                    .ok_or_else(|| {
-                        RuntimeError::Validation(
-                            "scheduler cursor project is not registered".into(),
-                        )
-                    })?
-                    .wrapping_add(1)
-                    % registry.projects.len()
-            }
+            Some(cursor) => match registry
+                .projects
+                .iter()
+                .position(|project| project.project_id == cursor.last_granted_project_id)
+            {
+                Some(index) => index.wrapping_add(1) % registry.projects.len(),
+                None if registry.retired_projects.iter().any(|retired| {
+                    retired.project.project_id == cursor.last_granted_project_id
+                }) =>
+                {
+                    registry
+                        .projects
+                        .iter()
+                        .position(|project| project.project_id > cursor.last_granted_project_id)
+                        .unwrap_or(0)
+                }
+                None => {
+                    return Err(RuntimeError::Validation(
+                        "scheduler cursor project is not registered".into(),
+                    ));
+                }
+            },
             None => 0,
         };
         for offset in 0..registry.projects.len() {
@@ -1636,15 +1841,25 @@ impl AutonomousProjectRegistryStoreV1 {
             .join(format!("{:x}.json", hasher.finalize()))
     }
     fn save_registry(&self, registry: &AutonomousProjectRegistryV1) -> Result<(), RuntimeError> {
-        validate_registry(registry)?;
-        let encoded = serde_json::to_vec_pretty(registry).map_err(|_| {
-            RuntimeError::Validation("project registry serialization failed".into())
-        })?;
-        if encoded.len() as u64 + 1 > MAX_PROJECT_REGISTRY_BYTES {
-            return Err(RuntimeError::Validation(
-                "project registry exceeds the record limit".into(),
-            ));
+        let encoded = encoded_registry(registry)?;
+        if self.registry_path().try_exists().map_err(io_error)? {
+            let previous = self.load_registry()?;
+            if previous.schema_version == PROJECT_REGISTRY_RETIREMENT_SCHEMA_VERSION
+                && (registry.schema_version != PROJECT_REGISTRY_RETIREMENT_SCHEMA_VERSION
+                    || previous
+                        .retired_projects
+                        .iter()
+                        .any(|retired| !registry.retired_projects.contains(retired)))
+            {
+                return Err(RuntimeError::Validation(
+                    "project retirement history cannot be removed".into(),
+                ));
+            }
         }
+        self.write_encoded_registry(&encoded)
+    }
+
+    fn write_encoded_registry(&self, encoded: &[u8]) -> Result<(), RuntimeError> {
         let path = self.registry_path();
         let tmp = self.root.join(format!(".projects-{}.tmp", Uuid::new_v4()));
         let mut file = OpenOptions::new()
@@ -1652,7 +1867,7 @@ impl AutonomousProjectRegistryStoreV1 {
             .create_new(true)
             .open(&tmp)
             .map_err(io_error)?;
-        file.write_all(&encoded).map_err(io_error)?;
+        file.write_all(encoded).map_err(io_error)?;
         file.write_all(b"\n").map_err(io_error)?;
         file.sync_all().map_err(io_error)?;
         drop(file);
@@ -1818,10 +2033,20 @@ impl Drop for RegistrationLockV1 {
 }
 
 fn validate_registry(registry: &AutonomousProjectRegistryV1) -> Result<(), RuntimeError> {
-    if registry.schema_version != PROJECT_REGISTRY_SCHEMA_VERSION
+    if !matches!(
+        registry.schema_version,
+        PROJECT_REGISTRY_SCHEMA_VERSION | PROJECT_REGISTRY_RETIREMENT_SCHEMA_VERSION
+    ) || (registry.schema_version == PROJECT_REGISTRY_SCHEMA_VERSION
+        && !registry.retired_projects.is_empty())
+        || (registry.schema_version == PROJECT_REGISTRY_RETIREMENT_SCHEMA_VERSION
+            && registry.retired_projects.is_empty())
         || registry.maximum_codex_workers == 0
         || registry.maximum_qwen_workers == 0
-        || registry.projects.len() > 128
+        || registry
+            .projects
+            .len()
+            .saturating_add(registry.retired_projects.len())
+            > 128
     {
         return Err(RuntimeError::Validation(
             "project registry shape is invalid".into(),
@@ -1829,6 +2054,22 @@ fn validate_registry(registry: &AutonomousProjectRegistryV1) -> Result<(), Runti
     }
     for project in &registry.projects {
         validate_project(project)?;
+    }
+    for (index, retired) in registry.retired_projects.iter().enumerate() {
+        validate_project(&retired.project)?;
+        valid_slug(&retired.retirement_id, "retirement id")?;
+        if retired.retired_utc == 0
+            || retired.project.project_id == CATDESK_PROJECT_ID_V1
+            || retired.project.codex_thread_id.is_some()
+            || retired.project.verification_profile != "web_only_v1"
+            || registry.retired_projects[..index]
+                .iter()
+                .any(|prior| prior.retirement_id == retired.retirement_id)
+        {
+            return Err(RuntimeError::Validation(
+                "project retirement record is invalid".into(),
+            ));
+        }
     }
     for (index, project) in registry.projects.iter().enumerate() {
         if registry
@@ -1850,13 +2091,34 @@ fn validate_registry(registry: &AutonomousProjectRegistryV1) -> Result<(), Runti
                 "project registry workspace or Codex thread binding is not unique".into(),
             ));
         }
+    }
+    let identities: Vec<_> = registry
+        .projects
+        .iter()
+        .chain(
+            registry
+                .retired_projects
+                .iter()
+                .map(|retired| &retired.project),
+        )
+        .collect();
+    for (index, project) in identities.iter().enumerate() {
+        if identities
+            .iter()
+            .skip(index + 1)
+            .any(|other| other.project_id == project.project_id)
+        {
+            return Err(RuntimeError::Validation(
+                "project retirement ids must remain reserved".into(),
+            ));
+        }
         let conversation_ids = project
             .chatgpt_target_url
             .iter()
             .chain(project.chatgpt_target_history.iter())
             .filter_map(|url| url.rsplit('/').next())
             .collect::<Vec<_>>();
-        if registry.projects.iter().skip(index + 1).any(|other| {
+        if identities.iter().skip(index + 1).any(|other| {
             other
                 .chatgpt_target_url
                 .iter()
@@ -1870,6 +2132,18 @@ fn validate_registry(registry: &AutonomousProjectRegistryV1) -> Result<(), Runti
         }
     }
     Ok(())
+}
+
+fn encoded_registry(registry: &AutonomousProjectRegistryV1) -> Result<Vec<u8>, RuntimeError> {
+    validate_registry(registry)?;
+    let encoded = serde_json::to_vec_pretty(registry)
+        .map_err(|_| RuntimeError::Validation("project registry serialization failed".into()))?;
+    if encoded.len() as u64 + 1 > MAX_PROJECT_REGISTRY_BYTES {
+        return Err(RuntimeError::Validation(
+            "project registry exceeds the record limit".into(),
+        ));
+    }
+    Ok(encoded)
 }
 fn validate_project(project: &AutonomousProjectV1) -> Result<(), RuntimeError> {
     valid_slug(&project.project_id, "project id")?;
@@ -2150,6 +2424,15 @@ fn reject_registration_conflicts(
     profile: &str,
     evidence: &ProjectRegistrationEvidenceV1,
 ) -> Result<(), RuntimeError> {
+    if registry
+        .retired_projects
+        .iter()
+        .any(|retired| retired.project.project_id == project_id)
+    {
+        return Err(RuntimeError::Validation(
+            "retired project id is reserved".into(),
+        ));
+    }
     if let Some(existing) = registry
         .projects
         .iter()
@@ -2240,6 +2523,435 @@ mod tests {
             chatgpt_target_sha256: None,
             chatgpt_target_history: Vec::new(),
         }
+    }
+
+    fn retirement_fixture(
+        label: &str,
+    ) -> (
+        PathBuf,
+        AutonomousProjectRegistryStoreV1,
+        AutonomousProjectV1,
+    ) {
+        let (root, store, _) = scheduler_preflight_fixture(label);
+        let mut registry = store.load_registry().unwrap();
+        let entry = &mut registry.projects[0];
+        entry.verification_profile = "web_only_v1".into();
+        entry.chatgpt_target_url = Some("https://chatgpt.com/c/retirement-current".into());
+        entry.chatgpt_target_sha256 = Some(project_chat_target_digest(
+            entry.chatgpt_target_url.as_ref().unwrap(),
+        ));
+        entry.chatgpt_target_history = vec!["https://chatgpt.com/c/retirement-predecessor".into()];
+        let observed = entry.clone();
+        store.save_registry(&registry).unwrap();
+        let sibling = root.join("beta");
+        fs::create_dir(&sibling).unwrap();
+        store.register_project(project("beta", sibling)).unwrap();
+        (root, store, observed)
+    }
+
+    #[test]
+    fn retirement_keeps_exact_tombstone_and_is_idempotent_across_reopen() {
+        use std::cell::Cell;
+        let (root, store, observed) = retirement_fixture("retirement-reopen");
+        let before = store.load_registry().unwrap();
+        assert_eq!(before.schema_version, 1);
+        assert!(
+            !serde_json::to_value(&before)
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .contains_key("retiredProjects")
+        );
+        let calls = Cell::new(0);
+        let (retired, repeated) = store
+            .retire_web_project_after(&observed, "retire-alpha", 100, || {
+                calls.set(calls.get() + 1);
+                assert_eq!(
+                    store.load_registry().unwrap(),
+                    before,
+                    "active row remains until callback succeeds"
+                );
+                Ok(())
+            })
+            .unwrap();
+        assert!(!repeated);
+        assert_eq!(retired.project, observed);
+        let published = fs::read(store.registry_path()).unwrap();
+        let reopened =
+            AutonomousProjectRegistryStoreV1::open_read_only(store.root.clone()).unwrap();
+        let state = reopened.load_registry().unwrap();
+        assert_eq!(state.schema_version, 2);
+        assert_ne!(
+            state.schema_version, PROJECT_REGISTRY_SCHEMA_VERSION,
+            "legacy schema-1 writer must refuse"
+        );
+        assert_eq!(
+            state.projects,
+            before
+                .projects
+                .into_iter()
+                .filter(|p| p.project_id != "alpha")
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            reopened.retired_project("alpha").unwrap(),
+            Some(retired.clone())
+        );
+        assert_eq!(reopened.retired_project("beta").unwrap(), None);
+        let (same, repeated) = reopened
+            .retire_web_project_after(&observed, "retire-alpha", 999, || {
+                calls.set(calls.get() + 1);
+                Ok(())
+            })
+            .unwrap();
+        assert!(repeated);
+        assert_eq!(same, retired);
+        assert_eq!(calls.get(), 1);
+        assert_eq!(fs::read(store.registry_path()).unwrap(), published);
+        assert!(
+            reopened
+                .retire_web_project_after(&observed, "different", 100, || panic!(
+                    "no second callback"
+                ))
+                .is_err()
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn retirement_registration_lock_excludes_mutations_and_releases_after_refusal() {
+        let (root, store, observed) = retirement_fixture("retirement-registration-lock");
+        let third_workspace = root.join("third");
+        fs::create_dir(&third_workspace).unwrap();
+        let third = project("third", third_workspace);
+        let before = fs::read(store.registry_path()).unwrap();
+        assert!(
+            store
+                .retire_web_project_after(&observed, "retire-alpha", 100, || {
+                    assert!(store.register_project(third.clone()).is_err());
+                    assert!(store.bind_codex_thread("beta", "thread-beta").is_err());
+                    Err(RuntimeError::Validation(
+                        "controlled callback refusal".into(),
+                    ))
+                })
+                .is_err()
+        );
+        assert_eq!(fs::read(store.registry_path()).unwrap(), before);
+        store.register_project(third).unwrap();
+        store.bind_codex_thread("beta", "thread-beta").unwrap();
+        store
+            .retire_web_project_after(&observed, "retire-alpha", 100, || Ok(()))
+            .unwrap();
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn retirement_refuses_scope_snapshot_and_callback_failure_without_changing_bytes() {
+        let (root, store, observed) = retirement_fixture("retirement-refusal");
+        let before = fs::read(store.registry_path()).unwrap();
+        for changed in [
+            AutonomousProjectV1 {
+                project_id: "catdesk".into(),
+                ..observed.clone()
+            },
+            AutonomousProjectV1 {
+                codex_thread_id: Some("native-owner".into()),
+                ..observed.clone()
+            },
+            AutonomousProjectV1 {
+                verification_profile: "rust_full".into(),
+                ..observed.clone()
+            },
+            AutonomousProjectV1 {
+                git_identity: "changed-origin".into(),
+                ..observed.clone()
+            },
+        ] {
+            assert!(
+                store
+                    .retire_web_project_after(&changed, "retire-alpha", 100, || panic!(
+                        "refuse before callback"
+                    ))
+                    .is_err()
+            );
+            assert_eq!(fs::read(store.registry_path()).unwrap(), before);
+        }
+        assert!(
+            store
+                .retire_web_project_after(&observed, "retire-alpha", 0, || panic!("zero time"))
+                .is_err()
+        );
+        assert!(
+            store
+                .retire_web_project_after(&observed, "retire-alpha", 100, || {
+                    Err(RuntimeError::Validation("Wake refused".into()))
+                })
+                .is_err()
+        );
+        assert_eq!(fs::read(store.registry_path()).unwrap(), before);
+        assert!(store.retired_project("alpha").unwrap().is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn retirement_refuses_even_expired_workspace_lease_until_owner_release() {
+        let (root, store, observed) = retirement_fixture("retirement-lease");
+        let GlobalScheduleDecisionV1::Granted(lease) = store
+            .schedule_mutating_worker("alpha", "owner-alpha", ScheduledProviderV1::Codex, 1, 2)
+            .unwrap()
+        else {
+            panic!("fixture lease required");
+        };
+        let before = fs::read(store.registry_path()).unwrap();
+        assert!(
+            store
+                .retire_web_project_after(&observed, "retire-alpha", 1000, || panic!(
+                    "lease remains owned"
+                ))
+                .is_err()
+        );
+        assert_eq!(fs::read(store.registry_path()).unwrap(), before);
+        store.release_workspace_lease(&lease).unwrap();
+        assert!(
+            store
+                .retire_web_project_after(&observed, "retire-alpha", 1000, || Ok(()))
+                .is_ok()
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn retired_ids_urls_and_tombstones_remain_reserved_by_every_registry_write() {
+        let (root, store, observed) = retirement_fixture("retirement-reservations");
+        store
+            .retire_web_project_after(&observed, "retire-alpha", 100, || Ok(()))
+            .unwrap();
+        let before = fs::read(store.registry_path()).unwrap();
+        let replacement_root = root.join("replacement");
+        fs::create_dir(&replacement_root).unwrap();
+        assert!(
+            store
+                .register_project(project("alpha", replacement_root.clone()))
+                .is_err()
+        );
+        let evidence = registration_evidence(replacement_root.clone(), "new-native-thread");
+        assert!(
+            reject_registration_conflicts(
+                &store.load_registry().unwrap(),
+                "alpha",
+                "rust_full",
+                &evidence
+            )
+            .is_err()
+        );
+        for url in observed
+            .chatgpt_target_url
+            .iter()
+            .chain(observed.chatgpt_target_history.iter())
+        {
+            assert!(
+                store
+                    .bind_project_chat_target_after("beta", url, None, || panic!(
+                        "reserved URL before Wake"
+                    ))
+                    .is_err()
+            );
+            let mut alias = project("new-project", replacement_root.clone());
+            alias.chatgpt_target_url = Some(url.clone());
+            alias.chatgpt_target_sha256 = Some(project_chat_target_digest(url));
+            assert!(store.register_project(alias).is_err());
+        }
+        assert_eq!(fs::read(store.registry_path()).unwrap(), before);
+        let mut forgotten = store.load_registry().unwrap();
+        forgotten.retired_projects.clear();
+        assert!(store.save_registry(&forgotten).is_err());
+        forgotten.schema_version = 1;
+        assert!(store.save_registry(&forgotten).is_err());
+        assert_eq!(fs::read(store.registry_path()).unwrap(), before);
+        // Explicit new identity may reuse the old directory, without inheriting its target.
+        store
+            .register_project(project("replacement", observed.workspace.clone()))
+            .unwrap();
+        assert_eq!(
+            store.retired_project("alpha").unwrap().unwrap().project,
+            observed
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn retirement_validates_capacity_before_external_callback() {
+        let (root, store, _) = retirement_fixture("retirement-size");
+        let mut registry = store.load_registry().unwrap();
+        registry.projects[0].workspace = PathBuf::from("x");
+        let base = encoded_registry(&registry).unwrap().len();
+        registry.projects[0].workspace =
+            PathBuf::from("x".repeat(MAX_PROJECT_REGISTRY_BYTES as usize - base - 16));
+        store.save_registry(&registry).unwrap();
+        let observed = registry.projects[0].clone();
+        let before = fs::read(store.registry_path()).unwrap();
+        assert!(
+            store
+                .retire_web_project_after(&observed, "retire-alpha", 100, || panic!(
+                    "oversize before Wake"
+                ))
+                .is_err()
+        );
+        assert_eq!(fs::read(store.registry_path()).unwrap(), before);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn retired_scheduler_cursor_does_not_block_independent_active_project() {
+        let (root, store, observed) = retirement_fixture("retirement-cursor");
+        store.save_round_robin_cursor("alpha").unwrap();
+        store
+            .retire_web_project_after(&observed, "retire-alpha", 100, || Ok(()))
+            .unwrap();
+        let GlobalScheduleDecisionV1::Granted(lease) = store
+            .schedule_next_ready_worker(
+                &["beta"],
+                "owner-beta",
+                ScheduledProviderV1::Codex,
+                101,
+                200,
+            )
+            .unwrap()
+        else {
+            panic!("active sibling must remain schedulable");
+        };
+        assert_eq!(lease.project_id, "beta");
+        store.release_workspace_lease(&lease).unwrap();
+        assert!(
+            store
+                .schedule_next_ready_worker(
+                    &["alpha"],
+                    "owner-alpha",
+                    ScheduledProviderV1::Codex,
+                    101,
+                    200
+                )
+                .is_err()
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn schema_one_cannot_hide_retirement_records() {
+        let (root, store, observed) = retirement_fixture("retirement-schema");
+        let mut registry = store.load_registry().unwrap();
+        registry.retired_projects.push(RetiredProjectV1 {
+            retirement_id: "retire-alpha".into(),
+            retired_utc: 100,
+            project: observed,
+        });
+        assert!(validate_registry(&registry).is_err());
+        registry.schema_version = 2;
+        assert!(
+            validate_registry(&registry).is_err(),
+            "active and retired duplicate ID forbidden"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn designated_digest_reconciliation_preserves_retired_history_and_rejects_other_corruption() {
+        let (root, store, observed) = retirement_fixture("retirement-digest-reconciliation");
+        let workspace = root.join("catdesk");
+        fs::create_dir(&workspace).unwrap();
+        let target = "https://chatgpt.com/c/designated-catdesk";
+        let digest = project_chat_target_digest(target);
+        let mut control = project("catdesk", workspace.clone());
+        control.chatgpt_target_url = Some(target.into());
+        control.chatgpt_target_sha256 = Some(digest.clone());
+        store.register_project(control).unwrap();
+        store
+            .retire_web_project_after(&observed, "retire-alpha", 100, || Ok(()))
+            .unwrap();
+        let valid = store.load_registry().unwrap();
+        let mut corrupted = valid.clone();
+        corrupted
+            .projects
+            .iter_mut()
+            .find(|project| project.project_id == "catdesk")
+            .unwrap()
+            .chatgpt_target_sha256 = Some("f".repeat(64));
+        fs::write(
+            store.registry_path(),
+            serde_json::to_vec(&corrupted).unwrap(),
+        )
+        .unwrap();
+        assert!(store.load_registry().is_err());
+        store
+            .reconcile_catdesk_digest_with_wake(&workspace, target, &digest)
+            .unwrap();
+        assert_eq!(store.load_registry().unwrap(), valid);
+
+        corrupted
+            .projects
+            .iter_mut()
+            .find(|project| project.project_id == "beta")
+            .unwrap()
+            .git_identity
+            .clear();
+        let corrupt_bytes = serde_json::to_vec(&corrupted).unwrap();
+        fs::write(store.registry_path(), &corrupt_bytes).unwrap();
+        assert!(
+            store
+                .reconcile_catdesk_digest_with_wake(&workspace, target, &digest)
+                .is_err()
+        );
+        assert_eq!(fs::read(store.registry_path()).unwrap(), corrupt_bytes);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn target_history_capacity_refuses_before_wake_commit_without_losing_predecessors() {
+        use std::cell::Cell;
+        let (root, store, _) = scheduler_preflight_fixture("history-capacity");
+        let current = "https://chatgpt.com/c/current-alpha";
+        let mut registry = store.load_registry().unwrap();
+        registry.projects[0].chatgpt_target_url = Some(current.into());
+        registry.projects[0].chatgpt_target_sha256 = Some(project_chat_target_digest(current));
+        registry.projects[0].chatgpt_target_history = (0..MAX_PROJECT_CHAT_TARGET_HISTORY)
+            .map(|index| format!("https://chatgpt.com/c/history-{index}"))
+            .collect();
+        store.save_registry(&registry).unwrap();
+        let before = fs::read(store.registry_path()).unwrap();
+        let called = Cell::new(false);
+        let result = store.bind_project_chat_target_after(
+            "alpha",
+            "https://chatgpt.com/c/replacement-alpha",
+            Some(&project_chat_target_digest(current)),
+            || {
+                called.set(true);
+                Ok(())
+            },
+        );
+        assert!(
+            result.is_err(),
+            "full history must not discard its oldest predecessor"
+        );
+        assert!(
+            !called.get(),
+            "Wake pre-commit must not run when registry cannot retain history"
+        );
+        assert_eq!(fs::read(store.registry_path()).unwrap(), before);
+        let same = store
+            .bind_project_chat_target("alpha", current, Some(&project_chat_target_digest(current)))
+            .unwrap();
+        assert_eq!(
+            same.chatgpt_target_history,
+            registry.projects[0].chatgpt_target_history
+        );
+        let sibling = root.join("beta");
+        fs::create_dir(&sibling).unwrap();
+        store.register_project(project("beta", sibling)).unwrap();
+        assert!(
+            store
+                .bind_project_chat_target("beta", "https://chatgpt.com/c/current-beta", None)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -3588,6 +4300,9 @@ mod tests {
                     .projects
                     .iter()
                     .any(|project| project.project_id == cursor.last_granted_project_id)
+                    || registry.retired_projects.iter().any(|retired| {
+                        retired.project.project_id == cursor.last_granted_project_id
+                    })
             );
         }
         let leases = store.all_leases().expect("existing leases validate");

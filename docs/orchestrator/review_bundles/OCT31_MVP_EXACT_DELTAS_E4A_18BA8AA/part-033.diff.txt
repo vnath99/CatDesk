@@ -1,0 +1,205 @@
++            queue.save_job(&child)?; // Dormant: no controller may execute it yet.
++        }
++        checkpoint("DORMANT_CHILD_SAVED")?;
++        job.state = QueueState::Paused;
++        job.native_continuation = Some(link.clone());
++        queue.save_job(&job)?;
++        checkpoint("PARENT_LINK_SAVED")?;
++        job = check_link(&queue, &job, &link, root, Some(source_event))?;
++    }
++    if job.native_origin.as_ref().is_some_and(|o| !o.activated) && job.native_continuation.is_none()
++    {
++        lease.check_native_continuation(control, project_id, original, current, source_event)?;
++        no_native_effects(&queue, &job)?;
++        if job.binding.target_sha256.as_deref() != Some(&current.digest) {
++            return Err("WEB_TASK_NATIVE_CONTINUATION_SCOPE_CHANGED".into());
++        }
++        job.native_origin.as_mut().unwrap().activated = true;
++        job.state = QueueState::Ready;
++        queue.save_job(&job)?;
++        checkpoint("CHILD_ACTIVATED")?;
++    }
++    let request_sha256 = job.request_sha256();
++    Ok(native_dispatch::NativeQueueSelection {
++        task_id: job.task_id,
++        binding_sha256: current_hash,
++        request_sha256,
++        maximum_seconds: root.maximum_seconds,
++    })
++}
++
++#[cfg(all(test, windows))]
++mod tests {
++    use super::*;
++    use catdesk_wake::{protocol::Target, store::Store};
++    use native_dispatch::{NativeQueueFixture, NativeQueueSelection};
++
++    struct Fixture {
++        control: PathBuf,
++        wake: Store,
++        event: String,
++        selected: NativeQueueSelection,
++        _native: NativeQueueFixture,
++    }
++    impl Fixture {
++        fn new() -> Self {
++            let (control, _, wake, _, event) =
++                crate::web_work::tests::assignment_fixture_for("alpha");
++            let path = control.join(".catdesk/projects/projects.json");
++            let mut registry: crate::delegated::autonomy_projects::AutonomousProjectRegistryV1 =
++                serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
++            registry
++                .projects
++                .iter_mut()
++                .find(|p| p.project_id == "alpha")
++                .unwrap()
++                .codex_thread_id = Some(Uuid::new_v4().to_string());
++            fs::write(path, serde_json::to_vec(&registry).unwrap()).unwrap();
++            let native = native_dispatch::native_queue_fixture(&control, "alpha");
++            let selected =
++                native_dispatch::freeze_native_queue_selection(&control, "alpha", "native-fixture")
++                    .unwrap();
++            Self {
++                control,
++                wake,
++                event: event.event_id,
++                selected,
++                _native: native,
++            }
++        }
++        fn queue(&self) -> QueueStore {
++            let controller =
++                resolve_registered_project_from_control_root(&self.control, "catdesk").unwrap();
++            native_dispatch::selected_store(&self.control, &controller.project).unwrap()
++        }
++        fn rollover(&self) -> (Target, Target) {
++            crate::operator_facade::native_continuation_fixture(
++                &self.control,
++                &self.wake,
++                "alpha",
++                &self.event,
++            )
++        }
++        fn resume(
++            &self,
++            source: &Target,
++            current: &Target,
++            stop: Option<&str>,
++        ) -> Result<NativeQueueSelection, String> {
++            let lease = crate::operator_facade::acquire_web_work_lease(&self.control, "alpha")?;
++            continue_selection(
++                &self.control,
++                "alpha",
++                &self.selected,
++                ContinuationProof {
++                    lease: &lease,
++                    original: source,
++                    current,
++                    source_event: &self.event,
++                },
++                |phase| {
++                    if Some(phase) == stop {
++                        Err("INJECTED_METADATA_INTERRUPTION".into())
++                    } else {
++                        Ok(())
++                    }
++                },
++            )
++        }
++    }
++
++    #[test]
++    fn native_continuation_recovers_each_metadata_boundary_once() {
++        for phase in [
++            "DORMANT_CHILD_SAVED",
++            "PARENT_LINK_SAVED",
++            "CHILD_ACTIVATED",
++        ] {
++            let f = Fixture::new();
++            let original = f
++                .queue()
++                .load_job("alpha", &f.selected.task_id)
++                .unwrap()
++                .unwrap();
++            let (source, current) = f.rollover();
++            assert_eq!(
++                f.resume(&source, &current, Some(phase)).unwrap_err(),
++                "INJECTED_METADATA_INTERRUPTION"
++            );
++            let cold = f.queue();
++            let pending = cold.jobs().unwrap();
++            assert_eq!(pending.len(), 2);
++            let child = pending
++                .iter()
++                .find(|j| j.task_id != original.task_id)
++                .unwrap();
++            assert_eq!(
++                child.state,
++                if phase == "CHILD_ACTIVATED" {
++                    QueueState::Ready
++                } else {
++                    QueueState::Paused
++                }
++            );
++            let selected = f.resume(&source, &current, None).unwrap();
++            assert_eq!(selected, f.resume(&source, &current, None).unwrap());
++            let (leaf, lineage) = follow(&cold, "alpha", &f.selected, Some(&f.event)).unwrap();
++            assert_eq!(
++                lineage,
++                vec![original.task_id.clone(), selected.task_id.clone()]
++            );
++            assert_eq!(leaf.state, QueueState::Ready);
++            assert_eq!(leaf.prompt, original.prompt);
++            assert_eq!(leaf.model, original.model);
++            assert_eq!(leaf.effort, original.effort);
++            assert_eq!(leaf.windows_sandbox, original.windows_sandbox);
++            assert_eq!(leaf.binding.workspace, original.binding.workspace);
++            assert_eq!(leaf.binding.thread_id, original.binding.thread_id);
++            assert_eq!(leaf.binding.target_sha256, Some(current.digest));
++            assert_eq!(selected.maximum_seconds, f.selected.maximum_seconds);
++            let parent = cold.load_job("alpha", &original.task_id).unwrap().unwrap();
++            assert_eq!(parent.state, QueueState::Paused);
++            assert_eq!(parent.request_sha256(), original.request_sha256());
++            assert_eq!(cold.jobs().unwrap().len(), 2);
++        }
++    }
++
++    #[test]
++    fn native_continuation_missing_committed_child_never_recreates_it() {
++        let f = Fixture::new();
++        let (source, current) = f.rollover();
++        assert!(
++            f.resume(&source, &current, Some("PARENT_LINK_SAVED"))
++                .is_err()
++        );
++        let queue = f.queue();
++        let parent = queue
++            .load_job("alpha", &f.selected.task_id)
++            .unwrap()
++            .unwrap();
++        let child = &parent.native_continuation.as_ref().unwrap().task_id;
++        fs::remove_file(queue.job_path("alpha", child)).unwrap();
++        assert_eq!(
++            f.resume(&source, &current, None).unwrap_err(),
++            "WEB_TASK_NATIVE_CONTINUATION_RECORD_MISSING_NO_REPLAY"
++        );
++        assert!(queue.load_job("alpha", child).unwrap().is_none());
++    }
++
++    #[test]
++    fn native_continuation_refuses_changed_native_scope_and_corrupt_dormant_child() {
++        let f = Fixture::new();
++        let (source, current) = f.rollover();
++        let queue = f.queue();
++        let before = fs::read(queue.job_path("alpha", &f.selected.task_id)).unwrap();
++        assert!(
++            f.resume(&source, &current, Some("DORMANT_CHILD_SAVED"))
++                .is_err()
++        );
++        let child = queue
++            .jobs()
++            .unwrap()
++            .into_iter()
++            .find(|j| j.task_id != f.selected.task_id)
++            .unwrap();
++        let child_path = queue.job_path("alpha", &child.task_id);

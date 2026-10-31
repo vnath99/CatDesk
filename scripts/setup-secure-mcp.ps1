@@ -14,6 +14,7 @@ param(
     [switch]$PreserveExistingMigrationBackup,
     [switch]$StopRuntime,
     [switch]$RollbackClient,
+    [switch]$ForwardLocalMcpBearer,
     [string]$TunnelClientPath = "",
     [string]$ProfileName = "catdesk-local",
     [string]$RuntimeAlias = "catdesk-local",
@@ -99,7 +100,15 @@ namespace CatDesk {
             return new BoundedCapture { Text = text.ToString(), Overflow = overflow };
         }
         public static BoundedNativeResult Run(string fileName, string arguments, int timeoutMilliseconds, int maximumOutputBytes) {
+            return Run(fileName, arguments, timeoutMilliseconds, maximumOutputBytes, null);
+        }
+        public static BoundedNativeResult Run(string fileName, string arguments, int timeoutMilliseconds, int maximumOutputBytes, string mcpAuthorization) {
             var start = new ProcessStartInfo(fileName, arguments) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
+            if (mcpAuthorization != null) {
+                start.EnvironmentVariables["CATDESK_TUNNEL_MCP_AUTHORIZATION"] = mcpAuthorization;
+                start.EnvironmentVariables["MCP_EXTRA_HEADERS"] = "Authorization: env:CATDESK_TUNNEL_MCP_AUTHORIZATION";
+                start.EnvironmentVariables["MCP_DISCOVERY_EXTRA_HEADERS"] = "Authorization: env:CATDESK_TUNNEL_MCP_AUTHORIZATION";
+            }
             using (var process = Process.Start(start)) {
                 if (process == null) throw new InvalidOperationException("tunnel-client command did not start");
                 process.StandardInput.Close();
@@ -131,14 +140,18 @@ namespace CatDesk {
 }
 
 function Invoke-BoundedTunnelClient {
-    param([string]$Path, [string[]]$CommandArgs, [int]$TimeoutSeconds, [int]$MaxOutputBytes = 65536)
+    param([string]$Path, [string[]]$CommandArgs, [int]$TimeoutSeconds, [int]$MaxOutputBytes = 65536, [string]$McpAuthorization = '')
     if (-not $Path -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "tunnel-client is not installed" }
     if ($TimeoutSeconds -lt 1 -or $TimeoutSeconds -gt 30 -or $MaxOutputBytes -lt 1 -or $MaxOutputBytes -gt 65536) {
         throw "bounded tunnel-client invocation is invalid"
     }
     Initialize-BoundedNativeProcessType
     $commandLine = [string]::Join(" ", @($CommandArgs | ForEach-Object { ConvertTo-NativeCommandLineArgument -Value $_ }))
-    $result = [CatDesk.BoundedNativeProcess]::Run($Path, $commandLine, $TimeoutSeconds * 1000, $MaxOutputBytes)
+    $result = if ([string]::IsNullOrEmpty($McpAuthorization)) {
+        [CatDesk.BoundedNativeProcess]::Run($Path, $commandLine, $TimeoutSeconds * 1000, $MaxOutputBytes)
+    } else {
+        [CatDesk.BoundedNativeProcess]::Run($Path, $commandLine, $TimeoutSeconds * 1000, $MaxOutputBytes, $McpAuthorization)
+    }
     if ($result.TimedOut) {
         if ($result.TerminationFailed) { throw "tunnel-client command exceeded bounded timeout and did not terminate" }
         throw "tunnel-client command exceeded bounded timeout and was killed"
@@ -362,16 +375,37 @@ function Invoke-InstallScript {
     & powershell -NoProfile -ExecutionPolicy Bypass -File $script "-$InstallMode" | ConvertFrom-Json
 }
 
+function Get-LocalMcpRuntimeAuthorization {
+    param([bool]$ForwardBearer)
+    if (-not $ForwardBearer) { return '' }
+    $token = [Environment]::GetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN', 'Process')
+    if ($null -eq $token -or $token -cnotmatch '\A[\x21-\x7E]{24,}\z') {
+        throw 'LOCAL_MCP_AUTH_TOKEN_INVALID'
+    }
+    $reference = 'Authorization: env:CATDESK_TUNNEL_MCP_AUTHORIZATION'
+    foreach ($name in @('MCP_EXTRA_HEADERS', 'MCP_DISCOVERY_EXTRA_HEADERS')) {
+        $existing = [Environment]::GetEnvironmentVariable($name, 'Process')
+        if (-not [string]::IsNullOrEmpty($existing) -and $existing -cne $reference) {
+            throw 'LOCAL_MCP_AUTH_HEADER_CONFLICT'
+        }
+    }
+    # Only the owned native command receives this value. CatDesk does not write
+    # it to a profile, command argument, parent environment or presentation.
+    # The external managed-runtime handoff still needs its own qualification.
+    return 'Bearer ' + $token
+}
+
 function Connect-Runtime {
     param([string]$ClientPath, $McpConfig)
     # Validate the target before checking any runtime inputs or invoking the
     # tunnel client.  This keeps redacted presentation values fail-closed.
     $localMcpUrl = Get-LocalMcpRuntimeUrl -McpConfig $McpConfig
+    $mcpAuthorization = Get-LocalMcpRuntimeAuthorization -ForwardBearer ([bool]$ForwardLocalMcpBearer)
     if (-not $TunnelId) { throw "TunnelId is required for runtime connect" }
     if (-not [Environment]::GetEnvironmentVariable("CONTROL_PLANE_API_KEY")) {
         throw "CONTROL_PLANE_API_KEY must be present in the process environment for runtime connect"
     }
-    Invoke-BoundedTunnelClient -Path $ClientPath -CommandArgs @("runtimes", "connect", "--alias", $RuntimeAlias, "--tunnel-id", $TunnelId, "--runtime-api-key", "env:CONTROL_PLANE_API_KEY", "--mcp-server-url", $localMcpUrl) -TimeoutSeconds $RuntimeCommandTimeoutSeconds | Out-Null
+    Invoke-BoundedTunnelClient -Path $ClientPath -CommandArgs @("runtimes", "connect", "--alias", $RuntimeAlias, "--tunnel-id", $TunnelId, "--runtime-api-key", "env:CONTROL_PLANE_API_KEY", "--mcp-server-url", $localMcpUrl) -TimeoutSeconds $RuntimeCommandTimeoutSeconds -McpAuthorization $mcpAuthorization | Out-Null
     return "connect invoked"
 }
 
@@ -450,6 +484,7 @@ if ($clientPath -and $Mode -in @("status", "repair", "start_all", "connect")) {
     RuntimeAlias = @{ Supplied = -not [string]::IsNullOrWhiteSpace($RuntimeAlias); Value = Redacted-String $RuntimeAlias }
     TunnelId = @{ Supplied = -not [string]::IsNullOrWhiteSpace($TunnelId); Value = Redacted-String $TunnelId }
     RuntimeCredential = @{ Name = "CONTROL_PLANE_API_KEY"; Present = [bool][Environment]::GetEnvironmentVariable("CONTROL_PLANE_API_KEY"); Value = "<redacted>" }
+    LocalMcpBearerForwarding = @{ Requested = [bool]$ForwardLocalMcpBearer; Value = '<redacted>'; Scope = 'OWNED_CONNECT_CHILD_ONLY' }
     LocalMcp = @{ ConfigFound = if ($null -eq $mcpConfig) { $null } else { $mcpConfig.Found }; Endpoint = "<redacted-local-mcp-url>" }
     RuntimeStatus = switch ($statusOutcome.State) {
         "AVAILABLE" { "<redacted-status-output-present>" }

@@ -1,0 +1,172 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C181_DIRECT_CONTROLLER_NORMAL_BUILD_AND_AUTH_QUALIFIED",
+  "recordedUtc": "2026-10-25T04:56:43.0226901+00:00",
+  "localDate": "2026-10-25_America_New_York",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "061051fe9e6e4493ab0ccf24c58b41cbe81b74a6",
+  "verifiedRemoteSourceSha": "061051fe9e6e4493ab0ccf24c58b41cbe81b74a6",
+  "sourceTree": "3f5a5a60e287c28834ffc1232d6767daf1b97a3a",
+  "sourcePins": [
+    {
+      "path": "src/delegated/autonomous_contract.rs",
+      "sha256": "6f3948c4ed62581cb1e2234ac9992843fbce104196e5cb4804420263f5f6208f"
+    },
+    {
+      "path": "src/delegated/autonomous_controller.rs",
+      "sha256": "d821e3348d09deddcd54922f3ee6c680ad450002490ca69f2ebc702ea107c563"
+    },
+    {
+      "path": "src/delegated/autonomy_runtime.rs",
+      "sha256": "9cce84cdbc32e7886bb8e21846b9224c4de1f8bfa5244533e3c4df7c8c11c9cf"
+    },
+    {
+      "path": "src/delegated/autonomy_supervisor.rs",
+      "sha256": "f4661055c5b6504378fd830909140c6f689781617cd5c347611466dd55878790"
+    },
+    {
+      "path": "src/delegated/autonomy_accounting.rs",
+      "sha256": "0ebf8d85e24dc9c4078bff0244c5acd43412e1b902ca5995e1b3316c876c5e03"
+    },
+    {
+      "path": "src/delegated/autonomy_state.rs",
+      "sha256": "06e638484460ea3e4f43dc705b1a28017ea1b119600cd324a93bcb820daf21d5"
+    },
+    {
+      "path": "scripts/wake_bridge.py",
+      "sha256": "0f162cd0a49f5166a95a88aba3be08afe04c3ec2010ce51a66504d44d3c77bdb"
+    },
+    {
+      "path": "wake/adapter.py",
+      "sha256": "0686ae77d3f4ed7ff6fc1dcfcffe07c212f8e4aea515ed069c73e11993782b97"
+    },
+    {
+      "path": "wake/src/development_foreground.rs",
+      "sha256": "078f96a3cb626d13bbaefae0e24f38174818b3452e0e50484470c55033559aa2"
+    }
+  ],
+  "sourceQualification": {
+    "format": "PASS",
+    "priorRootScope": "BEFORE_FINAL_CONTROLLER_ACCOUNTING_PENDING_INTENT_GUARD",
+    "record": "C151_EXPLICIT_DIRECT_CHATGPT_SOURCE_2026_10_25.json",
+    "manualIgnoredTests": "NOT_CLAIMED_EXECUTED",
+    "priorRootIntegrations": "PASS",
+    "exactSourceActions": 0,
+    "exactSourceChecks": 0,
+    "strictClippy": "PASS",
+    "remoteCi": "UNVERIFIED_ZERO_EXACT_SHA_ACTIONS_AND_CHECKS",
+    "priorRootMainTests": 1696,
+    "currentFocusedTests": 183,
+    "expectedDeniedSubprocesses": "ROOT_APPCONTAINER_NEGATIVE_CHILD_FAILURE_OUTPUT_IS_EXPECTED_PARENT_SUITE_PASSED",
+    "finalGuardRegression": "PASS_CURRENT_C177",
+    "independentSourceReview": "C178_PASS_LIMITED_STATIC_SCOPE"
+  },
+  "artifact": {
+    "profile": "NORMAL_RELEASE_APP_ONLY_NO_WAKE_UPGRADE_NO_DEV_DEPENDENCIES",
+    "recipe": "cargo build --locked --offline --release --bin catdesk",
+    "producerAttested": false,
+    "previousNormalController": "RETAINED_IMMUTABLE_86f00f6e_SOURCE_PREDECESSOR_NOT_TRUSTED_PRODUCTION_LKG",
+    "seconds": 506.2756796,
+    "byteLength": 35309568,
+    "sha256": "701221a979e73e95c81a7853bec661add68ba814c0ac68919c1e357c49254a7a",
+    "buildLogSha256": "f1321d9118126424a0ab84a3f4ff8deae0f2d52f4a8cb07157378334263a2a7c",
+    "maximumBuildSeconds": 600,
+    "classification": "QUALIFIED_SEPARATE_NORMAL_CONTROLLER_NOT_INSTALLED_RELEASE",
+    "buildRecordSha256": "fe9cc31577faf58cf3335ea8ef78fee867fc69c68ebb5f142b987131827d906f"
+  },
+  "liveQualification": {
+    "webMcpCodingAcceptance": false,
+    "scope": "SEPARATE_NORMAL_CONTROLLER_QUALIFICATION_NOT_CANONICAL_PRODUCTION_ACCEPTANCE",
+    "imageSha256": "701221a979e73e95c81a7853bec661add68ba814c0ac68919c1e357c49254a7a",
+    "runs": [
+      {
+        "exitCode": 0,
+        "http": [
+          {
+            "status": 401,
+            "authentication": "absent"
+          },
+          {
+            "status": 401,
+            "authentication": "incorrect"
+          },
+          {
+            "authentication": "valid",
+            "status": 200,
+            "tools": 10
+          }
+        ],
+        "runtimeBoundSeconds": 12,
+        "sequence": 1,
+        "naturalExit": true,
+        "ready": true,
+        "listenerGone": true
+      },
+      {
+        "exitCode": 0,
+        "http": [
+          {
+            "status": 401,
+            "authentication": "absent"
+          },
+          {
+            "status": 401,
+            "authentication": "incorrect"
+          },
+          {
+            "authentication": "valid",
+            "status": 200,
+            "tools": 10
+          }
+        ],
+        "runtimeBoundSeconds": 12,
+        "sequence": 2,
+        "naturalExit": true,
+        "ready": true,
+        "listenerGone": true
+      }
+    ],
+    "maximumSeconds": 180,
+    "productionStartupAcceptance": false,
+    "healthRecordSha256": "4f3d88a0c3b50463c71518f08a3c1d36a673e1edf86368c4af3eafb317b015c1",
+    "installedRollbackAcceptance": false,
+    "sourceCommit": "061051fe9e6e4493ab0ccf24c58b41cbe81b74a6"
+  },
+  "canonicalSource": {
+    "runtimeStarts": 0,
+    "existingUntrackedFilesExact": 10,
+    "head": "061051fe9e6e4493ab0ccf24c58b41cbe81b74a6",
+    "canonicalBinaryChanged": false,
+    "sourceOnlyFastForward": true,
+    "canonicalFingerprintChanged": false
+  },
+  "preservation": {
+    "developmentCurrent": "v77",
+    "browserWakeStarts": 0,
+    "developmentPrevious": "v76",
+    "temporaryListenersGone": true,
+    "externalRuntimeActions": 0,
+    "normalOwnedProcessesExited": true,
+    "projectBindingsChanged": 0,
+    "completedCanariesReplayed": 0,
+    "nativeSessionsResumed": 0,
+    "canonicalPromoted": false,
+    "existingStateFilesExact": 361,
+    "recurringAutomationStarts": 0,
+    "selectedDevelopmentChanged": false
+  },
+  "acceptance": {
+    "acknowledgedReviewSnapshotProducerChain": "NOT_YET_ESTABLISHED_FOR_THIS_SOURCE",
+    "next": "Prepare one genuine bounded ChatGPT Web source-review task through the new explicit direct lane and existing authenticated development browser. Verify exact response and task-attributable artifact before completion/ACK; then obtain real reviewed-build attestation and supported release-pair preflight/confirmation. Do not reattribute native review JSON, repeat completed canaries or enable recurring automation.",
+    "operatorAction": "NONE_IDENTIFIED",
+    "installedRollback": "OPEN",
+    "genuineNewDirectWebWork": "PENDING_NEW_EXPLICIT_SOURCE_LANE_NOW_AVAILABLE",
+    "connector": "LAST_OBSERVED_429_SEPARATE_DEPENDENCY_NOT_RETRIED",
+    "productionBackend": "STOPPED_UNPROMOTED",
+    "officialRuntime": "SEPARATE_OWNER_UNCHANGED",
+    "sourceControllerQualification": "PASS_NOT_PRODUCTION_ATTESTATION",
+    "goal": "ACTIVE",
+    "twoConversationWebCoding": "OPEN",
+    "dateHold": "SUPERSEDED"
+  }
+}

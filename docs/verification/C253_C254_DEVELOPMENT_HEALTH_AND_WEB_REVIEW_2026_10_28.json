@@ -1,0 +1,58 @@
+{
+  "preservation": {
+    "profileIdentityPreserved": true,
+    "testOwnersRemaining": 0,
+    "nativeSessionFiles": 4631,
+    "allFiveBindingsPreserved": true,
+    "protectedPins": 8212,
+    "controlsStopped": true
+  },
+  "connector429": "SEPARATE_PRIOR_DEPENDENCY_NOT_RECHECKED_OR_ATTRIBUTED_TO_BROWSER_FAILURE",
+  "date": "2026-10-28",
+  "selection": {
+    "previousVerifiedReleaseRetained": true,
+    "supportedGuardedUpdate": true,
+    "browserStarts": 0,
+    "protectedPinsPreserved": 8191,
+    "nativeSessionFilesPreserved": 4623,
+    "hostStarts": 0
+  },
+  "appSha256": "ae75df717195b60b479011aff02f68f823e90a78c7091ec5d6e114f88f118b65",
+  "twoIndependentWebCodingAcceptance": "OPEN",
+  "milestoneComplete": false,
+  "health": {
+    "evidenceAuthority": "LOCAL_OPERATOR_PROVIDED_DEVELOPMENT_ONLY",
+    "resultSha256": "bbec79446d5210af396ee93e743feb17bce13e86c18f86d7f48394ddc3a94720",
+    "naturalParentAndChildExit": true,
+    "maximumSeconds": 6,
+    "httpStatuses": [
+      401,
+      200
+    ],
+    "actualSelectedChildVerified": true,
+    "protectedPinsPreserved": 8196,
+    "uniqueTools": 79
+  },
+  "selectedDevelopmentPackage": "1.0.0-dev.85-5c11178d9227f2a885d9615fe6c5b8f754e9681362be191f2ecf31e93cb96100",
+  "review": {
+    "deliveryReceipt": "EXACT_USER_MESSAGE_APPENDED",
+    "acknowledged": false,
+    "newRequestsOrResendsAfterFailure": 0,
+    "sourceAccepted": false,
+    "timer": "OBSERVING",
+    "privateCaptureEncodingLimitationRecorded": true,
+    "checkpoint": "C254",
+    "readNativeResult": "WEB_REVIEW_RESPONSE_NOT_COMPLETE",
+    "releaseAuthorityCreated": false,
+    "messagesSent": 1,
+    "assistantBody": "LOAD_ERROR_PLACEHOLDER",
+    "capturedBytesRepairedForAuthority": false,
+    "standingScopedAuthorization": true,
+    "reobserveError": "RESPONSE_TARGET_DRIFT",
+    "latestUserMatchedFrozenRequest": true,
+    "eventVerified": false
+  },
+  "productionPromotion": "NOT_PERFORMED",
+  "classification": "SELECTED_DEVELOPMENT_HEALTH_PASS_WEB_REVIEW_RESPONSE_UNAVAILABLE",
+  "sourceCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612"
+}

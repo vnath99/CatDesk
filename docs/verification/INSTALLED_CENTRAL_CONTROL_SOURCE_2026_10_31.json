@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T04:47:27.232375+00:00",
+  "classification": "SOURCE_QUALIFIED_EXISTING_INSTALLED_OWNER_CENTRAL_CONTROL_SCOPE_NOT_LIVE_ACCEPTED",
+  "sourceBaseCommit": "69bbbc9316566bd3a687130aca301363cf0938e2",
+  "sourceFilesSha256": {
+    "src/operator_facade.rs": "58ad6b37ee0adac152a4a706ec0ae7c8b13ff69f2370e52009870870dded3dd9",
+    "src/operator_installed_backend.rs": "8ad2c0c03d70ad63bc1dfb198c5654592a61a6980a7e295ef5d0a77577bee0b7",
+    "src/operator_installed_project.rs": "d74ec604d5085024e5a8a72a31208cb3af6d4058221df2690610ac8770e42056",
+    "src/reviewed_candidate_owner.rs": "f964573fe580197740712663921b28c66e933d9024a4c317408ddef8d3456893"
+  },
+  "command": "operator installed-backend run-central --control-workspace <existing-approved-controller> --mcp-path <existing-local-route> --max-runtime-seconds <1..180>",
+  "implementation": {
+    "existingFiniteOwnerExtended": true,
+    "newDaemonSchedulerRegistryOrTrustFramework": false,
+    "trustedInstalledImageSelectionUnchanged": true,
+    "existingSelectedReleaseAndRollbackAuthorityRequired": true,
+    "existingRootLifecycleLeaseAndImmutablePinsRetained": true,
+    "existingPreparedControllerAuthorityRequired": true,
+    "installationOverlapRefusedBeforeOwnerWrites": true,
+    "exactDedicatedEntryOnly": true,
+    "jobPoliciesOrSharedHostRefusalsWeakened": false,
+    "loopbackPort": 3200,
+    "mode": "supervisor-only",
+    "bearerRequired": true,
+    "centralTaskCatalogRequired": true,
+    "perProjectExecutionGrantsStillRequired": true,
+    "providerConversationAuthenticated": false,
+    "nativeDaemonOrRecurringStarts": false,
+    "externalRuntimeOrProfileManagedByCommand": false,
+    "originalConfigurationClonedToNewOwnedEvidenceOnly": true,
+    "registryOrWakeCopyRebindMigration": false,
+    "registryAndTaskLeasesHeldForServingLifetime": false,
+    "defaultReadOnlyRunAndRunProjectRetained": true
+  },
+  "tests": {
+    "backend": {
+      "passed": 14,
+      "logSha256": "71d41cca3074de94e382c7295b15d4c63435e92f8a5adcba5ab37c7c7644ed3b"
+    },
+    "entry": {
+      "passed": 2,
+      "logSha256": "f48d2385bd3b4d7451adc41cbc0fd6fec584fec69f9e3b990f294e87b2b58156"
+    },
+    "projectCli": {
+      "passed": 1,
+      "logSha256": "344501f2adcd75b804f94a11cb74593d73f89c0e1852a802d43325bec8675327"
+    },
+    "nativeJobs": {
+      "passed": 17,
+      "logSha256": "687be7703a6d955394cf19eeb480e10b86971ef3529ab19bb63673d0ae5837f2"
+    },
+    "controlRefusal": {
+      "passed": 1,
+      "logSha256": "f7265a539d5cebc3003ff9b51c14e263427304c81df1446e50e18d15078f53ed"
+    }
+  },
+  "distinctPassingTests": 34,
+  "strictAllTargetsClippy": {
+    "passed": true,
+    "logSha256": "c8e78c1bb2ae155d690401d64d668d7b2ef5c5aed81f2a8c69af163d4e4ca628"
+  },
+  "rootFormattingPassed": true,
+  "initialZeroMatchFiltersCountedAsQualification": false,
+  "installedCurrentImageAlreadyTrustedSha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf",
+  "newCommandInstalledLiveAcceptance": false,
+  "productionExecutableChanged": false,
+  "twoWebCodingAccepted": false,
+  "nextExecutableTask": "BUILD_SEPARATE_HASH_PINNED_SOURCE_CONTROLLER_AND_QUALIFY_FINITE_TRUSTED_INSTALLED_IMAGE_IN_THE_EXISTING_FIVE_PROJECT_CONTROL_SCOPE",
+  "operatorActionRequired": false,
+  "diagnosticFollowup": {
+    "observedUtc": "2026-10-31T05:18:13.334013+00:00",
+    "sourceBaseCommit": "f7587a968e3f16a601fd0da9410713f609bac0ad",
+    "sourceFilesSha256": {
+      "src/main.rs": "7ea940c2ff9b48f37dfcc4c0394d50d7dcd59dab7d20570663794a322a7d0324",
+      "src/operator_facade.rs": "12b410e39b6cf6f0a249601d0177c0ec4f69006a15a2b1600b06a7d4e345f8e9",
+      "src/operator_installed_backend.rs": "822ca0a2dd4916db89219f24c00cc25477a428614149d1723ac69e19be9eae15"
+    },
+    "distinctPassingTestsIncludingRetainedOwnerFixtures": 38,
+    "testProofs": [
+      {
+        "logSha256": "626546cdcb725d817c1f96e2a0431e20d0b376c970ca59224f3a1c3441f93773",
+        "passingCount": 18
+      },
+      {
+        "logSha256": "8ed0fc7b95cb7f081e8dc3b1eb57ad9fa8c6a7346022c04560c5d8a0ef446d7b",
+        "passingCount": 1
+      },
+      {
+        "logSha256": "f48d2385bd3b4d7451adc41cbc0fd6fec584fec69f9e3b990f294e87b2b58156",
+        "passingCount": 2
+      },
+      {
+        "logSha256": "344501f2adcd75b804f94a11cb74593d73f89c0e1852a802d43325bec8675327",
+        "passingCount": 1
+      },
+      {
+        "logSha256": "687be7703a6d955394cf19eeb480e10b86971ef3529ab19bb63673d0ae5837f2",
+        "passingCount": 17
+      }
+    ],
+    "strictClippyLogSha256": "74732388f056e480f0396a848c367648b0294b9c1351f43b0c2b04dbe49e10d2",
+    "readyChecksUnchangedAndSharedWithDiagnostics": 11,
+    "rawChildTextExported": false,
+    "readinessArtifact": "readiness-observation.json",
+    "outputArtifact": "process-output-observation.json",
+    "outputMetadata": "PRESENCE_LENGTH_SHA256_AND_EXISTING_CLOSED_CODE_ONLY",
+    "typedCliErrorCodes": true,
+    "failedCentralRunIdentityAndCleanupEvent": true,
+    "unknownErrorStringsAndPrivateSuffixesRefused": true,
+    "readyGuardWeakened": false,
+    "newDiagnosticControllerLiveAccepted": false
+  },
+  "preparedConfigCorrection": {
+    "observedUtc": "2026-10-31T05:31:08.605095+00:00",
+    "sourceBaseCommit": "66436bc297f6e9e66da27d26883bf88b5e294fa0",
+    "sourceSha256": "9f0614f4bd25e6c1d7e0643dd1d2aef47608e4b2461371134ad9c235d4289358",
+    "confirmedStartupCode": "WEB_DEVELOPMENT_CONFIG_SCOPE_INVALID",
+    "existingChildScopeGuardChanged": false,
+    "centralUsesExactExistingPinnedPreparedConfig": true,
+    "centralClonesOrReplacesApprovedConfig": false,
+    "legacyReadOnlyConfigCopyRetained": true,
+    "preexistingEvidenceOverwriteRefused": true,
+    "distinctPassingTestsIncludingRetainedOwnerFixtures": 39,
+    "testProofs": [
+      {
+        "logSha256": "a41b4c657d487cb27511e9f87ea3014b7bf5178a1304016b2bb8592d418e11b4",
+        "passingCount": 20
+      },
+      {
+        "logSha256": "f48d2385bd3b4d7451adc41cbc0fd6fec584fec69f9e3b990f294e87b2b58156",
+        "passingCount": 2
+      },
+      {
+        "logSha256": "344501f2adcd75b804f94a11cb74593d73f89c0e1852a802d43325bec8675327",
+        "passingCount": 1
+      },
+      {
+        "logSha256": "687be7703a6d955394cf19eeb480e10b86971ef3529ab19bb63673d0ae5837f2",
+        "passingCount": 17
+      }
+    ],
+    "strictClippyLogSha256": "229f580741c024335d2e491c7eb3e3c3261269a6561de2cf63972168c9a0bf22",
+    "newFixedControllerLiveAccepted": false
+  }
+}

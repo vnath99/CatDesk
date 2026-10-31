@@ -1,0 +1,194 @@
++            let mut f = native_fixture("alpha");
++            let entered = Arc::new(tokio::sync::Notify::new());
++            let release = Arc::new(tokio::sync::Notify::new());
++            let gate = f.control.join("native-status-alpha");
++            TEST_GATES
++                .get_or_init(Default::default)
++                .lock()
++                .unwrap()
++                .insert(gate.clone(), (entered.clone(), release.clone()));
++            let root = f.control.clone();
++            let body = request(&f, "delayed-status", "native.codex.status", json!({}));
++            let pending = tokio::spawn(async move {
++                let request: JsonRpcRequest = serde_json::from_value(body).unwrap();
++                serde_json::to_value(handle(root.to_str().unwrap(), &request).await).unwrap()
++            });
++            tokio::time::timeout(Duration::from_secs(15), entered.notified())
++                .await
++                .unwrap();
++            if rollover {
++                native_rollover(&mut f);
++            } else {
++                crate::web_work::execution_permission(&f.control, f.pins.clone(), true).unwrap();
++            }
++            release.notify_one();
++            let response = tokio::time::timeout(Duration::from_secs(20), pending)
++                .await
++                .unwrap()
++                .unwrap();
++            TEST_GATES.get().unwrap().lock().unwrap().remove(&gate);
++            assert!(
++                response.get("result").is_none(),
++                "stale authority must not release its snapshot"
++            );
++            assert_eq!(
++                response["error"]["message"],
++                if rollover {
++                    "WEB_CONTEXT_TARGET_CHANGED"
++                } else {
++                    "WEB_TASK_GRANT_REVOKED"
++                }
++            );
++            if rollover {
++                let fresh = call(
++                    &f,
++                    request(
++                        &f,
++                        "current-target-status",
++                        "native.codex.status",
++                        json!({}),
++                    ),
++                )
++                .await;
++                assert!(fresh.get("error").is_none(), "{fresh}");
++                assert_eq!(
++                    fresh["result"]["structuredContent"]["job"]["state"],
++                    "READY"
++                );
++            }
++            assert!(
++                !f.control
++                    .join(".catdesk/project-mcp-tasks/alpha/task-fixture/journal")
++                    .exists()
++            );
++            assert!(!native_proof(&f).exists());
++        }
++    }
++    fn fixture_capabilities(id: &str, allow_manual_wake: bool, enable_native: bool) -> Fixture {
++        let (control, assignment, wake, pins, event) =
++            crate::web_work::tests::assignment_fixture_for(id);
++        let native_queue = if enable_native {
++            let path = control.join(".catdesk/projects/projects.json");
++            let mut registry: AutonomousProjectRegistryV1 =
++                serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
++            registry.maximum_codex_workers = 2;
++            registry
++                .projects
++                .iter_mut()
++                .find(|p| p.project_id == id)
++                .unwrap()
++                .codex_thread_id = Some(uuid::Uuid::new_v4().to_string());
++            fs::write(path, serde_json::to_vec(&registry).unwrap()).unwrap();
++            Some(crate::operator_codex_cli::native_queue_fixture(
++                &control, id,
++            ))
++        } else {
++            None
++        };
++        wake.publish(&event).unwrap();
++        crate::web_work::associate(&control, pins.clone(), &assignment).unwrap();
++        let task_data: Value = serde_json::from_slice(&fs::read(&assignment).unwrap()).unwrap();
++        let task = PathBuf::from(task_data["contract"]["workspace"].as_str().unwrap());
++        let native = resolve_registered_project_from_control_root(&control, id)
++            .unwrap()
++            .project
++            .workspace;
++        // A prepared association itself does not authorize central execution.
++        assert!(
++            crate::web_work::authorized_assignment(&control, pins.clone(), &"a".repeat(64))
++                .is_err()
++        );
++        sent(&wake, &event);
++        let expected_key = fresh_fixture_key_path(&control, id);
++        let granted = crate::web_work::execution_permission_with_capabilities(
++            &control,
++            pins.clone(),
++            false,
++            allow_manual_wake,
++            enable_native.then_some("native-fixture"),
++        )
++        .unwrap();
++        let owned_key = OwnedFixtureKey::retain(expected_key, &granted);
++        assert!(!Path::new(granted["executionKeyFile"].as_str().unwrap()).starts_with(&control));
++        let key: String = serde_json::from_slice(
++            &fs::read(granted["executionKeyFile"].as_str().unwrap()).unwrap(),
++        )
++        .unwrap();
++        let again = crate::web_work::execution_permission_with_capabilities(
++            &control,
++            pins.clone(),
++            false,
++            allow_manual_wake,
++            enable_native.then_some("native-fixture"),
++        )
++        .unwrap();
++        assert_eq!(granted, again);
++        assert!(!granted.to_string().contains(&key));
++        Fixture {
++            control,
++            pins,
++            key,
++            task,
++            native,
++            keys: vec![owned_key],
++            _native_queue: native_queue,
++        }
++    }
++    fn request(f: &Fixture, id: &str, tool: &str, args: Value) -> Value {
++        let mut pins = f.pins.clone();
++        let o = pins.as_object_mut().unwrap();
++        o.insert("executionKey".into(), json!(f.key));
++        o.insert("taskId".into(), json!("task-fixture"));
++        o.insert("callId".into(), json!(id));
++        o.insert("tool".into(), json!(tool));
++        o.insert("arguments".into(), args);
++        json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":TOOL,"arguments":pins}})
++    }
++    async fn call(f: &Fixture, body: Value) -> Value {
++        let req = serde_json::from_value(body).unwrap();
++        serde_json::to_value(handle(f.control.to_str().unwrap(), &req).await).unwrap()
++    }
++
++    fn ready_manual_wake(f: &Fixture) -> Store {
++        let root = crate::wake_protocol_client::wake_root_for_workspace(&f.control).unwrap();
++        // Controlled fixture times establish a past activation/target cutoff;
++        // no clock sleep or production metadata is involved.
++        let mut activation: catdesk_wake::runtime::Activation =
++            catdesk_wake::store::read(&root.join("activation.json")).unwrap();
++        activation.accept_after_utc = catdesk_wake::store::now() - 5;
++        fs::write(
++            root.join("activation.json"),
++            serde_json::to_vec(&activation).unwrap(),
++        )
++        .unwrap();
++        let mut config: catdesk_wake::store::Config =
++            catdesk_wake::store::read(&root.join("config.json")).unwrap();
++        for change in &mut config.history {
++            change.changed_utc = activation.accept_after_utc;
++        }
++        fs::write(
++            root.join("config.json"),
++            serde_json::to_vec(&config).unwrap(),
++        )
++        .unwrap();
++        Store::open(&root).unwrap()
++    }
++
++    fn manual_request(f: &Fixture, call_id: &str, turn: &str) -> Value {
++        request(
++            f,
++            call_id,
++            "wake.manual_end_turn",
++            json!({"sourceTurnId":turn,"priority":10,"ttlSeconds":300}),
++        )
++    }
++
++    #[test]
++    fn manual_wake_fixture_cleanup_is_exact_and_preserves_peer_key() {
++        let alpha = fixture("alpha");
++        let beta = fixture_with_manual_wake("beta", true);
++        let alpha_path = alpha.keys[0].path.clone();
++        let beta_path = beta.keys[0].path.clone();
++        let beta_bytes = fs::read(&beta_path).unwrap();
++        drop(alpha);
++        assert!(!alpha_path.try_exists().unwrap());

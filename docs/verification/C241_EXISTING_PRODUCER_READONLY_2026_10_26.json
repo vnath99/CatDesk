@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C241",
+  "classification": "READONLY_EXISTING_PRODUCER_COMPATIBILITY",
+  "sourceCommit": "47922f3a6ad5af85a85e1bbd619cb758b24966f2",
+  "branch": "codex/web-rollover-oct17",
+  "controllerSha256": "8461487729d20c576fc7051876d2013a0975937386d61b59b299fb4c38f1bcba",
+  "startedUtc": "2026-10-26T10:42:25.8936509+00:00",
+  "finishedUtc": "2026-10-26T10:42:32.6337880+00:00",
+  "outerLimitSeconds": 60,
+  "command": [
+    "operator",
+    "reviewed-build",
+    "result"
+  ],
+  "exitCode": 0,
+  "observedState": "BUILD_ATTESTED",
+  "results": {
+    "oldAuditsWithMissingOptionalField": 4,
+    "connectorCalls": 0,
+    "remainingCandidateProcesses": 0,
+    "retainedTransitions": 45,
+    "browserWakeRecurringStarts": 0,
+    "prepareOrConfirmCalls": 0,
+    "historicalBytesRewritten": 0,
+    "newBuildAttempts": 0,
+    "retainedFamilies": 46,
+    "protectedPinsUnchanged": 2701,
+    "promotionActions": 0
+  },
+  "priorFailure": {
+    "exitCode": 2,
+    "cause": "Optional field serialization incompatibility confirmed independently against raw hashes and retained records.",
+    "observed": "attention",
+    "automaticReplay": false,
+    "preserved": true,
+    "checkpoint": "C239"
+  },
+  "evidence": {
+    "failedAttemptResultSha256": "0afdfa254169dc17d2dda10b8f9aeb5731a4addc3fd07ffa43f35cd6e3359ae4",
+    "harnessSha256": "5bca21584ab7f46d51e7eadeb328182a06f9a755af899a93fee566b7d311aeb4",
+    "outerSha256": "f2e78a0677ecdd6c7384ed7dc176b363aaf851d46520614b5349d969670589b5",
+    "baselineSha256": "4e0adb2e66034d7c36ed4bcc7c081292750f7920e68004e132faa4a847058900",
+    "resultSha256": "970380cf5999e8ecf397bb10a49b116eb33a99b4dbc9ec4fbe1920ce44356c93",
+    "buildRecordSha256": "a11023769eb266ac50aad98225b56302e1b73dcef6b63e440d5a27b39f0a08d4"
+  },
+  "limits": [
+    "New controller read existing C208 authority only; it created no authority for current source.",
+    "Actual successful succession and new production promotion remain untested live.",
+    "Current source still needs its genuine acknowledged managed review and exact immutable snapshot. Native peer review is not substituted for that chain.",
+    "The last connector result remains HTTP429; no new connector probe or recurring automation was started.",
+    "Actual independent ChatGPT Web coding and installed qualification remain open."
+  ],
+  "installedAcceptance": false,
+  "milestoneComplete": false
+}

@@ -368,7 +368,7 @@ pub fn tool_schemas() -> Vec<Value> {
             }
             if *name == "catdesk_reviewed_build_promotion" {
                 input_schema = json!({"type":"object","oneOf":[
-                    {"required":["action","buildPath","expectedSha256","recordId"],"properties":{"action":{"const":"PREFLIGHT"},"buildPath":{"type":"string","minLength":1,"maxLength":4096},"expectedSha256":{"type":"string","pattern":"^[A-Fa-f0-9]{64}$"},"recordId":{"type":"string","pattern":"^[A-Za-z0-9_-]{1,128}$"}},"additionalProperties":false},
+                    {"required":["action","buildPath","expectedSha256","recordId"],"properties":{"action":{"const":"PREFLIGHT"},"buildPath":{"type":"string","minLength":1,"maxLength":4096},"expectedSha256":{"type":"string","pattern":"^[A-Fa-f0-9]{64}$"},"recordId":{"type":"string","pattern":"^[A-Za-z0-9_-]{1,128}$"},"localBackendOnly":{"type":"boolean"}},"additionalProperties":false},
                     {"required":["action","buildPath","expectedSha256","confirmationToken"],"properties":{"action":{"const":"CONFIRM"},"buildPath":{"type":"string","minLength":1,"maxLength":4096},"expectedSha256":{"type":"string","pattern":"^[A-Fa-f0-9]{64}$"},"confirmationToken":{"type":"string","minLength":1,"maxLength":256}},"additionalProperties":false},
                     {"required":["action"],"properties":{"action":{"const":"RESULT"}},"additionalProperties":false}
                 ]});
@@ -391,6 +391,14 @@ pub fn tool_schemas() -> Vec<Value> {
         .collect()
 }
 
+fn registration_runtime_error(error: super::runtime::RuntimeError) -> String {
+    let code = match &error {
+        super::runtime::RuntimeError::Validation(code) => code.as_str(),
+        _ => "",
+    };
+    super::codex_app_server::registration_error_code(code).into()
+}
+
 pub fn handle_tool(name: &str, args: Value, workspace: &Path) -> Result<Value, String> {
     let workspace = workspace
         .canonicalize()
@@ -401,6 +409,9 @@ pub fn handle_tool(name: &str, args: Value, workspace: &Path) -> Result<Value, S
     }
     if name == "autonomy_contract_validate" && is_capability_query(&args)? {
         return Ok(runtime_capability_manifest());
+    }
+    if name == "autonomy_project_registry_read" {
+        return AutonomousSupervisorV1::project_registry_read(&workspace);
     }
     let supervisor = AutonomousSupervisorV1::open(&workspace)?;
     match name {
@@ -518,7 +529,6 @@ pub fn handle_tool(name: &str, args: Value, workspace: &Path) -> Result<Value, S
         "autonomy_review_inbox_ack" => {
             supervisor.ack_review_inbox(required_str(&args, "recordId")?)
         }
-        "autonomy_project_registry_read" => supervisor.project_registry_read(),
         "autonomy_project_registry_bind" => supervisor.project_registry_bind(&args),
         "autonomy_project_registry_preflight" => supervisor.project_registry_preflight(
             required_str(&args, "projectId")?,
@@ -670,17 +680,25 @@ impl AutonomousSupervisorV1 {
         GithubBootstrapStore::open(self.workspace.join(".catdesk").join("github-bootstrap"))
     }
 
-    fn project_registry_read(&self) -> Result<Value, String> {
-        let registry = self
-            .project_registry()?
-            .load_registry()
-            .map_err(|_| "project registry is unavailable".to_string())?;
-        Ok(json!({
+    fn project_registry_read(workspace: &Path) -> Result<Value, String> {
+        let registry =
+            AutonomousProjectRegistryStoreV1::open_read_only(workspace.join(".catdesk/projects"))
+                .map_err(|_| "project registry is unavailable".to_string())?
+                .load_registry()
+                .map_err(|_| "project registry is unavailable".to_string())?;
+        let mut response = json!({
             "schemaVersion": registry.schema_version,
             "maximumCodexWorkers": registry.maximum_codex_workers,
             "maximumQwenWorkers": registry.maximum_qwen_workers,
             "projects": registry.projects,
-        }))
+        });
+        // Keep completed registrations and predecessor links visible to the
+        // coordinator without reactivating them. Preserve the legacy shape
+        // when there is no archived project history.
+        if !registry.retired_projects.is_empty() {
+            response["retiredProjects"] = json!(registry.retired_projects);
+        }
+        Ok(response)
     }
 
     /// The app-server resolver remains the authority for observing a thread.
@@ -732,7 +750,11 @@ impl AutonomousSupervisorV1 {
         let registry = store
             .load_registry()
             .map_err(|_| "project registry is unavailable".to_string())?;
-        if registry.schema_version != PROJECT_REGISTRY_SCHEMA_VERSION {
+        if !matches!(
+            registry.schema_version,
+            PROJECT_REGISTRY_SCHEMA_VERSION
+                | super::autonomy_projects::PROJECT_REGISTRY_RETIREMENT_SCHEMA_VERSION
+        ) {
             return Err("project registry schema is unsupported".into());
         }
         if let Some(existing) = registry
@@ -1086,17 +1108,17 @@ impl AutonomousSupervisorV1 {
         model_id: Option<&str>,
     ) -> Result<Value, String> {
         let workspace = verified_external_git_workspace(workspace, git_identity)?;
+        let store = self.project_registry()?;
+        let _writer = super::autonomy_runtime::acquire_project_writer_lock(&workspace)
+            .map_err(|_| "CODEX_REGISTRATION_WRITER_BUSY".to_string())?;
         let evidence = super::autonomy_runtime::host_observe_registration_thread_for_model(
             &workspace,
             git_identity,
             supervisor_now_unix(),
             model_id.unwrap_or(super::codex_model_policy::LEGACY_TERRA_MODEL),
         )
-        .map_err(|_| {
-            "authoritative exact-CWD Codex registration evidence is unavailable".to_string()
-        })?;
-        let preflight = self
-            .project_registry()?
+        .map_err(registration_runtime_error)?;
+        let preflight = store
             .preflight_project_registration(
                 project_id,
                 verification_profile,
@@ -1145,9 +1167,7 @@ impl AutonomousSupervisorV1 {
             supervisor_now_unix(),
             &preflight.evidence.selected_model,
         )
-        .map_err(|_| {
-            "authoritative exact-CWD Codex confirmation evidence is unavailable".to_string()
-        })?;
+        .map_err(registration_runtime_error)?;
         let project = store
             .confirm_project_registration(confirmation_token, &evidence, supervisor_now_unix())
             .map_err(|_| "project registration confirmation was rejected".to_string())?;
@@ -2179,6 +2199,13 @@ impl AutonomousSupervisorV1 {
             .ok_or_else(|| "reviewed promotion request is invalid".to_string())?;
         let action = required_str(args, "action")?;
         let expected_keys: &[&str] = match action {
+            "PREFLIGHT" if object.contains_key("localBackendOnly") => &[
+                "action",
+                "buildPath",
+                "expectedSha256",
+                "recordId",
+                "localBackendOnly",
+            ],
             "PREFLIGHT" => &["action", "buildPath", "expectedSha256", "recordId"],
             "CONFIRM" => &["action", "buildPath", "expectedSha256", "confirmationToken"],
             "RESULT" => &["action"],
@@ -2196,7 +2223,11 @@ impl AutonomousSupervisorV1 {
                 .map_err(|_| "reviewed promotion result is unavailable".to_string())?;
             return Ok(match result {
                 Some(result) => {
-                    json!({"state":result.state,"authorizationGeneration":result.authorization_generation,"candidateSha256":result.candidate_sha256,"tunnelAction":"none-external-tunnel-untouched"})
+                    let mut value = json!({"state":result.state,"authorizationGeneration":result.authorization_generation,"candidateSha256":result.candidate_sha256,"tunnelAction":"none-external-tunnel-untouched"});
+                    if let Some(serving_state) = result.serving_state {
+                        value["servingState"] = json!(serving_state);
+                    }
+                    value
                 }
                 None => {
                     json!({"state":"RESULT_UNAVAILABLE_OR_PENDING","tunnelAction":"none-external-tunnel-untouched"})
@@ -2207,16 +2238,35 @@ impl AutonomousSupervisorV1 {
         let expected = required_str(args, "expectedSha256")?;
         if action == "PREFLIGHT" {
             let record_id = required_str(args, "recordId")?;
+            let local_backend_only = match args.get("localBackendOnly") {
+                None => false,
+                Some(value) => value
+                    .as_bool()
+                    .ok_or("reviewed promotion profile is invalid")?,
+            };
             let review_authority = self.resolve_reviewed_promotion_review_authority(record_id)?;
-            let preflight = crate::daemon_reload::prepare_reviewed_promotion(
-                &self.workspace,
-                &candidate,
-                expected,
-                &review_authority.session_id,
-                &review_authority.record_id,
-                &review_authority.digest,
-                &review_authority.snapshot_expected,
-            )
+            let preflight = if local_backend_only {
+                crate::daemon_reload::prepare_reviewed_promotion_with_profile(
+                    &self.workspace,
+                    &candidate,
+                    expected,
+                    &review_authority.session_id,
+                    &review_authority.record_id,
+                    &review_authority.digest,
+                    &review_authority.snapshot_expected,
+                    true,
+                )
+            } else {
+                crate::daemon_reload::prepare_reviewed_promotion(
+                    &self.workspace,
+                    &candidate,
+                    expected,
+                    &review_authority.session_id,
+                    &review_authority.record_id,
+                    &review_authority.digest,
+                    &review_authority.snapshot_expected,
+                )
+            }
             .map_err(|_| "reviewed promotion preflight was rejected".to_string())?;
             return Ok(
                 json!({"state":"PREFLIGHT_READY","confirmationToken":preflight.confirmation_token,"expiresAtUnix":preflight.expires_at_unix,"candidateSha256":preflight.authorization.candidate_sha256,"tunnelAction":"none-external-tunnel-untouched"}),
@@ -2579,6 +2629,12 @@ impl AutonomousSupervisorV1 {
                 let _ = self.store.remove_unapproved_session(&session_id);
                 return Err("autonomous routine-provider route could not be persisted".into());
             }
+        } else if contract.is_direct_chatgpt() {
+            snapshot.provider_route = AutonomousProviderRouteV1::WaitingForChatgpt;
+            if self.store.save_session(&snapshot).is_err() {
+                let _ = self.store.remove_unapproved_session(&session_id);
+                return Err("direct ChatGPT route could not be persisted".into());
+            }
         }
         if self.store.save_contract(&session_id, &contract).is_err() {
             let _ = self.store.remove_unapproved_session(&session_id);
@@ -2613,14 +2669,21 @@ impl AutonomousSupervisorV1 {
                                         .verification_policy
                                         .profile
                                         .clone(),
-                                    preferred_worker_policy:
-                                        "codex-preferred-local-qwen-continuation".into(),
+                                    preferred_worker_policy: if contract.is_direct_chatgpt() {
+                                        "chatgpt-direct".into()
+                                    } else {
+                                        "codex-preferred-local-qwen-continuation".into()
+                                    },
                                     escalation_conditions: vec![
                                         "architecture ambiguity".into(),
                                         "scope expansion".into(),
                                     ],
                                     completion_artifact_ids: completion_artifact_ids.clone(),
-                                    provider_provenance: vec!["codex-cli".into()],
+                                    provider_provenance: vec![if contract.is_direct_chatgpt() {
+                                        "chatgpt-web".into()
+                                    } else {
+                                        "codex-cli".into()
+                                    }],
                                 }
                             },
                         )
@@ -2898,17 +2961,52 @@ impl AutonomousSupervisorV1 {
         expected: u64,
         key: &str,
     ) -> Result<Value, String> {
+        let policy = self.load_policy(session_id)?;
+        self.validate_graph_materialization(session_id, &policy)?;
         self.mutate(
             session_id,
             expected,
             key,
             "direct_work_claim_requested",
             |snapshot| {
+                let fresh = snapshot.current_task_id.is_none() && snapshot.provider_turn_count == 0;
+                let continuation = if fresh {
+                    false
+                } else {
+                    let queue = self
+                        .store
+                        .load_queue(session_id)
+                        .map_err(|_| "direct work queue is unavailable")?;
+                    super::autonomous_controller::direct_work_continuation_allowed(
+                        policy.contract(),
+                        snapshot,
+                        &queue,
+                    ) || super::autonomous_controller::direct_planner_reply_allows_claim(
+                        policy.contract(),
+                        snapshot,
+                        &queue,
+                        &self.store,
+                        session_id,
+                    ) || super::autonomous_controller::pending_direct_claim_task(
+                        policy.contract(),
+                        snapshot,
+                        &queue,
+                        &self.store,
+                        session_id,
+                    )
+                    .is_some()
+                };
                 if snapshot.state != AutonomousSessionStateV1::Queued
                     || !snapshot.active
-                    || snapshot.current_task_id.is_some()
-                    || snapshot.provider_turn_count != 0
+                    || snapshot.provider_thread_id.is_some()
+                    || snapshot.provider_handle_id.is_some()
+                    || snapshot.expected_codex_thread_id.is_some()
+                    || snapshot.codex_continuity.is_some()
+                    || (!fresh && !continuation)
                     || snapshot.approved_contract_hash.is_none()
+                    || (policy.contract().is_direct_chatgpt()
+                        && snapshot.approved_contract_hash.as_deref()
+                            != Some(policy.contract_hash()))
                 {
                     return Err(
                         "direct work claim requires one approved, never-started QUEUED session"
@@ -2926,6 +3024,7 @@ impl AutonomousSupervisorV1 {
         expected: u64,
         key: &str,
     ) -> Result<Value, String> {
+        let policy = self.load_policy(session_id)?;
         self.mutate(
             session_id,
             expected,
@@ -2941,6 +3040,11 @@ impl AutonomousSupervisorV1 {
                         "direct work finalization requires one already-started WAITING_FOR_CHATGPT task"
                             .into(),
                     );
+                }
+                if policy.contract().is_direct_chatgpt()
+                    && self.store.load_passed_verification_checkpoint(session_id).map_err(|_| "direct checkpoint unavailable")?.is_none()
+                    && !super::autonomous_controller::direct_task_is_claimed(policy.contract(), snapshot, &self.store, session_id).map_err(|_| "direct claim unavailable")? {
+                    return Err("direct work finalization requires this task's durable claim".into());
                 }
                 Ok(())
             },
@@ -3756,6 +3860,36 @@ pub(super) fn verified_external_git_workspace(
     Ok(workspace)
 }
 
+/// Fixed, bounded metadata for an operator-assigned Web task worktree. Reuses
+/// registration's trusted Git probe and environment policy, without Git writes.
+pub(crate) fn web_task_worktree_witness(
+    workspace: &Path,
+) -> Result<(PathBuf, PathBuf, String, String), String> {
+    let probe = |args| {
+        bounded_git_metadata(workspace, GitMetadataStage::TopLevel, args)
+            .map_err(|_| "PROJECT_TASK_GIT_UNAVAILABLE".to_string())
+    };
+    let common = workspace.join(probe(["rev-parse", "--git-common-dir"])?);
+    let directory = workspace.join(probe(["rev-parse", "--absolute-git-dir"])?);
+    let head = probe(["rev-parse", "HEAD"])?;
+    let branch = bounded_git_metadata(
+        workspace,
+        GitMetadataStage::TopLevel,
+        ["symbolic-ref", "--short", "HEAD"],
+    )
+    .map_err(|_| "PROJECT_TASK_BRANCH_UNAVAILABLE")?;
+    Ok((
+        common
+            .canonicalize()
+            .map_err(|_| "PROJECT_TASK_GIT_UNAVAILABLE")?,
+        directory
+            .canonicalize()
+            .map_err(|_| "PROJECT_TASK_GIT_UNAVAILABLE")?,
+        head,
+        branch,
+    ))
+}
+
 /// Shared, bounded Git-only metadata probe. It accepts only an absolute,
 /// non-reparse exact repository root and never writes registry or repository
 /// state. Registration reuses this exact root/origin observation before it
@@ -4347,6 +4481,49 @@ mod tests {
             completion_artifact_ids: Vec::new(),
             task_graph: Vec::new(),
         }
+    }
+
+    #[test]
+    fn direct_contract_create_reports_direct_route_without_native_profile() {
+        let root = std::env::temp_dir().join(format!("catdesk-direct-route-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        let mut direct = contract(&root);
+        direct.mode = "chatgpt_web_direct_autonomous".into();
+        direct.provider_policy.primary_provider = "chatgpt-web".into();
+        direct.provider_policy.primary_model = "conversation-selected".into();
+        direct.provider_policy.routine_provider = "none".into();
+        direct.provider_policy.routine_model = "none".into();
+        handle_tool(
+            "autonomy_contract_create",
+            json!({"contract":direct}),
+            &root,
+        )
+        .unwrap();
+        let store = AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).unwrap();
+        let snapshot = store.load_session("session-1").unwrap();
+        let plan = store.load_plan_queue("session-1").unwrap();
+        assert!(
+            plan.tasks
+                .iter()
+                .all(|task| task.provider_provenance == ["chatgpt-web"])
+        );
+        assert_eq!(
+            snapshot.provider_route,
+            AutonomousProviderRouteV1::WaitingForChatgpt
+        );
+        assert_eq!(snapshot.provider_turn_count, 0);
+        assert!(snapshot.provider_thread_id.is_none());
+        // Fresh sessions enable durable tracking infrastructure even when
+        // no native turn occurs; that bit is not evidence of a model turn.
+        assert!(snapshot.codex_turn_profile_tracking_started);
+        assert!(
+            store
+                .load_passed_verification_checkpoint("session-1")
+                .unwrap()
+                .is_none()
+        );
+        assert!(store.all_review_inbox().unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
@@ -5118,6 +5295,81 @@ mod tests {
     }
 
     #[test]
+    fn project_registry_read_does_not_initialize_missing_state() {
+        let root = std::env::temp_dir().join(format!("catdesk-project-read-{}", Uuid::new_v4()));
+        std::fs::create_dir(&root).expect("workspace");
+        assert!(handle_tool("autonomy_project_registry_read", json!({}), &root).is_err());
+        assert!(!root.join(".catdesk").exists());
+        std::fs::remove_dir_all(&root).expect("fixture cleanup");
+    }
+
+    #[test]
+    fn project_registry_read_retains_completed_project_history_after_retirement() {
+        let root =
+            std::env::temp_dir().join(format!("registry-archive-read-{}", uuid::Uuid::new_v4()));
+        let store = AutonomousProjectRegistryStoreV1::open(root.join(".catdesk/projects")).unwrap();
+        store.initialize(1, 1).unwrap();
+        let mut rows = Vec::new();
+        for id in ["alpha", "beta"] {
+            let workspace = root.join(id);
+            fs::create_dir_all(&workspace).unwrap();
+            let project = AutonomousProjectV1 {
+                project_id: id.into(),
+                workspace: workspace.canonicalize().unwrap(),
+                git_identity: format!("https://example.test/{id}.git"),
+                verification_profile: "web_only_v1".into(),
+                codex_thread_id: None,
+                chatgpt_target_url: None,
+                chatgpt_target_sha256: None,
+                chatgpt_target_history: Vec::new(),
+            };
+            store.register_project(project.clone()).unwrap();
+            rows.push(project);
+        }
+        let legacy = handle_tool("autonomy_project_registry_read", json!({}), &root).unwrap();
+        assert_eq!(legacy["projects"].as_array().unwrap().len(), 2);
+        assert!(legacy.get("retiredProjects").is_none());
+        let current = "https://chatgpt.com/c/fixture-alpha-current";
+        store
+            .bind_project_chat_target("alpha", current, None)
+            .unwrap();
+        let successor = "https://chatgpt.com/c/fixture-alpha-successor";
+        let first = store.load_registry().unwrap().projects[0].clone();
+        store
+            .bind_project_chat_target("alpha", successor, first.chatgpt_target_sha256.as_deref())
+            .unwrap();
+        let observed = store.load_registry().unwrap().projects[0].clone();
+        let (retired, _) = store
+            .retire_web_project_after(&observed, "completed-alpha", 100, || Ok(()))
+            .unwrap();
+        assert_eq!(
+            retired.project.chatgpt_target_history,
+            vec![current.to_string()]
+        );
+        let registry_path = root.join(".catdesk/projects/projects.json");
+        let before = fs::read(&registry_path).unwrap();
+        drop(store);
+        // Each MCP read reopens the existing store, without recreating or
+        // reactivating the completed project's registration.
+        for _ in 0..2 {
+            let value = handle_tool("autonomy_project_registry_read", json!({}), &root).unwrap();
+            assert_eq!(value["schemaVersion"], 2);
+            assert_eq!(value["projects"], json!([rows[1]]));
+            assert_eq!(value["retiredProjects"], json!([retired]));
+            assert_eq!(
+                value["retiredProjects"][0]["project"]["chatgptTargetUrl"],
+                successor
+            );
+            assert_eq!(
+                value["retiredProjects"][0]["project"]["chatgptTargetHistory"],
+                json!([current])
+            );
+            assert_eq!(fs::read(&registry_path).unwrap(), before);
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn project_registry_binding_is_canonical_evidence_gated_and_durable() {
         let root = std::env::temp_dir().join(format!("catdesk-project-bind-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).expect("workspace");
@@ -5853,6 +6105,12 @@ mod tests {
             .unwrap();
         let branches = schema["inputSchema"]["oneOf"].as_array().unwrap();
         assert_eq!(branches.len(), 3);
+        assert_eq!(
+            branches[0]["properties"]["localBackendOnly"]["type"],
+            "boolean"
+        );
+        assert!(branches[1]["properties"].get("localBackendOnly").is_none());
+        assert!(branches[2]["properties"].get("localBackendOnly").is_none());
         for branch in branches {
             assert_eq!(branch["additionalProperties"], false);
             for field in branch["required"].as_array().unwrap() {

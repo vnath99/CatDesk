@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C79_SELECTED_NORMAL_COORDINATOR_AND_FOREGROUND_WAKE_RESTART",
+  "observedUtc": "2026-10-24T06:24:20.4668181+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "parentCommit": "4731918c147e935bebfb68f1882e6e9ce9d7f797",
+  "sourceCommit": "5e71ef8ef62b6306610a49fee26bd5de28206976",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "ACTUAL_SELECTED_NORMAL_COORDINATOR_AND_INDEPENDENT_FOREGROUND_HOST_RESTART_WEB_SCHEDULER_OFF",
+  "elapsedSeconds": 63.3123568,
+  "startedUtc": "2026-10-24T06:19:19.7075920+00:00",
+  "finishedUtc": "2026-10-24T06:20:23.0199404+00:00",
+  "appImageSha256": "4bf469b1c1e86f4aa939df0f8d279ce3562a48fe73487a88b3af3e8a542b4ee0",
+  "hostImageSha256": "bd8ef10570d79e5e4090b210a005ba8f4e0616a1a437309f5bfc847d4e4ea2cd",
+  "coordinatorLifetimes": [
+    {
+      "cycle": 1,
+      "elapsedSeconds": 30.0950705,
+      "exactSavedRegistryAndArchive": true,
+      "exitCode": 0,
+      "finishedUtc": "2026-10-24T06:19:51.3897208+00:00",
+      "maximumRuntimeSeconds": 30,
+      "naturalExit": true,
+      "ownerExited": true,
+      "pairedProjects": 10,
+      "startedUtc": "2026-10-24T06:19:21.2946538+00:00",
+      "webAutoStarted": false
+    },
+    {
+      "cycle": 2,
+      "elapsedSeconds": 30.0879035,
+      "exactSavedRegistryAndArchive": true,
+      "exitCode": 0,
+      "finishedUtc": "2026-10-24T06:20:22.3942946+00:00",
+      "maximumRuntimeSeconds": 30,
+      "naturalExit": true,
+      "ownerExited": true,
+      "pairedProjects": 10,
+      "startedUtc": "2026-10-24T06:19:52.3063936+00:00",
+      "webAutoStarted": false
+    }
+  ],
+  "foregroundHostLifetimes": [
+    {
+      "browserOwnersObserved": 0,
+      "cycle": 1,
+      "deadlineReached": true,
+      "exitCode": 0,
+      "observedExitedByUtc": "2026-10-24T06:19:51.3882112+00:00",
+      "maximumSeconds": 25,
+      "normalHostLiveVerified": true,
+      "ownedTreeExited": true,
+      "queueCount": 0,
+      "startedUtc": "2026-10-24T06:19:20.4938753+00:00"
+    },
+    {
+      "browserOwnersObserved": 0,
+      "cycle": 2,
+      "deadlineReached": true,
+      "exitCode": 0,
+      "observedExitedByUtc": "2026-10-24T06:20:22.3942477+00:00",
+      "maximumSeconds": 25,
+      "normalHostLiveVerified": true,
+      "ownedTreeExited": true,
+      "queueCount": 0,
+      "startedUtc": "2026-10-24T06:19:51.4470622+00:00"
+    }
+  ],
+  "distinctCoordinatorProcesses": true,
+  "distinctHostProcesses": true,
+  "sameEndpointAndEphemeralAuth": true,
+  "httpRequests": 4,
+  "normalCatalogTools": 79,
+  "coordinatorProjectionsEqual": true,
+  "completeSavedRegistryAndArchiveEqual": true,
+  "verifiedFields": [
+    "ten current project workspaces and URLs",
+    "one retired registration and predecessor history",
+    "paired Wake targets and generations",
+    "per-conversation context",
+    "durable queues and work intents",
+    "rollover and browser-admission projections"
+  ],
+  "retainedRolloverPhases": {
+    "SUBMITTING": 2,
+    "QUARANTINED": 2,
+    "CONTINUATION_QUEUED": 9
+  },
+  "retainedNonterminalRollovers": 2,
+  "preservation": {
+    "turnsComplete": true,
+    "webAutoEnabled": false,
+    "foregroundHostStarts": 2,
+    "retiredProjects": 1,
+    "nativeActions": 0,
+    "pendingRolloversReplayed": 0,
+    "productionChanged": false,
+    "recurringStarts": 0,
+    "queueCount": 0,
+    "packageSelectionChanged": false,
+    "messagesSent": 0,
+    "changedRecords": 1,
+    "browserOwnersObserved": 0,
+    "connectorCalls": 0,
+    "scopedOwners": 0,
+    "runtimeRecords": 297,
+    "officialRuntimeActions": 0,
+    "activeProjects": 10,
+    "bothControls": "STOPPED",
+    "onlyChange": "DEVELOPMENT_STATUS_TELEMETRY",
+    "originalFivePreserved": true,
+    "otherRecordsByteExact": 296
+  },
+  "hostTerminalStatus": {
+    "hostRecoveryCount": 0,
+    "lastHostError": null,
+    "host": "STOPPED",
+    "attention": null,
+    "browser": "NOT_OBSERVED",
+    "queueDepth": 0
+  },
+  "containment": {
+    "terminationFailed": false,
+    "exitCode": 0,
+    "maximumSeconds": 180,
+    "timedOut": false
+  },
+  "notes": [
+    "Host deadline is25s followed by existing owned shutdown grace. Exit was sampled after the30s MCP lifetime; observedExitedByUtc is not the host exact exit time.",
+    "Shared status reads use FileShare.ReadWrite/Delete to avoid injecting an unrelated Windows atomic-replace fault.",
+    "Source, selected package and completed browser canaries were unchanged; no source tests or browser deliveries were repeated.",
+    "Connected V4 tool metadata still advertises90 older entries without catdesk_web_task_tool. Metadata inspection made no network call and is not a fresh transport probe."
+  ],
+  "acceptance": {
+    "actualParallelWebCodingBC": "OPEN_CONNECTOR_BACKEND_AND_CATALOG",
+    "ISelectedCoordinatorAndWakeRestart": "PASS_TWO_ACTUAL_TWO_COMPONENT_LIFETIMES",
+    "unattended": "NOT_ACTIVATED",
+    "protectedInstalled": "NOT_QUALIFIED",
+    "webSchedulerRestart": "NOT_TESTED_DISABLED",
+    "fullOctoberMilestone": "OPEN"
+  },
+  "nextTask": "Inspect and implement safe exact-owned composer archival for a protocol-v2 SEND_ATTEMPTED unknown-outcome operation. Current archive command accepts only legacy records with no progress stage. Preserve no-resend authority and use the existing durable archive/CAS mechanism; do not launch a live unknown-outcome canary until cleanup is supported."
+}

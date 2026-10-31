@@ -53,6 +53,12 @@ const FILE_NAMES_INFORMATION: u32 = 12;
 const STATUS_NO_SUCH_FILE: u32 = 0xC000_000F;
 const STATUS_NO_MORE_FILES: u32 = 0x8000_0006;
 const INVALID_HANDLE_VALUE: *mut c_void = -1isize as *mut c_void;
+
+#[path = "install_broker_reader_v2.rs"]
+mod offline_v2;
+pub(crate) use offline_v2::pin_created_offline_pointer;
+pub(crate) use offline_v2::reopen_recovered_offline_pointer;
+pub use offline_v2::{ProtectedInstallPinV2, ProtectedInstallReadOnlySnapshotV2};
 const ARTIFACT_NAMES: [&str; 4] = [
     "CatDeskWakeHost.exe",
     "CatDeskBinagotchy.exe",
@@ -583,7 +589,10 @@ fn reopen_directory_for_inventory(directory: &OwnedHandle) -> Result<OwnedHandle
     Ok(reopened)
 }
 
-fn directory_inventory(directory: &OwnedHandle, limit: usize) -> Result<BTreeSet<String>> {
+pub(crate) fn directory_inventory(
+    directory: &OwnedHandle,
+    limit: usize,
+) -> Result<BTreeSet<String>> {
     let fresh = reopen_directory_for_inventory(directory)?;
     let mut seen = BTreeSet::new();
     for index in 0..=limit {

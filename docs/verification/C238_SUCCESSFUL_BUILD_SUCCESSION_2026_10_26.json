@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C238",
+  "classification": "SOURCE_AND_WINDOWS_FILESYSTEM_PROCESS_FIXTURES",
+  "sourceCommit": "f1f0fe24cf57581fac81fe959ef3aa384a137f4a",
+  "sourceParent": "67186ebe9d3cdc58bfd7fc9351ffa1d7e9467765",
+  "branch": "codex/web-rollover-oct17",
+  "startedUtc": "2026-10-26T10:17:03.6279074+00:00",
+  "finishedUtc": "2026-10-26T10:22:20.2253817+00:00",
+  "changedPaths": [
+    "src/reviewed_build.rs"
+  ],
+  "implementation": [
+    "Reuse immutable generations, predecessor history, plans and atomic active pointer for a fully revalidated successful producer.",
+    "Separate schema2 successful succession from schema1 failed/unclaimed transitions.",
+    "Validate complete bounded lineage before selecting historical producer evidence by exact candidate attempt path.",
+    "Exact current or historical successful review binding returns existing BUILD_ATTESTED evidence without rebuild or selection change.",
+    "Preserve all original attempts, owner proofs, results, attestations, snapshots and candidate bytes.",
+    "Keep acknowledged review resolver, approval, snapshot and protected promotion gates unchanged."
+  ],
+  "validation": {
+    "firstRun": {
+      "reviewedBuildIgnored": 8,
+      "failure": "Static source guard matched test-only safe control_read_json turbofish as forbidden read_json syntax.",
+      "reviewedBuildFailed": 1,
+      "reviewedBuildPassed": 121
+    },
+    "correction": {
+      "productionCodeChanged": false,
+      "staticGuardWeakened": false,
+      "change": "Two test-only reads use explicit typed variables with the same safe helper."
+    },
+    "finalRun": {
+      "strictClippy": "PASS",
+      "correctedControlGuardPassed": 1,
+      "reviewAuthorityPassed": 4,
+      "releasePairPassed": 6,
+      "format": "PASS",
+      "failed": 0,
+      "successfulProducerRechecksPassed": 5
+    },
+    "newTests": 6,
+    "coverage": [
+      "Two successful successors retain both earlier attestations.",
+      "Exact old review request does not select or rebuild it; old CONFIRM remains inactive.",
+      "Changed candidate, failed/mixed producer or invalid audit is refused.",
+      "Unreachable orphan, malformed path, pointer, missing plan and cyclic lineage are refused.",
+      "Crash after plan publication resumes without duplicate generation.",
+      "Concurrent prepares converge; competing authority is refused."
+    ],
+    "nativeNegativeChildOutput": "Expected denied-output AppContainer child fixtures printed failures while their enclosing negative-control tests passed."
+  },
+  "preservation": {
+    "testOwnersRemaining": 0,
+    "newProducerAttempts": 0,
+    "priorPinsMatched": 2701,
+    "connectorChecks": 0,
+    "testExecutablesRemaining": 0,
+    "browserWakeRecurringStarts": 0,
+    "productionWrites": 0
+  },
+  "migration": [
+    "Before first live successful succession, retain a pinned qualified controller and enforce one release-management owner.",
+    "After cutover, use that controller for all reviewed-build and producer-dependent promotion/reconcile operations; never mix old and new release writers.",
+    "Old C208 can still read the schema1 active pointer but cannot validate historical candidates. Do not assume it uniformly rejects incompatible release operations.",
+    "Ordinary project MCP serving and existing terminal-receipt/LKG startup checks do not read this build lineage.",
+    "Same existing PREPARE/CONFIRM/RESULT commands; do not CONFIRM a PREPARE already returning BUILD_ATTESTED.",
+    "Historical validation still requires exact recorded Cargo/Rustc identities. Toolchain compatibility is not broadened by this change."
+  ],
+  "evidence": {
+    "finalResultSha256": "9a35137791e51d3031d07b073e34f51be30ff5c449fe1e1528f870c3a16dbdbb",
+    "finalOuterSha256": "653d7866245ff616fc5a9c160874662273c6c8779ff63b91e218ef68ceaaddf0",
+    "cleanupSha256": "224ace283de6ac768a85cfae0266eb99cfaa6dbfff312fb00dfaae040aa5720d",
+    "finalManifestSha256": "880a5a8af8e50b7b326c00996847d4106eed42b85a1fe32d8de88cf0862de424",
+    "preservationSha256": "876ccdec920031a9b67378c71a6ac3b0bee58f19cc0e9f75a6409a6826d10801",
+    "firstManifestSha256": "341b67b4860c58c1d1cf569095994f895e4b463cf5e89deaf73dfc69dc895ad5",
+    "firstResultSha256": "b095aa259d27f9e2b1f56b38a6c19f29c48971e244a7890d92c57695ec99ca4f"
+  },
+  "ci": {
+    "visibleRuns": 0,
+    "dispatchAttempts": 0,
+    "accepted": false
+  },
+  "limits": [
+    "No real producer succession, candidate build, promotion or installed qualification occurred.",
+    "Current source has no genuine acknowledged managed review/snapshot in canonical state; C196/C208 authority covers its historical source only.",
+    "Native peer/static review cannot be imported as managed completion authority.",
+    "Connector HTTP429 and genuine two-conversation Web coding remain separate open gates; completed canaries are not replayed."
+  ],
+  "milestoneComplete": false
+}

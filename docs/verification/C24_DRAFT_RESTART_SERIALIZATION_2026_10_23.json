@@ -1,0 +1,151 @@
+{
+  "recordedUtc": "2026-10-23T11:04:01.2943238Z",
+  "localDate": "2026-10-23",
+  "task": "C24-CONTROLLED-DRAFT-RESTART-AND-SERIALIZATION-REFUSAL",
+  "classification": "LIVE_SELECTED_PARTIAL_RECOVERY_WITH_SOURCE_MITIGATION",
+  "branch": "codex/web-rollover-oct17",
+  "baseCommit": "142b68baf86b8828fc8996a296fdf01f359ac8a4",
+  "qualifiedLiveSource": "bf62b48945903e69ab02a7cf0e07f6a48b8feadb",
+  "sourceFiles": [
+    {
+      "sha256": "d7194aaec1b99b01c34dc616e32e7629c6b70e45d02607d85832289187a9d94a",
+      "path": "scripts/wake_bridge.py"
+    },
+    {
+      "sha256": "29607b44d189e4c32e25a6d3af8cbc2fc943b8ec7a215c6eb6cd8bdd3af4cb1e",
+      "path": "wake/adapter.py"
+    },
+    {
+      "sha256": "fc535af891f0b666b75cc0677921b349556dbddfc428b42a81ae3f7c6e56fb36",
+      "path": "wake/tests/test_new_conversation.py"
+    },
+    {
+      "sha256": "2115b641ba8036209469a2e3ed93f807312955dd2e8da52ba2e86378e1354753",
+      "path": "tests/test_wake_bridge_current_dom.py"
+    }
+  ],
+  "scope": {
+    "freshTaskDistinctFromC23": true,
+    "completedC23RecordUnchanged": true,
+    "historicalCanariesReplayed": 0,
+    "originalFivePairsChanged": false,
+    "nativeSessionActions": 0
+  },
+  "interruption": {
+    "unexpectedStateChanges": 0,
+    "phase": "SUBMITTING",
+    "maximumSeconds": 180,
+    "retainedHandleTermination": true,
+    "sendAttemptRecorded": false,
+    "durableBoundary": "DRAFT_READY",
+    "finishedUtc": "2026-10-23T10:50:54.5545453Z",
+    "startedUtc": "2026-10-23T10:49:51.2245567Z",
+    "ownedProcesses": 0,
+    "journalPinnedAgainstNextAuthorization": true
+  },
+  "draftRestart": {
+    "startedUtc": "2026-10-23T10:51:09.9945362Z",
+    "finishedUtc": "2026-10-23T10:51:23.2188407Z",
+    "classification": "EXACT_OWNED",
+    "changedRecords": 0,
+    "messagesSent": 0,
+    "digestMatched": true,
+    "freshBrowserProcess": true
+  },
+  "resume": {
+    "receiptPresent": false,
+    "maximumSeconds": 180,
+    "newContinuationDelivered": false,
+    "outcome": "BOOTSTRAP_OUTCOME_UNKNOWN",
+    "resendAttempts": 0,
+    "retyping": 0,
+    "durableBoundary": "SEND_ATTEMPTED",
+    "bindingGeneration": 2,
+    "firstIntentionalSendAttempts": 1,
+    "finishedUtc": "2026-10-23T10:53:26.8524053Z",
+    "startedUtc": "2026-10-23T10:52:07.7139295Z",
+    "unrelatedRegistryAndWakeHistoryPreserved": true
+  },
+  "diagnosis": {
+    "quarantine": "SUPPORTED_PROJECT_SCOPED_NO_RECEIPT_NO_BIND",
+    "firstDiagnosticHarness": "ATTRIBUTE_ERROR_WRONG_SINK_CLASS_RETAINED_CORRECTED_NO_SEND",
+    "richComposerSerializationCause": "INFERRED_FROM_TEXT_DIFFERENCE_NOT_PROVED_BY_A_CAPTURED_PRE_SEND_DOM",
+    "candidateSeenInAuthenticatedApp": true,
+    "normalRecoveryComplete": false,
+    "observedTransformation": "PLAIN_URL_INSIDE_JSON_HANDOFF_BECAME_MARKDOWN_LINK_SYNTAX",
+    "independentBrowserReader": "RESPONSE_EXPECTED_USER_BODY_MISMATCH",
+    "candidatePreserved": true,
+    "candidateContainsProjectIntentTaskAndMarker": true,
+    "policyRestoreHarness": "FIRST_GUARD_EXPECTED_COMPLETION_REFUSED_NO_MUTATION_CORRECTED_FOR_QUARANTINE"
+  },
+  "mitigation": {
+    "unknownSubmissionReplayAllowed": false,
+    "receiptChecksRelaxed": false,
+    "limitation": "REFUSES_UNPROVEN_RICH_DRAFT;DOES_NOT_YET_PROVIDE_AUTOMATIC_LOSSLESS_SERIALIZATION_RECOVERY",
+    "installedOrLiveQualified": false,
+    "implemented": "READ_ONLY_RICH_LINK_CHECK_BEFORE_RESUME_AUTHORIZATION_AND_BEFORE_SUBMIT",
+    "unknownDraftCleared": false,
+    "draftRetyped": false
+  },
+  "sourceTests": {
+    "runtimeUpdated": false,
+    "maximumSeconds": 180,
+    "passed": 92,
+    "newTests": 3,
+    "failed": 0,
+    "browserActions": 0,
+    "checks": [
+      {
+        "finishedUtc": "2026-10-23T11:00:50.0161378Z",
+        "label": "affected-current-dom",
+        "startedUtc": "2026-10-23T11:00:46.109996Z",
+        "exitCode": 0,
+        "logSha256": "3fbba58fa7ef3ea14ca236347e0d208e7f394861aaf4a948ba7e7b4eb407cb55"
+      },
+      {
+        "finishedUtc": "2026-10-23T11:00:51.3421509Z",
+        "label": "independent-wake-adapter-bootstrap",
+        "startedUtc": "2026-10-23T11:00:50.0331336Z",
+        "exitCode": 0,
+        "logSha256": "df9a5c03096ab83102b87387e27aef3aabfcd26eb6cec8981a9c12e61bf4fc78"
+      }
+    ],
+    "finishedUtc": "2026-10-23T11:00:51.3511167Z",
+    "startedUtc": "2026-10-23T11:00:46.109996Z",
+    "currentDom": 21,
+    "adapterAndBootstrap": 71
+  },
+  "freshReadback": {
+    "pairedProjects": 9,
+    "finishedUtc": "2026-10-23T11:01:56.0461054Z",
+    "registryAndWakeConfigByteExactSinceC23": true,
+    "recordsChecked": 181,
+    "previousCompletedRecordExact": true,
+    "independentSiblingContinuationProved": true,
+    "sourceContextGenerations": 2,
+    "ownedProcesses": 0,
+    "changedRecords": 0,
+    "startedUtc": "2026-10-23T11:01:53.038115Z",
+    "policiesRestoredAutomaticFlagsOff": true,
+    "controls": [
+      "STOPPED",
+      "STOPPED"
+    ],
+    "currentIncident": "QUARANTINED_SEND_ATTEMPTED",
+    "executeRefusedBeforeBrowser": true
+  },
+  "acceptance": {
+    "B": "OPEN_ACTUAL_CONCURRENT_WEB_MCP_CODING",
+    "H": "PARTIAL_LIVE_DRAFT_CHECKPOINT_RESTART_AND_AMBIGUITY_QUARANTINE",
+    "G": "PRIOR_C23_PASS_PRESERVED_NOT_REPLAYED",
+    "unattended": "NOT_ACTIVATED",
+    "C": "OPEN_ACTUAL_USEFUL_WEB_PROGRESS_WHILE_SIBLING_BLOCKED",
+    "installedProduction": "OPEN",
+    "ci": "UNVERIFIED",
+    "automaticMonitoring": "NOT_LIVE_QUALIFIED",
+    "I": "PARTIAL_LIVE_CRITICAL_PHASE_JOURNAL_REOPEN"
+  },
+  "nextExecutableTask": "Implement and qualify lossless known-draft serialization recovery and independently verified receipt reconciliation without resending the quarantined operation. Continue independent source work while connector verification is unavailable.",
+  "operatorAction": "NONE_FOR_NEXT_ELIGIBLE_SOURCE_WORK",
+  "privacy": "PRIVATE_URLS_IDENTIFIERS_PAYLOADS_PROFILES_AND_RAW_SNAPSHOTS_OMITTED"
+}

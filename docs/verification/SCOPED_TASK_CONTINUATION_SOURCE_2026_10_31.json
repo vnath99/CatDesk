@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T07:25:45.860904+00:00",
+  "classification": "TESTED_SOURCE_EXACT_GRANTED_TASK_CONTINUATION_NO_LIVE_SEND",
+  "sourceBaseCommit": "ec9f9ec7bd2d883a39b78ad387df7fbfd91cd07a",
+  "workingSourceSha256": {
+    "src/operator_web_cli.rs": "5810cae5fe0bbfc4ab2127ece53484dbc8931fab7f84f5619ba70ef5d51a22d9",
+    "src/project_task_context.rs": "a795274367400e8369927893638aef10a9f8dd0d119fd61aa81cb201d7aa7545",
+    "src/web_work.rs": "adb0c4cbafb2d12e0e299f5b7d08aff7573765ecb8aee1304fe291f5883fd2fb",
+    "wake/src/runtime.rs": "1992232efdb875bb6f4f153dbb659f27633da414c145ddcfb9b635b82b1d621c",
+    "wake/src/runtime_scoped_review.rs": "aa1449748f858c81b20e2776592d64074a564e31870360911af2dd292dfbda4c"
+  },
+  "problem": "The existing finite foreground host runs the shared scheduler, while the existing single-event sender accepted source reviews only. A controlled task continuation had no bounded single-event dispatch entry.",
+  "implementation": {
+    "command": "operator web work context-deliver-continuation --project-id PROJECT --input-file FROZEN_ASSIGNMENT_IDENTITY",
+    "existingScopedReviewTransportReused": true,
+    "newBrowserOwnerSchedulerOrAuthorizationRegistry": false,
+    "existingLocalTaskGrantAndSentPrivateContextRequired": true,
+    "nativeMaximumSeconds": 120,
+    "selection": "EXACT_EXISTING_NEW_TASK_INITIAL_CONTEXT_INTENT",
+    "callerMessageUrlWorkspaceRuntimeOrEventOverrides": false,
+    "projectWorkLeaseRetainedGlobalRegistryLocksReleasedBeforeBrowserIo": true,
+    "grantRegistrationBindingRevalidatedBeforeSubmitAck": true,
+    "unknownOrCompletedSubmissionReplay": false,
+    "expirationCheckedBeforeClaimAndAtSubmitFence": true,
+    "siblingQueuesScanned": false,
+    "reviewApprovalBoundaryRetained": true,
+    "hostDesiredStateChanged": false,
+    "backendOrExternalOwnerAutomaticallyStarted": false,
+    "transportErrorNamespace": "Existing SCOPED_REVIEW_* codes describe the reused bounded transport, not source-review authority."
+  },
+  "tests": {
+    "distinctPassingTests": 27,
+    "newNativeCases": 4,
+    "proofs": [
+      {
+        "kind": "native",
+        "passed": 15,
+        "logSha256": "c4b386d068a7e7c0575f80c76605ba0280a4a75f5b3aae2615f707c66ea9ee5e",
+        "includedInDistinctCount": true
+      },
+      {
+        "kind": "root",
+        "passed": 12,
+        "logSha256": "8fa332e3e01d1e3c5bfd3c4a340cf02fb9d02ed669a27fbb25985fbba72cf0b6",
+        "includedInDistinctCount": true
+      },
+      {
+        "kind": "finalAdmission",
+        "passed": 1,
+        "logSha256": "a81b82361e53278a2eb81941ebf1a0e3eed451a6058b5eea3ad08aeb15fcd44c",
+        "includedInDistinctCount": false
+      }
+    ],
+    "newCases": [
+      "Exact continuation succeeds while foreign queue bytes are unreadable and unchanged",
+      "Changed body, foreign target and review-event selection refused before browser",
+      "Unknown and completed outcomes suppress replay without journal mutation",
+      "Expired continuation refused before claim or browser"
+    ],
+    "retainedReviewTests": 11,
+    "rootAdmissionAlsoRequiresPrivateContextReceipt": true
+  },
+  "strictClippy": {
+    "root": {
+      "allTargets": true,
+      "warningsDenied": true,
+      "passed": true,
+      "logSha256": "7da23a9987d93e6c31e1cffb28e7c764a84be6cb95c2885fc16e95fc1bec6b36"
+    },
+    "wake": {
+      "allTargets": true,
+      "warningsDenied": true,
+      "passed": true,
+      "logSha256": "942e7924e5fd9169155e2704a03cecdc2800132db38ff6ba3f1b33f043871951"
+    }
+  },
+  "formatChecks": "PASS_ROOT_AND_WAKE",
+  "failureEvidence": [
+    "Initial application test invocation used --lib, but the application is a binary package; no tests or runtime actions ran. Corrected to --bin catdesk."
+  ],
+  "preservation": {
+    "criticalPinsMatched": 5107,
+    "hostStopped": true,
+    "newProviderMessages": 0,
+    "browserBackendOfficialOrRecurringOwnerStarts": 0,
+    "productionPackageOrBindingsChanged": false
+  },
+  "acceptance": {
+    "source": "PASS",
+    "newControllerBuild": "OPEN",
+    "actualTaskContinuation": "OPEN",
+    "actualWebTaskCalls": "OPEN",
+    "twoWebFullNativeCoding": "OPEN"
+  },
+  "nextExecutableTask": "BUILD_SEPARATE_EXACT_COMMIT_CONTROLLER_THEN_ONE_BOUNDED_EXISTING_OWNER_TASK_CONTINUATION_WINDOW",
+  "operatorActionRequired": false,
+  "goal": "ACTIVE"
+}

@@ -1,0 +1,162 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C134_CORRECTED_NORMAL_CONTROLLER_QUALIFIED_ADMISSION_GAP_EXPLICIT",
+  "recordedUtc": "2026-10-25T02:44:49.4343196+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "3f272767c96b4113902a547efea804b76cd46eae",
+  "verifiedRemoteSourceSha": "3f272767c96b4113902a547efea804b76cd46eae",
+  "sourceTree": "7dee54072f5e46df5ce9df386507cdd7dfbb7e7a",
+  "sourcePins": [
+    {
+      "sha256": "4794c6af581c3163c8498bcff3a98d97aa317de251b6100c6d57b6fb06546bad",
+      "path": "src/reviewed_build.rs"
+    },
+    {
+      "sha256": "c8b87aae4bc9d2df5ec46b9fcb711b0dfe56ff23e06a4fdd8773dad8bf9c5713",
+      "path": "src/reviewed_source_snapshot.rs"
+    },
+    {
+      "sha256": "37f1080375a679b7c572274d9f2e1d6bb916e865f01451d4abef8a0db34b3725",
+      "path": "src/project_mcp.rs"
+    },
+    {
+      "sha256": "5c045d396329a5148b37b3cf5bafad755badfc7c70c30debfe5d7546216a9790",
+      "path": "src/mcp.rs"
+    },
+    {
+      "path": "scripts/wake_bridge.py",
+      "sha256": "0f162cd0a49f5166a95a88aba3be08afe04c3ec2010ce51a66504d44d3c77bdb"
+    },
+    {
+      "path": "wake/adapter.py",
+      "sha256": "0686ae77d3f4ed7ff6fc1dcfcffe07c212f8e4aea515ed069c73e11993782b97"
+    },
+    {
+      "path": "wake/src/development_foreground.rs",
+      "sha256": "078f96a3cb626d13bbaefae0e24f38174818b3452e0e50484470c55033559aa2"
+    }
+  ],
+  "sourceQualification": {
+    "manualIgnoredTests": "NOT_CLAIMED_EXECUTED",
+    "exactSourceActions": 0,
+    "remoteCi": "UNVERIFIED_ZERO_EXACT_SHA_ACTIONS_AND_CHECKS",
+    "strictClippy": "PASS",
+    "exactSourceChecks": 0,
+    "format": "PASS",
+    "rootMainTestsPassed": 1675,
+    "integrationSuites": "PASS_INCLUDING_WAKE_CRATE_INTEGRATION",
+    "independentChangedScope": "C129_PASS_HASH_PINNED_FOUR_FILES",
+    "record": "C130_PRODUCER_AND_PARALLEL_TARGET_FIXES_2026_10_24.json"
+  },
+  "artifact": {
+    "recipe": "cargo build --locked --offline --release --bin catdesk",
+    "profile": "NORMAL_RELEASE_APP_ONLY_NO_WAKE_UPGRADE_NO_DEV_DEPENDENCIES",
+    "sha256": "86f00f6e333a8988171fb30f2a1c09547c746586d339fc340a6785664acbb7cc",
+    "normalNativeExit": true,
+    "buildLogSha256": "c02f72b997d5a62b8af7f4b4a657b4b3d5b663f27dc3254c8dad85feabb30585",
+    "priorNormalArtifactRetained": true,
+    "seconds": 388.1244839,
+    "classification": "QUALIFIED_SEPARATE_NORMAL_CONTROLLER_NOT_INSTALLED_CANONICAL_RELEASE",
+    "buildRecordSha256": "ccd812d930e2aa402f4f6fd94ccaeb16881e5b4143d164b45fbdf55e7dd9fc7d",
+    "buildMaximumSeconds": 600,
+    "producerAttested": false,
+    "byteLength": 35160064
+  },
+  "liveQualification": {
+    "maximumSeconds": 180,
+    "scope": "SEPARATE_NORMAL_CONTROLLER_QUALIFICATION_NOT_CANONICAL_PRODUCTION_ACCEPTANCE",
+    "imageSha256": "86f00f6e333a8988171fb30f2a1c09547c746586d339fc340a6785664acbb7cc",
+    "productionStartupAcceptance": false,
+    "healthRecordSha256": "7b553ddd43d111bb9b1a34c487124989d727f175c12b558f0dc643ae6feacbd8",
+    "installedRollbackAcceptance": false,
+    "sourceCommit": "3f272767c96b4113902a547efea804b76cd46eae",
+    "runs": [
+      {
+        "exitCode": 0,
+        "runtimeBoundSeconds": 12,
+        "http": [
+          {
+            "authentication": "absent",
+            "status": 401
+          },
+          {
+            "authentication": "incorrect",
+            "status": 401
+          },
+          {
+            "authentication": "valid",
+            "status": 200,
+            "tools": 10
+          }
+        ],
+        "listenerGone": true,
+        "sequence": 1,
+        "ready": true,
+        "naturalExit": true
+      },
+      {
+        "exitCode": 0,
+        "runtimeBoundSeconds": 12,
+        "http": [
+          {
+            "authentication": "absent",
+            "status": 401
+          },
+          {
+            "authentication": "incorrect",
+            "status": 401
+          },
+          {
+            "authentication": "valid",
+            "status": 200,
+            "tools": 10
+          }
+        ],
+        "listenerGone": true,
+        "sequence": 2,
+        "ready": true,
+        "naturalExit": true
+      }
+    ]
+  },
+  "productionAdmission": {
+    "checksumRewritten": false,
+    "nativeOperatorQueueReview": "OPERATOR_REVIEW_ONLY_NOT_INDEPENDENT_CHATGPT_OR_INBOX_AUTHORITY",
+    "state": "CURRENT_ACKNOWLEDGED_COMPLETION_SNAPSHOT_AND_PRODUCER_CHAIN_NOT_ESTABLISHED",
+    "externalSourceReview": "VALID_LIMITED_SOURCE_REVIEW_NOT_PRODUCTION_AUTHORITY",
+    "next": "Resolve the genuine review-admission integration using existing bounded native review, completion attribution and snapshot validators. Preserve native-required Sol isolation/profile gates and explicitly distinguish any supported review-only lane. Obtain real producer attestation before release-pair prepare/confirm/result.",
+    "operatorAction": "NONE_IDENTIFIED_SOURCE_INTEGRATION_WORK_REMAINS",
+    "oldReviewRecordsReused": false,
+    "unresolvedAttemptDiscarded": false,
+    "silentTerraSubstitution": false,
+    "legacySolLaunch": "validate_sol_worker_launch_boundary_DELIBERATELY_REFUSES_UNPROVEN_OS_ISOLATION"
+  },
+  "preservation": {
+    "browserWakeStarts": 0,
+    "naturalExitAndListenerCleanup": true,
+    "externalRuntimeActions": 0,
+    "developmentPrevious": "v76",
+    "selectedDevelopmentChanged": false,
+    "completedCanariesReplayed": 0,
+    "historicalFilesExact": 55,
+    "existingNativeSessionsResumed": 0,
+    "existingExplorerChrome": "PRESERVED_UNRELATED_OCT20_DEFAULT_PROFILE_SESSION",
+    "trustedPreviousCanonical": "NOT_ESTABLISHED_DO_NOT_RELABEL_DEVELOPMENT_PREDECESSOR",
+    "recurringAutomationStarts": 0,
+    "developmentFilesExact": 306,
+    "projectBindingsChanged": 0,
+    "developmentCurrent": "v77",
+    "canonicalPromoted": false
+  },
+  "acceptance": {
+    "connector": "LAST_OBSERVED_429_SEPARATE_DEPENDENCY_NOT_RETRIED",
+    "local3200Backend": "STILL_STOPPED_NOT_PROMOTED",
+    "actualParallelTwoConversationWebCoding": "OPEN",
+    "installedRollback": "OPEN",
+    "goal": "ACTIVE",
+    "officialSecureRuntime": "SEPARATE_OWNER_UNCHANGED",
+    "fullOctoberMilestone": "OPEN",
+    "dateHold": "SUPERSEDED"
+  }
+}

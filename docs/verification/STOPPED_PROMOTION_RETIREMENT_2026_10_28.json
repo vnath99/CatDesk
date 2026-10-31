@@ -1,0 +1,56 @@
+{
+  "date": "2026-10-28",
+  "classification": "SOURCE_AND_ACTUAL_WINDOWS_FIXTURES_ONLY",
+  "sourceParent": "4d4df3411b6cd7cdb5568cc1ad171cae5e19f7ef",
+  "tests": {
+    "focusedRecovery": 10,
+    "existingDaemon": 19,
+    "operator": 20,
+    "protectedFilesystem": 14,
+    "isolatedSnapshot": 23,
+    "total": 86,
+    "subprocessEntryPointsIncluded": 2
+  },
+  "format": "PASS",
+  "strictAllTargetClippy": "PASS",
+  "actualWindowsProcessTests": [
+    "mapped candidate refuses retirement without listener",
+    "hard termination at both archive boundaries; fresh-owner recovery"
+  ],
+  "initialFailures": [
+    "parser test compilation fixed",
+    "nested pinned directory DELETE reopen fixed without dropping ancestors",
+    "Windows process path separator comparison fixed"
+  ],
+  "productionMutations": 0,
+  "browserActions": 0,
+  "installedAcceptance": "OPEN",
+  "connector": "NOT_RECHECKED_UNCHANGED_STOPPED_BACKEND",
+  "twoProjectWebCoding": "OPEN",
+  "ci": "UNVERIFIED_ZERO_CHECKS_AND_RUNS",
+  "logSha256": {
+    "promotion-retirement-focused-tests-v3.private.log": "46e2e02c8715e12e93db12fc3ef3ba5df8cf014fb7d50de7babcb520d6e0bc9f",
+    "promotion-retirement-existing-daemon-tests.private.log": "600f4da262298ba5b9f6e2b3b5386b024a41a8c8ab2516991c86890fd722e3b7",
+    "promotion-retirement-operator-tests.private.log": "c40eff388ab65d76c516b764e1a186f174de0af02b6e319afe422cb130b4cd1c",
+    "promotion-retirement-filesystem-tests.private.log": "9e20f0cb325206f81ceaee5779bcc353ec10a4f490aaaad6b5496a99e333908f",
+    "promotion-retirement-isolated-snapshot-tests.private.log": "b367f8baee25f95cd708598c08b75cf9d44d83135d50f2db22e295d3aa23f369",
+    "promotion-retirement-format.private.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "promotion-retirement-clippy.private.log": "5743a2a0bf3cf5faf9c936dd6c8ad499e8ef3534d2feeb66d810eb35aa812c03"
+  },
+  "sourceCommit": "c980eed0d299fe4bae3e661c543d6574f3e7f693",
+  "liveReadOnlyInspection": {
+    "startedUtc": "2026-10-28T21:23:45.4693423+00:00",
+    "finishedUtc": "2026-10-28T21:24:00.6503889+00:00",
+    "state": "ELIGIBLE",
+    "historicalReceiptIncluded": true,
+    "protectedFiles": 8484,
+    "metadataOnlyPreserved": 2,
+    "ownersRemaining": 0,
+    "statePreserved": true,
+    "resultSha256": "1eaf9116c866f82da0cbca51ce7115328cbc1d3f40292693dcade918eca7acb8",
+    "outerSha256": "ca3e49019a2fa55699c60a5f0fdc4270108533f7cd9d0d55c82ccb8b6f4e8ff9"
+  },
+  "mutatingRetirementExecuted": false,
+  "installedPromotion": "NOT_PERFORMED",
+  "nextBlocker": "Legacy promotion phase one requires a live canonical backend; current trusted C208 lacks supported backend-only startup. Qualify a stopped-current entry without unowned tunnel/Wake launch before retiring records."
+}

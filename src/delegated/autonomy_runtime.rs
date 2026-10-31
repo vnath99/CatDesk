@@ -122,6 +122,11 @@ impl ProjectWriterGuard {
     }
 
     fn begin_writer_turn_with_payload(&mut self, payload: String) -> Result<(), RuntimeError> {
+        if self.pending_path.with_extension("recovery").exists() {
+            return Err(RuntimeError::Validation(
+                "project writer recovery is unfinished".into(),
+            ));
+        }
         let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -137,6 +142,119 @@ impl ProjectWriterGuard {
         })?;
         self.pending_nonce = Some(payload);
         Ok(())
+    }
+
+    pub(crate) fn begin_task_writer_turn(
+        &mut self,
+        claim: &str,
+        claim_hash: &str,
+    ) -> Result<(), RuntimeError> {
+        if claim.len() != 32 || !claim.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(RuntimeError::Validation(
+                "task writer claim is invalid".into(),
+            ));
+        }
+        if claim_hash.len() != 64
+            || !claim_hash
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            return Err(RuntimeError::Validation(
+                "task claim hash is invalid".into(),
+            ));
+        }
+        self.begin_writer_turn_with_payload(format!("project-task-v1:{claim}:{claim_hash}"))
+    }
+
+    pub(crate) fn task_marker(&self) -> Result<Option<Vec<u8>>, RuntimeError> {
+        read_writer_recovery_file(&self.pending_path, 128)
+    }
+
+    pub(crate) fn task_recovery_fence(&self) -> Result<Option<Vec<u8>>, RuntimeError> {
+        read_writer_recovery_file(&self.pending_path.with_extension("recovery"), 16384)
+    }
+
+    pub(crate) fn write_task_recovery_fence(&self, bytes: &[u8]) -> Result<(), RuntimeError> {
+        let path = self.pending_path.with_extension("recovery");
+        if let Some(existing) = read_writer_recovery_file(&path, 16384)? {
+            return if existing == bytes {
+                Ok(())
+            } else {
+                Err(RuntimeError::Validation(
+                    "writer recovery fence differs".into(),
+                ))
+            };
+        }
+        let temporary = path.with_extension(format!("recovery-{}.tmp", uuid::Uuid::new_v4()));
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+            .map_err(io_error)?;
+        file.write_all(bytes)
+            .and_then(|()| file.sync_all())
+            .map_err(io_error)?;
+        drop(file);
+        rename_writer_evidence(&temporary, &path, bytes)?;
+        if read_writer_recovery_file(&path, 16384)?.as_deref() != Some(bytes) {
+            return Err(RuntimeError::Validation(
+                "writer recovery fence readback differs".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn archive_task_marker(
+        &self,
+        claim: &str,
+        expected: &[u8],
+    ) -> Result<(), RuntimeError> {
+        if claim.len() != 32 || !claim.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(RuntimeError::Validation(
+                "task writer claim is invalid".into(),
+            ));
+        }
+        let archive = self.pending_path.with_extension(format!("retired-{claim}"));
+        match (
+            read_writer_recovery_file(&self.pending_path, 128)?,
+            read_writer_recovery_file(&archive, 128)?,
+        ) {
+            (Some(bytes), None) if bytes == expected => {
+                rename_writer_evidence(&self.pending_path, &archive, expected)
+            }
+            (None, Some(bytes)) if bytes == expected => Ok(()),
+            _ => Err(RuntimeError::Validation(
+                "task writer archive is ambiguous".into(),
+            )),
+        }
+    }
+
+    pub(crate) fn finish_task_recovery_fence(
+        &self,
+        claim: &str,
+        expected: &[u8],
+    ) -> Result<(), RuntimeError> {
+        if claim.len() != 32 || !claim.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(RuntimeError::Validation(
+                "task writer claim is invalid".into(),
+            ));
+        }
+        let source = self.pending_path.with_extension("recovery");
+        let target = self
+            .pending_path
+            .with_extension(format!("recovered-{claim}"));
+        match (
+            read_writer_recovery_file(&source, 16384)?,
+            read_writer_recovery_file(&target, 16384)?,
+        ) {
+            (Some(bytes), None) if bytes == expected => {
+                rename_writer_evidence(&source, &target, expected)
+            }
+            (None, Some(bytes)) if bytes == expected => Ok(()),
+            _ => Err(RuntimeError::Validation(
+                "task writer recovery completion differs".into(),
+            )),
+        }
     }
 
     pub(crate) fn finish_writer_turn(&mut self) -> Result<(), RuntimeError> {
@@ -163,6 +281,82 @@ impl ProjectWriterGuard {
         self.pending_nonce = None;
         Ok(())
     }
+}
+
+fn read_writer_recovery_file(path: &Path, limit: u64) -> Result<Option<Vec<u8>>, RuntimeError> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(io_error(error)),
+    };
+    if !metadata.is_file() || path_is_reparse_or_symlink(&metadata) || metadata.len() > limit {
+        return Err(RuntimeError::Validation(
+            "writer recovery evidence is unsafe".into(),
+        ));
+    }
+    let mut file = open_writer_marker_no_follow(path)?;
+    let opened = file.metadata().map_err(io_error)?;
+    if !same_writer_marker_identity(&file, path, &opened, &metadata) {
+        return Err(RuntimeError::Validation(
+            "writer recovery evidence identity changed".into(),
+        ));
+    }
+    let mut bytes = Vec::new();
+    Read::by_ref(&mut file)
+        .take(limit + 1)
+        .read_to_end(&mut bytes)
+        .map_err(io_error)?;
+    if bytes.len() as u64 > limit {
+        return Err(RuntimeError::Validation(
+            "writer recovery evidence oversized".into(),
+        ));
+    }
+    Ok(Some(bytes))
+}
+
+fn io_error(_: std::io::Error) -> RuntimeError {
+    RuntimeError::Validation("project writer recovery I/O failed".into())
+}
+
+#[cfg(windows)]
+pub(crate) fn rename_writer_evidence(
+    source: &Path,
+    target: &Path,
+    expected: &[u8],
+) -> Result<(), RuntimeError> {
+    let parent = source
+        .parent()
+        .ok_or_else(|| RuntimeError::Validation("writer evidence parent missing".into()))?;
+    if target.parent() != Some(parent) {
+        return Err(RuntimeError::Validation(
+            "writer evidence parent differs".into(),
+        ));
+    }
+    let source_name = source
+        .file_name()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| RuntimeError::Validation("writer evidence name invalid".into()))?;
+    let target_name = target
+        .file_name()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| RuntimeError::Validation("writer evidence name invalid".into()))?;
+    let pinned =
+        crate::windows_protected_fs::ProtectedDirectoryGuard::acquire(parent, "writer evidence")
+            .map_err(RuntimeError::Validation)?;
+    crate::windows_protected_fs::rename_exact_regular_child(
+        &pinned,
+        source_name,
+        target_name,
+        expected,
+        "writer evidence",
+    )
+    .map_err(RuntimeError::Validation)
+}
+#[cfg(not(windows))]
+pub(crate) fn rename_writer_evidence(_: &Path, _: &Path, _: &[u8]) -> Result<(), RuntimeError> {
+    Err(RuntimeError::Validation(
+        "task writer recovery requires Windows ownership proof".into(),
+    ))
 }
 
 fn checked_writer_state_dir(path: &Path) -> Result<PathBuf, RuntimeError> {
@@ -485,6 +679,22 @@ fn acquire_project_writer_lock_at(
     lock_root: &Path,
     project_workspace: &Path,
 ) -> Result<ProjectWriterGuard, RuntimeError> {
+    acquire_project_writer_lock_inner(lock_root, project_workspace, false)
+}
+
+pub(crate) fn acquire_project_task_writer_lock(
+    project_workspace: &Path,
+) -> Result<ProjectWriterGuard, RuntimeError> {
+    let workspace = project_workspace.canonicalize().map_err(io_error)?;
+    let root = fixed_project_writer_lock_root(&workspace)?;
+    acquire_project_writer_lock_inner(&root, &workspace, true)
+}
+
+fn acquire_project_writer_lock_inner(
+    lock_root: &Path,
+    project_workspace: &Path,
+    task_recovery: bool,
+) -> Result<ProjectWriterGuard, RuntimeError> {
     let project_workspace = project_workspace
         .canonicalize()
         .map_err(|_| RuntimeError::Validation("project writer workspace is unavailable".into()))?;
@@ -530,8 +740,19 @@ fn acquire_project_writer_lock_at(
     file.try_lock().map_err(|_| {
         RuntimeError::Validation("project workspace already has an active Codex writer".into())
     })?;
+    if !task_recovery
+        && pending_path
+            .with_extension("recovery")
+            .try_exists()
+            .map_err(io_error)?
+    {
+        return Err(RuntimeError::Validation(
+            "project writer recovery is unfinished".into(),
+        ));
+    }
     match fs::symlink_metadata(&pending_path) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Ok(_) if task_recovery => {}
         _ => {
             return Err(RuntimeError::Validation(
                 "unresolved managed project writer marker exists".into(),
@@ -931,12 +1152,12 @@ pub fn host_prepare_codex_app_server_thread(
     Ok(bound_thread)
 }
 
-/// Host-only observation/bootstrap for a never-registered external project.
+/// Host-only observation for a never-registered external project.
 /// The caller supplies no thread, prompt, executable, or authentication data.
 /// An exact-CWD app-server-visible Terra/High idle thread is preferred first.
-/// Zero candidates alone permits the fixed read-only bootstrap; ambiguity,
-/// ownership, or metadata mismatch fails closed rather than creating a
-/// parallel hidden thread.
+/// A missing persisted thread returns a native initialization prerequisite.
+/// This observer never creates threads or submits turns; ambiguity, ownership
+/// and metadata mismatch fail closed.
 pub fn host_observe_registration_thread(
     workspace: &Path,
     git_identity: &str,
@@ -956,53 +1177,58 @@ pub fn host_observe_registration_thread_for_model(
     observed_at_unix: u64,
     expected_model: &str,
 ) -> Result<ProjectRegistrationEvidenceV1, RuntimeError> {
-    let effort = super::codex_model_policy::required_effort(expected_model).ok_or_else(|| {
-        RuntimeError::Validation("registration has no supported exact model profile".into())
-    })?;
-    let workspace = workspace.canonicalize().map_err(|_| {
-        RuntimeError::Validation("registration workspace canonicalization failed".into())
-    })?;
-    let mut transport = host_app_server_launch_config(&workspace)?.spawn_stdio_transport()?;
-    transport.initialize()?;
-    let cwd = workspace.to_string_lossy().into_owned();
-    let candidates = CodexAppServerReadClientV1::discover_registration_threads_for_model(
+    if super::codex_model_policy::required_effort(expected_model).is_none() {
+        return Err(RuntimeError::Validation(
+            "CODEX_REGISTRATION_PROFILE".into(),
+        ));
+    }
+    let workspace = workspace
+        .canonicalize()
+        .map_err(|_| RuntimeError::Validation("CODEX_REGISTRATION_WORKSPACE".into()))?;
+    let mut transport = host_app_server_launch_config(&workspace)
+        .and_then(|config| config.spawn_stdio_transport())
+        .map_err(|_| RuntimeError::Validation("CODEX_REGISTRATION_TRANSPORT".into()))?;
+    transport
+        .initialize()
+        .map_err(|_| RuntimeError::Validation("CODEX_REGISTRATION_INITIALIZE".into()))?;
+    observe_registration_thread(
         &mut transport,
-        &cwd,
+        &workspace,
+        git_identity,
         observed_at_unix,
         expected_model,
-    )?;
+    )
+}
+
+fn observe_registration_thread<T: CodexAppServerTransportV1>(
+    transport: &mut T,
+    workspace: &Path,
+    git_identity: &str,
+    observed_at_unix: u64,
+    expected_model: &str,
+) -> Result<ProjectRegistrationEvidenceV1, RuntimeError> {
+    if super::codex_model_policy::required_effort(expected_model).is_none() {
+        return Err(RuntimeError::Validation(
+            "CODEX_REGISTRATION_PROFILE".into(),
+        ));
+    }
+    let candidates = CodexAppServerReadClientV1::discover_registration_threads_for_model(
+        transport,
+        &workspace.to_string_lossy(),
+        observed_at_unix,
+        expected_model,
+    )
+    .map_err(|_| RuntimeError::Validation("CODEX_REGISTRATION_DISCOVERY".into()))?;
     let preparation = match candidates.as_slice() {
-        [preparation] => preparation.clone(),
+        [preparation] => preparation,
         [] => {
-            let response = transport.request(
-                "thread/start",
-                serde_json::json!({
-                    "cwd": cwd,
-                    "model": expected_model,
-                    "effort": effort,
-                    "approvalPolicy": "never",
-                    "sandboxPolicy": {"type":"readOnly", "networkAccess":false},
-                    "input": [{"type":"text", "text":"CatDesk registration bootstrap. Do not modify files, run commands, use tools, or access the network. Reply only that this exact workspace thread is available."}]
-                }),
-            )?;
-            let metadata = super::codex_app_server::parse_thread_metadata(&response)?;
-            if PathBuf::from(&metadata.cwd).canonicalize().ok().as_deref() != Some(&workspace) {
-                return Err(RuntimeError::Validation(
-                    "registration bootstrap returned a different workspace".into(),
-                ));
-            }
-            CodexAppServerReadClientV1::prepare_mutating_thread_for_model(
-                &mut transport,
-                &cwd,
-                None,
-                Some(&metadata.thread_id),
-                observed_at_unix,
-                expected_model,
-            )?
+            return Err(RuntimeError::Validation(
+                "CODEX_REGISTRATION_NATIVE_INITIALIZATION_REQUIRED".into(),
+            ));
         }
         _ => {
             return Err(RuntimeError::Validation(
-                "registration has multiple app-server-visible existing threads".into(),
+                "CODEX_REGISTRATION_AMBIGUOUS".into(),
             ));
         }
     };
@@ -1010,18 +1236,26 @@ pub fn host_observe_registration_thread_for_model(
         .canonicalize()
         .ok()
         .as_deref()
-        != Some(&workspace)
+        != Some(workspace)
     {
         return Err(RuntimeError::Validation(
-            "registration thread cwd drifted".into(),
+            "CODEX_REGISTRATION_WORKSPACE".into(),
         ));
     }
     Ok(ProjectRegistrationEvidenceV1 {
-        workspace,
+        workspace: workspace.to_path_buf(),
         git_identity: git_identity.into(),
-        codex_thread_id: preparation.thread.thread_id,
-        selected_model: preparation.thread.selected_model.unwrap_or_default(),
-        reasoning_effort: preparation.thread.reasoning_effort.unwrap_or_default(),
+        codex_thread_id: preparation.thread.thread_id.clone(),
+        selected_model: preparation
+            .thread
+            .selected_model
+            .clone()
+            .unwrap_or_default(),
+        reasoning_effort: preparation
+            .thread
+            .reasoning_effort
+            .clone()
+            .unwrap_or_default(),
     })
 }
 
@@ -3416,6 +3650,39 @@ pub async fn start_or_tick(
     let workspace = workspace.canonicalize().map_err(|_| {
         RuntimeError::Validation("autonomous workspace canonicalization failed".into())
     })?;
+    let store = AutonomousStateStoreV1::open(workspace.join(".catdesk").join("autonomy"))
+        .map_err(RuntimeError::from)?;
+    // Select the new lane only from a valid direct contract. Missing or
+    // malformed legacy contracts must still reach the original native writer
+    // recovery path, which preserves uncertain-child ownership markers.
+    if let Some(contract) = store
+        .load_contract(session_id)
+        .ok()
+        .filter(|contract| contract.is_direct_chatgpt())
+    {
+        let policy = AutonomousPolicyEngineV1::new(contract).map_err(|_| {
+            RuntimeError::Validation("persisted direct ChatGPT contract rejected".into())
+        })?;
+        let snapshot = store.load_session(session_id).map_err(RuntimeError::from)?;
+        if snapshot
+            .approved_contract_hash
+            .as_deref()
+            .is_some_and(|hash| hash != policy.contract_hash())
+        {
+            return Err(RuntimeError::Validation(
+                "direct ChatGPT approval binding changed".into(),
+            ));
+        }
+        // Return before native writer acquisition, executable discovery or
+        // native provider construction. Reuse the finalization-only provider
+        // used by explicit direct work: it is never invoked. The ordinary
+        // controller retains cancellation, lease and passed-checkpoint recovery.
+        let verifier = ContractVerifierV1::new(policy.clone())?;
+        let provider = FakeWorkerProviderV1::new(FakeProvider::new(Vec::new()));
+        let mut controller =
+            AutonomousControllerV1::new(policy, store, provider, verifier, session_id.into());
+        return controller.run_once(now_unix()).await;
+    }
     let key = format!("{}:{session_id}", workspace.to_string_lossy());
     let entry = controller_entry(&key).await;
     let mut entry = entry.lock().await;
@@ -4410,6 +4677,122 @@ mod tests {
     struct FakeTransport {
         replies: VecDeque<Value>,
         methods: Vec<String>,
+    }
+
+    #[test]
+    fn registration_missing_persisted_thread_requests_native_initialization_without_creating_anything()
+     {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-registration-missing-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let workspace = root.canonicalize().unwrap();
+        let mut transport = FakeTransport {
+            replies: VecDeque::from([json!({"data":[]}), json!({"data":[]})]),
+            methods: Vec::new(),
+        };
+        let error = observe_registration_thread(
+            &mut transport,
+            &workspace,
+            "fixture-git",
+            10,
+            SOL_MEDIUM_MODEL,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(error,RuntimeError::Validation(code) if code=="CODEX_REGISTRATION_NATIVE_INITIALIZATION_REQUIRED")
+        );
+        assert_eq!(transport.methods, ["thread/list", "thread/list"]);
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 0);
+        remove_writer_fixture(root);
+    }
+
+    #[test]
+    fn registration_reuses_persisted_native_thread_and_refuses_conflicting_writer_evidence() {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-registration-existing-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let workspace = root.canonicalize().unwrap();
+        let cwd = workspace.to_string_lossy();
+        for active_writer in [false, true] {
+            let thread = json!({"id":"existing-thread","cwd":cwd});
+            let mut resumed = json!({"thread":{"id":"existing-thread","cwd":cwd,"canAcceptDirectInput":true},"cwd":cwd,"model":"gpt-6.1-sol","reasoningEffort":"medium"});
+            resumed["thread"]["activeWriter"] = json!(active_writer);
+            let mut transport = FakeTransport {
+                replies: VecDeque::from([
+                    json!({"data":[thread.clone()]}),
+                    json!({"data":[]}),
+                    json!({"thread":thread}),
+                    json!({"rateLimits":[]}),
+                    resumed,
+                ]),
+                methods: Vec::new(),
+            };
+            let result = observe_registration_thread(
+                &mut transport,
+                &workspace,
+                "fixture-git",
+                10,
+                SOL_MEDIUM_MODEL,
+            );
+            assert_eq!(result.is_ok(), !active_writer);
+            if let Ok(evidence) = result {
+                assert_eq!(evidence.codex_thread_id, "existing-thread");
+                assert_eq!(evidence.selected_model, SOL_MEDIUM_MODEL);
+                assert_eq!(evidence.reasoning_effort, "medium");
+            }
+            assert_eq!(
+                transport.methods,
+                [
+                    "thread/list",
+                    "thread/list",
+                    "thread/read",
+                    "account/rateLimits/read",
+                    "thread/resume"
+                ]
+            );
+        }
+        for raw in [
+            "CODEX_REGISTRATION_DISCOVERY: private data",
+            "C:/private/runtime",
+            "CODEX_REGISTRATION_UNTRUSTED",
+        ] {
+            assert_eq!(
+                super::super::codex_app_server::registration_error_code(raw),
+                "CODEX_PROJECT_OPERATION_REFUSED"
+            );
+        }
+        remove_writer_fixture(root);
+    }
+
+    #[test]
+    #[ignore = "explicit bounded operator-local persisted native registration acceptance"]
+    fn live_operator_existing_registration_probe() {
+        let path = PathBuf::from(
+            std::env::var_os("CATDESK_REGISTRATION_LIVE_FIXTURE").expect("explicit test manifest"),
+        );
+        let manifest: Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+        assert_eq!(manifest["existingNativeThreadOnly"], true);
+        let control = PathBuf::from(manifest["controlWorkspace"].as_str().unwrap())
+            .canonicalize()
+            .unwrap();
+        let native = PathBuf::from(manifest["nativeWorkspace"].as_str().unwrap())
+            .canonicalize()
+            .unwrap();
+        assert_ne!(control, native);
+        let result=super::super::autonomy_supervisor::handle_tool("autonomy_project_registry_preflight",json!({
+            "projectId":"native-beta","workspace":native,"gitIdentity":"https://example.test/native-beta-fixture.git",
+            "verificationProfile":"rust_full","modelId":SOL_MEDIUM_MODEL
+        }),&control).expect("supported existing-thread preflight");
+        let confirmed = super::super::autonomy_supervisor::handle_tool(
+            "autonomy_project_registry_confirm",
+            json!({
+                "confirmationToken":result["confirmationToken"]
+            }),
+            &control,
+        )
+        .expect("existing-thread confirmation");
+        assert_eq!(confirmed["projectId"], "native-beta");
+        println!("LIVE_REGISTRATION_EXISTING_NATIVE_THREAD_CONFIRMED=true");
     }
     impl CodexAppServerTransportV1 for FakeTransport {
         fn request(&mut self, method: &str, _params: Value) -> Result<Value, RuntimeError> {

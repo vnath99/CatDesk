@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C197_APPROVED_REVIEW_AND_REAL_ROUTE_REFUSAL",
+  "recordedUtc": "2026-10-25T15:21:17.1102824+00:00",
+  "implementationCommit": "061051fe9e6e4493ab0ccf24c58b41cbe81b74a6",
+  "reviewedSourceCommit": "409513a1c1f81f74f873bd4b3dca825458ef29a8",
+  "priorOperatingCommit": "96121e9c34361d19632a491de69dbcfff232f5ba",
+  "controllerSha256": "701221a979e73e95c81a7853bec661add68ba814c0ac68919c1e357c49254a7a",
+  "approval": {
+    "originalExactMessage": "USER_APPROVED_OCT25",
+    "destinationChanged": false,
+    "originalReviewSent": false,
+    "wireChanged": false
+  },
+  "claimRecovery": {
+    "firstHttpOutcome": "TEN_SECOND_TIMEOUT_AFTER_COMMIT",
+    "naturalReadbackExit": true,
+    "original": "EXPIRED_NONRENEWABLE_SUPPORTED_CANCELLATION_HISTORY_PRESERVED",
+    "supportedSupersession": "RECORDED",
+    "preWorkOutput": "ABSENT",
+    "listenerGone": true,
+    "recovery": "DURABLE_STATUS_QUEUE_BASELINE_ACCOUNTING_NO_REPLAY",
+    "recordSha256": "7e0bdece4d8754f488d77038be479d6a535f3773cd524f026ec899eb6f6913a3",
+    "successor": "APPROVED_CLAIMED_ONCE",
+    "providerTurns": 1,
+    "actualWebWork": false,
+    "nativeTurns": 0,
+    "oldSessionsByteExact": 594,
+    "oldAccountingRecordsPreserved": 559
+  },
+  "actualBrowser": {
+    "maximumSeconds": 180,
+    "commandMaximumSeconds": 150,
+    "bindingsChanged": false,
+    "timedOut": false,
+    "wakeHostsStarted": 0,
+    "exitCode": 2,
+    "messagesSent": 0,
+    "ownedProcessesAfter": 0,
+    "quarantineCleared": false,
+    "scope": "PRESERVED_OCT18_CATDESK_QUARANTINE_READONLY",
+    "errorCode": "RESPONSE_EXPECTED_USER_NOT_FOUND",
+    "profile": "EXISTING_AUTHENTICATED",
+    "recordSha256": "a5b06eac490586dd7459b1a71055fce36a9b46e513443dc5c1a1b72999323239"
+  },
+  "actualPublisher": {
+    "application": "SELECTED_QUALIFIED_V77",
+    "queueCountAfter": 0,
+    "recordSha256": "c4554220b10164ef52e8e55bfc4eaa71fee6928f920418b3717b413305e2d98d",
+    "messagesSent": 0,
+    "wakeHostStarts": 0,
+    "timedOut": false,
+    "exitCode": 2,
+    "errorCode": "WEB_WORK_ROLLOVER_PENDING",
+    "guard": "PRESERVED_NO_SAME_PROJECT_BYPASS",
+    "browserStarts": 0
+  },
+  "workflowFix": {
+    "alternative": "EXISTING_WAKE2_TARGET_METADATA_PASSED_NO_SEND",
+    "change": "CHECK_PAIRED_ROUTE_FROZEN_DIGEST_PENDING_ROLLOVER_EXISTING_WORK_BEFORE_CLAIM",
+    "original": "REFUSED_BEFORE_CLAIM",
+    "scope": "PRIVATE_TEST_PREPARATION_NOT_PRODUCT_SOURCE",
+    "publisherRecheck": "STILL_REQUIRED_AT_SEND",
+    "newMessageAndDestinationApproval": "PENDING_C184_APPROVAL_NOT_REUSED"
+  },
+  "preservation": {
+    "completedCanariesReplayed": 0,
+    "externalRuntimeActions": 0,
+    "existingNativeSessionsChanged": 0,
+    "pinnedFilesExact": 361,
+    "runtimeControls": "BOTH_STOPPED",
+    "canonicalExecutableChanged": false,
+    "developmentSelection": "V77_CURRENT_V76_RETAINED",
+    "projectBindingsChanged": 0,
+    "fingerprintRewritten": false,
+    "recurringStarted": 0
+  },
+  "acceptance": {
+    "next": "Approval for the distinct frozen C196 review and its exact registered Wake2 destination; preserve the original quarantine and require genuine completed review before producer/promotion.",
+    "productionPromoted": false,
+    "connector": "LAST_OBSERVED_429_SEPARATE_NOT_RETRIED",
+    "installedRollback": "OPEN",
+    "productSourceChanged": false,
+    "genuineWebReview": "NOT_OBTAINED",
+    "producerAuthority": "NOT_FABRICATED",
+    "twoConversationWebCoding": "OPEN",
+    "goal": "ACTIVE",
+    "currentBlocker": "CATDESK_HISTORICAL_QUARANTINE_NOT_HTTP_429"
+  }
+}

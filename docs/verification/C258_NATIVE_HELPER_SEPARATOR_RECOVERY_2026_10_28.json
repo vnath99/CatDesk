@@ -1,0 +1,64 @@
+{
+  "reviewedSourceCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "date": "2026-10-28",
+  "classification": "NATIVE_WINDOWS_SEPARATOR_REGRESSION_FIXED_PRODUCTION_NOT_PROMOTED",
+  "priorProducer": {
+    "candidateQualified": false,
+    "workerMaximumSeconds": 900,
+    "automaticRetry": false,
+    "specificMemberIdentity": "NOT_CAPTURED",
+    "classification": "DESCENDANTS_ACTIVE",
+    "state": "BUILD_FAILED_OR_AMBIGUOUS",
+    "attestationCreated": false,
+    "failureCode": "REVIEWED_BUILD_TIMEOUT",
+    "phase": "CARGO_BUILD",
+    "rootExitCode": 0,
+    "remainingObservedProcesses": 0
+  },
+  "connector": "NOT_RECHECKED_BACKEND_RECOVERY_PENDING",
+  "sourceCi": "UNVERIFIED",
+  "checkpoint": "C258",
+  "newCumulativeIndependentSourceReview": "REQUIRED",
+  "installedBackendAcceptance": "OPEN",
+  "verification": {
+    "strictClippy": "PASS",
+    "preFixEachRootExitCode": 0,
+    "preFixCleanupRefused": true,
+    "formatting": "PASS",
+    "actualWindowsProcesses": true,
+    "regressionRed": true,
+    "actualCompilerCases": [
+      "CL_COMPILE",
+      "CL_LINK",
+      "RUST_LINK"
+    ],
+    "preFixEachLingeringPinnedHelperCount": 1,
+    "regressionGreen": true,
+    "ownedTreeExitProved": true,
+    "failed": 0,
+    "passed": 132,
+    "postFixEachRemainingJobMembers": 0,
+    "postFixHelperCleanupRecords": 0,
+    "ignored": 8,
+    "artifactExecuted": false
+  },
+  "recurringAutomationEnabled": false,
+  "correction": {
+    "retainedChecks": [
+      "exact image identity",
+      "read-only directory pin",
+      "complete owned Job membership",
+      "retained process handles",
+      "outside Job exclusion",
+      "zero Job and stderr EOF completion"
+    ],
+    "scope": "Only Windows separator spelling in pinned MSVC helper image-path comparison"
+  },
+  "productionPromotion": "NOT_PERFORMED",
+  "milestoneComplete": false,
+  "projectBindings": "PRESERVED",
+  "twoIndependentWebCodingAcceptance": "OPEN",
+  "priorFullBuildSpecificCause": "UNPROVEN",
+  "newReviewedBuild": "REQUIRED",
+  "sourceParentCommit": "1f7576c37dd3ba9e9ac6edd31063c59a395a41a1"
+}

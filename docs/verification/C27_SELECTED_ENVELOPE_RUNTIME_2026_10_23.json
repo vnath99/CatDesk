@@ -1,0 +1,141 @@
+{
+  "recordedUtc": "2026-10-23T12:18:36.5173823Z",
+  "localDate": "2026-10-23",
+  "task": "C27-MATCHED-ESCAPED-HANDOFF-DEVELOPMENT-SELECTION",
+  "classification": "NORMAL_RELEASE_AND_SELECTED_STOPPED_UNPROTECTED_RUNTIME",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "1fe093686f950786d54fbc71451770a7be57677e",
+  "codeCommit": "6dab09fcfb0c2e1c51841dc087e0945c229c78d1",
+  "sourceFiles": [
+    {
+      "path": "scripts/wake_bridge.py",
+      "sha256": "bd3331a475096efa392eabc14eb35a49301790c735cb16d39238ae66f552ad00"
+    },
+    {
+      "path": "src/main.rs",
+      "sha256": "eecf0517779b50a01ce806cce06441f26dab0ea1cdf91ac9cac1311be2caa6c2"
+    },
+    {
+      "path": "src/operator_web_rollover.rs",
+      "sha256": "481433742517b3fc9a305ce4f4481e7d5cb1020d4fe6f56aaddb51f4e1085447"
+    },
+    {
+      "path": "src/project_mcp_task.rs",
+      "sha256": "5f6146e7f134d2eedf723f3c4423f29571166be7e7af2d7a4ecbeab57f8a04fe"
+    },
+    {
+      "path": "src/project_mcp.rs",
+      "sha256": "e663b71f3fa3efd1d31ae2a11474f7de0a97a0096682220c5df1cfb1e4069f63"
+    },
+    {
+      "path": "src/project_task_command.rs",
+      "sha256": "5a82b4eddf495098ef85d94cc8c2a192f33a3423e8200a21aaf1c37de1d16c2b"
+    },
+    {
+      "path": "tests/test_wake_bridge_current_dom.py",
+      "sha256": "34c2b623f54c6ea3cb76ac677b391f19d9b302884c25c84301975a46d9ded411"
+    },
+    {
+      "path": "tests/test_wake_bridge.py",
+      "sha256": "bebd6d8fb4b6a6e3ea2a17944c82e6dfdc967dfa6c5b0d8683375abb4cc8b02c"
+    },
+    {
+      "path": "wake/adapter.py",
+      "sha256": "854dde9301d98466f1c6fd7b34d46348d0a44e7ae0b2903a31033b8552adc809"
+    },
+    {
+      "path": "wake/src/runtime.rs",
+      "sha256": "7f117ae02fa1519017f9fd24b85d073f898ee2283e96561cc6fa35fd309523bd"
+    },
+    {
+      "path": "wake/tests/test_new_conversation.py",
+      "sha256": "7e3688b46ce78aaf568624b06ea8be889c79465936d1d70f3f21ad8c0d0b6cb4"
+    }
+  ],
+  "normalApplication": {
+    "imageBytes": 34021888,
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+    "finishedUtc": "2026-10-23T12:09:51.025536Z",
+    "startedUtc": "2026-10-23T12:03:06.7360601Z",
+    "maximumSeconds": 600,
+    "imageSha256": "dbc526a4e1421323f96826f1c8cedd39c614ce3959e9dbe46eef9af845eb96b9",
+    "exitCode": 0
+  },
+  "normalHost": {
+    "ownerEofGate": "PASS_NEW_IMAGE",
+    "profile": "NORMAL_RELEASE_WAKE_DEFAULT_FEATURES_NO_TEST_SUPPORT",
+    "gateProcessExited": true,
+    "imageSha256": "c5a9279f7f0a23fd6b84d0d44ed5fabc45b4045861cf0b6b300841835de369c9",
+    "gateRuntimeStateCreated": false,
+    "deliveryProved": false,
+    "ownerEofRefused": true,
+    "finishedUtc": "2026-10-23T12:11:28.1451922Z",
+    "startedUtc": "2026-10-23T12:11:09.4099741Z",
+    "exitCode": 0
+  },
+  "files": [
+    {
+      "name": "CatDeskBinagotchy.exe",
+      "sha256": "dbc526a4e1421323f96826f1c8cedd39c614ce3959e9dbe46eef9af845eb96b9",
+      "bytes": 34021888
+    },
+    {
+      "name": "CatDeskWakeHost.exe",
+      "sha256": "c5a9279f7f0a23fd6b84d0d44ed5fabc45b4045861cf0b6b300841835de369c9",
+      "bytes": 2041344
+    },
+    {
+      "name": "adapter.py",
+      "sha256": "854dde9301d98466f1c6fd7b34d46348d0a44e7ae0b2903a31033b8552adc809",
+      "bytes": 47073
+    },
+    {
+      "name": "wake_bridge.py",
+      "sha256": "bd3331a475096efa392eabc14eb35a49301790c735cb16d39238ae66f552ad00",
+      "bytes": 169407
+    }
+  ],
+  "selection": {
+    "targetBindingChanges": 0,
+    "wakeWorkerStarts": 0,
+    "previousPackagePreserved": true,
+    "newRecords": 0,
+    "ownedProcesses": 0,
+    "selectedPackage": "1.0.0-dev.85-f6688c48555f403f479c85cd9f97d0fd1663fc71dd086b52754cee91afc115de",
+    "unexpectedChanges": 0,
+    "recordsChecked": 181,
+    "nativeSessionChanges": 0,
+    "selectedUtc": "2026-10-23T12:13:39.343667Z",
+    "protectedRecordsExact": 179,
+    "controls": [
+      "STOPPED",
+      "STOPPED"
+    ],
+    "allNinePairedStatusReadback": true,
+    "productionChanged": false,
+    "browserProfilePreserved": true,
+    "elapsedSeconds": 4.1342175,
+    "browserProfileAction": "NONE",
+    "previousPackage": "1.0.0-dev.85-69e6ba62417255411269b645ea7b55afdc6451795c99b4414b21eddeb1206a69",
+    "allowedPointerChanges": 2,
+    "browserStarts": 0,
+    "status": "PACKAGE_UPDATED_STOPPED",
+    "recurringStarts": 0
+  },
+  "acceptance": {
+    "isolatedSourceEnvelope": "C26_COMPLETE_DO_NOT_REPEAT",
+    "protectedInstalledProduction": "OPEN",
+    "automaticMonitoring": "NOT_LIVE_QUALIFIED",
+    "unattended": "NOT_ACTIVATED",
+    "selectedNewFormatRegisteredRollover": "OPEN",
+    "selectedStoppedDevelopment": "PASS_BYTES_AND_SAVED_STATUS",
+    "selectedCriticalPhaseRecovery": "OPEN",
+    "ci": "UNVERIFIED",
+    "actualWebMcpCodingBAndC": "OPEN_CONNECTOR_DEPENDENCY",
+    "normalDefaultBuild": "PASS",
+    "sourceTestsReused": 156
+  },
+  "nextExecutableTask": "Freeze a fresh controlled task for the registered beta test project at current generation2. Use selected v54 for a new schema2 handoff, interruption at its own DRAFT_READY checkpoint, supported exact-draft resume, guarded paired rollover and continuation. Preserve all completed/unknown old operations and original native sessions.",
+  "operatorAction": "NONE_FOR_NEXT_ELIGIBLE_CONTROLLED_TEST",
+  "privacy": "PRIVATE_URLS_THREAD_IDS_WORKSPACE_PATHS_PROFILES_AND_RAW_OUTPUT_OMITTED"
+}

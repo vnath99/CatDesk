@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C215",
+  "recordedUtc": "2026-10-25T18:20:08.9700372+00:00",
+  "branch": "codex/web-rollover-oct17",
+  "sourceParent": "a999b01fa88782ecc4e7a47494385b95a4f7e1f3",
+  "implementation": [
+    "Existing per-project WebWork ledger stores exact frozen review batches, material review keys, limits, expiry and revocation.",
+    "Dedicated bounded sender consumes consent at BEFORE_SUBMIT and never retries a dispatched or ambiguous request.",
+    "Typed source_review events fail closed on legacy hosts; ordinary work cannot republish grant-owned request IDs.",
+    "Explicit pre-submit resume preserves spent count and pending identity; completed review resolution requires historical dispatch and Wake proof."
+  ],
+  "sourceQualification": {
+    "strictClippy": "PASS_ROOT_AND_WAKE",
+    "startedUtc": "2026-10-25T14:14:00.2607775-04:00",
+    "timedOut": false,
+    "sourcePins": [
+      {
+        "sha256": "f8248635684bf660b6a6d07c15dc061c9e5d82bef9e2409a35f98f4b7de13980",
+        "path": "src/operator_web_cli.rs"
+      },
+      {
+        "sha256": "0e256f23f2b25b7031f59b5130e2bb1490d8fd970bfd00e17a6df71eb4e34cf7",
+        "path": "src/web_work.rs"
+      },
+      {
+        "sha256": "a64d99c1cefcf3c34aa78ec589643242f5043582605bb8efee0ac1bdbb92ace8",
+        "path": "src/web_work_state.rs"
+      },
+      {
+        "sha256": "ed51dac7f9fa0999e9a947f82ecc71bd8f365f50f14fae147a3ee38e28583f62",
+        "path": "src/web_review_authorization.rs"
+      },
+      {
+        "sha256": "b3c25c00cbf719c7cbd862001609fcdcbcd3e91389f8a61794b7504d5ee25acc",
+        "path": "src/web_review_work.rs"
+      },
+      {
+        "sha256": "e360561815c8bac4c5f556bb4888ce96abd3eb256ba43b5bcb8df657bfc35b7b",
+        "path": "src/wake_protocol_client.rs"
+      },
+      {
+        "sha256": "788029be26bd9d94f178633f1813304425e2bb5d5ae77223f4d9c458e456cff9",
+        "path": "src/web_development_tests.rs"
+      },
+      {
+        "sha256": "7b016cd80094991f5eb9dea0c3d02521b1e30eb10c3609c9fcfb039d1e91c7fb",
+        "path": "wake/src/protocol.rs"
+      },
+      {
+        "sha256": "dc1c82baebcea93eba8f95a6ce718b2a59b3012b82309cfe6bc9b778dbe70c1c",
+        "path": "wake/src/runtime.rs"
+      },
+      {
+        "sha256": "b814a5f89d637c8319ade169eed51fb1a52847a82542d70bffd97bafacf71d09",
+        "path": "wake/src/runtime_scoped_review.rs"
+      },
+      {
+        "sha256": "7026f7ba4deb6406a1a813fa8fe55544be6518a4fe025b09daf5b56b8787ff85",
+        "path": "wake/src/store.rs"
+      }
+    ],
+    "counts": {
+      "scoped-review-integration": {
+        "failed": 0,
+        "passed": 2,
+        "ignored": 0
+      },
+      "wake-all": {
+        "failed": 0,
+        "passed": 419,
+        "ignored": 1
+      },
+      "web-work-and-grants": {
+        "failed": 0,
+        "passed": 28,
+        "ignored": 0
+      }
+    },
+    "formatAndDiff": "PASS",
+    "ownerExit": 0,
+    "independentStaticReview": "PASS_TWO_REVIEWERS_AFTER_COMPATIBILITY_AND_RECOVERY_FIXES",
+    "maximumSeconds": 600,
+    "finishedUtc": "2026-10-25T14:17:35.3052241-04:00"
+  },
+  "live": {
+    "productionPromotions": 0,
+    "producerRuns": 0,
+    "testFinishedUtc": "2026-10-25T18:08:10Z",
+    "testStartedUtc": "2026-10-25T18:05:52Z",
+    "deliveryReceipt": "EXACT_USER_MESSAGE_APPENDED",
+    "completionArtifactsWritten": 0,
+    "sentExactlyOnce": true,
+    "acknowledgments": 0,
+    "nativeClaimsCreated": 0,
+    "standingUserAuthorizationUsed": true,
+    "scope": "C212_SINGLE_READ_ONLY_REVIEW_USING_PREEXISTING_QUALIFIED_CONTROLLER",
+    "initialPostSendRead": "25_SECOND_TIMEOUT_NO_BODY",
+    "outerLimitSeconds": 180,
+    "followupRead": {
+      "remainingOwnedProcesses": 0,
+      "result": "TIMEOUT_NO_BODY",
+      "finishedUtc": "2026-10-25T18:13:53Z",
+      "maximumSeconds": 90,
+      "resend": false,
+      "startedUtc": "2026-10-25T18:12:22Z",
+      "allFrozenRecordsPreserved": 477
+    },
+    "sourceReviewed": "a999b01fa88782ecc4e7a47494385b95a4f7e1f3",
+    "foregroundLimitSeconds": 100,
+    "bindingsAndHistoryPreserved": true,
+    "newGrantWorkflowInstalled": false,
+    "assistantBodyVerified": false
+  },
+  "release": {
+    "candidateAndAuthorityUnchanged": true,
+    "wrapperExecuted": false,
+    "newPrivateWrapperSha256": "ee20dfd56c5a382a13a4d60002f3edf92be3f82d1173ddb74439e86ac434ca7b",
+    "blocker": "Existing supported promotion owner requires outside-Windows-Job launch; available Codex launch contexts were previously proved contained."
+  },
+  "remaining": [
+    "Installed qualification and multiple live reviews under one durable grant remain open.",
+    "C212 assistant body remains unverified; never resend this request.",
+    "Snapshot startup has a separate budget before its read deadline and hides intermediate progress; implement one total budget and redacted diagnostic stages before another live read.",
+    "Production startup, authenticated connector, rollback and real two-conversation coding acceptance remain open."
+  ],
+  "publication": {
+    "remoteSha": "63e7ebc2c473919e7c7ff6f171ed8ec0081d5b09",
+    "implementationCommit": "63e7ebc2c473919e7c7ff6f171ed8ec0081d5b09",
+    "exactCommitCi": "NO_VISIBLE_WORKFLOW_RUNS_AT_READBACK",
+    "remoteVerifiedUtc": "2026-10-25T18:21:46.9734326+00:00",
+    "branch": "refs/heads/codex/web-rollover-oct17",
+    "repositoryVisibility": "PUBLIC_UNCHANGED"
+  }
+}

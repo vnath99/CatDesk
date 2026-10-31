@@ -80,6 +80,15 @@ const STATUS_NO_MORE_FILES: u32 = 0x8000_0006;
 const FILE_NAMES_INFORMATION: u32 = 12;
 const INVALID_HANDLE_VALUE: *mut c_void = -1isize as *mut c_void;
 
+#[path = "install_broker_offline_ledger.rs"]
+mod offline_v2;
+pub use offline_v2::{
+    OfflineIntentReadbackV2, OfflineLedgerLeaseV2, OfflinePointerBindingV2, OfflinePointerPlanV2,
+    OfflineRecoveryV2, StageBindingV2,
+};
+#[cfg(test)]
+pub(crate) use offline_v2::{begin_offline_fixture, begin_offline_writer_fixture};
+
 #[repr(C)]
 struct UnicodeString {
     length: u16,
@@ -1159,6 +1168,10 @@ fn root_info(root: &OwnedHandle) -> Result<ObjectIdentityV1> {
 }
 
 fn file_info(file: &File, expected_length: Option<usize>) -> Result<()> {
+    file_info_bounded(file, expected_length, MAX_RECORD_BYTES)
+}
+
+fn file_info_bounded(file: &File, expected_length: Option<usize>, maximum: usize) -> Result<()> {
     let mut info = FileInfo::default();
     if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0
         || info.attributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY) != 0
@@ -1167,8 +1180,7 @@ fn file_info(file: &File, expected_length: Option<usize>) -> Result<()> {
         return Err("WAKE_LEDGER_RECORD_INVALID".into());
     }
     let length = (u64::from(info.size_high) << 32) | u64::from(info.size_low);
-    if length > MAX_RECORD_BYTES as u64
-        || expected_length.is_some_and(|expected| length != expected as u64)
+    if length > maximum as u64 || expected_length.is_some_and(|expected| length != expected as u64)
     {
         return Err("WAKE_LEDGER_RECORD_INVALID".into());
     }
@@ -2951,7 +2963,7 @@ mod tests {
         ) -> *mut c_void;
     }
 
-    fn fixture() -> (
+    pub(super) fn fixture() -> (
         PathBuf,
         OwnedHandle,
         VerifiedApprovalV1,
@@ -3009,7 +3021,7 @@ mod tests {
         }
     }
 
-    fn remove_fixture(root: &Path, generation: u64) {
+    pub(super) fn remove_fixture(root: &Path, generation: u64) {
         remove_generation_records(root, generation);
         let marker = root.join(publication_attempt_name(generation));
         if marker.exists() {

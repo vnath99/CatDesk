@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "targetCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+  "kind": "parts",
+  "offset": 72,
+  "entries": [
+    {
+      "file": "part-073.diff.txt",
+      "bytes": 8188,
+      "sha256": "d5719f3509a08e64dd22c49ca8ba23925c5231bbd3a562965b872fe5c05f4af1",
+      "startByte": 587197,
+      "endByte": 595385,
+      "paths": [
+        "src/web_task_dispatch.rs"
+      ]
+    },
+    {
+      "file": "part-074.diff.txt",
+      "bytes": 8158,
+      "sha256": "93802cc892d830caceae3fe8193d57826d812e8055f0e3054a60e6d103835409",
+      "startByte": 595385,
+      "endByte": 603543,
+      "paths": [
+        "src/web_task_dispatch.rs",
+        "src/web_work.rs"
+      ]
+    },
+    {
+      "file": "part-075.diff.txt",
+      "bytes": 8186,
+      "sha256": "089dafb0173abd28a945a20359d45391fe27a245623080308d9a971aee6e57a9",
+      "startByte": 603543,
+      "endByte": 611729,
+      "paths": [
+        "src/web_work.rs"
+      ]
+    },
+    {
+      "file": "part-076.diff.txt",
+      "bytes": 8160,
+      "sha256": "e027b56f817f5bf2bac27e87e6f2e6aabc67fd3cfe853b4675b25e265bdd81ce",
+      "startByte": 611729,
+      "endByte": 619889,
+      "paths": [
+        "src/web_work.rs"
+      ]
+    },
+    {
+      "file": "part-077.diff.txt",
+      "bytes": 8183,
+      "sha256": "1c4cae0c2d1daeb3c561cc6e5b7f30f41d20832b33d44117f805ed36e043b207",
+      "startByte": 619889,
+      "endByte": 628072,
+      "paths": [
+        "src/web_work.rs",
+        "src/windows_protected_fs.rs",
+        "src/windows_supervisor_startup.rs",
+        "tests/test_wake_bridge.py",
+        "tests/test_wake_bridge_current_dom.py"
+      ]
+    },
+    {
+      "file": "part-078.diff.txt",
+      "bytes": 8149,
+      "sha256": "23b7b49f9fc9e65ad9b28d5b0b4e6dc706f6d1ebe63b2a2249aad3dabb1ca690",
+      "startByte": 628072,
+      "endByte": 636221,
+      "paths": [
+        "tests/test_wake_bridge_current_dom.py"
+      ]
+    },
+    {
+      "file": "part-079.diff.txt",
+      "bytes": 8192,
+      "sha256": "695cf4fbe9bec0cf800059ce22a22e62b3b39bddf08466d8cd3ded6624292abe",
+      "startByte": 636221,
+      "endByte": 644413,
+      "paths": [
+        "tests/test_wake_bridge_current_dom.py"
+      ]
+    },
+    {
+      "file": "part-080.diff.txt",
+      "bytes": 8149,
+      "sha256": "0f902a1fadc623424297b8e8e6f9179a89b86b495024f69d6fc258e67ae34b43",
+      "startByte": 644413,
+      "endByte": 652562,
+      "paths": [
+        "tests/test_wake_bridge_current_dom.py"
+      ]
+    }
+  ]
+}

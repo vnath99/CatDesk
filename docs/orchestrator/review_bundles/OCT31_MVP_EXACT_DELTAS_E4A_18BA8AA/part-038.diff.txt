@@ -1,0 +1,202 @@
++            .stdin(Stdio::piped())
++            .stdout(Stdio::piped())
++            .stderr(Stdio::null());
++        command
++    }
++
++    // Only read/synchronize rights, no PID-based cleanup. The transport owns
++    // the only kill authority. This observer proves the retained descendant
++    // was alive before the test and exited after the transport's Job cleanup.
++    fn observe(pid: PathBuf, cancel: Option<Arc<AtomicBool>>) -> std::thread::JoinHandle<bool> {
++        std::thread::spawn(move || {
++            let deadline = Instant::now() + Duration::from_secs(8);
++            let id = loop {
++                if let Some(id) = fs::read_to_string(&pid)
++                    .ok()
++                    .and_then(|s| s.parse::<u32>().ok())
++                {
++                    break id;
++                }
++                if Instant::now() >= deadline {
++                    return false;
++                }
++                std::thread::sleep(Duration::from_millis(5));
++            };
++            let handle = unsafe { OpenProcess(0x0010_0000, 0, id) };
++            if handle.is_null() {
++                return false;
++            }
++            let alive = unsafe { WaitForSingleObject(handle, 0) } == 0x102;
++            fs::write(format!("{}.ack", pid.display()), "ready").unwrap();
++            if let Some(cancel) = cancel {
++                cancel.store(true, Ordering::Release);
++            }
++            let exited = unsafe { WaitForSingleObject(handle, 8_000) } == 0;
++            unsafe {
++                CloseHandle(handle);
++            }
++            alive && exited
++        })
++    }
++
++    #[test]
++    fn native_transport_proves_descendant_exit_for_success_failure_timeout_and_blocked_prompt() {
++        let root = super::super::tests::fixture_root();
++        let exe = fixture(&root);
++        for mode in ["normal", "nonzero", "timeout", "blocked", "cancel"] {
++            let pid = root.join(format!("{mode}.pid"));
++            let cancel = Arc::new(AtomicBool::new(false));
++            let observer = observe(pid.clone(), (mode == "cancel").then(|| cancel.clone()));
++            let thread = Uuid::new_v4().to_string();
++            let prompt = if mode == "blocked" {
++                "x".repeat(1024 * 1024)
++            } else {
++                "exact prompt".into()
++            };
++            let result = run_blocking(
++                command(&exe, mode, &pid, &thread),
++                prompt,
++                CodexCliNativeStdoutEvidenceV1::new(&thread).unwrap(),
++                Duration::from_millis(800),
++                Duration::from_millis(800),
++                cancel,
++            );
++            assert!(result.tree_exit_proven, "{mode}: {}", result.outcome);
++            assert!(!result.no_child_created);
++            assert!(
++                observer.join().unwrap(),
++                "{mode}: exact descendant handle exited"
++            );
++            assert_eq!(
++                result.outcome,
++                match mode {
++                    "normal" => "NATIVE_EXIT_ZERO",
++                    "nonzero" => "NATIVE_EXIT_NONZERO",
++                    "timeout" => "NATIVE_TIMEOUT",
++                    "blocked" => "NATIVE_PROMPT_PIPE_FAILED",
++                    _ => "NATIVE_CANCELLED",
++                }
++            );
++            if mode == "normal" {
++                assert!(result.stdout.unwrap().completed_for(&thread));
++            }
++        }
++        super::super::tests::cleanup(root);
++    }
++
++    #[tokio::test]
++    async fn dropping_async_native_transport_requests_bounded_owned_cleanup() {
++        let root = super::super::tests::fixture_root();
++        let exe = fixture(&root);
++        let pid = root.join("aborted.pid");
++        let observer = observe(pid.clone(), None);
++        let thread = Uuid::new_v4().to_string();
++        let task = tokio::spawn(run(
++            command(&exe, "timeout", &pid, &thread),
++            "exact prompt".into(),
++            CodexCliNativeStdoutEvidenceV1::new(&thread).unwrap(),
++            Duration::from_secs(20),
++        ));
++        let deadline = Instant::now() + Duration::from_secs(8);
++        while !PathBuf::from(format!("{}.ack", pid.display())).exists() && Instant::now() < deadline
++        {
++            tokio::time::sleep(Duration::from_millis(10)).await;
++        }
++        task.abort();
++        assert!(task.await.unwrap_err().is_cancelled());
++        assert!(
++            tokio::task::spawn_blocking(move || observer.join().unwrap())
++                .await
++                .unwrap()
++        );
++        super::super::tests::cleanup(root);
++    }
++}
+diff --git a/src/operator_facade.rs b/src/operator_facade.rs
+index c8208844068cf9d85708b9ef095f19d1d7024794..851af13dd2ddf3fab501b826e4a6df9e99199b7d 100644
+--- a/src/operator_facade.rs
++++ b/src/operator_facade.rs
+@@ -22,7 +22,14 @@ mod development_backend;
+ #[path = "operator_installed_backend.rs"]
+ mod installed_backend;
+ 
++#[cfg(windows)]
++pub(crate) use installed_backend::{
++    backend_command as promotion_source_command, verify_mcp_at as verify_promotion_source_mcp,
++};
++
+ pub(crate) use web::WebWorkLease;
++#[cfg(all(test, windows))]
++pub(crate) use web::native_continuation_fixture;
+ 
+ #[cfg(test)]
+ pub(crate) fn read_web_status(workspace: &Path) -> Result<serde_json::Value, String> {
+@@ -159,6 +166,14 @@ pub(crate) enum WebDevelopmentAction {
+     Login {
+         project_id: String,
+     },
++    InspectReadiness {
++        project_id: String,
++    },
++    ReconcileLogin {
++        project_id: String,
++        marker_sha256: String,
++        execute: bool,
++    },
+     Status,
+     Start,
+     Stop,
+@@ -203,6 +218,17 @@ pub(crate) enum ReleasePairOperatorAction {
+         transaction_id: String,
+     },
+     ResultStopped,
++    InspectFailedPromotion {
++        transaction_id: String,
++    },
++    RetireFailedPromotion {
++        transaction_id: String,
++        evidence_sha256: String,
++    },
++    QualifyPromotionSource {
++        transaction_id: String,
++        evidence_sha256: String,
++    },
+     Result,
+ }
+ 
+@@ -272,6 +298,16 @@ pub(crate) fn parse_operator_action(
+ 
+ fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction, String> {
+     match args.get(2).map(String::as_str) {
++        Some("reconcile-login") if matches!(args.len(), 7 | 8)
++            && args[3] == "--project-id" && args[5] == "--expected-marker-sha256"
++            && catdesk_wake::protocol::valid_id(&args[4])
++            && args[6].len() == 64
++            && args[6].bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
++            && (args.len() == 7 || args[7] == "--execute") => Ok(WebDevelopmentAction::ReconcileLogin {
++                project_id: args[4].clone(), marker_sha256: args[6].clone(), execute: args.len() == 8,
++            }),
++        Some("inspect-readiness") if args.len()==5 && args[3]=="--project-id"
++            && catdesk_wake::protocol::valid_id(&args[4]) => Ok(WebDevelopmentAction::InspectReadiness {project_id:args[4].clone()}),
+         Some("login") if args.len() == 5
+             && args[3] == "--project-id"
+             && catdesk_wake::protocol::valid_id(&args[4]) => Ok(WebDevelopmentAction::Login {
+@@ -355,6 +391,72 @@ fn login_web_development(workspace: &Path, project_id: &str) -> Result<serde_jso
+     catdesk_wake::development_runtime::login(&workspace, &target.url)
+ }
+ 
++fn inspect_web_development_readiness(
++    workspace: &Path,
++    project_id: &str,
++) -> Result<serde_json::Value, String> {
++    let workspace = workspace
++        .canonicalize()
++        .map_err(|_| "DEV_WORKSPACE_UNAVAILABLE")?;
++    let root = catdesk_wake::development_runtime::root_for_workspace(&workspace)?
++        .ok_or("DEV_RUNTIME_NOT_PREPARED")?;
++    let lease = acquire_web_work_lease(&workspace, project_id)?;
++    let target = mcp::operator_read_project_web_target(&workspace, project_id)
++        .map_err(|_| "DEV_RUNTIME_PAIRED_TARGET_REQUIRED")?
++        .ok_or("DEV_RUNTIME_PAIRED_TARGET_REQUIRED")?;
++    let expected = catdesk_wake::protocol::Target::new(target.generation, target.url.clone())?;
++    if expected.digest != target.sha256 {

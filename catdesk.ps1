@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('install', 'start', 'status', 'diagnose', 'recover', 'stop', 'autostart', 'wake')]
+    [ValidateSet('install', 'start', 'status', 'diagnose', 'doctor', 'recover', 'stop', 'autostart', 'wake')]
     [string]$Command,
     [Parameter(Position = 1)]
     [string]$AutostartAction = '',
@@ -12,6 +12,11 @@ param(
     [string]$ExpectedBuildSha256 = '',
     [string]$BuildFingerprintPath = '',
     [int]$ReadyTimeoutSeconds = 180,
+    [switch]$BackendOnly,
+    [string]$ObservationFile = '',
+    [string]$ProjectWorkspace = '',
+    [string]$WakeRoot = '',
+    [switch]$Human,
     [hashtable]$TestSeams = @{}
 )
 
@@ -24,7 +29,8 @@ $ErrorActionPreference = 'Stop'
 # facade-relative defaults only after parameter binding has completed.
 if ([string]::IsNullOrWhiteSpace($Workspace)) { $Workspace = $PSScriptRoot }
 if ([string]::IsNullOrWhiteSpace($BuildFingerprintPath)) {
-    $BuildFingerprintPath = Join-Path $PSScriptRoot 'target\release\catdesk.exe.sha256'
+    if ($Command -eq 'doctor') { $BuildFingerprintPath = Join-Path $Workspace 'target\release\catdesk.exe.sha256' }
+    else { $BuildFingerprintPath = Join-Path $PSScriptRoot 'target\release\catdesk.exe.sha256' }
 }
 $script:LifecycleSeams = $TestSeams
 $engineExpectedPath = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'scripts\start-catdesk-stack.ps1'))
@@ -48,12 +54,14 @@ try {
     $facadeExpectedBuildSha256 = $ExpectedBuildSha256
     $facadeBuildFingerprintPath = $BuildFingerprintPath
     $facadeReadyTimeoutSeconds = $ReadyTimeoutSeconds
-    . $enginePath -Workspace $facadeWorkspace -ConfigPath $facadeConfigPath -ExpectedBuildSha256 $facadeExpectedBuildSha256 -BuildFingerprintPath $facadeBuildFingerprintPath -ReadyTimeoutSeconds $facadeReadyTimeoutSeconds
+    $facadeBackendOnly = [bool]$BackendOnly
+    . $enginePath -Workspace $facadeWorkspace -ConfigPath $facadeConfigPath -ExpectedBuildSha256 $facadeExpectedBuildSha256 -BuildFingerprintPath $facadeBuildFingerprintPath -ReadyTimeoutSeconds $facadeReadyTimeoutSeconds -BackendOnly:$facadeBackendOnly
     $Workspace = $facadeWorkspace
     $ConfigPath = $facadeConfigPath
     $ExpectedBuildSha256 = $facadeExpectedBuildSha256
     $BuildFingerprintPath = $facadeBuildFingerprintPath
     $ReadyTimeoutSeconds = $facadeReadyTimeoutSeconds
+    $BackendOnly = $facadeBackendOnly
 } catch {
     [pscustomobject][ordered]@{ command = $Command; state = 'STATUS_UNAVAILABLE'; detail = 'stage=LIFECYCLE_INITIALIZATION' } |
         ConvertTo-Json -Compress
@@ -150,7 +158,7 @@ function Get-LifecycleLocalMcpReadinessResult {
         'READY', 'LOCAL_MCP_LISTENER_MISSING', 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH',
         'LOCAL_MCP_LAUNCHED_PROCESS_MISMATCH', 'LOCAL_MCP_RESPONSE_TIMEOUT',
         'LOCAL_MCP_RESPONSE_UNAVAILABLE', 'LOCAL_MCP_RESPONSE_INVALID',
-        'LOCAL_MCP_PROTOCOL_UNREADY'
+        'LOCAL_MCP_PROTOCOL_UNREADY', 'LOCAL_MCP_AUTH_TOKEN_INVALID', 'LOCAL_MCP_AUTH_SCOPE_INVALID'
     )) { throw 'local MCP readiness gate is invalid' }
     return [pscustomobject]@{ Ready = [bool]$observed.Ready; Gate = $gate }
 }
@@ -604,12 +612,16 @@ function Invoke-CanonicalRecovery {
     # canonical release pair. Do not require canonical identity here: the
     # recovery engine first reconciles an interrupted reviewed promotion or a
     # persistent last-known-good pair, then revalidates identity before launch.
-    $raw = @(Invoke-LifecycleSeam -Name 'Recovery' -Arguments @($enginePath, $Workspace, $ConfigPath, $ExpectedBuildSha256, $BuildFingerprintPath, $ReadyTimeoutSeconds, $RequestedCommand) -Default {
-        param($engine, $root, $config, $expected, $manifest, $timeout, $requested)
+    $raw = @(Invoke-LifecycleSeam -Name 'Recovery' -Arguments @($enginePath, $Workspace, $ConfigPath, $ExpectedBuildSha256, $BuildFingerprintPath, $ReadyTimeoutSeconds, $RequestedCommand, [bool]$BackendOnly) -Default {
+        param($engine, $root, $config, $expected, $manifest, $timeout, $requested, $backend)
         # Both public start and recover use the same proven, release-only engine.
-        & $engine -Mode recover -Workspace $root -ConfigPath $config -ExpectedBuildSha256 $expected -BuildFingerprintPath $manifest -ReadyTimeoutSeconds $timeout -Execute
+        & $engine -Mode recover -Workspace $root -ConfigPath $config -ExpectedBuildSha256 $expected -BuildFingerprintPath $manifest -ReadyTimeoutSeconds $timeout -BackendOnly:$backend -Execute
     })
     $result = Get-LifecycleRecoveryResult -Raw $raw
+    if ($BackendOnly -and $null -ne $result -and $result.State -eq 'LOCAL_BACKEND_READY') {
+        Write-LifecycleStatus 'LOCAL_BACKEND_READY' 'scope=LOCAL_BACKEND_ONLY; Wake, GUI and official runtime not examined or started'
+        return
+    }
     if ($null -ne $result -and $result.State -eq 'LKG_AUTHORITY_MISSING') {
         Write-LifecycleStatus 'LKG_AUTHORITY_MISSING'
         return
@@ -655,7 +667,7 @@ function Get-LifecycleRecoveryResult {
         $state = [string]$parsed.State
         if ($parsed.PSObject.Properties['RecoverySource'] -and $parsed.RecoverySource -isnot [string]) { return $null }
         $source = if ($parsed.PSObject.Properties['RecoverySource']) { [string]$parsed.RecoverySource } else { '' }
-        if ($state -cnotin @('CONNECTED_VERIFIED', 'CORE_CONNECTED_WAKE_PENDING', 'RECOVERY_READY', 'LKG_AUTHORITY_MISSING', 'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED', 'RECOVERY_RELEASE_AUTHORITY_REQUIRED', 'TRANSPORT_VERIFICATION_FAILED')) {
+        if ($state -cnotin @('LOCAL_BACKEND_READY', 'CONNECTED_VERIFIED', 'CORE_CONNECTED_WAKE_PENDING', 'RECOVERY_READY', 'LKG_AUTHORITY_MISSING', 'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED', 'RECOVERY_RELEASE_AUTHORITY_REQUIRED', 'TRANSPORT_VERIFICATION_FAILED')) {
             return $null
         }
         if ($parsed.PSObject.Properties['Gate'] -and $parsed.Gate -isnot [string]) { return $null }
@@ -671,8 +683,11 @@ function Get-LifecycleRecoveryResult {
             'LOCAL_MCP_LISTENER_MISSING', 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH',
             'LOCAL_MCP_LAUNCHED_PROCESS_MISMATCH', 'LOCAL_MCP_RESPONSE_TIMEOUT',
             'LOCAL_MCP_RESPONSE_UNAVAILABLE', 'LOCAL_MCP_RESPONSE_INVALID',
-            'LOCAL_MCP_PROTOCOL_UNREADY'
+            'LOCAL_MCP_PROTOCOL_UNREADY',
+            'LOCAL_MCP_BACKEND_ONLY_UNSUPPORTED', 'LOCAL_MCP_AUTH_TOKEN_INVALID', 'LOCAL_MCP_AUTH_SCOPE_INVALID'
         )
+        if ($state -eq 'LOCAL_BACKEND_READY' -and -not $BackendOnly) { return $null }
+        if ($BackendOnly -and $state -in @('CONNECTED_VERIFIED', 'CORE_CONNECTED_WAKE_PENDING')) { return $null }
         if ($state -eq 'TRANSPORT_VERIFICATION_FAILED') {
             if ($gate -cnotin $allowedGates) { return $null }
         } elseif ($state -eq 'CORE_CONNECTED_WAKE_PENDING') {
@@ -940,12 +955,19 @@ function Invoke-CatDeskOnlyStop {
 }
 
 try {
+    if ($BackendOnly -and $Command -notin @('start', 'recover')) { throw 'BackendOnly is limited to start and recover' }
+    if ($Command -ne 'doctor' -and ($ObservationFile -or $ProjectWorkspace -or $WakeRoot -or $Human)) { throw 'doctor options require doctor' }
     switch ($Command) {
         'install' { Invoke-InstallPreparation }
         'start' { Invoke-CanonicalRecovery -RequestedCommand 'start' }
         'recover' { Invoke-CanonicalRecovery -RequestedCommand 'recover' }
         'status' { Get-NonMutatingStatus }
         'diagnose' { Invoke-LayeredDiagnosis }
+        'doctor' {
+            $doctorPath = Resolve-TrustedBootstrapHelperPath -Path (Join-Path $PSScriptRoot 'scripts/catdesk-doctor.ps1') -FailureMessage 'doctor helper unavailable'
+            . $doctorPath
+            Invoke-CatDeskDoctor -ObservationFile $ObservationFile -ProjectWorkspace $ProjectWorkspace -WakeRoot $WakeRoot -Human:$Human
+        }
         'stop' { Invoke-CatDeskOnlyStop }
         'autostart' { Invoke-AutostartLifecycle }
         'wake' { Invoke-WakePolicyLifecycle }

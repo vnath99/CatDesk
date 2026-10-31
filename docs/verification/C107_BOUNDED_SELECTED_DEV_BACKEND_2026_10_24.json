@@ -1,0 +1,179 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C107_BOUNDED_SELECTED_DEVELOPMENT_BACKEND_START",
+  "observedUtc": "2026-10-24T15:35:41.4176266+00:00",
+  "recordedUtc": "2026-10-24T15:39:02.5443444+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "parentCommit": "d92f9158f7e16dd0d18f25bfd0efd460c9dc3279",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "SOURCE_FIXTURES_AND_COMMAND_CONTRACTS_NORMAL_PROCESS_ACCEPTANCE_PENDING",
+  "implementation": {
+    "command": "operator web-dev-runtime run-backend [--max-runtime-seconds <1..900>]",
+    "defaultRuntimeSeconds": 180,
+    "sourcePins": [
+      {
+        "path": "src/operator_facade.rs",
+        "sha256": "dbbcbff502f75b015db3f9137f09b73eb8c49bcc59bf5a944154225015227e88"
+      },
+      {
+        "path": "src/operator_development_backend.rs",
+        "sha256": "99a0df3ccd782f713eeef4b6feb4b43e97aba89727a3add143da9813af8d220c"
+      },
+      {
+        "path": "wake/src/development_runtime.rs",
+        "sha256": "1d137d2580e0df33486392f5e8035ced9817f6e070bec77912456945dba0f374"
+      }
+    ],
+    "selection": "EXACT_EXISTING_DEVELOPMENT_PACKAGE_APP",
+    "automaticSelectionRecovery": "EXISTING_recover-package_FOR_PENDING_UPDATE_OR_FAILED_CURRENT_FILES",
+    "imagePinAndPointerAuthorityReadPins": true,
+    "leaseScope": "ONE_PREPARED_DEVELOPMENT_WORKSPACE",
+    "packageMutationRefusedWhileBackendLeaseHeld": true,
+    "healthyStartupRequiresWakeStopped": false,
+    "healthyStartupTakesBrowserLock": false,
+    "healthyStartupUsesGlobalWorkingDirectory": false,
+    "blockedWorkspacePreventsSiblingStartup": false,
+    "existingProcessOwner": "reviewed_candidate_owner::OwnedCandidateChild",
+    "childSuspendedBeforePrivateKillOnCloseJobAssignment": true,
+    "existingBackend": "--headless-mcp",
+    "listener": "LOOPBACK_EPHEMERAL_PORT",
+    "fixedConfig": "DEVELOPMENT_WORKSPACE_ONLY",
+    "toolMode": "supervisor-only",
+    "auth": "EXISTING_PROCESS_ENVIRONMENT_ONLY_NEVER_COMMAND_LINE",
+    "authOrTunnelChanged": false,
+    "browserWakeAndWebAutoStartup": false,
+    "ready": "VALIDATED_SCOPE_BUDGET_LOOPBACK_AUTH_REDACTION_AND_LIVE_CHILD_THEN_EMITTED",
+    "childDeadlineAndOwnerGrace": true,
+    "exactOwnedTreeDrainedBeforeSelectionPinsRelease": true,
+    "newReleaseStoreOrAuthorityType": false,
+    "protectedInstallationAccess": false
+  },
+  "tests": {
+    "runtimeModulePassed": 33,
+    "operatorFacadeFamilyPassed": 126,
+    "actualRootFilter": "operator_facade::",
+    "rootFamilyIncludesExistingWebGuards": true,
+    "newRuntimeTests": 5,
+    "newParserTests": 1,
+    "newBackendContractTests": 3,
+    "failed": 0,
+    "ignored": 0,
+    "steps": [
+      {
+        "seconds": 20.3415101,
+        "name": "wake-development-recovery",
+        "logSha256": "bf123fe5717c692fd89997b6f3cbcde531e34e862e4ef0b1f2115a1732e6b4ff",
+        "exitCode": 0,
+        "summaries": [
+          "test result: ok. 33 passed; 0 failed; 0 ignored; 0 measured; 361 filtered out; finished in 15.55s"
+        ]
+      },
+      {
+        "seconds": 90.1854649,
+        "name": "operator-contract",
+        "logSha256": "a141585c8c845656832243fbf74c5a89bfed8804fdb2b0375d4937c950a8a9a4",
+        "exitCode": 0,
+        "summaries": [
+          "test result: ok. 126 passed; 0 failed; 0 ignored; 0 measured; 1570 filtered out; finished in 35.36s"
+        ]
+      },
+      {
+        "seconds": 22.147303,
+        "name": "strict-root-clippy",
+        "logSha256": "f4972383d7a5cb4efdf9828126624abd00e4a9e5e858ef1d1a06de46a2f5c1f9",
+        "exitCode": 0,
+        "summaries": []
+      },
+      {
+        "seconds": 5.1077298,
+        "name": "strict-wake-clippy",
+        "logSha256": "def60fc06712f5d1c2cb3fd4e2a3e8af3e24e3f1107488aa1820cc5b25f7f02e",
+        "exitCode": 0,
+        "summaries": []
+      },
+      {
+        "seconds": 2.80891,
+        "name": "root-format",
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "exitCode": 0,
+        "summaries": []
+      },
+      {
+        "seconds": 0.735528,
+        "name": "wake-format",
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "exitCode": 0,
+        "summaries": []
+      }
+    ],
+    "sourceFrozen": true,
+    "strictRootAndWakeClippy": "PASS",
+    "rootAndWakeFormat": "PASS",
+    "outerBudgetSeconds": 600,
+    "outerExitCode": 0,
+    "outerTimedOut": false,
+    "outerTerminationFailed": false,
+    "coverage": [
+      "HEALTHY_SELECTION_WHILE_WAKE_HOST_AND_BROWSER_LEASES_HELD_WITH_RUNNING_CONTROL",
+      "SELECTED_IMAGE_POINTER_AUTHORITY_BYTES_PINNED",
+      "DUPLICATE_BACKEND_AND_PACKAGE_UPDATE_OR_RECOVERY_REFUSED_UNDER_LEASE",
+      "INDEPENDENT_WORKSPACE_SELECTIONS_AND_UPDATES_DO_NOT_SERIALIZE",
+      "FAILED_CURRENT_SELECTS_EXACT_RECORDED_PREDECESSOR",
+      "PENDING_SELECTION_COMPLETED_BEFORE_BACKEND_SELECTION",
+      "UNKNOWN_POINTER_AND_UNPREPARED_ROOT_REFUSED",
+      "COMMAND_SCOPE_BUDGET_AUTH_ENV_AND_NO_BROWSER_TUNNEL_FLAGS",
+      "WRONG_WORKSPACE_CONFIG_ENDPOINT_SCHEDULER_SCOPE_BUDGET_OR_SECRET_READY_REFUSED"
+    ],
+    "actualNewBackendProcesses": 0,
+    "actualParentDeath": "NOT_TESTED_THIS_INCREMENT",
+    "normalExecutableQualification": "NEXT"
+  },
+  "compatibility": {
+    "oldCurrentAndPreviousPackagesUseExistingHeadlessFlags": true,
+    "newPackageProtocolMarkerRequired": false,
+    "authorityAndManifestSchemasChanged": false,
+    "newSelectionStore": false,
+    "olderReaderCompatibility": "C106_NORMAL_BINARY_PROOF_RETAINED",
+    "futurePackageMutations": "USE_CURRENT_CONTROLLER_TO_HONOR_BACKEND_LEASE",
+    "leaseBusyIsProcessLivenessProof": false,
+    "productionPublicLifecycleChanged": false,
+    "existingWakeForegroundCommandsChanged": false,
+    "legacyMechanismsRetired": 0
+  },
+  "preservation": {
+    "runtimeRecords": 306,
+    "runtimeRecordsChanged": 0,
+    "historicalFiles": 55,
+    "historicalFilesChanged": 0,
+    "scopedOwners": 0,
+    "controls": "BOTH_STOPPED",
+    "queueCount": 0,
+    "selectedDevelopment": "V76_UNCHANGED",
+    "browserWakeRecurringStarts": 0,
+    "officialRuntimeActions": 0,
+    "connectorCalls": 0,
+    "nativeActions": 0,
+    "projectBindingChanges": 0,
+    "protectedInstallationChanges": 0,
+    "completedCanariesReplayed": 0
+  },
+  "acceptance": {
+    "source": "PASS_159_TESTS_AND_STRICT_LINT_FORMAT",
+    "normalRunBackend": "NOT_BUILT_OR_QUALIFIED",
+    "automaticStartupFallback": "SOURCE_FOR_FAILED_CURRENT_FILES_ONLY_RUNTIME_START_FAILURE_FALLBACK_PENDING",
+    "parentExitCleanup": "EXISTING_OWNER_REUSED_NEW_INTEGRATION_NOT_LIVE_TESTED",
+    "protectedRecovery": "NOT_EXECUTED",
+    "actualWebCodingBC": "OPEN",
+    "unattended": "NOT_ACTIVATED",
+    "fullOctoberMilestone": "OPEN",
+    "remoteSourceCi": "PENDING_EXACT_SHA_PUBLICATION_READBACK"
+  },
+  "priorPublication": {
+    "head": "d92f9158f7e16dd0d18f25bfd0efd460c9dc3279",
+    "remoteSha": "d92f9158f7e16dd0d18f25bfd0efd460c9dc3279",
+    "qualifiedProductSource": "cb50162d5705830d4c1530ec3e0c351ccdac9041",
+    "sourceRemoteCi": "UNVERIFIED_ZERO_EXACT_SHA_ACTIONS_AND_CHECKS"
+  },
+  "nextTask": "Build exact reviewed C107 source as normal release app/host images. In a monitored disposable test, exercise run-backend healthy startup, automatic failed-current restoration that executes the actual predecessor image, active lease refusal and parent-exit cleanup. Verify loopback MCP, exact image/process identity and all real project pins; do not activate recurring services or modify protected runtime. After qualification, complete bounded pre-ready startup-failure fallback for current images whose hashes remain valid; that case is not implemented by this increment. Then prioritize real two-conversation Web coding once approved serving dependencies are restored."
+}

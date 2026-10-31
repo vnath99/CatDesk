@@ -1,0 +1,211 @@
+     /// Both authentic review producers use the same project-scoped message
+     /// and target CAS. An exact legacy CatDesk message may be returned only
+     /// from an existing event; new events always use the current message.
+@@ -1604,6 +1749,9 @@ impl Store {
+                 return Err("RECEIPT_BINDING_MISMATCH".into());
+             }
+         }
++        if self.has_submission_witness_locked(&event.event_id)? {
++            return Err("SUBMISSION_RECONCILIATION_REQUIRED".into());
++        }
+         let delivery = Delivery {
+             schema_version: PROTOCOL_VERSION,
+             event: event.clone(),
+@@ -1645,6 +1793,15 @@ impl Store {
+             }
+         }
+         if next == Phase::Submitting {
++            if self.has_submission_witness_locked(id)? {
++                return Err("SUBMISSION_RECONCILIATION_REQUIRED".into());
++            }
++            // Recheck immediately before authorizing browser submission. Do
++            // not apply TTL to SUBMITTING/SENT recovery or receipt recording:
++            // an unknown outcome must never be retired or made replayable.
++            if delivery.event.is_expired_at(now())? {
++                return Err("QUEUE_EVENT_EXPIRED".into());
++            }
+             // Keep the immutable recovery-window start separate from the
+             // queue's age and the mutable attention timestamp. A sidecar keeps
+             // the existing Delivery JSON readable by earlier installed hosts.
+@@ -1678,6 +1835,29 @@ impl Store {
+             .join(format!("submission-start-{id}.json"))
+     }
+ 
++    /// Called under the Store transaction lock. Even a partial submission
++    /// write remains evidence; a stale CLAIMED owner must not replace it.
++    fn has_submission_witness_locked(&self, id: &str) -> Result<bool> {
++        for path in [self.submission_start_path(id), self.timer_path(id)] {
++            if path
++                .try_exists()
++                .map_err(|_| "SUBMISSION_RETRY_EVIDENCE_UNAVAILABLE")?
++            {
++                return Ok(true);
++            }
++        }
++        Ok(false)
++    }
++
++    /// A scheduler read cannot clear or downgrade partial submission evidence.
++    pub(crate) fn submission_witness_present(&self, id: &str) -> Result<bool> {
++        if !valid_id(id) {
++            return Err("QUEUE_EVENT_INVALID".into());
++        }
++        let _lock = self.read_lock()?;
++        self.has_submission_witness_locked(id)
++    }
++
+     pub(crate) fn submission_started_utc(&self, delivery: &Delivery) -> Result<u64> {
+         delivery.validate()?;
+         let path = self.submission_start_path(&delivery.event.event_id);
+@@ -1970,6 +2150,20 @@ impl Store {
+         if delivery.phase != Phase::Attention || delivery.receipt.is_some() {
+             return Err("SUBMISSION_RETRY_REFUSED".into());
+         }
++        // Surviving submission evidence remains authoritative even if an older
++        // or interrupted journal says ATTENTION. Never downgrade that boundary.
++        for path in [
++            self.submission_start_path(id),
++            self.timer_path(id),
++            self.archive_path(id),
++        ] {
++            if path
++                .try_exists()
++                .map_err(|_| "SUBMISSION_RETRY_EVIDENCE_UNAVAILABLE")?
++            {
++                return Err("SUBMISSION_RETRY_REFUSED".into());
++            }
++        }
+         if self.read_config()?.targets.get(&delivery.event.project_id) != Some(&delivery.target) {
+             return Err("TARGET_GENERATION_STALE".into());
+         }
+@@ -3696,3 +3890,872 @@ mod turn_timer_tests {
+         let _ = fs::remove_dir_all(root);
+     }
+ }
++
++#[cfg(test)]
++mod wake_metadata_tests {
++    use super::*;
++    use crate::protocol::{WakeMetadata, WakePurpose};
++
++    fn fixture() -> (PathBuf, Store, Target) {
++        let base = std::env::temp_dir().join(format!(
++            "wake-metadata-{}-{}",
++            std::process::id(),
++            TEMP.fetch_add(1, Ordering::Relaxed)
++        ));
++        fs::create_dir(&base).unwrap();
++        let store = Store::open_scoped_for_test(&base.join("wake"), &base).unwrap();
++        store.initialize().unwrap();
++        let target = store
++            .set_target("alpha", 0, "https://chatgpt.com/c/alpha")
++            .unwrap();
++        (base, store, target)
++    }
++
++    fn metadata(expires_utc: u64) -> WakeMetadata {
++        WakeMetadata {
++            purpose: WakePurpose::ManualEndTurn,
++            source_event_id: "source-alpha-1".into(),
++            source_turn_id: "turn-alpha-1".into(),
++            priority: 10,
++            expires_utc,
++        }
++    }
++
++    fn expired_event(target: &Target) -> Event {
++        let created_utc = now() - 120;
++        Event {
++            schema_version: PROTOCOL_VERSION,
++            event_id: "manual-alpha-expired".into(),
++            project_id: "alpha".into(),
++            event_type: "engineering_attention".into(),
++            created_utc,
++            message: "Continue alpha's assigned task".into(),
++            target_generation: target.generation,
++            audit_references: metadata(created_utc + 60)
++                .audit_references(created_utc)
++                .unwrap(),
++        }
++    }
++
++    #[test]
++    fn wake_metadata_publication_preserves_target_cas_immutable_identity_and_restart() {
++        let (base, store, target) = fixture();
++        let references = metadata(now() + 300).audit_references(now()).unwrap();
++        let event = store
++            .produce_expected_with_audit(
++                "manual-alpha",
++                "alpha",
++                "engineering_attention",
++                "Continue alpha",
++                &target,
++                &references,
++            )
++            .unwrap();
++        let persisted = fs::read(store.event_path("manual-alpha")).unwrap();
++        let reopened =
++            Store::open_scoped_for_test(store.root(), store.root().parent().unwrap()).unwrap();
++        let replay = reopened
++            .produce_expected_with_audit(
++                "manual-alpha",
++                "alpha",
++                "engineering_attention",
++                "Continue alpha",
++                &target,
++                &references,
++            )
++            .unwrap();
++        assert_eq!(replay, event);
++        assert_eq!(
++            replay.wake_metadata().unwrap(),
++            event.wake_metadata().unwrap()
++        );
++        assert_eq!(
++            fs::read(store.event_path("manual-alpha")).unwrap(),
++            persisted
++        );
++        let mut changed = references.clone();
++        changed[2] = "catdesk.wake.v1:source-turn:turn-alpha-2".into();
++        assert_eq!(
++            reopened
++                .produce_expected_with_audit(
++                    "manual-alpha",
++                    "alpha",
++                    "engineering_attention",
++                    "Continue alpha",
++                    &target,
++                    &changed,
++                )
++                .unwrap_err(),
++            "QUEUE_EVENT_ID_CONFLICT"
++        );
++        let wrong_target = Target::new(2, target.url.clone()).unwrap();
++        assert_eq!(
++            reopened
++                .produce_expected_with_audit(
++                    "manual-other",
++                    "alpha",
++                    "engineering_attention",
++                    "Continue alpha",
++                    &wrong_target,
++                    &references,
++                )
++                .unwrap_err(),
++            "TARGET_EXPECTATION_MISMATCH"
++        );
++        assert_eq!(reopened.events().unwrap(), [event]);
++        fs::remove_dir_all(base).unwrap();
++    }
++
++    #[test]
++    fn wake_metadata_expiry_refuses_submit_before_any_submission_journal_write() {
++        let (base, store, target) = fixture();
++        let event = expired_event(&target);
++        store.publish(&event).unwrap();
++        let lease = store.host_lock().unwrap();
++        let claimed = store.claim(&event, &lease).unwrap();
++        let before = fs::read(store.delivery_path(&event.event_id)).unwrap();
++        assert_eq!(
++            store
++                .transition(

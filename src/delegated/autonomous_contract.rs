@@ -145,6 +145,15 @@ pub fn runtime_capability_manifest() -> Value {
         "product": "CatDesk",
         "contractSchemaVersion": AUTONOMOUS_DEVELOPMENT_CONTRACT_SCHEMA_VERSION,
         "commandProfiles": command_profiles,
+        "directChatgpt": {
+            "mode": "chatgpt_web_direct_autonomous",
+            "primaryProvider": "chatgpt-web",
+            "primaryModel": "conversation-selected",
+            "routineProvider": "none",
+            "routineModel": "none",
+            "nativeProviderLaunch": false,
+            "claimAndFinalizationRequired": true,
+        },
     })
 }
 
@@ -334,7 +343,9 @@ impl AutonomousDevelopmentContractV1 {
         }
         if !matches!(
             self.mode.as_str(),
-            "chatgpt_web_codex_autonomous" | "chatgpt_web_qwen_autonomous"
+            "chatgpt_web_codex_autonomous"
+                | "chatgpt_web_qwen_autonomous"
+                | "chatgpt_web_direct_autonomous"
         ) || self.objective.trim().is_empty()
             || self.objective.len() > 8_000
         {
@@ -368,18 +379,34 @@ impl AutonomousDevelopmentContractV1 {
                 "autonomous contract enables a prohibited operation or fallback".into(),
             ));
         }
-        if self.provider_policy.primary_provider != "codex-cli"
-            || self.provider_policy.routine_provider != "ollama"
-        {
-            return Err(ContractPolicyError::Validation(
-                "autonomous contract provider selection is unsupported".into(),
-            ));
-        }
-        if required_effort(&self.provider_policy.primary_model).is_none() {
-            return Err(ContractPolicyError::Validation(
-                "autonomous Codex implementation work requires a supported exact model profile"
-                    .into(),
-            ));
+        if self.is_direct_chatgpt() {
+            // A Web conversation selects its own model. Do not label direct
+            // work as an observed Sol/Terra native turn or configure a hidden
+            // native fallback merely to satisfy legacy contract fields.
+            if self.provider_policy.primary_provider != "chatgpt-web"
+                || self.provider_policy.primary_model != "conversation-selected"
+                || self.provider_policy.routine_provider != "none"
+                || self.provider_policy.routine_model != "none"
+            {
+                return Err(ContractPolicyError::Validation(
+                    "direct ChatGPT contract requires its explicit provider and no native fallback"
+                        .into(),
+                ));
+            }
+        } else {
+            if self.provider_policy.primary_provider != "codex-cli"
+                || self.provider_policy.routine_provider != "ollama"
+            {
+                return Err(ContractPolicyError::Validation(
+                    "autonomous contract provider selection is unsupported".into(),
+                ));
+            }
+            if required_effort(&self.provider_policy.primary_model).is_none() {
+                return Err(ContractPolicyError::Validation(
+                    "autonomous Codex implementation work requires a supported exact model profile"
+                        .into(),
+                ));
+            }
         }
         if self.autonomy_lease.expires_at_unix <= self.autonomy_lease.issued_at_unix
             || self.autonomy_lease.maximum_total_elapsed_seconds == 0
@@ -432,6 +459,10 @@ impl AutonomousDevelopmentContractV1 {
 
     pub fn starts_on_routine_provider(&self) -> bool {
         self.mode == "chatgpt_web_qwen_autonomous"
+    }
+
+    pub fn is_direct_chatgpt(&self) -> bool {
+        self.mode == "chatgpt_web_direct_autonomous"
     }
 
     pub fn decision_hash(&self) -> Result<String, ContractPolicyError> {
@@ -933,6 +964,43 @@ mod tests {
             contract.decision_hash().expect("hash"),
             restored.decision_hash().expect("hash")
         );
+    }
+
+    #[test]
+    fn direct_chatgpt_mode_has_honest_provider_identity_and_no_native_fallback() {
+        let legacy = contract();
+        let legacy_hash = legacy.decision_hash().unwrap();
+        let mut direct = legacy.clone();
+        direct.mode = "chatgpt_web_direct_autonomous".into();
+        direct.provider_policy.primary_provider = "chatgpt-web".into();
+        direct.provider_policy.primary_model = "conversation-selected".into();
+        direct.provider_policy.routine_provider = "none".into();
+        direct.provider_policy.routine_model = "none".into();
+        direct.validate().expect("explicit direct ChatGPT contract");
+        assert_ne!(direct.decision_hash().unwrap(), legacy_hash);
+        for (provider, model) in [
+            ("codex-cli", "gpt-6.1-sol"),
+            ("chatgpt-web", "gpt-6.1-sol"),
+            ("chatgpt-web", "gpt-5.6-terra"),
+        ] {
+            let mut wrong = direct.clone();
+            wrong.provider_policy.primary_provider = provider.into();
+            wrong.provider_policy.primary_model = model.into();
+            assert!(
+                wrong.validate().is_err(),
+                "must not claim an unobserved native profile"
+            );
+        }
+        let mut fallback = direct.clone();
+        fallback.provider_policy.routine_provider = "ollama".into();
+        assert!(fallback.validate().is_err());
+        let mut implicit = direct.clone();
+        implicit.mode = legacy.mode.clone();
+        assert!(
+            implicit.validate().is_err(),
+            "native modes retain native provider requirements"
+        );
+        assert_eq!(legacy.decision_hash().unwrap(), legacy_hash);
     }
 
     #[test]

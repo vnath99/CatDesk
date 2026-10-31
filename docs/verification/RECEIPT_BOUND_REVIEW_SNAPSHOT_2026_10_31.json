@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T01:17:11.933934+00:00",
+  "classification": "SOURCE_QUALIFIED_RECEIPT_BOUND_REVIEW_PAIR_READER_ACTUAL_EXISTING_SEND_PRESERVED",
+  "sourceBaseCommit": "806071c369b4a926b8e73c8c8d9b15efebad6f9e",
+  "actualExistingReview": {
+    "sourceCommit": "b25119e8c47cfe261aae06b461c3697e3841cdb6",
+    "changedSourcePaths": 61,
+    "standingGrantRegistered": true,
+    "noSendPreflightEligible": true,
+    "singleSendCommands": 1,
+    "phase": "SENT",
+    "receipt": "EXACT_USER_MESSAGE_APPENDED",
+    "reservations": 1,
+    "dispatchRecorded": true,
+    "elapsedSeconds": 138.047,
+    "unrelatedPinsUnchanged": 5072,
+    "snapshotReadReason": "WEB_REVIEW_USER_WITNESS_REQUIRED",
+    "snapshotEventVerified": false,
+    "snapshotReadSeconds": 60.5,
+    "snapshotPinsUnchanged": 5075,
+    "latestAssistantVisibleUnits": 8241,
+    "returnedAssistantUtf8Bytes": 8192,
+    "snapshotReturnedUserWitness": false,
+    "nativeClaimCommittedExactlyOnce": true,
+    "claimRpcReplyCaptured": false,
+    "originalClaimOwnerTimedOut": true,
+    "readOnlyStatusResponseVerified": true,
+    "priorNativeFilesUnchanged": 4641,
+    "existingAccountingRecordsPreserved": true,
+    "newAccountingRecords": 1,
+    "sourceAccepted": false,
+    "nativeFinalized": false,
+    "producerStarted": false
+  },
+  "implementation": {
+    "existingOwnerAdapterAndRegistryReused": true,
+    "newSchedulerOrRecoveryFramework": false,
+    "largeProfileAdmission": "EXACT_EXISTING_SENT_SOURCE_REVIEW_RECEIPT_ONLY",
+    "sourceGenerationDigestAndFullKnownUserRechecked": true,
+    "duplicateOrSupersededTurnRefused": true,
+    "privateReviewMessageLimitBytes": 32768,
+    "privateReviewRawWindowBytes": 49152,
+    "privateReviewFinalRows": 2,
+    "privateWireFrameLimitUnchangedBytes": 65536,
+    "ordinaryFrameLimitUnchangedBytes": 8192,
+    "contextSnapshotLimitsUnchanged": true,
+    "mixedLegacyAndSemanticReviewRowsPreserveDomOrder": true,
+    "wirePressurePreservesUserAndMarksAssistantIncomplete": true,
+    "loadErrorPlaceholderDistinguishedFromUsefulDiscussion": true,
+    "userResendRetryRegenerateReloadAdded": false,
+    "newBodyReaderInstalled": false
+  },
+  "tests": {
+    "dom-final": {
+      "passed": 43,
+      "logSha256": "55139bc358bdbf7f5de3fc84cf9dac493369fab2068e34e6b255982d8ba34632"
+    },
+    "adapter-green": {
+      "passed": 34,
+      "logSha256": "af04774412f500040311353481693cb02fbc1ddc3e7a28827f066555f8996a19"
+    },
+    "bridge-green": {
+      "passed": 126,
+      "logSha256": "be2854303339c812c7fe1cfa31792927bcea0fe04e75f20b2a7084e02b12c47d"
+    },
+    "native-snapshot-final": {
+      "passed": 9,
+      "logSha256": "207c28d43f5e91460473318a4037b96f0ab1aa746b189d7b0fce8e299fdfdf94"
+    },
+    "native-review": {
+      "passed": 6,
+      "logSha256": "16fdf9bdadecc895cd4ba8852ef703f19b40b9d759c5b22fffd9e173d0563c30"
+    },
+    "wake-clippy": {
+      "passed": true,
+      "allTargets": true,
+      "warningsDenied": true,
+      "logSha256": "e4acb0819910357302e317ae9406e1a94f98cc467f58c9b015356c4d5b37a397"
+    },
+    "root-clippy": {
+      "passed": true,
+      "allTargets": true,
+      "warningsDenied": true,
+      "logSha256": "6e2c3eb54c4584b6ffc685ec758c2629c7418adfd5c62b70c1d337c2616da21b"
+    }
+  },
+  "distinctScopedTests": 218,
+  "newDistinctTests": 6,
+  "failuresPreserved": [
+    "Two new DOM tests red before implementation",
+    "Mixed legacy fixture initially selected only the historical assistant; review-only DOM union corrected",
+    "Native corrupted-receipt test initially expected a later helper error; existing Store guard correctly refused RECEIPT_INVALID",
+    "Initial managed-claim owner timed out after commit; supported read-only status and exact existing baseline proved one claim with no replay",
+    "Readback harness initially used root instead of existing artifacts directory, then required an omitted optional null SHA; both corrected without native authority writes"
+  ],
+  "cleanup": {
+    "state": "PROFILE_QUIESCENT",
+    "observedUtc": "2026-10-31T01:03:31.384271+00:00",
+    "testOwnedNativeBackendProcessesObservedAfterFirstTimeout": 0,
+    "productionOrRecurringOrTunnelRestarts": 0,
+    "historicalSubmissionsReplayed": false,
+    "allFiveBindingsAndNativeSessionsPreserved": true
+  },
+  "remainingBlocker": "CURRENT_SELECTED_READER_8K_WINDOW_DROPS_USER_WITNESS_FOR8241_UNIT_ANSWER_NEW_SOURCE_NOT_YET_SELECTED",
+  "nextExecutableTask": "BUILD_AND_QUALIFY_EXACT_PUBLISHED_NEW_OBSERVER_THEN_READ_ONLY_THE_SAME_SENT_EVENT_NO_SEND_OR_NEW_REVIEW_ID",
+  "operatorActionRequired": false,
+  "goal": "ACTIVE",
+  "privateEvidenceSha256": {
+    "oct31-mvp-review-grant-result.private.json": "76b46e51105df471d9a4f899e646f5ad8eca0c1d9cbee93e6284ad19373b0da8",
+    "oct31-mvp-managed-claim-owner.private.json": "e957175f470af0f21ae7a0dff7f3551fb1b9fa57b270b882a1bac27d499a146a",
+    "oct31-mvp-claim-reconciliation-qualified-result.private.json": "3c7018dd3a7265835f57d8681a43582d4316b3e55f5a4930475f5149372b6e58",
+    "oct31-mvp-standing-review-result.private.json": "6b06a20c46fafcaec28283425e480e848725b0d540e73da600f17efa007a1e25",
+    "oct31-mvp-standing-review-owner.private.json": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "oct31-mvp-review-response-read-result.private.json": "da6d1c9ed53e65bbeb4fa90ed62ebc16730f5c3be9beaa5482676c83b66293d9",
+    "oct31-mvp-review-response-read-owner.private.json": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "oct31-profile-quiescence-review-cleanup-result.private.json": "0cdc3def50d76e418acee9bb50a4cbd1a3009d3f5f92732abaf295a713394456"
+  }
+}

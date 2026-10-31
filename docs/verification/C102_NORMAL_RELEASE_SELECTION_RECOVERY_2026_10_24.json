@@ -1,0 +1,211 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C102_NORMAL_RELEASE_SELECTION_RECOVERY",
+  "observedUtc": "2026-10-24T14:13:29.2573473+00:00",
+  "recordedUtc": "2026-10-24T14:15:30.7584303+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "parentCommit": "d8e8aa66e6ee130a1380241bf1b686c95103c3b3",
+  "sourceCommit": "d8e8aa66e6ee130a1380241bf1b686c95103c3b3",
+  "sourceTree": "889bd8d1a860d2a30033f401a37c08698eb1f3c6",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "NORMAL_EXECUTABLE_DISPOSABLE_RECOVERY_NOT_PROTECTED_INSTALLED_OR_WEB_ACCEPTANCE",
+  "build": {
+    "profile": "NORMAL_RELEASE_APP_AND_HOST_NO_DEV_DEPENDENCIES",
+    "maximumSeconds": 600,
+    "sourceFrozen": true,
+    "sourcePins": [
+      {
+        "path": "src/operator_facade.rs",
+        "sha256": "4280a35713fd77eb49666cca6d9fd31891b2415a35f6d6c29ddf141488dee7b0"
+      },
+      {
+        "path": "wake/src/development_runtime.rs",
+        "sha256": "8ea5db719ab371c06c6e87f628547f091930a17f4e0e72c4817175a24b36ba33"
+      },
+      {
+        "sha256": "0f162cd0a49f5166a95a88aba3be08afe04c3ec2010ce51a66504d44d3c77bdb",
+        "path": "scripts/wake_bridge.py"
+      },
+      {
+        "sha256": "0686ae77d3f4ed7ff6fc1dcfcffe07c212f8e4aea515ed069c73e11993782b97",
+        "path": "wake/adapter.py"
+      },
+      {
+        "sha256": "078f96a3cb626d13bbaefae0e24f38174818b3452e0e50484470c55033559aa2",
+        "path": "wake/src/development_foreground.rs"
+      }
+    ],
+    "images": [
+      {
+        "exitCode": 0,
+        "role": "normal-app",
+        "buildSeconds": 422.793316,
+        "buildLogSha256": "278fc3f4d91b2eaea74cda0cb649501ed4ec248241bc81bbd699a5efd1a8d56c",
+        "sha256": "2dc86ab91694bdf4a4f278d596b7a5f5aa78d0136f2bdfa888f9096a55380d06",
+        "bytes": 34908672
+      },
+      {
+        "exitCode": 0,
+        "role": "normal-wake-host",
+        "buildSeconds": 21.470729,
+        "buildLogSha256": "dc308a674540d8123c947de39a017f6f051bd6124148de599e7c0807d65262ef",
+        "sha256": "344bcb5c92b910a7d3b0076fb2a03af98505c7d6e0acab4053829088ffe3cdc2",
+        "bytes": 2083328
+      }
+    ],
+    "cargoVersion": "cargo 1.97.0 (c980f4866 2026-06-30)",
+    "rustcVersion": [
+      "rustc 1.97.0 (2d8144b78 2026-07-07)",
+      "binary: rustc",
+      "commit-hash: 2d8144b7880597b6e6d3dfd63a9a9efae3f533d3",
+      "commit-date: 2026-07-07",
+      "host: x86_64-pc-windows-msvc",
+      "release: 1.97.0",
+      "LLVM version: 22.1.6"
+    ],
+    "rootCargoLockSha256": "2533e7de0170581cb7f1f7eb740540feb20d14ed1de7b3a877952ff31af3f6bb",
+    "wakeCargoLockSha256": "b5111ee182d8233b2d026ad51c7e0232ef669784dcd634234785ee54c191034b",
+    "recipe": [
+      "cargo build --locked --offline --release --bin catdesk",
+      "cargo build --manifest-path wake/Cargo.toml --locked --offline --release --bin CatDeskWakeHost"
+    ],
+    "bitForBitRebuildDemonstrated": false,
+    "normalHostStarted": false
+  },
+  "normalRecovery": {
+    "seconds": 3.2816259,
+    "maximumSeconds": 180,
+    "commands": 9,
+    "naturalOwnedCommandExits": 9,
+    "steps": [
+      {
+        "action": "prepare",
+        "expectedError": "",
+        "timedOut": false,
+        "exitCode": 0,
+        "label": "prepare",
+        "ownerExited": true
+      },
+      {
+        "action": "recover-package",
+        "expectedError": "",
+        "timedOut": false,
+        "exitCode": 0,
+        "label": "healthy-1",
+        "ownerExited": true
+      },
+      {
+        "action": "recover-package",
+        "expectedError": "",
+        "timedOut": false,
+        "exitCode": 0,
+        "label": "healthy-2",
+        "ownerExited": true
+      },
+      {
+        "action": "update-package",
+        "expectedError": "DEV_PACKAGE_UPDATE_REPLACE_FAILED",
+        "timedOut": false,
+        "exitCode": 2,
+        "label": "held-authority-real-replace-fault",
+        "ownerExited": true
+      },
+      {
+        "action": "status",
+        "expectedError": "DEV_PACKAGE_UPDATE_INCOMPLETE",
+        "timedOut": false,
+        "exitCode": 2,
+        "label": "cold-status-refuses-pending-selection",
+        "ownerExited": true
+      },
+      {
+        "action": "update-package",
+        "expectedError": "DEV_RUNTIME_OBJECT_UNAVAILABLE",
+        "timedOut": false,
+        "exitCode": 2,
+        "label": "old-source-route-unavailable",
+        "ownerExited": true
+      },
+      {
+        "action": "recover-package",
+        "expectedError": "",
+        "timedOut": false,
+        "exitCode": 0,
+        "label": "cold-recovery-without-build-output",
+        "ownerExited": true
+      },
+      {
+        "action": "recover-package",
+        "expectedError": "",
+        "timedOut": false,
+        "exitCode": 0,
+        "label": "recovery-replay",
+        "ownerExited": true
+      },
+      {
+        "action": "status",
+        "expectedError": "",
+        "timedOut": false,
+        "exitCode": 0,
+        "label": "final-normal-status",
+        "ownerExited": true
+      }
+    ],
+    "checks": [
+      "normal-image-healthy-cold-recovery-is-byte-stable",
+      "real-windows-sharing-failure-leaves-exact-pointer-first-journal-and-cold-refusal",
+      "normal-cold-recovery-reuses-retained-immutable-package-with-profile-history-and-old-version-preserved",
+      "idempotent-recovery-and-final-status-select-exact-new-package-with-control-stopped"
+    ],
+    "actualWindowsReplacementFault": true,
+    "fault": "READ_ONLY_SHARE_LEASE_ON_DISPOSABLE_AUTHORITY_FILE",
+    "partialPhase": "NEW_POINTER_OLD_AUTHORITY_DURABLE_UPDATE_ATTEMPT",
+    "coldPendingSelectionRefused": true,
+    "sourceDirectoryRemovedFromExpectedPath": "MOVED_AND_RETAINED_WITHIN_DISPOSABLE_TEST_ROOT",
+    "recoveryUsesRetainedImmutablePackage": true,
+    "normalRecoveryStatus": "PACKAGE_UPDATED_STOPPED",
+    "idempotentStatus": "PACKAGE_CURRENT_VERIFIED_STOPPED",
+    "profileHistoryAndOldPackagePreserved": true,
+    "inertFixturePythonExecuted": false,
+    "testHostOrBrowserStarted": false,
+    "actualProcessKill": "NOT_PART_OF_THIS_QUALIFICATION"
+  },
+  "retainedFailedAttempts": {
+    "count": 2,
+    "first": "TEST_HARNESS_CLI_ALIAS_COLLISION_ZERO_PRODUCT_COMMANDS",
+    "second": "ALTERED_SCRIPT_FIXTURE_CORRECTLY_REFUSED_BY_EMBEDDED_SOURCE_PIN_BEFORE_SELECTION",
+    "correctedFixture": "TWO_GENUINE_CHECKSUM_PINNED_PACKAGE_VERSIONS_WITH_UNCHANGED_SCRIPTS",
+    "realStateChanged": 0,
+    "ownersRemaining": 0,
+    "failuresPreserved": true
+  },
+  "preservation": {
+    "runtimeRecords": 306,
+    "historicalFiles": 55,
+    "changedFiles": 0,
+    "scopedOwners": 0,
+    "selectedDevelopment": "V76_UNCHANGED",
+    "protectedInstallationChanged": false,
+    "bindingsHistoriesAndNativeOwnersChanged": false,
+    "browserWakeRecurringStarts": 0,
+    "officialRuntimeActions": 0,
+    "connectorCalls": 0,
+    "actualWebToolCalls": 0,
+    "providerReceiptsFabricated": 0,
+    "completedCanariesReplayed": 0,
+    "diagnosticFixturesRetained": true,
+    "artifactBinariesPublishedToGit": false
+  },
+  "acceptance": {
+    "normalCommand": "PASS_REAL_FILESYSTEM_FAILURE_AND_COLD_RECOVERY",
+    "normalDeveloperBackendStartup": "NOT_QUALIFIED",
+    "automaticVerifiedPreviousFallback": "NOT_IMPLEMENTED",
+    "protectedRecovery": "NOT_EXECUTED",
+    "unattended": "NOT_ACTIVATED",
+    "actualParallelWebCodingBC": "OPEN",
+    "remoteSourceCi": "UNVERIFIED_ZERO_RUNS_ZERO_CHECKS_AT_C101_EXACT_SHA_READBACK",
+    "fullOctoberMilestone": "OPEN"
+  },
+  "nextTask": "Implement commit/review/working-health qualification and verified predecessor fallback in the existing versioned selection model, preserving compatibility and testing normal developer backend startup before legacy retirement. No protected mutation or official startup without existing authorization; actual Web B/C remains the first live priority after the serving dependency is restored."
+}

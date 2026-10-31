@@ -4,7 +4,6 @@ use std::collections::{HashMap, VecDeque};
 use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-#[cfg(not(test))]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 use tokio::sync::Mutex;
@@ -191,6 +190,20 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
+    #[cfg(test)]
+    fn verify_no_migration_fixture(config: &Self) -> (bool, bool) {
+        let root =
+            std::env::temp_dir().join(format!("headless-no-migration-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        let path = root.join("config.toml");
+        let bytes = toml::to_string(config).unwrap();
+        fs::write(&path, bytes.as_bytes()).unwrap();
+        let accepted = Self::require_headless_no_migration(&path).is_ok();
+        let unchanged = fs::read(&path).unwrap() == bytes.as_bytes()
+            && fs::read_dir(&root).unwrap().count() == 1;
+        fs::remove_dir_all(&root).unwrap();
+        (accepted, unchanged)
+    }
     fn normalized(mut self) -> Self {
         self.ngrok_authtoken = self
             .ngrok_authtoken
@@ -237,6 +250,27 @@ impl AppConfig {
             .validate()
             .map_err(std::io::Error::other)?;
         Ok(config)
+    }
+
+    /// A pinned shared launch configuration must already be initialized.
+    /// Check the same typed startup rules without writing a backup or temp file.
+    pub(crate) fn require_headless_no_migration(path: &Path) -> std::io::Result<()> {
+        if !fs::metadata(path)?.is_file() {
+            return Err(std::io::Error::other(
+                "headless configuration is unavailable",
+            ));
+        }
+        let mut config = Self::load_from_path(path)?;
+        let pending = config.mcp.route_rotation.restart_required
+            || config.mcp.route_rotation.pending_route_id.is_some();
+        let identity = ensure_installation_id(&mut config.identity);
+        let route = ensure_persistent_route_if_required(&mut config.mcp, &config.tunnel);
+        if pending || identity || route {
+            return Err(std::io::Error::other(
+                "headless configuration requires initialization or migration",
+            ));
+        }
+        Ok(())
     }
 
     #[allow(dead_code)]
@@ -756,6 +790,8 @@ pub struct AppState {
     pub tool_mode: ToolMode,
     // Fixture-only state never opens or persists a pathname-based configuration.
     fixture_config_in_memory: bool,
+    // Headless launch overrides are process-local; accounting still persists.
+    headless_launch_settings_ephemeral: bool,
     pub mcp_slug: String,
     pub installation_id: String,
     #[allow(dead_code)]
@@ -767,6 +803,10 @@ pub struct AppState {
     pub transport_identity: TransportIdentityConfig,
     pub transport_health: TransportHealthSnapshot,
     pub server_running: bool,
+    // Process-only listener credential. Never included in AppConfig or status.
+    pub(crate) mcp_auth_token: Option<String>,
+    pub web_auto_cancel: Option<Arc<AtomicBool>>,
+    pub web_auto_tasks: Vec<tokio::task::JoinHandle<()>>,
     pub ngrok_running: bool,
     pub ngrok_url: Option<String>,
     pub remote_connected: bool,
@@ -1117,6 +1157,13 @@ fn advance_bootstrap_progress(
 }
 
 impl AppState {
+    pub(crate) fn cancel_web_auto_scheduler(&mut self) -> Vec<tokio::task::JoinHandle<()>> {
+        if let Some(cancel) = self.web_auto_cancel.take() {
+            cancel.store(true, Ordering::Release);
+        }
+        std::mem::take(&mut self.web_auto_tasks)
+    }
+
     pub fn new(port: u16, workspace_root: String) -> std::io::Result<Self> {
         let config_path = app_config_path()?;
         Self::from_config_path_with_archive(port, workspace_root, config_path, true)
@@ -1148,7 +1195,41 @@ impl AppState {
         workspace_root: String,
         config_path: PathBuf,
     ) -> std::io::Result<Self> {
-        Self::from_config_path_with_archive(port, workspace_root, config_path, false)
+        let mut state =
+            Self::from_config_path_with_archive(port, workspace_root, config_path, false)?;
+        state.headless_launch_settings_ephemeral = true;
+        Ok(state)
+    }
+
+    /// Local-backend recovery consumes the already initialized endpoint exactly
+    /// as the public lifecycle probe read it. Unlike ordinary startup, it must
+    /// not promote a pending route or initialize/migrate the configuration.
+    pub(crate) fn new_backend_only(
+        port: u16,
+        workspace_root: String,
+        config_path: PathBuf,
+    ) -> std::io::Result<Self> {
+        if !fs::metadata(&config_path)?.is_file() {
+            return Err(std::io::Error::other(
+                "backend-only startup requires an existing configuration file",
+            ));
+        }
+        let config = AppConfig::load_from_path(&config_path)?;
+        if config.identity.installation_id.is_none() || config.mcp.route_id.is_none() {
+            return Err(std::io::Error::other(
+                "backend-only startup requires initialized installation identity and current MCP route",
+            ));
+        }
+        let mut state = Self::from_prepared_config(
+            port,
+            workspace_root,
+            config_path,
+            false,
+            config,
+            Vec::new(),
+        )?;
+        state.headless_launch_settings_ephemeral = true;
+        Ok(state)
     }
 
     #[cfg(test)]
@@ -1224,6 +1305,7 @@ impl AppState {
             mode: config.mode,
             tool_mode: config.tool_mode,
             fixture_config_in_memory: false,
+            headless_launch_settings_ephemeral: false,
             mcp_slug: config
                 .mcp
                 .route_id
@@ -1239,6 +1321,9 @@ impl AppState {
                 config.tunnel.remote_self_check,
             ),
             server_running: false,
+            mcp_auth_token: None,
+            web_auto_cancel: None,
+            web_auto_tasks: Vec::new(),
             ngrok_running: false,
             ngrok_url: None,
             remote_connected: false,
@@ -1313,13 +1398,15 @@ impl AppState {
         config.partner_binagotchy_seed = self.partner_binagotchy_seed.clone();
         config.set_catdesk_as_co_author = self.set_catdesk_as_co_author;
         config.theme = self.theme.clone();
-        config.mode = self.mode;
-        config.tool_mode = self.tool_mode;
+        if !self.headless_launch_settings_ephemeral {
+            config.mode = self.mode;
+            config.tool_mode = self.tool_mode;
+            config.mcp.bind_host = self.mcp_bind_host.clone();
+            config.mcp.port = self.port;
+        }
         config.usage_totals = self.usage_totals.clone().normalized();
         config.selected_browser = self.selected_browser.clone();
         config.tunnel = self.tunnel_config.clone();
-        config.mcp.bind_host = self.mcp_bind_host.clone();
-        config.mcp.port = self.port;
         config.openai_tunnel = self.openai_tunnel_config.clone();
         config.identity = self.transport_identity.clone();
         config.identity.installation_id = Some(self.installation_id.clone());
@@ -1441,6 +1528,11 @@ impl AppState {
             },
             "transportHealth": self.transport_health.health.as_str(),
             "localMcp": self.transport_health.local_mcp.clone(),
+            "localMcpAuth": if self.mcp_auth_token.as_deref().is_some_and(crate::server::valid_mcp_auth_token) {
+                "BEARER_REQUIRED"
+            } else {
+                "LEGACY_NO_BEARER"
+            },
             "remoteCheckEnabled": self.tunnel_config.remote_self_check,
             "lastCheckedAt": self.transport_health.last_checked_at.clone(),
             "installationFingerprint": crate::tunnel::connection_fingerprint(&self.installation_id),
@@ -1667,6 +1759,41 @@ fn generate_mcp_slug() -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn headless_no_migration_accepts_initialized_bytes_without_sidefiles() {
+        let config = super::AppConfig {
+            identity: super::TransportIdentityConfig {
+                installation_id: Some("existing-installation".into()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert_eq!(
+            super::AppConfig::verify_no_migration_fixture(&config),
+            (true, true)
+        );
+    }
+
+    #[test]
+    fn headless_no_migration_refuses_pending_route_and_missing_identity_without_sidefiles() {
+        let mut config = super::AppConfig::default();
+        assert_eq!(
+            super::AppConfig::verify_no_migration_fixture(&config),
+            (false, true)
+        );
+        config.identity.installation_id = Some("existing-installation".into());
+        config.mcp.route_rotation.restart_required = true;
+        config.mcp.route_rotation.pending_route_id = Some("pending-existing-route".into());
+        assert_eq!(
+            super::AppConfig::verify_no_migration_fixture(&config),
+            (false, true)
+        );
+        config.mcp.route_rotation.restart_required = false;
+        assert_eq!(
+            super::AppConfig::verify_no_migration_fixture(&config),
+            (false, true)
+        );
+    }
     use super::*;
     use std::sync::{Mutex, MutexGuard};
 
@@ -1936,8 +2063,103 @@ toolCallCount = 7
         assert_eq!(reloaded.usage_totals.total_tokens, 20);
         assert_eq!(reloaded.session_usage_totals, UsageTotals::default());
 
+        // Accounting from a bounded headless invocation must not save its
+        // temporary listener or tool-mode overrides as the next launch defaults.
+        let mut headless = AppState::new_headless(
+            0,
+            workspace.to_string_lossy().into_owned(),
+            config_path.clone(),
+        )
+        .expect("headless app state");
+        headless.mode = Mode::Both;
+        headless.tool_mode = ToolMode::MultiTools;
+        headless.mcp_bind_host = "127.0.0.2".into();
+        headless.port = 49152;
+        headless.record_turn_usage(2, 3);
+        headless
+            .persist_state()
+            .expect("headless usage persistence");
+        let headless_saved =
+            AppConfig::load_from_path(&config_path).expect("headless saved config");
+        let mut expected = saved.clone();
+        expected.usage_totals.accumulate(2, 3, 1);
+        assert_eq!(
+            serde_json::to_value(headless_saved).unwrap(),
+            serde_json::to_value(expected).unwrap(),
+            "headless accounting preserves configured launch settings"
+        );
+
         let _ = std::fs::remove_file(config_path);
         let _ = std::fs::remove_dir(workspace);
+    }
+
+    #[test]
+    fn backend_only_keeps_pending_route_and_persisted_launch_settings() {
+        let (workspace, config_path) = temp_config_workspace("catdesk-backend-only-config");
+        let mut configured = AppConfig {
+            mode: Mode::Browser,
+            ..AppConfig::default()
+        };
+        configured.identity.installation_id = Some("backend-only-fixture-installation".into());
+        configured.mcp.route_id = Some("oldrouteoldrouteoldroute12".into());
+        configured.mcp.route_rotation.pending_route_id = Some("newroutenewroutenewroute12".into());
+        configured.mcp.route_rotation.restart_required = true;
+        configured.save_to_path(&config_path).unwrap();
+        let before = fs::read(&config_path).unwrap();
+        let mut app = AppState::new_backend_only(
+            0,
+            workspace.to_string_lossy().into_owned(),
+            config_path.clone(),
+        )
+        .unwrap();
+        assert!(app.mode == Mode::Browser);
+        assert_eq!(app.mcp_path(), "/oldrouteoldrouteoldroute12/mcp");
+        assert_eq!(fs::read(&config_path).unwrap(), before);
+        assert!(!workspace.join("config.toml.pre-t0025b-backup").exists());
+        assert!(!app.fixture_config_in_memory);
+
+        app.mode = Mode::Computer;
+        app.port = 49152;
+        app.tool_mode = ToolMode::ReadOnly;
+        app.record_turn_usage(2, 3);
+        app.persist_state().unwrap();
+        configured.usage_totals.accumulate(2, 3, 1);
+        assert_eq!(
+            serde_json::to_value(AppConfig::load_from_path(&config_path).unwrap()).unwrap(),
+            serde_json::to_value(configured).unwrap(),
+            "normal accounting may persist totals without promoting routes or changing UI defaults"
+        );
+        assert!(temp_config_files(&workspace).is_empty());
+        assert!(!workspace.join("config.toml.pre-t0025b-backup").exists());
+        fs::remove_file(config_path).unwrap();
+        fs::remove_dir(workspace).unwrap();
+    }
+
+    #[test]
+    fn backend_only_refuses_uninitialized_config_without_writing_it() {
+        let (workspace, config_path) = temp_config_workspace("catdesk-backend-only-uninitialized");
+        let construct = || {
+            AppState::new_backend_only(
+                0,
+                workspace.to_string_lossy().into_owned(),
+                config_path.clone(),
+            )
+        };
+        assert!(construct().is_err());
+        assert!(!config_path.exists());
+        let mut configured = AppConfig::default();
+        configured.save_to_path(&config_path).unwrap();
+        let before = fs::read(&config_path).unwrap();
+        assert!(construct().is_err());
+        assert_eq!(fs::read(&config_path).unwrap(), before);
+        configured.identity.installation_id = Some("backend-only-fixture-installation".into());
+        configured.save_to_path(&config_path).unwrap();
+        let before = fs::read(&config_path).unwrap();
+        assert!(construct().is_err());
+        assert_eq!(fs::read(&config_path).unwrap(), before);
+        assert!(!workspace.join("config.toml.pre-t0025b-backup").exists());
+        fs::remove_file(config_path).unwrap();
+        fs::remove_dir(workspace).unwrap();
     }
 
     #[test]

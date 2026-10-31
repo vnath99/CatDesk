@@ -27,6 +27,24 @@ const MAX_APP_SERVER_SKIPPED_NOTIFICATIONS: usize = 32;
 const THREAD_LIST_PAGE_LIMIT: u64 = 5;
 const THREAD_LIST_MAX_PAGES: usize = 8;
 
+/// Only these fixed stage codes can cross the operator boundary. Provider
+/// messages, paths, thread IDs, prompts and authentication data stay private.
+pub(crate) fn registration_error_code(error: &str) -> &'static str {
+    match error {
+        "CODEX_REGISTRATION_WORKSPACE" => "CODEX_REGISTRATION_WORKSPACE",
+        "CODEX_REGISTRATION_PROFILE" => "CODEX_REGISTRATION_PROFILE",
+        "CODEX_REGISTRATION_TRANSPORT" => "CODEX_REGISTRATION_TRANSPORT",
+        "CODEX_REGISTRATION_INITIALIZE" => "CODEX_REGISTRATION_INITIALIZE",
+        "CODEX_REGISTRATION_DISCOVERY" => "CODEX_REGISTRATION_DISCOVERY",
+        "CODEX_REGISTRATION_AMBIGUOUS" => "CODEX_REGISTRATION_AMBIGUOUS",
+        "CODEX_REGISTRATION_WRITER_BUSY" => "CODEX_REGISTRATION_WRITER_BUSY",
+        "CODEX_REGISTRATION_NATIVE_INITIALIZATION_REQUIRED" => {
+            "CODEX_REGISTRATION_NATIVE_INITIALIZATION_REQUIRED"
+        }
+        _ => "CODEX_PROJECT_OPERATION_REFUSED",
+    }
+}
+
 /// Launch settings for a CatDesk-owned supported `codex app-server --stdio`
 /// process.  The only authentication-related setting is an opaque,
 /// operator-selected config-root path.  CatDesk never reads it, and it is
@@ -160,6 +178,13 @@ impl CodexAppServerStdioTransportV1 {
                 "capabilities": {"experimentalApi": true}
             }),
         )?;
+        // Complete the documented handshake before any workspace request.
+        self.stdin
+            .write_all(b"{\"method\":\"initialized\",\"params\":{}}\n")
+            .and_then(|()| self.stdin.flush())
+            .map_err(|_| {
+                RuntimeError::Provider("Codex initialization acknowledgment failed".into())
+            })?;
         self.initialized = true;
         Ok(response)
     }
@@ -1168,6 +1193,7 @@ pub fn parse_resumed_thread_metadata(value: &Value) -> Result<CodexThreadMetadat
         .get("canAcceptDirectInput")
         .and_then(Value::as_bool)
         != Some(true)
+        || metadata.concurrently_owned
     {
         return Err(RuntimeError::Validation(
             "Codex resumed thread is not idle/direct-input eligible".into(),

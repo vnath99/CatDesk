@@ -1,0 +1,115 @@
+{
+  "recordedUtc": "2026-10-23T13:36:49.4188738Z",
+  "localDate": "2026-10-23",
+  "task": "C31-SCOPED-TARGET-AUTHORITY-DIAGNOSTICS",
+  "classification": "SOURCE_AND_SELECTED_CONTROLLED_READ_QUALIFIED",
+  "branch": "codex/web-rollover-oct17",
+  "baseCommit": "8db2686e13bf4bce9da6b6949cce9c3d01e29a69",
+  "codeCommit": "5973f1437953ed57a591bc70927631e96c5f6016",
+  "codeRemoteSha": "5973f1437953ed57a591bc70927631e96c5f6016",
+  "sourceFiles": [
+    {
+      "path": "src/mcp.rs",
+      "sha256": "351c4ccdf2c6862ecd62604968e2cbebf4c2da645673af05a7fea62d1c396d88"
+    },
+    {
+      "path": "src/operator_web_cli.rs",
+      "sha256": "3300045ae4366682638810f54c05c0a8e2015447189e37871e0a9c46fd231798"
+    },
+    {
+      "path": "src/operator_web_auto.rs",
+      "sha256": "84f9918642d768050243232d0828b0a3b54809bd31891818165f2ac80e4d2736"
+    },
+    {
+      "path": "src/web_development_tests.rs",
+      "sha256": "0fa8498a4612cebf7889d616ea280f5a65cea7b73ec5baedb6dcfe610a8190e1"
+    }
+  ],
+  "implementation": {
+    "rawPathsGitOutputAndUrlsRetained": false,
+    "legacyCoarseErrorVariantsPreserved": true,
+    "diagnosticField": "diagnosticCode",
+    "schedulerRetainsExactSanitizedCode": true,
+    "newRegistryOrLock": false,
+    "guardBypass": false,
+    "existingReadAndPairingGuardsReused": true,
+    "unknownErrorsUseFixedFallback": true,
+    "fixedStageCodes": [
+      "WEB_TARGET_CONTROL_GIT_UNAVAILABLE",
+      "WEB_TARGET_PROJECT_GIT_UNAVAILABLE",
+      "WEB_TARGET_REGISTRY_UNAVAILABLE",
+      "WEB_TARGET_REGISTRY_WAKE_MISMATCH",
+      "WEB_TARGET_WAKE_STORE_UNAVAILABLE"
+    ]
+  },
+  "tests": {
+    "additionalFinishedUtc": "2026-10-23T13:32:20.8074492Z",
+    "strictAllTargetsAllFeaturesClippy": "PASS",
+    "finishedUtc": "2026-10-23T13:24:36.2388646Z",
+    "newTests": 3,
+    "format": "PASS",
+    "currentDistinctTests": 84,
+    "additionalLogSha256": "23b395da41904fe00b0ada0ec72433622f05ff7b38a27c3b9d416d0349a75ca1",
+    "additionalRolloverRegressions": 44,
+    "browserActions": 0,
+    "distinctInitialTests": 40,
+    "suites": [
+      {
+        "logSha256": "286cbbb9c93224cc8d778edc9a21a51fb3f98ee9106b7ca2c5b71bc6c103376a",
+        "passed": 5,
+        "suite": "target-diagnostic-and-pairing-regressions"
+      },
+      {
+        "logSha256": "bbba18cab32431345be3ce923bd47777b0d83afb88ba1423313340e29a39b379",
+        "passed": 1,
+        "suite": "full-project-git-failure-and-sibling"
+      },
+      {
+        "logSha256": "a7d154a0cbb66f6d633824488484cf7a309791c986ec86bafc54aaf69c7af9cb",
+        "passed": 16,
+        "suite": "automatic-driver"
+      },
+      {
+        "logSha256": "0d94fb901e13098effb0d343b10696f0afeef247c41de0551504517aed078d46",
+        "passed": 13,
+        "suite": "operator-web-read-routing"
+      },
+      {
+        "logSha256": "29d26c712cf656f619600590b3acaf48a382a1751672211643a5a1f65f920019",
+        "passed": 5,
+        "suite": "context-control-readers"
+      }
+    ],
+    "startedUtc": "2026-10-23T13:23:04.9850001Z"
+  },
+  "inducedFailure": {
+    "siblingTick": "WAKE_STOPPED_NO_BROWSER_ACTION",
+    "projectFailure": "WEB_TARGET_PROJECT_GIT_UNAVAILABLE",
+    "changedOrigin": "SYNTHETIC_PROJECT_ONLY",
+    "scope": "DISPOSABLE_LOCAL_THREE_GIT_ROOT_DEVELOPMENT_FIXTURE",
+    "operatorAndSchedulerCodeMatch": true,
+    "registryUnchanged": true,
+    "protectedProductionUnchanged": true,
+    "actualWebCodingClaimed": false,
+    "siblingTargetRemainsPaired": true
+  },
+  "historicalC29": {
+    "historicalMonitorAccepted": false,
+    "oldBrowserCyclesReplayed": false,
+    "oldAttentionStatusPreserved": true,
+    "underlyingCause": "UNPROVEN_ORIGINAL_CODE_DISCARDED",
+    "originalQuarantinePreserved": true
+  },
+  "selectedReadback": {
+    "settingsOrBindingChanges": 0,
+    "sourceCommit": "5973f1437953ed57a591bc70927631e96c5f6016",
+    "changedRecords": 0,
+    "browserActions": 0,
+    "allPaired": true,
+    "ownedProcesses": 0,
+    "reads": 9,
+    "metadataRecords": 199
+  },
+  "next": "A future bounded monitor qualification can now retain precise authority diagnostics; do not claim that the earlier unrecorded cause has been reproduced or repaired.",
+  "privacy": "PRIVATE_URLS_NATIVE_IDS_WORKSPACE_PATHS_AND_RUNTIME_ARTIFACTS_OMITTED"
+}

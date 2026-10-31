@@ -1,0 +1,196 @@
++                lease.owner(),
++                Phase::Submitting,
++                None,
++                None,
++            )
++            .unwrap();
++        assert_eq!(
++            store
++                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
++                .unwrap(),
++            event
++        );
++        let path = store.submission_start_path(&event.event_id);
++        let mut start: SubmissionStart = read(&path).unwrap();
++        start.target_digest = "f".repeat(64);
++        atomic(&path, &start).unwrap();
++        let saved = witness_bytes(&store, &event.event_id);
++        assert_eq!(
++            store
++                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
++                .unwrap_err(),
++            "SUBMISSION_START_BINDING_INVALID"
++        );
++        assert_eq!(witness_bytes(&store, &event.event_id), saved);
++        drop(lease);
++        fs::remove_dir_all(base).unwrap();
++    }
++
++    #[test]
++    fn semantic_wake_crossed_boundary_refuses_mismatched_timer_without_writes() {
++        let (base, store, target) = fixture();
++        let event = store
++            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
++            .unwrap();
++        let lease = store.host_lock().unwrap();
++        store.claim(&event, &lease).unwrap();
++        store
++            .transition(
++                &event.event_id,
++                lease.owner(),
++                Phase::Submitting,
++                None,
++                None,
++            )
++            .unwrap();
++        store.start_submission_timer(&event.event_id).unwrap();
++        assert_eq!(
++            store
++                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
++                .unwrap(),
++            event
++        );
++        let timer = store.timer(&event.event_id).unwrap().unwrap();
++        for changed in [
++            TurnTimer {
++                project_id: "beta".into(),
++                ..timer.clone()
++            },
++            TurnTimer {
++                target_generation: target.generation + 1,
++                ..timer.clone()
++            },
++            TurnTimer {
++                target_digest: "f".repeat(64),
++                ..timer.clone()
++            },
++        ] {
++            atomic(&store.timer_path(&event.event_id), &changed).unwrap();
++            let saved = witness_bytes(&store, &event.event_id);
++            assert_eq!(
++                store
++                    .produce_expected_wake("alpha", "Continue alpha", &target, intent())
++                    .unwrap_err(),
++                "TIMER_SUBMISSION_BINDING_MISMATCH"
++            );
++            assert_eq!(witness_bytes(&store, &event.event_id), saved);
++        }
++        drop(lease);
++        fs::remove_dir_all(base).unwrap();
++    }
++
++    #[test]
++    fn semantic_wake_simultaneous_independent_producers_keep_project_identity_and_deduplicate() {
++        use std::sync::{Arc, Barrier};
++        let (base, store, alpha) = fixture();
++        let beta = store
++            .set_target("beta", 0, "https://chatgpt.com/c/beta")
++            .unwrap();
++        let store = Arc::new(store);
++        let barrier = Arc::new(Barrier::new(4));
++        let threads = [
++            ("alpha", alpha.clone()),
++            ("beta", beta.clone()),
++            ("alpha", alpha),
++            ("beta", beta),
++        ]
++        .into_iter()
++        .map(|(project, target)| {
++            let store = store.clone();
++            let barrier = barrier.clone();
++            std::thread::spawn(move || {
++                barrier.wait();
++                store
++                    .produce_expected_wake(project, "Continue assigned work", &target, intent())
++                    .unwrap()
++            })
++        })
++        .collect::<Vec<_>>();
++        let events = threads
++            .into_iter()
++            .map(|thread| thread.join().unwrap())
++            .collect::<Vec<_>>();
++        assert_eq!(events[0], events[2]);
++        assert_eq!(events[1], events[3]);
++        assert_ne!(events[0].event_id, events[1].event_id);
++        assert_eq!(events[0].project_id, "alpha");
++        assert_eq!(events[1].project_id, "beta");
++        assert_eq!(store.events().unwrap().len(), 2);
++        fs::remove_dir_all(base).unwrap();
++    }
++}
+diff --git a/wake/tests/protocol_store.rs b/wake/tests/protocol_store.rs
+index eee5cac65d0c2475a61c71ab9829855be148fb7c..fa09cba5788a3de0e6ef7f639940e79caae98669 100644
+--- a/wake/tests/protocol_store.rs
++++ b/wake/tests/protocol_store.rs
+@@ -524,6 +524,43 @@ fn producer_replay_keeps_original_target_generation() {
+     assert!(s.claim(&first, &lease).is_err());
+ }
+ 
++#[test]
++fn pre_submit_retry_refuses_surviving_submission_witnesses() {
++    for directory in ["logs", "turns", "archive"] {
++        let fixture = Fixture::new();
++        let store = fixture.store();
++        let event = event();
++        store.publish(&event).unwrap();
++        let lease = store.host_lock().unwrap();
++        store.claim(&event, &lease).unwrap();
++        store
++            .transition(
++                &event.event_id,
++                lease.owner(),
++                Phase::Attention,
++                None,
++                Some("LOGIN_OR_PROFILE_REQUIRED".into()),
++            )
++            .unwrap();
++        let name = if directory == "logs" {
++            format!("submission-start-{}.json", event.event_id)
++        } else {
++            format!("{}.json", event.event_id)
++        };
++        let witness = fixture.root.join(directory).join(name);
++        // Even an unreadable/partial witness cannot authorize another attempt.
++        fs::write(&witness, b"{partial").unwrap();
++        let before = store.delivery(&event.event_id).unwrap().unwrap();
++        assert_eq!(
++            store.retry_pre_submit(&event.event_id).unwrap_err(),
++            "SUBMISSION_RETRY_REFUSED",
++            "{directory}"
++        );
++        assert_eq!(store.delivery(&event.event_id).unwrap().unwrap(), before);
++        assert_eq!(fs::read(witness).unwrap(), b"{partial");
++    }
++}
++
+ #[test]
+ fn pre_submit_retry_is_explicit_and_submitting_can_never_be_downgraded() {
+     let f = Fixture::new();
+diff --git a/wake/tests/test_adapter.py b/wake/tests/test_adapter.py
+index 0e14ea83732dd8ad276b441b871da0b5102a6ab5..cbf70e68cb28cc50977b2f850b14303f3e076dff 100644
+--- a/wake/tests/test_adapter.py
++++ b/wake/tests/test_adapter.py
+@@ -239,6 +239,55 @@ class AdapterTests(unittest.TestCase):
+         self.assertFalse(cdp.sent)
+         self.assertEqual(cdp.keys, [])
+ 
++    def test_sent_review_pair_scope_stability_and_escaping_preserve_user(self):
++        for count, answer in [((1, 1), "r" * 16000), ((1, 1), "😀" * 8192), ((2, 1), "answer"), ((1, 2), "answer")]:
++            with self.subTest(count=count, unicode=answer.startswith("😀")):
++                cdp = FakeCdp()
++                class Sink:
++                    def __init__(self, url, *_): self.url, self.ui_timeout = url, 1
++                    def exact(self, url): return url == self.url
++                    def wait_for_page_readiness(self, _sb, current): return current
++                    def wait_for_idle(self, _cdp, _timeout): pass
++                    def readiness_reason(self, _): return None
++                    def trusted_turn_anchor_state(self, _, message):
++                        self_message = "approved review"
++                        if message != self_message: raise AssertionError("wrong receipt message")
++                        return count
++                    def visible_message_snapshot(self, _, *, max_message_bytes, review_pair):
++                        if (max_message_bytes, review_pair) != (32768, True): raise AssertionError("wrong private budget")
++                        return {"messages":[dict(role=role,text=text,textComplete=True,revisionComplete=True,
++                            revisionHash="a"*64,identityBasis="UNIT_KEY") for role,text in
++                            [("USER","approved review"),("ASSISTANT",answer)]], "truncated":False,

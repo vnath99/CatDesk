@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T11:02:15.3368087Z",
+  "branch": "codex/web-rollover-oct17",
+  "baseCommit": "7cc523a35e2523c250e143f28a94db4c49c2b0e9",
+  "implementationIdentity": "Containing Git commit; exact tested source diff and test-executable digest retained privately",
+  "classification": "SOURCE_REGRESSIONS_AND_BOUNDED_ACTUAL_NATIVE_APP_SERVER_REGISTRATION",
+  "diagnosis": [
+    "The retained candidate returned generic attention during fresh-workspace registration; the original refused attempt did not expose its failing stage.",
+    "Inspection found registration's thread/start was rejected by the transport allowlist, the initialized handshake acknowledgment was omitted, and bootstrap fields differed from the installed CLI schema.",
+    "An unpublished controlled experiment created one metadata-only thread and retained its intent/issued-ID receipt, but follow-up qualification failed. Exact read returned -32600 thread not loaded; exact metadata resume returned -32600 no rollout found. No model turn or task was submitted on that thread.",
+    "The exploratory bootstrap journal/creation implementation was removed from the source diff. Its private failure evidence and isolated journals remain preserved. No thread deletion, lock clearing or retry with a replacement ID occurred in that workspace."
+  ],
+  "finalImplementation": [
+    "Complete initialize/initialized handshake.",
+    "Register only an existing, exact-CWD persisted native thread through existing preflight/confirm commands.",
+    "Return CODEX_REGISTRATION_NATIVE_INITIALIZATION_REQUIRED when no qualifying persisted thread exists; registration issues no thread/start or turn/start.",
+    "Hold the existing per-workspace writer guard during registration preflight; no new global lock or registry.",
+    "Expose allowlisted stage codes without paths, native IDs or provider messages.",
+    "Refuse conflicting activeWriter evidence even when canAcceptDirectInput is true."
+  ],
+  "sourceTests": {
+    "registrationFilter": { "passed": 21, "failed": 0, "ignoredOptIn": 1 },
+    "runtimeSuite": { "passed": 64, "failed": 0, "ignoredOptIn": 2 },
+    "appServerSuite": { "passed": 29, "failed": 0, "ignoredOptIn": 1 },
+    "countsOverlap": true,
+    "strictAllTargetsClippy": "PASS",
+    "formatting": "PASS"
+  },
+  "actualNativeEvidence": {
+    "scope": "Separate fresh disposable native workspace, distinct from the failed metadata-only experiment and every real project",
+    "normalCliInitializationTurns": 1,
+    "requestedModel": "gpt-6.1-sol",
+    "requestedEffort": "medium",
+    "initializationExitCode": 0,
+    "initializationElapsedSeconds": 9.735,
+    "completedTurnObserved": true,
+    "modelToolItems": 0,
+    "trackedWorkspaceCleanAfterInitialization": true,
+    "sourceRegistrationProbe": "PASS",
+    "registrationElapsedSeconds": 55.79,
+    "exactPersistedNativeThreadConfirmed": true,
+    "authoritativeSolMediumProfileRequired": true,
+    "outerOwnerMaximumSeconds": 180,
+    "timedOut": false,
+    "terminationFailed": false,
+    "newCandidateOrCodexProcessesRemaining": 0,
+    "actualChatGPTWebCalls": 0,
+    "existingNativeSessionsResumed": 0,
+    "browserWakeTunnelOrRecurringStarts": 0
+  },
+  "notEstablished": [
+    "Real native coding turn through the retained executable's MCP route",
+    "Installed production acceptance of this source correction",
+    "Genuine two-ChatGPT-Web-conversation coding",
+    "Hosted exact-source CI"
+  ],
+  "nextAction": "Use the retained candidate's existing execution-grant/native queue MCP route against the newly registered disposable native project. No need to rebuild that artifact to test its existing dispatch implementation.",
+  "officialProtocolReference": "https://learn.chatgpt.com/docs/app-server"
+}

@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C228",
+  "status": "ACTUAL_INSTALLED_FOREGROUND_NATURAL_AND_INTERRUPTION_PASS",
+  "startedUtc": "2026-10-26T01:22:24.8878557+00:00",
+  "finishedUtc": "2026-10-26T01:23:48.6399150+00:00",
+  "sourceCommit": "2e7260a8d76edc55ba0915c59016c5d142b85286",
+  "branch": "codex/web-rollover-oct17",
+  "controller": {
+    "sha256": "95cb2afa04d906c5aca3655aca684a0c3284dc0b9304f475204890d2d3723d3f",
+    "bytes": 71801344,
+    "buildRecordSha256": "81bf3a9d715fff5fc2a1411dfcdd54df095b97ab529a86c82818633b7d7a501f",
+    "sourceTree": "b8587dff368684d440583c217cf6f9655dda8be9",
+    "normalDebugBuild": true,
+    "installedCandidateReplaced": false
+  },
+  "installed": {
+    "sha256": "91eea19e6e030e80900d43114f800c3642f5cc063ef2c969b83eb20d2c28d14b",
+    "sourceCommit": "409513a1c1f81f74f873bd4b3dca825458ef29a8",
+    "trustedSlot": "slot-b",
+    "generation": 2,
+    "releaseAndReceiptUnchanged": true
+  },
+  "profile": "INSTALLED_HEADLESS_LOCAL",
+  "scope": "UNSCOPED_READ_ONLY_CANONICAL_WORKSPACE_KNOWN_LOCAL_ROUTE",
+  "test": {
+    "outerLimitSeconds": 180,
+    "commandBudgetSeconds": 90,
+    "distinctSuccessfulRunIdentities": 2,
+    "natural": {
+      "exitCode": 0,
+      "readyAndDurableResultVerified": true,
+      "ownedTreeExited": true,
+      "wrongTokenStatus": 401,
+      "readStatus": 200,
+      "readPath": "README.md",
+      "readBytes": 24049,
+      "readSha256": "2a490d5686f63a8f892fb3f38220111bb73c5b3947ed39e0418fd682c7061060"
+    },
+    "interruption": {
+      "method": "One deliberate kill through the exact retained controller process handle after verified readiness",
+      "exitCode": -1,
+      "backendAndLeaseHolderJobMembershipVerified": true,
+      "bothRetainedChildHandlesProvedExited": true,
+      "outerTestOwnerRemainedAlive": true,
+      "missingNormalResultExpectedAndPreserved": true
+    },
+    "both": {
+      "controllerAndBackendIdentityVerified": true,
+      "namedControllerJobAbsentAfterExit": true,
+      "lifecycleLeaseAvailableAfterExit": true,
+      "installedListenerAndOwnersEmpty": true
+    },
+    "cleanupFailures": 0,
+    "timeout": false,
+    "preservedState": true
+  },
+  "preservation": {
+    "originalC224ReleaseAuthorityAndEscrowUnchanged": true,
+    "postRecoveryBaselineAndSourceUnchanged": true,
+    "untrackedFilesPreserved": 11,
+    "earlierInterruptedForegroundHistoriesPreserved": 2,
+    "newRunDirectories": 2,
+    "newRuntimeFiles": 7,
+    "projectBindingAndHistoryChanges": 0,
+    "nativeSessionActions": 0,
+    "browserWakeRecurringStarts": 0,
+    "externalRuntimeActions": 0,
+    "promotionRepeated": false
+  },
+  "retainedHarnessFailures": [
+    "First actual readiness succeeded; stdout JSON timestamp auto-conversion caused literal-date comparison refusal. Preserved and corrected the private parser without changing identity rules.",
+    "Second actual readiness succeeded; a typed Child switch collided with a process foreach variable. Preserved and renamed the script switch; AST checked all 19 foreach loops for parameter collisions. Both attempts stopped cleanly and completed no natural cycle."
+  ],
+  "proofSha256": {
+    "result": "0408671c9ed6b8f2a089fbc04446adbc53db928df0ce9502abfc2bb38b766714",
+    "outer": "190e34ca78a749e78fbfe93105b9b34864820288505532c90c43ccba3e0f061f",
+    "containment": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "natural": "b1df5a458f9cdc512db85b29823b4c44b1c0388d2df1cd1cad806422472d7167",
+    "interruption": "b5d9e2c08ae5c4f664eb7515c0ae899e64fa1af1afc505c477f2e4c8c53df547",
+    "read": "513a48cf5a262587beadc761c9b409aeb58f00dc784b3c06956c082da5bc0770",
+    "runtimeInventory": "7d50781093ee8d6c7e52bea5ebb6c7e8a8add9ab911f14d0121e885cbf74f3fa"
+  },
+  "github": {
+    "sourceRemoteShaVerified": "2e7260a8d76edc55ba0915c59016c5d142b85286",
+    "exactSourceActionsRunsObserved": 0,
+    "remoteCiAcceptance": false
+  },
+  "limits": {
+    "publicNativeDaemonAccepted": false,
+    "unattendedServingAccepted": false,
+    "projectWriteOrMultiProjectWebAcceptance": false,
+    "differentTrustedVersionRollbackAccepted": false,
+    "officialSecureMcpAccepted": false,
+    "officialConnectorDependency": "HTTP429 remains open; not retried"
+  },
+  "next": "Qualify project-bound serving against the current registry and existing scope authority, then actual independent Web coding when official connector access is available. Preserve all bindings and completed canaries.",
+  "operatorActionRequiredForCompletedRecovery": false,
+  "milestoneComplete": false
+}
