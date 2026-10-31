@@ -1,3 +1,7 @@
+## 2026-10-31 - selected USER-reader qualification outcome
+
+Source18ba8aa is selected and backend-health qualified. Existing receipt-only reobserve returned PENDING/ASSISTANT_COMPLETION_ACTION_UNPROVEN; receipt gate accepted=True, timer completed=False, transport closed=False. No new USER message or recovery click was issued. Original source verdict remains INCONCLUSIVE; this does not authorize ACK/producer/promotion. Final native profile state is QUIESCENT. Evidence: `docs/verification/USER_BODY_CANONICALIZATION_2026_10_31.json`.
+
 ## 2026-10-31 - USER receipt representation guard
 
 Selected source51c7b13 passed backend health but receipt-only reobserve refused RESPONSE_USER_REPRESENTATION_MISMATCH before assistant completion. Its Copy message predicate is not live-accepted. The shared USER plaintext-reader correction is source-tested only; no exact receipt or unknown-outcome protection was relaxed. Do not resend the existing event or ask for a screenshot to override this guard. Next is qualified package observation of the corrected reader. See `docs/verification/USER_BODY_CANONICALIZATION_2026_10_31.json`.
