@@ -1,3 +1,7 @@
+## 2026-10-31T08:28:12.692322+00:00 - actual SENT accounting qualification
+
+The existing `context-reconcile` SENT branch has now accounted two retained receipts through a separate matched controller from `bbf72a7`, with no browser or provider action. Both accounting states returned RECORDED. A repeated local metadata reconciliation changed no bytes and recreated no queue event. Only the intended active conversation ledger changed; all other 5,106 critical checks matched. The original private context and continuation remain SENT and must not be sent again. This does not qualify unknown-submission browser recovery, installed production correlation, or actual project tool execution. Use the new forensic baseline only for preservation measurements, never release authority. See `docs/verification/KNOWN_USER_CONTEXT_ACCOUNTING_LIVE_2026_10_31.json`.
+
 ## 2026-10-31T08:18:05.222815+00:00 - delivered-context accounting through existing reconciliation
 
 With a matched controller containing this source, `operator web work context-reconcile --project-id PROJECT --input-file FROZEN_ASSIGNMENT_IDENTITY` accounts the initial private context and its exact continuation when the private journal is already SENT. That branch starts no browser and creates/renews no Wake intent. It requires the same unchanged task, local grant, workspace registration and paired target. Unknown submission states retain the existing bounded observe-only browser reconciliation; do not describe the command as universally browser-free.
