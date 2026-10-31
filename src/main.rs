@@ -2762,6 +2762,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         && args.get(1).is_some_and(|arg| arg == "web");
     let operator_project = args.first().is_some_and(|arg| arg == "operator")
         && args.get(1).is_some_and(|arg| arg == "project");
+    let operator_installed_backend = args.first().is_some_and(|arg| arg == "operator")
+        && args.get(1).is_some_and(|arg| arg == "installed-backend");
     match operator_facade::parse_operator_action(args.clone()) {
         Ok(Some(action)) => {
             let workspace = std::env::current_dir()?;
@@ -2786,6 +2788,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             "{}",
                             serde_json::json!({"status":"attention","errorCode":operator_web_error_code(&error)})
                         );
+                    } else if operator_installed_backend {
+                        println!(
+                            "{}",
+                            serde_json::json!({"status":"attention","errorCode":operator_facade::installed_backend_error_code(&error)})
+                        );
                     } else {
                         println!("{{\"status\":\"attention\"}}");
                     }
@@ -2809,6 +2816,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!(
                     "{}",
                     serde_json::json!({"status":"attention","errorCode":operator_web_error_code(&error)})
+                );
+            } else if operator_installed_backend {
+                println!(
+                    "{}",
+                    serde_json::json!({"status":"attention","errorCode":operator_facade::installed_backend_error_code(&error)})
                 );
             } else {
                 println!("{{\"status\":\"attention\"}}");

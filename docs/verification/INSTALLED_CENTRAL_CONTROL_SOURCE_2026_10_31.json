@@ -67,5 +67,48 @@
   "productionExecutableChanged": false,
   "twoWebCodingAccepted": false,
   "nextExecutableTask": "BUILD_SEPARATE_HASH_PINNED_SOURCE_CONTROLLER_AND_QUALIFY_FINITE_TRUSTED_INSTALLED_IMAGE_IN_THE_EXISTING_FIVE_PROJECT_CONTROL_SCOPE",
-  "operatorActionRequired": false
+  "operatorActionRequired": false,
+  "diagnosticFollowup": {
+    "observedUtc": "2026-10-31T05:18:13.334013+00:00",
+    "sourceBaseCommit": "f7587a968e3f16a601fd0da9410713f609bac0ad",
+    "sourceFilesSha256": {
+      "src/main.rs": "7ea940c2ff9b48f37dfcc4c0394d50d7dcd59dab7d20570663794a322a7d0324",
+      "src/operator_facade.rs": "12b410e39b6cf6f0a249601d0177c0ec4f69006a15a2b1600b06a7d4e345f8e9",
+      "src/operator_installed_backend.rs": "822ca0a2dd4916db89219f24c00cc25477a428614149d1723ac69e19be9eae15"
+    },
+    "distinctPassingTestsIncludingRetainedOwnerFixtures": 38,
+    "testProofs": [
+      {
+        "logSha256": "626546cdcb725d817c1f96e2a0431e20d0b376c970ca59224f3a1c3441f93773",
+        "passingCount": 18
+      },
+      {
+        "logSha256": "8ed0fc7b95cb7f081e8dc3b1eb57ad9fa8c6a7346022c04560c5d8a0ef446d7b",
+        "passingCount": 1
+      },
+      {
+        "logSha256": "f48d2385bd3b4d7451adc41cbc0fd6fec584fec69f9e3b990f294e87b2b58156",
+        "passingCount": 2
+      },
+      {
+        "logSha256": "344501f2adcd75b804f94a11cb74593d73f89c0e1852a802d43325bec8675327",
+        "passingCount": 1
+      },
+      {
+        "logSha256": "687be7703a6d955394cf19eeb480e10b86971ef3529ab19bb63673d0ae5837f2",
+        "passingCount": 17
+      }
+    ],
+    "strictClippyLogSha256": "74732388f056e480f0396a848c367648b0294b9c1351f43b0c2b04dbe49e10d2",
+    "readyChecksUnchangedAndSharedWithDiagnostics": 11,
+    "rawChildTextExported": false,
+    "readinessArtifact": "readiness-observation.json",
+    "outputArtifact": "process-output-observation.json",
+    "outputMetadata": "PRESENCE_LENGTH_SHA256_AND_EXISTING_CLOSED_CODE_ONLY",
+    "typedCliErrorCodes": true,
+    "failedCentralRunIdentityAndCleanupEvent": true,
+    "unknownErrorStringsAndPrivateSuffixesRefused": true,
+    "readyGuardWeakened": false,
+    "newDiagnosticControllerLiveAccepted": false
+  }
 }

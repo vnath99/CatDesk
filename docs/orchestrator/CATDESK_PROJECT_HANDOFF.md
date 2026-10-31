@@ -1,3 +1,9 @@
+## 2026-10-31 - central readiness refusal preserved; diagnostic follow-up qualified
+
+The first finite installed-image/control-scope attempt ended after27.297s with INSTALLED_BACKEND_READY_INVALID, before any qualification MCP call, Web message or task execution. Native owner evidence matched the exact controller and proves the owned tree exited; port3200 closed, all5,107 critical checks matched, and profile/bindings/selected development/protected release state remained unchanged. The original outer record lacked that cleanup frame because the CLI reduced failure to generic attention; its original bytes remain preserved with a separate native-proof supplement. The failed run is not installed central-scope acceptance, and the underlying readiness mismatch is still unknown.
+
+The source follow-up preserves all eleven readiness predicates and records only their boolean outcomes, bounded output presence/length/hash and recognized closed error codes. Central failures now emit their own run identity, cleanup result and sanitized code while retaining nonzero exit. No raw child text, credentials, paths, routes, drafts or conversation content enter these diagnostics. Unknown/private error values are refused.38 distinct source/Windows tests and strict Clippy pass. Next build the materially changed diagnostic controller and observe one bounded attempt; do not relax a failed check or replay the unchanged attempt. The trusted C254 authenticated-ingress success remains separate, and current-source review/promotion gates remain open. No operator action is required. Evidence: `docs/verification/INSTALLED_CENTRAL_CONTROL_LIVE_2026_10_31.json` and `docs/verification/INSTALLED_CENTRAL_CONTROL_SOURCE_2026_10_31.json`.
+
 ## 2026-10-31 - finite installed central-control owner source qualified
 
 The existing finite installed-backend owner now has an explicit central-control form:

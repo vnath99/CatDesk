@@ -21,6 +21,7 @@ mod development_backend;
 
 #[path = "operator_installed_backend.rs"]
 mod installed_backend;
+pub(crate) use installed_backend::diagnostic_error_code as installed_backend_error_code;
 
 #[cfg(windows)]
 pub(crate) use installed_backend::{

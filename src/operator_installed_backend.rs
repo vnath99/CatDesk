@@ -360,6 +360,9 @@ fn first(reader: &Reader) -> Result<Value, String> {
     serde_json::from_slice(&line).map_err(|_| "INSTALLED_BACKEND_READY_INVALID".into())
 }
 fn finish_readers(reader: Reader, token: &str) -> Result<(), String> {
+    finish_readers_observed(reader, token, None)
+}
+fn finish_readers_observed(reader: Reader, token: &str, path: Option<&Path>) -> Result<(), String> {
     let output = reader
         .tail
         .join()
@@ -368,6 +371,9 @@ fn finish_readers(reader: Reader, token: &str) -> Result<(), String> {
         .error
         .join()
         .map_err(|_| "INSTALLED_BACKEND_OUTPUT_UNAVAILABLE")?;
+    if let Some(path) = path {
+        save(path, &startup_output_diagnostic(&output, &error))?;
+    }
     if output.overflow
         || error.overflow
         || output.read_failed
@@ -377,6 +383,18 @@ fn finish_readers(reader: Reader, token: &str) -> Result<(), String> {
         return Err("INSTALLED_BACKEND_OUTPUT_INVALID".into());
     }
     Ok(())
+}
+fn startup_output_diagnostic(output: &super::BoundedOutput, error: &super::BoundedOutput) -> Value {
+    let code = error
+        .text
+        .split(|c: char| !c.is_ascii_uppercase() && !c.is_ascii_digit() && c != '_')
+        .find(|word| diagnostic_error_code(word) != "INSTALLED_BACKEND_REFUSED")
+        .map(diagnostic_error_code);
+    json!({"schemaVersion":1,"phase":"CHILD_OUTPUT","knownErrorCode":code,
+        "stderrPresent":!error.text.is_empty(),"stderrBytes":error.text.len(),
+        "stderrSha256":format!("{:x}",Sha256::digest(error.text.as_bytes())),
+        "stdoutTailPresent":!output.text.is_empty(),"overflow":output.overflow||error.overflow,
+        "readFailed":output.read_failed||error.read_failed})
 }
 fn ps_command(root: &Path, text: String) -> Result<Command, String> {
     let mut c = Command::new(super::trusted_windows_powershell(root)?);
@@ -524,25 +542,138 @@ fn validate_ready_for(
     endpoint: &str,
     tool_mode: &str,
 ) -> Result<(), String> {
-    let workspace = value["workspace"]
-        .as_str()
-        .and_then(|s| Path::new(s).canonicalize().ok())
-        .map(crate::command::normalize_windows_verbatim_path);
-    if value["status"] != "ready"
-        || value["mode"] != "Computer"
-        || value["tool_mode"] != tool_mode
-        || value["maximum_runtime_seconds"] != seconds
-        || value["web_auto_scheduler_enabled"] != false
-        || !value["project_scope"].is_null()
-        || value["mcp_url"] != endpoint
-        || value["auth"]["scheme"] != "bearer"
-        || value["auth"]["token_redacted"] != true
-        || workspace.as_deref() != Some(root)
-        || value["config_path"].as_str().map(Path::new) != Some(config)
+    if readiness_checks(value, root, config, seconds, endpoint, tool_mode)
+        .iter()
+        .any(|(_, matched)| !matched)
     {
         return Err("INSTALLED_BACKEND_READY_INVALID".into());
     }
     Ok(())
+}
+fn readiness_checks(
+    value: &Value,
+    root: &Path,
+    config: &Path,
+    seconds: u64,
+    endpoint: &str,
+    tool_mode: &str,
+) -> [(&'static str, bool); 11] {
+    let workspace = value["workspace"]
+        .as_str()
+        .and_then(|s| Path::new(s).canonicalize().ok())
+        .map(crate::command::normalize_windows_verbatim_path);
+    [
+        ("INSTALLED_BACKEND_READY_STATUS", value["status"] == "ready"),
+        ("INSTALLED_BACKEND_READY_MODE", value["mode"] == "Computer"),
+        (
+            "INSTALLED_BACKEND_READY_TOOLS",
+            value["tool_mode"] == tool_mode,
+        ),
+        (
+            "INSTALLED_BACKEND_READY_BUDGET",
+            value["maximum_runtime_seconds"] == seconds,
+        ),
+        (
+            "INSTALLED_BACKEND_READY_AUTO",
+            value["web_auto_scheduler_enabled"] == false,
+        ),
+        (
+            "INSTALLED_BACKEND_READY_PROJECT",
+            value["project_scope"].is_null(),
+        ),
+        (
+            "INSTALLED_BACKEND_READY_ROUTE",
+            value["mcp_url"] == endpoint,
+        ),
+        (
+            "INSTALLED_BACKEND_READY_AUTH",
+            value["auth"]["scheme"] == "bearer",
+        ),
+        (
+            "INSTALLED_BACKEND_READY_TOKEN",
+            value["auth"]["token_redacted"] == true,
+        ),
+        (
+            "INSTALLED_BACKEND_READY_WORKSPACE",
+            workspace.as_deref() == Some(root),
+        ),
+        (
+            "INSTALLED_BACKEND_READY_CONFIG",
+            value["config_path"].as_str().map(Path::new) == Some(config),
+        ),
+    ]
+}
+fn readiness_diagnostic(
+    value: &Value,
+    root: &Path,
+    config: &Path,
+    seconds: u64,
+    endpoint: &str,
+    tool_mode: &str,
+) -> Value {
+    let checks = readiness_checks(value, root, config, seconds, endpoint, tool_mode);
+    let reason = checks
+        .iter()
+        .find(|(_, matched)| !matched)
+        .map_or("READY_VALIDATED", |(code, _)| *code);
+    let checks = checks
+        .into_iter()
+        .map(|(code, matched)| (code.to_owned(), Value::Bool(matched)))
+        .collect::<serde_json::Map<_, _>>();
+    let child_error = value
+        .get("errorCode")
+        .or_else(|| value.get("error"))
+        .and_then(Value::as_str)
+        .map(diagnostic_error_code);
+    json!({"schemaVersion":1,"phase":"CHILD_READINESS","reason":reason,"checks":checks,"childErrorCode":child_error})
+}
+pub(crate) fn diagnostic_error_code(error: &str) -> &str {
+    let code = error.split_once(':').map_or(error, |(code, _)| code);
+    match code {
+        "INSTALLED_BACKEND_READY_STATUS"
+        | "INSTALLED_BACKEND_READY_MODE"
+        | "INSTALLED_BACKEND_READY_TOOLS"
+        | "INSTALLED_BACKEND_READY_BUDGET"
+        | "INSTALLED_BACKEND_READY_AUTO"
+        | "INSTALLED_BACKEND_READY_PROJECT"
+        | "INSTALLED_BACKEND_READY_ROUTE"
+        | "INSTALLED_BACKEND_READY_AUTH"
+        | "INSTALLED_BACKEND_READY_TOKEN"
+        | "INSTALLED_BACKEND_READY_WORKSPACE"
+        | "INSTALLED_BACKEND_READY_CONFIG"
+        | "INSTALLED_BACKEND_READY_INVALID"
+        | "INSTALLED_BACKEND_READY_TIMEOUT"
+        | "INSTALLED_BACKEND_AUTH_REQUIRED"
+        | "INSTALLED_BACKEND_BUDGET_INVALID"
+        | "INSTALLED_BACKEND_AUTHORITY_UNPROVEN"
+        | "INSTALLED_BACKEND_HELPER_UNQUALIFIED"
+        | "INSTALLED_BACKEND_INPUT_CHANGED"
+        | "INSTALLED_BACKEND_INPUT_PIN_FAILED"
+        | "INSTALLED_BACKEND_INSUFFICIENT_BUDGET"
+        | "INSTALLED_BACKEND_OWNER_PROOF_FAILED"
+        | "INSTALLED_BACKEND_NOT_EMPTY"
+        | "INSTALLED_BACKEND_HTTP_INVALID"
+        | "INSTALLED_BACKEND_AUTH_UNPROVEN"
+        | "INSTALLED_BACKEND_CATALOG_INVALID"
+        | "INSTALLED_BACKEND_CHILD_FAILED"
+        | "INSTALLED_BACKEND_PROTECTED_INPUT_CHANGED"
+        | "INSTALLED_BACKEND_HISTORY_CHANGED"
+        | "INSTALLED_CENTRAL_CONTROL_UNAVAILABLE"
+        | "INSTALLED_CENTRAL_CONTROL_OVERLAPS_INSTALLATION"
+        | "INSTALLED_CENTRAL_CONTROL_AUTHORITY_REQUIRED"
+        | "INSTALLED_CENTRAL_CATALOG_INVALID"
+        | "INSTALLED_CENTRAL_TASK_TOOL_UNAVAILABLE"
+        | "DEV_PRODUCTION_ROOT_MISMATCH" => code,
+        _ if error.starts_with("installed-backend ") => "INSTALLED_BACKEND_ARGUMENTS_INVALID",
+        _ => "INSTALLED_BACKEND_REFUSED",
+    }
+}
+
+fn failure_event(result: &Value) -> Value {
+    json!({"status":"ATTENTION","profile":result["profile"],"runId":result["runId"],
+        "installedSha256":result["installedSha256"],"ownedTreeExited":result["ownedTreeExited"],
+        "errorCode":diagnostic_error_code(result["errorCode"].as_str().unwrap_or("")),
+        "nativeDaemon":false,"unattended":false})
 }
 pub(crate) async fn verify_mcp_at(endpoint: &str, token: &str) -> Result<(), String> {
     verify_mcp_catalog_at(endpoint, token, false).await
@@ -957,7 +1088,25 @@ fn run_owned(
         let mut child = OwnedCandidateChild::spawn(&mut command)?;
         let reader = readers(&mut child)?;
         let child_outcome: Result<(), String> = (|| {
-            let ready = first(&reader)?;
+            let ready = match first(&reader) {
+                Ok(value) => value,
+                Err(error) => {
+                    save(
+                        &path.join("readiness-observation.json"),
+                        &json!({"schemaVersion":1,"phase":"CHILD_READINESS","reason":diagnostic_error_code(&error),"frameReadable":false}),
+                    )?;
+                    return Err(error);
+                }
+            };
+            let diagnostic = readiness_diagnostic(
+                &ready,
+                &control,
+                &config,
+                child_seconds,
+                &endpoint,
+                tool_mode,
+            );
+            save(&path.join("readiness-observation.json"), &diagnostic)?;
             if central.is_some() {
                 validate_ready_for(
                     &ready,
@@ -966,7 +1115,13 @@ fn run_owned(
                     child_seconds,
                     &endpoint,
                     tool_mode,
-                )?;
+                )
+                .map_err(|_| {
+                    diagnostic["reason"]
+                        .as_str()
+                        .unwrap_or("INSTALLED_BACKEND_READY_INVALID")
+                        .to_owned()
+                })?;
             } else {
                 validate_ready(&ready, &root, &config, child_seconds)?;
             }
@@ -1012,7 +1167,11 @@ fn run_owned(
         })();
         child.terminate_tree_and_confirm_quiescent()?;
         child_exited = true;
-        finish_readers(reader, token)?;
+        finish_readers_observed(
+            reader,
+            token,
+            Some(&path.join("process-output-observation.json")),
+        )?;
         empty_proof(&root, &reconcile)?;
         if hash(&binary)? != expected || hash(&source)? != source_hash {
             return Err("INSTALLED_BACKEND_PROTECTED_INPUT_CHANGED".into());
@@ -1045,6 +1204,12 @@ fn run_owned(
     if let Some(path) = directory {
         save(&path.join("result.json"), &result)?;
     }
+    if central.is_some() && error.is_some() {
+        // Preserve the failure's own run identity and cleanup proof on the
+        // existing JSON-lines channel without reflecting private child output.
+        println!("{}", failure_event(&result));
+        let _ = std::io::stdout().flush();
+    }
     outcome?;
     cleanup?;
     Ok(result)
@@ -1057,6 +1222,129 @@ fn run_owned(_: &Path, _: u64, _: &str, _: Option<&CentralOptions>) -> Result<Va
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn readiness_diagnostics_keep_every_gate_and_never_export_child_text() {
+        let root = std::env::temp_dir()
+            .canonicalize()
+            .map(crate::command::normalize_windows_verbatim_path)
+            .unwrap();
+        let config = root.join("owned-readiness.toml");
+        let endpoint = "http://127.0.0.1:3200/private-test-route/mcp";
+        let ready = json!({"status":"ready","mode":"Computer","tool_mode":"supervisor-only",
+            "maximum_runtime_seconds":60,"web_auto_scheduler_enabled":false,"project_scope":null,
+            "mcp_url":endpoint,"auth":{"scheme":"bearer","token_redacted":true},"workspace":root,"config_path":config,
+            "arbitrary":"PRIVATE_SENTINEL_BODY"});
+        assert_eq!(
+            readiness_diagnostic(&ready, &root, &config, 60, endpoint, "supervisor-only")["reason"],
+            "READY_VALIDATED"
+        );
+        for (field, value, reason) in [
+            ("status", json!("PRIVATE_SENTINEL_BODY"), "STATUS"),
+            ("mode", json!("Browser"), "MODE"),
+            ("tool_mode", json!("multi-tools"), "TOOLS"),
+            ("maximum_runtime_seconds", json!(61), "BUDGET"),
+            ("web_auto_scheduler_enabled", json!(true), "AUTO"),
+            (
+                "project_scope",
+                json!({"secret":"PRIVATE_SENTINEL_BODY"}),
+                "PROJECT",
+            ),
+            ("mcp_url", json!("https://private.invalid/mcp"), "ROUTE"),
+            (
+                "auth",
+                json!({"scheme":"legacy","token_redacted":true}),
+                "AUTH",
+            ),
+            (
+                "auth",
+                json!({"scheme":"bearer","token_redacted":false}),
+                "TOKEN",
+            ),
+            ("workspace", json!("PRIVATE_SENTINEL_BODY"), "WORKSPACE"),
+            ("config_path", json!("PRIVATE_SENTINEL_BODY"), "CONFIG"),
+        ] {
+            let mut changed = ready.clone();
+            changed[field] = value;
+            let diagnostic =
+                readiness_diagnostic(&changed, &root, &config, 60, endpoint, "supervisor-only");
+            assert_eq!(
+                diagnostic["reason"],
+                format!("INSTALLED_BACKEND_READY_{reason}")
+            );
+            assert!(
+                validate_ready_for(&changed, &root, &config, 60, endpoint, "supervisor-only")
+                    .is_err()
+            );
+            let checks = diagnostic["checks"].as_object().unwrap();
+            assert_eq!(checks.len(), 11);
+            assert!(checks.values().all(Value::is_boolean));
+            let text = diagnostic.to_string();
+            assert!(
+                !text.contains("PRIVATE_SENTINEL_BODY")
+                    && !text.contains("private.invalid")
+                    && !text.contains("private-test-route")
+            );
+        }
+    }
+
+    #[test]
+    fn installed_error_codes_drop_unknown_values_and_private_suffixes() {
+        assert_eq!(
+            diagnostic_error_code("INSTALLED_BACKEND_READY_CONFIG: PRIVATE_SENTINEL"),
+            "INSTALLED_BACKEND_READY_CONFIG"
+        );
+        assert_eq!(
+            diagnostic_error_code("installed-backend PRIVATE_SENTINEL"),
+            "INSTALLED_BACKEND_ARGUMENTS_INVALID"
+        );
+        for value in [
+            "INSTALLED_BACKEND_PRIVATE_SENTINEL",
+            "PRIVATE_SENTINEL",
+            "Bearer private-test-token",
+            "DEV_PRIVATE_SENTINEL",
+            "",
+        ] {
+            assert_eq!(diagnostic_error_code(value), "INSTALLED_BACKEND_REFUSED");
+        }
+    }
+
+    #[test]
+    fn child_output_diagnostic_exports_known_codes_and_hashes_without_text() {
+        let output = super::super::BoundedOutput::default();
+        let error = super::super::BoundedOutput {
+            text: "Error: DEV_PRODUCTION_ROOT_MISMATCH: PRIVATE_SENTINEL Bearer private-test-value"
+                .into(),
+            ..Default::default()
+        };
+        let observed = startup_output_diagnostic(&output, &error);
+        assert_eq!(observed["knownErrorCode"], "DEV_PRODUCTION_ROOT_MISMATCH");
+        assert_eq!(observed["stderrPresent"], true);
+        assert!(
+            !observed.to_string().contains("PRIVATE_SENTINEL")
+                && !observed.to_string().contains("private-test-value")
+        );
+        let error = super::super::BoundedOutput {
+            text: "PRIVATE_SENTINEL".into(),
+            ..Default::default()
+        };
+        assert!(startup_output_diagnostic(&output, &error)["knownErrorCode"].is_null());
+    }
+
+    #[test]
+    fn failed_run_event_keeps_its_identity_cleanup_and_exit_failure_without_raw_errors() {
+        let report = failure_event(
+            &json!({"profile":"INSTALLED_CENTRAL_CONTROL","runId":"owned-run",
+            "installedSha256":"a".repeat(64),"ownedTreeExited":true,
+            "errorCode":"INSTALLED_BACKEND_READY_CONFIG: PRIVATE_SENTINEL",
+            "rawChildOutput":"PRIVATE_SENTINEL"}),
+        );
+        assert_eq!(report["status"], "ATTENTION");
+        assert_eq!(report["runId"], "owned-run");
+        assert_eq!(report["ownedTreeExited"], true);
+        assert_eq!(report["errorCode"], "INSTALLED_BACKEND_READY_CONFIG");
+        assert!(!report.to_string().contains("PRIVATE_SENTINEL"));
+    }
+
     #[test]
     fn central_cli_rejects_remote_routes_unbounded_lifetime_and_extra_controls() {
         let control = std::env::temp_dir();
