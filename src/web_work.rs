@@ -88,6 +88,9 @@ pub(crate) fn context_action(
         "context-send" => crate::project_mcp_task::InitialContextAction::Send,
         "context-reconcile" => crate::project_mcp_task::InitialContextAction::Reconcile,
         "context-continue" => crate::project_mcp_task::InitialContextAction::Continue,
+        "context-deliver-continuation" => {
+            crate::project_mcp_task::InitialContextAction::DeliverContinuation
+        }
         _ => return Err("WEB_TASK_CONTEXT_OPERATION_INVALID".into()),
     };
     let request = AssignmentRequest::parse(args)?;

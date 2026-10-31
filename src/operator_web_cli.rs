@@ -295,6 +295,7 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
             | "context-send"
             | "context-reconcile"
             | "context-continue"
+            | "context-deliver-continuation"
             | "context-retry-prepare"
             | "execution-revoke",
         ) => {
@@ -335,6 +336,7 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                     | "context-send"
                     | "context-reconcile"
                     | "context-continue"
+                    | "context-deliver-continuation"
                     | "context-retry-prepare"
             ) {
                 Ok(WebAction::WorkContext {
@@ -2161,6 +2163,7 @@ mod tests {
             "context-send",
             "context-reconcile",
             "context-continue",
+            "context-deliver-continuation",
             "context-retry-prepare",
         ] {
             let command = args(&[

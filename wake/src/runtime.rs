@@ -27,7 +27,7 @@ mod review_reconcile;
 mod scoped_review;
 pub(crate) use response::validate_observation as validate_response_observation;
 pub use review_reconcile::{diagnose_scoped_review_guarded, reconcile_scoped_review_guarded};
-pub use scoped_review::run_scoped_review;
+pub use scoped_review::{run_scoped_review, run_scoped_task_continuation};
 #[path = "runtime_task_context.rs"]
 mod task_context;
 pub use task_context::{TaskContextOperation, TaskContextSubmission, run_private_task_context};
@@ -6974,6 +6974,7 @@ impl SubmissionAdapter for Adapter {
 
 struct ScopedReviewGuard<'a> {
     deadline: Instant,
+    review_event: bool,
     before_submit: &'a mut dyn FnMut(&crate::protocol::Event, &Target) -> Result<()>,
     keep_running: &'a dyn Fn() -> Result<()>,
 }
@@ -7003,7 +7004,11 @@ fn attempt_inner<A: SubmissionAdapter>(
     status: &mut Status,
     mut scoped: Option<&mut ScopedReviewGuard<'_>>,
 ) -> Result<()> {
-    if is_scoped_review_event(&d.event) != scoped.is_some() {
+    let review_event = is_scoped_review_event(&d.event);
+    if scoped
+        .as_ref()
+        .map_or(review_event, |guard| guard.review_event != review_event)
+    {
         return Err("SCOPED_REVIEW_EXPLICIT_GUARD_REQUIRED".into());
     }
     if let Some(guard) = scoped.as_ref() {

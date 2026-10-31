@@ -1,3 +1,11 @@
+## 2026-10-31T07:25:45.860904+00:00 - one exact granted-task continuation, without the shared scheduler
+
+```powershell
+& '<qualified-controller>' operator web work context-deliver-continuation --project-id '<registered-project>' --input-file '<frozen-assignment-identity.json>'
+```
+
+Use a separate controller built from the published source containing this command. It admits the same strict six-field assignment identity as the existing context commands, requires an OPEN associated task, its exact existing local execution grant and a SENT private-context receipt. It publishes/reuses the fixed key-free continuation event and dispatches only that event through the existing scoped transport, with a 120-second native deadline and unchanged STOPPED host intent. It starts no shared scheduler, backend or external runtime. Prepare any authorized serving window first; continuation TTL remains 600 seconds and duplicates do not renew it. SENT and unknown outcomes refuse another submission. Existing SCOPED_REVIEW_* error codes belong to the reused transport; source-review consent does not grant coding authority. No message/URL/workspace/event/runtime overrides are supported. The old source 90030ce controller does not implement this command.
+
 ## 2026-10-31T07:16:36.469869+00:00 - initial context frame compatibility and completed delivery
 
 Ordinary initial-task context requests must fit 8,192 serialized UTF-8 bytes including JSON escaping and the terminating LF, for both Submit and read-only Reconcile. Source validates this before preparation writes and browser startup, returning TASK_CONTEXT_REQUEST_TOO_LARGE without enlarging adapter/bootstrap permissions. The separate commit 90030ce controller already delivered one independently checked 4,469-byte frozen context and recorded SENT. Do not resend it. Only a separate existing-grant continuation is next; its 600-second TTL begins when queued, so prepare the bounded runtime window first. USER delivery does not establish assistant acknowledgment or actual project tool use. The new admission correction is source-qualified; it does not replace the selected browser package or production executable.

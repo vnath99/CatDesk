@@ -12,6 +12,7 @@ pub(crate) enum InitialContextAction {
     Send,
     Reconcile,
     Continue,
+    DeliverContinuation,
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -426,9 +427,43 @@ pub(crate) fn run_initial_context(
 ) -> Result<Value, String> {
     let root = crate::wake_protocol_client::wake_root_for_workspace(&scope.control_workspace)?;
     let store = catdesk_wake::store::Store::open(&root)?;
-    if action == InitialContextAction::Continue {
+    if matches!(
+        action,
+        InitialContextAction::Continue | InitialContextAction::DeliverContinuation
+    ) {
         keep_running()?;
-        return queue_continuation(scope, record, target, &store);
+        let queued = queue_continuation(scope, record, target, &store)?;
+        if action == InitialContextAction::Continue {
+            return Ok(queued);
+        }
+        let event_id = queued["eventId"]
+            .as_str()
+            .ok_or("WEB_TASK_CONTEXT_CONTINUATION_INVALID")?;
+        // SENT/unknown deliveries may already be archived. Read their durable
+        // event only for identity; the existing sender still refuses replay.
+        let delivery = store.delivery(event_id)?;
+        let event = match delivery {
+            Some(delivery) => delivery.event,
+            None => catdesk_wake::store::read::<catdesk_wake::protocol::Event>(
+                &store.root().join("queue").join(format!("{event_id}.json")),
+            )?,
+        };
+        let mut before = |actual: &catdesk_wake::protocol::Event, actual_target: &Target| {
+            keep_running()?;
+            load(scope, record, target)?;
+            if actual != &event || actual_target != target {
+                return Err("WEB_TASK_CONTEXT_CONTINUATION_CHANGED".into());
+            }
+            Ok(())
+        };
+        return catdesk_wake::runtime::run_scoped_task_continuation(
+            &store,
+            &event,
+            target,
+            120,
+            &mut before,
+            keep_running,
+        );
     }
     run_with_sender(
         scope,
@@ -922,6 +957,17 @@ mod tests {
         prepare_initial_context(&scope, &record, &record.target).unwrap();
         assert_eq!(
             queue_continuation(&scope, &record, &record.target, &store).unwrap_err(),
+            "WEB_TASK_CONTEXT_RECEIPT_REQUIRED"
+        );
+        assert_eq!(
+            run_initial_context(
+                &scope,
+                &record,
+                &record.target,
+                InitialContextAction::DeliverContinuation,
+                &|| Ok(())
+            )
+            .unwrap_err(),
             "WEB_TASK_CONTEXT_RECEIPT_REQUIRED"
         );
         sent(&scope, &record, &store);

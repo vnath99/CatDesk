@@ -1,7 +1,41 @@
-//! One explicit, grant-guarded review event; no persistent host or scheduler.
+//! One explicit, grant-guarded event; no persistent host or scheduler.
 use super::*;
 use crate::protocol::Event;
 use serde_json::{Value, json};
+
+enum Selection<'a> {
+    Review,
+    TaskContinuation(&'a Event, &'a Target),
+}
+
+/// The local task owner supplies the immutable event selected from its existing
+/// receipt-checked context. This path never scans or dispatches sibling queues.
+pub fn run_scoped_task_continuation(
+    store: &Store,
+    event: &Event,
+    target: &Target,
+    maximum_seconds: u64,
+    before_submit: &mut dyn FnMut(&Event, &Target) -> Result<()>,
+    keep_running: &dyn Fn() -> Result<()>,
+) -> Result<Value> {
+    run_selected_with_adapter(
+        store,
+        &event.event_id,
+        maximum_seconds,
+        Selection::TaskContinuation(event, target),
+        before_submit,
+        keep_running,
+        |deadline, guard| {
+            let installed = installed_bootstrap_directory(store)?;
+            Adapter::spawn_from_installed_guarded(
+                store.root(),
+                &installed,
+                deadline.saturating_duration_since(Instant::now()),
+                guard,
+            )
+        },
+    )
+}
 
 pub fn run_scoped_review(
     store: &Store,
@@ -36,6 +70,26 @@ fn run_with_adapter<A: SubmissionAdapter>(
     keep_running: &dyn Fn() -> Result<()>,
     connect: impl FnOnce(Instant, &dyn Fn() -> Result<()>) -> Result<A>,
 ) -> Result<Value> {
+    run_selected_with_adapter(
+        store,
+        event_id,
+        maximum_seconds,
+        Selection::Review,
+        before_submit,
+        keep_running,
+        connect,
+    )
+}
+
+fn run_selected_with_adapter<A: SubmissionAdapter>(
+    store: &Store,
+    event_id: &str,
+    maximum_seconds: u64,
+    selection: Selection<'_>,
+    before_submit: &mut dyn FnMut(&Event, &Target) -> Result<()>,
+    keep_running: &dyn Fn() -> Result<()>,
+    connect: impl FnOnce(Instant, &dyn Fn() -> Result<()>) -> Result<A>,
+) -> Result<Value> {
     if !crate::protocol::valid_id(event_id) || !(1..=180).contains(&maximum_seconds) {
         return Err("SCOPED_REVIEW_ARGUMENTS_INVALID".into());
     }
@@ -63,20 +117,47 @@ fn run_with_adapter<A: SubmissionAdapter>(
     // sibling project's queue, and never accept a caller-provided message.
     let event: Event = read(&store.root().join("queue").join(format!("{event_id}.json")))?;
     event.validate()?;
-    if event.event_id != event_id
-        || event.event_type != "source_review"
-        || event
+    let review = event.event_type == "source_review"
+        && event
             .audit_references
             .iter()
             .filter(|item| item.starts_with("catdesk-review-v1:"))
             .count()
-            != 1
-        || event
+            == 1
+        && !event
             .audit_references
             .iter()
-            .any(|item| item == "catdesk-review-v1:")
-    {
+            .any(|item| item == "catdesk-review-v1:");
+    let permitted = match selection {
+        Selection::Review => review,
+        Selection::TaskContinuation(expected, target) => {
+            target.validate()?;
+            &event == expected
+                && event.event_type == "engineering_attention"
+                && !event
+                    .audit_references
+                    .iter()
+                    .any(|item| item.starts_with("catdesk-review-v1:"))
+                && store.config()?.targets.get(&event.project_id) == Some(target)
+                && event.wake_metadata()?.is_some_and(|metadata| {
+                    metadata.purpose == crate::protocol::WakePurpose::NewTask
+                        && metadata
+                            .source_turn_id
+                            .strip_prefix("initial-context-")
+                            .is_some_and(|id| {
+                                id.len() == 64
+                                    && id
+                                        .bytes()
+                                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                            })
+                })
+        }
+    };
+    if event.event_id != event_id || !permitted {
         return Err("SCOPED_REVIEW_EVENT_INVALID".into());
+    }
+    if event.is_expired_at(now())? {
+        return Err("QUEUE_EVENT_EXPIRED".into());
     }
     if store
         .timers_for_project(&event.project_id)?
@@ -92,6 +173,7 @@ fn run_with_adapter<A: SubmissionAdapter>(
         let mut adapter = connect(deadline, &guard)?;
         let mut scoped = ScopedReviewGuard {
             deadline,
+            review_event: review,
             before_submit,
             keep_running: &guard,
         };
@@ -138,7 +220,7 @@ fn run_with_adapter<A: SubmissionAdapter>(
         return Err("SCOPED_REVIEW_RECEIPT_REQUIRED".into());
     }
     Ok(
-        json!({"action":"scoped_review_run","eventId":event_id,"projectId":event.project_id,
+        json!({"action":if review {"scoped_review_run"} else {"scoped_task_continuation_run"},"eventId":event_id,"projectId":event.project_id,
         "targetGeneration":final_delivery.target.generation,"targetDigest":final_delivery.target.digest,
         "phase":final_delivery.phase,"receipt":final_delivery.receipt,"maximumSeconds":maximum_seconds,
         "hostStarted":false,"schedulerStarted":false,"desiredStateChanged":false}),
@@ -258,6 +340,197 @@ mod tests {
             cancel_after_ack: false,
             delay: Duration::ZERO,
         }
+    }
+
+    fn continuation(store: &Store, target: &Target) -> Event {
+        store
+            .produce_expected_wake(
+                "alpha",
+                "Continue the exact already-granted task",
+                target,
+                crate::store::WakeIntent {
+                    purpose: crate::protocol::WakePurpose::NewTask,
+                    source_event_id: "existing-source-task",
+                    source_turn_id: &format!("initial-context-{}", "a".repeat(64)),
+                    priority: 0,
+                    ttl_seconds: 600,
+                },
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn scoped_task_continuation_sends_only_exact_selection_while_foreign_queue_is_unreadable() {
+        let (store, review, target) = fixture("task-continuation-isolation");
+        let event = continuation(&store, &target);
+        let foreign = store.root().join("queue/beta-unreadable.json");
+        std::fs::write(&foreign, b"preserve unrelated invalid queue bytes").unwrap();
+        let fake = adapter(&event, &target);
+        let admitted = fake.admitted.clone();
+        let ack = fake.ack_count.clone();
+        let before_control = std::fs::read(store.root().join("control.json")).unwrap();
+        let result = run_selected_with_adapter(
+            &store,
+            &event.event_id,
+            120,
+            Selection::TaskContinuation(&event, &target),
+            &mut |actual, actual_target| {
+                assert_eq!(actual, &event);
+                assert_eq!(actual_target, &target);
+                admitted.set(true);
+                Ok(())
+            },
+            &|| Ok(()),
+            |_, _| Ok(fake),
+        )
+        .unwrap();
+        assert_eq!(result["action"], "scoped_task_continuation_run");
+        assert_eq!(result["phase"], "SENT");
+        assert_eq!(ack.get(), 1);
+        assert!(store.delivery(&review.event_id).unwrap().is_none());
+        assert!(store.delivery("beta-1").unwrap().is_none());
+        assert_eq!(
+            std::fs::read(&foreign).unwrap(),
+            b"preserve unrelated invalid queue bytes"
+        );
+        assert_eq!(
+            std::fs::read(store.root().join("control.json")).unwrap(),
+            before_control
+        );
+    }
+
+    #[test]
+    fn scoped_task_continuation_refuses_foreign_changed_or_review_selection_before_browser() {
+        for changed in ["body", "target", "review"] {
+            let (store, review, target) = fixture(&format!("task-selection-{changed}"));
+            let event = continuation(&store, &target);
+            let mut expected = event.clone();
+            let mut expected_target = target.clone();
+            let selected = match changed {
+                "body" => {
+                    expected.message.push_str(" changed");
+                    &event
+                }
+                "target" => {
+                    expected_target =
+                        Target::new(99, "https://chatgpt.com/c/foreign".into()).unwrap();
+                    &event
+                }
+                _ => {
+                    expected = review.clone();
+                    &review
+                }
+            };
+            let result = run_selected_with_adapter::<FakeAdapter>(
+                &store,
+                &selected.event_id,
+                120,
+                Selection::TaskContinuation(&expected, &expected_target),
+                &mut |_, _| panic!("invalid selection cannot authorize submission"),
+                &|| Ok(()),
+                |_, _| panic!("invalid selection cannot start browser"),
+            );
+            assert_eq!(result.unwrap_err(), "SCOPED_REVIEW_EVENT_INVALID");
+            assert!(store.delivery(&selected.event_id).unwrap().is_none());
+        }
+    }
+
+    #[test]
+    fn scoped_task_continuation_keeps_unknown_outcome_and_suppresses_completed_replay() {
+        for unknown in [false, true] {
+            let (store, _, target) = fixture(if unknown {
+                "task-unknown"
+            } else {
+                "task-complete"
+            });
+            let event = continuation(&store, &target);
+            let mut fake = adapter(&event, &target);
+            if unknown {
+                fake.receipt.message_digest = "0".repeat(64);
+            }
+            let admitted = fake.admitted.clone();
+            let ack = fake.ack_count.clone();
+            let result = run_selected_with_adapter(
+                &store,
+                &event.event_id,
+                120,
+                Selection::TaskContinuation(&event, &target),
+                &mut |_, _| {
+                    admitted.set(true);
+                    Ok(())
+                },
+                &|| Ok(()),
+                |_, _| Ok(fake),
+            );
+            assert_eq!(result.is_err(), unknown);
+            assert_eq!(ack.get(), 1);
+            let before = std::fs::read(
+                store
+                    .root()
+                    .join("deliveries")
+                    .join(format!("{}.json", event.event_id)),
+            )
+            .unwrap();
+            let result = run_selected_with_adapter::<FakeAdapter>(
+                &store,
+                &event.event_id,
+                120,
+                Selection::TaskContinuation(&event, &target),
+                &mut |_, _| panic!("replay cannot authorize submission"),
+                &|| Ok(()),
+                |_, _| panic!("replay cannot start browser"),
+            );
+            assert_eq!(result.unwrap_err(), "SCOPED_REVIEW_REPLAY_REFUSED");
+            assert_eq!(
+                std::fs::read(
+                    store
+                        .root()
+                        .join("deliveries")
+                        .join(format!("{}.json", event.event_id))
+                )
+                .unwrap(),
+                before
+            );
+        }
+    }
+
+    #[test]
+    fn scoped_task_continuation_expired_intent_is_refused_before_claim_or_browser() {
+        let (store, _, target) = fixture("task-expired");
+        let created = now() - 601;
+        let event = Event {
+            schema_version: 1,
+            event_id: "expired-task-continuation".into(),
+            project_id: "alpha".into(),
+            event_type: "engineering_attention".into(),
+            created_utc: created,
+            message: "Continue exact task".into(),
+            target_generation: target.generation,
+            audit_references: vec![],
+        }
+        .with_wake_metadata(crate::protocol::WakeMetadata {
+            purpose: crate::protocol::WakePurpose::NewTask,
+            source_event_id: "existing-source-task".into(),
+            source_turn_id: format!("initial-context-{}", "a".repeat(64)),
+            priority: 0,
+            expires_utc: created + 600,
+        })
+        .unwrap();
+        store.publish(&event).unwrap();
+        assert_eq!(
+            run_selected_with_adapter::<FakeAdapter>(
+                &store,
+                &event.event_id,
+                120,
+                Selection::TaskContinuation(&event, &target),
+                &mut |_, _| panic!(),
+                &|| Ok(()),
+                |_, _| panic!("expired intent cannot start browser")
+            )
+            .unwrap_err(),
+            "QUEUE_EVENT_EXPIRED"
+        );
+        assert!(store.delivery(&event.event_id).unwrap().is_none());
     }
 
     #[test]
