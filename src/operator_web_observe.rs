@@ -7,6 +7,20 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 
+/// Only a literal assistant error card is unavailable content. Diagnostic
+/// explanations and USER text quoting the same phrase remain useful history.
+pub(super) fn failed_assistant_placeholder(role: &str, text: &str) -> bool {
+    role == "ASSISTANT"
+        && text
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .replace(['’', '‘'], "'")
+            .to_lowercase()
+            .trim_end_matches('.')
+            == "this response couldn't load"
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Snapshot {
@@ -178,18 +192,11 @@ pub(super) fn ingest(
     confirm_target()?;
     for message in &snapshot.messages {
         confirm_target()?;
-        let normalized = message
-            .text
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ")
-            .replace(['’', '‘'], "'")
-            .to_lowercase();
-        let load_error = message.role == "ASSISTANT"
-            && normalized.trim_end_matches('.') == "this response couldn't load";
+        let has_text = !message.text.trim().is_empty();
+        let load_error = failed_assistant_placeholder(&message.role, &message.text);
         let complete = message.text_complete
             && message.revision_complete
-            && !normalized.is_empty()
+            && has_text
             && !load_error
             && matches!(message.identity_basis.as_str(), "UNIT_KEY" | "MESSAGE_ID");
         if let Some(id) = message.message_hash.as_ref().filter(|_| complete) {
@@ -213,7 +220,7 @@ pub(super) fn ingest(
         } else {
             uncertain += 1;
             if message.body_text_observed
-                && !normalized.is_empty()
+                && has_text
                 && !load_error
                 && let Some(id) = &message.message_hash
             {

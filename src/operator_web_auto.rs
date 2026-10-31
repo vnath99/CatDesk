@@ -348,11 +348,20 @@ pub(super) fn run_step_with_capture(
     capture: impl FnOnce() -> Result<Value, String>,
 ) -> Result<(&'static str, Value), String> {
     keep_running()?;
-    let accounting =
-        super::receipts::reconcile(workspace, project, keep_running).unwrap_or_else(|reason| {
+    // Receipt storage is best-effort; the caller's cancellation/ownership guard
+    // is not. Preserve even a one-shot guard failure rather than swallowing it
+    // as a counter error and allowing a later successful check to start capture.
+    let guard_failed = std::cell::Cell::new(false);
+    let accounting = super::receipts::reconcile(workspace, project, &|| {
+        keep_running().inspect_err(|_| guard_failed.set(true))
+    });
+    let accounting = match accounting {
+        Err(reason) if guard_failed.get() => return Err(reason),
+        result => result.unwrap_or_else(|reason| {
             json!({"status":if reason == "WEB_CONTEXT_BUSY" {"BUSY"} else {"UNAVAILABLE"},
             "browserAction":"NONE","rolloverRequested":false})
-        });
+        }),
+    };
     keep_running()?;
     run_step_after_accounting(workspace, project, key, source, keep_running, capture).map(
         |(stage, mut output)| {

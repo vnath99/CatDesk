@@ -1887,6 +1887,12 @@ fn source_ready_for_handoff(snapshot: &Value) -> Result<(), String> {
     {
         return Err("WEB_HANDOFF_SOURCE_RESPONSE_REQUIRED".into());
     }
+    if super::observe::failed_assistant_placeholder(
+        "ASSISTANT",
+        latest.get("text").and_then(Value::as_str).unwrap_or(""),
+    ) {
+        return Err("WEB_HANDOFF_SOURCE_RESPONSE_FAILED".into());
+    }
     Ok(())
 }
 
@@ -3796,6 +3802,47 @@ pub(crate) fn native_continuation_fixture(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn handoff_source_error_card_is_not_a_completed_assistant_answer() {
+        for text in [
+            "This response couldn't load",
+            "This response couldn’t load.",
+            " \nThis\tresponse\ncouldn‘t load... ",
+            "THIS RESPONSE COULDN'T LOAD",
+        ] {
+            let snapshot = json!({"messages":[{"role":"ASSISTANT","text":text,
+                "textComplete":true,"revisionComplete":true}]});
+            assert_eq!(
+                source_ready_for_handoff(&snapshot).unwrap_err(),
+                "WEB_HANDOFF_SOURCE_RESPONSE_FAILED"
+            );
+        }
+    }
+
+    #[test]
+    fn handoff_source_historical_error_and_useful_error_explanation_remain_usable() {
+        for text in [
+            "The task is checkpointed; inspect the assigned tests next.",
+            "The UI says This response couldn't load; do not resend the request.",
+        ] {
+            let snapshot = json!({"messages":[
+                {"role":"ASSISTANT","text":"This response couldn’t load.","textComplete":true,"revisionComplete":true},
+                {"role":"USER","text":"Inspect the existing failure without resending.","textComplete":true,"revisionComplete":true},
+                {"role":"ASSISTANT","text":text,"textComplete":true,"revisionComplete":true}]});
+            source_ready_for_handoff(&snapshot).unwrap();
+        }
+        for last in [
+            json!({"role":"USER","text":"This response couldn't load","textComplete":true,"revisionComplete":true}),
+            json!({"role":"ASSISTANT","text":"Still generating","textComplete":false,"revisionComplete":true}),
+            json!({"role":"ASSISTANT","text":"Partial revision","textComplete":true,"revisionComplete":false}),
+        ] {
+            assert_eq!(
+                source_ready_for_handoff(&json!({"messages":[last]})).unwrap_err(),
+                "WEB_HANDOFF_SOURCE_RESPONSE_REQUIRED"
+            );
+        }
+    }
 
     // Synthetic durable proof only: no browser, provider or native process.
     #[cfg(windows)]
@@ -5875,8 +5922,8 @@ mod tests {
                 },
             )
             .unwrap();
-        for stop_at in [1, 2, 3] {
-            let checks = std::cell::Cell::new(0);
+        for cancel_during_capture in [false, true] {
+            let stopped = std::cell::Cell::new(!cancel_during_capture);
             let captured = std::cell::Cell::new(false);
             let result = super::super::auto::run_step_with_capture(
                 &root,
@@ -5884,8 +5931,34 @@ mod tests {
                 &source_key,
                 &pending.source,
                 &|| {
+                    if stopped.get() {
+                        Err("WEB_AUTO_OWNER_STOPPED".into())
+                    } else {
+                        Ok(())
+                    }
+                },
+                || {
+                    captured.set(true);
+                    stopped.set(true);
+                    Ok(json!({"captured":true}))
+                },
+            );
+            assert_eq!(result.unwrap_err(), "WEB_AUTO_OWNER_STOPPED");
+            assert_eq!(captured.get(), cancel_during_capture);
+        }
+        // A guard error returned inside best-effort receipt accounting must
+        // survive even if a subsequent guard call would return Ok again.
+        let checks = std::cell::Cell::new(0);
+        let captured = std::cell::Cell::new(false);
+        assert_eq!(
+            super::super::auto::run_step_with_capture(
+                &root,
+                "alpha",
+                &source_key,
+                &pending.source,
+                &|| {
                     checks.set(checks.get() + 1);
-                    if checks.get() == stop_at {
+                    if checks.get() == 2 {
                         Err("WEB_AUTO_OWNER_STOPPED".into())
                     } else {
                         Ok(())
@@ -5895,10 +5968,11 @@ mod tests {
                     captured.set(true);
                     Ok(json!({"captured":true}))
                 },
-            );
-            assert_eq!(result.unwrap_err(), "WEB_AUTO_OWNER_STOPPED");
-            assert_eq!(captured.get(), stop_at == 3);
-        }
+            )
+            .unwrap_err(),
+            "WEB_AUTO_OWNER_STOPPED"
+        );
+        assert!(!captured.get());
         assert_eq!(
             super::super::auto::run_step_with_capture(
                 &root,
