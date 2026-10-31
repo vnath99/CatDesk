@@ -120,6 +120,11 @@ pub(crate) enum WebAction {
         project_id: String,
         input_file: PathBuf,
     },
+    WorkContext {
+        project_id: String,
+        operation: String,
+        input_file: PathBuf,
+    },
     WorkExecutionPermission {
         project_id: String,
         input_file: PathBuf,
@@ -281,7 +286,16 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         }
         (
             "work",
-            "request" | "resolve" | "associate" | "resume-prepare" | "execution-grant"
+            "request"
+            | "resolve"
+            | "associate"
+            | "resume-prepare"
+            | "execution-grant"
+            | "context-prepare"
+            | "context-send"
+            | "context-reconcile"
+            | "context-continue"
+            | "context-retry-prepare"
             | "execution-revoke",
         ) => {
             let input_file = options
@@ -315,7 +329,20 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
             if !options.is_empty() {
                 return Err("WEB_USAGE: unexpected work option".into());
             }
-            if verb == "request" {
+            if matches!(
+                verb,
+                "context-prepare"
+                    | "context-send"
+                    | "context-reconcile"
+                    | "context-continue"
+                    | "context-retry-prepare"
+            ) {
+                Ok(WebAction::WorkContext {
+                    project_id: project_id.into(),
+                    operation: verb.into(),
+                    input_file: input_file.into(),
+                })
+            } else if verb == "request" {
                 Ok(WebAction::WorkRequest {
                     project_id: project_id.into(),
                     input_file: input_file.into(),
@@ -1401,6 +1428,15 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
         } => {
             crate::web_work::resume_prepare(&workspace, read_work_input(&input_file, &project_id)?)
         }
+        WebAction::WorkContext {
+            project_id,
+            operation,
+            input_file,
+        } => crate::web_work::context_action(
+            &workspace,
+            read_work_input(&input_file, &project_id)?,
+            &operation,
+        ),
         WebAction::WorkExecutionPermission {
             project_id,
             input_file,
@@ -2115,6 +2151,53 @@ mod tests {
                 assert!(parse(&invalid).is_err());
             }
             assert!(parse(&valid[..6]).is_err());
+        }
+    }
+
+    #[test]
+    fn private_initial_context_commands_are_closed_and_never_accept_payload_or_runtime_overrides() {
+        for operation in [
+            "context-prepare",
+            "context-send",
+            "context-reconcile",
+            "context-continue",
+            "context-retry-prepare",
+        ] {
+            let command = args(&[
+                "operator",
+                "web",
+                "work",
+                operation,
+                "--project-id",
+                "alpha",
+                "--input-file",
+                "pins.json",
+            ]);
+            assert_eq!(
+                parse(&command).unwrap(),
+                WebAction::WorkContext {
+                    project_id: "alpha".into(),
+                    operation: operation.into(),
+                    input_file: "pins.json".into(),
+                }
+            );
+            for flag in [
+                "--message",
+                "--conversation-url",
+                "--workspace",
+                "--execution-key",
+                "--max-runtime-seconds",
+                "--native-queue-task-id",
+                "--assignment-file",
+            ] {
+                let mut invalid = command.clone();
+                invalid.extend(args(&[flag, "override"]));
+                assert!(parse(&invalid).is_err());
+            }
+            let mut invalid = command.clone();
+            invalid.push("--allow-manual-wake".into());
+            assert!(parse(&invalid).is_err());
+            assert!(parse(&command[..6]).is_err());
         }
     }
 

@@ -73,6 +73,78 @@ pub(crate) fn resume_prepare(workspace: &Path, args: Value) -> Result<Value, Str
     assigned_action(workspace, args, AssignmentAction::Prepare)
 }
 
+pub(crate) fn context_action(
+    workspace: &Path,
+    args: Value,
+    operation: &str,
+) -> Result<Value, String> {
+    if operation == "context-prepare" {
+        return assigned_action(workspace, args, AssignmentAction::PrepareContext);
+    }
+    if operation == "context-retry-prepare" {
+        return assigned_action(workspace, args, AssignmentAction::RetryContext);
+    }
+    let action = match operation {
+        "context-send" => crate::project_mcp_task::InitialContextAction::Send,
+        "context-reconcile" => crate::project_mcp_task::InitialContextAction::Reconcile,
+        "context-continue" => crate::project_mcp_task::InitialContextAction::Continue,
+        _ => return Err("WEB_TASK_CONTEXT_OPERATION_INVALID".into()),
+    };
+    let request = AssignmentRequest::parse(args)?;
+    let workspace = workspace
+        .canonicalize()
+        .map_err(|_| "WEB_WORK_CONTROL_UNAVAILABLE")?;
+    let prepared = PreparedProjectScopeV1::resolve(&workspace, &request.project_id)
+        .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
+    let lease = crate::operator_facade::acquire_web_work_lease(&workspace, &request.project_id)?;
+    // Only this short admission owns the paired-target/registry locks. The
+    // browser transaction retains its per-project fence, not a global lock.
+    let (record, target) = mcp::with_current_project_web_target(
+        &workspace,
+        &request.project_id,
+        request.expected_target_generation,
+        &request.expected_target_sha256,
+        |workspace, paired| {
+            prepared
+                .revalidate_registration()
+                .map_err(|_| "WEB_WORK_PROJECT_REGISTRATION_CHANGED")?;
+            let target = protocol::Target::new(paired.generation, paired.url.clone())?;
+            let record = WorkLedger::open(workspace, &request.project_id)?
+                .record(&request.request_id)?
+                .ok_or("WEB_WORK_REQUEST_MISSING")?;
+            if record.phase != "OPEN"
+                || record.event_id != request.source_event_id
+                || record
+                    .task_assignment
+                    .as_ref()
+                    .is_none_or(|a| a.assignment_sha256 != request.assignment_sha256)
+            {
+                return Err("WEB_WORK_ASSIGNMENT_CONFLICT".into());
+            }
+            lease.check_source_task(&record.target, &target, &record.event_id)?;
+            require_assignment_source(
+                workspace,
+                &request.project_id,
+                &record,
+                record.target == target,
+            )?;
+            Ok((record, target))
+        },
+    )?;
+    crate::project_mcp_task::run_initial_context(
+        prepared.scope(),
+        &record,
+        &target,
+        action,
+        &|| {
+            prepared
+                .revalidate_registration()
+                .map_err(|_| "WEB_WORK_PROJECT_REGISTRATION_CHANGED")?;
+            lease.check_target(&target)
+        },
+    )
+}
+
 pub(crate) fn execution_permission(
     workspace: &Path,
     args: Value,
@@ -521,6 +593,8 @@ pub(crate) fn manual_wake_with_preparation(
 enum AssignmentAction<'a> {
     Associate(&'a Path),
     Prepare,
+    PrepareContext,
+    RetryContext,
     Permission {
         revoke: bool,
         allow_manual_wake: bool,
@@ -589,6 +663,12 @@ fn assigned_action(
             match action {
                 AssignmentAction::Prepare => {
                     crate::project_mcp_task::prepare_work_resume(scope, &record, &current)
+                }
+                AssignmentAction::PrepareContext => {
+                    crate::project_mcp_task::prepare_initial_context(scope, &record, &current)
+                }
+                AssignmentAction::RetryContext => {
+                    crate::project_mcp_task::retry_initial_context(scope, &record, &current)
                 }
                 AssignmentAction::Permission {
                     revoke,

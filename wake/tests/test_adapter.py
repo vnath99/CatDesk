@@ -604,6 +604,23 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(emitted[-2]["receipt"]["sentUtc"], 99)
         self.assertEqual(emitted[-1]["receipt"], emitted[-2]["receipt"])
 
+    def test_private_task_context_uses_existing_large_message_path_without_exporting_key_or_body(self):
+        # Public synthetic capability, never a real grant or provider send.
+        key = "f" * 64
+        message = "CatDesk private assigned-task context.\n" + json.dumps({
+            "executionKey": key, "taskContract": {"objective": "bounded fixture " * 300}})
+        self.assertGreater(len(message), 2048)
+        cdp, emitted, error = self.run_attempt(lambda _: {"submit": True}, cooperative=True, message=message)
+        self.assertIsNone(error)
+        self.assertTrue(cdp.sent)
+        self.assertEqual(cdp.keys[0][1], bridge.keyboard_safe_message(message))
+        self.assertEqual(cdp.timeline, ["submit", "accepted", "round-trip", "confirm"])
+        self.assertEqual(emitted[-1]["stage"], "SENT_PENDING_RESPONSE")
+        self.assertEqual(emitted[-1]["receipt"]["messageDigest"], bridge.digest(bridge.normalize_message(message)))
+        wire = json.dumps(emitted)
+        self.assertNotIn(key, wire)
+        self.assertNotIn("taskContract", wire)
+
     def test_cooperative_delivery_releases_browser_after_durable_user_receipt(self):
         cdp, emitted, error = self.run_attempt(lambda _cdp: {"submit": True}, cooperative=True)
         self.assertIsNone(error)

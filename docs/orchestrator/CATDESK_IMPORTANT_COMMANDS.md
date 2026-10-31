@@ -1,3 +1,30 @@
+## 2026-10-31T06:36:53.834197+00:00 - private initial task-context commands (SOURCE-QUALIFIED ONLY)
+
+Use a qualified separate controller built from this feature's published commit. The retained installed C254 and source6993 selected development executable do not implement these commands. Existing runtime selection, browser authentication, project/Wake bindings and native sessions remain unchanged.
+
+```powershell
+& '<qualified-controller>' operator web work context-prepare --project-id '<registered-project>' --input-file '<frozen-assignment-identity.json>'
+& '<qualified-controller>' operator web work context-send --project-id '<registered-project>' --input-file '<frozen-assignment-identity.json>'
+& '<qualified-controller>' operator web work context-continue --project-id '<registered-project>' --input-file '<frozen-assignment-identity.json>'
+```
+
+The identity file uses the existing strict assignment schema: projectId, requestId, sourceEventId, expectedTargetGeneration, expectedTargetSha256 and assignmentSha256. No payload, URL, workspace, execution key, native-task selection or runtime override is accepted. Prerequisites are an OPEN associated work request, exact known source delivery, unchanged paired target and registration, immutable assignment and an existing local execution grant. This workflow grants no authority and does not reuse source-review consent.
+
+`context-prepare` WRITES the immutable private payload and hashed reference; it is not a read-only diagnostic. Repeating it reads the exact existing preparation without regenerating identifiers, keys or payload. `context-send` allows one attempt from PREPARED using the existing stopped Wake store, host/browser ownership and at most120seconds of native time. The first possible typing action follows a durable SUBMITTING write. Return phase SENT proves only exact persisted USER delivery, not assistant completion or project execution. The context asks the assistant to acknowledge only and wait for continuation. Completed sends return the existing receipt without another browser. Private context and keys are never returned in command output.
+
+`context-continue` requires that receipt, then queues a key-free NEW_TASK intent against the same current target. It starts no browser, WakeHost or scheduler. The existing finite foreground owner must deliver it separately. Semantic identity/expiry and unknown-outcome suppression remain in the existing Wake queue; TTL is600seconds and duplicate calls do not renew it. No execution budget or completed/unknown task call ID is reset.
+
+Recovery operations use the SAME identity file:
+
+```powershell
+& '<qualified-controller>' operator web work context-reconcile --project-id '<registered-project>' --input-file '<frozen-assignment-identity.json>'
+& '<qualified-controller>' operator web work context-retry-prepare --project-id '<registered-project>' --input-file '<frozen-assignment-identity.json>'
+```
+
+`context-reconcile` inspects only the exact expected USER turn for OBSERVING/SUBMITTING/OUTCOME_UNKNOWN. It types nothing, sends no submit ACK and performs no assistant Retry; an unproven outcome remains held. `context-retry-prepare` is a distinct mutation for ATTENTION_PRE_SUBMIT only when no submission fence was ever crossed, with fewer than three total attempts. It preserves the payload/key/identity and never applies to attempted or unknown sends. Recheck the specific changed prerequisite before using it; do not loop. Stale target generations, revoked grants, changed payloads, foreign task identities and unrelated drafts are refused. Old requests and rollover quarantine are untouched.
+
+Local source/fixture tests and strict Clippy pass; installed command, new private-context browser delivery, actual interrupted-process recovery and two-Web coding acceptance remain OPEN. Evidence: `docs/verification/INITIAL_PRIVATE_TASK_CONTEXT_SOURCE_2026_10_31.json`.
+
 ## 2026-10-31 - exact startup cause established; prepared-config selection fixed
 
 The changed diagnostic controller proved that the trusted child exited before its readiness frame. All5,107 checks remained exact and the native tree/endpoint closed. Its46-byte stderr fingerprint matches the public C254 source's WEB_DEVELOPMENT_CONFIG_SCOPE_INVALID error exactly; no private stderr text or credential was exported. The new central owner had copied the approved config into an audit directory as config.toml, while the unchanged executable correctly requires the prepared controller's existing .catdesk/web-development/catdesk.toml. This is a config-selection defect in the new owner, not a release-integrity, Windows Job, login or connector failure.
