@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "targetCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+  "kind": "parts",
+  "offset": 0,
+  "entries": [
+    {
+      "file": "part-001.diff.txt",
+      "bytes": 8129,
+      "sha256": "78d3dff2e0b404f71625f8a099a7bc012a6df4dfdce90ee654bee8c17072a2bf",
+      "startByte": 0,
+      "endByte": 8129,
+      "paths": [
+        "catdesk.ps1",
+        "scripts/catdesk-doctor.ps1"
+      ]
+    },
+    {
+      "file": "part-002.diff.txt",
+      "bytes": 8130,
+      "sha256": "5ec1cdd559903b787a2108fe71101cc70d7710ec007747877887f42e64565464",
+      "startByte": 8129,
+      "endByte": 16259,
+      "paths": [
+        "scripts/catdesk-doctor.ps1"
+      ]
+    },
+    {
+      "file": "part-003.diff.txt",
+      "bytes": 8159,
+      "sha256": "a6bb35c56ff6a7e0cfbdeb50d4f8bd9c8d3f9aa2615e8f4f2c5fa6db804bb84b",
+      "startByte": 16259,
+      "endByte": 24418,
+      "paths": [
+        "scripts/catdesk-doctor.ps1"
+      ]
+    },
+    {
+      "file": "part-004.diff.txt",
+      "bytes": 8141,
+      "sha256": "a8c881c668560332e9e7f6b11f93076f5a0001667fc076310a9beced21ee93ac",
+      "startByte": 24418,
+      "endByte": 32559,
+      "paths": [
+        "scripts/catdesk-doctor.ps1",
+        "scripts/promote-reviewed-catdesk-build.ps1",
+        "scripts/setup-secure-mcp.ps1"
+      ]
+    },
+    {
+      "file": "part-005.diff.txt",
+      "bytes": 8086,
+      "sha256": "e49fac1f043bdb19b8479fce2b8c088cc1be2930fdc519f494fe880936c30dd5",
+      "startByte": 32559,
+      "endByte": 40645,
+      "paths": [
+        "scripts/setup-secure-mcp.ps1",
+        "scripts/start-catdesk-stack.ps1",
+        "scripts/test-backend-only-native-capability.ps1",
+        "scripts/test-catdesk-doctor.ps1"
+      ]
+    },
+    {
+      "file": "part-006.diff.txt",
+      "bytes": 8111,
+      "sha256": "f68ce2b6f4244f16da05d050358ace1b9b3475181320b3b4c8d5ae5cb9d3a04f",
+      "startByte": 40645,
+      "endByte": 48756,
+      "paths": [
+        "scripts/test-catdesk-doctor.ps1"
+      ]
+    },
+    {
+      "file": "part-007.diff.txt",
+      "bytes": 8087,
+      "sha256": "81e7702c0b0ba5d5bbf7c8cd04ec3626c27800fc4524c0d5f7ea2939bb2bad1e",
+      "startByte": 48756,
+      "endByte": 56843,
+      "paths": [
+        "scripts/test-catdesk-doctor.ps1",
+        "scripts/test-catdesk-lifecycle.ps1"
+      ]
+    },
+    {
+      "file": "part-008.diff.txt",
+      "bytes": 8154,
+      "sha256": "4edfef90f515e16666d21693f65270e8ad7cae6b00111b68fbf0cd143b009e36",
+      "startByte": 56843,
+      "endByte": 64997,
+      "paths": [
+        "scripts/test-catdesk-lifecycle.ps1",
+        "scripts/test-local-mcp-readiness-strict.ps1",
+        "scripts/test-promotion-handoff-script-status.ps1"
+      ]
+    }
+  ]
+}

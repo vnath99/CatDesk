@@ -1,0 +1,117 @@
++                            "coverage":{"visibleRoleCount":2,"returned":2}}
++                source = {"url":cdp.url,"digest":bridge.digest(cdp.url),"generation":1}
++                request={"snapshot":True,"projectId":"alpha","source":source,"reviewEvent":
++                    {"eventId":"review-one","message":"approved review","messageDigest":bridge.digest("approved review")}}
++                with patch.object(bridge,"NewConversationSink",Sink), patch.object(adapter,"prepare_cdp_target",return_value=cdp), patch.object(adapter,"emit") as emit:
++                    if count != (1,1):
++                        with self.assertRaisesRegex(bridge.Attention,"SOURCE_REVIEW_SEQUENCE_UNPROVEN"):
++                            adapter.source_snapshot(bridge,object(),request)
++                        emit.assert_not_called()
++                    else:
++                        adapter.source_snapshot(bridge,object(),request)
++                        payload=emit.call_args.args[0];messages=payload["snapshot"]["messages"]
++                        self.assertEqual(messages[0]["text"],"approved review")
++                        self.assertTrue(messages[0]["textComplete"])
++                        self.assertEqual(messages[-1]["textComplete"],not answer.startswith("😀"))
++                        self.assertLessEqual(len(json.dumps(payload,separators=(",", ":")).encode())+1,adapter.SOURCE_SNAPSHOT_RESPONSE_BYTES)
++                        if answer.startswith("😀"):
++                            self.assertFalse(messages[-1]["revisionComplete"])
++                            self.assertIsNone(messages[-1]["revisionHash"])
++                self.assertFalse(cdp.sent)
++                self.assertEqual(cdp.keys,[])
++
++    def test_sent_review_snapshot_rejects_changed_digest_before_browser(self):
++        source={"url":"https://chatgpt.com/c/exact","digest":bridge.digest("https://chatgpt.com/c/exact"),"generation":1}
++        with patch.object(adapter,"prepare_cdp_target") as opened:
++            with self.assertRaisesRegex(bridge.Attention,"SOURCE_SNAPSHOT_REQUEST_INVALID"):
++                adapter.source_snapshot(bridge,object(),{"snapshot":True,"projectId":"alpha","source":source,
++                    "reviewEvent":{"eventId":"review-one","message":"approved review","messageDigest":"0"*64}})
++            opened.assert_not_called()
++
+     def test_private_snapshot_refuses_frame_over_cap_and_ordinary_input_stays_bounded(self):
+         cdp = FakeCdp()
+         class Sink:
+@@ -268,6 +317,39 @@ class AdapterTests(unittest.TestCase):
+         self.assertFalse(cdp.sent)
+         self.assertEqual(cdp.keys, [])
+ 
++    def test_response_probe_waits_readonly_through_transient_plain_home(self):
++        for initial in ["about:blank", "https://chatgpt.com/", "https://chat.openai.com/"]:
++            with self.subTest(initial=initial):
++                now=[0.0];cdp=FakeCdp();cdp.url=initial;samples=[]
++                class Sink:
++                    def observe_cooperative_response(self, browser, *_):
++                        samples.append(browser.url)
++                        if browser.url==initial:raise bridge.Attention("RESPONSE_TARGET_DRIFT")
++                        return "RESPONSE_COMPLETE"
++                def pause(seconds):
++                    now[0]+=seconds
++                    cdp.url="https://chatgpt.com/c/exact"
++                stage=adapter.bounded_response_observation(bridge,Sink(),cdp,"approved",bridge.digest("approved"),
++                    clock=lambda:now[0],sleep=pause)
++                self.assertEqual(stage,"RESPONSE_COMPLETE")
++                self.assertEqual(samples.count("https://chatgpt.com/c/exact"),2)
++                self.assertFalse(cdp.sent);self.assertEqual(cdp.keys,[])
++
++    def test_response_probe_never_accepts_persistent_home_or_waits_on_foreign_chat(self):
++        for initial,elapsed in [("https://chatgpt.com/",1),("https://chatgpt.com/c/foreign",0),
++                ("https://chatgpt.com/auth/login",0),("chrome-error://chromewebdata/",0),
++                ({"value":"https://chatgpt.com/"},0)]:
++            with self.subTest(initial=initial):
++                now=[0.0];cdp=FakeCdp();cdp.url=initial
++                class Sink:
++                    def observe_cooperative_response(self,*_):raise bridge.Attention("RESPONSE_TARGET_DRIFT")
++                def pause(seconds):now[0]+=seconds
++                with self.assertRaisesRegex(bridge.Attention,"RESPONSE_TARGET_DRIFT"):
++                    adapter.bounded_response_observation(bridge,Sink(),cdp,"approved",bridge.digest("approved"),
++                        timeout=1,clock=lambda:now[0],sleep=pause)
++                self.assertEqual(now[0],elapsed)
++                self.assertFalse(cdp.sent);self.assertEqual(cdp.keys,[])
++
+     def test_fresh_document_probe_waits_within_one_browser_and_requires_stability(self):
+         now = [0.0]
+         sleeps = []
+@@ -690,6 +772,57 @@ class AdapterTests(unittest.TestCase):
+         self.assertFalse(cdp.sent)
+         self.assertFalse(any(item.get("stage") == "RESPONSE_COMPLETE" for item in emitted))
+ 
++    def test_probe_diagnostic_is_closed_and_scoped_to_each_independent_sink(self):
++        class Diagnosed(FakeProbeSink):
++            def observe_cooperative_response(self, cdp, message, expected_digest):
++                self.response_observation_reason = cdp.reason
++                return super().observe_cooperative_response(cdp, message, expected_digest)
++        frames = []
++        with patch.object(bridge, "CdpSink", Diagnosed), patch.object(adapter, "emit", frames.append), \
++                patch.object(adapter.time, "sleep"), patch.object(adapter.time, "monotonic", side_effect=range(1000)):
++            for event_id, stage, reason in [("alpha", "RESPONSE_PENDING", "ASSISTANT_BODY_UNPROVEN"),
++                    ("beta", "RESPONSE_COMPLETE", "COMPLETE"),
++                    ("gamma", "RESPONSE_PENDING", "PRIVATE_PAGE_TEXT"),
++                    ("delta", "RESPONSE_COMPLETE", "GENERATION_ACTIVE")]:
++                cdp = FakeCdp(); cdp.probe_stage = stage; cdp.reason = reason
++                sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
++                if event_id in {"gamma", "delta"}:
++                    with self.assertRaisesRegex(bridge.Attention, "RESPONSE_PROBE_DIAGNOSTIC_INVALID"):
++                        adapter.observe_response(bridge, sb, self.probe_request(event_id=event_id))
++                else:
++                    adapter.observe_response(bridge, sb, self.probe_request(event_id=event_id))
++                self.assertFalse(cdp.sent); self.assertEqual(cdp.keys, [])
++        terminal = [frame for frame in frames if "diagnosticReason" in frame]
++        self.assertEqual([(frame["eventId"], frame["diagnosticReason"]) for frame in terminal],
++            [("alpha", "ASSISTANT_BODY_UNPROVEN"), ("beta", "COMPLETE")])
++
++    def test_completion_control_metadata_is_scoped_and_invalid_metadata_cannot_emit(self):
++        controls = dict.fromkeys(bridge.RESPONSE_CONTROL_COUNTS, 0)
++        controls.update(dict.fromkeys(bridge.RESPONSE_CONTROL_FLAGS, False))
++        controls['assistantBodyPresent'] = True
++        class Diagnosed(FakeProbeSink):
++            def observe_cooperative_response(self, cdp, message, expected_digest):
++                self.response_observation_reason = 'ASSISTANT_COMPLETION_ACTION_UNPROVEN'
++                self.response_observation_controls = cdp.controls
++                return super().observe_cooperative_response(cdp, message, expected_digest)
++        frames = []
++        with patch.object(bridge, 'CdpSink', Diagnosed), patch.object(adapter, 'emit', frames.append), \
++                patch.object(adapter.time, 'sleep'), patch.object(adapter.time, 'monotonic', side_effect=range(1000)):
++            for event_id, shape in [('invalid', controls | {'label':'PRIVATE_DRAFT'}), ('valid', controls)]:
++                cdp = FakeCdp(); cdp.probe_stage = 'RESPONSE_PENDING'; cdp.controls = shape
++                sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
++                if event_id == 'invalid':

@@ -1,0 +1,208 @@
++                if line.len() < MAX_NATIVE_STDOUT_LINE_BYTES {
++                    line.push(*byte);
++                } else {
++                    evidence.invalidate();
++                    line.clear();
++                    oversized = true;
++                }
++            }
++        }
++    }
++}
++
++fn run_blocking(
++    mut command: StdCommand,
++    prompt: String,
++    evidence: CodexCliNativeStdoutEvidenceV1,
++    turn_limit: Duration,
++    prompt_limit: Duration,
++    cancel: Arc<AtomicBool>,
++) -> Transport {
++    if cancel.load(Ordering::Acquire) {
++        return Transport {
++            no_child_created: true,
++            ..Transport::unknown("NATIVE_CANCELLED_BEFORE_SPAWN")
++        };
++    }
++    // Same prepared args, environment and directory. Suspended assignment is
++    // performed by the existing owner before any CLI code executes.
++    let mut owner = match OwnedCandidateChild::spawn_classified(&mut command) {
++        Ok(owner) => owner,
++        Err(SpawnFailure::NoChildCreated) => {
++            return Transport {
++                no_child_created: true,
++                ..Transport::unknown("NATIVE_SPAWN_FAILED")
++            };
++        }
++        Err(failure) => {
++            return Transport {
++                tree_exit_proven: failure.quiescence_proven(),
++                ..Transport::unknown("NATIVE_OWNER_SETUP_FAILED")
++            };
++        }
++    };
++    let mut result = Transport::unknown("NATIVE_PIPE_UNAVAILABLE");
++    let mut output = None;
++    let mut input = None;
++    if let (Some(stdout), Some(mut stdin)) = (
++        owner.child_mut().stdout.take(),
++        owner.child_mut().stdin.take(),
++    ) {
++        output = PipeWorker::start(move || drain(stdout, evidence)).ok();
++        if output.is_some() {
++            input = PipeWorker::start(move || {
++                let accepted = stdin
++                    .write_all(prompt.as_bytes())
++                    .and_then(|_| stdin.flush())
++                    .is_ok();
++                drop(stdin); // Native exec - must see EOF, including on Windows.
++                accepted
++            })
++            .ok();
++        }
++    }
++    if let Some(writer) = input.as_ref() {
++        let deadline = Instant::now() + prompt_limit;
++        let accepted = loop {
++            if cancel.load(Ordering::Acquire) {
++                result.outcome = "NATIVE_CANCELLED";
++                break false;
++            }
++            match writer.receive.try_recv() {
++                Ok(value) => break value,
++                Err(mpsc::TryRecvError::Disconnected) => break false,
++                Err(mpsc::TryRecvError::Empty) if Instant::now() < deadline => {
++                    std::thread::sleep(Duration::from_millis(10))
++                }
++                Err(_) => break false,
++            }
++        };
++        if accepted {
++            let deadline = Instant::now() + turn_limit;
++            loop {
++                if cancel.load(Ordering::Acquire) {
++                    result.outcome = "NATIVE_CANCELLED";
++                    break;
++                }
++                match owner.child_mut().try_wait() {
++                    Ok(Some(status)) => {
++                        result.child_exit_observed = true;
++                        result.exit_code = status.code();
++                        result.exit_observed_at = Some(SystemTime::now());
++                        result.outcome = if status.success() {
++                            "NATIVE_EXIT_ZERO"
++                        } else {
++                            "NATIVE_EXIT_NONZERO"
++                        };
++                        break;
++                    }
++                    Ok(None) if Instant::now() < deadline => {
++                        std::thread::sleep(Duration::from_millis(10))
++                    }
++                    Ok(None) => {
++                        result.outcome = "NATIVE_TIMEOUT";
++                        break;
++                    }
++                    Err(_) => {
++                        result.outcome = "NATIVE_EXIT_UNOBSERVED";
++                        break;
++                    }
++                }
++            }
++        } else if result.outcome != "NATIVE_CANCELLED" {
++            result.outcome = "NATIVE_PROMPT_PIPE_FAILED";
++        }
++    }
++    // Parent exit alone is never cleanup proof. Retain this exact Job handle
++    // through complete descendant termination and zero-active-process readback.
++    result.tree_exit_proven = owner.terminate_tree_and_confirm_quiescent().is_ok();
++    if !result.tree_exit_proven {
++        result.outcome = "NATIVE_TREE_EXIT_UNPROVEN";
++    }
++    if let Some(writer) = input {
++        // Its single result may already have been consumed by the prompt poll.
++        // After Job cleanup, require actual thread exit rather than detaching it.
++        let deadline = Instant::now() + NATIVE_STDOUT_EOF_TIMEOUT;
++        while !writer.thread.is_finished() && Instant::now() < deadline {
++            std::thread::sleep(Duration::from_millis(10));
++        }
++        if writer.thread.is_finished() {
++            if writer.thread.join().is_err() {
++                result.outcome = "NATIVE_PIPE_THREAD_UNOBSERVED";
++            }
++        } else {
++            result.outcome = "NATIVE_PIPE_THREAD_UNOBSERVED";
++        }
++    }
++    if let Some(reader) = output {
++        if let Some((evidence, true)) = reader.finish() {
++            result.stdout = Some(evidence);
++        } else {
++            result.outcome = "NATIVE_STDOUT_EOF_UNOBSERVED";
++        }
++    }
++    result
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use std::ffi::c_void;
++
++    #[link(name = "kernel32")]
++    unsafe extern "system" {
++        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut c_void;
++        fn WaitForSingleObject(handle: *mut c_void, timeout: u32) -> u32;
++        fn CloseHandle(handle: *mut c_void) -> i32;
++    }
++
++    fn fixture(root: &Path) -> PathBuf {
++        let source = root.join("pipe-fixture.rs");
++        let exe = root.join("pipe-fixture.exe");
++        fs::write(
++            &source,
++            r#"
++            use std::{io::{Read, Write}, process::{Command, Stdio}, time::Duration};
++            fn main() {
++                let a: Vec<String> = std::env::args().collect();
++                if a[1] == "sleep" { std::thread::sleep(Duration::from_secs(20)); return; }
++                if a[1] != "blocked" {
++                    let mut prompt = String::new();
++                    std::io::stdin().read_to_string(&mut prompt).unwrap();
++                    assert_eq!(prompt, "exact prompt");
++                }
++                let _child = Command::new(std::env::current_exe().unwrap()).arg("sleep")
++                    .stdin(Stdio::null()).stdout(Stdio::inherit()).spawn().unwrap();
++                std::fs::write(&a[2], _child.id().to_string()).unwrap();
++                // Let the observer retain a process handle before this parent exits.
++                for _ in 0..500 {
++                    if std::path::Path::new(&format!("{}.ack", a[2])).exists() { break; }
++                    std::thread::sleep(Duration::from_millis(10));
++                }
++                if a[1] == "normal" {
++                    println!("{{\"type\":\"thread.started\",\"thread_id\":\"{}\"}}", a[3]);
++                    println!("{{\"type\":\"turn.started\"}}");
++                    println!("{{\"type\":\"turn.completed\"}}");
++                    std::io::stdout().flush().unwrap();
++                } else if a[1] == "nonzero" { std::process::exit(7); }
++                else { std::thread::sleep(Duration::from_secs(20)); }
++            }
++        "#,
++        )
++        .unwrap();
++        assert!(
++            StdCommand::new("rustc")
++                .arg(&source)
++                .arg("-o")
++                .arg(&exe)
++                .status()
++                .unwrap()
++                .success()
++        );
++        exe
++    }
++
++    fn command(exe: &Path, mode: &str, pid: &Path, thread: &str) -> StdCommand {
++        let mut command = StdCommand::new(exe);
++        command
++            .args([mode, pid.to_str().unwrap(), thread])

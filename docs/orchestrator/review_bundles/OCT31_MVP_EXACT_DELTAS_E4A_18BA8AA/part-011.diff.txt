@@ -1,0 +1,113 @@
++            "editor": {"READY", "MISSING", "AMBIGUOUS", "UNKNOWN"},
++            "composer": {"EMPTY", "DRAFT_PRESENT", "UNKNOWN"},
++            "generation": {"ACTIVE", "IDLE", "UNKNOWN"},
++            "assistant": {"LOAD_ERROR", "DELIVERY_TIMEOUT", "PRESENT", "ABSENT", "UNKNOWN"},
++        }
++        script = f"""(() => {{
++            const result = {{route:'UNKNOWN',document:'UNKNOWN',history:'UNKNOWN',editor:'UNKNOWN',
++                composer:'UNKNOWN',generation:'UNKNOWN',assistant:'UNKNOWN'}};
++            const visible = node => {{
++                const style = node && window.getComputedStyle(node);
++                return Boolean(node && node.getClientRects().length &&
++                    style.visibility !== 'hidden' && style.display !== 'none');
++            }};
++            const any = selectors => selectors.some(s => Array.from(document.querySelectorAll(s)).some(visible));
++            {RESPONSE_LOAD_ERROR_DETECTOR}
++            let actual, expected;
++            try {{actual = new URL(location.href); expected = new URL({json.dumps(self.url)});}}
++            catch (_) {{return result;}}
++            if (actual.protocol === 'chrome-error:') {{result.route='NETWORK_ERROR';return result;}}
++            if (actual.protocol !== 'https:' || !['chatgpt.com','chat.openai.com'].includes(actual.hostname) ||
++                    actual.port || actual.username || actual.password || actual.search || actual.hash) {{
++                result.route='TARGET_DRIFT';return result;
++            }}
++            if (actual.pathname.startsWith('/auth/') || any({json.dumps(LOGIN)})) {{
++                result.route='AUTH_REQUIRED';return result;
++            }}
++            if (any({json.dumps(CAPTCHA)})) {{result.route='SECURITY_CHECK';return result;}}
++            if ({json.dumps(NETWORK)}.every(s => any([s]))) {{result.route='NETWORK_ERROR';return result;}}
++            const route = actual.pathname.match(new RegExp('^/(?:c/([A-Za-z0-9_-]{{1,200}})|g/[A-Za-z0-9_-]{{1,200}}/c/([A-Za-z0-9_-]{{1,200}}))$'));
++            result.route = route && (route[1] || route[2]) === expected.pathname.split('/').pop()
++                ? 'EXACT' : (['','/'].includes(actual.pathname) ? 'HOME' : 'TARGET_DRIFT');
++            if (!['EXACT','HOME'].includes(result.route)) return result;
++            result.document = document.readyState === 'complete' ? 'COMPLETE' :
++                (['loading','interactive'].includes(document.readyState) ? 'LOADING' : 'UNKNOWN');
++            const editors = Array.from(document.querySelectorAll({json.dumps(', '.join(EDITOR_SELECTORS))})).filter(visible);
++            result.editor = editors.length === 1 ? 'READY' : (editors.length ? 'AMBIGUOUS' : 'MISSING');
++            if (editors.length === 1) {{
++                const e = editors[0];
++                const text = typeof e.value === 'string' ? e.value : (e.textContent || '');
++                const media = e.querySelector('img,video,audio,input,[data-file-id]') ||
++                    document.querySelector('[data-testid*="attachment" i], [data-testid*="file-thumbnail" i]');
++                result.composer = text !== '' || media ? 'DRAFT_PRESENT' : 'EMPTY';
++            }}
++            result.generation = any({json.dumps(STOP)}) ? 'ACTIVE' : 'IDLE';
++            const roles = document.querySelectorAll('[data-message-author-role], [data-content-search-turn-key], [data-testid^="conversation-turn-"], article[data-turn]');
++            result.history = roles.length ? 'PRESENT' : 'ABSENT';
++            const raw = Array.from(document.querySelectorAll(
++                "[data-message-author-role='assistant'], [data-turn='assistant'], [data-content-search-unit-key]"
++            )).filter(node => visible(node) && (node.matches("[data-message-author-role='assistant'], [data-turn='assistant']") ||
++                node.querySelector('h4[data-conversation-role="assistant"]')));
++            const assistants = raw.filter(node => !raw.some(other => other !== node && other.contains(node)));
++            if (assistants.length > 128) return result;
++            if (!assistants.length) {{result.assistant='ABSENT';return result;}}
++            const text = String(assistants[assistants.length - 1].textContent || '');
++            const limited = text.slice(0, 16384).replace(/[‘’]/g, "'").toLowerCase();
++            result.assistant = assistantLoadError(assistants[assistants.length - 1]) ? 'LOAD_ERROR' :
++                (limited.includes('message delivery timed out. please try again.') ? 'DELIVERY_TIMEOUT' :
++                 (text.length > 16384 ? 'UNKNOWN' : 'PRESENT'));
++            return result;
++        }})()"""
++        try:
++            value = self.cdp_value(cdp.evaluate(script))
++        except Exception as error:
++            raise Attention("BROWSER_OBSERVATION_UNAVAILABLE") from error
++        if (not isinstance(value, dict) or set(value) != set(vocab) or
++                any(not isinstance(value[k], str) or value[k] not in allowed for k, allowed in vocab.items())):
++            raise Attention("BROWSER_OBSERVATION_INVALID")
++        return dict(value, exchange="UNATTRIBUTED", recovery="OBSERVATION_ONLY")
+     def error(self, cdp: Any, current: str | None = None) -> bool:
+         if current is None:
+             try:
+@@ -675,6 +817,7 @@ class CdpSink:
+         # some current surfaces; hash the dedicated message-content node when
+         # present so those controls cannot change the receipt digest.
+         script = """(() => {
++            __CATDESK_USER_BODY_READER__
+             const roleUsers = Array.from(document.querySelectorAll(\"[data-message-author-role='user'], article[data-turn='user']:not(:has([data-message-author-role='user']))\"));
+             const bubbles = Array.from(document.querySelectorAll('[data-user-message-bubble]'));
+             const classUsers = Array.from(document.querySelectorAll("[class~='group/user-message']"));
+@@ -703,10 +846,11 @@ class CdpSink:
+             const containers = semanticUsers.length ? semanticUsers : roleUsers.length ? roleUsers :
+                 bubbles.length ? bubbles : classUsers.length ? classUsers : fallbackUsers;
+             return containers.map(container => {
+-            const content = container.querySelector(\"[data-message-content], [data-markdown-text-tone='user-message'], .whitespace-pre-wrap\") || container;
+-            return content.innerText || content.textContent || '';
++            const contentSelector = "[data-message-content], [data-markdown-text-tone='user-message'], .whitespace-pre-wrap";
++            const content = container.matches(contentSelector) ? container : container.querySelector(contentSelector);
++            return content ? userBodyText(content) : (container.innerText || container.textContent || '');
+             });
+-        })()"""
++        })()""".replace("__CATDESK_USER_BODY_READER__", USER_BODY_TEXT_READER)
+         try:
+             return CdpSink.bounded_cdp_strings(cdp.evaluate(script))
+         except Exception as error:
+@@ -1088,7 +1232,8 @@ class CdpSink:
+                 sleeper(.25)
+         raise PostSubmitUnknown(last_stage)
+ 
+-    def response_snapshot(self, cdp: Any, message: str, *, require_usable_body: bool = False) -> tuple[int, int, bool, bool]:
++    def response_snapshot(self, cdp: Any, message: str, *, require_usable_body: bool = False,
++                          diagnostic: dict | None = None) -> tuple[int, int, bool, bool]:
+         """Return only bounded structural signals for the latest user turn.
+ 
+         The timeout detector is intentionally exact-text and scoped strictly
+@@ -1101,6 +1246,7 @@ class CdpSink:
+             const retryLabel = {json.dumps("Retry")};
+             const expectedWake = {json.dumps(normalize_message(message))};
+             const requireUsableBody = {str(require_usable_body).lower()};
++            const includeDiagnostic = {str(diagnostic is not None).lower()};
+             const normalize = value => String(value || '').replace(/\\s+/g, ' ').trim();
+             const visible = element => {{
+                 if (!element) return false;
+@@ -1139,8 +1285,9 @@ class CdpSink:

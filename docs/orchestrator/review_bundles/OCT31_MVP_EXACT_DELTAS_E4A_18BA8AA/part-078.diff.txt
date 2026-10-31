@@ -1,0 +1,125 @@
++  user.children = [user.children[0].children[1]];
++  user.children[0].parentElement = user;
++}
+ const answer = options.loadError ? "This response couldn’t load" : (options.answer ?? 'A useful answer');
+ const assistant = el('div', {'data-content-search-unit-key':'fallback-turn-0:2:assistant'}, '', [
+   el('h4', {'data-conversation-role':'assistant'}, 'ChatGPT said:'),
+   el('div', {'data-chatgpt-selection-message-id':'assistant-id'}, '', options.controlsOnly ? [] : [
+     el('div', {'data-markdown-text-style':'assistant-message'}, answer, [
+-      el('div', {class:'turn-action-controls'}, '', [button('Copy')]),
++      el('div', {class:'turn-action-controls'}, '', [button(options.bodyCopyLabel || 'Copy')]),
+     ]),
+   ]),
+ ]);
++if (options.timeoutCard) append(assistant, el('div', {role:'alert'}, '', [
++  el('p', {}, 'Message delivery timed out. Please try again.'),
++  ...Array.from({length:options.retryOnlyOutside ? 0 : (options.retryCount ?? 1)}, () => button(options.retryLabel || 'Retry')),
++]));
++if (options.userTimeoutQuote) {
++  append(user.children[0], el('p', {}, 'Message delivery timed out. Please try again.'));
++  append(user.children[0], button('Retry'));
++}
+ const children = options.userOnly ? [user] : [user, assistant];
++for (let i = 0; i < (options.diagnosticExtraButtons || 0); i++)
++  children.push(button(options.diagnosticButtonLabel || 'Unrelated control'));
++if (options.auxiliaryUnit) {
++  const auxiliary = el('div', {'data-content-search-unit-key':'tool-status'}, '', [
++    el('div', {'data-markdown-text-style':'assistant-message'}, 'Tool status only'),
++    el('div', {class:'turn-action-controls'}, '', [button(options.auxiliaryCopyLabel || 'Copy')]),
++  ]);
++  children.splice(options.auxiliaryUnit === 'before' ? 1 : children.length, 0, auxiliary);
++}
+ if (options.duplicateUser) children.splice(1, 0, user.cloneNode());
+ for (const control of options.submitControls || []) children.push(el('button', {
+   'aria-label':control.label, type:control.type, disabled:control.disabled || false
+@@ -129,14 +161,33 @@ for (const control of options.submitControls || []) children.push(el('button', {
+ if (options.extraAssistant) children.push(el('div', {'data-content-search-unit-key':'assistant-2'}, '', [
+   el('h4', {'data-conversation-role':'assistant'}, 'ChatGPT said:'),
+ ]));
+-if (options.toolbar !== false) children.push(el('div', {class:'turn-action-controls'}, '', [button('Copy')]));
+-if (options.duplicateToolbar) children.push(el('div', {class:'turn-action-controls'}, '', [button('Copy')]));
++if (options.toolbar !== false) children.push(el('div', {class:'turn-action-controls'}, '', [button(options.assistantCopyLabel || 'Copy')]));
++if (options.duplicateToolbar) children.push(el('div', {class:'turn-action-controls'}, '', [button(options.assistantCopyLabel || 'Copy')]));
+ const paired = el('div', {'data-content-search-turn-key':'fallback-turn-0'}, '', children);
+ if (options.bareUser) {
+   delete user.attrs['data-content-search-unit-key'];
+   delete paired.attrs['data-content-search-turn-key'];
+ }
+ global.document = el('document', {}, '', [paired]);
++if (options.legacyTurns) {
++  delete user.attrs['data-content-search-unit-key'];
++  delete assistant.attrs['data-content-search-unit-key'];
++  user.attrs['data-message-author-role'] = 'user';
++  assistant.attrs['data-message-author-role'] = 'assistant';
++  document.children = [
++    el('div', {'data-testid':'conversation-turn-0'}, '', [user]),
++    el('div', {'data-testid':'conversation-turn-1'}, '', [assistant,
++      el('div', {class:'turn-action-controls'}, '', [el('button', {'data-testid':'copy-turn-action-button','aria-label':'Copy'}, 'Copy')])]),
++  ];
++}
++if (options.retryOnlyOutside) document.children.push(button('Retry'));
++if (options.historicalLoadError) document.children.unshift(el('div', {'data-message-author-role':'assistant'}, 'This response couldn’t load'));
++document.readyState = options.documentState || 'complete';
++if (options.observationEditor) document.children.push(el('div', {id:'prompt-textarea'}, options.observationDraft || ''));
++if (options.observationStop) document.children.push(el('button', {'data-testid':'stop-button'}));
++if (options.observationLogin) document.children.push(el('a', {href:'/auth/login'}));
++if (options.observationCaptcha) document.children.push(el('iframe', {title:'captcha'}));
++if (options.observationNetwork) document.children.push(el('div', {id:'main-frame-error'}), el('div', {id:'error-code'}));
+ global.window = {getComputedStyle: () => ({visibility:'visible', display:'block'})};
+ global.location = {href:options.location || 'https://chatgpt.com/c/current-dom'};
+ if (options.composerCount !== undefined) {
+@@ -196,7 +247,7 @@ const value = eval(fs.readFileSync(0, 'utf8'));
+ const editor = document.querySelector('#prompt-textarea');
+ process.stdout.write(JSON.stringify(options.normalizationTrace ? {
+   value, mutations, commands, editorText:editor?.textContent || '', linked:Boolean(editor?.querySelector('a[href], [text-link-href]'))
+-} : options.traceMutations ? {value, mutations} : value));
++} : (options.traceMutations || options.traceClicks) ? {value, mutations} : value));
+ """
+ 
+ 
+@@ -205,7 +256,7 @@ class CurrentDom:
+         self.options = options
+ 
+     def get_current_url(self):
+-        return self.options.get("location", "https://chatgpt.com/c/current-dom")
++        return self.options.get("metadataLocation", self.options.get("location", "https://chatgpt.com/c/current-dom"))
+ 
+     def get_attribute(self, selector, attribute, timeout):
+         return self.evaluate(f"document.querySelector({json.dumps(selector)})?.getAttribute({json.dumps(attribute)}) ?? null")
+@@ -230,7 +281,7 @@ class CurrentDom:
+             if not observed["linked"]:
+                 self.options.update(composerLink=False, composerText=observed["editorText"])
+             return observed["value"]
+-        if self.options.get("traceMutations"):
++        if self.options.get("traceMutations") or self.options.get("traceClicks"):
+             self.mutations = observed["mutations"]
+             return observed["value"]
+         return observed
+@@ -405,6 +456,26 @@ class CurrentDomTests(unittest.TestCase):
+         self.assertEqual(self.sink.user_message_digests(CurrentDom()), [bridge.digest("exact wake message")])
+         self.assertEqual(self.sink.trusted_turn_anchor_state(CurrentDom(), "exact wake message"), (1, 1))
+ 
++    def test_sent_review_pair_preserves_user_beside_large_complete_answer(self):
++        cdp = CurrentDom(answer="r" * 16000, historicalLoadError=True)
++        observed = self.sink.visible_message_snapshot(cdp, max_message_bytes=32768, review_pair=True)
++        self.assertEqual([item["role"] for item in observed["messages"]], ["USER", "ASSISTANT"])
++        self.assertEqual(observed["messages"][0]["text"], "exact wake message")
++        self.assertEqual(observed["messages"][1]["text"], "r" * 16000)
++        self.assertTrue(all(item["textComplete"] for item in observed["messages"]))
++        ordinary = self.sink.visible_message_snapshot(cdp, max_message_bytes=8192)
++        self.assertLessEqual(sum(len(item["text"].encode()) for item in ordinary["messages"]), 8192)
++
++    def test_sent_review_pair_caps_unicode_without_discarding_user(self):
++        observed = self.sink.visible_message_snapshot(CurrentDom(answer="😀" * 10000),
++            max_message_bytes=32768, review_pair=True)
++        self.assertEqual([item["role"] for item in observed["messages"]], ["USER", "ASSISTANT"])
++        self.assertTrue(observed["messages"][0]["textComplete"])
++        self.assertFalse(observed["messages"][1]["textComplete"])
++        self.assertLessEqual(len(observed["messages"][1]["text"].encode()), 32768)
++        with self.assertRaises(ValueError):
++            self.sink.visible_message_snapshot(CurrentDom(), max_message_bytes=32768)
++
+     def test_class_only_user_receipt_agrees_with_snapshot_and_turn_anchor(self):
+         cdp = CurrentDom(userClassOnly=True, answer="exact wake message")
+         observed = self.sink.visible_message_snapshot(cdp)
+@@ -519,6 +590,32 @@ class CurrentDomTests(unittest.TestCase):

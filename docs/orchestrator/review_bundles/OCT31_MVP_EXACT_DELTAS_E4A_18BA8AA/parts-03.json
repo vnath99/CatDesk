@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "targetCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+  "kind": "parts",
+  "offset": 16,
+  "entries": [
+    {
+      "file": "part-017.diff.txt",
+      "bytes": 8181,
+      "sha256": "eca64e000adb48e788389500c0e11a019d184c62acf7d52146765f2b1fcef834",
+      "startByte": 130241,
+      "endByte": 138422,
+      "paths": [
+        "scripts/wake_readiness_visual_probe.py"
+      ]
+    },
+    {
+      "file": "part-018.diff.txt",
+      "bytes": 8116,
+      "sha256": "13f4387aa1a5fc3653fee960d8bdeea33ca7fc797fd627b5d3a4607f2d2b3717",
+      "startByte": 138422,
+      "endByte": 146538,
+      "paths": [
+        "scripts/wake_readiness_visual_probe.py",
+        "src/daemon_reload.rs"
+      ]
+    },
+    {
+      "file": "part-019.diff.txt",
+      "bytes": 8183,
+      "sha256": "56df9a4923693983f9ebe191f0a5078293444e6a720622353ef7318089c90e43",
+      "startByte": 146538,
+      "endByte": 154721,
+      "paths": [
+        "src/daemon_reload.rs",
+        "src/delegated/autonomy_projects.rs"
+      ]
+    },
+    {
+      "file": "part-020.diff.txt",
+      "bytes": 8135,
+      "sha256": "2e8a5379a52df45b10a9d4cb27f41473d177c84f67e6c8c17de6ec96d0634cb6",
+      "startByte": 154721,
+      "endByte": 162856,
+      "paths": [
+        "src/delegated/autonomy_projects.rs",
+        "src/delegated/autonomy_runtime.rs"
+      ]
+    },
+    {
+      "file": "part-021.diff.txt",
+      "bytes": 8183,
+      "sha256": "4ffa3339355cfd2e15c0dd10c3c496c3099081abf79a5386c5e87264166f0473",
+      "startByte": 162856,
+      "endByte": 171039,
+      "paths": [
+        "src/delegated/autonomy_runtime.rs",
+        "src/delegated/autonomy_supervisor.rs",
+        "src/delegated/codex_app_server.rs"
+      ]
+    },
+    {
+      "file": "part-022.diff.txt",
+      "bytes": 8108,
+      "sha256": "848836e69db3facd55f3aafb771ae9baadfe2bf623a287ee42194b1d0743a93b",
+      "startByte": 171039,
+      "endByte": 179147,
+      "paths": [
+        "src/delegated/codex_app_server.rs",
+        "src/main.rs",
+        "src/mcp.rs"
+      ]
+    },
+    {
+      "file": "part-023.diff.txt",
+      "bytes": 8191,
+      "sha256": "209b9ed638fccff670355539235e87cf15b3e3e03e276c7320479eb02d18355f",
+      "startByte": 179147,
+      "endByte": 187338,
+      "paths": [
+        "src/mcp.rs"
+      ]
+    },
+    {
+      "file": "part-024.diff.txt",
+      "bytes": 8161,
+      "sha256": "6ca2f7b76d644acd1f04be4e536f418ec5c943a62c446cac5e278be770863e8c",
+      "startByte": 187338,
+      "endByte": 195499,
+      "paths": [
+        "src/mcp.rs"
+      ]
+    }
+  ]
+}

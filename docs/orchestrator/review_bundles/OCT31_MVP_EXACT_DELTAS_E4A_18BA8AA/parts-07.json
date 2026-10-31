@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "targetCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+  "kind": "parts",
+  "offset": 48,
+  "entries": [
+    {
+      "file": "part-049.diff.txt",
+      "bytes": 8186,
+      "sha256": "392f63dcaf1e7efcc5d81be6a878560bd3362616b081eb2c0b609c30cfb7dbc2",
+      "startByte": 391379,
+      "endByte": 399565,
+      "paths": [
+        "src/promotion_retirement.rs"
+      ]
+    },
+    {
+      "file": "part-050.diff.txt",
+      "bytes": 8188,
+      "sha256": "2b1d6964ec4c363bdcd1899a7cf742b2b174caf266fcc3183cc286c00ecf00a9",
+      "startByte": 399565,
+      "endByte": 407753,
+      "paths": [
+        "src/promotion_retirement.rs"
+      ]
+    },
+    {
+      "file": "part-051.diff.txt",
+      "bytes": 8191,
+      "sha256": "dab145ba58a793bc9252210ef10e3cf52ef4dd6458e8bae07d2050a144a1ef00",
+      "startByte": 407753,
+      "endByte": 415944,
+      "paths": [
+        "src/promotion_retirement.rs"
+      ]
+    },
+    {
+      "file": "part-052.diff.txt",
+      "bytes": 8191,
+      "sha256": "535c104f5d1f19dc025a7f834f535fcbb3d4371c373b104ea1b2776c3351a7d9",
+      "startByte": 415944,
+      "endByte": 424135,
+      "paths": [
+        "src/promotion_retirement.rs"
+      ]
+    },
+    {
+      "file": "part-053.diff.txt",
+      "bytes": 8119,
+      "sha256": "c22f91ad933053159e5e4e3599c4ad88535e20b0be88077801365815a3f7e33b",
+      "startByte": 424135,
+      "endByte": 432254,
+      "paths": [
+        "src/promotion_retirement.rs"
+      ]
+    },
+    {
+      "file": "part-054.diff.txt",
+      "bytes": 8164,
+      "sha256": "1e283cd7865f9dcce0be41827f231a8a446125e749bdea2179beb4e113c28aaf",
+      "startByte": 432254,
+      "endByte": 440418,
+      "paths": [
+        "src/promotion_retirement.rs"
+      ]
+    },
+    {
+      "file": "part-055.diff.txt",
+      "bytes": 8167,
+      "sha256": "5743e3f420faf19f3fabd3e1f5db17618798677f124969304a6f8c46ecd17ccd",
+      "startByte": 440418,
+      "endByte": 448585,
+      "paths": [
+        "src/promotion_retirement.rs",
+        "src/promotion_source_bridge.rs"
+      ]
+    },
+    {
+      "file": "part-056.diff.txt",
+      "bytes": 8130,
+      "sha256": "b9920f165272945dfe2db6feceb572e0669ebe51bf444b613048575afabbec74",
+      "startByte": 448585,
+      "endByte": 456715,
+      "paths": [
+        "src/promotion_source_bridge.rs"
+      ]
+    }
+  ]
+}

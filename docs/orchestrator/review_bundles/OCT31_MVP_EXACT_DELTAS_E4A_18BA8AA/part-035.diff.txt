@@ -1,0 +1,212 @@
++            continue_native_queue_selection(
++                &f.control,
++                "alpha",
++                &f.selected,
++                &lease,
++                &source,
++                &current,
++                "wrong-event"
++            )
++            .is_err()
++        );
++        assert_eq!(f.queue().jobs().unwrap(), before);
++    }
++
++    #[test]
++    fn native_continuation_follows_multiple_rollovers_and_dormant_interruption() {
++        let f = Fixture::new();
++        let (original, first) = f.rollover();
++        assert!(
++            f.resume(&original, &first, Some("PARENT_LINK_SAVED"))
++                .is_err()
++        );
++        let (_, second) = f.rollover();
++        let selected = f.resume(&original, &second, None).unwrap();
++        let (leaf, lineage) = follow(&f.queue(), "alpha", &f.selected, Some(&f.event)).unwrap();
++        assert_eq!(lineage.len(), 3);
++        assert_eq!(leaf.task_id, selected.task_id);
++        assert_eq!(leaf.binding.target_sha256, Some(second.digest));
++        assert_eq!(
++            f.queue()
++                .jobs()
++                .unwrap()
++                .iter()
++                .filter(|j| j.state == QueueState::Ready)
++                .count(),
++            1
++        );
++        assert_eq!(
++            f.queue()
++                .jobs()
++                .unwrap()
++                .iter()
++                .filter(|j| j.native_origin.as_ref().is_some_and(|o| !o.activated))
++                .count(),
++            1
++        );
++        assert!(follow(&f.queue(), "alpha", &f.selected, Some("foreign-event")).is_err());
++    }
++}
+diff --git a/src/operator_codex_cli/queue/native_dispatch.rs b/src/operator_codex_cli/queue/native_dispatch.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..53fd80cd92e7b8a3f617c05bf113017c7034005b
+--- /dev/null
++++ b/src/operator_codex_cli/queue/native_dispatch.rs
+@@ -0,0 +1,287 @@
++//! Immutable task selection for the existing Web execution grant. These bytes
++//! are not authorization by themselves; the Web key/journal admits dispatch.
++use super::*;
++
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
++#[serde(rename_all = "camelCase", deny_unknown_fields)]
++pub(crate) struct NativeQueueSelection {
++    pub(crate) task_id: String,
++    pub(crate) binding_sha256: String,
++    pub(crate) request_sha256: String,
++    pub(crate) maximum_seconds: u64,
++}
++
++impl NativeQueueSelection {
++    pub(crate) fn validate(&self) -> Result<(), String> {
++        if !cfg!(windows) {
++            return Err("WEB_TASK_NATIVE_PLATFORM_UNQUALIFIED".into());
++        }
++        valid_slug(&self.task_id)?;
++        if !(60..=43_200).contains(&self.maximum_seconds)
++            || [&self.binding_sha256, &self.request_sha256]
++                .iter()
++                .any(|v| !valid_sha256_hex(v) || **v != v.to_ascii_lowercase())
++        {
++            return Err("WEB_TASK_NATIVE_SELECTION_INVALID".into());
++        }
++        Ok(())
++    }
++}
++
++pub(super) fn selected_store(
++    _control: &Path,
++    controller: &AutonomousProjectV1,
++) -> Result<QueueStore, String> {
++    #[cfg(all(test, windows))]
++    if let Some((root, _)) = fixture_entry(_control) {
++        return Ok(QueueStore { root });
++    }
++    QueueStore::open_read_only(controller)?
++        .ok_or_else(|| "WEB_TASK_NATIVE_QUEUE_UNAVAILABLE".into())
++}
++
++pub(crate) fn freeze_native_queue_selection(
++    control: &Path,
++    project_id: &str,
++    task_id: &str,
++) -> Result<NativeQueueSelection, String> {
++    if !cfg!(windows) {
++        return Err("WEB_TASK_NATIVE_PLATFORM_UNQUALIFIED".into());
++    }
++    valid_slug(task_id)?;
++    let controller = resolve_registered_project_from_control_root(control, "catdesk")
++        .map_err(|_| "WEB_TASK_NATIVE_CONTROL_UNAVAILABLE")?;
++    let project = resolve_registered_project_from_control_root(control, project_id)
++        .map_err(|_| "WEB_TASK_NATIVE_PROJECT_UNAVAILABLE")?;
++    let queue = selected_store(&controller.control_workspace, &controller.project)?;
++    let _lock = queue.lock()?;
++    let job = queue
++        .load_job(project_id, task_id)?
++        .ok_or("WEB_TASK_NATIVE_TASK_UNAVAILABLE")?;
++    if job.state != QueueState::Ready || !job.binding.matches(&project.project) {
++        return Err("WEB_TASK_NATIVE_TASK_NOT_READY_OR_CHANGED".into());
++    }
++    #[cfg(all(test, windows))]
++    let maximum_seconds = if fixture_entry(control).is_some() {
++        60
++    } else {
++        turn_timeout()?.as_secs()
++    };
++    #[cfg(not(all(test, windows)))]
++    let maximum_seconds = turn_timeout()?.as_secs();
++    Ok(NativeQueueSelection {
++        task_id: task_id.into(),
++        binding_sha256: project_binding_sha256(&project.project)?,
++        request_sha256: job.request_sha256(),
++        maximum_seconds,
++    })
++}
++
++/// Metadata only. The caller retains the paired-target/registration transaction
++/// and has revalidated this exact Git-prepared project/controller snapshot.
++pub(crate) fn check_native_queue_selection_prepared(
++    prepared: &crate::delegated::autonomy_projects::PreparedProjectScopeV1,
++    selected: &NativeQueueSelection,
++) -> Result<(), String> {
++    selected.validate()?;
++    let project = prepared.scope();
++    let queue = selected_store(&project.control_workspace, prepared.controller())?;
++    let _lock = queue.lock()?;
++    if project_binding_sha256(&project.project)? != selected.binding_sha256 {
++        return Err("CODEX_QUEUE_SCOPE: exact dispatch binding changed".into());
++    }
++    let scope = CodexScope {
++        project_id: project.project.project_id.clone(),
++        workspace: project.project.workspace.clone(),
++    };
++    dispatch_jobs(
++        &queue,
++        Some((
++            &scope,
++            &selected.task_id,
++            &selected.binding_sha256,
++            Some(&selected.request_sha256),
++        )),
++    )?;
++    Ok(())
++}
++
++pub(crate) fn native_queue_selection_status(
++    control: &Path,
++    project_id: &str,
++    selected: &NativeQueueSelection,
++) -> Result<Value, String> {
++    selected.validate()?;
++    let controller = resolve_registered_project_from_control_root(control, "catdesk")
++        .map_err(|_| "WEB_TASK_NATIVE_CONTROL_UNAVAILABLE")?;
++    let project = resolve_registered_project_from_control_root(control, project_id)
++        .map_err(|_| "WEB_TASK_NATIVE_PROJECT_UNAVAILABLE")?;
++    let queue = selected_store(&controller.control_workspace, &controller.project)?;
++    let (job, lineage) = super::native_continuation::follow(&queue, project_id, selected, None)?;
++    let receipt = job
++        .receipt_id
++        .as_deref()
++        .map(|id| -> Result<QueueReceipt, String> {
++            let receipt = queue.read_receipt(id)?;
++            if receipt.project_id != project_id
++                || receipt.task_id != job.task_id
++                || job
++                    .attempt
++                    .as_ref()
++                    .is_none_or(|attempt| attempt.attempt_id != receipt.attempt_id)
++            {
++                return Err("WEB_TASK_NATIVE_RECEIPT_MISMATCH".into());
++            }
++            Ok(receipt)
++        })
++        .transpose()?;
++    Ok(
++        json!({"job":job.summary(),"receipt":receipt,"snapshotOnly":true,
++        "originTaskId":selected.task_id,"lineage":lineage,
++        "bindingStillMatches":job.binding.matches(&project.project),
++        "originalBindingStillMatches":project_binding_sha256(&project.project)? == selected.binding_sha256,
++        "processLiveness":"NOT_INFERRED_FROM_CLAIM_METADATA","taskCompletionVerified":false,
++        "nativeTurnStarted":false,"journalChanged":false}),
++    )
++}
++
++pub(crate) async fn dispatch_native_queue_selection(
++    control: &Path,
++    project_id: &str,
++    selected: &NativeQueueSelection,
++) -> Result<Value, String> {
++    selected.validate()?;
++    let controller = resolve_registered_project_from_control_root(control, "catdesk")
++        .map_err(|_| "WEB_TASK_NATIVE_CONTROL_UNAVAILABLE")?;
++    let project = resolve_registered_project_from_control_root(control, project_id)
++        .map_err(|_| "WEB_TASK_NATIVE_PROJECT_UNAVAILABLE")?;

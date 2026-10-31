@@ -1,0 +1,137 @@
++                cdp.is_element_visible.return_value = False
++                cdp.evaluate.return_value = empty
++                self.probe.recover_empty_home(cdp, target)
++                self.assertEqual(cdp.get.call_args_list, [mock.call(target)] if empty == "EMPTY" else [])
++
++    def test_home_refusal_reasons_are_fixed_and_do_not_navigate(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        cdp = mock.Mock()
++        cdp.get_current_url.return_value = "https://chatgpt.com/"
++        cdp.is_element_visible.return_value = False
++        for reason in self.probe.HOME_CHECKS - {"EMPTY"}:
++            cdp.evaluate.return_value = reason
++            self.assertEqual(self.probe.recover_empty_home(cdp, target), reason)
++        for value in [True, None, "private draft", "EMPTY\n", {"value": "EMPTY"}]:
++            cdp.evaluate.return_value = value
++            self.assertEqual(self.probe.recover_empty_home(cdp, target), "EVALUATION_UNKNOWN")
++        cdp.evaluate.side_effect = RuntimeError("private failure")
++        self.assertEqual(self.probe.recover_empty_home(cdp, target), "EVALUATION_FAILED")
++        cdp.get.assert_not_called()
++
++    def test_home_route_change_or_busy_state_refuses_navigation_after_empty_check(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        cdp = mock.Mock()
++        cdp.evaluate.return_value = "EMPTY"
++        cdp.is_element_visible.return_value = False
++        cdp.get_current_url.side_effect = ["https://chatgpt.com/", target]
++        self.assertEqual(self.probe.recover_empty_home(cdp, target), "NOT_HOME")
++        cdp.get.assert_not_called()
++        cdp.get_current_url.side_effect = None
++        cdp.get_current_url.return_value = "https://chatgpt.com/"
++        def evaluation(_):
++            cdp.is_element_visible.side_effect = lambda selector: selector in self.probe.STOP
++            return "EMPTY"
++        cdp.evaluate.side_effect = evaluation
++        self.assertEqual(self.probe.recover_empty_home(cdp, target), "BUSY")
++        cdp.get.assert_not_called()
++
++    def test_recovery_refuses_login_security_drift_busy_and_unknown_state(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        for current, visible in [
++                ("https://chatgpt.com/auth/login", set()),
++                ("https://chatgpt.com/", {"iframe[title*='captcha' i]"}),
++                ("https://chatgpt.com/", {"button[data-testid='stop-button']"}),
++                ("https://chatgpt.com/c/other", set()),
++                (target, {"#prompt-textarea"})]:
++            with self.subTest(current=current, visible=visible):
++                cdp = mock.Mock()
++                cdp.get_current_url.return_value = current
++                cdp.is_element_visible.side_effect = lambda selector: selector in visible
++                cdp.evaluate.return_value = "EMPTY"
++                self.probe.recover_empty_home(cdp, target)
++                cdp.get.assert_not_called()
++        cdp = mock.Mock()
++        cdp.get_current_url.return_value = "https://chatgpt.com/"
++        cdp.is_element_visible.return_value = False
++        cdp.evaluate.side_effect = RuntimeError("unavailable")
++        self.probe.recover_empty_home(cdp, target)
++        cdp.get.assert_not_called()
++
++    def test_home_navigation_is_attempted_only_once_within_original_deadline(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        cdp = mock.Mock()
++        cdp.get_current_url.return_value = "https://chatgpt.com/"
++        cdp.is_element_visible.return_value = False
++        cdp.evaluate.return_value = "EMPTY"
++        browser = mock.MagicMock()
++        browser.__enter__.return_value = browser
++        browser.cdp = cdp
++        clock = [0]
++
++        def sleep(seconds):
++            clock[0] += seconds
++
++        with tempfile.TemporaryDirectory() as profile:
++            argv = ["probe", "--profile", profile, "--conversation-url", target, "--seconds", "5"]
++            with mock.patch.object(sys, "argv", argv), \
++                    mock.patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=lambda **kwargs: browser)}), \
++                    mock.patch.object(self.probe.time, "monotonic", side_effect=lambda: clock[0]), \
++                    mock.patch.object(self.probe.time, "sleep", side_effect=sleep), \
++                    contextlib.redirect_stdout(io.StringIO()):
++                self.assertEqual(self.probe.main(), 0)
++        cdp.get.assert_called_once_with(target)
++        self.assertEqual(clock[0], 5)
++
++    def target_tabs(self, metadata_urls, document_urls, selected_url=None):
++        tabs = []
++        for metadata, document in zip(metadata_urls, document_urls):
++            async def read_url(value=document):
++                return value
++            tabs.append(types.SimpleNamespace(target=types.SimpleNamespace(url=metadata),
++                                             get_current_url=read_url))
++        cdp = mock.Mock()
++        cdp.get_tabs.return_value = tabs
++        cdp.get_current_url.return_value = selected_url
++        cdp.loop = asyncio.new_event_loop()
++        self.addCleanup(cdp.loop.close)
++        return cdp, tabs
++
++    def test_target_aliases_match_bridge_identity_without_relaxing_route_guards(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        alternatives = [target, "https://chatgpt.com/g/project/c/readiness-fixture",
++                        "https://chat.openai.com/c/readiness-fixture"]
++        for metadata in alternatives:
++            for document in alternatives:
++                with self.subTest(metadata=metadata, document=document):
++                    cdp, tabs = self.target_tabs([metadata], [document], selected_url=document)
++                    facts = []
++                    self.assertEqual(self.probe.select_registered_target_tab(cdp, target, facts.append), "TARGET_TAB_EXACT")
++                    cdp.switch_to_tab.assert_called_once_with(tabs[0])
++                    self.assertEqual(facts[0]["stage"], "VERIFIED")
++                    self.assertEqual(facts[0]["alternateRoute"], document != target)
++        for invalid in [target + "/", target + "?query=private", target + "#fragment",
++                        "https://user@chatgpt.com/c/readiness-fixture", "https://chatgpt.com:443/c/readiness-fixture",
++                        "https://foreign.test/c/readiness-fixture", "https://chatgpt.com/c/other",
++                        "https://chatgpt.com/c/readiness%2Dfixture", "https://chatgpt.com/c/with space"]:
++            with self.subTest(invalid=invalid):
++                self.assertFalse(self.probe.exact_url(invalid, target))
++                cdp, _ = self.target_tabs([target], [invalid], selected_url=target)
++                self.assertEqual(self.probe.select_registered_target_tab(cdp, target), "TARGET_TAB_DRIFT")
++                cdp.switch_to_tab.assert_not_called()
++
++    def test_route_contract_matches_owner_verified_bridge(self):
++        path = Path(__file__).resolve().parents[1] / "scripts/wake_bridge.py"
++        expected = "https://chatgpt.com/c/fixture"
++        with tempfile.TemporaryDirectory() as profile:
++            sink = self.probe.load_observation_sink(path, hashlib.sha256(path.read_bytes()).hexdigest(), Path(profile), expected)
++            for value in [expected, "https://chat.openai.com/g/project/c/fixture",
++                          expected + "/", expected + "?query=1", expected + "#fragment",
++                          "https://user@chatgpt.com/c/fixture", "https://chatgpt.com:443/c/fixture",
++                          "http://chatgpt.com/c/fixture", "https://foreign.test/c/fixture",
++                          "https://chatgpt.com/g/project/c/other", "https://chatgpt.com/c/fixture extra", None, {}]:
++                with self.subTest(value=value):
++                    self.assertEqual(self.probe.exact_url(value, expected), sink.exact(value))
++
++    def test_main_accepts_registered_project_route_and_rejects_invalid_route_before_browser(self):
++        target = "https://chatgpt.com/g/project/c/fixture"
++        cdp = mock.Mock()

@@ -1,0 +1,197 @@
++        let mut invalid: Value = serde_json::from_slice(&fs::read(&child_path).unwrap()).unwrap();
++        invalid["nativeOrigin"]["link"]["sourceEventId"] = json!("foreign-source-event");
++        let invalid = serde_json::to_vec(&invalid).unwrap();
++        fs::write(&child_path, &invalid).unwrap();
++        assert!(f.resume(&source, &current, None).is_err());
++        assert_eq!(fs::read(&child_path).unwrap(), invalid);
++        assert_eq!(
++            fs::read(queue.job_path("alpha", &f.selected.task_id)).unwrap(),
++            before
++        );
++
++        let f = Fixture::new();
++        let (source, current) = f.rollover();
++        let lease = crate::operator_facade::acquire_web_work_lease(&f.control, "alpha").unwrap();
++        let path = f.control.join(".catdesk/projects/projects.json");
++        let mut registry: crate::delegated::autonomy_projects::AutonomousProjectRegistryV1 =
++            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
++        registry
++            .projects
++            .iter_mut()
++            .find(|p| p.project_id == "alpha")
++            .unwrap()
++            .codex_thread_id = Some(Uuid::new_v4().to_string());
++        fs::write(path, serde_json::to_vec(&registry).unwrap()).unwrap();
++        assert_eq!(
++            continue_native_queue_selection(
++                &f.control,
++                "alpha",
++                &f.selected,
++                &lease,
++                &source,
++                &current,
++                &f.event
++            )
++            .unwrap_err(),
++            "WEB_TASK_NATIVE_CONTINUATION_SCOPE_CHANGED"
++        );
++        assert_eq!(f.queue().jobs().unwrap().len(), 1);
++    }
++
++    #[test]
++    fn native_continuation_preserves_proved_no_child_receipt_and_rejects_active_claim() {
++        let f = Fixture::new();
++        let queue = f.queue();
++        let project = resolve_registered_project_from_control_root(&f.control, "alpha").unwrap();
++        let scope = CodexScope {
++            project_id: "alpha".into(),
++            workspace: project.project.workspace,
++        };
++        let pins = Some((
++            &scope,
++            f.selected.task_id.as_str(),
++            f.selected.binding_sha256.as_str(),
++            Some(f.selected.request_sha256.as_str()),
++        ));
++        let claimed = claim_selected(&f.control, &queue, pins).unwrap().unwrap();
++        let id = claimed.attempt.as_ref().unwrap().attempt_id.clone();
++        let before_claim = fs::read(queue.job_path("alpha", &claimed.task_id)).unwrap();
++        let (source, current) = f.rollover();
++        let unchanged = f.resume(&source, &current, None).unwrap();
++        assert_eq!(unchanged.task_id, f.selected.task_id);
++        assert_eq!(
++            fs::read(queue.job_path("alpha", &claimed.task_id)).unwrap(),
++            before_claim
++        );
++        // Finish the simulated claim against its original target: no child
++        // existed. Binding changed meanwhile, so recovery cannot infer that
++        // the old receipt was a valid prelaunch refusal for the new target.
++        complete_attempt(
++            &f.control,
++            &queue,
++            &claimed,
++            TurnResult::before_spawn("FIXTURE_NO_CHILD"),
++        )
++        .unwrap();
++        assert_eq!(
++            f.resume(&source, &current, None).unwrap().task_id,
++            f.selected.task_id
++        );
++        assert_eq!(queue.jobs().unwrap().len(), 1);
++        assert!(!queue.read_receipt(&id).unwrap().binding_still_matches);
++        let mut job = queue
++            .load_job("alpha", &f.selected.task_id)
++            .unwrap()
++            .unwrap();
++        job.state = QueueState::Ready; // An operator state edit is not no-effect proof.
++        queue.save_job(&job).unwrap();
++        assert!(f.resume(&source, &current, None).is_err());
++        assert_eq!(queue.jobs().unwrap().len(), 1);
++
++        let f = Fixture::new();
++        let queue = f.queue();
++        let project = resolve_registered_project_from_control_root(&f.control, "alpha").unwrap();
++        let scope = CodexScope {
++            project_id: "alpha".into(),
++            workspace: project.project.workspace,
++        };
++        let claimed = claim_selected(
++            &f.control,
++            &queue,
++            Some((
++                &scope,
++                f.selected.task_id.as_str(),
++                f.selected.binding_sha256.as_str(),
++                Some(f.selected.request_sha256.as_str()),
++            )),
++        )
++        .unwrap()
++        .unwrap();
++        let id = claimed.attempt.as_ref().unwrap().attempt_id.clone();
++        complete_attempt(
++            &f.control,
++            &queue,
++            &claimed,
++            TurnResult::before_spawn("FIXTURE_NO_CHILD"),
++        )
++        .unwrap();
++        let receipt_path = queue.root.join("receipts").join(format!("{id}.json"));
++        let original_receipt = fs::read(&receipt_path).unwrap();
++        assert!(queue.read_receipt(&id).unwrap().binding_still_matches);
++        let (source, current) = f.rollover();
++        let selected = f.resume(&source, &current, None).unwrap();
++        assert_ne!(selected.task_id, f.selected.task_id);
++        assert_eq!(fs::read(&receipt_path).unwrap(), original_receipt);
++        assert_eq!(queue.read_receipt(&id).unwrap().task_id, f.selected.task_id);
++        assert!(
++            queue
++                .load_job("alpha", &selected.task_id)
++                .unwrap()
++                .unwrap()
++                .attempt
++                .is_none()
++        );
++    }
++
++    #[test]
++    fn native_continuation_terminal_and_operator_paused_jobs_remain_unchanged() {
++        for state in [
++            QueueState::Paused,
++            QueueState::NativeExitedZero,
++            QueueState::Failed,
++            QueueState::Unknown,
++            QueueState::Attention,
++        ] {
++            let f = Fixture::new();
++            let queue = f.queue();
++            let mut job = queue
++                .load_job("alpha", &f.selected.task_id)
++                .unwrap()
++                .unwrap();
++            job.state = state;
++            queue.save_job(&job).unwrap();
++            let before = fs::read(queue.job_path("alpha", &job.task_id)).unwrap();
++            let (source, current) = f.rollover();
++            let effective = f.resume(&source, &current, None).unwrap();
++            assert_eq!(effective.task_id, f.selected.task_id);
++            assert_eq!(
++                fs::read(queue.job_path("alpha", &job.task_id)).unwrap(),
++                before
++            );
++            assert_eq!(queue.jobs().unwrap().len(), 1);
++        }
++    }
++
++    #[test]
++    fn native_continuation_requires_durable_proof_and_exact_source_scope() {
++        let f = Fixture::new();
++        let source = f.wake.config().unwrap().targets["alpha"].clone();
++        let current = f
++            .wake
++            .set_target(
++                "alpha",
++                source.generation,
++                "https://chatgpt.com/c/manual-fixture-target",
++            )
++            .unwrap();
++        let path = f.control.join(".catdesk/projects/projects.json");
++        let mut registry: crate::delegated::autonomy_projects::AutonomousProjectRegistryV1 =
++            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
++        let p = registry
++            .projects
++            .iter_mut()
++            .find(|p| p.project_id == "alpha")
++            .unwrap();
++        p.chatgpt_target_url = Some(current.url.clone());
++        p.chatgpt_target_sha256 = Some(current.digest.clone());
++        p.chatgpt_target_history.push(current.url.clone());
++        fs::write(path, serde_json::to_vec(&registry).unwrap()).unwrap();
++        let before = f.queue().jobs().unwrap();
++        assert_eq!(
++            f.resume(&source, &current, None).unwrap_err(),
++            "WEB_WORK_CONTINUATION_SOURCE_REQUIRED"
++        );
++        assert_eq!(f.queue().jobs().unwrap(), before);
++        let (source, current) = f.rollover();
++        let lease = crate::operator_facade::acquire_web_work_lease(&f.control, "alpha").unwrap();
++        assert!(

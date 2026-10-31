@@ -1,0 +1,256 @@
++    let scope = CodexScope {
++        project_id: project_id.into(),
++        workspace: project.project.workspace,
++    };
++    let pins = Some((
++        &scope,
++        selected.task_id.as_str(),
++        selected.binding_sha256.as_str(),
++        Some(selected.request_sha256.as_str()),
++    ));
++    exact_dispatch_binding(control, pins)?;
++    let queue = selected_store(&controller.control_workspace, &controller.project)?;
++    let ready = {
++        let _lock = queue.lock()?;
++        dispatch_jobs(&queue, pins)?
++            .iter()
++            .any(|j| j.state == QueueState::Ready)
++    };
++    if !ready {
++        return Ok(
++            json!({"action":"codex_queue_dispatch","status":"no_ready_tasks","nativeTurnStarted":false}),
++        );
++    }
++    #[cfg(all(test, windows))]
++    let cli = if let Some((_, image)) = fixture_entry(control) {
++        preflight_selected_cli(image, None, control).await
++    } else {
++        preflight_native_cli(control).await
++    };
++    #[cfg(not(all(test, windows)))]
++    let cli = preflight_native_cli(control).await;
++    let cli = match cli {
++        Ok(cli) => cli,
++        Err(reason) => {
++            return Ok(json!({"action":"codex_queue_dispatch",
++            "status":"prelaunch_refused","reason":reason,"nativeTurnStarted":false}));
++        }
++    };
++    let Some(job) = claim_selected(control, &queue, pins)? else {
++        return Ok(
++            json!({"action":"codex_queue_dispatch","status":"no_ready_tasks","nativeTurnStarted":false}),
++        );
++    };
++    let turn = run_queued_turn(
++        &job,
++        control,
++        &cli,
++        Duration::from_secs(selected.maximum_seconds),
++    )
++    .await
++    .with_cli(&cli);
++    complete_attempt(control, &queue, &job, turn)
++}
++
++#[cfg(all(test, windows))]
++type FixtureMap = std::collections::BTreeMap<PathBuf, (PathBuf, PathBuf)>;
++#[cfg(all(test, windows))]
++static FIXTURES: std::sync::OnceLock<std::sync::Mutex<FixtureMap>> = std::sync::OnceLock::new();
++#[cfg(all(test, windows))]
++fn fixture_entry(control: &Path) -> Option<(PathBuf, PathBuf)> {
++    FIXTURES
++        .get_or_init(Default::default)
++        .lock()
++        .unwrap()
++        .get(control)
++        .cloned()
++}
++#[cfg(all(test, windows))]
++pub(crate) struct NativeQueueFixture {
++    control: PathBuf,
++    owns_map: bool,
++}
++#[cfg(all(test, windows))]
++impl NativeQueueFixture {
++    pub(crate) fn image(&self) -> PathBuf {
++        fixture_entry(&self.control).unwrap().1
++    }
++    pub(crate) fn job_file(&self, project_id: &str) -> PathBuf {
++        let root = fixture_entry(&self.control).unwrap().0;
++        QueueStore { root }.job_path(project_id, "native-fixture")
++    }
++}
++#[cfg(all(test, windows))]
++impl Drop for NativeQueueFixture {
++    fn drop(&mut self) {
++        if self.owns_map {
++            FIXTURES
++                .get()
++                .unwrap()
++                .lock()
++                .unwrap()
++                .remove(&self.control);
++        }
++    }
++}
++#[cfg(all(test, windows))]
++pub(crate) fn native_queue_fixture(control: &Path, project_id: &str) -> NativeQueueFixture {
++    let control = control.canonicalize().unwrap();
++    let project = resolve_registered_project_from_control_root(&control, project_id).unwrap();
++    let (queue, owns_map) = if let Some((root, _)) = fixture_entry(&control) {
++        (QueueStore { root }, false)
++    } else {
++        let base = control
++            .parent()
++            .unwrap()
++            .join(format!("native-queue-{}", Uuid::new_v4()));
++        fs::create_dir(&base).unwrap();
++        let queue = QueueStore::open_at(base.join("queue")).unwrap();
++        let cli = super::tests::fake_native_cli(&base);
++        assert!(
++            FIXTURES
++                .get_or_init(Default::default)
++                .lock()
++                .unwrap()
++                .insert(control.clone(), (queue.root.clone(), cli))
++                .is_none()
++        );
++        (queue, true)
++    };
++    let job = QueueJob::new(
++        "native-fixture".into(),
++        &project.project,
++        "native fixture task".into(),
++        None,
++        None,
++    )
++    .unwrap();
++    queue.save_job(&job).unwrap();
++    NativeQueueFixture { control, owns_map }
++}
+diff --git a/src/operator_codex_cli/queue/owned_native.rs b/src/operator_codex_cli/queue/owned_native.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..0847dbcd36c48d057ad0f163c05cee8ff66452d4
+--- /dev/null
++++ b/src/operator_codex_cli/queue/owned_native.rs
+@@ -0,0 +1,442 @@
++//! Bounded transport for the existing native invocation, not a new worker policy.
++//! The private Job is never disarmed. Cancellation requests cleanup even when
++//! the async caller disappears; the durable claim/marker then remain unresolved.
++
++use super::*;
++use crate::reviewed_candidate_owner::{OwnedCandidateChild, SpawnFailure};
++use std::process::Command as StdCommand;
++use std::sync::{
++    Arc,
++    atomic::{AtomicBool, Ordering},
++    mpsc,
++};
++
++#[derive(Debug)]
++pub(super) struct Transport {
++    pub outcome: &'static str,
++    pub exit_code: Option<i32>,
++    pub child_exit_observed: bool,
++    pub tree_exit_proven: bool,
++    pub no_child_created: bool,
++    pub exit_observed_at: Option<SystemTime>,
++    pub stdout: Option<CodexCliNativeStdoutEvidenceV1>,
++}
++
++impl Transport {
++    fn unknown(outcome: &'static str) -> Self {
++        Self {
++            outcome,
++            exit_code: None,
++            child_exit_observed: false,
++            tree_exit_proven: false,
++            no_child_created: false,
++            exit_observed_at: None,
++            stdout: None,
++        }
++    }
++}
++
++struct CancelOnDrop(Arc<AtomicBool>);
++impl Drop for CancelOnDrop {
++    fn drop(&mut self) {
++        self.0.store(true, Ordering::Release);
++    }
++}
++
++pub(super) async fn run(
++    command: StdCommand,
++    prompt: String,
++    evidence: CodexCliNativeStdoutEvidenceV1,
++    turn_limit: Duration,
++) -> Transport {
++    let cancel = Arc::new(AtomicBool::new(false));
++    let _cancel_on_drop = CancelOnDrop(cancel.clone());
++    tokio::task::spawn_blocking(move || {
++        run_blocking(
++            command,
++            prompt,
++            evidence,
++            turn_limit,
++            PROMPT_TIMEOUT,
++            cancel,
++        )
++    })
++    .await
++    .unwrap_or_else(|_| Transport::unknown("NATIVE_OWNER_TASK_UNOBSERVED"))
++}
++
++struct PipeWorker<T> {
++    receive: mpsc::Receiver<T>,
++    thread: std::thread::JoinHandle<()>,
++}
++impl<T: Send + 'static> PipeWorker<T> {
++    fn start(work: impl FnOnce() -> T + Send + 'static) -> std::io::Result<Self> {
++        let (send, receive) = mpsc::sync_channel(1);
++        let thread = std::thread::Builder::new()
++            .name("catdesk-native-pipe".into())
++            .spawn(move || {
++                let _ = send.send(work());
++            })?;
++        Ok(Self { receive, thread })
++    }
++    fn finish(self) -> Option<T> {
++        let value = self.receive.recv_timeout(NATIVE_STDOUT_EOF_TIMEOUT).ok()?;
++        self.thread.join().ok()?;
++        Some(value)
++    }
++}
++
++fn drain(
++    mut pipe: impl Read,
++    mut evidence: CodexCliNativeStdoutEvidenceV1,
++) -> (CodexCliNativeStdoutEvidenceV1, bool) {
++    let mut buffer = [0; 8192];
++    let mut line = Vec::new();
++    let mut oversized = false;
++    loop {
++        let count = match pipe.read(&mut buffer) {
++            Ok(n) => n,
++            Err(_) => {
++                evidence.invalidate();
++                return (evidence, false);
++            }
++        };
++        if count == 0 {
++            if !line.is_empty() || oversized {
++                evidence.invalidate();
++            }
++            evidence.mark_eof();
++            return (evidence, true);
++        }
++        for byte in &buffer[..count] {
++            if *byte == b'\n' {
++                if oversized {
++                    evidence.invalidate();
++                } else {
++                    evidence.observe_line(&line);
++                }
++                line.clear();
++                oversized = false;
++            } else if !oversized {

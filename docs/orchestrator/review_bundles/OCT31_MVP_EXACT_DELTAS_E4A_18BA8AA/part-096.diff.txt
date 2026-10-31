@@ -1,0 +1,205 @@
++    }
++
++    #[test]
++    fn failed_assistant_observations_preserve_delivery_and_allow_sibling_wake() {
++        for reason in [
++            "RESPONSE_LOAD_ERROR",
++            "RESPONSE_NETWORK_ERROR",
++            "RESPONSE_EXPECTED_USER_DUPLICATED",
++            "RESPONSE_PROBE_TIMEOUT",
++        ] {
++            let (store, delivery) = ready_fixture("failed-response-sibling-progress");
++            let before_timer = timer_bytes(&store);
++            let path = store.root().join("deliveries/alpha-1.json");
++            let before_delivery = std::fs::read(&path).unwrap();
++            let result = reobserve_with_observer(
++                &store,
++                "alpha",
++                &delivery.target,
++                "alpha-1",
++                &|| Ok(()),
++                |_| panic!("failed assistant must not commit completion"),
++                |_, _, _| Err(reason.into()),
++            );
++            assert_eq!(result.unwrap_err(), reason);
++            assert_eq!(timer_bytes(&store), before_timer);
++            assert_eq!(std::fs::read(&path).unwrap(), before_delivery);
++            assert!(!store.root().join("queue/alpha-1.json").exists());
++            let events = super::super::scheduler::fair_round(
++                &store,
++                &store.config().unwrap().targets,
++                None,
++                &std::collections::BTreeMap::new(),
++                crate::store::now(),
++            )
++            .unwrap();
++            let beta = events
++                .iter()
++                .find(|event| event.event_id == "beta-1")
++                .unwrap();
++            let lease = store.host_lock().unwrap();
++            assert_eq!(store.claim(beta, &lease).unwrap().phase, Phase::Claimed);
++        }
++    }
++
+     #[test]
+     fn reobserve_scope_and_receipt_rejections_create_no_journal() {
+         let (store, lease) = fixture("reobserve-scope");
+diff --git a/wake/src/runtime_response.rs b/wake/src/runtime_response.rs
+index 11c944ac79b2c3cd8057a29b7106ebf85511c80c..b722756e940a9db077fca9f5d9e8919d0a1f875e 100644
+--- a/wake/src/runtime_response.rs
++++ b/wake/src/runtime_response.rs
+@@ -16,15 +16,94 @@ fn apply_observation(store: &Store, delivery: &Delivery, value: &Value) -> Resul
+     Ok(complete)
+ }
+ 
++fn valid_completion_controls(value: &Value) -> bool {
++    const COUNTS: &[&str] = &[
++        "semanticAssistantUnits",
++        "roleAssistantNodes",
++        "copyTestIdInTurn",
++        "copyLabelInTurn",
++        "copyResponseLabelInTurn",
++        "copyMessageLabelInTurn",
++        "copyTextInTurn",
++        "knownCopyInAssistant",
++        "knownCopyInBody",
++        "sharedCopyAfterAssistant",
++        "toolbarContainersInTurn",
++        "buttonsInTurn",
++        "copyTestIdInParent",
++        "copyLabelInParent",
++        "copyResponseLabelInParent",
++        "copyMessageLabelInParent",
++    ];
++    const FLAGS: &[&str] = &[
++        "pairedTurn",
++        "assistantBodyPresent",
++        "completionActionFound",
++        "assistantInsideSemanticUnit",
++    ];
++    value
++        .as_object()
++        .is_some_and(|map| map.len() == COUNTS.len() + FLAGS.len())
++        && COUNTS.iter().all(|key| {
++            value
++                .get(key)
++                .and_then(Value::as_u64)
++                .is_some_and(|n| n <= 64)
++        })
++        && FLAGS
++            .iter()
++            .all(|key| value.get(key).and_then(Value::as_bool).is_some())
++}
++
+ pub(crate) fn validate_observation(delivery: &Delivery, value: &Value) -> Result<bool> {
+     let receipt = delivery
+         .receipt
+         .as_ref()
+         .ok_or("RESPONSE_PROBE_RECEIPT_REQUIRED")?;
+     let stage = value.get("stage").and_then(Value::as_str);
++    let controls_valid = value.get("completionControls").is_none_or(|controls| {
++        value.get("diagnosticReason").is_some()
++            && valid_completion_controls(controls)
++            && (stage != Some("RESPONSE_COMPLETE")
++                || (controls
++                    .get("assistantBodyPresent")
++                    .and_then(Value::as_bool)
++                    == Some(true)
++                    && controls
++                        .get("completionActionFound")
++                        .and_then(Value::as_bool)
++                        == Some(true)))
++    });
++    let expected_fields = 5 + usize::from(value.get("completionControls").is_some());
++    let diagnostic_valid = match value.get("diagnosticReason") {
++        None => value
++            .as_object()
++            .is_some_and(|map| map.len() == expected_fields),
++        Some(reason) => {
++            value
++                .as_object()
++                .is_some_and(|map| map.len() == expected_fields + 1)
++                && match stage {
++                    Some("RESPONSE_COMPLETE") => reason.as_str() == Some("COMPLETE"),
++                    Some("RESPONSE_PENDING") => matches!(
++                        reason.as_str(),
++                        Some(
++                            "DOCUMENT_LOADING"
++                                | "GENERATION_ACTIVE"
++                                | "EDITOR_NOT_READY"
++                                | "ASSISTANT_NOT_MOUNTED"
++                                | "ASSISTANT_BODY_UNPROVEN"
++                                | "ASSISTANT_COMPLETION_ACTION_UNPROVEN"
++                        )
++                    ),
++                    _ => false,
++                }
++        }
++    };
+     if delivery.phase != Phase::Sent
+         || !matches!(stage, Some("RESPONSE_PENDING" | "RESPONSE_COMPLETE"))
+-        || !value.as_object().is_some_and(|map| map.len() == 5)
++        || !diagnostic_valid
++        || !controls_valid
+         || value.get("eventId").and_then(Value::as_str) != Some(delivery.event.event_id.as_str())
+         || value.get("targetGeneration").and_then(Value::as_u64) != Some(delivery.target.generation)
+         || value.get("targetDigest").and_then(Value::as_str)
+@@ -209,6 +288,49 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn diagnostic_is_closed_stage_consistent_and_never_completes_pending() {
++        let (store, lease) = fixture("probe-diagnostic");
++        let delivery = sent(&store, &lease, "alpha-1");
++        for reason in [
++            "DOCUMENT_LOADING",
++            "GENERATION_ACTIVE",
++            "EDITOR_NOT_READY",
++            "ASSISTANT_NOT_MOUNTED",
++            "ASSISTANT_BODY_UNPROVEN",
++            "ASSISTANT_COMPLETION_ACTION_UNPROVEN",
++        ] {
++            let mut value = observation(&delivery, "RESPONSE_PENDING");
++            value["diagnosticReason"] = json!(reason);
++            assert!(!apply_observation(&store, &delivery, &value).unwrap());
++            value["stage"] = json!("RESPONSE_COMPLETE");
++            assert_eq!(
++                apply_observation(&store, &delivery, &value).unwrap_err(),
++                "RESPONSE_PROBE_SCOPE_INVALID"
++            );
++        }
++        for reason in [
++            json!("PRIVATE_PAGE_TEXT"),
++            json!("COMPLETE"),
++            json!(null),
++            json!({"text":"private"}),
++        ] {
++            let mut value = observation(&delivery, "RESPONSE_PENDING");
++            value["diagnosticReason"] = reason;
++            assert_eq!(
++                apply_observation(&store, &delivery, &value).unwrap_err(),
++                "RESPONSE_PROBE_SCOPE_INVALID"
++            );
++        }
++        assert_eq!(
++            store.timer("alpha-1").unwrap().unwrap().response_state,
++            ResponseState::Observing
++        );
++        let mut complete = observation(&delivery, "RESPONSE_COMPLETE");
++        complete["diagnosticReason"] = json!("COMPLETE");
++        assert!(apply_observation(&store, &delivery, &complete).unwrap());
++    }
++
+     #[test]
+     fn target_change_during_probe_cannot_complete_old_conversation() {
+         let (store, lease) = fixture("probe-stale");
+@@ -234,4 +356,56 @@ mod tests {
+             ResponseState::Observing
+         );
+     }
++
++    #[test]
++    fn completion_control_metadata_is_closed_capped_scoped_and_not_completion_authority() {
++        let (store, lease) = fixture("probe-control-shape");

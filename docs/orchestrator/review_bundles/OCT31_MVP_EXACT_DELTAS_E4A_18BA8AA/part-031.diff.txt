@@ -1,0 +1,211 @@
++                .load_job("alpha", "alpha_second")
++                .unwrap()
++                .unwrap()
++                .state,
++            QueueState::Claimed
++        );
++        scheduler(control)
++            .unwrap()
++            .release_workspace_lease(&claimed.attempt.unwrap().lease)
++            .unwrap();
++        cleanup(fixture);
++    }
++
+     #[test]
+     fn claimed_attempt_remains_durable_and_is_never_reselected() {
+         let (fixture, projects, queue) = three_project_fixture(2);
+@@ -11382,6 +11970,7 @@ mod tests {
+             profile_readback_diagnostic: None,
+             exit_code: Some(0),
+             child_exit_observed: true,
++            tree_exit_proven: true,
+             binding_still_matches: true,
+             outcome: "NATIVE_EXIT_ZERO".into(),
+             recorded_at_unix: unix_now().unwrap(),
+@@ -11435,6 +12024,7 @@ mod tests {
+                 outcome: "NATIVE_EXIT_ZERO",
+                 exit_code: Some(0),
+                 child_exit_observed: true,
++                tree_exit_proven: true,
+                 child_absent_proven: false,
+                 marker_retired: true,
+                 native_executable: None,
+@@ -11495,6 +12085,7 @@ mod tests {
+             profile_readback_diagnostic: None,
+             exit_code: None,
+             child_exit_observed: false,
++            tree_exit_proven: false,
+             binding_still_matches: false,
+             outcome: "FIXTURE".into(),
+             recorded_at_unix: unix_now().unwrap(),
+@@ -11529,6 +12120,7 @@ mod tests {
+                     outcome: "REVIEW_POST_SNAPSHOT_UNAVAILABLE",
+                     exit_code: Some(0),
+                     child_exit_observed: true,
++                    tree_exit_proven: true,
+                     child_absent_proven: false,
+                     marker_retired: true,
+                     native_executable: None,
+@@ -11601,6 +12193,7 @@ mod tests {
+                     outcome: "NATIVE_EXIT_ZERO",
+                     exit_code: Some(0),
+                     child_exit_observed: true,
++                    tree_exit_proven: true,
+                     child_absent_proven: false,
+                     marker_retired: drift,
+                     native_executable: None,
+diff --git a/src/operator_codex_cli/queue/native_continuation.rs b/src/operator_codex_cli/queue/native_continuation.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..b68ec8cedec1959401b575db98323f377aa5c834
+--- /dev/null
++++ b/src/operator_codex_cli/queue/native_continuation.rs
+@@ -0,0 +1,812 @@
++//! A proved Web continuation can carry unexecuted native work. Keep the source
++//! job/receipts intact. Prepare a dormant child, pause/link its parent, then
++//! activate the child. A missing committed child is evidence loss, not resend
++//! authority. No extra authorization store, browser action or native launch.
++use super::*;
++
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
++#[serde(rename_all = "camelCase", deny_unknown_fields)]
++pub(super) struct NativeContinuationLink {
++    origin_task_id: String,
++    origin_request_sha256: String,
++    source_event_id: String,
++    target_generation: u64,
++    target_sha256: String,
++    task_id: String,
++    request_sha256: String,
++    created_at_unix: u64,
++}
++
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
++#[serde(rename_all = "camelCase", deny_unknown_fields)]
++pub(super) struct NativeContinuationOrigin {
++    parent_task_id: String,
++    parent_request_sha256: String,
++    link: NativeContinuationLink,
++    pub(super) activated: bool,
++}
++
++fn child_id(parent: &str, link: &NativeContinuationLink) -> String {
++    let bytes = serde_json::to_vec(&(
++        "native-continuation-v1",
++        parent,
++        &link.origin_task_id,
++        &link.origin_request_sha256,
++        &link.source_event_id,
++        link.target_generation,
++        &link.target_sha256,
++    ))
++    .expect("native continuation identity");
++    format!("native-next-{:x}", Sha256::digest(bytes))
++}
++
++impl NativeContinuationLink {
++    fn valid_fields(&self, parent_id: &str) -> bool {
++        valid_slug(&self.origin_task_id).is_ok()
++            && valid_slug(parent_id).is_ok()
++            && catdesk_wake::protocol::valid_id(&self.source_event_id)
++            && self.source_event_id.len() <= 128
++            && self.target_generation > 0
++            && self.created_at_unix > 0
++            && self.task_id == child_id(parent_id, self)
++            && [
++                &self.origin_request_sha256,
++                &self.target_sha256,
++                &self.request_sha256,
++            ]
++            .iter()
++            .all(|hash| valid_sha256_hex(hash) && **hash == hash.to_ascii_lowercase())
++    }
++    pub(super) fn validate(&self, parent: &QueueJob) -> Result<(), String> {
++        if parent.state != QueueState::Paused
++            || !self.valid_fields(&parent.task_id)
++            || dormant_child(parent, self).request_sha256() != self.request_sha256
++        {
++            return Err("WEB_TASK_NATIVE_CONTINUATION_INVALID".into());
++        }
++        Ok(())
++    }
++}
++
++impl NativeContinuationOrigin {
++    pub(super) fn validate(&self, child: &QueueJob) -> Result<(), String> {
++        if !self.link.valid_fields(&self.parent_task_id)
++            || !valid_sha256_hex(&self.parent_request_sha256)
++            || self.link.task_id != child.task_id
++            || self.link.request_sha256 != child.request_sha256()
++            || !self.activated && (child.state != QueueState::Paused || !empty_effects(child))
++        {
++            return Err("WEB_TASK_NATIVE_CONTINUATION_INVALID".into());
++        }
++        Ok(())
++    }
++}
++
++fn empty_effects(job: &QueueJob) -> bool {
++    job.attempt.is_none()
++        && job.receipt_id.is_none()
++        && job.review_candidate_sha256.is_none()
++        && job.verification_sha256.is_none()
++        && job.review_package_sha256.is_none()
++        && job.advisory_outcome_sha256.is_none()
++}
++
++fn no_native_effects(queue: &QueueStore, job: &QueueJob) -> Result<(), String> {
++    if !matches!(job.state, QueueState::Ready | QueueState::Paused)
++        || job.review_candidate_sha256.is_some()
++        || job.verification_sha256.is_some()
++        || job.review_package_sha256.is_some()
++        || job.advisory_outcome_sha256.is_some()
++    {
++        return Err("WEB_TASK_NATIVE_CONTINUATION_EFFECTS_UNPROVEN".into());
++    }
++    if empty_effects(job) {
++        return Ok(());
++    }
++    let attempt = job
++        .attempt
++        .as_ref()
++        .ok_or("WEB_TASK_NATIVE_CONTINUATION_EFFECTS_UNPROVEN")?;
++    if !attempt.marker_binding_is_valid() || job.receipt_id.as_deref() != Some(&attempt.attempt_id)
++    {
++        return Err("WEB_TASK_NATIVE_CONTINUATION_EFFECTS_UNPROVEN".into());
++    }
++    let receipt = queue.read_receipt(&attempt.attempt_id)?;
++    if receipt.project_id != job.binding.project_id
++        || receipt.task_id != job.task_id
++        || receipt.attempt_id != attempt.attempt_id
++        || receipt.evidence_level != "CHILD_ABSENT_BEFORE_SPAWN"
++        || receipt.child_exit_observed
++        || receipt.exit_code.is_some()
++        || !receipt.binding_still_matches
++    {
++        return Err("WEB_TASK_NATIVE_CONTINUATION_EFFECTS_UNPROVEN".into());
++    }
++    Ok(())
++}
++
++fn dormant_child(parent: &QueueJob, link: &NativeContinuationLink) -> QueueJob {
++    let mut child = parent.clone();
++    child.task_id = link.task_id.clone();
++    child.binding.target_sha256 = Some(link.target_sha256.clone());
++    child.state = QueueState::Paused;
++    child.created_at_unix = link.created_at_unix;
++    child.attempt = None;
++    child.receipt_id = None;
++    child.review_candidate_sha256 = None;
++    child.verification_sha256 = None;
++    child.review_package_sha256 = None;
++    child.advisory_outcome_sha256 = None;
++    child.native_continuation = None;
++    child.native_origin = None;
++    child.native_origin = Some(NativeContinuationOrigin {
++        parent_task_id: parent.task_id.clone(),
++        parent_request_sha256: parent.request_sha256(),
++        link: link.clone(),
++        activated: false,
++    });
++    child
++}

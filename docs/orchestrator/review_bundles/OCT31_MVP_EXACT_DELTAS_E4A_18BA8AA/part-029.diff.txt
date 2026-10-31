@@ -1,0 +1,202 @@
+     } else {
+         QueueState::Failed
+     };
+-    let release_safe = turn.child_exit_observed || turn.child_absent_proven;
++    let release_safe = turn.tree_exit_proven || turn.child_absent_proven;
+     // Stage attention while the lease is still held. A failed release or a
+     // crash between receipt and release cannot masquerade as a completed job.
+     job.state = if release_safe {
+@@ -5341,19 +5591,38 @@ fn complete_attempt(
+     }))
+ }
+ 
+-async fn dispatch_one(control: &AutonomousProjectV1) -> Result<Value, String> {
+-    let control_workspace = &control.workspace;
++async fn dispatch_one(
++    control: &AutonomousProjectV1,
++    control_workspace: &Path,
++) -> Result<Value, String> {
++    dispatch_selected(control, control_workspace, None).await
++}
++
++async fn dispatch_selected(
++    control: &AutonomousProjectV1,
++    control_workspace: &Path,
++    selected: DispatchSelection<'_>,
++) -> Result<Value, String> {
++    exact_dispatch_binding(control_workspace, selected)?;
+     let queue = QueueStore::open_for_operator(control, control_workspace)?;
+-    if !queue
+-        .jobs()?
+-        .iter()
+-        .any(|job| job.state == QueueState::Ready)
+-    {
++    // Validate the frozen request before probes and again under the claim lock.
++    let ready = {
++        let _lock = queue.lock()?;
++        dispatch_jobs(&queue, selected)?
++            .iter()
++            .any(|job| job.state == QueueState::Ready)
++    };
++    if !ready {
+         return Ok(json!({ "action":"codex_queue_dispatch", "status":"no_ready_tasks" }));
+     }
+     let turn_limit = turn_timeout()?;
+     let cli = preflight_native_cli(control_workspace).await?;
+-    let Some(job) = claim_one(control_workspace, &queue)? else {
++    let claimed = if selected.is_some() {
++        claim_selected(control_workspace, &queue, selected)?
++    } else {
++        claim_one(control_workspace, &queue)?
++    };
++    let Some(job) = claimed else {
+         return Ok(json!({ "action":"codex_queue_dispatch", "status":"no_ready_tasks" }));
+     };
+     let turn = run_queued_turn(&job, control_workspace, &cli, turn_limit)
+@@ -5394,7 +5663,7 @@ mod tests {
+         }
+     }
+ 
+-    fn fixture_root() -> PathBuf {
++    pub(super) fn fixture_root() -> PathBuf {
+         let root = std::env::temp_dir().join(format!("catdesk-operator-queue-{}", Uuid::new_v4()));
+         fs::create_dir(&root).expect("fixture root");
+         root
+@@ -5422,7 +5691,7 @@ mod tests {
+         }
+     }
+ 
+-    fn fake_native_cli(root: &Path) -> PathBuf {
++    pub(super) fn fake_native_cli(root: &Path) -> PathBuf {
+         let source = root.join("fake-codex.rs");
+         let executable = root.join(if cfg!(windows) {
+             "fake-codex.exe"
+@@ -6697,6 +6966,7 @@ mod tests {
+             evidence_level: "NATIVE_EXIT_OBSERVED".into(),
+             exit_code: Some(0),
+             child_exit_observed: true,
++            tree_exit_proven: true,
+             binding_still_matches: true,
+             outcome: "NATIVE_EXIT_ZERO".into(),
+             recorded_at_unix: unix_now().unwrap(),
+@@ -9655,6 +9925,7 @@ mod tests {
+             evidence_level: "NATIVE_EXIT_OBSERVED".into(),
+             exit_code: Some(0),
+             child_exit_observed: true,
++            tree_exit_proven: true,
+             binding_still_matches: true,
+             outcome: "NATIVE_EXIT_ZERO".into(),
+             recorded_at_unix: unix_now().unwrap(),
+@@ -10643,6 +10914,7 @@ mod tests {
+             outcome: "NATIVE_EXIT_ZERO",
+             exit_code: Some(0),
+             child_exit_observed: true,
++            tree_exit_proven: true,
+             child_absent_proven: false,
+             marker_retired: true,
+             native_executable: None,
+@@ -10795,6 +11067,7 @@ mod tests {
+                 },
+                 exit_code: Some(if iteration == 0 { 1 } else { 0 }),
+                 child_exit_observed: true,
++                tree_exit_proven: true,
+                 child_absent_proven: false,
+                 marker_retired: true,
+                 native_executable: None,
+@@ -10842,6 +11115,91 @@ mod tests {
+         cleanup(fixture);
+     }
+ 
++    #[test]
++    fn parent_exit_is_not_tree_authority_and_cleaned_timeouts_never_requeue() {
++        for (tree_exit_proven, marker_retired, outcome, expected, released) in [
++            (false, true, "NATIVE_EXIT_ZERO", "UNKNOWN", false),
++            (false, true, "NATIVE_EXIT_NONZERO", "UNKNOWN", false),
++            (true, false, "NATIVE_TIMEOUT", "ATTENTION", true),
++            (true, false, "NATIVE_PROMPT_PIPE_FAILED", "ATTENTION", true),
++            (true, true, "NATIVE_EXIT_NONZERO", "FAILED", true),
++        ] {
++            let (fixture, projects, queue) = three_project_fixture(2);
++            let control = &projects[0].workspace;
++            for project in projects.iter().skip(1) {
++                queue
++                    .save_job(
++                        &QueueJob::new(
++                            format!("job_{}", project.project_id),
++                            project,
++                            "fixture".into(),
++                            None,
++                            None,
++                        )
++                        .unwrap(),
++                    )
++                    .unwrap();
++            }
++            let claimed = claim_one(control, &queue).unwrap().unwrap();
++            assert_eq!(claimed.binding.project_id, "alpha");
++            let result = complete_attempt(
++                control,
++                &queue,
++                &claimed,
++                TurnResult {
++                    outcome,
++                    exit_code: Some(if outcome == "NATIVE_EXIT_ZERO" { 0 } else { 1 }),
++                    child_exit_observed: true,
++                    child_absent_proven: false,
++                    tree_exit_proven,
++                    marker_retired,
++                    native_executable: None,
++                    native_version: None,
++                    native_executable_sha256: None,
++                    actual_profile: None,
++                    profile_readback_diagnostic: None,
++                    review_before: Some(mock_git_witness()),
++                    review_after: Some(mock_git_witness()),
++                },
++            )
++            .unwrap();
++            assert_eq!(result["job"]["state"], expected);
++            assert_eq!(result["leaseReleased"], released);
++            assert!(result["job"]["reviewCandidateSha256"].is_null());
++            let receipt = queue
++                .read_receipt(&claimed.attempt.as_ref().unwrap().attempt_id)
++                .unwrap();
++            assert_eq!(receipt.tree_exit_proven, tree_exit_proven);
++            let mut old = serde_json::to_value(&receipt).unwrap();
++            old.as_object_mut().unwrap().remove("treeExitProven");
++            assert!(
++                !serde_json::from_value::<QueueReceipt>(old)
++                    .unwrap()
++                    .tree_exit_proven
++            );
++            // Cold reopen cannot reinterpret this as READY, and another project
++            // can still obtain the independent slot while alpha is unresolved.
++            let reopened = QueueStore::open_at(queue.root.clone()).unwrap();
++            let next = claim_one(control, &reopened).unwrap().unwrap();
++            assert_eq!(next.binding.project_id, "beta");
++            assert_eq!(
++                reopened
++                    .load_job("alpha", "job_alpha")
++                    .unwrap()
++                    .unwrap()
++                    .state,
++                if expected == "UNKNOWN" {
++                    QueueState::Unknown
++                } else if expected == "FAILED" {
++                    QueueState::Failed
++                } else {
++                    QueueState::Attention
++                }
++            );
++            cleanup(fixture);
++        }
++    }
++
+     #[test]
+     fn valid_registry_without_scheduler_children_initializes_on_claim() {
+         let (fixture, projects, queue) = three_project_fixture(1);
+@@ -11024,6 +11382,236 @@ mod tests {
+         cleanup(fixture);
+     }
+ 
++    #[test]

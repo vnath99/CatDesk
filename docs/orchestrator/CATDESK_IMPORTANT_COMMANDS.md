@@ -1,3 +1,7 @@
+## 2026-10-31 - negative auxiliary review disposition
+
+Use existing `autonomy_session_cancel` only with the exact owned session, current `expectedStateVersion` and immutable idempotency key after establishing a known negative review outcome and no provider handle. The qualified bounded supervisor-only path retired the owned source-b251 review at version5, preserving its contract/history and every unrelated file. This does not clear a SENT Web response hold, finish accounting spans, acknowledge source or grant promotion authority. A material current-source review needs a fresh contract, frozen payload/destination and existing scoped authorization/admission. Complete64-path exact inputs are available; source18ba8aa remains the selected health-qualified development bundle. Evidence: `docs/verification/OWNED_REVIEW_DISPOSITION_2026_10_31.json`.
+
 ## 2026-10-31 - selected USER-reader qualification outcome
 
 Source18ba8aa is selected and backend-health qualified. Existing receipt-only reobserve returned PENDING/ASSISTANT_COMPLETION_ACTION_UNPROVEN; receipt gate accepted=True, timer completed=False, transport closed=False. No new USER message or recovery click was issued. Original source verdict remains INCONCLUSIVE; this does not authorize ACK/producer/promotion. Final native profile state is QUIESCENT. Evidence: `docs/verification/USER_BODY_CANONICALIZATION_2026_10_31.json`.

@@ -1,0 +1,202 @@
++        let launched_at = SystemTime::now();
++        let mut child = match command.spawn() {
++            Ok(child) => child,
++            Err(_) => {
++                let retired = writer.finish_writer_turn().is_ok();
++                return TurnResult {
++                    marker_retired: retired,
++                    native_executable: Some(executable.clone()),
++                    ..TurnResult::before_spawn("NATIVE_SPAWN_FAILED")
++                };
++            }
++        };
++        let Some(stdout) = child.stdout.take() else {
++            let _ = tokio::time::timeout(KILL_TIMEOUT, child.kill()).await;
++            return TurnResult::unknown("NATIVE_STDOUT_UNAVAILABLE");
++        };
++        let stdout_reader = tokio::spawn(drain_native_jsonl_stdout(stdout, stdout_evidence));
++        let prompt_accepted = write_queued_prompt(&mut child, &job.prompt, PROMPT_TIMEOUT).await;
++        if !prompt_accepted {
++            let _ = tokio::time::timeout(KILL_TIMEOUT, child.kill()).await;
++            // The native parent may have descendants. Keep the pending writer
++            // marker and scheduler lease until an explicit proof-based recovery.
++            return TurnResult::unknown("PROMPT_PIPE_DESCENDANTS_UNPROVEN");
++        }
++        let status = match tokio::time::timeout(turn_limit, child.wait()).await {
++            Ok(Ok(status)) => status,
++            Ok(Err(_)) => {
++                let _ = tokio::time::timeout(KILL_TIMEOUT, child.kill()).await;
++                return TurnResult::unknown("NATIVE_EXIT_UNOBSERVED");
++            }
++            Err(_) => {
++                let _ = tokio::time::timeout(KILL_TIMEOUT, child.kill()).await;
++                return TurnResult::unknown("NATIVE_TIMEOUT_DESCENDANTS_UNPROVEN");
++            }
++        };
++        let exit_observed_at = SystemTime::now();
++        let stdout_evidence =
++            match tokio::time::timeout(NATIVE_STDOUT_EOF_TIMEOUT, stdout_reader).await {
++                Ok(Ok((evidence, true))) => evidence,
++                _ => {
++                    return TurnResult {
++                        outcome: "NATIVE_STDOUT_EOF_UNOBSERVED",
++                        exit_code: status.code(),
++                        child_exit_observed: true,
++                        child_absent_proven: false,
++                        tree_exit_proven: false,
++                        marker_retired: false,
++                        native_executable: Some(executable.clone()),
++                        native_version: None,
++                        native_executable_sha256: None,
++                        actual_profile: None,
++                        profile_readback_diagnostic: None,
++                        review_before: Some(review_before),
++                        review_after: None,
++                    };
++                }
+             };
+-        }
+-    };
+-    let (actual_profile, profile_readback_diagnostic) = if status.success() {
+-        let (profile, diagnostic) = read_queued_native_profile(
+-            profile_readback.as_ref(),
+-            &job.binding.thread_id,
+-            launched_at,
+-            exit_observed_at,
+-            &stdout_evidence,
+-        );
+-        (profile, Some(diagnostic))
+-    } else {
+-        (None, None)
+-    };
+-    let review_after = if status.success() {
+-        capture_git_review_witness(&project.workspace, &git)
+-            .await
+-            .ok()
+-    } else {
+-        None
+-    };
+-    let retired = writer.finish_writer_turn().is_ok();
+-    TurnResult {
+-        outcome: if status.success() && review_after.is_none() {
+-            "REVIEW_POST_SNAPSHOT_UNAVAILABLE"
+-        } else if status.success() {
+-            "NATIVE_EXIT_ZERO"
++        let (actual_profile, profile_readback_diagnostic) = if status.success() {
++            let (profile, diagnostic) = read_queued_native_profile(
++                profile_readback.as_ref(),
++                &job.binding.thread_id,
++                launched_at,
++                exit_observed_at,
++                &stdout_evidence,
++            );
++            (profile, Some(diagnostic))
+         } else {
+-            "NATIVE_EXIT_NONZERO"
+-        },
+-        exit_code: status.code(),
+-        child_exit_observed: true,
+-        child_absent_proven: false,
+-        marker_retired: retired,
+-        native_executable: Some(executable.clone()),
+-        native_version: None,
+-        native_executable_sha256: None,
+-        actual_profile,
+-        profile_readback_diagnostic,
+-        review_before: Some(review_before),
+-        review_after,
++            (None, None)
++        };
++        let review_after = if status.success() {
++            capture_git_review_witness(&project.workspace, &git)
++                .await
++                .ok()
++        } else {
++            None
++        };
++        let retired = writer.finish_writer_turn().is_ok();
++        TurnResult {
++            outcome: if status.success() && review_after.is_none() {
++                "REVIEW_POST_SNAPSHOT_UNAVAILABLE"
++            } else if status.success() {
++                "NATIVE_EXIT_ZERO"
++            } else {
++                "NATIVE_EXIT_NONZERO"
++            },
++            exit_code: status.code(),
++            child_exit_observed: true,
++            child_absent_proven: false,
++            tree_exit_proven: false,
++            marker_retired: retired,
++            native_executable: Some(executable.clone()),
++            native_version: None,
++            native_executable_sha256: None,
++            actual_profile,
++            profile_readback_diagnostic,
++            review_before: Some(review_before),
++            review_after,
++        }
+     }
+ }
+ 
+@@ -5267,6 +5513,7 @@ fn complete_attempt(
+         .into(),
+         exit_code: turn.exit_code,
+         child_exit_observed: turn.child_exit_observed,
++        tree_exit_proven: turn.tree_exit_proven,
+         binding_still_matches,
+         outcome: turn.outcome.into(),
+         recorded_at_unix: unix_now()?,
+@@ -5275,28 +5522,31 @@ fn complete_attempt(
+     job.receipt_id = Some(receipt_id);
+     // Preserve the process receipt even if evidence capture or sidecar
+     // publication fails. A review candidate is never a completion verdict.
+-    job.review_candidate_sha256 =
+-        if turn.outcome == "NATIVE_EXIT_ZERO" && binding_still_matches && turn.marker_retired {
+-            turn.review_before
+-                .clone()
+-                .zip(turn.review_after.clone())
+-                .and_then(|(before, after)| {
+-                    let receipt_sha = queue.persisted_receipt_sha256(&receipt).ok()?;
+-                    let candidate = QueueReviewCandidate::from_observed_turn(
+-                        &job,
+-                        &receipt,
+-                        receipt_sha,
+-                        before,
+-                        after,
+-                    );
+-                    queue.write_review_candidate(&candidate).ok()
+-                })
+-        } else {
+-            None
+-        };
++    job.review_candidate_sha256 = if turn.outcome == "NATIVE_EXIT_ZERO"
++        && turn.tree_exit_proven
++        && binding_still_matches
++        && turn.marker_retired
++    {
++        turn.review_before
++            .clone()
++            .zip(turn.review_after.clone())
++            .and_then(|(before, after)| {
++                let receipt_sha = queue.persisted_receipt_sha256(&receipt).ok()?;
++                let candidate = QueueReviewCandidate::from_observed_turn(
++                    &job,
++                    &receipt,
++                    receipt_sha,
++                    before,
++                    after,
++                );
++                queue.write_review_candidate(&candidate).ok()
++            })
++    } else {
++        None
++    };
+     let review_missing =
+         turn.outcome == "NATIVE_EXIT_ZERO" && job.review_candidate_sha256.is_none();
+-    let final_state = if !turn.child_exit_observed && !turn.child_absent_proven {
++    let final_state = if !turn.tree_exit_proven && !turn.child_absent_proven {
+         QueueState::Unknown
+     } else if !binding_still_matches
+         || !turn.marker_retired
+@@ -5312,7 +5562,7 @@ fn complete_attempt(

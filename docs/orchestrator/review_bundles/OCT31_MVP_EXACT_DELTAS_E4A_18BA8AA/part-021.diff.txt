@@ -1,0 +1,174 @@
++            let thread = json!({"id":"existing-thread","cwd":cwd});
++            let mut resumed = json!({"thread":{"id":"existing-thread","cwd":cwd,"canAcceptDirectInput":true},"cwd":cwd,"model":"gpt-6.1-sol","reasoningEffort":"medium"});
++            resumed["thread"]["activeWriter"] = json!(active_writer);
++            let mut transport = FakeTransport {
++                replies: VecDeque::from([
++                    json!({"data":[thread.clone()]}),
++                    json!({"data":[]}),
++                    json!({"thread":thread}),
++                    json!({"rateLimits":[]}),
++                    resumed,
++                ]),
++                methods: Vec::new(),
++            };
++            let result = observe_registration_thread(
++                &mut transport,
++                &workspace,
++                "fixture-git",
++                10,
++                SOL_MEDIUM_MODEL,
++            );
++            assert_eq!(result.is_ok(), !active_writer);
++            if let Ok(evidence) = result {
++                assert_eq!(evidence.codex_thread_id, "existing-thread");
++                assert_eq!(evidence.selected_model, SOL_MEDIUM_MODEL);
++                assert_eq!(evidence.reasoning_effort, "medium");
++            }
++            assert_eq!(
++                transport.methods,
++                [
++                    "thread/list",
++                    "thread/list",
++                    "thread/read",
++                    "account/rateLimits/read",
++                    "thread/resume"
++                ]
++            );
++        }
++        for raw in [
++            "CODEX_REGISTRATION_DISCOVERY: private data",
++            "C:/private/runtime",
++            "CODEX_REGISTRATION_UNTRUSTED",
++        ] {
++            assert_eq!(
++                super::super::codex_app_server::registration_error_code(raw),
++                "CODEX_PROJECT_OPERATION_REFUSED"
++            );
++        }
++        remove_writer_fixture(root);
++    }
++
++    #[test]
++    #[ignore = "explicit bounded operator-local persisted native registration acceptance"]
++    fn live_operator_existing_registration_probe() {
++        let path = PathBuf::from(
++            std::env::var_os("CATDESK_REGISTRATION_LIVE_FIXTURE").expect("explicit test manifest"),
++        );
++        let manifest: Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
++        assert_eq!(manifest["existingNativeThreadOnly"], true);
++        let control = PathBuf::from(manifest["controlWorkspace"].as_str().unwrap())
++            .canonicalize()
++            .unwrap();
++        let native = PathBuf::from(manifest["nativeWorkspace"].as_str().unwrap())
++            .canonicalize()
++            .unwrap();
++        assert_ne!(control, native);
++        let result=super::super::autonomy_supervisor::handle_tool("autonomy_project_registry_preflight",json!({
++            "projectId":"native-beta","workspace":native,"gitIdentity":"https://example.test/native-beta-fixture.git",
++            "verificationProfile":"rust_full","modelId":SOL_MEDIUM_MODEL
++        }),&control).expect("supported existing-thread preflight");
++        let confirmed = super::super::autonomy_supervisor::handle_tool(
++            "autonomy_project_registry_confirm",
++            json!({
++                "confirmationToken":result["confirmationToken"]
++            }),
++            &control,
++        )
++        .expect("existing-thread confirmation");
++        assert_eq!(confirmed["projectId"], "native-beta");
++        println!("LIVE_REGISTRATION_EXISTING_NATIVE_THREAD_CONFIRMED=true");
++    }
+     impl CodexAppServerTransportV1 for FakeTransport {
+         fn request(&mut self, method: &str, _params: Value) -> Result<Value, RuntimeError> {
+             self.methods.push(method.into());
+diff --git a/src/delegated/autonomy_supervisor.rs b/src/delegated/autonomy_supervisor.rs
+index b8cc78fbce037b08c0abf21e8e2eaa84e732788f..f30ffebb20206435d1beba279f191394fb75a080 100644
+--- a/src/delegated/autonomy_supervisor.rs
++++ b/src/delegated/autonomy_supervisor.rs
+@@ -391,6 +391,14 @@ pub fn tool_schemas() -> Vec<Value> {
+         .collect()
+ }
+ 
++fn registration_runtime_error(error: super::runtime::RuntimeError) -> String {
++    let code = match &error {
++        super::runtime::RuntimeError::Validation(code) => code.as_str(),
++        _ => "",
++    };
++    super::codex_app_server::registration_error_code(code).into()
++}
++
+ pub fn handle_tool(name: &str, args: Value, workspace: &Path) -> Result<Value, String> {
+     let workspace = workspace
+         .canonicalize()
+@@ -1100,17 +1108,17 @@ impl AutonomousSupervisorV1 {
+         model_id: Option<&str>,
+     ) -> Result<Value, String> {
+         let workspace = verified_external_git_workspace(workspace, git_identity)?;
++        let store = self.project_registry()?;
++        let _writer = super::autonomy_runtime::acquire_project_writer_lock(&workspace)
++            .map_err(|_| "CODEX_REGISTRATION_WRITER_BUSY".to_string())?;
+         let evidence = super::autonomy_runtime::host_observe_registration_thread_for_model(
+             &workspace,
+             git_identity,
+             supervisor_now_unix(),
+             model_id.unwrap_or(super::codex_model_policy::LEGACY_TERRA_MODEL),
+         )
+-        .map_err(|_| {
+-            "authoritative exact-CWD Codex registration evidence is unavailable".to_string()
+-        })?;
+-        let preflight = self
+-            .project_registry()?
++        .map_err(registration_runtime_error)?;
++        let preflight = store
+             .preflight_project_registration(
+                 project_id,
+                 verification_profile,
+@@ -1159,9 +1167,7 @@ impl AutonomousSupervisorV1 {
+             supervisor_now_unix(),
+             &preflight.evidence.selected_model,
+         )
+-        .map_err(|_| {
+-            "authoritative exact-CWD Codex confirmation evidence is unavailable".to_string()
+-        })?;
++        .map_err(registration_runtime_error)?;
+         let project = store
+             .confirm_project_registration(confirmation_token, &evidence, supervisor_now_unix())
+             .map_err(|_| "project registration confirmation was rejected".to_string())?;
+diff --git a/src/delegated/codex_app_server.rs b/src/delegated/codex_app_server.rs
+index ec101f20098e88d100325b82f61965d9d8de51b2..a22414e763e06bad49819dfc4c93827885298b2a 100644
+--- a/src/delegated/codex_app_server.rs
++++ b/src/delegated/codex_app_server.rs
+@@ -27,6 +27,24 @@ const MAX_APP_SERVER_SKIPPED_NOTIFICATIONS: usize = 32;
+ const THREAD_LIST_PAGE_LIMIT: u64 = 5;
+ const THREAD_LIST_MAX_PAGES: usize = 8;
+ 
++/// Only these fixed stage codes can cross the operator boundary. Provider
++/// messages, paths, thread IDs, prompts and authentication data stay private.
++pub(crate) fn registration_error_code(error: &str) -> &'static str {
++    match error {
++        "CODEX_REGISTRATION_WORKSPACE" => "CODEX_REGISTRATION_WORKSPACE",
++        "CODEX_REGISTRATION_PROFILE" => "CODEX_REGISTRATION_PROFILE",
++        "CODEX_REGISTRATION_TRANSPORT" => "CODEX_REGISTRATION_TRANSPORT",
++        "CODEX_REGISTRATION_INITIALIZE" => "CODEX_REGISTRATION_INITIALIZE",
++        "CODEX_REGISTRATION_DISCOVERY" => "CODEX_REGISTRATION_DISCOVERY",
++        "CODEX_REGISTRATION_AMBIGUOUS" => "CODEX_REGISTRATION_AMBIGUOUS",
++        "CODEX_REGISTRATION_WRITER_BUSY" => "CODEX_REGISTRATION_WRITER_BUSY",
++        "CODEX_REGISTRATION_NATIVE_INITIALIZATION_REQUIRED" => {
++            "CODEX_REGISTRATION_NATIVE_INITIALIZATION_REQUIRED"
++        }
++        _ => "CODEX_PROJECT_OPERATION_REFUSED",
++    }
++}
++
+ /// Launch settings for a CatDesk-owned supported `codex app-server --stdio`
+ /// process.  The only authentication-related setting is an opaque,
+ /// operator-selected config-root path.  CatDesk never reads it, and it is
+@@ -160,6 +178,13 @@ impl CodexAppServerStdioTransportV1 {
+                 "capabilities": {"experimentalApi": true}
+             }),
+         )?;
++        // Complete the documented handshake before any workspace request.
++        self.stdin
++            .write_all(b"{\"method\":\"initialized\",\"params\":{}}\n")
++            .and_then(|()| self.stdin.flush())
++            .map_err(|_| {

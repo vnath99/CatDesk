@@ -1,0 +1,117 @@
+         self.assertEqual(bridge.digest(bridge.normalize_message(observed["text"])),
+                          self.sink.user_message_digests(cdp)[0])
+ 
++    def test_user_body_readers_exclude_controls_even_when_unit_is_the_body(self):
++        for options in [dict(userControlsInsideBody=True), dict(userBodyIsUnit=True)]:
++            with self.subTest(options=options):
++                cdp = CurrentDom(**options)
++                self.assertEqual(self.sink.user_message_digests(cdp), [bridge.digest('exact wake message')])
++                message = self.sink.visible_message_snapshot(cdp)['messages'][0]
++                self.assertEqual(message['text'], 'exact wake message')
++                self.assertNotIn('PRIVATE_CONTROL_LABEL', message['text'])
++                self.assertEqual(self.sink.observe_cooperative_response(
++                    CurrentDom(observationEditor=True, **options), 'exact wake message',
++                    bridge.digest('exact wake message')), 'RESPONSE_COMPLETE')
++        literal = CurrentDom(userText='Copy message', userControlsInsideBody=True)
++        self.assertEqual(self.sink.user_message_digests(literal), [bridge.digest('Copy message')])
++        with self.assertRaisesRegex(bridge.Attention, 'RESPONSE_USER_REPRESENTATION_MISMATCH'), \
++                patch.object(self.sink, 'response_snapshot', side_effect=AssertionError('must refuse before assistant')):
++            self.sink.observe_cooperative_response(CurrentDom(userText='unrelated',
++                userControlsInsideBody=True, observationEditor=True), 'PRIVATE_CONTROL_LABEL',
++                bridge.digest('PRIVATE_CONTROL_LABEL'))
++
++    def test_user_paragraph_boundaries_match_receipts_and_private_snapshots(self):
++        cdp = CurrentDom(userParagraphs=True)
++        expected = bridge.digest(bridge.normalize_message('first paragraph\n\nsecond paragraph'))
++        self.assertEqual(self.sink.user_message_digests(cdp), [expected])
++        snapshot = self.sink.visible_message_snapshot(cdp)['messages'][0]
++        self.assertEqual(bridge.digest(bridge.normalize_message(snapshot['text'])), expected)
++
+     def test_new_chat_plain_send_requires_submit_type_and_unique_enabled_control(self):
+         send = {"label":"Send", "type":"submit"}
+         selector = "button[type='submit'][aria-label='Send']"
+@@ -535,10 +632,120 @@ class CurrentDomTests(unittest.TestCase):
+         self.assertEqual(self.sink.response_snapshot(CurrentDom(), "exact wake message", require_usable_body=True),
+                          (0, 0, True, True))
+ 
++    def test_assistant_copy_message_action_qualifies_only_exact_latest_assistant(self):
++        for legacy in [False, True]:
++            with self.subTest(legacy=legacy):
++                cdp = CurrentDom(assistantCopyLabel='Copy message', legacyTurns=legacy)
++                self.assertEqual(self.sink.response_snapshot(cdp, 'exact wake message',
++                    require_usable_body=True), (0, 0, True, True))
++
++    def test_copy_message_from_user_body_auxiliary_or_ambiguous_toolbar_cannot_complete(self):
++        for options in [dict(toolbar=False, userCopy='Copy message'),
++                dict(toolbar=False, bodyCopyLabel='Copy message'),
++                dict(toolbar=False, auxiliaryUnit='after', auxiliaryCopyLabel='Copy message'),
++                dict(assistantCopyLabel='Copy message', duplicateToolbar=True),
++                dict(assistantCopyLabel='Copy message', extraAssistant=True),
++                dict(assistantCopyLabel='Copy message elsewhere')]:
++            with self.subTest(options=options):
++                self.assertFalse(self.sink.response_snapshot(CurrentDom(**options),
++                    'exact wake message', require_usable_body=True)[3])
++
++    def test_copy_message_never_completes_controls_only_or_failed_assistant(self):
++        self.assertFalse(self.sink.response_snapshot(CurrentDom(assistantCopyLabel='Copy message',
++            controlsOnly=True), 'exact wake message', require_usable_body=True)[3])
++        with self.assertRaisesRegex(bridge.PostSubmitUnknown, 'RESPONSE_LOAD_ERROR'):
++            self.sink.response_snapshot(CurrentDom(assistantCopyLabel='Copy message', loadError=True),
++                'exact wake message', require_usable_body=True)
++
++    def test_passive_completion_diagnostics_distinguish_body_and_toolbar_without_text(self):
++        for options, reason in [({}, "COMPLETE"),
++                ({"controlsOnly": True}, "ASSISTANT_BODY_UNPROVEN"),
++                ({"toolbar": False}, "ASSISTANT_COMPLETION_ACTION_UNPROVEN"),
++                ({"duplicateToolbar": True}, "ASSISTANT_COMPLETION_ACTION_UNPROVEN")]:
++            with self.subTest(options=options):
++                cdp = CurrentDom(observationEditor=True, answer="PRIVATE_BODY_MARKER", **options)
++                stage = self.sink.observe_cooperative_response(cdp, "exact wake message",
++                    bridge.digest("exact wake message"))
++                self.assertEqual(stage, "RESPONSE_COMPLETE" if reason == "COMPLETE" else "RESPONSE_PENDING")
++                self.assertEqual(self.sink.response_observation_reason, reason)
++                self.assertNotIn("PRIVATE_BODY_MARKER", reason)
++
++    def test_passive_diagnostics_identify_pending_layer_and_reset_on_refusal(self):
++        for options, reason in [({"documentState": "loading"}, "DOCUMENT_LOADING"),
++                ({"observationStop": True}, "GENERATION_ACTIVE"),
++                ({"observationEditor": False}, "EDITOR_NOT_READY")]:
++            with self.subTest(options=options):
++                cdp = CurrentDom(**({"observationEditor": True} | options))
++                self.assertEqual(self.sink.observe_cooperative_response(cdp, "exact wake message",
++                    bridge.digest("exact wake message")), "RESPONSE_PENDING")
++                self.assertEqual(self.sink.response_observation_reason, reason)
++        with self.assertRaises(bridge.Attention):
++            self.sink.observe_cooperative_response(CurrentDom(loadError=True, observationEditor=True),
++                "exact wake message", bridge.digest("exact wake message"))
++        self.assertIsNone(self.sink.response_observation_reason)
++
++    def test_response_diagnostic_refuses_arbitrary_dom_data(self):
++        class Malformed:
++            def evaluate(self, script): return ["ready", 0, 0, True, False, "PRIVATE_PAGE_TEXT"]
++        with self.assertRaisesRegex(bridge.PostSubmitUnknown, "RESPONSE_STATE_QUERY_FAILED"):
++            self.sink.response_snapshot(Malformed(), "exact wake message", require_usable_body=True,
++                diagnostic={})
++
+     def test_user_and_code_block_copy_cannot_complete_response(self):
+         self.assertEqual(self.sink.response_snapshot(CurrentDom(toolbar=False, userCopy="Copy"),
+                          "exact wake message", require_usable_body=True), (0, 0, True, False))
+ 
++    def test_completion_control_shape_is_closed_content_free_and_advisory(self):
++        for options, complete, shared in [({}, True, 1), ({"toolbar":False}, False, 0),
++                ({"duplicateToolbar":True}, False, 2)]:
++            with self.subTest(options=options):
++                diagnostic = {}
++                result = self.sink.response_snapshot(CurrentDom(answer="PRIVATE_ANSWER_MARKER", **options),
++                    "exact wake message", require_usable_body=True, diagnostic=diagnostic)
++                controls = diagnostic["controls"]
++                self.assertTrue(bridge.valid_response_control_diagnostics(controls))
++                self.assertEqual(controls["semanticAssistantUnits"], 1)
++                self.assertEqual(controls["knownCopyInBody"], 1)
++                self.assertEqual(controls["sharedCopyAfterAssistant"], shared)
++                self.assertEqual(controls["assistantBodyPresent"], True)
++                self.assertEqual(controls["completionActionFound"], complete)
++                self.assertEqual(result[3], complete)
++                self.assertNotIn("PRIVATE_", json.dumps(diagnostic))
++                self.assertLess(len(json.dumps(diagnostic)), 1500)
++        self.sink.observe_cooperative_response(CurrentDom(observationEditor=True),

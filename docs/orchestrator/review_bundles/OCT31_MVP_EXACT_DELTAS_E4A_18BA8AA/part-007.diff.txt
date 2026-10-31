@@ -1,0 +1,69 @@
++ Require ($browserLayer.facts.exchange -ceq 'UNATTRIBUTED' -and -not $browserLayer.facts.userResendAllowed -and -not $browserLayer.facts.genericLoadErrorRetryQualified -and $browserLayer.facts.independentProjectsMayContinue) 'assistant failure authorized USER resend or globally blocked projects'
++ $import.observations=@(@{layer='CONNECTOR';code='CONNECTOR_TRANSPORT_NO_HTTP_STATUS'});Save $observation $import
++ Require ((Layer (Invoke-Doctor -Import) 'CONNECTOR').code -ceq 'CONNECTOR_TRANSPORT_NO_HTTP_STATUS') 'no-status failure relabeled 429'
++ $import.observations=@(@{layer='CONNECTOR';code='CONNECTOR_RESPONSE_VERIFIED'});Save $observation $import
++ $connectedReport=Invoke-Doctor -Import;$connected=Layer $connectedReport 'CONNECTOR'
++ Require ($connected.status -ceq 'UNVERIFIED' -and $connected.provenance -ceq 'IMPORTED_ADVISORY' -and $connected.nextDiagnostic -ceq 'VERIFY_AUTHENTICATED_PROJECT_TASK_SCOPE') 'retained connector response requested polling or claimed current availability'
++ Require ($connected.facts.projectTaskAccess -ceq 'UNVERIFIED' -and $connected.facts.providerConversationIdentity -ceq 'UNVERIFIED' -and $connected.facts.taskGrantRequired -and $connected.facts.bearerAndExecutionModeRequired -and (Layer $connectedReport 'LOCAL_MCP').status -ceq 'NOT_RUN' -and (Layer $connectedReport 'WAKE_QUEUE').code -ceq 'WAKE_UNKNOWN_OUTCOME') 'connector success implied task authority or hid independent gates'
++ foreach($invalid in @('PRIVATE_MARKER',('x'*16385),'{"schemaVersion":true}',('{"schemaVersion":1,"source":"RETAINED_REPORT","observedUtc":"2999-01-01","observations":[]}'))){
++  [IO.File]::WriteAllText($observation,$invalid)
++  Require ((Layer (Invoke-Doctor -Import) 'OBSERVATIONS').code -ceq 'OBSERVATIONS_INVALID') 'invalid imported evidence accepted'
++ }
++ Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=1;targets=@{alpha=@{url=$url;digest=('b'*64);generation=1}}}
++ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').code -ceq 'PROJECT_WAKE_TARGET_MISMATCH') 'stale pair not observed'
++ Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=1;targets=@{alpha=@{url=$url;digest=$digest;generation=1}}}
++ Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=999;targets=@{alpha=@{url=$url;digest=$digest;generation=1}}}
++ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').code -ceq 'WAKE_CONFIG_INVALID') 'unknown Wake schema was accepted as paired'
++ Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=2;targets=@{alpha=@{url=$url;digest=$digest;generation=1}};retiredTargets=@{retired=@{retirementId='retired-fixture';lastTarget=$null;retiredUtc=1}}}
++ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').facts.pairedWakeTargets -eq 1) 'supported retired-target schema refused'
++ Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=2;targets=@{alpha=@{url=$url;digest=$digest;generation=1}};retiredTargets=@{}}
++ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').code -ceq 'WAKE_CONFIG_INVALID') 'schema2 without retirement accepted'
++ Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=1;targets=@{alpha=@{url=$url;digest=$digest;generation=1}};retiredTargets=@{retired=@{}}}
++ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').code -ceq 'WAKE_CONFIG_INVALID') 'retirement allowed in legacy schema'
++ Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=1;targets=@{alpha=@{url=$url;digest=$digest;generation=1}}}
++ Save (Join-Path $projectRoot '.catdesk/projects/projects.json') @{schemaVersion=1;projects=@(@{projectId='alpha';chatgptTargetUrl=$url;chatgptTargetSha256=$digest})}
++ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').code -ceq 'REGISTRY_INVALID') 'missing workspace was accepted as paired'
++ Save (Join-Path $projectRoot '.catdesk/projects/projects.json') @{schemaVersion=1;projects=@(@{projectId='invalid.id';workspace=$projectRoot;chatgptTargetUrl=$url;chatgptTargetSha256=$digest})}
++ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').code -ceq 'REGISTRY_INVALID') 'invalid Wake project ID was accepted'
++ Save (Join-Path $projectRoot '.catdesk/projects/projects.json') @{schemaVersion=1;projects=@(@{projectId='alpha';workspace=(Join-Path $projectRoot '../elsewhere');chatgptTargetUrl=$url;chatgptTargetSha256=$digest})}
++ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').status -cne 'PASS') 'noncanonical workspace was accepted'
++ [IO.File]::WriteAllText((Join-Path $projectRoot '.catdesk/projects/projects.json'),$before[(Join-Path $projectRoot '.catdesk/projects/projects.json')])
++ foreach($path in $before.Keys){Require ([IO.File]::ReadAllText($path) -ceq $before[$path]) 'doctor mutated protected fixture data'}
++ Require ($script:forbidden -eq 0) 'doctor performed a forbidden probe or mutation'
++ . (Join-Path $PSScriptRoot 'catdesk-doctor.ps1')
++ foreach($local in @($projectRoot,('\\?\'+$projectRoot),$projectRoot.Replace('\','/'))){
++  Require (Test-DoctorWorkspaceSpelling $local) 'canonical local workspace spelling refused'
++ }
++ foreach($invalidPath in @('relative','\\server\share','\\?\UNC\server\share','\\.\C:\project','C:\project\..\outside','\\?\C:\project\..\outside','C:\project:stream')){
++  Require (-not (Test-DoctorWorkspaceSpelling $invalidPath)) 'unsupported workspace spelling accepted'
++ }
++ Save (Join-Path $projectRoot '.catdesk/projects/projects.json') @{schemaVersion=1;projects=@(@{projectId='alpha';workspace=('\\?\'+$projectRoot);chatgptTargetUrl=$url;chatgptTargetSha256=$digest})}
++ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').facts.pairedWakeTargets -eq 1) 'Rust canonical registry workspace refused'
++ [IO.File]::WriteAllText((Join-Path $projectRoot '.catdesk/projects/projects.json'),$before[(Join-Path $projectRoot '.catdesk/projects/projects.json')])
++ foreach($nonlocal in @('relative.json','\\server\share\observation.json','https://invalid.example/report')){
++  $refused=$false;try{Assert-DoctorLocalPath $nonlocal}catch{$refused=$_.Exception.Message -ceq 'DOCTOR_LOCAL_PATH_REQUIRED'}
++  Require $refused 'nonlocal metadata path was not refused before filesystem access'
++ }
++ $link=Join-Path $testRoot 'linked-observations'
++ [void](New-Item -ItemType Junction -Path $link -Target $wakeRoot)
++ try{$refused=$false;try{Assert-DoctorLocalPath (Join-Path $link 'control.json')}catch{$refused=$true};Require $refused 'redirected metadata ancestor accepted'}finally{[IO.Directory]::Delete($link)}
++ $human=@(& $facade doctor -Workspace $testRoot -ProjectWorkspace $projectRoot -WakeRoot $wakeRoot -Human -TestSeams $seams)
++ Require ($human.Count -eq 17 -and ($human -join "`n") -notmatch 'PRIVATE_MARKER|C:\\|https://') 'human summary not safe'
++ $source=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'catdesk-doctor.ps1'))
++ Require ($source -notmatch '(?im)^\s*(Start-Process|Stop-Process|Set-Content|Add-Content|Remove-Item|Invoke-WebRequest|Invoke-RestMethod)\b|\.WriteAll|Store::open\(') 'doctor gained active operations'
++ "doctor tests passed: $checks assertions"
++}finally{
++ $resolved=[IO.Path]::GetFullPath($testRoot)
++ if(-not $resolved.StartsWith($tempParent+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase) -or [IO.Path]::GetFileName($resolved) -notmatch '^catdesk-doctor-test-[a-f0-9]{32}$'){throw 'fixture cleanup path refused'}
++ if(Test-Path -LiteralPath (Join-Path $resolved 'linked-observations')){[IO.Directory]::Delete((Join-Path $resolved 'linked-observations'))}
++ if(Test-Path -LiteralPath $resolved){Remove-Item -LiteralPath $resolved -Recurse -Force}
++}
+diff --git a/scripts/test-catdesk-lifecycle.ps1 b/scripts/test-catdesk-lifecycle.ps1
+index 6a5b994b82cf72b7b2723def27a6479b3e049711..ee0fe3b4b954f79ebe4b65b0fdf2d1fda6a3fc90 100644
+--- a/scripts/test-catdesk-lifecycle.ps1
++++ b/scripts/test-catdesk-lifecycle.ps1
+@@ -76,7 +76,7 @@ $realCanonicalRoot = $null
+ 
+ try {
+     Require ($source -match [regex]::Escape('$PSScriptRoot')) 'facade resolves all internal paths from its own root'
+-    Require ($source -match "ValidateSet\('install', 'start', 'status', 'diagnose', 'recover', 'stop', 'autostart', 'wake'\)") 'exact public command vocabulary is present'

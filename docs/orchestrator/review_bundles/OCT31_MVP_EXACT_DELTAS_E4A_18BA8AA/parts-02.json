@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "targetCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+  "kind": "parts",
+  "offset": 8,
+  "entries": [
+    {
+      "file": "part-009.diff.txt",
+      "bytes": 8185,
+      "sha256": "e7804478a264030cb72edca53d15eb09e896b18ade7b03f2cd4c5565ceddbfd4",
+      "startByte": 64997,
+      "endByte": 73182,
+      "paths": [
+        "scripts/test-promotion-handoff-script-status.ps1",
+        "scripts/test-release-worker-command-line.ps1",
+        "scripts/test-secure-mcp-bearer-forwarding.ps1"
+      ]
+    },
+    {
+      "file": "part-010.diff.txt",
+      "bytes": 8161,
+      "sha256": "3c3f94b504c82ed083647d8393701933e7be793d5812cb30bddf4dafb0db6ccc",
+      "startByte": 73182,
+      "endByte": 81343,
+      "paths": [
+        "scripts/test-secure-mcp-bearer-forwarding.ps1",
+        "scripts/test-start-catdesk-stack.ps1",
+        "scripts/wake_bridge.py"
+      ]
+    },
+    {
+      "file": "part-011.diff.txt",
+      "bytes": 8138,
+      "sha256": "afcb689f39a341302d71dc2c8716514fdc07fa33c29385db675591ad8abd265b",
+      "startByte": 81343,
+      "endByte": 89481,
+      "paths": [
+        "scripts/wake_bridge.py"
+      ]
+    },
+    {
+      "file": "part-012.diff.txt",
+      "bytes": 8168,
+      "sha256": "2182d9dae1f0c7bf03838d17dfc77cf5aa80172d1127c43d61656350766e12c1",
+      "startByte": 89481,
+      "endByte": 97649,
+      "paths": [
+        "scripts/wake_bridge.py"
+      ]
+    },
+    {
+      "file": "part-013.diff.txt",
+      "bytes": 8118,
+      "sha256": "97af50527c4472c2d5a400cd3b963958404310aaeb14641b0054947abed99575",
+      "startByte": 97649,
+      "endByte": 105767,
+      "paths": [
+        "scripts/wake_bridge.py"
+      ]
+    },
+    {
+      "file": "part-014.diff.txt",
+      "bytes": 8135,
+      "sha256": "e17a93a480ff9e2e4947e56df049b1575b4a3542347a2094787cc42e97677f86",
+      "startByte": 105767,
+      "endByte": 113902,
+      "paths": [
+        "scripts/wake_bridge.py"
+      ]
+    },
+    {
+      "file": "part-015.diff.txt",
+      "bytes": 8157,
+      "sha256": "05a266f92f087d1d0a51aa26014a3fdd67fabbb6497767dd38e110efd68105af",
+      "startByte": 113902,
+      "endByte": 122059,
+      "paths": [
+        "scripts/wake_bridge.py",
+        "scripts/wake_profile_quiescence.py"
+      ]
+    },
+    {
+      "file": "part-016.diff.txt",
+      "bytes": 8182,
+      "sha256": "c7466c8e8ce9fe6ad268cf62703f7efb50f9fc064f8923d82abe32fa9adc6cac",
+      "startByte": 122059,
+      "endByte": 130241,
+      "paths": [
+        "scripts/wake_profile_quiescence.py",
+        "scripts/wake_readiness_visual_probe.py"
+      ]
+    }
+  ]
+}

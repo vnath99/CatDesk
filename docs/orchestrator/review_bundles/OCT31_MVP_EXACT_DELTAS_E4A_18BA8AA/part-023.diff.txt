@@ -1,0 +1,195 @@
++        "requestReplayAllowed":false,"executionAuthorized":false,"taskCompletionVerified":false})
++    };
++    if !matches!(
++        work["status"].as_str(),
++        Some("UNOBSERVED" | "DURABLE_SNAPSHOT")
++    ) {
++        return unavailable("WORK_INTENT_UNAVAILABLE");
++    }
++    let Some(active) = work.get("active").filter(|value| !value.is_null()) else {
++        return json!({"status":"NO_ACTIVE_REQUEST","requestReplayAllowed":false,
++            "executionAuthorized":false,"taskCompletionVerified":false});
++    };
++    let (Some(id), Some(request), Some(generation), Some(target_digest), Some(message_digest)) = (
++        active["eventId"].as_str(),
++        active["requestId"].as_str(),
++        active["targetGeneration"].as_u64(),
++        active["targetSha256"].as_str(),
++        active["messageSha256"].as_str(),
++    ) else {
++        return unavailable("WORK_INTENT_IDENTITY_INVALID");
++    };
++    if active["phase"] != "OPEN"
++        || id != format!("web-work-{}", digest(&format!("{project}\0{request}")))
++    {
++        return unavailable("WORK_INTENT_IDENTITY_INVALID");
++    }
++    let queued: Vec<_> = events.iter().filter(|event| event.event_id == id).collect();
++    let recorded: Vec<_> = deliveries
++        .iter()
++        .filter(|delivery| delivery.event.event_id == id)
++        .collect();
++    if queued.len() > 1 || recorded.len() > 1 {
++        return unavailable("WORK_DELIVERY_IDENTITY_CONFLICT");
++    }
++    let event_matches = |event: &catdesk_wake::protocol::Event| {
++        event.project_id == project
++            && event.target_generation == generation
++            && matches!(
++                event.event_type.as_str(),
++                "engineering_attention" | "source_review"
++            )
++            && digest(&event.message) == message_digest
++    };
++    if queued.iter().any(|event| !event_matches(event)) {
++        return unavailable("WORK_DELIVERY_IDENTITY_CONFLICT");
++    }
++    let matches_paired = paired.map(|target| {
++        target.project_id == project
++            && target.generation == generation
++            && target.sha256 == target_digest
++    });
++    let mut result = json!({"status":"DURABLE_SNAPSHOT","eventId":id,
++        "matchesPairedTarget":matches_paired,"snapshotAtomic":false,
++        "requestReplayAllowed":false,"executionAuthorized":false,"taskCompletionVerified":false,
++        "receiptObserved":false,"requiresReconciliation":false});
++    if let Some(delivery) = recorded.first() {
++        if !event_matches(&delivery.event)
++            || delivery.target.generation != generation
++            || delivery.target.digest != target_digest
++            || delivery.message_digest != message_digest
++            || queued
++                .first()
++                .is_some_and(|event| **event != delivery.event)
++        {
++            return unavailable("WORK_DELIVERY_IDENTITY_CONFLICT");
++        }
++        result["phase"] = json!(delivery.phase);
++        result["lastActivityUtc"] = json!(delivery.updated_utc);
++        result["receiptObserved"] =
++            json!(delivery.phase == Phase::Sent && delivery.receipt.is_some());
++        result["requiresReconciliation"] = json!(matches!(
++            delivery.phase,
++            Phase::Submitting | Phase::Attention
++        ));
++    } else if let Some(event) = queued.first() {
++        result["phase"] = json!("QUEUED");
++        result["lastActivityUtc"] = json!(event.created_utc);
++    } else {
++        result["status"] = json!("UNOBSERVED");
++        result["phase"] = json!("NO_DURABLE_DELIVERY_OBSERVED");
++    }
++    result
++}
++
+ fn wake_project_progress(
+     project_id: &str,
+     events: &[catdesk_wake::protocol::Event],
+@@ -6676,7 +6822,10 @@ fn wake_project_progress(
+             event["eventId"]
+                 .as_str()
+                 .is_some_and(|id| id.starts_with("web-work-"))
+-                && event["eventType"] == "engineering_attention"
++                && matches!(
++                    event["eventType"].as_str(),
++                    Some("engineering_attention" | "source_review")
++                )
+         })
+         .count();
+     let work_requests = recent
+@@ -6685,7 +6834,10 @@ fn wake_project_progress(
+             event["eventId"]
+                 .as_str()
+                 .is_some_and(|id| id.starts_with("web-work-"))
+-                && event["eventType"] == "engineering_attention"
++                && matches!(
++                    event["eventType"].as_str(),
++                    Some("engineering_attention" | "source_review")
++                )
+         })
+         .take(8)
+         .map(|(_, event)| {
+@@ -10761,6 +10913,234 @@ mod tests {
+     use std::ffi::OsString;
+     use uuid::Uuid;
+ 
++    fn active_delivery_fixture(
++        project: &str,
++    ) -> (Value, ProjectWebTargetV1, catdesk_wake::store::Delivery) {
++        use catdesk_wake::{
++            protocol::{Event, Target, digest},
++            store::{Delivery, Phase},
++        };
++        let target = Target::new(3, format!("https://chatgpt.com/c/{project}-fixture")).unwrap();
++        let event = Event {
++            schema_version: catdesk_wake::PROTOCOL_VERSION,
++            event_id: format!("web-work-{}", digest(&format!("{project}\0request"))),
++            project_id: project.into(),
++            event_type: "source_review".into(),
++            created_utc: 10,
++            message: format!("private {project} source review"),
++            target_generation: 3,
++            audit_references: vec![],
++        };
++        let work = json!({"status":"DURABLE_SNAPSHOT","active":{"requestId":"request",
++            "eventId":event.event_id,"phase":"OPEN","targetGeneration":3,
++            "targetSha256":target.digest,"messageSha256":digest(&event.message)}});
++        let paired = ProjectWebTargetV1 {
++            project_id: project.into(),
++            url: target.url.clone(),
++            sha256: target.digest.clone(),
++            generation: 3,
++            historical_urls: vec![],
++        };
++        let delivery = Delivery {
++            schema_version: catdesk_wake::PROTOCOL_VERSION,
++            message_digest: digest(&event.message),
++            event,
++            target,
++            phase: Phase::Submitting,
++            owner: "fixture-owner".into(),
++            updated_utc: 12,
++            receipt: None,
++            reason: None,
++        };
++        (work, paired, delivery)
++    }
++
++    #[test]
++    fn active_web_work_progress_distinguishes_unknown_without_blocking_siblings() {
++        let (alpha_work, alpha_target, alpha) = active_delivery_fixture("alpha");
++        let (beta_work, beta_target, mut beta) = active_delivery_fixture("beta");
++        beta.phase = catdesk_wake::store::Phase::Claimed;
++        let events = vec![alpha.event.clone(), beta.event.clone()];
++        let deliveries = vec![alpha.clone(), beta.clone()];
++        let a = web_work_delivery_progress(
++            "alpha",
++            &alpha_work,
++            Some(&alpha_target),
++            &events,
++            &deliveries,
++        );
++        let b = web_work_delivery_progress(
++            "beta",
++            &beta_work,
++            Some(&beta_target),
++            &events,
++            &deliveries,
++        );
++        assert_eq!(a["phase"], "SUBMITTING");
++        assert_eq!(a["requiresReconciliation"], true);
++        assert_eq!(b["phase"], "CLAIMED");
++        assert_eq!(b["requiresReconciliation"], false);
++        for status in [&a, &b] {
++            assert_eq!(status["matchesPairedTarget"], true);
++            assert_eq!(status["requestReplayAllowed"], false);
++            assert_eq!(status["executionAuthorized"], false);
++            assert_eq!(status["taskCompletionVerified"], false);
++            assert_eq!(status["snapshotAtomic"], false);
++            assert!(!status.to_string().contains("private"));
++            assert!(!status.to_string().contains("https://"));
++        }
++        assert_eq!(a["eventId"], alpha.event.event_id);
++        assert!(!a.to_string().contains(&beta.event.event_id));
++        assert_eq!(
++            wake_project_progress("alpha", &events, &deliveries)["workRequests"]["recordCount"],
