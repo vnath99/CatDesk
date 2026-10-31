@@ -287,6 +287,7 @@ fn update_pointer(
 pub fn record_release_verification(workspace: &Path, input_file: &Path) -> Result<Value> {
     let workspace = canonical_workspace(workspace)?;
     let (root, _) = validated_authority(&workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    let _projects = project_backend_lock(&workspace, false)?;
     let store = Store::open(&root)?;
     let _host = store.host_lock()?;
     let _browser = runtime::browser_session_lock(&root, Duration::ZERO)?;
@@ -1136,6 +1137,7 @@ pub fn update_package(workspace: &Path, source_package: &Path) -> Result<Value> 
     plain(&dev, true)?;
     plain(&root, true)?;
     let _backend = backend_lock(&workspace)?;
+    let _projects = project_backend_lock(&workspace, false)?;
     plain(source_package, true)?;
     let source = fs::canonicalize(source_package).map_err(|_| "DEV_PACKAGE_UNAVAILABLE")?;
     if source.starts_with(&workspace) || workspace.starts_with(&source) {
@@ -1175,6 +1177,7 @@ pub fn recover_package(workspace: &Path) -> Result<Value> {
     plain(&dev, true)?;
     plain(&root, true)?;
     let _backend = backend_lock(&workspace)?;
+    let _projects = project_backend_lock(&workspace, false)?;
     let attempt_path = dev.join(PACKAGE_UPDATE_ATTEMPT);
     if !present(&attempt_path)? {
         validated_authority_options(&workspace, false, true)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
@@ -1517,9 +1520,17 @@ pub fn root_for_workspace(workspace: &Path) -> Result<Option<PathBuf>> {
 }
 
 fn backend_lock(workspace: &Path) -> Result<File> {
+    named_backend_lock(workspace, "backend.lock", false)
+}
+
+fn project_backend_lock(workspace: &Path, shared: bool) -> Result<File> {
+    named_backend_lock(workspace, "project-backends.lock", shared)
+}
+
+fn named_backend_lock(workspace: &Path, name: &str, shared: bool) -> Result<File> {
     let dev = dev_dir(workspace);
     plain(&dev, true)?;
-    let path = dev.join("backend.lock");
+    let path = dev.join(name);
     if present(&path)? {
         plain(&path, false)?;
     }
@@ -1530,7 +1541,12 @@ fn backend_lock(workspace: &Path) -> Result<File> {
         .truncate(false)
         .open(&path)
         .map_err(|_| "DEV_BACKEND_LEASE_UNAVAILABLE")?;
-    file.try_lock().map_err(|_| "DEV_BACKEND_ALREADY_RUNNING")?;
+    if shared {
+        file.try_lock_shared()
+    } else {
+        file.try_lock()
+    }
+    .map_err(|_| "DEV_BACKEND_ALREADY_RUNNING")?;
     Ok(file)
 }
 
@@ -1546,9 +1562,20 @@ pub struct BackendSelection {
     _lease: File,
     _pins: Vec<File>,
     authority: Authority,
+    shared: bool,
 }
 
 pub fn select_backend(workspace: &Path) -> Result<BackendSelection> {
+    select_backend_mode(workspace, false)
+}
+
+/// Independent project listeners share immutable selection pins. They may run
+/// beside the central listener; package mutation/recovery excludes all of them.
+pub fn select_project_backend(workspace: &Path) -> Result<BackendSelection> {
+    select_backend_mode(workspace, true)
+}
+
+fn select_backend_mode(workspace: &Path, shared: bool) -> Result<BackendSelection> {
     let workspace = canonical_workspace(workspace)?;
     let recovery = match validated_authority(&workspace) {
         Ok(Some(_)) => "CURRENT_PACKAGE_VERIFIED".to_owned(),
@@ -1558,11 +1585,20 @@ pub fn select_backend(workspace: &Path) -> Result<BackendSelection> {
             .ok_or("DEV_BACKEND_RECOVERY_STATUS_INVALID")?
             .to_owned(),
     };
-    let lease = backend_lock(&workspace)?;
-    pin_backend(workspace, lease, recovery)
+    let lease = if shared {
+        project_backend_lock(&workspace, true)?
+    } else {
+        backend_lock(&workspace)?
+    };
+    pin_backend(workspace, lease, recovery, shared)
 }
 
-fn pin_backend(workspace: PathBuf, lease: File, recovery: String) -> Result<BackendSelection> {
+fn pin_backend(
+    workspace: PathBuf,
+    lease: File,
+    recovery: String,
+    shared: bool,
+) -> Result<BackendSelection> {
     use std::os::windows::fs::OpenOptionsExt;
     let (root, authority) = validated_authority(&workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
     let executable = root
@@ -1600,6 +1636,7 @@ fn pin_backend(workspace: PathBuf, lease: File, recovery: String) -> Result<Back
         _lease: lease,
         _pins: pins,
         authority,
+        shared,
     })
 }
 
@@ -1608,7 +1645,11 @@ impl BackendSelection {
     /// Retain the existing backend lease across rollback; display fields cannot
     /// choose a different workspace/package or substitute an authority snapshot.
     pub fn restore_after_startup_failure(mut self) -> Result<Self> {
+        if self.shared {
+            return Err("DEV_BACKEND_SHARED_RECOVERY_REQUIRES_STOPPED".into());
+        }
         let workspace = canonical_workspace(Path::new(&self.authority.workspace))?;
+        let _projects = project_backend_lock(&workspace, false)?;
         let (root, current) = validated_authority(&workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
         if current != self.authority {
             return Err("DEV_BACKEND_SELECTION_CHANGED".into());
@@ -1637,6 +1678,7 @@ impl BackendSelection {
             workspace,
             self._lease,
             "PACKAGE_PREVIOUS_RESTORED_STOPPED".into(),
+            false,
         )
     }
 }
@@ -3460,6 +3502,49 @@ mod tests {
         drop(selection);
         drop(browser);
         drop(host);
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn project_backend_selections_share_pins_but_keep_rotation_exclusive() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let before = fs::read(root.join("current.json")).unwrap();
+        let alpha = select_project_backend(&workspace).unwrap();
+        let beta = select_project_backend(&workspace).unwrap();
+        assert_eq!(alpha.app_sha256, beta.app_sha256);
+        let central = select_backend(&workspace).unwrap();
+        assert_eq!(central.app_sha256, alpha.app_sha256);
+        assert_eq!(
+            recover_package(&workspace).unwrap_err(),
+            "DEV_BACKEND_ALREADY_RUNNING"
+        );
+        assert!(fs::write(&alpha.executable, b"forbidden while shared").is_err());
+        assert_eq!(
+            alpha.restore_after_startup_failure().err().unwrap(),
+            "DEV_BACKEND_SHARED_RECOVERY_REQUIRES_STOPPED"
+        );
+        assert_eq!(
+            central.restore_after_startup_failure().err().unwrap(),
+            "DEV_BACKEND_ALREADY_RUNNING"
+        );
+        assert_eq!(
+            recover_package(&workspace).unwrap_err(),
+            "DEV_BACKEND_ALREADY_RUNNING"
+        );
+        assert_eq!(
+            update_package(&workspace, &package).unwrap_err(),
+            "DEV_BACKEND_ALREADY_RUNNING"
+        );
+        assert_eq!(
+            record_release_verification(&workspace, &workspace.join("unread-input.json"))
+                .unwrap_err(),
+            "DEV_BACKEND_ALREADY_RUNNING"
+        );
+        assert_eq!(fs::read(root.join("current.json")).unwrap(), before);
+        drop(beta);
+        drop(select_backend(&workspace).unwrap());
         cleanup(&parent);
     }
 

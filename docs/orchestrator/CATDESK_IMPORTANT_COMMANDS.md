@@ -1,3 +1,13 @@
+## 2026-10-31T10:52:00.937185+00:00 - bounded fixed-project development backend (source qualified)
+
+From the prepared development control workspace, with `CATDESK_MCP_AUTH_TOKEN` supplied through the process environment, the supported syntax is:
+
+```text
+<qualified-controller> operator web-dev-runtime run-project-backend --project-id <registered-id> --project-target-generation <current-generation> --project-target-sha256 <current-digest> --max-runtime-seconds <1..180> [--project-task-contract <absolute-approved-assignment-file>]
+```
+
+The selected development package supplies the backend image. The first output is `DEV_BACKEND_READY`, containing its actual package/hash, ephemeral loopback `mcpUrl` and validated `projectScope`. No contract means read-only access; an exact existing contract enables its existing isolated task tools, including normal native execution only where separately granted. A contract is not permission to take over native project work. The process ends at its bound, verifies the owned tree exited and reports `FOREGROUND_BACKEND_EXITED`. No listener is published for malformed/unregistered/stale scope or mismatched task/readiness; failed shared listeners never select a fallback package. Stop all listeners before existing explicit package recovery/update. Never supply a custom host, port, tunnel, workspace override or credentials in arguments. This command changes no production installation, browser profile or Wake binding. Source evidence: `docs/verification/PROJECT_DEVELOPMENT_BACKEND_SOURCE_2026_10_31.json`; actual multi-process qualification is still pending.
+
 ## 2026-10-31T09:56:19.619581+00:00 - ordinary SENT metadata channel installed-development qualification
 
 The existing exact-event response reader is now qualified on selected development source `4237624`, application `cba49d5f...`, with the actual original response receipt and closed UI tool metadata. The previous health-qualified application `6f7da692...` remains available. The runtime stays STOPPED; this is not protected production promotion or unattended serving. No send was repeated. Actual known marker counts were zero, which cannot establish no attempted tool call, platform clearance or retry rights. Preserve the held task. Evidence: `docs/verification/ORDINARY_SENT_WITNESS_INSTALLED_2026_10_31.json`.

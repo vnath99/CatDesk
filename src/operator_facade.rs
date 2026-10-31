@@ -186,6 +186,7 @@ pub(crate) enum WebDevelopmentAction {
     RunBackend {
         maximum_seconds: u64,
     },
+    RunProjectBackend(development_backend::ProjectOptions),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -365,6 +366,8 @@ fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction,
         Some("stop") if args.len() == 3 => Ok(WebDevelopmentAction::Stop),
         Some("run") if args.len() == 3 => Ok(WebDevelopmentAction::Run),
         Some("run-backend") if args.len() == 3 => Ok(WebDevelopmentAction::RunBackend { maximum_seconds: 180 }),
+        Some("run-project-backend") => development_backend::parse_project_options(args)
+            .map(WebDevelopmentAction::RunProjectBackend),
         Some("run-backend") if args.len() == 5 && args[3] == "--max-runtime-seconds" => {
             let maximum_seconds = args[4].parse::<u64>().ok()
                 .filter(|seconds| (1..=900).contains(seconds))
@@ -1026,6 +1029,9 @@ pub(crate) async fn execute_operator_action(
                 }
                 WebDevelopmentAction::RunBackend { maximum_seconds } => {
                     development_backend::run(workspace, maximum_seconds).await
+                }
+                WebDevelopmentAction::RunProjectBackend(options) => {
+                    development_backend::run_project(workspace, options).await
                 }
             }
         }
@@ -2507,6 +2513,34 @@ mod tests {
         ] {
             assert!(parse_operator_action(invalid.into_iter().map(str::to_string)).is_err());
         }
+    }
+
+    #[test]
+    fn development_project_backend_cli_preserves_fixed_scope() {
+        let args = [
+            "operator",
+            "web-dev-runtime",
+            "run-project-backend",
+            "--project-id",
+            "alpha",
+            "--project-target-generation",
+            "7",
+            "--project-target-sha256",
+            &"a".repeat(64),
+            "--max-runtime-seconds",
+            "9",
+        ]
+        .map(str::to_string);
+        let action = parse_operator_action(args).unwrap().unwrap();
+        let OperatorAction::WebDevelopment(WebDevelopmentAction::RunProjectBackend(options)) =
+            action
+        else {
+            panic!("wrong action");
+        };
+        assert_eq!(options.selection.project_id, "alpha");
+        assert_eq!(options.selection.target_generation, 7);
+        assert!(options.assignment.is_none());
+        assert_eq!(options.maximum_seconds, 9);
     }
 
     #[test]

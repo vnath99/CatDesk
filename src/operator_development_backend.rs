@@ -6,12 +6,16 @@ use catdesk_wake::development_runtime::{self, BackendSelection};
 use serde_json::{Value, json};
 use std::{
     io::{BufRead, BufReader, Read, Write},
-    path::Path,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::mpsc,
     thread,
     time::{Duration, Instant},
 };
+
+#[path = "operator_development_project.rs"]
+mod project;
+pub(super) use project::{ProjectOptions, parse_project_options, run_project};
 
 pub(super) async fn run(workspace: &Path, maximum_seconds: u64) -> Result<Value, String> {
     if !(1..=900).contains(&maximum_seconds) {
@@ -131,10 +135,9 @@ mod tests {
                 bytes.push(b'\n');
                 bytes
             };
-            assert_eq!(
-                ready_value(&encode(&ready), selection, 7, &token).unwrap()["status"],
-                "DEV_BACKEND_READY"
-            );
+            let legacy = ready_value(&encode(&ready), selection, 7, &token).unwrap();
+            assert_eq!(legacy["status"], "DEV_BACKEND_READY");
+            assert!(legacy.get("projectScope").is_none());
             for fault in 0..9 {
                 let mut changed = ready.clone();
                 match fault {
@@ -179,6 +182,107 @@ mod tests {
     }
 
     #[test]
+    fn project_backend_command_and_readiness_pin_project_and_assignment() {
+        with_selection(|selection| {
+            for assigned in [false, true] {
+                let options = ProjectOptions {
+                    selection: crate::project_mcp::Selection {
+                        project_id: "alpha".into(),
+                        target_generation: 7,
+                        target_sha256: "a".repeat(64),
+                    },
+                    assignment: assigned.then(|| selection.workspace.join("approved-task.json")),
+                    maximum_seconds: 9,
+                };
+                let token = "k".repeat(64);
+                let command = backend_command_for(selection, 9, &token, Some(&options));
+                let args: Vec<_> = command
+                    .get_args()
+                    .map(|a| a.to_string_lossy().into_owned())
+                    .collect();
+                for pair in [
+                    ["--port", "0"],
+                    ["--project-id", "alpha"],
+                    ["--project-target-generation", "7"],
+                    ["--mcp-path", "/project/mcp"],
+                    [
+                        "--tool-mode",
+                        if assigned { "multi-tools" } else { "read-only" },
+                    ],
+                ] {
+                    assert!(args.windows(2).any(|w| w == pair));
+                }
+                assert_eq!(
+                    args.iter().any(|a| a == "--project-task-contract"),
+                    assigned
+                );
+                assert!(
+                    args.contains(&"--no-ngrok".into()) && args.contains(&"--no-web-auto".into())
+                );
+                assert!(!args.iter().any(|a| a.contains(&token)));
+                let mut expected = json!({"projectId":"alpha","targetGeneration":7,"targetSha256":"a".repeat(64),
+                    "executionWorkspace":selection.workspace,"nativeWriterClaimed":false,"assignedTask":null});
+                if assigned {
+                    expected["assignedTask"] = json!({"taskId":"task-a","executionWorkspace":selection.workspace.join("isolated"),
+                    "registeredWorkspace":selection.workspace,"nativeWriterClaimed":false});
+                }
+                let mut scope = expected.clone();
+                scope["access"] = json!(if assigned {
+                    "READ_ONLY_INSPECTION_WITH_ASSIGNED_TASK_PATCH_AND_COMMAND_TOOLS"
+                } else {
+                    "READ_ONLY"
+                });
+                let ready = json!({"status":"ready","mode":"Computer","tool_mode":if assigned {"multi-tools"} else {"read-only"},
+                    "workspace":selection.workspace,"config_path":selection.workspace.join(".catdesk/web-development/catdesk.toml"),
+                    "maximum_runtime_seconds":9,"web_auto_scheduler_enabled":false,"project_scope":scope,
+                    "auth":{"scheme":"bearer","token_redacted":true},"mcp_url":"http://127.0.0.1:49123/project/mcp"});
+                let encode = |v: &Value| {
+                    let mut b = serde_json::to_vec(v).unwrap();
+                    b.push(b'\n');
+                    b
+                };
+                assert!(
+                    ready_value_for(
+                        &encode(&ready),
+                        selection,
+                        9,
+                        &token,
+                        Some((&options, &expected))
+                    )
+                    .is_ok()
+                );
+                for fault in 0..8 {
+                    let mut bad = ready.clone();
+                    match fault {
+                        0 => bad["project_scope"]["projectId"] = json!("beta"),
+                        1 => bad["project_scope"]["targetGeneration"] = json!(8),
+                        2 => bad["project_scope"]["targetSha256"] = json!("b".repeat(64)),
+                        3 => {
+                            bad["project_scope"]["executionWorkspace"] =
+                                json!(selection.workspace.parent())
+                        }
+                        4 => bad["project_scope"]["nativeWriterClaimed"] = json!(true),
+                        5 => bad["project_scope"]["assignedTask"] = json!({"taskId":"foreign"}),
+                        6 => bad["mcp_url"] = json!("http://127.0.0.1:3200/project/mcp"),
+                        _ => bad["tool_mode"] = json!("supervisor-only"),
+                    }
+                    assert!(
+                        ready_value_for(
+                            &encode(&bad),
+                            selection,
+                            9,
+                            &token,
+                            Some((&options, &expected))
+                        )
+                        .is_err(),
+                        "fault {fault}"
+                    );
+                }
+            }
+        });
+    }
+
+    #[test]
     fn startup_fallback_requires_known_exit_proof_and_no_published_readiness() {
         for (code, proof) in [
             ("DEV_BACKEND_START_FAILED", ExitProof::NoChildCreated),
@@ -219,6 +323,15 @@ mod tests {
 }
 
 fn backend_command(selection: &BackendSelection, maximum_seconds: u64, token: &str) -> Command {
+    backend_command_for(selection, maximum_seconds, token, None)
+}
+
+fn backend_command_for(
+    selection: &BackendSelection,
+    maximum_seconds: u64,
+    token: &str,
+    project: Option<&ProjectOptions>,
+) -> Command {
     let mut command = Command::new(&selection.executable);
     command
         .current_dir(&selection.workspace)
@@ -241,11 +354,19 @@ fn backend_command(selection: &BackendSelection, maximum_seconds: u64, token: &s
         )
         .args([
             "--mcp-path",
-            "/central/mcp",
+            if project.is_some() {
+                "/project/mcp"
+            } else {
+                "/central/mcp"
+            },
             "--mode",
             "computer",
             "--tool-mode",
-            "supervisor-only",
+            match project {
+                Some(p) if p.assignment.is_some() => "multi-tools",
+                Some(_) => "read-only",
+                None => "supervisor-only",
+            },
             "--no-ngrok",
             "--no-web-auto",
             "--max-runtime-seconds",
@@ -254,6 +375,21 @@ fn backend_command(selection: &BackendSelection, maximum_seconds: u64, token: &s
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    if let Some(project) = project {
+        command
+            .arg("--project-id")
+            .arg(&project.selection.project_id)
+            .arg("--project-target-generation")
+            .arg(project.selection.target_generation.to_string())
+            .arg("--project-target-sha256")
+            .arg(&project.selection.target_sha256);
+        if let Some(assignment) = &project.assignment {
+            command.arg("--project-task-contract").arg(assignment);
+        }
+    }
+    command
+        .env_remove("CONTROL_PLANE_API_KEY")
+        .env_remove("CATDESK_OPENAI_TUNNEL_ID");
     command
 }
 
@@ -262,6 +398,16 @@ fn ready_value(
     selection: &BackendSelection,
     maximum_seconds: u64,
     token: &str,
+) -> Result<Value, String> {
+    ready_value_for(bytes, selection, maximum_seconds, token, None)
+}
+
+fn ready_value_for(
+    bytes: &[u8],
+    selection: &BackendSelection,
+    maximum_seconds: u64,
+    token: &str,
+    project: Option<(&ProjectOptions, &Value)>,
 ) -> Result<Value, String> {
     let line = std::str::from_utf8(bytes).map_err(|_| "DEV_BACKEND_READY_INVALID")?;
     if bytes.len() > 64 * 1024 || !bytes.ends_with(b"\n") || line.contains(token) {
@@ -280,9 +426,19 @@ fn ready_value(
     if ready["status"] != "ready"
         || ready["maximum_runtime_seconds"].as_u64() != Some(maximum_seconds)
         || ready["web_auto_scheduler_enabled"] != false
-        || !ready["project_scope"].is_null()
+        || match project {
+            None => !ready["project_scope"].is_null(),
+            Some((_, expected)) => {
+                project::verify_scope(&ready["project_scope"], expected).is_err()
+            }
+        }
         || ready["mode"] != "Computer"
-        || ready["tool_mode"] != "supervisor-only"
+        || ready["tool_mode"]
+            != match project {
+                Some((p, _)) if p.assignment.is_some() => "multi-tools",
+                Some(_) => "read-only",
+                None => "supervisor-only",
+            }
         || ready["auth"]["scheme"] != "bearer"
         || ready["auth"]["token_redacted"] != true
         || workspace.as_deref() != Some(selection.workspace.as_path())
@@ -298,24 +454,31 @@ fn ready_value(
         || !url.username().is_empty()
         || url.password().is_some()
         || url.port().is_none_or(|port| port == 0 || port == 3200)
-        || url.path() != "/central/mcp"
+        || url.path()
+            != if project.is_some() {
+                "/project/mcp"
+            } else {
+                "/central/mcp"
+            }
         || url.query().is_some()
         || url.fragment().is_some()
     {
         return Err("DEV_BACKEND_READY_INVALID".into());
     }
-    Ok(
-        json!({"status":"DEV_BACKEND_READY", "mode":"DEVELOPMENT_UNPROTECTED",
+    let mut output = json!({"status":"DEV_BACKEND_READY", "mode":"DEVELOPMENT_UNPROTECTED",
         "workspace":selection.workspace, "packageId":selection.package_id,
         "appSha256":selection.app_sha256, "recovery":selection.recovery,
         "mcpUrl":url.as_str(), "maximumRuntimeSeconds":maximum_seconds,
-        "webAutoSchedulerEnabled":false,"authTokenRedacted":true}),
-    )
+        "webAutoSchedulerEnabled":false,"authTokenRedacted":true});
+    if let Some((_, expected)) = project {
+        output["projectScope"] = expected.clone();
+    }
+    Ok(output)
 }
 
 fn run_owned(workspace: &Path, maximum_seconds: u64, token: &str) -> Result<Value, String> {
     let selection = development_runtime::select_backend(workspace)?;
-    match attempt_backend(&selection, maximum_seconds, token, None) {
+    match attempt_backend(&selection, maximum_seconds, token, None, None) {
         Ok(result) => Ok(result),
         Err(failure) if failure.may_restore() => {
             let metadata = json!({"attempted":true,"maximumStartupAttempts":2,
@@ -324,7 +487,7 @@ fn run_owned(workspace: &Path, maximum_seconds: u64, token: &str) -> Result<Valu
             let previous = selection.restore_after_startup_failure()?;
             // One fallback only. A failed predecessor is reported; it cannot
             // resurrect the failed current release or recursively retry work.
-            attempt_backend(&previous, maximum_seconds, token, Some(&metadata))
+            attempt_backend(&previous, maximum_seconds, token, Some(&metadata), None)
                 .map_err(|failure| failure.code)
         }
         Err(failure) => Err(failure.code),
@@ -382,8 +545,12 @@ fn attempt_backend(
     maximum_seconds: u64,
     token: &str,
     fallback: Option<&Value>,
+    project: Option<(&ProjectOptions, &Value)>,
 ) -> Result<Value, AttemptFailure> {
-    let mut command = backend_command(selection, maximum_seconds, token);
+    let mut command = match project {
+        Some((options, _)) => backend_command_for(selection, maximum_seconds, token, Some(options)),
+        None => backend_command(selection, maximum_seconds, token),
+    };
     let started = Instant::now();
     let mut owned = OwnedCandidateChild::spawn_classified(&mut command).map_err(|failure| {
         AttemptFailure::new(
@@ -426,7 +593,10 @@ fn attempt_backend(
         if bytes.is_empty() {
             return Err("DEV_BACKEND_READY_EOF".into());
         }
-        let mut ready = ready_value(&bytes, selection, maximum_seconds, token)?;
+        let mut ready = match project {
+            Some(_) => ready_value_for(&bytes, selection, maximum_seconds, token, project)?,
+            None => ready_value(&bytes, selection, maximum_seconds, token)?,
+        };
         if owned
             .child_mut()
             .try_wait()
