@@ -492,4 +492,90 @@ mod tests {
             .creation_recorded()
             .unwrap();
     }
+
+    // A separate process is necessary here: dropping an in-process guard does
+    // not establish Windows' behavior when an owner dies without unwinding.
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "bounded child entry point, invoked only by the process-exit test"]
+    fn rollover_admission_process_child() {
+        let Some(root) = std::env::var_os("CATDESK_TEST_ADMISSION_PROCESS_ROOT") else {
+            return;
+        };
+        let root = PathBuf::from(root);
+        let _owner = try_acquire(&root, key("alpha"), |_| true).unwrap().unwrap();
+        std::fs::write(root.join("child-ready"), b"lease-retained").unwrap();
+        // The parent terminates this exact child. A bounded natural exit also
+        // prevents a manually invoked helper from becoming a resident owner.
+        std::thread::sleep(std::time::Duration::from_secs(15));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn rollover_admission_process_exit_preserves_unknown_and_unblocks_sibling() {
+        use std::{
+            process::{Child, Command, Stdio},
+            time::{Duration, Instant},
+        };
+
+        struct OwnedChild(Child);
+        impl Drop for OwnedChild {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+
+        let root = fixture();
+        let source = root.join("alpha-source-journal.json");
+        let unknown = br#"{"phase":"SUBMITTING","outcome":"UNKNOWN","resendAllowed":false}"#;
+        std::fs::write(&source, unknown).unwrap();
+        let name = std::thread::current().name().unwrap().to_owned();
+        let (module, _) = name.rsplit_once("::").unwrap();
+        let helper = format!("{module}::rollover_admission_process_child");
+        let mut child = OwnedChild(
+            Command::new(std::env::current_exe().unwrap())
+                .args(["--ignored", "--exact", &helper])
+                .env("CATDESK_TEST_ADMISSION_PROCESS_ROOT", &root)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap(),
+        );
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !root.join("child-ready").is_file() {
+            assert!(child.0.try_wait().unwrap().is_none(), "helper exited early");
+            assert!(Instant::now() < deadline, "helper readiness deadline");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(child.0.try_wait().unwrap().is_none());
+        assert!(try_acquire(&root, key("beta"), |_| true).unwrap().is_none());
+        assert_eq!(status(&root, &key("alpha")).unwrap()["phase"], "ACTIVE");
+        assert_eq!(status(&root, &key("beta")).unwrap()["phase"], "WAITING");
+        assert_eq!(std::fs::read(&source).unwrap(), unknown);
+
+        child.0.kill().unwrap(); // No unwind, creation receipt or browser action.
+        while child.0.try_wait().unwrap().is_none() {
+            assert!(Instant::now() < deadline, "owned child exit deadline");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let beta = try_acquire(&root, key("beta"), |_| true).unwrap().unwrap();
+        let held = status(&root, &key("alpha")).unwrap();
+        assert_eq!(held["phase"], "QUARANTINED");
+        assert_eq!(held["creationProof"], false);
+        assert_eq!(std::fs::read(&source).unwrap(), unknown);
+        beta.creation_recorded().unwrap();
+        assert_eq!(
+            status(&root, &key("beta")).unwrap()["phase"],
+            "CREATION_RECORDED"
+        );
+        assert_eq!(
+            status(&root, &key("alpha")).unwrap()["phase"],
+            "QUARANTINED"
+        );
+        assert_eq!(std::fs::read(&source).unwrap(), unknown);
+        drop(child);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }
