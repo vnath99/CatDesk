@@ -319,7 +319,7 @@ fn owner_response(response: Value) -> Result<Value, String> {
     }
 }
 
-fn verify_pins(expected: &[(PathBuf, String)]) -> Result<(), String> {
+pub(super) fn verify_pins(expected: &[(PathBuf, String)]) -> Result<(), String> {
     for (path, digest) in expected {
         if &hash(path)? != digest {
             return Err("INSTALLED_BACKEND_INPUT_CHANGED".into());
@@ -329,7 +329,7 @@ fn verify_pins(expected: &[(PathBuf, String)]) -> Result<(), String> {
 }
 
 #[cfg(windows)]
-fn pin_inputs(
+pub(super) fn pin_inputs(
     root: &Path,
     control: &Path,
     proof: &Value,

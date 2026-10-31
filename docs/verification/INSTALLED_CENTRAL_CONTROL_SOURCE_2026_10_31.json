@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T04:47:27.232375+00:00",
+  "classification": "SOURCE_QUALIFIED_EXISTING_INSTALLED_OWNER_CENTRAL_CONTROL_SCOPE_NOT_LIVE_ACCEPTED",
+  "sourceBaseCommit": "69bbbc9316566bd3a687130aca301363cf0938e2",
+  "sourceFilesSha256": {
+    "src/operator_facade.rs": "58ad6b37ee0adac152a4a706ec0ae7c8b13ff69f2370e52009870870dded3dd9",
+    "src/operator_installed_backend.rs": "8ad2c0c03d70ad63bc1dfb198c5654592a61a6980a7e295ef5d0a77577bee0b7",
+    "src/operator_installed_project.rs": "d74ec604d5085024e5a8a72a31208cb3af6d4058221df2690610ac8770e42056",
+    "src/reviewed_candidate_owner.rs": "f964573fe580197740712663921b28c66e933d9024a4c317408ddef8d3456893"
+  },
+  "command": "operator installed-backend run-central --control-workspace <existing-approved-controller> --mcp-path <existing-local-route> --max-runtime-seconds <1..180>",
+  "implementation": {
+    "existingFiniteOwnerExtended": true,
+    "newDaemonSchedulerRegistryOrTrustFramework": false,
+    "trustedInstalledImageSelectionUnchanged": true,
+    "existingSelectedReleaseAndRollbackAuthorityRequired": true,
+    "existingRootLifecycleLeaseAndImmutablePinsRetained": true,
+    "existingPreparedControllerAuthorityRequired": true,
+    "installationOverlapRefusedBeforeOwnerWrites": true,
+    "exactDedicatedEntryOnly": true,
+    "jobPoliciesOrSharedHostRefusalsWeakened": false,
+    "loopbackPort": 3200,
+    "mode": "supervisor-only",
+    "bearerRequired": true,
+    "centralTaskCatalogRequired": true,
+    "perProjectExecutionGrantsStillRequired": true,
+    "providerConversationAuthenticated": false,
+    "nativeDaemonOrRecurringStarts": false,
+    "externalRuntimeOrProfileManagedByCommand": false,
+    "originalConfigurationClonedToNewOwnedEvidenceOnly": true,
+    "registryOrWakeCopyRebindMigration": false,
+    "registryAndTaskLeasesHeldForServingLifetime": false,
+    "defaultReadOnlyRunAndRunProjectRetained": true
+  },
+  "tests": {
+    "backend": {
+      "passed": 14,
+      "logSha256": "71d41cca3074de94e382c7295b15d4c63435e92f8a5adcba5ab37c7c7644ed3b"
+    },
+    "entry": {
+      "passed": 2,
+      "logSha256": "f48d2385bd3b4d7451adc41cbc0fd6fec584fec69f9e3b990f294e87b2b58156"
+    },
+    "projectCli": {
+      "passed": 1,
+      "logSha256": "344501f2adcd75b804f94a11cb74593d73f89c0e1852a802d43325bec8675327"
+    },
+    "nativeJobs": {
+      "passed": 17,
+      "logSha256": "687be7703a6d955394cf19eeb480e10b86971ef3529ab19bb63673d0ae5837f2"
+    },
+    "controlRefusal": {
+      "passed": 1,
+      "logSha256": "f7265a539d5cebc3003ff9b51c14e263427304c81df1446e50e18d15078f53ed"
+    }
+  },
+  "distinctPassingTests": 34,
+  "strictAllTargetsClippy": {
+    "passed": true,
+    "logSha256": "c8e78c1bb2ae155d690401d64d668d7b2ef5c5aed81f2a8c69af163d4e4ca628"
+  },
+  "rootFormattingPassed": true,
+  "initialZeroMatchFiltersCountedAsQualification": false,
+  "installedCurrentImageAlreadyTrustedSha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf",
+  "newCommandInstalledLiveAcceptance": false,
+  "productionExecutableChanged": false,
+  "twoWebCodingAccepted": false,
+  "nextExecutableTask": "BUILD_SEPARATE_HASH_PINNED_SOURCE_CONTROLLER_AND_QUALIFY_FINITE_TRUSTED_INSTALLED_IMAGE_IN_THE_EXISTING_FIVE_PROJECT_CONTROL_SCOPE",
+  "operatorActionRequired": false
+}

@@ -122,6 +122,7 @@ pub(crate) enum OperatorAction {
         maximum_seconds: u64,
     },
     InstalledProject(installed_backend::ProjectOptions),
+    InstalledCentral(installed_backend::CentralOptions),
     SetWakeTarget {
         conversation_url: String,
         expected_current_target_sha256: Option<String>,
@@ -255,6 +256,11 @@ pub(crate) fn parse_operator_action(
     }
     match args.get(1).map(String::as_str) {
         Some("installed-backend") => {
+            if args.get(2).map(String::as_str) == Some("run-central") {
+                return installed_backend::parse_central_options(&args)
+                    .map(OperatorAction::InstalledCentral)
+                    .map(Some);
+            }
             if args.get(2).map(String::as_str) == Some("run-project") {
                 return installed_backend::parse_project_options(&args)
                     .map(OperatorAction::InstalledProject)
@@ -1028,6 +1034,9 @@ pub(crate) async fn execute_operator_action(
         }
         OperatorAction::InstalledProject(options) => {
             installed_backend::run_project(workspace, options).await
+        }
+        OperatorAction::InstalledCentral(options) => {
+            installed_backend::run_central(workspace, options).await
         }
         OperatorAction::Codex(action) => {
             crate::operator_codex_cli::execute_action(action, workspace).await
@@ -2050,6 +2059,38 @@ mod tests {
         ] {
             assert!(parse_operator_action(args(&values)).is_err());
         }
+    }
+
+    #[test]
+    fn installed_central_cli_dispatches_only_the_closed_control_scope_command() {
+        let args = [
+            "operator",
+            "installed-backend",
+            "run-central",
+            "--control-workspace",
+            "C:/approved-control",
+            "--mcp-path",
+            "/existing-route/mcp",
+            "--max-runtime-seconds",
+            "180",
+        ]
+        .map(String::from)
+        .to_vec();
+        assert!(matches!(
+            parse_operator_action(args.clone()),
+            Ok(Some(OperatorAction::InstalledCentral(
+                installed_backend::CentralOptions {
+                    maximum_seconds: 180,
+                    ..
+                }
+            )))
+        ));
+        let mut extra = args.clone();
+        extra.push("--force".into());
+        assert!(parse_operator_action(extra).is_err());
+        let mut changed = args;
+        changed[6] = "https://other.invalid/mcp".into();
+        assert!(parse_operator_action(changed).is_err());
     }
 
     #[test]

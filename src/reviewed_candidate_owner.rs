@@ -405,7 +405,21 @@ mod windows {
             && args[12]
                 .parse::<u64>()
                 .is_ok_and(|value| (1..=180).contains(&value));
-        unscoped || project
+        let central = args.len() == 9
+            && args[0] == "operator"
+            && args[1] == "installed-backend"
+            && args[2] == "run-central"
+            && args[3] == "--control-workspace"
+            && args[4].len() <= 4096
+            && std::path::Path::new(&args[4]).is_absolute()
+            && args[5] == "--mcp-path"
+            && args[6].len() <= 128
+            && crate::validate_headless_mcp_path(&args[6]).is_ok()
+            && args[7] == "--max-runtime-seconds"
+            && args[8]
+                .parse::<u64>()
+                .is_ok_and(|seconds| (1..=180).contains(&seconds));
+        unscoped || project || central
     }
 
     fn dedicated_task_entry(args: &[String]) -> bool {
@@ -1221,6 +1235,40 @@ mod windows {
             }
             let mut extra = project.to_vec();
             extra.push("--project-task-contract".into());
+            assert!(!super::dedicated_installed_backend_entry(&extra));
+        }
+
+        #[test]
+        fn installed_central_lifetime_requires_closed_dedicated_entry() {
+            let good = [
+                "operator",
+                "installed-backend",
+                "run-central",
+                "--control-workspace",
+                "C:/approved-control",
+                "--mcp-path",
+                "/existing-route/mcp",
+                "--max-runtime-seconds",
+                "180",
+            ]
+            .map(String::from);
+            assert!(super::dedicated_installed_backend_entry(&good));
+            for (index, value) in [
+                (0, "--headless-mcp"),
+                (3, "--workspace"),
+                (4, "relative"),
+                (6, "https://other.invalid/mcp"),
+                (6, "/one/mcp?other"),
+                (7, "--no-auth"),
+                (8, "0"),
+                (8, "181"),
+            ] {
+                let mut changed = good.clone();
+                changed[index] = value.into();
+                assert!(!super::dedicated_installed_backend_entry(&changed));
+            }
+            let mut extra = good.to_vec();
+            extra.push("--force".into());
             assert!(!super::dedicated_installed_backend_entry(&extra));
         }
 

@@ -38,6 +38,61 @@ pub(crate) struct ProjectOptions {
     pub maximum_seconds: u64,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct CentralOptions {
+    pub control: PathBuf,
+    pub mcp_path: String,
+    pub maximum_seconds: u64,
+}
+
+pub(super) fn parse_central_options(args: &[String]) -> Result<CentralOptions, String> {
+    let usage = "installed-backend run-central requires --control-workspace <existing-root> --mcp-path <existing-local-route> --max-runtime-seconds <1..180>";
+    if args.len() != 9
+        || args[..4]
+            != [
+                "operator",
+                "installed-backend",
+                "run-central",
+                "--control-workspace",
+            ]
+        || args[5] != "--mcp-path"
+        || args[7] != "--max-runtime-seconds"
+        || args[4].len() > 4096
+        || !Path::new(&args[4]).is_absolute()
+        || args[6].len() > 128
+    {
+        return Err(usage.into());
+    }
+    let mcp_path = crate::validate_headless_mcp_path(&args[6]).map_err(|_| usage)?;
+    let maximum_seconds = args[8]
+        .parse::<u64>()
+        .ok()
+        .filter(|seconds| (1..=180).contains(seconds))
+        .ok_or(usage)?;
+    Ok(CentralOptions {
+        control: args[4].clone().into(),
+        mcp_path,
+        maximum_seconds,
+    })
+}
+
+pub(super) async fn run_central(
+    workspace: &Path,
+    options: CentralOptions,
+) -> Result<Value, String> {
+    let token =
+        std::env::var("CATDESK_MCP_AUTH_TOKEN").map_err(|_| "INSTALLED_BACKEND_AUTH_REQUIRED")?;
+    if !valid_token(&token) || !(1..=180).contains(&options.maximum_seconds) {
+        return Err("INSTALLED_BACKEND_AUTH_REQUIRED".into());
+    }
+    let workspace = workspace.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        run_owned(&workspace, options.maximum_seconds, &token, Some(&options))
+    })
+    .await
+    .map_err(|_| "INSTALLED_BACKEND_OWNER_FAILED")?
+}
+
 pub(super) fn parse_project_options(args: &[String]) -> Result<ProjectOptions, String> {
     let usage = "installed-backend run-project requires --control-workspace <existing-root> --project-id <id> --project-target-generation <n> --project-target-sha256 <digest> --max-runtime-seconds <1..180>";
     if args.len() != 13
@@ -164,7 +219,7 @@ pub(super) async fn run(workspace: &Path, seconds: u64) -> Result<Value, String>
         return Err("INSTALLED_BACKEND_AUTH_REQUIRED".into());
     }
     let workspace = workspace.to_path_buf();
-    tokio::task::spawn_blocking(move || run_owned(&workspace, seconds, &token))
+    tokio::task::spawn_blocking(move || run_owned(&workspace, seconds, &token, None))
         .await
         .map_err(|_| "INSTALLED_BACKEND_OWNER_FAILED")?
 }
@@ -458,17 +513,28 @@ fn empty_proof(root: &Path, helper: &Path) -> Result<(), String> {
     Ok(())
 }
 fn validate_ready(value: &Value, root: &Path, config: &Path, seconds: u64) -> Result<(), String> {
+    validate_ready_for(value, root, config, seconds, LOCAL, "read-only")
+}
+
+fn validate_ready_for(
+    value: &Value,
+    root: &Path,
+    config: &Path,
+    seconds: u64,
+    endpoint: &str,
+    tool_mode: &str,
+) -> Result<(), String> {
     let workspace = value["workspace"]
         .as_str()
         .and_then(|s| Path::new(s).canonicalize().ok())
         .map(crate::command::normalize_windows_verbatim_path);
     if value["status"] != "ready"
         || value["mode"] != "Computer"
-        || value["tool_mode"] != "read-only"
+        || value["tool_mode"] != tool_mode
         || value["maximum_runtime_seconds"] != seconds
         || value["web_auto_scheduler_enabled"] != false
         || !value["project_scope"].is_null()
-        || value["mcp_url"] != LOCAL
+        || value["mcp_url"] != endpoint
         || value["auth"]["scheme"] != "bearer"
         || value["auth"]["token_redacted"] != true
         || workspace.as_deref() != Some(root)
@@ -479,6 +545,10 @@ fn validate_ready(value: &Value, root: &Path, config: &Path, seconds: u64) -> Re
     Ok(())
 }
 pub(crate) async fn verify_mcp_at(endpoint: &str, token: &str) -> Result<(), String> {
+    verify_mcp_catalog_at(endpoint, token, false).await
+}
+
+async fn verify_mcp_catalog_at(endpoint: &str, token: &str, central: bool) -> Result<(), String> {
     let url = reqwest::Url::parse(endpoint).map_err(|_| "INSTALLED_BACKEND_HTTP_INVALID")?;
     if url.scheme() != "http"
         || url.host_str() != Some("127.0.0.1")
@@ -546,8 +616,33 @@ pub(crate) async fn verify_mcp_at(endpoint: &str, token: &str) -> Result<(), Str
                 return Err("INSTALLED_BACKEND_HTTP_INVALID".into());
             }
         } else {
-            validate_catalog(&value)?;
+            if central {
+                validate_central_catalog(&value)?;
+            } else {
+                validate_catalog(&value)?;
+            }
         }
+    }
+    Ok(())
+}
+
+fn validate_central_catalog(value: &Value) -> Result<(), String> {
+    let tools = value["result"]["tools"]
+        .as_array()
+        .filter(|tools| !tools.is_empty() && tools.len() <= 256)
+        .ok_or("INSTALLED_CENTRAL_CATALOG_INVALID")?;
+    let mut names = std::collections::BTreeSet::new();
+    for tool in tools {
+        let name = tool["name"]
+            .as_str()
+            .filter(|name| !name.is_empty() && name.len() <= 128)
+            .ok_or("INSTALLED_CENTRAL_CATALOG_INVALID")?;
+        if !names.insert(name) {
+            return Err("INSTALLED_CENTRAL_CATALOG_INVALID".into());
+        }
+    }
+    if !names.contains(crate::web_task_dispatch::TOOL) {
+        return Err("INSTALLED_CENTRAL_TASK_TOOL_UNAVAILABLE".into());
     }
     Ok(())
 }
@@ -641,6 +736,18 @@ pub(crate) fn backend_command(
     seconds: u64,
     token: &str,
 ) -> Command {
+    backend_command_for(root, binary, config, seconds, token, ROUTE, "read-only")
+}
+
+fn backend_command_for(
+    root: &Path,
+    binary: &Path,
+    config: &Path,
+    seconds: u64,
+    token: &str,
+    route: &str,
+    tool_mode: &str,
+) -> Command {
     let mut command = Command::new(binary);
     command
         .args([
@@ -656,11 +763,11 @@ pub(crate) fn backend_command(
         .arg(config)
         .args([
             "--mcp-path",
-            ROUTE,
+            route,
             "--mode",
             "computer",
             "--tool-mode",
-            "read-only",
+            tool_mode,
             "--no-ngrok",
             "--no-web-auto",
             "--max-runtime-seconds",
@@ -678,12 +785,44 @@ pub(crate) fn backend_command(
 }
 
 #[cfg(windows)]
-fn run_owned(workspace: &Path, seconds: u64, token: &str) -> Result<Value, String> {
+fn run_owned(
+    workspace: &Path,
+    seconds: u64,
+    token: &str,
+    central: Option<&CentralOptions>,
+) -> Result<Value, String> {
     use std::os::windows::fs::OpenOptionsExt;
     let root = workspace
         .canonicalize()
         .map(crate::command::normalize_windows_verbatim_path)
         .map_err(|_| "INSTALLED_BACKEND_ROOT_UNAVAILABLE")?;
+    let control = if let Some(options) = central {
+        let control = options
+            .control
+            .canonicalize()
+            .map(crate::command::normalize_windows_verbatim_path)
+            .map_err(|_| "INSTALLED_CENTRAL_CONTROL_UNAVAILABLE")?;
+        if control.starts_with(&root) || root.starts_with(&control) {
+            return Err("INSTALLED_CENTRAL_CONTROL_OVERLAPS_INSTALLATION".into());
+        }
+        catdesk_wake::development_runtime::root_for_workspace(&control)?
+            .ok_or("INSTALLED_CENTRAL_CONTROL_AUTHORITY_REQUIRED")?;
+        control
+    } else {
+        root.clone()
+    };
+    let route = central.map_or(ROUTE, |options| options.mcp_path.as_str());
+    let endpoint = format!("http://127.0.0.1:3200{route}");
+    let tool_mode = if central.is_some() {
+        "supervisor-only"
+    } else {
+        "read-only"
+    };
+    let profile = if central.is_some() {
+        "INSTALLED_CENTRAL_CONTROL"
+    } else {
+        "INSTALLED_HEADLESS_LOCAL"
+    };
     let id = uuid::Uuid::new_v4().simple().to_string();
     // This rejects MCP/server/general test-host entry before files or children.
     let lifetime = OwnedCandidateChild::enter_installed_backend_lifetime(&id, &root)?;
@@ -755,11 +894,22 @@ fn run_owned(workspace: &Path, seconds: u64, token: &str) -> Result<Value, Strin
         let history = history_snapshot(&root)?;
         empty_proof(&root, &reconcile)?;
         live(&mut holder)?;
-        let source = regular(
-            &root,
-            ".catdesk/release-pair-control/qualification-config.toml",
-            65536,
-        )?;
+        // Reuse existing scope admission and immutable input pins. Registry,
+        // task and Wake stores are not locked for this serving lifetime.
+        let central_inputs = if central.is_some() {
+            Some(project::pin_inputs(&root, &control, &trust)?)
+        } else {
+            None
+        };
+        let source = if let Some((_, _, config)) = &central_inputs {
+            config.clone()
+        } else {
+            regular(
+                &root,
+                ".catdesk/release-pair-control/qualification-config.toml",
+                65536,
+            )?
+        };
         let source_hash = hash(&source)?;
         let bytes = fs::read(&source).map_err(|_| "INSTALLED_BACKEND_CONFIG_UNAVAILABLE")?;
         let path = run_directory(&root, &id)?;
@@ -776,7 +926,7 @@ fn run_owned(workspace: &Path, seconds: u64, token: &str) -> Result<Value, Strin
         drop(file);
         save(
             &path.join("owner.json"),
-            &json!({"schemaVersion":1,"runId":id,"profile":"INSTALLED_HEADLESS_LOCAL","controllerPid":lifetime.pid,"controllerCreation":lifetime.creation_time,"controllerSession":lifetime.session_id,"controllerJob":lifetime.job_name,"installedSha256":expected,"sourceConfigSha256":source_hash,"maximumRuntimeSeconds":seconds}),
+            &json!({"schemaVersion":1,"runId":id,"profile":profile,"controllerPid":lifetime.pid,"controllerCreation":lifetime.creation_time,"controllerSession":lifetime.session_id,"controllerJob":lifetime.job_name,"installedSha256":expected,"sourceConfigSha256":source_hash,"maximumRuntimeSeconds":seconds,"controlWorkspace":control}),
         )?;
         let child_seconds = deadline
             .saturating_duration_since(Instant::now())
@@ -784,7 +934,19 @@ fn run_owned(workspace: &Path, seconds: u64, token: &str) -> Result<Value, Strin
             .checked_sub(30)
             .filter(|s| *s > 0)
             .ok_or("INSTALLED_BACKEND_INSUFFICIENT_BUDGET")?;
-        let mut command = backend_command(&root, &binary, &config, child_seconds, token);
+        let mut command = if central.is_some() {
+            backend_command_for(
+                &control,
+                &binary,
+                &config,
+                child_seconds,
+                token,
+                route,
+                tool_mode,
+            )
+        } else {
+            backend_command(&root, &binary, &config, child_seconds, token)
+        };
         live(&mut holder)?;
         if hash(&binary)? != expected {
             return Err("INSTALLED_BACKEND_IMAGE_CHANGED".into());
@@ -796,7 +958,18 @@ fn run_owned(workspace: &Path, seconds: u64, token: &str) -> Result<Value, Strin
         let reader = readers(&mut child)?;
         let child_outcome: Result<(), String> = (|| {
             let ready = first(&reader)?;
-            validate_ready(&ready, &root, &config, child_seconds)?;
+            if central.is_some() {
+                validate_ready_for(
+                    &ready,
+                    &control,
+                    &config,
+                    child_seconds,
+                    &endpoint,
+                    tool_mode,
+                )?;
+            } else {
+                validate_ready(&ready, &root, &config, child_seconds)?;
+            }
             live(&mut child)?;
             live(&mut holder)?;
             let before = owner_proof(&root, &reconcile, &expected, child.pid(), None)?;
@@ -807,9 +980,13 @@ fn run_owned(workspace: &Path, seconds: u64, token: &str) -> Result<Value, Strin
                 .enable_all()
                 .build()
                 .map_err(|_| "INSTALLED_BACKEND_HTTP_UNAVAILABLE")?;
-            rt.block_on(verify_mcp_at(LOCAL, token))?;
+            if central.is_some() {
+                rt.block_on(verify_mcp_catalog_at(&endpoint, token, true))?;
+            } else {
+                rt.block_on(verify_mcp_at(LOCAL, token))?;
+            }
             owner_proof(&root, &reconcile, &expected, child.pid(), Some(start))?;
-            let output = json!({"status":"INSTALLED_HEADLESS_READY","profile":"INSTALLED_HEADLESS_LOCAL","runId":id,"pid":child.pid(),"startedAtUtc":start,"installedSha256":expected,"mcpUrl":LOCAL,"commandMaximumSeconds":seconds,"maximumRuntimeSeconds":child_seconds,"readOnly":true,"webAutoSchedulerEnabled":false,"nativeDaemon":false,"unattended":false});
+            let output = json!({"status":"INSTALLED_HEADLESS_READY","profile":profile,"runId":id,"pid":child.pid(),"startedAtUtc":start,"installedSha256":expected,"mcpUrl":endpoint,"commandMaximumSeconds":seconds,"maximumRuntimeSeconds":child_seconds,"readOnly":central.is_none(),"webAutoSchedulerEnabled":false,"nativeDaemon":false,"unattended":false,"controlWorkspace":control,"taskGrantRequired":central.is_some(),"providerConversationVerified":false});
             save(&path.join("ready.json"), &output)?;
             println!("{output}");
             std::io::stdout()
@@ -840,6 +1017,9 @@ fn run_owned(workspace: &Path, seconds: u64, token: &str) -> Result<Value, Strin
         if hash(&binary)? != expected || hash(&source)? != source_hash {
             return Err("INSTALLED_BACKEND_PROTECTED_INPUT_CHANGED".into());
         }
+        if let Some((_, expected_inputs, _)) = &central_inputs {
+            project::verify_pins(expected_inputs)?;
+        }
         if history_snapshot(&root)? != history {
             return Err("INSTALLED_BACKEND_HISTORY_CHANGED".into());
         }
@@ -861,7 +1041,7 @@ fn run_owned(workspace: &Path, seconds: u64, token: &str) -> Result<Value, Strin
         .err()
         .cloned()
         .or_else(|| cleanup.as_ref().err().cloned());
-    let result = json!({"status":if error.is_none(){"INSTALLED_HEADLESS_EXITED"}else{"ATTENTION"},"profile":"INSTALLED_HEADLESS_LOCAL","runId":id,"installedSha256":expected,"ownedTreeExited":child_exited && cleanup.is_ok(),"errorCode":error,"nativeDaemon":false,"unattended":false});
+    let result = json!({"status":if error.is_none(){"INSTALLED_HEADLESS_EXITED"}else{"ATTENTION"},"profile":profile,"runId":id,"installedSha256":expected,"ownedTreeExited":child_exited && cleanup.is_ok(),"errorCode":error,"nativeDaemon":false,"unattended":false});
     if let Some(path) = directory {
         save(&path.join("result.json"), &result)?;
     }
@@ -870,13 +1050,227 @@ fn run_owned(workspace: &Path, seconds: u64, token: &str) -> Result<Value, Strin
     Ok(result)
 }
 #[cfg(not(windows))]
-fn run_owned(_: &Path, _: u64, _: &str) -> Result<Value, String> {
+fn run_owned(_: &Path, _: u64, _: &str, _: Option<&CentralOptions>) -> Result<Value, String> {
     Err("INSTALLED_BACKEND_WINDOWS_REQUIRED".into())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn central_cli_rejects_remote_routes_unbounded_lifetime_and_extra_controls() {
+        let control = std::env::temp_dir();
+        let args = vec![
+            "operator".into(),
+            "installed-backend".into(),
+            "run-central".into(),
+            "--control-workspace".into(),
+            control.to_string_lossy().into_owned(),
+            "--mcp-path".into(),
+            "/existing-test-route/mcp".into(),
+            "--max-runtime-seconds".into(),
+            "180".into(),
+        ];
+        let parsed = parse_central_options(&args).unwrap();
+        assert_eq!(parsed.control, control);
+        assert_eq!(parsed.maximum_seconds, 180);
+        for (index, value) in [
+            (4, "relative"),
+            (6, "https://other.invalid/mcp"),
+            (6, "/../mcp"),
+            (6, "/one/two/mcp"),
+            (6, "/one/mcp?target=other"),
+            (8, "0"),
+            (8, "181"),
+            (8, "-1"),
+        ] {
+            let mut changed = args.clone();
+            changed[index] = value.into();
+            assert!(parse_central_options(&changed).is_err());
+        }
+        let mut extra = args.clone();
+        extra.extend(["--no-auth".into(), "true".into()]);
+        assert!(parse_central_options(&extra).is_err());
+    }
+
+    #[test]
+    fn central_readiness_requires_exact_control_workspace_route_and_supervisor_mode() {
+        let control = std::env::temp_dir()
+            .canonicalize()
+            .map(crate::command::normalize_windows_verbatim_path)
+            .unwrap();
+        let config = control.join("owned-run.toml");
+        let endpoint = "http://127.0.0.1:3200/central-test/mcp";
+        let baseline = json!({"status":"ready","mode":"Computer","tool_mode":"supervisor-only",
+            "maximum_runtime_seconds":90,"web_auto_scheduler_enabled":false,"project_scope":null,
+            "mcp_url":endpoint,"auth":{"scheme":"bearer","token_redacted":true},
+            "workspace":control,"config_path":config});
+        assert!(
+            validate_ready_for(
+                &baseline,
+                &control,
+                &config,
+                90,
+                endpoint,
+                "supervisor-only"
+            )
+            .is_ok()
+        );
+        for (field, value) in [
+            ("workspace", json!("other-controller")),
+            ("mcp_url", json!(LOCAL)),
+            ("tool_mode", json!("multi-tools")),
+            ("web_auto_scheduler_enabled", json!(true)),
+            ("auth", json!({"scheme":"legacy","token_redacted":true})),
+            ("project_scope", json!({"projectId":"foreign"})),
+        ] {
+            let mut changed = baseline.clone();
+            changed[field] = value;
+            assert!(
+                validate_ready_for(&changed, &control, &config, 90, endpoint, "supervisor-only")
+                    .is_err()
+            );
+        }
+        assert!(validate_ready(&baseline, &control, &config, 90).is_err());
+    }
+
+    #[test]
+    fn central_catalog_cannot_accept_legacy_status_or_ambiguous_tool_names() {
+        assert!(
+            validate_central_catalog(
+                &json!({"result":{"tools":[{"name":crate::web_task_dispatch::TOOL}]}})
+            )
+            .is_ok()
+        );
+        for tools in [
+            json!([]),
+            json!([{"name":"catdesk_transport_status"}]),
+            json!([{"name":crate::web_task_dispatch::TOOL},{"name":crate::web_task_dispatch::TOOL}]),
+            json!([{"name":crate::web_task_dispatch::TOOL},{"name":null}]),
+        ] {
+            assert!(validate_central_catalog(&json!({"result":{"tools":tools}})).is_err());
+        }
+    }
+
+    #[tokio::test]
+    async fn central_probe_checks_real_http_auth_before_accepting_catalog() {
+        use axum::{
+            Json, Router,
+            extract::State,
+            http::{HeaderMap, StatusCode},
+            routing::post,
+        };
+        async fn reply(
+            State(available): State<bool>,
+            headers: HeaderMap,
+            Json(request): Json<Value>,
+        ) -> (StatusCode, Json<Value>) {
+            if headers.get("authorization").and_then(|h| h.to_str().ok())
+                != Some("Bearer central-test-auth-token-1234")
+            {
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    Json(json!({"error":"unauthorized"})),
+                );
+            }
+            let result = if request["method"] == "initialize" {
+                json!({"serverInfo":{"name":"installed-fixture"}})
+            } else if available {
+                json!({"tools":[{"name":crate::web_task_dispatch::TOOL}]})
+            } else {
+                json!({"tools":[{"name":"catdesk_transport_status"}]})
+            };
+            (
+                StatusCode::OK,
+                Json(json!({"jsonrpc":"2.0","id":request["id"],"result":result})),
+            )
+        }
+        for available in [false, true] {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let endpoint = format!("http://{}/mcp", listener.local_addr().unwrap());
+            let router = Router::new()
+                .route("/mcp", post(reply))
+                .with_state(available);
+            let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+            let result =
+                verify_mcp_catalog_at(&endpoint, "central-test-auth-token-1234", true).await;
+            server.abort();
+            let _ = server.await;
+            assert_eq!(result.is_ok(), available);
+        }
+    }
+
+    #[test]
+    fn central_command_uses_control_scope_and_never_passes_secrets_or_starts_workers() {
+        let control = Path::new("C:/approved-controller");
+        let token = "central-test-auth-token-1234";
+        let command = backend_command_for(
+            control,
+            Path::new("C:/installed/target/release/catdesk.exe"),
+            Path::new("C:/installed/evidence/config.toml"),
+            60,
+            token,
+            "/existing-route/mcp",
+            "supervisor-only",
+        );
+        let args = command
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(command.get_current_dir(), Some(control));
+        assert!(
+            args.windows(2)
+                .any(|pair| pair == ["--workspace", "C:/approved-controller"])
+        );
+        assert!(
+            args.windows(2)
+                .any(|pair| pair == ["--tool-mode", "supervisor-only"])
+        );
+        assert!(
+            args.iter().any(|a| a == "--no-web-auto") && args.iter().any(|a| a == "--no-ngrok")
+        );
+        assert!(
+            !args
+                .iter()
+                .any(|a| a.contains(token) || a == "--catdesk-daemon" || a == "--project-id")
+        );
+        let env = command
+            .get_envs()
+            .collect::<std::collections::BTreeMap<_, _>>();
+        assert_eq!(
+            env[std::ffi::OsStr::new("WORKSPACE_ROOT")],
+            Some(control.as_os_str())
+        );
+        assert_eq!(env[std::ffi::OsStr::new("CONTROL_PLANE_API_KEY")], None);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn central_scope_refuses_host_overlap_and_unprepared_controller_before_any_owner_write() {
+        let base = std::env::temp_dir().join(format!("central-scope-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&base).unwrap();
+        let root = base.join("installation");
+        let control = base.join("controller");
+        fs::create_dir(&root).unwrap();
+        fs::create_dir(&control).unwrap();
+        for (selected, expected) in [
+            (&root, "INSTALLED_CENTRAL_CONTROL_OVERLAPS_INSTALLATION"),
+            (&control, "INSTALLED_CENTRAL_CONTROL_AUTHORITY_REQUIRED"),
+        ] {
+            let options = CentralOptions {
+                control: selected.clone(),
+                mcp_path: "/existing-route/mcp".into(),
+                maximum_seconds: 60,
+            };
+            assert_eq!(
+                run_owned(&root, 60, "central-test-auth-token-1234", Some(&options)).unwrap_err(),
+                expected
+            );
+        }
+        assert!(!root.join(".catdesk").exists() && !control.join(".catdesk").exists());
+        fs::remove_dir_all(base).unwrap();
+    }
+
     #[test]
     fn installed_backend_history_detects_drift_and_never_overwrites_records() {
         let root = std::env::temp_dir().join(format!("installed-history-{}", uuid::Uuid::new_v4()));
