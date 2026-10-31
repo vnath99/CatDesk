@@ -1,3 +1,7 @@
+## 2026-10-31 - actual single-event continuation qualification
+
+The `context-deliver-continuation` command below has now delivered one exact event using a separate controller built from commit `0f6cc7f`, the retained selected browser package, trusted installed C254 in central-control mode, and the existing official runtime/profile. Its exact USER receipt and paired assistant response were verified; the private context was not resent. This qualifies bounded delivery, not project coding or protected promotion. The response reported a platform safety restriction and the local task journal contains zero calls. Preserve that attempt without replay or transport substitution. No recurring host is enabled. See `docs/verification/SCOPED_TASK_CONTINUATION_LIVE_2026_10_31.json` and `OPERATOR_ACTIONS.md`.
+
 ## 2026-10-31T07:25:45.860904+00:00 - one exact granted-task continuation, without the shared scheduler
 
 ```powershell
