@@ -1,3 +1,9 @@
+## 2026-10-31T18:09:45.900034-04:00 - v5 creation refused by tunnel discovery; no further creation retry now
+
+One authorized attempt returned setup HTTP 424 with nested upstream tunnel HTTP 429; no Retry-After or account-quota reason was exposed. The existing backend and official tunnel owner are stopped/not ready; owned plugin identities are unchanged and no v5 was observed. Preserve the prepared form and all existing connections. No new terminal experiment, login, authentication change, tunnel replacement, C49 resend or repeated creation attempt is requested. The next prerequisite is a qualified serving window through the existing supported backend/tunnel owner, followed by one fresh discovery check. Do not assume that starting it resolves 429. If a ready owner still receives that error, the retained private UTC/correlation evidence supports OpenAI Support escalation; no message has been sent.
+
+The original C49 catalog/connection-kind inspection remains separately unverified; this failed v5 setup does not answer it. Direct custom MCP metadata refresh is documented, so a new plugin per tool is not universally required. The actual v4 Refresh UI remains uninspected. Detailed evidence and preservation results: `docs/verification/CUSTOM_MCP_SETUP_GATEWAY_429_2026_10_31.json`.
+
 ## 2026-10-31T17:41:46.979955+00:00 - one inspection remains; new-chat report does not establish original C49 catalog
 
 The new ChatGPT Web conversation's 90-tool/no-dispatcher result and three reported upstream 429s are retained as user evidence. Do not repeat those probes. The local read-only observation independently found the backend and official client stopped at 17:28 UTC; their executable/fingerprint authority is unchanged. Source registration is present and conditional, and the existing reserved JSON compatibility adapter is documented. None of these findings clears C49, establishes its outcome or supplies protected review/producer authority.
