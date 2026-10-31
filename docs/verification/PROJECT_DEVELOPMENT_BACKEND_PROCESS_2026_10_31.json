@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T11:03:31.321482+00:00",
+  "classification": "ACTUAL_DISPOSABLE_SELECTED_DEVELOPMENT_CONCURRENT_MCP_EXECUTION_NOT_CHATGPT_WEB",
+  "sourceCommit": "6cbc5e8620d359e489536d5f91f78f68b44379c7",
+  "controllerSha256": "dda2ac4aef1b13f5744454191c75635b9405fcadae01f756a4613e56f2cadeb1",
+  "controllerRole": "SEPARATE_REVIEWED_SOURCE_DEVELOPMENT_CONTROLLER_NOT_PROTECTED_RELEASE_ARTIFACT",
+  "backendSha256": "cba49d5f2bd2233c7b142fa8b8dda9be5455cd493db4c24faf2f35d567ff2084",
+  "backendSourceCommit": "4237624501681394df824d65d4a936ad8d4d2ca4",
+  "backendSelection": "EXISTING_QUALIFIED_DEVELOPMENT_PACKAGE_COPIED_THROUGH_SUPPORTED_PREPARE_TO_DISPOSABLE_SCOPE",
+  "scope": {
+    "centralListeners": 1,
+    "assignedProjectListeners": 2,
+    "simultaneousOwnersVerifiedLive": true,
+    "realExistingProjectsUsedForTestWrites": false,
+    "registeredRoots": "TWO_SEPARATE_SYNTHETIC_GIT_ROOTS",
+    "assignedRoots": "SEPARATE_LINKED_WORKTREE_FOR_EACH_PROJECT",
+    "python": "INERT_UNUSED_FIXTURE_HELPER_NO_BROWSER_EXECUTION",
+    "actualChatGPTWebCalls": 0,
+    "nativeCodexModelTurns": 0,
+    "browserWakeOfficialTunnelOrRecurringStarts": 0,
+    "servingSecondsPerListener": 90,
+    "maximumOuterSeconds": 180,
+    "elapsedSeconds": 104.969
+  },
+  "verification": {
+    "missingBearerRequests": 3,
+    "missingBearerStatus": 401,
+    "authenticatedInitializations": 3,
+    "authenticatedStatus": 200,
+    "exactProjectAndWorktreeScopeVerified": true,
+    "foreignProjectWitnessRefused": true,
+    "parallelPatchPreviewsAndApplications": 2,
+    "eachAssignedFileChangedAsRequested": true,
+    "registeredNativeRootsUnchanged": true,
+    "duplicateApplySuppressed": true,
+    "currentSourceGuardOrExecutionKeyBypass": false
+  },
+  "cleanup": {
+    "owner": {
+      "ExitCode": 0,
+      "TimedOut": false,
+      "TerminationFailed": false
+    },
+    "listeners": [
+      {
+        "label": "central",
+        "readySeconds": 5.594,
+        "exitCode": 0,
+        "readersClosed": true,
+        "endpointClosed": true,
+        "ownedTreeExited": true
+      },
+      {
+        "label": "beta",
+        "readySeconds": 14.047,
+        "exitCode": 0,
+        "readersClosed": true,
+        "endpointClosed": true,
+        "ownedTreeExited": true
+      },
+      {
+        "label": "alpha",
+        "readySeconds": 13.656,
+        "exitCode": 0,
+        "readersClosed": true,
+        "endpointClosed": true,
+        "ownedTreeExited": true
+      }
+    ],
+    "allOwnedTreesExited": true,
+    "allEndpointsClosed": true,
+    "allReadersClosed": true,
+    "forcedOwnerStop": false
+  },
+  "preservation": {
+    "realStatePinsChecked": 5121,
+    "pinChanges": 0,
+    "realBindingsHistoriesTaskGrantsQueuesAndNativeSessionsChanged": false,
+    "realSelectedDevelopmentPackageOrProtectedInstallationChanged": false,
+    "authenticatedBrowserProfileAccessed": false,
+    "heldCallsOrUnknownWebSubmissionsReplayed": false,
+    "newProductionAuthority": false
+  },
+  "earlierAttemptsRetained": [
+    {
+      "stage": "FIXTURE_PREPARE",
+      "failure": "GIT_INITIALIZED_BEFORE_REQUIRED_EMPTY_WORKSPACE_PREPARATION",
+      "listenersStarted": 0
+    },
+    {
+      "stage": "FIXTURE_BIND",
+      "failure": "LEGACY_NATIVE_PROJECT_BIND_USED_INSTEAD_OF_PAIRED_WEB_BIND",
+      "listenersStarted": 0
+    },
+    {
+      "stage": "SEQUENTIAL_STARTUP_OVERLAP",
+      "failure": "FIRST_22_SECOND_WINDOW_EXPIRED_BEFORE_THIRD_READY",
+      "listenersStarted": 3,
+      "allTreesAndEndpointsClosed": true,
+      "taskRpcAttempted": false,
+      "correctiveAction": "REUSE_CLOSED_ZERO_CALL_FIXTURE_AND_START_OWNERS_CONCURRENTLY_WITH_90_SECOND_WINDOWS"
+    }
+  ],
+  "privateEvidenceSha256": {
+    "oct31-development-project-controller-build-result.private.json": "6148e2d3a341a7b2d4b6a12bcefa091cfd6ea39537dc5924acbeb840d09d7807",
+    "oct31-development-project-concurrent-result.private.json": "f9be96d04ff2ac67d926f4b0445d4e836a80b4ccc4d047aa41a4a721ea3a2c5f",
+    "oct31-development-project-concurrent-owner.private.json": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "oct31-development-project-processes-result.private.json": "438a133f5afdc1657725f271d45bf5b4757f27780161ec27b36d51efe6b8b643",
+    "oct31-development-project-processes-corrected-result.private.json": "fb9242c4762186e3541b4f2b3585594771bdc8438b5cd177256280e96d93cca1",
+    "oct31-development-project-processes-paired-result.private.json": "cc4a85f3e695ff9bf7f4f9e54db287582029ee836be57a3916fcbde6cd8ff1a5"
+  },
+  "sourceEvidence": "PROJECT_DEVELOPMENT_BACKEND_SOURCE_2026_10_31.json",
+  "acceptance": {
+    "supportedParallelDevelopmentMcpProjectListeners": "PASS_ACTUAL_PROCESSES_AND_ASSIGNED_WRITES",
+    "actualTwoChatGptWebCoding": "OPEN",
+    "fullNativeCodexFromTwoWebConversations": "OPEN",
+    "latestSourceProductionReviewAndPromotion": "OPEN",
+    "normalUnattendedOperation": "NOT_ENABLED"
+  },
+  "nextExecutableTask": "CONNECT_EXISTING_APPROVED_WEB_INGRESS_TO_A_QUALIFIED_CURRENT_SOURCE_WITHOUT_REPLAYING_HELD_CALLS_WHEN_GENUINE_AUTHORITY_OR_NEW_CALL_TRACE_IS_AVAILABLE",
+  "operatorActionRequiredNow": false,
+  "goal": "ACTIVE"
+}
