@@ -110,5 +110,37 @@
     "unknownErrorStringsAndPrivateSuffixesRefused": true,
     "readyGuardWeakened": false,
     "newDiagnosticControllerLiveAccepted": false
+  },
+  "preparedConfigCorrection": {
+    "observedUtc": "2026-10-31T05:31:08.605095+00:00",
+    "sourceBaseCommit": "66436bc297f6e9e66da27d26883bf88b5e294fa0",
+    "sourceSha256": "9f0614f4bd25e6c1d7e0643dd1d2aef47608e4b2461371134ad9c235d4289358",
+    "confirmedStartupCode": "WEB_DEVELOPMENT_CONFIG_SCOPE_INVALID",
+    "existingChildScopeGuardChanged": false,
+    "centralUsesExactExistingPinnedPreparedConfig": true,
+    "centralClonesOrReplacesApprovedConfig": false,
+    "legacyReadOnlyConfigCopyRetained": true,
+    "preexistingEvidenceOverwriteRefused": true,
+    "distinctPassingTestsIncludingRetainedOwnerFixtures": 39,
+    "testProofs": [
+      {
+        "logSha256": "a41b4c657d487cb27511e9f87ea3014b7bf5178a1304016b2bb8592d418e11b4",
+        "passingCount": 20
+      },
+      {
+        "logSha256": "f48d2385bd3b4d7451adc41cbc0fd6fec584fec69f9e3b990f294e87b2b58156",
+        "passingCount": 2
+      },
+      {
+        "logSha256": "344501f2adcd75b804f94a11cb74593d73f89c0e1852a802d43325bec8675327",
+        "passingCount": 1
+      },
+      {
+        "logSha256": "687be7703a6d955394cf19eeb480e10b86971ef3529ab19bb63673d0ae5837f2",
+        "passingCount": 17
+      }
+    ],
+    "strictClippyLogSha256": "229f580741c024335d2e491c7eb3e3c3261269a6561de2cf63972168c9a0bf22",
+    "newFixedControllerLiveAccepted": false
   }
 }

@@ -284,6 +284,25 @@ fn save(path: &Path, value: &Value) -> Result<(), String> {
     .and_then(|()| f.sync_all())
     .map_err(|_| "INSTALLED_BACKEND_RECORD_UNAVAILABLE".into())
 }
+
+fn backend_config_for_scope(source: &Path, run: &Path, central: bool) -> Result<PathBuf, String> {
+    // Prepared controllers admit this exact config path. The existing input
+    // pins keep it immutable; copying it elsewhere is not equivalent authority.
+    if central {
+        return Ok(source.to_path_buf());
+    }
+    let bytes = fs::read(source).map_err(|_| "INSTALLED_BACKEND_CONFIG_UNAVAILABLE")?;
+    let config = run.join("config.toml");
+    let mut file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(&config)
+        .map_err(|_| "INSTALLED_BACKEND_CONFIG_UNAVAILABLE")?;
+    file.write_all(&bytes)
+        .and_then(|()| file.sync_all())
+        .map_err(|_| "INSTALLED_BACKEND_CONFIG_UNAVAILABLE")?;
+    Ok(config)
+}
 fn run_directory(root: &Path, id: &str) -> Result<PathBuf, String> {
     let mut path = root.to_path_buf();
     for part in [".catdesk", "recovery-evidence", "installed-backend"] {
@@ -663,7 +682,8 @@ pub(crate) fn diagnostic_error_code(error: &str) -> &str {
         | "INSTALLED_CENTRAL_CONTROL_AUTHORITY_REQUIRED"
         | "INSTALLED_CENTRAL_CATALOG_INVALID"
         | "INSTALLED_CENTRAL_TASK_TOOL_UNAVAILABLE"
-        | "DEV_PRODUCTION_ROOT_MISMATCH" => code,
+        | "DEV_PRODUCTION_ROOT_MISMATCH"
+        | "WEB_DEVELOPMENT_CONFIG_SCOPE_INVALID" => code,
         _ if error.starts_with("installed-backend ") => "INSTALLED_BACKEND_ARGUMENTS_INVALID",
         _ => "INSTALLED_BACKEND_REFUSED",
     }
@@ -1042,19 +1062,9 @@ fn run_owned(
             )?
         };
         let source_hash = hash(&source)?;
-        let bytes = fs::read(&source).map_err(|_| "INSTALLED_BACKEND_CONFIG_UNAVAILABLE")?;
         let path = run_directory(&root, &id)?;
         directory = Some(path.clone());
-        let config = path.join("config.toml");
-        let mut file = OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(&config)
-            .map_err(|_| "INSTALLED_BACKEND_CONFIG_UNAVAILABLE")?;
-        file.write_all(&bytes)
-            .and_then(|()| file.sync_all())
-            .map_err(|_| "INSTALLED_BACKEND_CONFIG_UNAVAILABLE")?;
-        drop(file);
+        let config = backend_config_for_scope(&source, &path, central.is_some())?;
         save(
             &path.join("owner.json"),
             &json!({"schemaVersion":1,"runId":id,"profile":profile,"controllerPid":lifetime.pid,"controllerCreation":lifetime.creation_time,"controllerSession":lifetime.session_id,"controllerJob":lifetime.job_name,"installedSha256":expected,"sourceConfigSha256":source_hash,"maximumRuntimeSeconds":seconds,"controlWorkspace":control}),
@@ -1343,6 +1353,34 @@ mod tests {
         assert_eq!(report["ownedTreeExited"], true);
         assert_eq!(report["errorCode"], "INSTALLED_BACKEND_READY_CONFIG");
         assert!(!report.to_string().contains("PRIVATE_SENTINEL"));
+    }
+
+    #[test]
+    fn central_config_retains_the_prepared_path_while_legacy_copy_never_overwrites_evidence() {
+        let base = std::env::temp_dir().join(format!("central-config-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&base).unwrap();
+        let prepared = base.join("prepared");
+        let run = base.join("run");
+        fs::create_dir(&prepared).unwrap();
+        fs::create_dir(&run).unwrap();
+        let source = prepared.join("catdesk.toml");
+        fs::write(&source, b"approved configuration").unwrap();
+        assert_eq!(
+            backend_config_for_scope(&source, &run, true).unwrap(),
+            source
+        );
+        assert!(!run.join("config.toml").exists());
+        let copied = backend_config_for_scope(&source, &run, false).unwrap();
+        assert_eq!(fs::read(&copied).unwrap(), b"approved configuration");
+        fs::write(&copied, b"preserved prior evidence").unwrap();
+        assert!(backend_config_for_scope(&source, &run, false).is_err());
+        assert_eq!(fs::read(&copied).unwrap(), b"preserved prior evidence");
+        assert_eq!(fs::read(&source).unwrap(), b"approved configuration");
+        assert_eq!(
+            diagnostic_error_code("WEB_DEVELOPMENT_CONFIG_SCOPE_INVALID"),
+            "WEB_DEVELOPMENT_CONFIG_SCOPE_INVALID"
+        );
+        fs::remove_dir_all(base).unwrap();
     }
 
     #[test]

@@ -24,9 +24,30 @@
   "projectTaskCalls": 0,
   "browserWakeOrExternalOwnerStarts": 0,
   "providerMessages": 0,
-  "underlyingReadinessMismatchKnown": false,
+  "underlyingReadinessMismatchKnown": true,
   "unchangedFailureRetried": false,
-  "nextExecutableTask": "BUILD_CHANGED_DIAGNOSTIC_CONTROLLER_AND_OBSERVE_ONE_BOUNDED_CENTRAL_STARTUP_WITH_ALL_EXISTING_GATES_RETAINED",
+  "nextExecutableTask": "BUILD_FIXED_CONTROLLER_AND_TEST_EXISTING_PINNED_CONFIG_WITHOUT_CHANGING_CHILD_SCOPE_POLICY",
   "operatorActionRequired": false,
-  "milestoneComplete": false
+  "milestoneComplete": false,
+  "diagnosticFollowup": {
+    "sourceCommit": "66436bc297f6e9e66da27d26883bf88b5e294fa0",
+    "controllerSha256": "2ccb4dd08742caf2e86082402da5ea560c664ceb9432e37485b933c0b9586ee8",
+    "elapsedSeconds": 26.297,
+    "diagnosticProbeQualified": true,
+    "centralScopeLiveAccepted": false,
+    "nativeOwnedTreeExitProved": true,
+    "endpointClosed": true,
+    "criticalPinsUnchanged": 5107,
+    "childReadinessFrameReadable": false,
+    "stderrBytes": 46,
+    "stderrSha256": "8b745f89e617a0a7054b0414651511d347488778865dec7a0d502d6566ef8f97",
+    "rawTextExported": false,
+    "knownPublicSourceCodeMatched": "WEB_DEVELOPMENT_CONFIG_SCOPE_INVALID",
+    "matchedPublicSourceCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+    "sourcePath": "src/main.rs",
+    "cause": "New owner supplied an audit-directory config.toml; prepared-controller startup requires its existing .catdesk/web-development/catdesk.toml. Filename and parent differ.",
+    "scopeGuardWasCorrect": true,
+    "protectedOrBindingChanges": false,
+    "next": "BUILD_FIXED_CONTROLLER_AND_TEST_EXISTING_PINNED_CONFIG_WITHOUT_CHANGING_CHILD_SCOPE_POLICY"
+  }
 }
