@@ -50,6 +50,60 @@ pub(crate) fn surface_observation(line: &str) -> Option<serde_json::Value> {
     Some(value)
 }
 
+/// URL classes and value shapes only. Never pass tab IDs, URLs or page text.
+pub(crate) fn tab_observation(line: &str) -> Option<serde_json::Value> {
+    let text = line.strip_prefix("PROBE:TAB:")?;
+    if text.len() > 1024 {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_str(text).ok()?;
+    let object = value.as_object()?;
+    if object.len() != 12 || value.get("schemaVersion")?.as_u64()? != 1 {
+        return None;
+    }
+    for (key, item) in object {
+        let valid = match key.as_str() {
+            "schemaVersion" => item.as_u64() == Some(1),
+            "tabCount" => item.as_i64().is_some_and(|n| (-1..=32).contains(&n)),
+            "metadataMatches" | "unreadableMetadata" => item.as_u64().is_some_and(|n| n <= 32),
+            "candidateShape" | "controlledShape" => matches!(
+                item.as_str(),
+                Some("UNOBSERVED" | "STRING" | "WRAPPED" | "OTHER")
+            ),
+            "candidateRoute" | "controlledRoute" => matches!(
+                item.as_str(),
+                Some("UNKNOWN" | "EXACT" | "HOME" | "AUTH" | "NETWORK" | "OTHER" | "INVALID")
+            ),
+            "candidateFrame" => matches!(item.as_str(), Some("UNKNOWN" | "TOP" | "SUBFRAME")),
+            "alternateRoute" => item.is_boolean(),
+            "stage" => matches!(
+                item.as_str(),
+                Some("ENUMERATION" | "METADATA" | "DOCUMENT" | "SWITCH" | "VERIFIED")
+            ),
+            "state" => matches!(
+                item.as_str(),
+                Some(
+                    "TARGET_TAB_UNAVAILABLE"
+                        | "TARGET_TAB_MISSING"
+                        | "TARGET_TAB_AMBIGUOUS"
+                        | "TARGET_TAB_DRIFT"
+                        | "TARGET_TAB_EXACT"
+                )
+            ),
+            _ => false,
+        };
+        if !valid {
+            return None;
+        }
+    }
+    let count = value["tabCount"].as_i64()?;
+    let examined = value["metadataMatches"].as_u64()? + value["unreadableMetadata"].as_u64()?;
+    if count >= 0 && examined > count as u64 || count < 0 && examined != 0 {
+        return None;
+    }
+    Some(value)
+}
+
 pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<String>, &'static str> {
     #[cfg(windows)]
     {
@@ -125,6 +179,9 @@ pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<Strin
             };
             if state.starts_with("SURFACE:") {
                 return surface_observation(line).is_some();
+            }
+            if state.starts_with("TAB:") {
+                return tab_observation(line).is_some();
             }
             if let Some(reason) = state.strip_prefix("HOME_CHECK:") {
                 return matches!(
@@ -210,9 +267,13 @@ pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<Strin
         .map(|line| {
             // Return canonical whitelisted values, never raw JSON containing
             // duplicate-key values or formatting from an untrusted helper.
-            surface_observation(line)
-                .map(|value| format!("PROBE:SURFACE:{value}"))
-                .unwrap_or_else(|| line.to_owned())
+            if let Some(value) = surface_observation(line) {
+                format!("PROBE:SURFACE:{value}")
+            } else if let Some(value) = tab_observation(line) {
+                format!("PROBE:TAB:{value}")
+            } else {
+                line.to_owned()
+            }
         })
         .collect())
 }
@@ -224,6 +285,39 @@ mod tests {
         serde_json::json!({"route":"EXACT","document":"COMPLETE","history":"PRESENT",
             "editor":"READY","composer":"EMPTY","generation":"IDLE","assistant":"LOAD_ERROR",
             "exchange":"UNATTRIBUTED","recovery":"OBSERVATION_ONLY"})
+    }
+    fn tab() -> serde_json::Value {
+        serde_json::json!({"schemaVersion":1,"tabCount":2,"metadataMatches":1,
+            "unreadableMetadata":0,"candidateShape":"STRING","candidateRoute":"HOME",
+            "candidateFrame":"TOP","controlledShape":"STRING","controlledRoute":"HOME",
+            "alternateRoute":false,"stage":"DOCUMENT","state":"TARGET_TAB_DRIFT"})
+    }
+    #[test]
+    fn tab_protocol_accepts_only_bounded_counts_shapes_and_closed_routes() {
+        let value = tab();
+        assert_eq!(
+            tab_observation(&format!("PROBE:TAB:{value}")),
+            Some(value.clone())
+        );
+        for (key, invalid) in [
+            ("tabCount", serde_json::json!(33)),
+            ("metadataMatches", serde_json::json!(3)),
+            ("metadataMatches", serde_json::json!(true)),
+            ("schemaVersion", serde_json::json!(true)),
+            (
+                "candidateRoute",
+                serde_json::json!("https://chatgpt.com/c/private"),
+            ),
+            ("candidateShape", serde_json::json!("PRIVATE_CONTENT")),
+            ("alternateRoute", serde_json::json!("true")),
+        ] {
+            let mut changed = value.clone();
+            changed[key] = invalid;
+            assert!(tab_observation(&format!("PROBE:TAB:{changed}")).is_none());
+        }
+        let mut changed = value;
+        changed["privateBody"] = serde_json::json!("PRIVATE_DRAFT");
+        assert!(tab_observation(&format!("PROBE:TAB:{changed}")).is_none());
     }
     #[test]
     fn surface_protocol_accepts_only_closed_metadata_vocabulary() {
@@ -262,14 +356,19 @@ mod tests {
         let row = surface()
             .to_string()
             .replacen('{', "{\"composer\":\"PRIVATE_SENTINEL\",", 1);
+        let tab_row = tab()
+            .to_string()
+            .replacen('{', "{\"state\":\"PRIVATE_TAB_SENTINEL\",", 1);
         let script = format!(
-            "if([Console]::In.ReadLine() -cne 'START'){{exit 2}}; for($i=0;$i -lt 90;$i++){{[Console]::Out.WriteLine(('x'*150))}}; [Console]::Out.WriteLine('PROBE:SURFACE:{row}'); [Console]::Out.WriteLine('PROBE:FINAL:EXACT_READY_RESPONSE_LOAD_ERROR')"
+            "if([Console]::In.ReadLine() -cne 'START'){{exit 2}}; for($i=0;$i -lt 90;$i++){{[Console]::Out.WriteLine(('x'*150))}}; [Console]::Out.WriteLine('PROBE:SURFACE:{row}'); [Console]::Out.WriteLine('PROBE:TAB:{tab_row}'); [Console]::Out.WriteLine('PROBE:FINAL:EXACT_READY_RESPONSE_LOAD_ERROR')"
         );
         command.args(["-NoProfile", "-NonInteractive", "-Command", &script]);
         let rows = run_bounded(&mut command, Duration::from_secs(5)).unwrap();
-        assert_eq!(rows.len(), 2);
+        assert_eq!(rows.len(), 3);
         assert_eq!(surface_observation(&rows[0]), Some(surface()));
-        assert_eq!(rows[1], "PROBE:FINAL:EXACT_READY_RESPONSE_LOAD_ERROR");
+        assert_eq!(tab_observation(&rows[1]), Some(tab()));
+        assert_eq!(rows[2], "PROBE:FINAL:EXACT_READY_RESPONSE_LOAD_ERROR");
         assert!(!rows.join(" ").contains("PRIVATE_SENTINEL"));
+        assert!(!rows.join(" ").contains("PRIVATE_TAB_SENTINEL"));
     }
 }

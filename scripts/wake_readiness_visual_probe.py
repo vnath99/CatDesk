@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -77,39 +78,122 @@ def visible(cdp, selector):
     try: return bool(cdp.is_element_visible(selector))
     except Exception: return False
 
-def exact_url(current, expected):
+def conversation_id(value):
+    """Same strict route contract as the owner-verified bridge primitives."""
+    if (not isinstance(value, str) or not value or len(value) > 512 or not value.isascii()
+            or any(char.isspace() or ord(char) < 32 for char in value)):
+        return None
     try:
-        actual, target = urlparse(current), urlparse(expected)
-        return (actual.scheme == "https" and actual.hostname == target.hostname
-                and actual.username is None and actual.password is None and actual.port is None
-                and actual.path.rstrip("/") == target.path.rstrip("/")
-                and not actual.query and not actual.fragment)
+        actual = urlparse(value)
+        if (actual.scheme != "https" or actual.hostname not in {"chatgpt.com", "chat.openai.com"}
+                or actual.username or actual.password or actual.port is not None or actual.query or actual.fragment):
+            return None
+        if not re.fullmatch(r"/(?:c/[A-Za-z0-9_-]{1,200}|g/[A-Za-z0-9_-]{1,200}/c/[A-Za-z0-9_-]{1,200})", actual.path):
+            return None
+        return actual.path.split("/")[-1]
     except Exception:
-        return False
+        return None
 
-def select_registered_target_tab(cdp, url):
+
+def exact_url(current, expected):
+    identity = conversation_id(current)
+    return identity is not None and identity == conversation_id(expected)
+
+
+def value_shape(value):
+    return "STRING" if isinstance(value, str) else ("WRAPPED" if isinstance(value, (dict, tuple, list)) else "OTHER")
+
+
+def route_class(value, expected):
+    if not isinstance(value, str):
+        return "UNKNOWN"
+    if value.startswith("chrome-error://"):
+        return "NETWORK"
+    if exact_url(value, expected):
+        return "EXACT"
+    try:
+        parsed = urlparse(value)
+        if (parsed.scheme != "https" or parsed.hostname not in {"chatgpt.com", "chat.openai.com"}
+                or parsed.username or parsed.password or parsed.port is not None):
+            return "OTHER"
+        if parsed.path.startswith('/auth/'):
+            return "AUTH"
+        if parsed.path in {"", "/"} and not parsed.query and not parsed.fragment:
+            return "HOME"
+    except Exception:
+        return "INVALID"
+    return "OTHER"
+
+
+def select_registered_target_tab(cdp, url, report=None):
     """CDP's controlled tab may differ from the human-visible tab after login.
 
     Select only a unique returned tab whose target metadata AND document URL
     match the registered destination. Do not navigate, close tabs, read draft
     contents, or export any other tab's URL. Uncertainty never permits selection.
     """
+    facts = dict(schemaVersion=1, tabCount=-1, metadataMatches=0, unreadableMetadata=0,
+                 candidateShape="UNOBSERVED", candidateRoute="UNKNOWN", candidateFrame="UNKNOWN",
+                 controlledShape="UNOBSERVED", controlledRoute="UNKNOWN", alternateRoute=False,
+                 stage="ENUMERATION", state="TARGET_TAB_UNAVAILABLE")
+    def finish(state):
+        facts["state"] = state
+        if report is not None:
+            report(dict(facts))
+        return state
+    def controlled():
+        value = cdp.get_current_url()
+        facts["controlledShape"] = value_shape(value)
+        facts["controlledRoute"] = route_class(value, url)
+        return value
     try:
+        try:
+            controlled()
+        except Exception:
+            facts["controlledShape"] = "OTHER"
         tabs = cdp.get_tabs()
         if not isinstance(tabs, (list, tuple)) or len(tabs) > 32:
-            return "TARGET_TAB_UNAVAILABLE"
-        matches = [tab for tab in tabs if exact_url(str(tab.target.url), url)]
+            return finish("TARGET_TAB_UNAVAILABLE")
+        facts["tabCount"] = len(tabs)
+        facts["stage"] = "METADATA"
+        matches = []
+        for tab in tabs:
+            try:
+                metadata = tab.target.url
+                if not isinstance(metadata, str):
+                    facts["unreadableMetadata"] += 1
+                elif exact_url(metadata, url):
+                    matches.append(tab)
+            except Exception:
+                facts["unreadableMetadata"] += 1
+        facts["metadataMatches"] = len(matches)
+        if facts["unreadableMetadata"]:
+            return finish("TARGET_TAB_UNAVAILABLE")
         if not matches:
-            return "TARGET_TAB_MISSING"
+            return finish("TARGET_TAB_MISSING")
         if len(matches) != 1:
-            return "TARGET_TAB_AMBIGUOUS"
+            return finish("TARGET_TAB_AMBIGUOUS")
         tab = matches[0]
-        if not exact_url(str(cdp.loop.run_until_complete(tab.get_current_url())), url):
-            return "TARGET_TAB_DRIFT"
+        facts["stage"] = "DOCUMENT"
+        document = cdp.loop.run_until_complete(tab.get_current_url())
+        facts["candidateShape"] = value_shape(document)
+        facts["candidateRoute"] = route_class(document, url)
+        try:
+            frame = cdp.loop.run_until_complete(tab.evaluate("window === window.top"))
+            facts["candidateFrame"] = "TOP" if frame is True else ("SUBFRAME" if frame is False else "UNKNOWN")
+        except Exception:
+            pass
+        if not exact_url(document, url):
+            return finish("TARGET_TAB_DRIFT")
+        facts["alternateRoute"] = document != url
+        facts["stage"] = "SWITCH"
         cdp.switch_to_tab(tab)
-        return "TARGET_TAB_EXACT" if exact_url(str(cdp.get_current_url()), url) else "TARGET_TAB_DRIFT"
+        if not exact_url(controlled(), url):
+            return finish("TARGET_TAB_DRIFT")
+        facts["stage"] = "VERIFIED"
+        return finish("TARGET_TAB_EXACT")
     except Exception:
-        return "TARGET_TAB_UNAVAILABLE"
+        return finish("TARGET_TAB_UNAVAILABLE")
 
 def classify(cdp, url):
     try: current = str(cdp.get_current_url())
@@ -218,8 +302,7 @@ def main():
     if args.await_start and sys.stdin.readline() != "START\n":
         return 2
     url = args.conversation_url
-    parsed = urlparse(url)
-    if parsed.scheme != "https" or parsed.hostname not in {"chatgpt.com", "chat.openai.com"} or not parsed.path.startswith("/c/") or parsed.query or parsed.fragment:
+    if conversation_id(url) is None:
         print("PROBE:BAD_URL", flush=True); return 2
     if not 5 <= args.seconds <= 120:
         print("PROBE:BAD_DURATION", flush=True); return 2
@@ -242,11 +325,13 @@ def main():
         except Exception:
             return "OBSERVATION_UNAVAILABLE", None
     from seleniumbase import SB
+    def report_tab(facts):
+        print("PROBE:TAB:" + json.dumps(facts, separators=(",", ":"), sort_keys=True), flush=True)
     with SB(uc=True, user_data_dir=str(profile)) as sb:
         sb.activate_cdp_mode(url)
         cdp = sb.cdp
         if args.profile is not None:
-            print("PROBE:" + select_registered_target_tab(cdp, url), flush=True)
+            print("PROBE:" + select_registered_target_tab(cdp, url, report_tab), flush=True)
         last = None
         last_surface = None
         deadline = time.monotonic() + args.seconds
@@ -262,7 +347,7 @@ def main():
             if (args.profile is not None and state in {"HOME", "TARGET_DRIFT"}
                     and selection_attempts < 4 and time.monotonic() >= select_after):
                 selection_attempts += 1
-                selected = select_registered_target_tab(cdp, url)
+                selected = select_registered_target_tab(cdp, url, report_tab)
                 print("PROBE:" + selected, flush=True)
                 state, surface = observation(cdp)
                 select_after = time.monotonic() + 5.0

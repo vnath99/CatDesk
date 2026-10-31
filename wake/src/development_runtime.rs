@@ -2208,10 +2208,15 @@ pub fn inspect_readiness(workspace: &Path, target_url: &str) -> Result<Value> {
             .rev()
             .find_map(|line| crate::readiness_probe::surface_observation(line))
     };
+    let tab_observation = rows
+        .iter()
+        .rev()
+        .find_map(|line| crate::readiness_probe::tab_observation(line));
     Ok(
         json!({"mode":"DEVELOPMENT_UNPROTECTED","status":"BROWSER_READINESS_OBSERVED",
         "observations":rows,"finalState":final_state,"authenticationVerified":false,
-        "browserObservation":browser_observation,"registeredTargetSha256":protocol::digest(target_url),
+        "browserObservation":browser_observation,"tabObservation":tab_observation,
+        "registeredTargetSha256":protocol::digest(target_url),
         "registeredTargetGeneration":prepared.target_generation,
         "advisory":true,"browserReadOnly":true,"sendAttempted":false,
         "hostStarted":false,"schedulerStarted":false,"ownedTreeExited":true}),

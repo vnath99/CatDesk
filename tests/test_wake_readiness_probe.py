@@ -3,6 +3,7 @@ import hashlib
 import asyncio
 import importlib.util
 import io
+import json
 import os
 from pathlib import Path
 import sys
@@ -143,7 +144,9 @@ class ReadinessProbeTests(unittest.TestCase):
                     contextlib.redirect_stdout(output):
                 self.assertEqual(self.probe.main(), 0)
             self.assertEqual(calls, [{"uc": True, "user_data_dir": profile}, target, "closed"])
-            self.assertEqual(output.getvalue(), "PROBE:TARGET_TAB_UNAVAILABLE\nPROBE:FINAL:EXACT_READY_IDLE\n")
+            rows = output.getvalue().splitlines()
+            self.assertTrue(rows[0].startswith("PROBE:TAB:"))
+            self.assertEqual(rows[1:], ["PROBE:TARGET_TAB_UNAVAILABLE", "PROBE:FINAL:EXACT_READY_IDLE"])
         self.assertEqual(self.probe.PROFILE, default)
 
     def test_home_recovery_requires_verified_empty_composer(self):
@@ -249,6 +252,117 @@ class ReadinessProbeTests(unittest.TestCase):
         cdp.loop = asyncio.new_event_loop()
         self.addCleanup(cdp.loop.close)
         return cdp, tabs
+
+    def test_target_aliases_match_bridge_identity_without_relaxing_route_guards(self):
+        target = "https://chatgpt.com/c/readiness-fixture"
+        alternatives = [target, "https://chatgpt.com/g/project/c/readiness-fixture",
+                        "https://chat.openai.com/c/readiness-fixture"]
+        for metadata in alternatives:
+            for document in alternatives:
+                with self.subTest(metadata=metadata, document=document):
+                    cdp, tabs = self.target_tabs([metadata], [document], selected_url=document)
+                    facts = []
+                    self.assertEqual(self.probe.select_registered_target_tab(cdp, target, facts.append), "TARGET_TAB_EXACT")
+                    cdp.switch_to_tab.assert_called_once_with(tabs[0])
+                    self.assertEqual(facts[0]["stage"], "VERIFIED")
+                    self.assertEqual(facts[0]["alternateRoute"], document != target)
+        for invalid in [target + "/", target + "?query=private", target + "#fragment",
+                        "https://user@chatgpt.com/c/readiness-fixture", "https://chatgpt.com:443/c/readiness-fixture",
+                        "https://foreign.test/c/readiness-fixture", "https://chatgpt.com/c/other",
+                        "https://chatgpt.com/c/readiness%2Dfixture", "https://chatgpt.com/c/with space"]:
+            with self.subTest(invalid=invalid):
+                self.assertFalse(self.probe.exact_url(invalid, target))
+                cdp, _ = self.target_tabs([target], [invalid], selected_url=target)
+                self.assertEqual(self.probe.select_registered_target_tab(cdp, target), "TARGET_TAB_DRIFT")
+                cdp.switch_to_tab.assert_not_called()
+
+    def test_route_contract_matches_owner_verified_bridge(self):
+        path = Path(__file__).resolve().parents[1] / "scripts/wake_bridge.py"
+        expected = "https://chatgpt.com/c/fixture"
+        with tempfile.TemporaryDirectory() as profile:
+            sink = self.probe.load_observation_sink(path, hashlib.sha256(path.read_bytes()).hexdigest(), Path(profile), expected)
+            for value in [expected, "https://chat.openai.com/g/project/c/fixture",
+                          expected + "/", expected + "?query=1", expected + "#fragment",
+                          "https://user@chatgpt.com/c/fixture", "https://chatgpt.com:443/c/fixture",
+                          "http://chatgpt.com/c/fixture", "https://foreign.test/c/fixture",
+                          "https://chatgpt.com/g/project/c/other", "https://chatgpt.com/c/fixture extra", None, {}]:
+                with self.subTest(value=value):
+                    self.assertEqual(self.probe.exact_url(value, expected), sink.exact(value))
+
+    def test_main_accepts_registered_project_route_and_rejects_invalid_route_before_browser(self):
+        target = "https://chatgpt.com/g/project/c/fixture"
+        cdp = mock.Mock()
+        cdp.get_current_url.return_value = target
+        cdp.get_tabs.return_value = []
+        cdp.is_element_visible.side_effect = lambda selector: selector == "#prompt-textarea"
+        browser = mock.MagicMock();browser.__enter__.return_value = browser;browser.cdp = cdp
+        factory = mock.Mock(return_value=browser)
+        with tempfile.TemporaryDirectory() as profile:
+            args = ["probe", "--profile", profile, "--read-only", "--conversation-url", target, "--seconds", "5"]
+            output = io.StringIO()
+            with mock.patch.object(sys, "argv", args), mock.patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=factory)}), \
+                    mock.patch.object(self.probe.time, "monotonic", side_effect=[0, 0, 10]), contextlib.redirect_stdout(output):
+                self.assertEqual(self.probe.main(), 0)
+            self.assertTrue(output.getvalue().endswith("PROBE:FINAL:EXACT_READY_IDLE\n"))
+            factory.reset_mock()
+            for invalid in [target + "/", target + "?query=1", "https://user@chatgpt.com/c/fixture", "https://chatgpt.com:443/c/fixture"]:
+                args[5] = invalid
+                with mock.patch.object(sys, "argv", args), mock.patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=factory)}), contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(self.probe.main(), 2)
+            factory.assert_not_called()
+
+    def test_metadata_match_with_home_document_is_precise_and_does_not_switch(self):
+        target = "https://chatgpt.com/c/readiness-fixture"
+        cdp, _ = self.target_tabs([target], ["https://chatgpt.com/"], selected_url="https://chatgpt.com/")
+        facts = []
+        self.assertEqual(self.probe.select_registered_target_tab(cdp, target, facts.append), "TARGET_TAB_DRIFT")
+        self.assertEqual((facts[0]["metadataMatches"], facts[0]["candidateRoute"], facts[0]["stage"]), (1, "HOME", "DOCUMENT"))
+        cdp.switch_to_tab.assert_not_called()
+        cdp.get.assert_not_called()
+
+    def test_wrapped_document_and_metadata_remain_unproven_without_export(self):
+        target = "https://chatgpt.com/c/readiness-fixture"
+        for metadata, document, state, key in [
+                (target, {"value": "PRIVATE_ROUTE"}, "TARGET_TAB_DRIFT", "candidateShape"),
+                ({"value": "PRIVATE_ROUTE"}, target, "TARGET_TAB_UNAVAILABLE", "controlledShape")]:
+            cdp, _ = self.target_tabs([metadata], [document], selected_url=None)
+            facts = []
+            self.assertEqual(self.probe.select_registered_target_tab(cdp, target, facts.append), state)
+            if key == "candidateShape":self.assertEqual(facts[0][key], "WRAPPED")
+            else:self.assertEqual(facts[0]["unreadableMetadata"], 1)
+            self.assertNotIn("PRIVATE_ROUTE", json.dumps(facts))
+            cdp.switch_to_tab.assert_not_called()
+
+    def test_post_selection_drift_is_distinct_from_candidate_document_drift(self):
+        target = "https://chatgpt.com/c/readiness-fixture"
+        cdp, tabs = self.target_tabs([target], [target], selected_url="https://chatgpt.com/")
+        facts = []
+        self.assertEqual(self.probe.select_registered_target_tab(cdp, target, facts.append), "TARGET_TAB_DRIFT")
+        self.assertEqual((facts[0]["candidateRoute"], facts[0]["controlledRoute"], facts[0]["stage"]), ("EXACT", "HOME", "SWITCH"))
+        cdp.switch_to_tab.assert_called_once_with(tabs[0])
+        cdp.get.assert_not_called()
+
+    def test_duplicate_aliases_and_unreadable_sibling_cannot_select(self):
+        target = "https://chatgpt.com/c/readiness-fixture"
+        for metadata, documents, expected in [
+                ([target, "https://chatgpt.com/g/project/c/readiness-fixture"], [target, target], "TARGET_TAB_AMBIGUOUS"),
+                ([target, None], [target, target], "TARGET_TAB_UNAVAILABLE")]:
+            cdp, _ = self.target_tabs(metadata, documents, selected_url=target)
+            self.assertEqual(self.probe.select_registered_target_tab(cdp, target), expected)
+            cdp.switch_to_tab.assert_not_called()
+
+    def test_metadata_diagnostics_never_export_private_urls_and_errors(self):
+        target = "https://chatgpt.com/c/readiness-fixture"
+        cdp, tabs = self.target_tabs([target], [target], selected_url=target)
+        async def frame(_):return False
+        tabs[0].evaluate = frame
+        facts = []
+        self.assertEqual(self.probe.select_registered_target_tab(cdp, target, facts.append), "TARGET_TAB_EXACT")
+        self.assertEqual(facts[0]["candidateFrame"], "SUBFRAME")
+        self.assertNotIn("chatgpt.com", json.dumps(facts))
+        cdp.get_tabs.side_effect = RuntimeError("PRIVATE_ERROR")
+        self.assertEqual(self.probe.select_registered_target_tab(cdp, target, facts.append), "TARGET_TAB_UNAVAILABLE")
+        self.assertNotIn("PRIVATE_ERROR", json.dumps(facts))
 
     def test_loading_registered_tab_is_reselected_without_home_navigation(self):
         target = "https://chatgpt.com/c/readiness-fixture"
