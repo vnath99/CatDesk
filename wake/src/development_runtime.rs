@@ -1982,6 +1982,16 @@ struct LoginPreflight {
     _browser: File,
 }
 
+fn browser_child_path(path: &Path, directory: bool) -> Result<PathBuf> {
+    let compatible = runtime::browser_process_root(path)?;
+    // Normal spelling must still resolve to the same approved object. A
+    // packaged-process root-view difference is a refusal, never a rebind.
+    if identity(&compatible, directory)? != identity(path, directory)? {
+        return Err("DEV_LOGIN_BROWSER_PATH_IDENTITY_MISMATCH".into());
+    }
+    Ok(compatible)
+}
+
 fn require_login_target(store: &Store, url: &str) -> Result<()> {
     let config = store.config()?;
     let matched = config
@@ -2038,8 +2048,8 @@ fn login_preflight(workspace: &Path, target_url: &str) -> Result<LoginPreflight>
     validate_against_production(&checked_authority, target_url)?;
     require_stopped_control(&root)?;
     require_login_target(&store, target_url)?;
-    let python = root.join("runtime/python.exe");
-    let profile = root.join("browser-profile");
+    let python = browser_child_path(&root.join("runtime/python.exe"), false)?;
+    let profile = browser_child_path(&root.join("browser-profile"), true)?;
     plain(&profile, true)?;
     let primitives = root
         .join("versions")
@@ -3878,6 +3888,43 @@ mod tests {
         let selected = login_preflight(&workspace, url).unwrap();
         drop(selected);
         cleanup(&parent);
+    }
+
+    #[test]
+    fn login_preflight_uses_chrome_compatible_identity_preserving_paths() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let url = "https://chatgpt.com/c/chrome-compatible-profile-path";
+        Store::open(&root)
+            .unwrap()
+            .set_target("alpha", 0, url)
+            .unwrap();
+        let prepared = login_preflight(&workspace, url).unwrap();
+        assert_eq!(
+            identity(&prepared.profile, true).unwrap(),
+            identity(&root.join("browser-profile"), true).unwrap()
+        );
+        assert_eq!(
+            identity(&prepared.python, false).unwrap(),
+            identity(&root.join("runtime/python.exe"), false).unwrap()
+        );
+        let browser_paths_are_normal = !prepared
+            .profile
+            .as_os_str()
+            .to_string_lossy()
+            .starts_with(r"\\?\")
+            && !prepared
+                .python
+                .as_os_str()
+                .to_string_lossy()
+                .starts_with(r"\\?\");
+        drop(prepared);
+        cleanup(&parent);
+        assert!(
+            browser_paths_are_normal,
+            "Browser children must receive the existing Chrome-compatible drive spelling"
+        );
     }
 
     #[test]
