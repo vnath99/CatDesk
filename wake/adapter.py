@@ -633,7 +633,7 @@ def bootstrap_quarantine_inspect(bridge, sb, request):
 
 
 def bounded_source_snapshot(bridge, sink, cdp, *, timeout=10, clock=None, sleep=None,
-                            max_message_bytes=None):
+                            max_message_bytes=None, review_pair=False):
     """Wait in one document for matching complete final message frames.
 
     A still-incomplete snapshot remains explicitly incomplete at the deadline;
@@ -646,8 +646,10 @@ def bounded_source_snapshot(bridge, sink, cdp, *, timeout=10, clock=None, sleep=
     while True:
         if not sink.exact(cdp.get_current_url()):
             raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
-        snapshot = (sink.visible_message_snapshot(cdp) if max_message_bytes is None else
-                    sink.visible_message_snapshot(cdp, max_message_bytes=max_message_bytes))
+        options = {} if max_message_bytes is None else {"max_message_bytes": max_message_bytes}
+        if review_pair:
+            options["review_pair"] = True
+        snapshot = sink.visible_message_snapshot(cdp, **options)
         if not sink.exact(cdp.get_current_url()):
             raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
         messages = snapshot["messages"]
@@ -677,7 +679,16 @@ def bounded_source_snapshot(bridge, sink, cdp, *, timeout=10, clock=None, sleep=
 
 def source_snapshot(bridge, sb, request):
     """Read an exact idle source chat only on an explicit private request."""
-    if set(request) != {"snapshot", "projectId", "source"} or request["snapshot"] is not True:
+    review = request.get("reviewEvent")
+    keys = {"snapshot", "projectId", "source"} | ({"reviewEvent"} if review is not None else set())
+    if set(request) != keys or request["snapshot"] is not True:
+        raise bridge.Attention("SOURCE_SNAPSHOT_REQUEST_INVALID")
+    if review is not None and (
+            not isinstance(review, dict) or set(review) != {"eventId", "message", "messageDigest"} or
+            not isinstance(review["eventId"], str) or not bridge.SAFE_ID.fullmatch(review["eventId"]) or
+            not isinstance(review["message"], str) or not 0 < len(review["message"].encode("utf-8")) <= 2048 or
+            bridge.normalize_message(review["message"]) != review["message"] or
+            review["messageDigest"] != bridge.digest(review["message"])):
         raise bridge.Attention("SOURCE_SNAPSHOT_REQUEST_INVALID")
     if not isinstance(request["projectId"], str) or not bridge.SAFE_ID.fullmatch(request["projectId"]):
         raise bridge.Attention("SOURCE_SNAPSHOT_REQUEST_INVALID")
@@ -695,7 +706,19 @@ def source_snapshot(bridge, sb, request):
     sink.wait_for_idle(cdp, sink.ui_timeout)
     if not sink.exact(cdp.get_current_url()) or sink.readiness_reason(cdp) is not None:
         raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
-    snapshot = bounded_source_snapshot(bridge, sink, cdp, max_message_bytes=8192)
+    def require_review_turn():
+        if review is not None and sink.trusted_turn_anchor_state(cdp, review["message"]) != (1, 1):
+            raise bridge.Attention("SOURCE_REVIEW_SEQUENCE_UNPROVEN")
+    require_review_turn()
+    snapshot = bounded_source_snapshot(bridge, sink, cdp,
+        max_message_bytes=32768 if review is not None else 8192, review_pair=review is not None)
+    if review is not None:
+        messages = snapshot["messages"]
+        if (len(messages) != 2 or [item["role"] for item in messages] != ["USER", "ASSISTANT"] or
+                not messages[0]["textComplete"] or
+                bridge.normalize_message(messages[0]["text"]) != review["message"]):
+            raise bridge.Attention("SOURCE_REVIEW_USER_WITNESS_REQUIRED")
+        require_review_turn()
     if snapshot["messages"] and snapshot["messages"][-1]["role"] == "ASSISTANT":
         last = snapshot["messages"][-1]
         normalized = bridge.normalize_message(last["text"]).replace("’", "'").replace("‘", "'").lower()
@@ -713,12 +736,21 @@ def source_snapshot(bridge, sb, request):
     # The private snapshot reader has a separate wire allowance: JSON escaping
     # and identity metadata must not consume the 8 KiB raw-text budget and
     # discard a complete USER witness preceding a complete assistant answer.
-    # Ordinary adapter frames and all snapshot text/count bounds stay unchanged.
+    # Ordinary frames and generic context limits stay unchanged; receipt-bound
+    # review pair text limits were applied above.
     while (len(json.dumps(payload, separators=(",", ":")).encode("utf-8")) + 1 >
            SOURCE_SNAPSHOT_RESPONSE_BYTES):
         messages = snapshot["messages"]
         snapshot["truncated"] = True
-        if len(messages) > 1:
+        if review is not None:
+            # Escaping/metadata may exhaust the unchanged64KiB wire cap.
+            # Retain the exact USER and honestly mark the answer incomplete.
+            if len(messages) != 2 or not messages[-1]["text"]:
+                raise bridge.Attention("SOURCE_SNAPSHOT_TOO_LARGE")
+            answer = messages[-1]
+            answer["text"] = answer["text"][:len(answer["text"]) // 2]
+            answer.update(textComplete=False, revisionComplete=False, revisionHash=None)
+        elif len(messages) > 1:
             del messages[0]
         elif messages and messages[0]["text"]:
             text = messages[0]["text"]

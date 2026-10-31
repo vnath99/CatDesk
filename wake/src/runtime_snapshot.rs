@@ -56,6 +56,8 @@ fn diagnostic_failure(reason: &str) -> String {
         | "SOURCE_SNAPSHOT_QUERY_FAILED"
         | "SOURCE_SNAPSHOT_TOO_LARGE"
         | "SOURCE_REVIEW_RECEIPT_REQUIRED"
+        | "SOURCE_REVIEW_SEQUENCE_UNPROVEN"
+        | "SOURCE_REVIEW_USER_WITNESS_REQUIRED"
         | "BOOTSTRAP_SOURCE_BINDING_CHANGED"
         | "BOOTSTRAP_SOURCE_QUEUE_PENDING"
         | "BOOTSTRAP_SOURCE_TURN_PENDING"
@@ -232,6 +234,7 @@ fn snapshot_with_adapter<A: SubmissionAdapter>(
         guard()?;
         phase.set(SnapshotReadPhase::ScopeCheck);
         ensure_source_snapshot_available(store, project_id, source, delivered_review)?;
+        let request = snapshot_request(store, project_id, source, delivered_review)?;
         guard()?;
         phase.set(SnapshotReadPhase::PackageCheck);
         let monitor = |value| {
@@ -244,8 +247,7 @@ fn snapshot_with_adapter<A: SubmissionAdapter>(
         let mut adapter = connect(deadline, &guard, &monitor)?;
         phase.set(SnapshotReadPhase::BrowserReady);
         guard()?;
-        adapter
-            .send(serde_json::json!({"snapshot":true,"projectId":project_id,"source":source}))?;
+        adapter.send(request)?;
         phase.set(SnapshotReadPhase::SnapshotReply);
         loop {
             guard()?;
@@ -309,6 +311,44 @@ fn snapshot_with_adapter<A: SubmissionAdapter>(
             budget_millis: maximum.as_millis().min(u64::MAX as u128) as u64,
         },
     }
+}
+
+fn snapshot_request(
+    store: &Store,
+    project: &str,
+    source: &Target,
+    delivered_review: Option<&str>,
+) -> Result<Value> {
+    let mut request = serde_json::json!({"snapshot":true,"projectId":project,"source":source});
+    if let Some(id) = delivered_review {
+        let delivery = store
+            .delivery(id)?
+            .ok_or("SOURCE_REVIEW_RECEIPT_REQUIRED")?;
+        if delivery.event.event_type == "source_review" {
+            let receipt = delivery
+                .receipt
+                .as_ref()
+                .ok_or("SOURCE_REVIEW_RECEIPT_REQUIRED")?;
+            if delivery.phase != Phase::Sent
+                || delivery.target != *source
+                || delivery.event.project_id != project
+                || delivery.event.event_id != id
+                || delivery.event.target_generation != source.generation
+                || delivery.event.message.len() > 2048
+                || receipt.event_id != id
+                || receipt.target_generation != source.generation
+                || receipt.target_digest != source.digest
+                || receipt.evidence != "EXACT_USER_MESSAGE_APPENDED"
+                || receipt.message_digest != delivery.message_digest
+                || receipt.message_digest != crate::protocol::digest(&delivery.event.message)
+            {
+                return Err("SOURCE_REVIEW_RECEIPT_REQUIRED".into());
+            }
+            request["reviewEvent"] = serde_json::json!({"eventId":id,
+                "message":delivery.event.message,"messageDigest":delivery.message_digest});
+        }
+    }
+    Ok(request)
 }
 
 #[cfg(test)]
@@ -378,6 +418,55 @@ mod tests {
             cleanup_budget: Rc::new(Cell::new(Duration::ZERO)),
             consume_cleanup_budget: false,
         }
+    }
+
+    #[test]
+    fn large_review_profile_requires_exact_sent_source_review_receipt() {
+        let (store, target) = fixture();
+        let plain = snapshot_request(&store, "alpha", &target, None).unwrap();
+        assert!(plain.get("reviewEvent").is_none());
+        let event = store
+            .produce_expected(
+                "review-pair",
+                "alpha",
+                "source_review",
+                "approved review",
+                &target,
+            )
+            .unwrap();
+        let lease = store.host_lock().unwrap();
+        store.claim(&event, &lease).unwrap();
+        assert!(snapshot_request(&store, "alpha", &target, Some("review-pair")).is_err());
+        store
+            .transition("review-pair", lease.owner(), Phase::Submitting, None, None)
+            .unwrap();
+        let receipt = crate::store::Receipt {
+            schema_version: 1,
+            event_id: event.event_id.clone(),
+            target_generation: target.generation,
+            target_digest: target.digest.clone(),
+            message_digest: crate::protocol::digest(&event.message),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        let mut delivery = store
+            .transition(
+                "review-pair",
+                lease.owner(),
+                Phase::Sent,
+                Some(receipt),
+                None,
+            )
+            .unwrap();
+        let request = snapshot_request(&store, "alpha", &target, Some("review-pair")).unwrap();
+        assert_eq!(request["reviewEvent"]["message"], "approved review");
+        assert!(request.get("submit").is_none());
+        delivery.receipt.as_mut().unwrap().message_digest = "0".repeat(64);
+        crate::store::atomic(&store.root().join("deliveries/review-pair.json"), &delivery).unwrap();
+        assert_eq!(
+            snapshot_request(&store, "alpha", &target, Some("review-pair")).unwrap_err(),
+            "RECEIPT_INVALID"
+        );
     }
 
     #[test]

@@ -239,6 +239,55 @@ class AdapterTests(unittest.TestCase):
         self.assertFalse(cdp.sent)
         self.assertEqual(cdp.keys, [])
 
+    def test_sent_review_pair_scope_stability_and_escaping_preserve_user(self):
+        for count, answer in [((1, 1), "r" * 16000), ((1, 1), "😀" * 8192), ((2, 1), "answer"), ((1, 2), "answer")]:
+            with self.subTest(count=count, unicode=answer.startswith("😀")):
+                cdp = FakeCdp()
+                class Sink:
+                    def __init__(self, url, *_): self.url, self.ui_timeout = url, 1
+                    def exact(self, url): return url == self.url
+                    def wait_for_page_readiness(self, _sb, current): return current
+                    def wait_for_idle(self, _cdp, _timeout): pass
+                    def readiness_reason(self, _): return None
+                    def trusted_turn_anchor_state(self, _, message):
+                        self_message = "approved review"
+                        if message != self_message: raise AssertionError("wrong receipt message")
+                        return count
+                    def visible_message_snapshot(self, _, *, max_message_bytes, review_pair):
+                        if (max_message_bytes, review_pair) != (32768, True): raise AssertionError("wrong private budget")
+                        return {"messages":[dict(role=role,text=text,textComplete=True,revisionComplete=True,
+                            revisionHash="a"*64,identityBasis="UNIT_KEY") for role,text in
+                            [("USER","approved review"),("ASSISTANT",answer)]], "truncated":False,
+                            "coverage":{"visibleRoleCount":2,"returned":2}}
+                source = {"url":cdp.url,"digest":bridge.digest(cdp.url),"generation":1}
+                request={"snapshot":True,"projectId":"alpha","source":source,"reviewEvent":
+                    {"eventId":"review-one","message":"approved review","messageDigest":bridge.digest("approved review")}}
+                with patch.object(bridge,"NewConversationSink",Sink), patch.object(adapter,"prepare_cdp_target",return_value=cdp), patch.object(adapter,"emit") as emit:
+                    if count != (1,1):
+                        with self.assertRaisesRegex(bridge.Attention,"SOURCE_REVIEW_SEQUENCE_UNPROVEN"):
+                            adapter.source_snapshot(bridge,object(),request)
+                        emit.assert_not_called()
+                    else:
+                        adapter.source_snapshot(bridge,object(),request)
+                        payload=emit.call_args.args[0];messages=payload["snapshot"]["messages"]
+                        self.assertEqual(messages[0]["text"],"approved review")
+                        self.assertTrue(messages[0]["textComplete"])
+                        self.assertEqual(messages[-1]["textComplete"],not answer.startswith("😀"))
+                        self.assertLessEqual(len(json.dumps(payload,separators=(",", ":")).encode())+1,adapter.SOURCE_SNAPSHOT_RESPONSE_BYTES)
+                        if answer.startswith("😀"):
+                            self.assertFalse(messages[-1]["revisionComplete"])
+                            self.assertIsNone(messages[-1]["revisionHash"])
+                self.assertFalse(cdp.sent)
+                self.assertEqual(cdp.keys,[])
+
+    def test_sent_review_snapshot_rejects_changed_digest_before_browser(self):
+        source={"url":"https://chatgpt.com/c/exact","digest":bridge.digest("https://chatgpt.com/c/exact"),"generation":1}
+        with patch.object(adapter,"prepare_cdp_target") as opened:
+            with self.assertRaisesRegex(bridge.Attention,"SOURCE_SNAPSHOT_REQUEST_INVALID"):
+                adapter.source_snapshot(bridge,object(),{"snapshot":True,"projectId":"alpha","source":source,
+                    "reviewEvent":{"eventId":"review-one","message":"approved review","messageDigest":"0"*64}})
+            opened.assert_not_called()
+
     def test_private_snapshot_refuses_frame_over_cap_and_ordinary_input_stays_bounded(self):
         cdp = FakeCdp()
         class Sink:

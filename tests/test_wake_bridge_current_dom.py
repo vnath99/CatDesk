@@ -434,6 +434,26 @@ class CurrentDomTests(unittest.TestCase):
         self.assertEqual(self.sink.user_message_digests(CurrentDom()), [bridge.digest("exact wake message")])
         self.assertEqual(self.sink.trusted_turn_anchor_state(CurrentDom(), "exact wake message"), (1, 1))
 
+    def test_sent_review_pair_preserves_user_beside_large_complete_answer(self):
+        cdp = CurrentDom(answer="r" * 16000, historicalLoadError=True)
+        observed = self.sink.visible_message_snapshot(cdp, max_message_bytes=32768, review_pair=True)
+        self.assertEqual([item["role"] for item in observed["messages"]], ["USER", "ASSISTANT"])
+        self.assertEqual(observed["messages"][0]["text"], "exact wake message")
+        self.assertEqual(observed["messages"][1]["text"], "r" * 16000)
+        self.assertTrue(all(item["textComplete"] for item in observed["messages"]))
+        ordinary = self.sink.visible_message_snapshot(cdp, max_message_bytes=8192)
+        self.assertLessEqual(sum(len(item["text"].encode()) for item in ordinary["messages"]), 8192)
+
+    def test_sent_review_pair_caps_unicode_without_discarding_user(self):
+        observed = self.sink.visible_message_snapshot(CurrentDom(answer="😀" * 10000),
+            max_message_bytes=32768, review_pair=True)
+        self.assertEqual([item["role"] for item in observed["messages"]], ["USER", "ASSISTANT"])
+        self.assertTrue(observed["messages"][0]["textComplete"])
+        self.assertFalse(observed["messages"][1]["textComplete"])
+        self.assertLessEqual(len(observed["messages"][1]["text"].encode()), 32768)
+        with self.assertRaises(ValueError):
+            self.sink.visible_message_snapshot(CurrentDom(), max_message_bytes=32768)
+
     def test_class_only_user_receipt_agrees_with_snapshot_and_turn_anchor(self):
         cdp = CurrentDom(userClassOnly=True, answer="exact wake message")
         observed = self.sink.visible_message_snapshot(cdp)

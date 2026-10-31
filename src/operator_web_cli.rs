@@ -837,7 +837,7 @@ fn review_text(snapshot: &Value, expected_message_digest: &str) -> Result<String
     if assistant["role"] != "ASSISTANT"
         || assistant["textComplete"] != true
         || text.trim().is_empty()
-        || text.len() > 8192
+        || text.len() > 32768
     {
         return Err("WEB_REVIEW_RESPONSE_NOT_COMPLETE".into());
     }
@@ -850,7 +850,7 @@ fn review_text(snapshot: &Value, expected_message_digest: &str) -> Result<String
         .join(" ")
         .replace(['’', '‘'], "'")
         .to_ascii_lowercase();
-    if normalized.contains("response couldn't load") {
+    if normalized.trim_end_matches('.') == "this response couldn't load" {
         return Err("WEB_REVIEW_RESPONSE_LOAD_ERROR".into());
     }
     Ok(text.to_owned())
@@ -1868,6 +1868,29 @@ mod tests {
             empty.last_mut().unwrap().clear();
             assert!(parse(&empty).is_err());
         }
+    }
+
+    #[test]
+    fn review_read_large_answer_preserves_limits_and_discussion_is_not_a_placeholder() {
+        let expected = catdesk_wake::protocol::digest("approved review request");
+        let mut snapshot = json!({"messages":[
+            {"role":"USER","text":"approved review request","textComplete":true},
+            {"role":"ASSISTANT","text":"r".repeat(16000),"textComplete":true}
+        ]});
+        assert_eq!(review_text(&snapshot, &expected).unwrap().len(), 16000);
+        snapshot["messages"][1]["text"] =
+            json!("A UI may say This response couldn't load. Preserve the receipt.");
+        assert!(review_text(&snapshot, &expected).is_ok());
+        snapshot["messages"][1]["text"] = json!("r".repeat(32769));
+        assert_eq!(
+            review_text(&snapshot, &expected).unwrap_err(),
+            "WEB_REVIEW_RESPONSE_NOT_COMPLETE"
+        );
+        snapshot["messages"][1]["text"] = json!("r".repeat(16000));
+        snapshot["messages"][1]["textComplete"] = json!(false);
+        assert!(review_text(&snapshot, &expected).is_err());
+        snapshot["messages"][1]["textComplete"] = json!(true);
+        assert!(review_text(&snapshot, &"0".repeat(64)).is_err());
     }
 
     #[test]

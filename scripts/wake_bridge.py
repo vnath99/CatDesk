@@ -2792,7 +2792,8 @@ class NewConversationSink(CdpSink):
             raise Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
         return {"status": "OBSERVED", **value}
 
-    def visible_message_snapshot(self, cdp: Any, *, max_message_bytes: int = 4096) -> dict[str, Any]:
+    def visible_message_snapshot(self, cdp: Any, *, max_message_bytes: int = 4096,
+                                 review_pair: bool = False) -> dict[str, Any]:
         """Return bounded private text and qualified identities for visible role units.
 
         DOM keys stay inside this process. A hash is an observation aid, not a
@@ -2801,10 +2802,13 @@ class NewConversationSink(CdpSink):
         # Context observation keeps its existing small excerpts. An explicit
         # private source read may retain the same 8 KiB total window in one
         # message, matching the review reader's existing body limit.
-        if type(max_message_bytes) is not int or max_message_bytes not in {4096, 8192}:
+        # Receipt-bound review pairs have their own explicitly selected profile.
+        if (type(review_pair) is not bool or type(max_message_bytes) is not int or
+                max_message_bytes not in ({32768} if review_pair else {4096, 8192})):
             raise ValueError("unsupported private snapshot message budget")
         script = """(() => {
             const messageLimit = __CATDESK_SNAPSHOT_MESSAGE_BYTES__;
+            const reviewPair = __CATDESK_REVIEW_PAIR__;
             const visible = element => {
                 const style = window.getComputedStyle(element);
                 return element.getClientRects().length > 0 &&
@@ -2835,9 +2839,16 @@ class NewConversationSink(CdpSink):
             )).filter(visible);
             const units = Array.from(document.querySelectorAll('[data-content-search-unit-key]'))
                 .filter(node => visible(node) && role(node));
-            const tier = roles.length ? 'AUTHOR_ROLE' : articles.length ? 'ARTICLE_ROLE' :
+            const tier = reviewPair && units.length ? 'SEMANTIC_UNIT' : roles.length ? 'AUTHOR_ROLE' : articles.length ? 'ARTICLE_ROLE' :
                 units.length ? 'SEMANTIC_UNIT' : 'NONE';
-            const candidates = roles.length ? roles : articles.length ? articles : units;
+            // A historical legacy-role card must not hide the latest semantic
+            // USER/ASSISTANT pair. Preserve DOM order and existing nested/key
+            // collapse, without exporting the older messages in review mode.
+            const candidates = reviewPair ? Array.from(document.querySelectorAll(
+                "[data-message-author-role='user'], [data-message-author-role='assistant'], " +
+                "article[data-turn='user'], article[data-turn='assistant'], [data-content-search-unit-key]"
+            )).filter(node => visible(node) && ['user','assistant'].includes(role(node))) :
+                roles.length ? roles : articles.length ? articles : units;
             const candidateSet = new Set(candidates);
             const nested = new Set();
             for (const node of candidates) {
@@ -2894,8 +2905,10 @@ class NewConversationSink(CdpSink):
             }
             const unique = rows.filter(row => row !== null);
             return [tier, Math.min(unique.length, 1024), unique.length > 1024,
-                Math.min(nested.size, 1024), Math.min(keyedCollapsed, 1024), unique.slice(-16)];
-        })()""".replace("__CATDESK_SNAPSHOT_MESSAGE_BYTES__", str(max_message_bytes))
+                Math.min(nested.size, 1024), Math.min(keyedCollapsed, 1024), unique.slice(-__CATDESK_SNAPSHOT_ROWS__)];
+        })()""".replace("__CATDESK_SNAPSHOT_MESSAGE_BYTES__", str(max_message_bytes)).replace(
+            "__CATDESK_SNAPSHOT_ROWS__", "2" if review_pair else "16").replace(
+            "__CATDESK_REVIEW_PAIR__", "true" if review_pair else "false")
         try:
             value = CdpSink.cdp_value(cdp.evaluate(script))
         except Exception as error:
@@ -2908,7 +2921,9 @@ class NewConversationSink(CdpSink):
                 len(value[5]) > 16 or value[1] < len(value[5])):
             raise Attention("SOURCE_SNAPSHOT_QUERY_FAILED")
         truncated = value[2] or value[1] > len(value[5])
-        remaining = 8192
+        # Only a receipt-bound private review can use the larger final-pair
+        # window. A long answer must not consume the preceding USER witness.
+        remaining = 49152 if review_pair else 8192
         messages = []
         source_salt = digest(self.url)
         for item in reversed(value[5]):
