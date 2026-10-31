@@ -136,6 +136,23 @@ const assistantLoadError = element => {
 """
 # Shared by observation and the sole qualified assistant Retry action. Never
 # climb out of the wake's assistant/exchange boundary or borrow USER controls.
+RESPONSE_WAKE_USER_MATCHER = USER_BODY_TEXT_READER + r"""
+const wakeTurnMatches = turn => {
+    if (!expectedWake) return false;
+    const selector = "[data-message-author-role='user'], [data-turn='user'], " +
+        "[data-user-message-bubble], [class~='group/user-message']";
+    const raw = [turn, ...turn.querySelectorAll(selector)].filter(node => node.matches(selector));
+    // Multiple nested markers describe one USER; distinct sibling USER nodes
+    // remain ambiguous even inside the same paired exchange container.
+    if (raw.length > 128) return false;
+    const users = raw.filter(node => !raw.some(other => other !== node && other.contains(node)));
+    if (users.length !== 1) return false;
+    const user = users[0];
+    const contentSelector = "[data-message-content], [data-markdown-text-tone='user-message'], .whitespace-pre-wrap";
+    const content = user.matches(contentSelector) ? user : user.querySelector(contentSelector);
+    return normalize(userBodyText(content || user)) === expectedWake;
+};
+"""
 RESPONSE_ASSISTANT_SCOPE = """
 const userNodeSelector = "[data-message-author-role='user'], [data-turn='user'], " +
     "[data-user-message-bubble], [class~='group/user-message']";
@@ -1277,9 +1294,8 @@ class CdpSink:
                 ) || candidate;
                 if (!turnContainers.includes(container)) turnContainers.push(container);
             }});
-            const wakeTurns = turnContainers.filter(turn =>
-                normalize(turn.innerText || turn.textContent).includes(expectedWake)
-            );
+            {RESPONSE_WAKE_USER_MATCHER}
+            const wakeTurns = turnContainers.filter(wakeTurnMatches);
             if (wakeTurns.length !== 1)
                 return [wakeTurns.length === 0 ? 'missing-user' : 'invalid', 0, 0, false, false];
             const latestUser = wakeTurns[0];
@@ -1614,9 +1630,8 @@ class CdpSink:
                 ) || candidate;
                 if (!turnContainers.includes(container)) turnContainers.push(container);
             }});
-            const wakeTurns = turnContainers.filter(turn =>
-                normalize(turn.innerText || turn.textContent).includes(expectedWake)
-            );
+            {RESPONSE_WAKE_USER_MATCHER}
+            const wakeTurns = turnContainers.filter(wakeTurnMatches);
             if (wakeTurns.length !== 1) return wakeTurns.length ? 'ambiguous-user' : 'missing-user';
             const latestUser = wakeTurns[0];
             const followsLatestUser = element =>

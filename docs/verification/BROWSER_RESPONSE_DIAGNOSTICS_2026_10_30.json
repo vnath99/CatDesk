@@ -207,5 +207,65 @@
     "coarseFailureDoesNotRequestManualClassification": true,
     "responseFailureDoesNotRequestLoginOrUserResend": true
   },
-  "finalizedUtc": "2026-10-30T22:49:13.515395+00:00"
+  "finalizedUtc": "2026-10-30T22:49:13.515395+00:00",
+  "exactUserRecoveryFollowup": {
+    "observedUtc": "2026-10-31T05:44:37.627608+00:00",
+    "sourceBaseCommit": "63822f47b366aabe19d709b9829a2d4fed775a9e",
+    "classification": "TESTED_SOURCE_NOT_INSTALLED_ACTION_QUALIFICATION",
+    "sourceFilesSha256": {
+      "scripts/wake_bridge.py": "7f51e0d74ad10af4a1756747d610f1a7b3a15e78b80ea4e52da56f17a6c0c814",
+      "tests/test_wake_bridge_current_dom.py": "0209cfb2bb326b43ec3c3d1531fb9206044ed5a173377b4679a8190649e83c19",
+      "wake/tests/test_adapter.py": "a6651b65e3483ecb5059e66f7d5cee9f81c033390de7ea7f82f76565bf8e74c5"
+    },
+    "defect": "Response snapshot and final timeout Retry still matched substrings in whole turn containers after the trusted receipt anchor had moved to canonical whole USER bodies.",
+    "correction": "Both share a canonical USER body matcher; detached controls are excluded, paragraph boundaries retained, empty/partial/control/assistant matches and duplicate sibling USER nodes refused.",
+    "redRegression": {
+      "tests": 3,
+      "failingSubcases": 7,
+      "errorSubcases": 2
+    },
+    "passingTests": 52,
+    "proofs": [
+      {
+        "kind": "focused",
+        "passed": 7,
+        "logSha256": "f09a72daab9d7d8b0cf989fbb6676af70c3769d1e0a225707168a374b1becc2c"
+      },
+      {
+        "kind": "adapter-final",
+        "passed": 38,
+        "logSha256": "bfcb92f0c873dcf3aef9ca084aa5dc85331f065c811c464125f24de39f617d4e"
+      },
+      {
+        "kind": "lifecycle",
+        "passed": 6,
+        "logSha256": "43e5310abb666dad1b0ed0d2f1621496bf2a8fc5cd8255c10ff2b081cb6d5212"
+      },
+      {
+        "kind": "nativeFiveProjectMixedHoldsRestart",
+        "passed": 1,
+        "logSha256": "eec21ee70fbf80aa8a24567a0ed009664d115f566a34c3207ba2eeca65023453"
+      }
+    ],
+    "olderControlsOnlyFixtureNowModelsActualUserProvenance": true,
+    "broaderOfflineAttempt": {
+      "completed": false,
+      "passingQualificationClaimed": false,
+      "stoppedAtSeconds": 200.3,
+      "ownedChildrenAtStop": 0,
+      "invalidExtraDiscoverModuleArgument": true,
+      "unchangedFullRunRepeated": false
+    },
+    "browserWakeOrExternalOwnerStarts": 0,
+    "messagesSent": 0,
+    "productionOrBindingChanges": false,
+    "newRetryCategory": false,
+    "genericLoadErrorRecovery": "OBSERVE_ONLY_NO_UNIQUE_QUALIFIED_TASK_BOUND_RETRY",
+    "installedActionQualification": "OPEN_NO_SAFE_CURRENT_TIMEOUT_CARD_EXERCISED",
+    "newOperatorActionRequired": false,
+    "historicalAndLiveReferences": [
+      "BROWSER_OBSERVATION_INSTALLED_2026_10_31.json",
+      "CANONICAL_TURN_ANCHOR_2026_10_31.json"
+    ]
+  }
 }

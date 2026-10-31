@@ -838,6 +838,40 @@ class CurrentDomTests(unittest.TestCase):
                 self.sink.click_response_timeout_retry(cdp, "exact wake message")
                 self.assertEqual(cdp.mutations, 1)
 
+    def test_response_and_retry_require_whole_canonical_user_body(self):
+        for legacy in [False, True]:
+            for message in ["", "exact wake", "Copy message", "A useful answer"]:
+                with self.subTest(legacy=legacy, message=message):
+                    cdp = CurrentDom(timeoutCard=True, observationEditor=True,
+                                     traceClicks=True, legacyTurns=legacy)
+                    with self.assertRaises(bridge.PostSubmitUnknown):
+                        self.sink.response_snapshot(cdp, message)
+                    with self.assertRaisesRegex(bridge.PostSubmitUnknown,
+                                                "RESPONSE_RETRY_CONTROL_AMBIGUOUS"):
+                        self.sink.click_response_timeout_retry(cdp, message)
+                    self.assertEqual(getattr(cdp, "mutations", 0), 0)
+
+    def test_response_and_retry_share_paragraph_and_control_free_user_identity(self):
+        for legacy in [False, True]:
+            with self.subTest(legacy=legacy):
+                cdp = CurrentDom(timeoutCard=True, observationEditor=True,
+                                 traceClicks=True, legacyTurns=legacy, userParagraphs=True,
+                                 userControlsInsideBody=True)
+                message = "first paragraph\nsecond paragraph"
+                self.assertEqual(self.sink.response_snapshot(cdp, message)[:2], (1, 1))
+                self.sink.click_response_timeout_retry(cdp, message)
+                self.assertEqual(cdp.mutations, 1)
+
+    def test_duplicate_user_inside_one_exchange_never_authorizes_retry(self):
+        cdp = CurrentDom(timeoutCard=True, observationEditor=True,
+                         traceClicks=True, duplicateUser=True)
+        with self.assertRaises(bridge.PostSubmitUnknown):
+            self.sink.response_snapshot(cdp, "exact wake message")
+        with self.assertRaisesRegex(bridge.PostSubmitUnknown,
+                                    "RESPONSE_RETRY_CONTROL_AMBIGUOUS"):
+            self.sink.click_response_timeout_retry(cdp, "exact wake message")
+        self.assertEqual(getattr(cdp, "mutations", 0), 0)
+
     def test_current_receipt_attribution_distinguishes_failed_history_and_duplicates(self):
         for options, expected in [
             ({"historicalLoadError": True}, "RESPONSE_COMPLETE"),

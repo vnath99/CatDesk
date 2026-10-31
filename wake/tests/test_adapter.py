@@ -914,6 +914,20 @@ class AdapterTests(unittest.TestCase):
             const fs = require('fs');
             const withBody = __WITH_BODY__;
             const withAssistantAction = __WITH_ASSISTANT_ACTION__;
+            // The response reader now requires actual USER provenance rather
+            // than text borrowed from this synthetic paired container.
+            const userBody = {
+                nodeType: 1, tagName: 'DIV',
+                childNodes: [{nodeType: 3, nodeValue: 'exact wake message'}],
+                getAttribute: () => null, hasAttribute: () => false,
+                querySelectorAll: () => [], cloneNode() {return this;}
+            };
+            const user = {
+                matches: selector => selector.includes("data-message-author-role='user'"),
+                contains: node => node === user,
+                querySelector: () => userBody,
+                querySelectorAll: () => []
+            };
             const body = {
                 textContent: 'A useful answer',
                 contains: () => false,
@@ -945,7 +959,8 @@ class AdapterTests(unittest.TestCase):
                 closest: selector => selector === '[data-content-search-turn-key]' ? turn : null,
                 contains: element => element === assistant,
                 compareDocumentPosition: element => element === assistant ? 4 : 0,
-                querySelectorAll: selector => selector === '[data-content-search-unit-key]' ? [assistant] : [],
+                querySelectorAll: selector => selector === '[data-content-search-unit-key]' ? [assistant] :
+                    selector.includes("data-message-author-role='user'") ? [user] : [],
                 querySelector: selector => selector === "button[data-testid='copy-turn-action-button']" ? {} : null
             };
             assistant.parentElement = turn;
