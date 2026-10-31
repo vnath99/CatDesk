@@ -961,8 +961,17 @@ def observe_response(bridge, sb, request):
     stage = bounded_response_observation(bridge, sink, cdp, message, expected)
     if stage not in {"RESPONSE_PENDING", "RESPONSE_COMPLETE"}:
         raise bridge.Attention("RESPONSE_PROBE_STATE_INVALID")
-    emit({"stage": stage, "eventId": event_id, "targetGeneration": generation,
-          "targetDigest": target["digest"], "messageDigest": expected})
+    frame = {"stage": stage, "eventId": event_id, "targetGeneration": generation,
+             "targetDigest": target["digest"], "messageDigest": expected}
+    reason = getattr(sink, "response_observation_reason", None)
+    if reason is not None:
+        pending = {"DOCUMENT_LOADING", "GENERATION_ACTIVE", "EDITOR_NOT_READY",
+                   "ASSISTANT_NOT_MOUNTED", "ASSISTANT_BODY_UNPROVEN",
+                   "ASSISTANT_COMPLETION_ACTION_UNPROVEN"}
+        if not isinstance(reason, str) or (reason not in pending if stage == "RESPONSE_PENDING" else reason != "COMPLETE"):
+            raise bridge.Attention("RESPONSE_PROBE_DIAGNOSTIC_INVALID")
+        frame["diagnosticReason"] = reason
+    emit(frame)
 
 
 def startup_reason(error):

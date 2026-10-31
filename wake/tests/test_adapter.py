@@ -772,6 +772,30 @@ class AdapterTests(unittest.TestCase):
         self.assertFalse(cdp.sent)
         self.assertFalse(any(item.get("stage") == "RESPONSE_COMPLETE" for item in emitted))
 
+    def test_probe_diagnostic_is_closed_and_scoped_to_each_independent_sink(self):
+        class Diagnosed(FakeProbeSink):
+            def observe_cooperative_response(self, cdp, message, expected_digest):
+                self.response_observation_reason = cdp.reason
+                return super().observe_cooperative_response(cdp, message, expected_digest)
+        frames = []
+        with patch.object(bridge, "CdpSink", Diagnosed), patch.object(adapter, "emit", frames.append), \
+                patch.object(adapter.time, "sleep"), patch.object(adapter.time, "monotonic", side_effect=range(1000)):
+            for event_id, stage, reason in [("alpha", "RESPONSE_PENDING", "ASSISTANT_BODY_UNPROVEN"),
+                    ("beta", "RESPONSE_COMPLETE", "COMPLETE"),
+                    ("gamma", "RESPONSE_PENDING", "PRIVATE_PAGE_TEXT"),
+                    ("delta", "RESPONSE_COMPLETE", "GENERATION_ACTIVE")]:
+                cdp = FakeCdp(); cdp.probe_stage = stage; cdp.reason = reason
+                sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
+                if event_id in {"gamma", "delta"}:
+                    with self.assertRaisesRegex(bridge.Attention, "RESPONSE_PROBE_DIAGNOSTIC_INVALID"):
+                        adapter.observe_response(bridge, sb, self.probe_request(event_id=event_id))
+                else:
+                    adapter.observe_response(bridge, sb, self.probe_request(event_id=event_id))
+                self.assertFalse(cdp.sent); self.assertEqual(cdp.keys, [])
+        terminal = [frame for frame in frames if "diagnosticReason" in frame]
+        self.assertEqual([(frame["eventId"], frame["diagnosticReason"]) for frame in terminal],
+            [("alpha", "ASSISTANT_BODY_UNPROVEN"), ("beta", "COMPLETE")])
+
     def test_probe_rejects_boolean_generation_and_schema_before_browser_open(self):
         class NoBrowser:
             @property
@@ -822,7 +846,7 @@ class AdapterTests(unittest.TestCase):
                 bridge.CdpSink, "response_snapshot", return_value=(0, 0, True, False)
             ) as response:
                 self.assertEqual(sink.observe_cooperative_response(cdp, "bounded wake", expected), "RESPONSE_PENDING")
-                response.assert_called_once_with(cdp, "bounded wake", require_usable_body=True)
+                response.assert_called_once_with(cdp, "bounded wake", require_usable_body=True, diagnostic={})
             with patch.object(bridge.CdpSink, "post_submit_visible_any", return_value=False), patch.object(
                 bridge.CdpSink, "document_ready_state", return_value="complete"
             ), patch.object(bridge.CdpSink, "trusted_turn_anchor_state", return_value=(1, 0)), patch.object(

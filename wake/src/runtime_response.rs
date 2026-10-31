@@ -22,9 +22,30 @@ pub(crate) fn validate_observation(delivery: &Delivery, value: &Value) -> Result
         .as_ref()
         .ok_or("RESPONSE_PROBE_RECEIPT_REQUIRED")?;
     let stage = value.get("stage").and_then(Value::as_str);
+    let diagnostic_valid = match value.get("diagnosticReason") {
+        None => value.as_object().is_some_and(|map| map.len() == 5),
+        Some(reason) => {
+            value.as_object().is_some_and(|map| map.len() == 6)
+                && match stage {
+                    Some("RESPONSE_COMPLETE") => reason.as_str() == Some("COMPLETE"),
+                    Some("RESPONSE_PENDING") => matches!(
+                        reason.as_str(),
+                        Some(
+                            "DOCUMENT_LOADING"
+                                | "GENERATION_ACTIVE"
+                                | "EDITOR_NOT_READY"
+                                | "ASSISTANT_NOT_MOUNTED"
+                                | "ASSISTANT_BODY_UNPROVEN"
+                                | "ASSISTANT_COMPLETION_ACTION_UNPROVEN"
+                        )
+                    ),
+                    _ => false,
+                }
+        }
+    };
     if delivery.phase != Phase::Sent
         || !matches!(stage, Some("RESPONSE_PENDING" | "RESPONSE_COMPLETE"))
-        || !value.as_object().is_some_and(|map| map.len() == 5)
+        || !diagnostic_valid
         || value.get("eventId").and_then(Value::as_str) != Some(delivery.event.event_id.as_str())
         || value.get("targetGeneration").and_then(Value::as_u64) != Some(delivery.target.generation)
         || value.get("targetDigest").and_then(Value::as_str)
@@ -207,6 +228,49 @@ mod tests {
                 ResponseState::Observing
             );
         }
+    }
+
+    #[test]
+    fn diagnostic_is_closed_stage_consistent_and_never_completes_pending() {
+        let (store, lease) = fixture("probe-diagnostic");
+        let delivery = sent(&store, &lease, "alpha-1");
+        for reason in [
+            "DOCUMENT_LOADING",
+            "GENERATION_ACTIVE",
+            "EDITOR_NOT_READY",
+            "ASSISTANT_NOT_MOUNTED",
+            "ASSISTANT_BODY_UNPROVEN",
+            "ASSISTANT_COMPLETION_ACTION_UNPROVEN",
+        ] {
+            let mut value = observation(&delivery, "RESPONSE_PENDING");
+            value["diagnosticReason"] = json!(reason);
+            assert!(!apply_observation(&store, &delivery, &value).unwrap());
+            value["stage"] = json!("RESPONSE_COMPLETE");
+            assert_eq!(
+                apply_observation(&store, &delivery, &value).unwrap_err(),
+                "RESPONSE_PROBE_SCOPE_INVALID"
+            );
+        }
+        for reason in [
+            json!("PRIVATE_PAGE_TEXT"),
+            json!("COMPLETE"),
+            json!(null),
+            json!({"text":"private"}),
+        ] {
+            let mut value = observation(&delivery, "RESPONSE_PENDING");
+            value["diagnosticReason"] = reason;
+            assert_eq!(
+                apply_observation(&store, &delivery, &value).unwrap_err(),
+                "RESPONSE_PROBE_SCOPE_INVALID"
+            );
+        }
+        assert_eq!(
+            store.timer("alpha-1").unwrap().unwrap().response_state,
+            ResponseState::Observing
+        );
+        let mut complete = observation(&delivery, "RESPONSE_COMPLETE");
+        complete["diagnosticReason"] = json!("COMPLETE");
+        assert!(apply_observation(&store, &delivery, &complete).unwrap());
     }
 
     #[test]

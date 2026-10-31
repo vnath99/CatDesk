@@ -1200,7 +1200,8 @@ class CdpSink:
                 sleeper(.25)
         raise PostSubmitUnknown(last_stage)
 
-    def response_snapshot(self, cdp: Any, message: str, *, require_usable_body: bool = False) -> tuple[int, int, bool, bool]:
+    def response_snapshot(self, cdp: Any, message: str, *, require_usable_body: bool = False,
+                          diagnostic: dict | None = None) -> tuple[int, int, bool, bool]:
         """Return only bounded structural signals for the latest user turn.
 
         The timeout detector is intentionally exact-text and scoped strictly
@@ -1213,6 +1214,7 @@ class CdpSink:
             const retryLabel = {json.dumps("Retry")};
             const expectedWake = {json.dumps(normalize_message(message))};
             const requireUsableBody = {str(require_usable_body).lower()};
+            const includeDiagnostic = {str(diagnostic is not None).lower()};
             const normalize = value => String(value || '').replace(/\\s+/g, ' ').trim();
             const visible = element => {{
                 if (!element) return false;
@@ -1375,19 +1377,24 @@ class CdpSink:
                 : (Boolean(completionAction) || pairedAssistantComplete);
             if (timeouts.length > 8 || retryButtons.length > 8 || assistants.length > 64)
                 return ['invalid', 0, 0, false, false];
-            return [
+            const result = [
                 'ready',
                 timeouts.length,
                 retryButtons.length,
                 assistants.length > 0,
                 completionActionReady,
             ];
+            if (includeDiagnostic) result.push(
+                !latestAssistant ? 'ASSISTANT_NOT_MOUNTED' :
+                !assistantBodyText.length ? 'ASSISTANT_BODY_UNPROVEN' :
+                !assistantCompletionAction ? 'ASSISTANT_COMPLETION_ACTION_UNPROVEN' : 'COMPLETE');
+            return result;
         }})()"""
         try:
             value = self.cdp_value(cdp.evaluate(script))
         except Exception as error:
             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED") from error
-        if (not isinstance(value, list) or len(value) != 5 or
+        if (not isinstance(value, list) or len(value) not in {5, 6} or
                 value[0] not in {"ready", "missing-user", "invalid", "load-error"} or
                 not isinstance(value[1], int) or isinstance(value[1], bool) or
                 not isinstance(value[2], int) or isinstance(value[2], bool) or
@@ -1398,6 +1405,14 @@ class CdpSink:
             raise PostSubmitUnknown("RESPONSE_LOAD_ERROR")
         if value[0] != "ready":
             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
+        if diagnostic is not None:
+            allowed = {"ASSISTANT_NOT_MOUNTED", "ASSISTANT_BODY_UNPROVEN",
+                       "ASSISTANT_COMPLETION_ACTION_UNPROVEN", "COMPLETE"}
+            if len(value) != 6 or not isinstance(value[5], str) or value[5] not in allowed:
+                raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
+            diagnostic["reason"] = value[5]
+        elif len(value) != 5:
+            raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
         return value[1], value[2], value[3], value[4]
 
     def observe_cooperative_response(self, cdp: Any, message: str, expected_digest: str) -> str:
@@ -1406,6 +1421,9 @@ class CdpSink:
         The caller opens the exact target before this check. In particular,
         this helper never retries the assistant or re-submits a USER message.
         """
+        # Local to this receipt-bound sink; never shared across projects. Only
+        # fixed structural reasons leave the browser, never text or selectors.
+        self.response_observation_reason = None
         try:
             current = str(cdp.get_current_url())
         except Exception as error:
@@ -1418,6 +1436,7 @@ class CdpSink:
                 self.post_submit_visible_any(cdp, CAPTCHA)):
             raise Attention("LOGIN_OR_PROFILE_REQUIRED")
         if self.document_ready_state(cdp) != "complete":
+            self.response_observation_reason = "DOCUMENT_LOADING"
             return "RESPONSE_PENDING"
         try:
             users = self.user_message_digests(cdp)
@@ -1439,16 +1458,19 @@ class CdpSink:
         if users[-1] != expected_digest or count != 1 or turns_after > 1:
             raise Attention("RESPONSE_SEQUENCE_DRIFT")
         if self.post_submit_visible_any(cdp, STOP):
+            self.response_observation_reason = "GENERATION_ACTIVE"
             return "RESPONSE_PENDING"
         try:
             editor_status, _editor_empty = self.editor_state(cdp)
         except Attention as error:
             raise Attention("RESPONSE_STATE_QUERY_FAILED") from error
         if editor_status != "ready":
+            self.response_observation_reason = "EDITOR_NOT_READY"
             return "RESPONSE_PENDING"
+        diagnostic = {}
         try:
             timeout_count, _retry_count, assistant_after_user, completed = self.response_snapshot(
-                cdp, message, require_usable_body=True
+                cdp, message, require_usable_body=True, diagnostic=diagnostic
             )
         except PostSubmitUnknown as error:
             if str(error) == "RESPONSE_LOAD_ERROR":
@@ -1456,6 +1478,7 @@ class CdpSink:
             raise Attention("RESPONSE_STATE_UNPROVEN") from error
         if timeout_count:
             raise Attention("RESPONSE_TIMEOUT_RETRY_REQUIRED")
+        self.response_observation_reason = diagnostic.get("reason")
         return "RESPONSE_COMPLETE" if assistant_after_user and completed else "RESPONSE_PENDING"
 
     def click_response_timeout_retry(self, cdp: Any, message: str) -> None:

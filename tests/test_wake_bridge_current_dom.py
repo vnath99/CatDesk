@@ -584,6 +584,40 @@ class CurrentDomTests(unittest.TestCase):
         self.assertEqual(self.sink.response_snapshot(CurrentDom(), "exact wake message", require_usable_body=True),
                          (0, 0, True, True))
 
+    def test_passive_completion_diagnostics_distinguish_body_and_toolbar_without_text(self):
+        for options, reason in [({}, "COMPLETE"),
+                ({"controlsOnly": True}, "ASSISTANT_BODY_UNPROVEN"),
+                ({"toolbar": False}, "ASSISTANT_COMPLETION_ACTION_UNPROVEN"),
+                ({"duplicateToolbar": True}, "ASSISTANT_COMPLETION_ACTION_UNPROVEN")]:
+            with self.subTest(options=options):
+                cdp = CurrentDom(observationEditor=True, answer="PRIVATE_BODY_MARKER", **options)
+                stage = self.sink.observe_cooperative_response(cdp, "exact wake message",
+                    bridge.digest("exact wake message"))
+                self.assertEqual(stage, "RESPONSE_COMPLETE" if reason == "COMPLETE" else "RESPONSE_PENDING")
+                self.assertEqual(self.sink.response_observation_reason, reason)
+                self.assertNotIn("PRIVATE_BODY_MARKER", reason)
+
+    def test_passive_diagnostics_identify_pending_layer_and_reset_on_refusal(self):
+        for options, reason in [({"documentState": "loading"}, "DOCUMENT_LOADING"),
+                ({"observationStop": True}, "GENERATION_ACTIVE"),
+                ({"observationEditor": False}, "EDITOR_NOT_READY")]:
+            with self.subTest(options=options):
+                cdp = CurrentDom(**({"observationEditor": True} | options))
+                self.assertEqual(self.sink.observe_cooperative_response(cdp, "exact wake message",
+                    bridge.digest("exact wake message")), "RESPONSE_PENDING")
+                self.assertEqual(self.sink.response_observation_reason, reason)
+        with self.assertRaises(bridge.Attention):
+            self.sink.observe_cooperative_response(CurrentDom(loadError=True, observationEditor=True),
+                "exact wake message", bridge.digest("exact wake message"))
+        self.assertIsNone(self.sink.response_observation_reason)
+
+    def test_response_diagnostic_refuses_arbitrary_dom_data(self):
+        class Malformed:
+            def evaluate(self, script): return ["ready", 0, 0, True, False, "PRIVATE_PAGE_TEXT"]
+        with self.assertRaisesRegex(bridge.PostSubmitUnknown, "RESPONSE_STATE_QUERY_FAILED"):
+            self.sink.response_snapshot(Malformed(), "exact wake message", require_usable_body=True,
+                diagnostic={})
+
     def test_user_and_code_block_copy_cannot_complete_response(self):
         self.assertEqual(self.sink.response_snapshot(CurrentDom(toolbar=False, userCopy="Copy"),
                          "exact wake message", require_usable_body=True), (0, 0, True, False))

@@ -93,10 +93,12 @@ where
             owner_guard()?;
             store.finish_response_reobservation(&attempt, &witness)
         })?;
-        Ok(
-            json!({"responseState":if complete {"COMPLETE"} else {"PENDING"},
-            "alreadyComplete":false,"browserStarted":true,"sendAttempted":false}),
-        )
+        let mut result = json!({"responseState":if complete {"COMPLETE"} else {"PENDING"},
+            "alreadyComplete":false,"browserStarted":true,"sendAttempted":false});
+        if let Some(reason) = witness.get("diagnosticReason") {
+            result["diagnosticReason"] = reason.clone();
+        }
+        Ok(result)
     })();
     if let Err(reason) = result.as_ref() {
         // A failed outcome append never changes the timer; an existing outcome
@@ -221,6 +223,52 @@ mod tests {
             assert_eq!(timer_bytes(&store), before);
             assert_eq!(log_count(&store), 2);
         }
+    }
+
+    #[test]
+    fn pending_diagnostic_is_returned_and_journaled_without_timer_change() {
+        let (store, delivery) = ready_fixture("reobserve-diagnostic");
+        let before = timer_bytes(&store);
+        let result = reobserve_with_observer(
+            &store,
+            "alpha",
+            &delivery.target,
+            "alpha-1",
+            &|| Ok(()),
+            |commit| commit(),
+            |current, _, _| {
+                let mut value = witness(current, "RESPONSE_PENDING");
+                value["diagnosticReason"] = json!("ASSISTANT_COMPLETION_ACTION_UNPROVEN");
+                Ok(value)
+            },
+        )
+        .unwrap();
+        assert_eq!(result["responseState"], "PENDING");
+        assert_eq!(
+            result["diagnosticReason"],
+            "ASSISTANT_COMPLETION_ACTION_UNPROVEN"
+        );
+        assert_eq!(timer_bytes(&store), before);
+        let outcomes: Vec<Value> = std::fs::read_dir(store.root().join("logs"))
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("response-reobserve-")
+                    && entry
+                        .file_name()
+                        .to_string_lossy()
+                        .ends_with("-outcome.json")
+            })
+            .map(|entry| read(&entry.path()).unwrap())
+            .collect();
+        assert_eq!(outcomes.len(), 1);
+        assert_eq!(
+            outcomes[0]["witness"]["diagnosticReason"],
+            result["diagnosticReason"]
+        );
     }
 
     #[test]
