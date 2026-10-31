@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "observedUtc": "2026-10-31T02:38:01.223517+00:00",
-  "classification": "TESTED_SOURCE_COMPLETION_CONTROL_SHAPE_NOT_YET_INSTALLED",
+  "observedUtc": "2026-10-31T02:45:53.046722+00:00",
+  "classification": "ACTUAL_SELECTED_DEVELOPMENT_CONTENT_FREE_CONTROL_SHAPE",
   "sourceBaseCommit": "c0808c009c64bb488628a7c0627aec75cd7145c6",
   "tests": {
     "dom": {
-      "passed": 49,
-      "logSha256": "8fe2a58ffeb7514a32024d4a6250c47f61bc7bc2ede5775fdc4df8885462f6ef"
+      "passed": 52,
+      "logSha256": "859f0d79c28a5a56d8999626ab53fc456fb1332c921ea5fd19b9f0932694b619"
     },
     "adapter": {
       "passed": 38,
-      "logSha256": "128bbbf0bc6b4a679797f0ebe90e329963046dbf1111166f9fb62242ca29782d"
+      "logSha256": "4191140c1b7891d340e2a0d063f6e2a580efc6fe8486dad07571c661b1b5e48c"
     },
     "wakeLibrary": {
       "passed": 480,
@@ -18,7 +18,7 @@
     },
     "bridgeResponse": {
       "passed": 16,
-      "logSha256": "50a13a5a85bf660fb9959093d47e0ba7d62a936bbc2faf23f2f1aa8c287f9a30"
+      "logSha256": "d1bd72de07f1a88543512dba70c29643f090d15503253c73ad9eebe2e90a3b19"
     },
     "rootClippy": {
       "allTargets": true,
@@ -33,7 +33,7 @@
       "logSha256": "f197614480c028a36763b95628b1ebb85f057eeaa5a06d768f3e358675284a7b"
     }
   },
-  "distinctPassingTests": 583,
+  "distinctPassingTests": 586,
   "implementation": {
     "fixedCountFields": 16,
     "fixedBooleanFields": 4,
@@ -63,13 +63,118 @@
     "reason": "ASSISTANT_COMPLETION_ACTION_UNPROVEN",
     "hostStopped": true
   },
-  "newSourceLiveQualified": false,
+  "newSourceLiveQualified": true,
   "productionChanged": false,
   "messagesSent": 0,
   "originalReviewVerdict": "INCONCLUSIVE",
   "newPromotionAuthority": false,
   "twoChatWebCoding": "OPEN",
   "operatorActionRequired": false,
-  "nextExecutableTask": "BUILD_AND_QUALIFY_THIS_METADATA_CHANGE_THEN_ONE_READONLY_EXISTING_SENT_RECEIPT_OBSERVATION_NO_RESEND",
-  "goal": "ACTIVE"
+  "nextExecutableTask": "QUALIFY_FIXED_COPY_MESSAGE_LABEL_WITH_EXISTING_ASSISTANT_ROLE_BODY_AND_UNIQUE_TOOLBAR_GUARDS_THEN_ONE_READONLY_EXISTING_RECEIPT_PROBE",
+  "goal": "ACTIVE",
+  "actualSelectedDevelopment": {
+    "sourceCommit": "878631ee985712f426e14618e926660fd731dc5c",
+    "candidateSha256": "69d202e8e9a8943464ab73ad6050ff7dde6e9fbe2fae4e556dac16f40e928a9c",
+    "previousSha256": "730a5683b0d5fc5b61542e480fc13f6cab1fae558fdcb2d82effc0949dec0086",
+    "selectedPackageId": "1.0.0-dev.85-63c945e6851370a5b48a670ce5c293ce665fe0d698b0d11b14b254d26772bc06",
+    "elapsedSeconds": 123.453,
+    "hostStopped": true,
+    "reobserveExitCode": 0,
+    "responseTimerState": "OBSERVING",
+    "timerCompleted": false,
+    "transportClosed": false,
+    "observedResponseState": "PENDING",
+    "diagnosticReason": "ASSISTANT_COMPLETION_ACTION_UNPROVEN",
+    "completionControls": {
+      "assistantBodyPresent": true,
+      "assistantInsideSemanticUnit": true,
+      "buttonsInTurn": 4,
+      "completionActionFound": false,
+      "copyLabelInParent": 0,
+      "copyLabelInTurn": 0,
+      "copyMessageLabelInParent": 1,
+      "copyMessageLabelInTurn": 1,
+      "copyResponseLabelInParent": 0,
+      "copyResponseLabelInTurn": 0,
+      "copyTestIdInParent": 0,
+      "copyTestIdInTurn": 0,
+      "copyTextInTurn": 0,
+      "knownCopyInAssistant": 0,
+      "knownCopyInBody": 0,
+      "pairedTurn": true,
+      "roleAssistantNodes": 0,
+      "semanticAssistantUnits": 1,
+      "sharedCopyAfterAssistant": 0,
+      "toolbarContainersInTurn": 1
+    },
+    "health": [
+      {
+        "label": "installed-debug-health",
+        "maximumRuntimeSeconds": 15,
+        "expectedSha256": "69d202e8e9a8943464ab73ad6050ff7dde6e9fbe2fae4e556dac16f40e928a9c",
+        "actualSha256": "69d202e8e9a8943464ab73ad6050ff7dde6e9fbe2fae4e556dac16f40e928a9c",
+        "recovery": "CURRENT_PACKAGE_VERIFIED",
+        "packageId": "1.0.0-dev.85-63c945e6851370a5b48a670ce5c293ce665fe0d698b0d11b14b254d26772bc06",
+        "unauthorizedStatus": 401,
+        "initializeStatus": 200,
+        "catalogStatus": 200,
+        "toolCount": 79,
+        "registeredProjectsRead": true,
+        "ownerExitCode": 0,
+        "readersClosed": true,
+        "ownedTreeExitProved": true,
+        "endpointClosed": true,
+        "observedUtc": "2026-10-31T02:41:18.875325+00:00"
+      }
+    ]
+  },
+  "build": {
+    "sourceCommit": "878631ee985712f426e14618e926660fd731dc5c",
+    "elapsedSeconds": 60.734,
+    "pinnedFilesChecked": 5081,
+    "pinnedMismatchCount": 0
+  },
+  "preservation": {
+    "criticalPinsChecked": 5069,
+    "criticalMismatchCount": 0,
+    "previousFilesChecked": 7,
+    "previousMismatchCount": 0,
+    "profileIdentityPreserved": true,
+    "nonUsageConfigurationPreserved": true,
+    "timerStartedUtcPreserved": true,
+    "otherLedgerRecordsPreserved": true,
+    "allGrantsPreserved": true,
+    "adapterLogPrefixPreserved": true,
+    "messagesSent": 0,
+    "productionChanged": false,
+    "recurringOrTunnelOwnerStarts": 0,
+    "nativeTaskOrSessionCommandsInvoked": false
+  },
+  "cleanup": {
+    "state": "PROFILE_QUIESCENT",
+    "observedUtc": "2026-10-31T02:44:10.732960+00:00",
+    "testOwnedRemaining": 0
+  },
+  "privateEvidenceSha256": {
+    "oct31-control-shape-debug-build-result.private.json": "9aa0b7fae6f26f404ed179c6789f670deb14ac6c09b35da5fbf450d0bdfaf86d",
+    "oct31-control-shape-debug-live-v2-result.private.json": "bcc790dd882c212c17a3b51ac022e62895f3b99cf7d084e3913d9963fde44033",
+    "oct31-control-shape-debug-live-v2-owner.private.json": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "oct31-profile-quiescence-control-shape-cleanup-result.private.json": "b537dcb5bb40924985e0da29a04053af2cc107a8427e485f7bb6d9530be7d132"
+  },
+  "copyMessageCompatibility": {
+    "classification": "RED_GREEN_SOURCE_QUALIFIED_NOT_YET_INSTALLED",
+    "sourceBaseCommit": "878631ee985712f426e14618e926660fd731dc5c",
+    "liveCopyLabelCount": 0,
+    "liveLegacyCopyTestIdCount": 0,
+    "liveCopyMessageLabelCount": 1,
+    "redFailures": 1,
+    "redLogSha256": "c519bb6ad59da625ccd89a3b23818c36b131c06daf9f131650838b756f4779c2",
+    "newDomTests": 3,
+    "allDomPassed": 52,
+    "allAdapterPassed": 38,
+    "bodyUserToolAmbiguousWrongLabelAndLoadErrorRefused": true,
+    "sameAssistantOnlyAndSharedToolbarGuards": true,
+    "newClickRetryReloadOrSubmit": false,
+    "liveCompletionRecovered": false
+  }
 }

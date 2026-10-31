@@ -119,7 +119,7 @@ const assistant = el('div', {'data-content-search-unit-key':'fallback-turn-0:2:a
   el('h4', {'data-conversation-role':'assistant'}, 'ChatGPT said:'),
   el('div', {'data-chatgpt-selection-message-id':'assistant-id'}, '', options.controlsOnly ? [] : [
     el('div', {'data-markdown-text-style':'assistant-message'}, answer, [
-      el('div', {class:'turn-action-controls'}, '', [button('Copy')]),
+      el('div', {class:'turn-action-controls'}, '', [button(options.bodyCopyLabel || 'Copy')]),
     ]),
   ]),
 ]);
@@ -137,7 +137,7 @@ for (let i = 0; i < (options.diagnosticExtraButtons || 0); i++)
 if (options.auxiliaryUnit) {
   const auxiliary = el('div', {'data-content-search-unit-key':'tool-status'}, '', [
     el('div', {'data-markdown-text-style':'assistant-message'}, 'Tool status only'),
-    el('div', {class:'turn-action-controls'}, '', [button('Copy')]),
+    el('div', {class:'turn-action-controls'}, '', [button(options.auxiliaryCopyLabel || 'Copy')]),
   ]);
   children.splice(options.auxiliaryUnit === 'before' ? 1 : children.length, 0, auxiliary);
 }
@@ -148,8 +148,8 @@ for (const control of options.submitControls || []) children.push(el('button', {
 if (options.extraAssistant) children.push(el('div', {'data-content-search-unit-key':'assistant-2'}, '', [
   el('h4', {'data-conversation-role':'assistant'}, 'ChatGPT said:'),
 ]));
-if (options.toolbar !== false) children.push(el('div', {class:'turn-action-controls'}, '', [button('Copy')]));
-if (options.duplicateToolbar) children.push(el('div', {class:'turn-action-controls'}, '', [button('Copy')]));
+if (options.toolbar !== false) children.push(el('div', {class:'turn-action-controls'}, '', [button(options.assistantCopyLabel || 'Copy')]));
+if (options.duplicateToolbar) children.push(el('div', {class:'turn-action-controls'}, '', [button(options.assistantCopyLabel || 'Copy')]));
 const paired = el('div', {'data-content-search-turn-key':'fallback-turn-0'}, '', children);
 if (options.bareUser) {
   delete user.attrs['data-content-search-unit-key'];
@@ -592,6 +592,31 @@ class CurrentDomTests(unittest.TestCase):
     def test_adjacent_assistant_toolbar_proves_usable_response(self):
         self.assertEqual(self.sink.response_snapshot(CurrentDom(), "exact wake message", require_usable_body=True),
                          (0, 0, True, True))
+
+    def test_assistant_copy_message_action_qualifies_only_exact_latest_assistant(self):
+        for legacy in [False, True]:
+            with self.subTest(legacy=legacy):
+                cdp = CurrentDom(assistantCopyLabel='Copy message', legacyTurns=legacy)
+                self.assertEqual(self.sink.response_snapshot(cdp, 'exact wake message',
+                    require_usable_body=True), (0, 0, True, True))
+
+    def test_copy_message_from_user_body_auxiliary_or_ambiguous_toolbar_cannot_complete(self):
+        for options in [dict(toolbar=False, userCopy='Copy message'),
+                dict(toolbar=False, bodyCopyLabel='Copy message'),
+                dict(toolbar=False, auxiliaryUnit='after', auxiliaryCopyLabel='Copy message'),
+                dict(assistantCopyLabel='Copy message', duplicateToolbar=True),
+                dict(assistantCopyLabel='Copy message', extraAssistant=True),
+                dict(assistantCopyLabel='Copy message elsewhere')]:
+            with self.subTest(options=options):
+                self.assertFalse(self.sink.response_snapshot(CurrentDom(**options),
+                    'exact wake message', require_usable_body=True)[3])
+
+    def test_copy_message_never_completes_controls_only_or_failed_assistant(self):
+        self.assertFalse(self.sink.response_snapshot(CurrentDom(assistantCopyLabel='Copy message',
+            controlsOnly=True), 'exact wake message', require_usable_body=True)[3])
+        with self.assertRaisesRegex(bridge.PostSubmitUnknown, 'RESPONSE_LOAD_ERROR'):
+            self.sink.response_snapshot(CurrentDom(assistantCopyLabel='Copy message', loadError=True),
+                'exact wake message', require_usable_body=True)
 
     def test_passive_completion_diagnostics_distinguish_body_and_toolbar_without_text(self):
         for options, reason in [({}, "COMPLETE"),

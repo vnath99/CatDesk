@@ -1365,6 +1365,7 @@ class CdpSink:
                 const actions = Array.from(new Set([
                     ...scope.querySelectorAll("button[data-testid='copy-turn-action-button']"),
                     ...scope.querySelectorAll(".turn-action-controls button[aria-label='Copy']"),
+                    ...scope.querySelectorAll(".turn-action-controls button[aria-label='Copy message']"),
                 ])).filter(button => !bodyNode || !bodyNode.contains(button));
                 if (actions.length > 1) break;
                 if (actions.length === 1) {{
@@ -1373,17 +1374,18 @@ class CdpSink:
                 }}
             }}
             // The current paired-turn UI puts its ASSISTANT toolbar beside
-            // both message units. Qualify that toolbar by its distinct Copy
-            // label, position after the sole ASSISTANT unit and exclusion from
-            // every USER subtree. A USER Copy message or code-block Copy is
-            // not a completed-answer control.
+            // both message units. Copy labels alone do not identify a role:
+            // qualify the shared toolbar by position after the sole ASSISTANT
+            // unit and exclusion from every USER/message subtree. A USER or
+            // code-block Copy message is not a completed-answer control.
             if (!assistantCompletionAction && pairedTurn && latestAssistant &&
                     pairedAssistantUnits.length === 1 &&
                     (pairedAssistantUnits[0] === latestAssistant ||
                      pairedAssistantUnits[0].contains(latestAssistant)) &&
                     pairedAssistantUnits[0].querySelector('h4[data-conversation-role="assistant"]')) {{
                 const actions = Array.from(latestUser.querySelectorAll(
-                    ".turn-action-controls button[aria-label='Copy']"
+                    ".turn-action-controls button[aria-label='Copy'], " +
+                    ".turn-action-controls button[aria-label='Copy message']"
                 )).filter(button => !button.closest(userNodeSelector) &&
                     // Auxiliary tool/search units can have their own Copy.
                     // Only the shared assistant toolbar outside every message
@@ -1418,11 +1420,12 @@ class CdpSink:
                 // leave this read. Parent counts are advisory and can include
                 // historical controls; they never qualify an assistant action.
                 const count = (scope, selector) => Math.min(scope ? scope.querySelectorAll(selector).length : 0, 64);
-                const knownCopySelector = "button[data-testid='copy-turn-action-button'], .turn-action-controls button[aria-label='Copy']";
+                const knownCopySelector = "button[data-testid='copy-turn-action-button'], .turn-action-controls button[aria-label='Copy'], .turn-action-controls button[aria-label='Copy message']";
                 const turn = pairedTurn ? latestUser : latestAssistantTurn;
                 const parent = turn && turn.parentElement;
                 const shared = turn && latestAssistant ? Array.from(turn.querySelectorAll(
-                    ".turn-action-controls button[aria-label='Copy']"
+                    ".turn-action-controls button[aria-label='Copy'], " +
+                    ".turn-action-controls button[aria-label='Copy message']"
                 )).filter(button => !button.closest(userNodeSelector) &&
                     !button.closest('[data-content-search-unit-key]') &&
                     Boolean(latestAssistant.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING)) : [];
