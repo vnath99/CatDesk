@@ -116,6 +116,25 @@ def valid_response_control_diagnostics(value: Any) -> bool:
             and all(type(value[key]) is bool for key in RESPONSE_CONTROL_FLAGS))
 
 
+TOOL_MARKER_COUNTS = ("callMarkers", "resultMarkers", "errorMarkers", "busyMarkers")
+
+
+def valid_tool_marker_diagnostics(value: Any) -> bool:
+    """Visible, known UI markers only; never tool arguments or execution proof."""
+    if isinstance(value, dict) and value == {
+            "status": "UNAVAILABLE", "reason": "UI_MARKERS_UNPROVEN",
+            "basis": "VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT"}:
+        return True
+    return (isinstance(value, dict) and set(value) == set(TOOL_MARKER_COUNTS) | {
+                "schemaVersion", "basis", "scope", "selectorCoverage", "countOverflow"}
+            and type(value["schemaVersion"]) is int and value["schemaVersion"] == 1
+            and value["basis"] == "VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT"
+            and value["scope"] == "EXACT_USER_EXCHANGE"
+            and value["selectorCoverage"] == "KNOWN_MARKERS_ONLY"
+            and type(value["countOverflow"]) is bool
+            and all(type(value[key]) is int and 0 <= value[key] <= 64 for key in TOOL_MARKER_COUNTS))
+
+
 RESPONSE_LOAD_ERROR_DETECTOR = """
 const assistantLoadError = element => {
     if (!element || typeof element.cloneNode !== 'function') return false;
@@ -1256,7 +1275,8 @@ class CdpSink:
         raise PostSubmitUnknown(last_stage)
 
     def response_snapshot(self, cdp: Any, message: str, *, require_usable_body: bool = False,
-                          diagnostic: dict | None = None) -> tuple[int, int, bool, bool]:
+                          diagnostic: dict | None = None,
+                          tool_diagnostic: dict | None = None) -> tuple[int, int, bool, bool]:
         """Return only bounded structural signals for the latest user turn.
 
         The timeout detector is intentionally exact-text and scoped strictly
@@ -1264,12 +1284,17 @@ class CdpSink:
         Retry is considered actionable only when exactly one visible Retry
         control can be associated with the exact timeout card.
         """
+        if tool_diagnostic is not None:
+            tool_diagnostic.clear()
+            if diagnostic is None:
+                raise ValueError("tool diagnostics require an explicit diagnostic read")
         script = f"""(() => {{
             const timeoutText = {json.dumps("Message delivery timed out. Please try again.")};
             const retryLabel = {json.dumps("Retry")};
             const expectedWake = {json.dumps(normalize_message(message))};
             const requireUsableBody = {str(require_usable_body).lower()};
             const includeDiagnostic = {str(diagnostic is not None).lower()};
+            const includeToolDiagnostic = {str(tool_diagnostic is not None).lower()};
             const normalize = value => String(value || '').replace(/\\s+/g, ' ').trim();
             const visible = element => {{
                 if (!element) return false;
@@ -1488,13 +1513,31 @@ class CdpSink:
                         unit === latestAssistant || unit.contains(latestAssistant))),
                 }});
             }}
+            if (includeToolDiagnostic) {{
+                const scope = pairedTurn ? latestUser : responseBoundary;
+                const excluded = "pre, code, [data-markdown-text-style='assistant-message'], .markdown, [class~='prose']";
+                const markers = selector => Array.from(scope ? scope.querySelectorAll(selector) : [])
+                    .filter(node => visible(node) && !node.closest(userNodeSelector) && !node.closest(excluded));
+                const calls = markers("[data-tool-call-id], [data-tool-call], [data-testid='tool-call'], [data-testid='mcp-tool-call']");
+                const results = markers("[data-tool-response-id], [data-testid='tool-result'], [data-testid='mcp-tool-result']");
+                const cards = Array.from(new Set([...calls, ...results]));
+                const flagged = selector => cards.filter(card => (visible(card) && card.matches(selector)) ||
+                    Array.from(card.querySelectorAll(selector)).some(node => visible(node) && !node.closest(excluded)));
+                const errors = flagged("[data-status='error'], [role='alert']");
+                const busy = flagged("[aria-busy='true']");
+                result.push({{schemaVersion:1, basis:'VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT',
+                    scope:'EXACT_USER_EXCHANGE', selectorCoverage:'KNOWN_MARKERS_ONLY',
+                    callMarkers:Math.min(calls.length,64),resultMarkers:Math.min(results.length,64),
+                    errorMarkers:Math.min(errors.length,64),busyMarkers:Math.min(busy.length,64),
+                    countOverflow:[calls,results,errors,busy].some(items => items.length > 64)}});
+            }}
             return result;
         }})()"""
         try:
             value = self.cdp_value(cdp.evaluate(script))
         except Exception as error:
             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED") from error
-        if (not isinstance(value, list) or len(value) not in {5, 7} or
+        if (not isinstance(value, list) or len(value) not in {5, 7, 8} or
                 value[0] not in {"ready", "missing-user", "invalid", "load-error"} or
                 not isinstance(value[1], int) or isinstance(value[1], bool) or
                 not isinstance(value[2], int) or isinstance(value[2], bool) or
@@ -1508,9 +1551,14 @@ class CdpSink:
         if diagnostic is not None:
             allowed = {"ASSISTANT_NOT_MOUNTED", "ASSISTANT_BODY_UNPROVEN",
                        "ASSISTANT_COMPLETION_ACTION_UNPROVEN", "COMPLETE"}
-            if (len(value) != 7 or not isinstance(value[5], str) or value[5] not in allowed or
+            if (len(value) != (8 if tool_diagnostic is not None else 7) or
+                    not isinstance(value[5], str) or value[5] not in allowed or
                     not valid_response_control_diagnostics(value[6])):
                 raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
+            if tool_diagnostic is not None:
+                if not valid_tool_marker_diagnostics(value[7]):
+                    raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
+                tool_diagnostic.update(value[7])
             diagnostic["reason"] = value[5]
             diagnostic["controls"] = value[6]
         elif len(value) != 5:

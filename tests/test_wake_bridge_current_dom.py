@@ -21,7 +21,8 @@ SPEC.loader.exec_module(bridge)
 
 DOM = r"""
 const fs = require('fs');
-const options = JSON.parse(process.argv[1]);
+const inputFrame = JSON.parse(fs.readFileSync(0, 'utf8'));
+const options = inputFrame.options;
 class Element {
   constructor(tag, attrs = {}, text = '', children = []) {
     this.tagName = tag; this.attrs = attrs; this.text = text;
@@ -35,7 +36,7 @@ class Element {
   get disabled() { return this.attrs.disabled === true; }
   getAttribute(name) { return this.attrs[name] ?? null; }
   hasAttribute(name) { return Object.hasOwn(this.attrs, name); }
-  getClientRects() { return [1]; }
+  getClientRects() { return this.attrs.hidden ? [] : [1]; }
   matches(selector) { return selector.split(',').some(raw => {
     const s = raw.trim();
     const has = s.match(/^([^:]+):has\(([^()]+)\)$/);
@@ -145,6 +146,15 @@ if (options.userTimeoutQuote) {
   append(user.children[0], button('Retry'));
 }
 const children = options.userOnly ? [user] : [user, assistant];
+for (let i = 0; i < (options.toolMarkerCount || 0); i++) {
+  const card = el('div', {'data-testid':'mcp-tool-call', 'data-tool-call-id':'PRIVATE_CALL_ID',
+    'aria-busy':options.toolBusy ? 'true' : 'false', hidden:options.toolHidden || false},
+    'PRIVATE_TOOL_ARGUMENTS', options.toolError ? [el('div', {role:'alert'}, 'PRIVATE_POLICY_TEXT')] : []);
+  if (options.toolPlacement === 'user') append(user.children[0], card);
+  else if (options.toolPlacement === 'code') append(assistant.children[1].children[0], el('pre', {}, '', [card]));
+  else children.splice(1,0,card);
+}
+if (options.toolResult) children.splice(1,0,el('div', {'data-testid':'mcp-tool-result'}, 'PRIVATE_TOOL_RESULT'));
 for (let i = 0; i < (options.diagnosticExtraButtons || 0); i++)
   children.push(button(options.diagnosticButtonLabel || 'Unrelated control'));
 if (options.auxiliaryUnit) {
@@ -182,6 +192,7 @@ if (options.legacyTurns) {
 }
 if (options.retryOnlyOutside) document.children.push(button('Retry'));
 if (options.historicalLoadError) document.children.unshift(el('div', {'data-message-author-role':'assistant'}, 'This response couldn’t load'));
+if (options.historicalToolMarker) document.children.unshift(el('div', {'data-testid':'mcp-tool-call'}, 'PRIVATE_OLD_TOOL'));
 document.readyState = options.documentState || 'complete';
 if (options.observationEditor) document.children.push(el('div', {id:'prompt-textarea'}, options.observationDraft || ''));
 if (options.observationStop) document.children.push(el('button', {'data-testid':'stop-button'}));
@@ -243,7 +254,7 @@ if (options.traceMutations) {
   document.execCommand = () => {mutations++; return true;};
 }
 global.Node = {DOCUMENT_POSITION_FOLLOWING:4};
-const value = eval(fs.readFileSync(0, 'utf8'));
+const value = eval(inputFrame.script);
 const editor = document.querySelector('#prompt-textarea');
 process.stdout.write(JSON.stringify(options.normalizationTrace ? {
   value, mutations, commands, editorText:editor?.textContent || '', linked:Boolean(editor?.querySelector('a[href], [text-link-href]'))
@@ -269,8 +280,9 @@ class CurrentDom:
 
     def evaluate(self, script):
         result = subprocess.run(
-            [shutil.which("node"), "-e", DOM, json.dumps(self.options, ensure_ascii=False)],
-            input=script, text=True, encoding="utf-8", capture_output=True, timeout=10,
+            [shutil.which("node"), "-e", DOM],
+            input=json.dumps({"options":self.options,"script":script},ensure_ascii=False),
+            text=True, encoding="utf-8", capture_output=True, timeout=10,
         )
         if result.returncode:
             raise AssertionError(result.stderr)
@@ -701,6 +713,46 @@ class CurrentDomTests(unittest.TestCase):
         with self.assertRaisesRegex(bridge.PostSubmitUnknown, "RESPONSE_STATE_QUERY_FAILED"):
             self.sink.response_snapshot(Malformed(), "exact wake message", require_usable_body=True,
                 diagnostic={})
+
+    def test_exact_exchange_tool_marker_counts_are_private_capped_and_advisory(self):
+        controls, tools = {}, {}
+        result = self.sink.response_snapshot(CurrentDom(toolMarkerCount=2, toolError=True,
+            toolBusy=True, toolResult=True, historicalToolMarker=True),
+            "exact wake message", diagnostic=controls, tool_diagnostic=tools)
+        self.assertEqual(result, (0, 0, True, True))
+        self.assertTrue(bridge.valid_tool_marker_diagnostics(tools))
+        self.assertEqual([tools[key] for key in bridge.TOOL_MARKER_COUNTS], [2, 1, 2, 2])
+        self.assertFalse(tools['countOverflow'])
+        self.assertIn('NOT_EXECUTION_RECEIPT', tools['basis'])
+        self.assertNotIn('PRIVATE_', json.dumps(tools))
+        self.assertEqual(controls['reason'], 'COMPLETE')
+        self.sink.response_snapshot(CurrentDom(toolMarkerCount=65), "exact wake message",
+            diagnostic={}, tool_diagnostic=tools)
+        self.assertEqual(tools['callMarkers'],64)
+        self.assertTrue(tools['countOverflow'])
+
+    def test_tool_marker_diagnostics_exclude_user_code_hidden_and_history(self):
+        for options in ({}, {'toolPlacement':'user'}, {'toolPlacement':'code'}, {'toolHidden':True}):
+            tools = {}
+            self.sink.response_snapshot(CurrentDom(toolMarkerCount=0 if not options else 1,
+                historicalToolMarker=True, **options), "exact wake message", diagnostic={}, tool_diagnostic=tools)
+            self.assertEqual([tools[key] for key in bridge.TOOL_MARKER_COUNTS], [0,0,0,0])
+
+    def test_tool_marker_diagnostics_reset_on_wrong_or_duplicate_exchange(self):
+        for options in ({'duplicateUser':True},{'userText':'different request'}):
+            tools = {'callMarkers':999}
+            with self.assertRaises(bridge.PostSubmitUnknown):
+                self.sink.response_snapshot(CurrentDom(**options), "exact wake message",
+                    diagnostic={}, tool_diagnostic=tools)
+            self.assertEqual(tools,{})
+
+    def test_tool_marker_diagnostics_schema_rejects_content_or_unbounded_values(self):
+        tools={}
+        self.sink.response_snapshot(CurrentDom(), "exact wake message", diagnostic={}, tool_diagnostic=tools)
+        for key, value in [('callMarkers',True),('callMarkers',65),('countOverflow',0),
+                ('schemaVersion',True),('scope','OTHER_CHAT'),('arguments','PRIVATE_KEY')]:
+            with self.subTest(key=key,value=value):
+                self.assertFalse(bridge.valid_tool_marker_diagnostics(tools | {key:value}))
 
     def test_user_and_code_block_copy_cannot_complete_response(self):
         self.assertEqual(self.sink.response_snapshot(CurrentDom(toolbar=False, userCopy="Copy"),

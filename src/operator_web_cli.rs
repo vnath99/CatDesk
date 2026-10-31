@@ -893,6 +893,38 @@ fn review_text(snapshot: &Value, expected_message_digest: &str) -> Result<String
     Ok(text.to_owned())
 }
 
+/// Closed optional UI metadata, never task execution authority.
+fn review_tool_diagnostics(snapshot: &Value) -> Result<Option<Value>, String> {
+    let Some(value) = snapshot.get("toolDiagnostics") else {
+        return Ok(None);
+    };
+    if value
+        == &json!({"status":"UNAVAILABLE","reason":"UI_MARKERS_UNPROVEN",
+        "basis":"VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT"})
+    {
+        return Ok(Some(value.clone()));
+    }
+    let counts = [
+        "callMarkers",
+        "resultMarkers",
+        "errorMarkers",
+        "busyMarkers",
+    ];
+    if !value.as_object().is_some_and(|map| map.len() == 9)
+        || value["schemaVersion"].as_u64() != Some(1)
+        || value["basis"] != "VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT"
+        || value["scope"] != "EXACT_USER_EXCHANGE"
+        || value["selectorCoverage"] != "KNOWN_MARKERS_ONLY"
+        || value["countOverflow"].as_bool().is_none()
+        || !counts
+            .iter()
+            .all(|field| value[*field].as_u64().is_some_and(|count| count <= 64))
+    {
+        return Err("WEB_REVIEW_TOOL_DIAGNOSTICS_INVALID".into());
+    }
+    Ok(Some(value.clone()))
+}
+
 /// Explicit local read only; private response text is never a status field.
 fn read_review(workspace: &Path, project: &str, event_id: &str) -> Result<Value, String> {
     read_review_guarded(workspace, project, event_id, None, &|| Ok(()))
@@ -990,12 +1022,19 @@ where
     }
     keep_running()?;
     let snapshot = report.snapshot.ok_or("WEB_REVIEW_SNAPSHOT_INVALID")?;
+    // Validate the optional closed telemetry before any private snapshot may
+    // leave this reader. UI markers cannot establish execution or retry rights.
+    let tool_diagnostics = review_tool_diagnostics(&snapshot)?;
     match review_text(&snapshot, &receipt.message_digest) {
-        Ok(text) => Ok(
-            json!({"action":"web_review_read", "projectId":project,"eventId":event_id,
+        Ok(text) => {
+            let mut result = json!({"action":"web_review_read", "projectId":project,"eventId":event_id,
             "target":target,"readOnly":true,"response":text,"eventVerified":true,
-            "diagnostic":report.diagnostic,"sendAttempted":false}),
-        ),
+            "diagnostic":report.diagnostic,"sendAttempted":false});
+            if let Some(diagnostic) = tool_diagnostics {
+                result["toolDiagnostics"] = diagnostic;
+            }
+            Ok(result)
+        }
         // Explicit local reads may expose this bounded private excerpt for
         // diagnosis. It is never a status endpoint or verified event response.
         Err(reason) => Ok(json!({"action":"web_review_read", "projectId":project,
@@ -1606,6 +1645,39 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn review_tool_markers_are_closed_optional_ui_telemetry_without_execution_authority() {
+        assert_eq!(review_tool_diagnostics(&json!({})).unwrap(), None);
+        let value = json!({"schemaVersion":1,"basis":"VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT",
+            "scope":"EXACT_USER_EXCHANGE","selectorCoverage":"KNOWN_MARKERS_ONLY",
+            "callMarkers":2,"resultMarkers":1,"errorMarkers":1,"busyMarkers":0,"countOverflow":false});
+        assert_eq!(
+            review_tool_diagnostics(&json!({"toolDiagnostics":value})).unwrap(),
+            Some(value.clone())
+        );
+        for (field, changed) in [
+            ("callMarkers", json!(true)),
+            ("callMarkers", json!(65)),
+            ("schemaVersion", json!(true)),
+            ("scope", json!("OTHER_CHAT")),
+            ("countOverflow", json!(0)),
+            ("arguments", json!("PRIVATE_KEY")),
+        ] {
+            let mut invalid = value.clone();
+            invalid[field] = changed;
+            assert_eq!(
+                review_tool_diagnostics(&json!({"toolDiagnostics":invalid})).unwrap_err(),
+                "WEB_REVIEW_TOOL_DIAGNOSTICS_INVALID"
+            );
+        }
+        let unavailable = json!({"status":"UNAVAILABLE","reason":"UI_MARKERS_UNPROVEN",
+            "basis":"VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT"});
+        assert_eq!(
+            review_tool_diagnostics(&json!({"toolDiagnostics":unavailable})).unwrap(),
+            Some(unavailable)
+        );
+    }
     fn args(values: &[&str]) -> Vec<String> {
         values.iter().map(|v| (*v).into()).collect()
     }
@@ -1687,7 +1759,9 @@ mod tests {
         assert_eq!(result["diagnostic"]["phase"], "ADAPTER_READY_WAIT");
         assert!(result.get("response").is_none() && result.get("snapshot").is_none());
         assert!(!result.to_string().contains("never forward"));
-        let snapshot = json!({"messages":[
+        let tools = json!({"status":"UNAVAILABLE","reason":"UI_MARKERS_UNPROVEN",
+            "basis":"VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT"});
+        let snapshot = json!({"toolDiagnostics":tools,"messages":[
             {"role":"USER","text":event.message,"textComplete":true},
             {"role":"ASSISTANT","text":"Verified review body.","textComplete":true}
         ]});
@@ -1710,6 +1784,7 @@ mod tests {
         .unwrap();
         assert_eq!(success["eventVerified"], true);
         assert_eq!(success["response"], "Verified review body.");
+        assert_eq!(success["toolDiagnostics"], tools);
         for placeholder in [
             "This response couldn't load",
             "This response\ncouldn’t load",

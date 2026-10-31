@@ -739,6 +739,20 @@ def source_snapshot(bridge, sb, request):
                 bridge.normalize_message(messages[0]["text"]) != review["message"]):
             raise bridge.Attention("SOURCE_REVIEW_USER_WITNESS_REQUIRED")
         require_review_turn()
+        # Optional, closed UI telemetry from the same exact exchange. It is
+        # neither an MCP execution receipt nor proof that an absent marker
+        # means no tool was attempted. No labels, arguments or call IDs leave.
+        tool_diagnostic = {}
+        try:
+            sink.response_snapshot(cdp, review["message"], diagnostic={},
+                                   tool_diagnostic=tool_diagnostic)
+        except Exception:
+            tool_diagnostic = {}
+        require_review_turn()
+        if not bridge.valid_tool_marker_diagnostics(tool_diagnostic):
+            tool_diagnostic = {"status": "UNAVAILABLE", "reason": "UI_MARKERS_UNPROVEN",
+                               "basis": "VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT"}
+        snapshot["toolDiagnostics"] = tool_diagnostic
     if snapshot["messages"] and snapshot["messages"][-1]["role"] == "ASSISTANT":
         last = snapshot["messages"][-1]
         normalized = bridge.normalize_message(last["text"]).replace("’", "'").replace("‘", "'").lower()

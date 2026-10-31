@@ -2863,26 +2863,21 @@ class WakeBridgeTests(unittest.TestCase):
                     text, _ = json.JSONDecoder().raw_decode(script.rsplit("const text = ", 1)[1])
                     self.send_keys(wake_bridge.EDITOR, text, timeout=1)
                     return "INSERTED"
+                # Shared canonical body helpers contain composerText too.
+                # Identify the actual probe before its helper definitions.
+                if "const expected =" in script and "const selectorTiers =" in script:
+                    expected_text = wake_bridge.normalize_message(message)
+                    matches = sum(
+                        expected_text == wake_bridge.normalize_message(item)
+                        for item in self.messages
+                    )
+                    return ["ready", matches, 0]
+                if "const containers = semanticUsers.length" in script:
+                    return list(self.messages)
                 if "const composerText = root" in script:
                     return self.composer
                 if "#prompt-textarea" in script:
                     return ["ready", True]
-                if "const expected =" in script and "conversation-turn-" in script:
-                    expected_text = wake_bridge.normalize_message(message)
-                    matches = sum(
-                        expected_text in wake_bridge.normalize_message(item)
-                        for item in self.messages
-                    )
-                    return ["ready", matches, 0]
-                if "const expected =" in script and "conversation-turn-" in script:
-                    expected_text = wake_bridge.normalize_message(message)
-                    matches = sum(
-                        expected_text in wake_bridge.normalize_message(item)
-                        for item in self.messages
-                    )
-                    return ["ready", matches, 0]
-                if "data-message-author-role" in script:
-                    return list(self.messages)
                 if "const unique" in script:
                     return ["ready", "button#composer-submit-button"]
                 raise AssertionError("unexpected fixed CDP evaluation")
