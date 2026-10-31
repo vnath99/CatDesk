@@ -1,3 +1,9 @@
+## 2026-10-31T16:55:23.547740+00:00 - separate caller evidence recorded; wait for affected connection report
+
+The user's separate ChatGPT conversation reports 90 CatDesk v4 tools without the central task dispatcher. It does not establish the affected chat's catalog or old call outcome. Publication/discovery, authentication/project scope and protected source-promotion authority remain separate. All completed native MCP evidence is retained; no new test, source behavior, connection setting, runtime, binding or native-session change occurred. C49 and unknown effects stay fenced.
+
+The exact prerequisites and single existing operator request are in `OPERATOR_ACTIONS.md` and `docs/verification/SEPARATE_CALLER_CATALOG_WAIT_2026_10_31.json`. No additional independently executable mandatory source slice is currently identified. Apply the user's conditional instruction to pause event-driven until affected-connection or materially changed evidence arrives; do not poll or create another question. The overall milestone remains incomplete, with genuine Web coding/review/producer acceptance open. Other projects remain independent.
+
 ## 2026-10-31T11:15:31.583993+00:00 - live acceptance waiting on caller evidence and genuine review authority
 
 The preceding turn completed supported concurrent development MCP execution; it remains actual loopback evidence, not two ChatGPT Web callers. The current ordered-work audit identifies no additional independently executable mandatory source slice. Current-source production promotion still requires genuine qualified review/producer evidence. The last material review is INCONCLUSIVE; its frozen request already distinguishes cumulative source review from live MVP acceptance, so an alleged circular acceptance requirement is not established. The existing native-managed isolation gate remains unqualified and ordinary native queue advice cannot replace release authority.
