@@ -316,6 +316,119 @@ fn status(reference: &Reference, state: &State) -> Value {
         "executionKeyDisclosed":false,"taskCompleted":false,"nativeSessionAction":"NONE"})
 }
 
+fn continuation_identity(
+    reference: &Reference,
+    record: &crate::web_work_state::WorkRecord,
+) -> Result<String, String> {
+    let turn = format!("initial-context-{}", reference.storage_id);
+    catdesk_wake::store::WakeIntent {
+        purpose: catdesk_wake::protocol::WakePurpose::NewTask,
+        source_event_id: &record.event_id,
+        source_turn_id: &turn,
+        priority: 0,
+        ttl_seconds: 600,
+    }
+    .event_id(&reference.project_id)
+}
+
+fn meter_status(result: Result<(), String>) -> &'static str {
+    match result.as_ref().map_err(String::as_str) {
+        Ok(()) => "RECORDED",
+        Err("WEB_CONTEXT_BUSY" | "WEB_CONTEXT_REGISTRATION_BUSY") => "BUSY",
+        Err("WEB_CONTEXT_OLD_GENERATION" | "WEB_CONTEXT_TARGET_CHANGED") => "TARGET_CHANGED",
+        Err("WEB_CONTEXT_EVENT_LIMIT") => "AT_LIMIT",
+        Err(_) => "UNAVAILABLE",
+    }
+}
+
+/// Advisory accounting never changes the already-established delivery outcome.
+/// It may be retried on SENT through context-reconcile, without browser work.
+fn account_sent_context(
+    scope: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    target: &Target,
+    wake: &catdesk_wake::store::Store,
+) -> Result<Value, String> {
+    use crate::web_conversation_context::{ConversationKey, WebContextStore};
+    let (reference, payload, private) = load(scope, record, target)?;
+    let current = state(&private, &reference)?;
+    if current.phase != "SENT" {
+        return Err("WEB_TASK_CONTEXT_RECEIPT_REQUIRED".into());
+    }
+    let key = crate::mcp::with_current_project_web_target(
+        &scope.control_workspace,
+        &scope.project.project_id,
+        target.generation,
+        &target.digest,
+        |control, paired| {
+            let key = ConversationKey {
+                project_id: scope.project.project_id.clone(),
+                conversation_url: paired.url.clone(),
+                target_generation: paired.generation,
+            };
+            let meter = WebContextStore::open_nonblocking(control.join(".catdesk/web-context"))?;
+            let previous = meter.active_key(&key.project_id)?;
+            meter.bind_observed_target(key.clone(), previous.as_ref())?;
+            Ok(key)
+        },
+    )?;
+    // Tokenization retains no global registry or paired-target lock.
+    let meter =
+        WebContextStore::open_nonblocking(scope.control_workspace.join(".catdesk/web-context"))?;
+    let initial = meter_status(
+        meter
+            .record_delivered_user(
+                &key,
+                &payload.message,
+                current
+                    .receipt
+                    .as_ref()
+                    .ok_or("WEB_TASK_CONTEXT_RECEIPT_REQUIRED")?,
+            )
+            .map(|_| ()),
+    );
+    // Pure identity lookup: do not recreate a queue file or renew an old TTL.
+    let id = continuation_identity(&reference, record)?;
+    let continuation = match wake.delivery(&id)? {
+        Some(delivery)
+            if delivery.phase == catdesk_wake::store::Phase::Sent
+                && delivery.target == *target
+                && delivery.event.project_id == scope.project.project_id =>
+        {
+            meter_status(
+                meter
+                    .record_delivered_user(
+                        &key,
+                        &delivery.event.message,
+                        delivery
+                            .receipt
+                            .as_ref()
+                            .ok_or("WEB_TASK_CONTEXT_RECEIPT_REQUIRED")?,
+                    )
+                    .map(|_| ()),
+            )
+        }
+        _ => "NOT_SENT",
+    };
+    Ok(json!({"initial":initial,"continuation":continuation,
+        "rawTextPersisted":false,"browserStarted":false,"providerContextExact":false}))
+}
+
+fn with_context_accounting(
+    mut output: Value,
+    scope: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    target: &Target,
+    store: &catdesk_wake::store::Store,
+) -> Value {
+    output["contextAccounting"] = account_sent_context(scope, record, target, store)
+        .unwrap_or_else(|reason| {
+            json!({"initial":meter_status(Err(reason)),
+            "continuation":"UNAVAILABLE","deliveryOutcomeChanged":false})
+        });
+    output
+}
+
 pub(crate) fn prepare_initial_context(
     scope: &ResolvedProjectScopeV1,
     record: &crate::web_work_state::WorkRecord,
@@ -456,7 +569,7 @@ pub(crate) fn run_initial_context(
             }
             Ok(())
         };
-        return catdesk_wake::runtime::run_scoped_task_continuation(
+        let result = catdesk_wake::runtime::run_scoped_task_continuation(
             &store,
             &event,
             target,
@@ -464,6 +577,7 @@ pub(crate) fn run_initial_context(
             &mut before,
             keep_running,
         );
+        return result.map(|output| with_context_accounting(output, scope, record, target, &store));
     }
     run_with_sender(
         scope,
@@ -535,7 +649,13 @@ fn run_with_sender(
     let (reference, payload, root) = load(scope, record, target)?;
     let current = state(&root, &reference)?;
     if current.phase == "SENT" {
-        return Ok(status(&reference, &current));
+        return Ok(with_context_accounting(
+            status(&reference, &current),
+            scope,
+            record,
+            target,
+            store,
+        ));
     }
     match action {
         InitialContextAction::Send if current.phase != "PREPARED" => {
@@ -601,7 +721,13 @@ fn run_with_sender(
                 "SENT",
                 Some(receipt),
             )?;
-            Ok(status(&reference, &state(&root, &reference)?))
+            Ok(with_context_accounting(
+                status(&reference, &state(&root, &reference)?),
+                scope,
+                record,
+                target,
+                store,
+            ))
         }
         Err(reason) => {
             let current = state(&root, &reference)?;
@@ -1028,6 +1154,145 @@ mod tests {
                 .unwrap()
                 .submission_fenced_utc
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn initial_context_accounting_requires_sent_and_recovers_continuation_without_queue_recreation()
+    {
+        use crate::web_conversation_context::{ConversationKey, WebContextStore};
+        let (scope, record, store, _) = fixture(true);
+        prepare_initial_context(&scope, &record, &record.target).unwrap();
+        assert_eq!(
+            account_sent_context(&scope, &record, &record.target, &store).unwrap_err(),
+            "WEB_TASK_CONTEXT_RECEIPT_REQUIRED"
+        );
+        sent(&scope, &record, &store);
+        let key = ConversationKey {
+            project_id: scope.project.project_id.clone(),
+            conversation_url: record.target.url.clone(),
+            target_generation: record.target.generation,
+        };
+        let meter =
+            WebContextStore::open(scope.control_workspace.join(".catdesk/web-context")).unwrap();
+        assert_eq!(
+            meter.pressure(&key).unwrap().known_delivered_user_messages,
+            1
+        );
+        let queued = queue_continuation(&scope, &record, &record.target, &store).unwrap();
+        let id = queued["eventId"].as_str().unwrap();
+        let path = store.root().join("queue").join(format!("{id}.json"));
+        let bytes = fs::read(&path).unwrap();
+        let output = run_with_sender(
+            &scope,
+            &record,
+            &record.target,
+            InitialContextAction::Reconcile,
+            &store,
+            &|| Ok(()),
+            |_, _, _, _| panic!("SENT accounting cannot open browser"),
+        )
+        .unwrap();
+        assert_eq!(output["contextAccounting"]["initial"], "RECORDED");
+        assert_eq!(output["contextAccounting"]["continuation"], "NOT_SENT");
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+        let event: catdesk_wake::protocol::Event = serde_json::from_slice(&bytes).unwrap();
+        let host = store.host_lock().unwrap();
+        let delivery = store.claim(&event, &host).unwrap();
+        store
+            .transition(id, &delivery.owner, Phase::Submitting, None, None)
+            .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: id.into(),
+            target_generation: record.target.generation,
+            target_digest: record.target.digest.clone(),
+            message_digest: digest(&event.message),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        store.record_exact_receipt_timer(id, &receipt).unwrap();
+        store
+            .transition(id, &delivery.owner, Phase::Sent, Some(receipt), None)
+            .unwrap();
+        drop(host);
+        let (_, _, private) = load(&scope, &record, &record.target).unwrap();
+        let before_state = fs::read(private.join("initial-delivery.json")).unwrap();
+        for _ in 0..2 {
+            let output = run_with_sender(
+                &scope,
+                &record,
+                &record.target,
+                InitialContextAction::Reconcile,
+                &store,
+                &|| Ok(()),
+                |_, _, _, _| panic!("cannot resend completed context"),
+            )
+            .unwrap();
+            assert_eq!(output["contextAccounting"]["continuation"], "RECORDED");
+            assert_eq!(
+                meter.pressure(&key).unwrap().known_delivered_user_messages,
+                2
+            );
+            assert!(!path.exists());
+            assert_eq!(
+                fs::read(private.join("initial-delivery.json")).unwrap(),
+                before_state
+            );
+            assert_eq!(
+                fs::read(store.root().join("archive").join(format!("{id}.json"))).unwrap(),
+                bytes
+            );
+        }
+    }
+
+    #[test]
+    fn initial_context_busy_meter_never_downgrades_sent_or_reopens_the_browser() {
+        let (scope, record, store, _) = fixture(true);
+        sent(&scope, &record, &store);
+        let (_, _, private) = load(&scope, &record, &record.target).unwrap();
+        let before = fs::read(private.join("initial-delivery.json")).unwrap();
+        let held = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(
+                scope
+                    .control_workspace
+                    .join(".catdesk/web-context/ledger.lock"),
+            )
+            .unwrap();
+        held.lock().unwrap();
+        let output = run_with_sender(
+            &scope,
+            &record,
+            &record.target,
+            InitialContextAction::Reconcile,
+            &store,
+            &|| Ok(()),
+            |_, _, _, _| panic!("accounting busy cannot resend"),
+        )
+        .unwrap();
+        assert_eq!(output["phase"], "SENT");
+        assert_eq!(output["contextAccounting"]["initial"], "BUSY");
+        assert_eq!(
+            fs::read(private.join("initial-delivery.json")).unwrap(),
+            before
+        );
+        drop(held);
+        let output = run_with_sender(
+            &scope,
+            &record,
+            &record.target,
+            InitialContextAction::Reconcile,
+            &store,
+            &|| Ok(()),
+            |_, _, _, _| panic!("accounting recovery cannot resend"),
+        )
+        .unwrap();
+        assert_eq!(output["contextAccounting"]["initial"], "RECORDED");
+        assert_eq!(
+            fs::read(private.join("initial-delivery.json")).unwrap(),
+            before
         );
     }
 

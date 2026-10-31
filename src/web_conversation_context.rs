@@ -20,6 +20,9 @@ use uuid::Uuid;
 
 use crate::delegated::autonomy_projects::canonical_project_chat_target;
 
+#[path = "web_context_user_receipts.rs"]
+mod user_receipts;
+
 const SCHEMA_VERSION: u32 = 1;
 const MAX_PROJECT_BYTES: usize = 64 * 1024;
 const MAX_CONVERSATION_BYTES: usize = 2 * 1024 * 1024;
@@ -175,6 +178,10 @@ fn is_false(value: &bool) -> bool {
     !value
 }
 
+fn is_zero(value: &usize) -> bool {
+    *value == 0
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RolloverIntent {
@@ -262,6 +269,16 @@ pub struct PressureStatus {
     pub last_observed_event_at_unix: Option<u64>,
     #[serde(default)]
     pub excerpt_only_messages: usize,
+    /// Receipt-checked known USER text, not authenticated provider context.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub known_delivered_user_messages: usize,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub paired_delivered_user_messages: usize,
+    /// Multiple equal bodies cannot establish a one-to-one correspondence.
+    /// Keep the larger source total in observed pressure; retain the possible
+    /// additional content only in the uncertain upper proxy, not the trigger.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub ambiguous_delivered_user_groups: usize,
     /// Deduplicated observed model-visible content, including structured tool
     /// arguments and worker messages. The field name remains wire-compatible.
     pub visible_unique_tokens: u64,
@@ -412,6 +429,8 @@ impl WebContextStore {
         observation: Observation<'_>,
     ) -> Result<PressureStatus, String> {
         key.validate()?;
+        user_receipts::reject_reserved(observation.event_id)?;
+        user_receipts::reject_reserved(observation.dedup_key)?;
         let event = observation_metadata(observation)?;
         let _lock = self.lock()?;
         let project = self.read_project(&key.project_id)?;
@@ -455,8 +474,21 @@ impl WebContextStore {
         let events = observations
             .into_iter()
             .take(513)
-            .map(observation_metadata)
+            .map(|observation| {
+                user_receipts::reject_reserved(observation.event_id)?;
+                user_receipts::reject_reserved(observation.dedup_key)?;
+                observation_metadata(observation)
+            })
             .collect::<Result<Vec<_>, _>>()?;
+        self.record_metadata_batch(key, events, allow_known_history)
+    }
+
+    fn record_metadata_batch(
+        &self,
+        key: &ConversationKey,
+        events: Vec<EventMetadata>,
+        allow_known_history: bool,
+    ) -> Result<PressureStatus, String> {
         if events.is_empty() || events.len() > 512 {
             return Err("WEB_CONTEXT_INPUT_SCOPE_INVALID".into());
         }
@@ -538,6 +570,21 @@ impl WebContextStore {
         excerpt_only: bool,
     ) -> Result<PressureStatus, String> {
         key.validate()?;
+        user_receipts::reject_reserved(event_id)?;
+        if visible_text.is_some_and(|text| text.len() > MAX_VISIBLE_TEXT_BYTES) {
+            return Err("WEB_CONTEXT_EVENT_CONTENT_OVERSIZED".into());
+        }
+        // Match the delivery receipt's canonical USER text only for complete,
+        // keyed browser observations. Keep clipped and generic inputs intact.
+        let canonical = if !excerpt_only
+            && source_kind == VisibleSourceKind::UserMessage
+            && user_receipts::is_browser_id(event_id)
+        {
+            visible_text.map(user_receipts::canonical_user)
+        } else {
+            None
+        };
+        let visible_text = canonical.as_deref().or(visible_text);
         let mut event = observation_metadata(Observation {
             event_id,
             revision: 1,
@@ -1045,6 +1092,8 @@ impl WebContextStore {
 }
 
 pub(crate) fn validate_observation(observation: Observation<'_>) -> Result<(), String> {
+    user_receipts::reject_reserved(observation.event_id)?;
+    user_receipts::reject_reserved(observation.dedup_key)?;
     observation_metadata(observation).map(|_| ())
 }
 
@@ -1115,6 +1164,7 @@ fn observation_metadata(observation: Observation<'_>) -> Result<EventMetadata, S
 }
 
 fn pressure_status(project: &ProjectState, ledger: &ConversationLedger) -> PressureStatus {
+    let correlation = user_receipts::correlate(&ledger.events);
     let mut visible = BTreeMap::<&str, u64>::new();
     let mut arguments = BTreeMap::<&str, u64>::new();
     let mut results = BTreeMap::<&str, u64>::new();
@@ -1126,7 +1176,11 @@ fn pressure_status(project: &ProjectState, ledger: &ConversationLedger) -> Press
         }
         let tokens = event.estimated_tokens.unwrap_or(0);
         if event.source_kind.counts_in_context_pressure() {
-            let entry = visible.entry(&event.dedup_key).or_default();
+            let dedup = correlation
+                .aliases
+                .get(event.event_id.as_str())
+                .map_or(event.dedup_key.as_str(), |key| key.as_str());
+            let entry = visible.entry(dedup).or_default();
             *entry = (*entry).max(tokens);
         }
         let traffic = match event.source_kind {
@@ -1139,13 +1193,16 @@ fn pressure_status(project: &ProjectState, ledger: &ConversationLedger) -> Press
             *entry = (*entry).max(tokens);
         }
     }
-    let visible_unique_tokens = visible
+    let visible_upper_tokens = visible
         .values()
         .fold(0u64, |sum, value| sum.saturating_add(*value));
-    let estimated_upper_tokens = visible_unique_tokens.saturating_add(
+    let visible_unique_tokens =
+        visible_upper_tokens.saturating_sub(correlation.possible_overlap_tokens);
+    let estimated_upper_tokens = visible_upper_tokens.saturating_add(
         (unknown.len() as u64).saturating_mul(project.policy.unknown_source_reserve_tokens),
     );
     let coverage_known = ledger.browser_coverage.observed
+        && correlation.ambiguous == 0
         && !ledger.browser_coverage.initial_history_gap
         && !ledger.browser_coverage.identity_gap
         && !ledger.browser_coverage.text_gap
@@ -1173,6 +1230,9 @@ fn pressure_status(project: &ProjectState, ledger: &ConversationLedger) -> Press
             .iter()
             .filter(|event| event.excerpt_only)
             .count(),
+        known_delivered_user_messages: correlation.known,
+        paired_delivered_user_messages: correlation.paired,
+        ambiguous_delivered_user_groups: correlation.ambiguous,
         visible_unique_tokens,
         observed_estimate_tokens: visible_unique_tokens,
         unknown_source_count: unknown.len(),
@@ -1197,7 +1257,11 @@ fn pressure_status(project: &ProjectState, ledger: &ConversationLedger) -> Press
         automatic_observation_enabled: project.policy.automatic_observation_enabled,
         incomplete_history_rollover: project.policy.incomplete_history_rollover,
         rollover_intent: ledger.rollover_intent.clone(),
-        estimate_method: "O200K_OBSERVED_CONTEXT_PROXY_WITH_CONFIGURED_UNKNOWN_RESERVE".into(),
+        estimate_method: if correlation.known == 0 {
+            "O200K_OBSERVED_CONTEXT_PROXY_WITH_CONFIGURED_UNKNOWN_RESERVE"
+        } else {
+            "O200K_CANONICAL_USER_RECEIPTS_AND_OBSERVED_CONTEXT_PROXY_WITH_CONFIGURED_UNKNOWN_RESERVE"
+        }.into(),
         advisory: true,
         origin_authenticated: false,
     }

@@ -54,7 +54,9 @@ impl WakeIntent<'_> {
         Ok(metadata)
     }
 
-    fn event_id(&self, project: &str) -> Result<String> {
+    /// Pure semantic identity lookup; does not publish, renew TTL or grant a
+    /// sender. Allows receipt accounting without recreating an expired intent.
+    pub fn event_id(&self, project: &str) -> Result<String> {
         if !valid_id(project) {
             return Err("QUEUE_EVENT_INVALID".into());
         }

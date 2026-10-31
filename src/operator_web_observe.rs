@@ -185,7 +185,8 @@ pub(super) fn ingest(
             .join(" ")
             .replace(['’', '‘'], "'")
             .to_lowercase();
-        let load_error = normalized.contains("this response couldn't load");
+        let load_error = message.role == "ASSISTANT"
+            && normalized.trim_end_matches('.') == "this response couldn't load";
         let complete = message.text_complete
             && message.revision_complete
             && !normalized.is_empty()
@@ -298,6 +299,69 @@ mod tests {
         value["messages"][0]["revisionHash"] = Value::Null;
         value["coverage"]["revisionIncomplete"] = json!(1);
         value
+    }
+
+    #[test]
+    fn error_words_are_content_in_user_messages_and_useful_assistant_bodies() {
+        for (role, text) in [
+            ("USER", "This response couldn't load"),
+            (
+                "USER",
+                "Investigate why the UI says This response couldn't load.",
+            ),
+            (
+                "ASSISTANT",
+                "The UI says This response couldn't load; the request must not be resent.",
+            ),
+        ] {
+            let root = std::env::temp_dir().join(format!(
+                "web-observe-error-content-{}",
+                uuid::Uuid::new_v4()
+            ));
+            let store = WebContextStore::open(root).unwrap();
+            let key = ConversationKey {
+                project_id: "alpha".into(),
+                conversation_url: "https://chatgpt.com/c/error-content".into(),
+                target_generation: 1,
+            };
+            store.bind_observed_target(key.clone(), None).unwrap();
+            let mut value = input(&key, text, true);
+            value["messages"][0]["role"] = json!(role);
+            let result = ingest(&store, &key, value, 1, || Ok(())).unwrap();
+            assert_eq!(result["recordedMessages"], 1, "{role} body is content");
+            assert_eq!(result["uncertainMessages"], 0);
+            assert!(result["pressure"]["visibleUniqueTokens"].as_u64().unwrap() > 0);
+        }
+    }
+
+    #[test]
+    fn literal_assistant_load_card_stays_unknown_without_erasing_the_user_count() {
+        let root =
+            std::env::temp_dir().join(format!("web-observe-load-card-{}", uuid::Uuid::new_v4()));
+        let store = WebContextStore::open(root).unwrap();
+        let key = ConversationKey {
+            project_id: "alpha".into(),
+            conversation_url: "https://chatgpt.com/c/load-card".into(),
+            target_generation: 1,
+        };
+        store.bind_observed_target(key.clone(), None).unwrap();
+        let mut user = input(&key, "current delivered request", true);
+        user["messages"][0]["role"] = json!("USER");
+        user["messages"][0]["messageHash"] = json!(digest("current-user"));
+        let before = ingest(&store, &key, user, 1, || Ok(())).unwrap();
+        for text in [
+            "This response couldn't load",
+            "This response couldn’t load.",
+        ] {
+            let result = ingest(&store, &key, input(&key, text, true), 2, || Ok(())).unwrap();
+            assert_eq!(result["recordedMessages"], 0);
+            assert_eq!(result["uncertainMessages"], 1);
+            assert_eq!(
+                result["pressure"]["visibleUniqueTokens"],
+                before["pressure"]["visibleUniqueTokens"]
+            );
+            assert_eq!(result["pressure"]["browserCoverage"]["textGap"], true);
+        }
     }
 
     fn fill_observation_ledger(store: &WebContextStore, key: &ConversationKey, count: usize) {

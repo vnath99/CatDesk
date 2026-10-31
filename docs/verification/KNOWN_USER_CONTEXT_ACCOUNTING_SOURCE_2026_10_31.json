@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T08:18:05.222815+00:00",
+  "classification": "TESTED_SOURCE_RECEIPT_CHECKED_CONTEXT_ACCOUNTING_NOT_INSTALLED_OR_NEW_WEB_ACCEPTANCE",
+  "sourceBaseCommit": "69ed3f47d9287fbbfd852fe158d5782ffd411a0d",
+  "workingSourceSha256": {
+    "src/project_task_context.rs": "b3b8d015474538e7cbf8545a0307772e4efe17721fedd01f7b819ad78eb6473a",
+    "src/web_conversation_context.rs": "024f3218bdc4c809bfb3d4f5e558bd5b9515aeabbf76298e3f17c5079c53d4fe",
+    "src/web_context_user_receipts.rs": "c7edb33dbfbb806227b59fdd768cabde642741eba077a1d44d8cf6b8b94e9901",
+    "src/operator_web_observe.rs": "7af0066ba68412569df66d27ea60e562b5e141f0be42c3881a40dabb6dbf503e",
+    "wake/src/store.rs": "bbb0083a881cf97131061c14c96a279f17b390c61498cfc7948a72458889f505"
+  },
+  "implementation": {
+    "existingContextLedgerAndTaskReceiptStoreReused": true,
+    "newRegistryBrowserOwnerSchedulerOrAuthorizationSystem": false,
+    "countsOnlyAfterDurableSentReceipt": true,
+    "requiresExactMessageTargetGenerationDigestAndEvidence": true,
+    "storage": "EXISTING_SCHEMA_V1_USER_MESSAGE_HASH_BYTE_AND_TOKEN_METADATA_NO_RAW_BODY_OR_KEY",
+    "counterReceiptNamespaceUnavailableToGenericObservations": true,
+    "tokenEstimate": "O200K_CANONICAL_WHITESPACE_USER_TEXT_PROXY_NOT_PROVIDER_USAGE",
+    "uniqueCompleteReceiptBrowserContentCorrelation": "ONE_COUNT_MAX_ESTIMATE_WITHOUT_REWRITING_STORED_IDENTITIES",
+    "ambiguousEqualBodies": "NO_IDENTITY_MERGE_LARGER_SOURCE_TOTAL_IN_OBSERVED_PROXY_POSSIBLE_EXTRA_CONTENT_ONLY_IN_UNCERTAIN_UPPER_PROXY",
+    "ambiguousOverlapAloneCanTriggerObservedPressureRollover": false,
+    "genericMessagesAndClippedExcerptsAcquireReceiptIdentity": false,
+    "historicalBrowserMetadataRewrittenWithoutNewCapture": false,
+    "knownPredecessorAccountingReactivatesConversation": false,
+    "sentReconciliation": "EXISTING_CONTEXT_RECONCILE_ACCOUNTS_RECEIPTS_WITHOUT_BROWSER_OR_RENEWING_OR_RECREATING_QUEUE",
+    "counterFailureChangesDeliveryOutcomeOrAuthorizesResend": false,
+    "globalRegistryLocksHeldDuringTokenization": false,
+    "supportedAccountingStates": [
+      "RECORDED",
+      "BUSY",
+      "TARGET_CHANGED",
+      "AT_LIMIT",
+      "UNAVAILABLE",
+      "NOT_SENT"
+    ],
+    "automaticRolloversOrPoliciesChanged": false
+  },
+  "responseErrorCorrection": {
+    "defect": "Context ingestion treated every occurrence of the response-load-error phrase as an error, including USER content and useful assistant explanations.",
+    "redTestFailed": true,
+    "redLogSha256": "a74ce7bc9e67142ea871aff3ec94c152cfc74067f350b3ef2fb32641b486cf64",
+    "fixedPredicate": "ASSISTANT_ROLE_AND_LITERAL_NORMALIZED_PLACEHOLDER_ONLY",
+    "usefulBodyMentionsErrorCounts": true,
+    "literalAssistantLoadCardUnknown": true,
+    "newRetryOrSendBehavior": false
+  },
+  "compatibility": {
+    "contextLedgerSchema": 1,
+    "newPersistedReceiptBodyOrPrivateField": false,
+    "newPressureFieldsOptionalAndAbsentAtZero": [
+      "knownDeliveredUserMessages",
+      "pairedDeliveredUserMessages",
+      "ambiguousDeliveredUserGroups"
+    ],
+    "olderMetadataReaders": "CAN_READ_EXISTING_EVENT_SHAPE_BUT_DO_NOT_IMPLEMENT_NEW_OVERLAP_ESTIMATION_USE_MATCHED_NEW_CONTROLLER_FOR_NEW_COUNTS",
+    "protectedExecutableOrSelectedPackageChanged": false
+  },
+  "tests": {
+    "distinctPassingCases": 57,
+    "newDistinctCases": 15,
+    "proofs": [
+      {
+        "kind": "context",
+        "passed": 34,
+        "logSha256": "17dff347936ccde10d13ff00600297e2b2bfdd3cd489fd9cdbd843dbf09ff263"
+      },
+      {
+        "kind": "delivery",
+        "passed": 14,
+        "logSha256": "7a7c602183bc09926de843ee51bd7da89fd2585f2acb4fc45a7b2687dc05caf3"
+      },
+      {
+        "kind": "observe",
+        "passed": 9,
+        "logSha256": "d8d3374888b143e25dc1f115baed331b50c28efd7623ff0ed950c9e6dd07ada6"
+      }
+    ],
+    "strictClippy": {
+      "root": {
+        "passed": true,
+        "allTargets": true,
+        "warningsDenied": true,
+        "logSha256": "35a6c0aa991e5593a33bb465ac410b5daf43cb3fa4439f4910d945ca8b523311"
+      },
+      "wake": {
+        "passed": true,
+        "allTargets": true,
+        "warningsDenied": true,
+        "logSha256": "ac1b2112a8eccd9ba23b24042cd85ed91ed30bab32ef3b1802ab0806c6f77966"
+      }
+    },
+    "rootAndWakeFormat": "PASS"
+  },
+  "preservation": {
+    "criticalPinsMatched": 5107,
+    "newBrowserBackendWakeOfficialOrRecurringOwnerStarts": 0,
+    "newProviderMessages": 0,
+    "liveContextLedgerMutations": 0,
+    "projectBindingsNativeSessionsAndProtectedReleasePreserved": true
+  },
+  "acceptance": {
+    "source": "PASS",
+    "actualRetainedReceiptAccounting": "OPEN",
+    "actualBrowserOverlapQualification": "SOURCE_FIXTURES_ONLY",
+    "newControllerBuild": "OPEN",
+    "fullNativeTwoWebCoding": "OPEN",
+    "protectedPromotion": "NOT_PERFORMED"
+  },
+  "blockedOperation": "PREVIOUS_ASSISTANT_REPORTED_PLATFORM_SAFETY_RESTRICTION_PRESERVED_NO_REPLAY_OR_TRANSPORT_SUBSTITUTION",
+  "nextExecutableTask": "BUILD_EXACT_COMMIT_CONTROLLER_THEN_ACCOUNT_TWO_RETAINED_SENT_RECEIPTS_WITH_NO_BROWSER_OR_PROVIDER_ACTION",
+  "operatorActionRequired": false,
+  "goal": "ACTIVE"
+}
