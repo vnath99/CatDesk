@@ -348,6 +348,29 @@ pub(super) fn run_step_with_capture(
     capture: impl FnOnce() -> Result<Value, String>,
 ) -> Result<(&'static str, Value), String> {
     keep_running()?;
+    let accounting =
+        super::receipts::reconcile(workspace, project, keep_running).unwrap_or_else(|reason| {
+            json!({"status":if reason == "WEB_CONTEXT_BUSY" {"BUSY"} else {"UNAVAILABLE"},
+            "browserAction":"NONE","rolloverRequested":false})
+        });
+    keep_running()?;
+    run_step_after_accounting(workspace, project, key, source, keep_running, capture).map(
+        |(stage, mut output)| {
+            output["receiptAccounting"] = accounting;
+            (stage, output)
+        },
+    )
+}
+
+fn run_step_after_accounting(
+    workspace: &Path,
+    project: &str,
+    key: &ConversationKey,
+    source: &Target,
+    keep_running: &dyn Fn() -> Result<(), String>,
+    capture: impl FnOnce() -> Result<Value, String>,
+) -> Result<(&'static str, Value), String> {
+    keep_running()?;
     match rollover::auto_stage(workspace, project, source)? {
         rollover::AutoStage::AwaitContinuation => Ok((
             "AWAITING_RESPONSE",

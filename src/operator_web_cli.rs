@@ -20,6 +20,8 @@ use crate::web_conversation_context::{
 mod auto;
 #[path = "operator_web_observe.rs"]
 mod observe;
+#[path = "operator_web_receipts.rs"]
+mod receipts;
 #[path = "operator_web_retirement.rs"]
 mod retirement;
 #[path = "operator_web_review.rs"]
@@ -77,6 +79,9 @@ pub(crate) enum WebAction {
         expected_generation: u64,
     },
     ContextStatus {
+        project_id: String,
+    },
+    ContextReceipts {
         project_id: String,
     },
     ContextCapture {
@@ -452,6 +457,9 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
             })
         }
         ("context", "status") if options.is_empty() => Ok(WebAction::ContextStatus {
+            project_id: project_id.into(),
+        }),
+        ("context", "reconcile-receipts") if options.is_empty() => Ok(WebAction::ContextReceipts {
             project_id: project_id.into(),
         }),
         ("context", "capture") if options.is_empty() => Ok(WebAction::ContextCapture {
@@ -1379,6 +1387,9 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             )
         }
         WebAction::ContextStatus { project_id } => Ok(context_status(&workspace, &project_id)),
+        WebAction::ContextReceipts { project_id } => {
+            receipts::reconcile(&workspace, &project_id, &|| Ok(()))
+        }
         WebAction::ContextCapture { project_id } => {
             crate::web_context_control::capture_current(&workspace, &project_id).await
         }
@@ -2201,6 +2212,36 @@ mod tests {
             invalid.push("--allow-manual-wake".into());
             assert!(parse(&invalid).is_err());
             assert!(parse(&command[..6]).is_err());
+        }
+    }
+
+    #[test]
+    fn receipt_only_reconciliation_accepts_no_payload_route_or_browser_overrides() {
+        let command = args(&[
+            "operator",
+            "web",
+            "context",
+            "reconcile-receipts",
+            "--project-id",
+            "alpha",
+        ]);
+        assert_eq!(
+            parse(&command).unwrap(),
+            WebAction::ContextReceipts {
+                project_id: "alpha".into()
+            }
+        );
+        for flag in [
+            "--message",
+            "--url",
+            "--workspace",
+            "--event-id",
+            "--input-file",
+            "--max-runtime-seconds",
+        ] {
+            let mut bad = command.clone();
+            bad.extend(args(&[flag, "override"]));
+            assert!(parse(&bad).is_err());
         }
     }
 

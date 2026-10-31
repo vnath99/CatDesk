@@ -1,3 +1,11 @@
+## 2026-10-31T08:46:39.581462+00:00 - local receipt-only context reconciliation
+
+```powershell
+& '<matched-controller>' operator web context reconcile-receipts --project-id '<registered-project>'
+```
+
+This source-qualified command accepts only the registered project selector. It requires exact registry/Wake agreement and an already-active matching context ledger; it does not repair or create bindings. It reads existing timers and SENT delivery receipts and writes count/hash metadata only. It starts no browser, backend, Wake or official runtime, creates no intent and requests no rollover. Repeated calls skip known receipt identities; PARTIAL means another bounded metadata cycle may be needed. Unknown submissions and missing bodies remain untouched. Current source limits are 64 new receipts per loop, five seconds for its accounting loop and 10,000 project timers. Existing opt-in automatic observation uses the same helper; this change does not activate that owner. Use a separately qualified current controller; retained older executables do not implement this command. Evidence: `docs/verification/OBSERVER_RECEIPT_ACCOUNTING_SOURCE_2026_10_31.json`.
+
 ## 2026-10-31T08:35:56.125565+00:00 - report blocked work without completing or retiring it
 
 `operator web work resolve --project-id PROJECT --input-file FROZEN_REPORT` accepts outcome blocked or in_progress with a valid reasonCode and summary of at most 1,024 bytes. The strict input fields are projectId, requestId, expectedTargetGeneration, expectedTargetSha256, outcome, summary and reasonCode. Match the saved work record's original target; do not substitute a newer continuation generation. The existing rollover lease separately checks the current paired target. Report outcomes retain phase OPEN and ownership, send nothing, execute no task and do not retire a Wake event. They do not reconcile an unknown operation or convert an assistant claim into verified execution. The actual controlled report qualified this path with original generation 4/current generation 5 and all other state preserved.

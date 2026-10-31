@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T08:46:39.581462+00:00",
+  "classification": "TESTED_SOURCE_EXISTING_OBSERVER_RECEIPT_ACCOUNTING_NO_BACKGROUND_ACTIVATION",
+  "sourceBaseCommit": "4e4663f9cbca17524cd4be84688fc7c43eafec6b",
+  "sourceFilesSha256": {
+    "src/operator_web_receipts.rs": "0b25586994102eecb02dad5c1d7b36246406bd8932ac2fbe4b14d266047d16ae",
+    "src/operator_web_auto.rs": "56c9ba1f7e3d076685504213c221e766a18784357c2c8e74a23d005578e80a98",
+    "src/operator_web_cli.rs": "a6d1b6ba6088be43f92e2e671ede64c638edd16553874288e3dcd0e51a5797a3",
+    "src/web_context_user_receipts.rs": "831aa3da2df775166e52ac4672eaf6aad571854c1f42de5951d0f135db5f6691"
+  },
+  "implementation": {
+    "existingRegistryPairedTargetWakeTimersAndContextLedgerReused": true,
+    "newOwnerSchedulerCursorJournalOrAuthorizationRegistry": false,
+    "operation": "operator web context reconcile-receipts --project-id REGISTERED_PROJECT",
+    "existingAutomaticObservationStepIntegrated": true,
+    "automaticOwnerStarted": false,
+    "bindingOrPolicyCreation": false,
+    "onlyCurrentPairedTargetAndAlreadyActiveContext": true,
+    "unknownSubmittingOrMissingBodyNotCountedAsKnownUser": true,
+    "failedOrPendingAssistantDoesNotUndoConfirmedUserDelivery": true,
+    "timerOrReceiptStateModified": false,
+    "incrementalProgress": "EXISTING_RECEIPT_EVENT_IDENTITIES_SKIP_ALREADY_RECORDED_TEXT",
+    "maximumNewReceiptsPerCycle": 64,
+    "accountingLoopBudgetSeconds": 5,
+    "maximumProjectTimers": 10000,
+    "partialCycleReportedAndResumesFromKnownIdentities": true,
+    "sourceTimestamps": "ORIGINAL_SENT_RECEIPTS_NOT_POLL_TIME",
+    "globalRegistryLocksHeldDuringTokenization": false,
+    "counterFailureDoesNotBlockExistingProjectStep": true,
+    "cancellationRecheckedBeforeContinuingAutoStep": true,
+    "rawBodyDraftCredentialsOrUrlExportedByNewCommand": false
+  },
+  "tests": {
+    "distinctPassingCases": 36,
+    "newCases": 8,
+    "proofs": [
+      {
+        "kind": "receipts",
+        "passed": 18,
+        "logSha256": "26f9c14286ef9ee6098d59c8ffd54e0c6458567e8feb7ab2af4aeeb9f5329cf8"
+      },
+      {
+        "kind": "closedCli",
+        "passed": 1,
+        "logSha256": "51f26cd99645ebc96dcab8ee8f162c3730d0a8fd5b197cbaa2257875628005c6"
+      },
+      {
+        "kind": "existingAutoObserver",
+        "passed": 17,
+        "logSha256": "c1589ac07ef8abe42a048258c33a9169ea6214f149bd2b1da21f0b035f929664"
+      }
+    ],
+    "rootStrictClippyAllTargets": true,
+    "warningsDenied": true,
+    "clippyLogSha256": "3beb8181d5c4ecff65dcd8ab60b156c3c778620f5187fa44b4371e81d6918fed",
+    "rootAndWakeFormat": "PASS"
+  },
+  "preservation": {
+    "currentDerivedPinsMatched": 5107,
+    "existingRuntimeOrLedgerWrites": 0,
+    "newProviderActions": 0,
+    "nativeSessionActions": 0,
+    "protectedPromotion": false
+  },
+  "acceptance": {
+    "source": "PASS",
+    "registeredProjectRetainedReceiptBatch": "OPEN",
+    "newBrowserOrWebCodingProof": "NOT_PERFORMED",
+    "fullNativeTwoWebCoding": "OPEN"
+  },
+  "nextExecutableTask": "BUILD_EXACT_COMMIT_CONTROLLER_THEN_BOUNDED_LOCAL_RECEIPT_ACCOUNTING_FOR_EXISTING_REGISTERED_PROJECTS_NO_BROWSER_OR_PROVIDER_ACTION",
+  "operatorActionRequired": false,
+  "goal": "ACTIVE",
+  "finalScopeRecheck": {
+    "qualifiedUtc": "2026-10-31T08:55:22.515358+00:00",
+    "activeContextRevalidatedAfterPairedTargetReadback": true,
+    "concurrentContextChangeReturns": "WEB_CONTEXT_TARGET_CHANGED",
+    "admittedPredecessorCountPreserved": true,
+    "automaticContextRebinding": false
+  }
+}

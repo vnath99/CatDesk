@@ -28,6 +28,30 @@ pub(super) fn reject_reserved(id: &str) -> Result<(), String> {
 }
 
 impl WebContextStore {
+    /// Reuse retained event identities as the incremental accounting cursor.
+    /// No second journal or per-project scheduler state is needed.
+    pub(crate) fn delivered_user_ids(
+        &self,
+        key: &ConversationKey,
+    ) -> Result<BTreeSet<String>, String> {
+        key.validate()?;
+        let _lock = self.read_lock()?;
+        let project = self.read_project(&key.project_id)?;
+        if !project.history.contains(key) {
+            return Err("WEB_CONTEXT_TARGET_NOT_RECORDED".into());
+        }
+        Ok(self
+            .read_ledger(key)?
+            .events
+            .into_iter()
+            .filter(|event| {
+                tagged_id(&event.event_id, "delivered-user:")
+                    && event.source_kind == VisibleSourceKind::UserMessage
+            })
+            .map(|event| event.event_id)
+            .collect())
+    }
+
     /// The caller must establish the durable SENT receipt independently. This
     /// validates its target/message witnesses, stores only hashes/counts, and
     /// may finish on an already-known predecessor without reactivating it.
