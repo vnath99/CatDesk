@@ -1,3 +1,7 @@
+## 2026-10-31T09:06:57.685252+00:00 - no new operator action from capability diagnosis
+
+Read-only permission inspection and the current Codex tool inventory do not establish the affected Web chat's catalog or the platform decision behind its reported restriction. No permission change, refresh/reconnect, equivalent review approval or task replay is requested. The passive doctor now records this distinction without turning app preferences into task authority. A supported metadata refresh is documented for future qualified discovery work, but is not known to resolve this held operation. Continue independent handoff/freeze/ownership integration. Evidence: `docs/verification/CONNECTOR_CAPABILITY_DIAGNOSTICS_2026_10_31.json`.
+
 ## 2026-10-31T08:35:56.125565+00:00 - existing blocker now visible in the durable work report
 
 The previously verified assistant-reported safety restriction is now projected through the existing work-ledger report API. The request remains OPEN with reported state blocked; ownership, grant and receipt history remain intact. It is coordinator-reported metadata, not task completion or an independently verified platform rejection. No new operator decision or repeated Web request is requested. Source/outcome evidence: `docs/verification/COORDINATOR_BLOCKED_REPORT_2026_10_31.json`. Continue independent receipt accounting; do not replay the unestablished operation or switch transport to evade its reported restriction.

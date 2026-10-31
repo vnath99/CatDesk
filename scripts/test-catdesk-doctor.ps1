@@ -90,6 +90,25 @@ try{
  $connectedReport=Invoke-Doctor -Import;$connected=Layer $connectedReport 'CONNECTOR'
  Require ($connected.status -ceq 'UNVERIFIED' -and $connected.provenance -ceq 'IMPORTED_ADVISORY' -and $connected.nextDiagnostic -ceq 'VERIFY_AUTHENTICATED_PROJECT_TASK_SCOPE') 'retained connector response requested polling or claimed current availability'
  Require ($connected.facts.projectTaskAccess -ceq 'UNVERIFIED' -and $connected.facts.providerConversationIdentity -ceq 'UNVERIFIED' -and $connected.facts.taskGrantRequired -and $connected.facts.bearerAndExecutionModeRequired -and (Layer $connectedReport 'LOCAL_MCP').status -ceq 'NOT_RUN' -and (Layer $connectedReport 'WAKE_QUEUE').code -ceq 'WAKE_UNKNOWN_OUTCOME') 'connector success implied task authority or hid independent gates'
+ foreach($case in @(
+  @{code='CONNECTOR_TOOL_DISCOVERY_UNVERIFIED';next='COMPARE_AFFECTED_CALLER_TOOL_CATALOG_WITHOUT_TASK_REPLAY'},
+  @{code='CONNECTOR_TASK_CALL_REPORTED_BLOCKED';next='OBTAIN_ATTRIBUTABLE_PLATFORM_OR_TASK_CALL_EVIDENCE_WITHOUT_REPLAY'})){
+  $import.observations=@(@{layer='CONNECTOR';code=$case.code});Save $observation $import
+  $capabilityReport=Invoke-Doctor -Import;$capability=Layer $capabilityReport 'CONNECTOR'
+  Require ($capability.code -ceq $case.code -and $capability.nextDiagnostic -ceq $case.next) 'connector capability gap collapsed into transport retry or task invocation'
+  Require ($capability.status -ceq 'UNVERIFIED' -and $capability.provenance -ceq 'IMPORTED_ADVISORY') 'reported connector capability became current authoritative evidence'
+  Require ($capability.facts.reportBasis -ceq 'ADVISORY_NOT_PLATFORM_REJECTION_RECEIPT' -and $capability.facts.projectTaskAccess -ceq 'UNVERIFIED' -and $capability.facts.affectedWebCallerCatalog -ceq 'UNVERIFIED' -and $capability.facts.taskCallOutcome -ceq 'UNESTABLISHED') 'different caller inventory or assistant report asserted task-call cause/outcome'
+  Require (-not $capability.facts.appPermissionEstablishesTaskAuthority -and -not $capability.facts.unknownCallReplayAllowed -and -not $capability.facts.alternateTransportRetryAllowed -and $capability.facts.independentProjectsMayContinue) 'app setting authorized retry or blocked independent projects'
+  Require ((Layer $capabilityReport 'LOCAL_MCP').status -ceq 'NOT_RUN' -and (Layer $capabilityReport 'WAKE_QUEUE').code -ceq 'WAKE_UNKNOWN_OUTCOME' -and $capabilityReport.runtimeStarts -eq 0 -and $capabilityReport.networkRequests -eq 0 -and $capabilityReport.repairs -eq 0) 'connector report hid existing gates or started active diagnosis'
+ }
+ foreach($invalidCapability in @(
+  @{layer='CONNECTOR';code='CONNECTOR_TASK_CALL_REPORTED_BLOCKED';status='PASS'},
+  @{layer='CONNECTOR';code='CONNECTOR_TOOL_DISCOVERY_UNVERIFIED';facts=@{unknownCallReplayAllowed=$true}},
+  @{layer='LOCAL_MCP';code='CONNECTOR_TOOL_DISCOVERY_UNVERIFIED'})){
+  $import.observations=@($invalidCapability);Save $observation $import
+  $invalidReport=Invoke-Doctor -Import
+  Require ((Layer $invalidReport 'OBSERVATIONS').code -ceq 'OBSERVATIONS_INVALID' -and (Layer $invalidReport 'CONNECTOR').code -ceq 'CONNECTOR_NOT_PROBED') 'invalid capability observation partially applied or overrode authority'
+ }
  foreach($invalid in @('PRIVATE_MARKER',('x'*16385),'{"schemaVersion":true}',('{"schemaVersion":1,"source":"RETAINED_REPORT","observedUtc":"2999-01-01","observations":[]}'))){
   [IO.File]::WriteAllText($observation,$invalid)
   Require ((Layer (Invoke-Doctor -Import) 'OBSERVATIONS').code -ceq 'OBSERVATIONS_INVALID') 'invalid imported evidence accepted'

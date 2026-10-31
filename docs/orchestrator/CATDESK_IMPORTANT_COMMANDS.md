@@ -1,3 +1,9 @@
+## 2026-10-31T09:06:57.685252+00:00 - passive connector capability diagnostics
+
+The existing `catdesk.ps1 doctor -ObservationFile <local-redacted-report.json>` accepts `CONNECTOR_TOOL_DISCOVERY_UNVERIFIED` or `CONNECTOR_TASK_CALL_REPORTED_BLOCKED` in the CONNECTOR layer of its unchanged schemaVersion 1 observation document. Keep source `RETAINED_REPORT` or `OPERATOR_REPORTED`, the original `observedUtc`, and only `layer`/`code` in each observation. Reports remain advisory; extra status/facts are refused. Neither code performs a request, changes permissions, refreshes the connector, starts a service or authorizes task replay. A current Codex catalog cannot establish a different Web chat's catalog. The existing 17-layer human/JSON format remains intact.
+
+For metadata changes to a directly connected custom MCP server, the [official connection guide](https://developers.openai.com/plugins/deploy/connect-chatgpt) documents Refresh in its connection details followed by advertised-metadata verification and a new conversation test. This is guidance, not a performed action or a cure for the reported restriction. Do not replace/rebind an existing project conversation, start a backend, change authentication or resend an unknown task merely to follow it. Preserve all mandatory platform checks. Evidence: `docs/verification/CONNECTOR_CAPABILITY_DIAGNOSTICS_2026_10_31.json`.
+
 ## 2026-10-31T08:46:39.581462+00:00 - local receipt-only context reconciliation
 
 ```powershell
