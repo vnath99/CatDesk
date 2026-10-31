@@ -1,0 +1,214 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T00:40:15.283862+00:00",
+  "classification": "ACTUAL_SELECTED_DEVELOPMENT_THREE_REGISTERED_CONVERSATION_OBSERVATION_NOT_PROTECTED_PRODUCTION_OR_WEB_CODING",
+  "sourceCommit": "b25119e8c47cfe261aae06b461c3697e3841cdb6",
+  "branch": "codex/web-rollover-oct17",
+  "sourceRemoteShaVerifiedBeforeBuild": true,
+  "application": {
+    "sha256": "6e741010733bfbc284f633b36bbf04a7ef2192ebc46fc0fc0e433015620ed4b2",
+    "profile": "DEV_DEBUG",
+    "packageId": "1.0.0-dev.85-3b1153a3a307ce1f96f7396ef8c8bfb14376a8aba728e2e98141c1f127a9f3d9",
+    "previousVerifiedSha256": "2540934b5a64e16ccdc7106876ebffc92dfa1a66bcbe64ce3b824870495e5840",
+    "olderOptimizedVersionsRetained": true,
+    "protectedProductionChanged": false
+  },
+  "build": {
+    "elapsedSeconds": 34.797,
+    "exitCode": 0,
+    "pinnedFilesUnchanged": 137
+  },
+  "localBackendHealth": [
+    {
+      "maximumRuntimeSeconds": 15,
+      "actualSha256": "6e741010733bfbc284f633b36bbf04a7ef2192ebc46fc0fc0e433015620ed4b2",
+      "unauthorizedStatus": 401,
+      "initializeStatus": 200,
+      "catalogStatus": 200,
+      "registeredProjectsRead": true,
+      "ownerExitCode": 0,
+      "readersClosed": true,
+      "ownedTreeExitProved": true,
+      "endpointClosed": true
+    }
+  ],
+  "observations": [
+    {
+      "projectLabel": "registered-project-A",
+      "state": "EXACT_READY_IDLE",
+      "browserObservation": {
+        "assistant": "PRESENT",
+        "composer": "EMPTY",
+        "document": "COMPLETE",
+        "editor": "READY",
+        "exchange": "UNATTRIBUTED",
+        "generation": "IDLE",
+        "history": "PRESENT",
+        "recovery": "OBSERVATION_ONLY",
+        "route": "EXACT"
+      },
+      "tabObservation": {
+        "alternateRoute": false,
+        "candidateFrame": "TOP",
+        "candidateRoute": "EXACT",
+        "candidateShape": "STRING",
+        "controlledRoute": "EXACT",
+        "controlledShape": "STRING",
+        "metadataMatches": 1,
+        "schemaVersion": 1,
+        "stage": "VERIFIED",
+        "state": "TARGET_TAB_EXACT",
+        "tabCount": 1,
+        "unreadableMetadata": 0
+      },
+      "bindingPinned": true,
+      "ownedTreeExited": true
+    },
+    {
+      "projectLabel": "registered-project-B",
+      "state": "EXACT_DRAFT_PRESENT",
+      "browserObservation": {
+        "assistant": "PRESENT",
+        "composer": "DRAFT_PRESENT",
+        "document": "COMPLETE",
+        "editor": "READY",
+        "exchange": "UNATTRIBUTED",
+        "generation": "IDLE",
+        "history": "PRESENT",
+        "recovery": "OBSERVATION_ONLY",
+        "route": "EXACT"
+      },
+      "tabObservation": {
+        "alternateRoute": false,
+        "candidateFrame": "TOP",
+        "candidateRoute": "EXACT",
+        "candidateShape": "STRING",
+        "controlledRoute": "EXACT",
+        "controlledShape": "STRING",
+        "metadataMatches": 1,
+        "schemaVersion": 1,
+        "stage": "VERIFIED",
+        "state": "TARGET_TAB_EXACT",
+        "tabCount": 1,
+        "unreadableMetadata": 0
+      },
+      "bindingPinned": true,
+      "ownedTreeExited": true
+    },
+    {
+      "projectLabel": "registered-project-C",
+      "state": "EXACT_READY_IDLE",
+      "browserObservation": {
+        "assistant": "PRESENT",
+        "composer": "EMPTY",
+        "document": "COMPLETE",
+        "editor": "READY",
+        "exchange": "UNATTRIBUTED",
+        "generation": "IDLE",
+        "history": "PRESENT",
+        "recovery": "OBSERVATION_ONLY",
+        "route": "EXACT"
+      },
+      "tabObservation": {
+        "alternateRoute": false,
+        "candidateFrame": "TOP",
+        "candidateRoute": "EXACT",
+        "candidateShape": "STRING",
+        "controlledRoute": "EXACT",
+        "controlledShape": "STRING",
+        "metadataMatches": 1,
+        "schemaVersion": 1,
+        "stage": "VERIFIED",
+        "state": "TARGET_TAB_EXACT",
+        "tabCount": 1,
+        "unreadableMetadata": 0
+      },
+      "bindingPinned": true,
+      "ownedTreeExited": true
+    }
+  ],
+  "bounds": {
+    "firstWorkflowElapsedSeconds": 97.281,
+    "firstWorkflowMaximumSeconds": 170,
+    "twoProjectMatrixElapsedSeconds": 90.938,
+    "twoProjectMatrixMaximumSeconds": 240
+  },
+  "preservation": {
+    "criticalPinsUnchanged": 128,
+    "statePinsUnchanged": 200,
+    "previousPackageFilesUnchanged": 6,
+    "laterMatrixPinsUnchanged": 287,
+    "allFiveOriginalBindingsAndHistoriesPreserved": true,
+    "profileDirectoryIdentityPreserved": true,
+    "nonUsageConfigurationPreserved": true,
+    "draftUntouchedAndNotExported": true,
+    "messagesSent": 0,
+    "unknownOrCompletedRequestsReplayed": false,
+    "nativeTaskOrSessionCommandsInvoked": false,
+    "recurringOrTunnelOwnersStarted": false
+  },
+  "cleanup": {
+    "nativeProfileState": "PROFILE_QUIESCENT",
+    "observedUtc": "2026-10-31T00:39:19.965886+00:00",
+    "allOwnedTreesExited": true,
+    "allOwnersTimedOut": false,
+    "hostStopped": true,
+    "unrelatedBrowsersUntouched": true
+  },
+  "sourceTests": {
+    "newPathRegressionRedBeforeFix": true,
+    "developmentRuntimePassed": 48,
+    "rootAndWakeStrictAllTargetClippy": "PASS",
+    "diagnosticAndRecoveryMatrixReference": "BROWSER_RESPONSE_DIAGNOSTICS_2026_10_30.json",
+    "tabAndPrivacyProtocolTestsReference": "TAB_ROUTE_OBSERVATION_SOURCE_2026_10_31.json"
+  },
+  "chat51ComparisonReference": "BROWSER_RESPONSE_DIAGNOSTICS_2026_10_30.json",
+  "actualCorrections": [
+    "Shared readiness preflight now uses the existing Chrome-compatible Python/profile path conversion with exact object-identity equality",
+    "Previously observed Home/target drift was followed by exact ready conversation observations after this correction; no exclusive cause or authentication-loss claim",
+    "Missing or draft-blocked project observation does not stop subsequent registered project observation"
+  ],
+  "failureSpecificRecovery": {
+    "confirmedUserResentForAssistantFailure": false,
+    "genericLoadErrorRetry": "UNSUPPORTED_WITHOUT_UNIQUE_TASK_BOUND_ACTION",
+    "assistantOnlyRetry": "EXISTING_UNIQUE_MATCHED_DELIVERY_TIMEOUT_CARD_ONLY_SOURCE_QUALIFIED",
+    "historicalResponseAttributedToCurrentWake": false,
+    "currentAssistantBodyContentExported": false,
+    "originalLoadFailureReproducedInNewLiveObservation": false
+  },
+  "failedTestHarnessAttempt": {
+    "state": "MISSING_ENTRYPOINT_BEFORE_WORKFLOW_ENTRY",
+    "browserStarts": 0,
+    "projectWrites": 0,
+    "failedWrapperPreserved": true,
+    "correctedFreshWrapperCompleted": true
+  },
+  "acceptance": {
+    "autonomousExactConversationObservation": "PASS_REAL_SELECTED_DEVELOPMENT_THREE_PROJECTS",
+    "draftDetectionAndPreservation": "PASS_REAL_SELECTED_DEVELOPMENT",
+    "subsequentIndependentObservationDespiteDraft": "PASS_REAL_SELECTED_DEVELOPMENT",
+    "currentTaskAssistantLoadFailureAndRetry": "SOURCE_QUALIFIED_LIVE_OPEN",
+    "simultaneousWakesAndUnknownSuppression": "SOURCE_NATIVE_FIXTURES_ONLY",
+    "actualIndependentWakeDeliveryAndTwoWebCoding": "OPEN",
+    "newSourceProtectedProductionPromotion": "OPEN_REQUIRES_GENUINE_EXISTING_REVIEW_PRODUCER_AUTHORITY",
+    "normalUnattendedOperation": "OPEN"
+  },
+  "remainingDependenciesRecordedOnce": [
+    "Fresh task-bound review/delivery preflight and genuine independent response/ACK/snapshot/producer evidence for current source",
+    "Authenticated project-scoped Web tool ingress and useful two-conversation coding acceptance",
+    "Task-attributable failed assistant turn needed for live recovery qualification; historical unknown sends and drafts must not be replayed or cleared"
+  ],
+  "nextExecutableTask": "EXISTING_NO_SEND_TASK_SCOPED_REVIEW_DELIVERY_PREFLIGHT_ON_AN_ELIGIBLE_EMPTY_REGISTERED_CONVERSATION_THEN_ONLY_AUTHORIZED_UNIQUE_WORK",
+  "operatorActionRequired": false,
+  "goal": "ACTIVE",
+  "privateEvidenceSha256": {
+    "oct31-browser-path-debug-build-result.private.json": "f1059e6573b1b8ce64deda317eae6e1260dd335dcf73a0e9f28bfe46d229ceea",
+    "oct31-browser-path-debug-build-owner.private.json": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "oct31-browser-path-debug-live-result.private.json": "6d5c84e38796b1dfd43cf93ce59b799232c43275bf5d119d1ae2236ac078e6da",
+    "oct31-browser-path-debug-live-owner.private.json": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "oct31-browser-path-project-matrix-result.private.json": "4568f6cb67a3fbe6a9481eb4fd2b30ef234f0f274af9505ab5819c1f69e46709",
+    "oct31-browser-path-project-matrix-owner-corrected.private.json": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "oct31-profile-quiescence-browser-path-cleanup-result.private.json": "665827d45cf2633de3e96e8a1e3ad879bff029e14960969b29bf9f32676f0a58",
+    "oct31-profile-quiescence-browser-path-cleanup-owner.private.json": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84"
+  }
+}
