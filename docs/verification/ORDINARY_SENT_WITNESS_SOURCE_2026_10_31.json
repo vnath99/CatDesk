@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T09:47:31.752391+00:00",
+  "classification": "TESTED_SOURCE_FIX_FOR_LIVE_OBSERVED_ORDINARY_SENT_WITNESS_OMISSION",
+  "sourceBaseCommit": "0e220535f609c0da6f9d40608244af4ce6cf00c7",
+  "sourceFilesSha256": {
+    "wake/src/runtime_snapshot.rs": "0a31eda43974582497812a1601e98b94f68e16702984397c3911616a531902c5",
+    "wake/adapter.py": "a3cc9186668291c4176e3f50cf7f78bc2163e42254ef40efa603025651c96387",
+    "wake/tests/test_adapter.py": "cb326b788efa43c042ef287e647117e29b6c846f1755489a879875efcfc13f36"
+  },
+  "implementation": {
+    "ordinarySentWitness": "sentEvent",
+    "sourceReviewWitness": "reviewEvent",
+    "sameExistingReceiptTargetAndSequenceValidation": true,
+    "pendingUnknownStaleForeignOrMalformedWitnessRefused": true,
+    "bothProfilesRefusedBeforeBrowser": true,
+    "ordinaryUserMessageLimitBytes": 2048,
+    "genericSnapshotTextBudgetBytes": 8192,
+    "sourceReviewLargerProfileUnchangedAndTypeRestricted": true,
+    "ordinaryReadReturnsOnlyProvenCurrentPair": true,
+    "olderCapturedTaskContextsNotReturned": true,
+    "omittedHistoryAndReturnedCoverageRecomputed": true,
+    "olderAdapterWithoutSentCapabilityRefusedBeforeSpawn": true,
+    "newOwnerSchedulerOrSendPath": false
+  },
+  "tests": {
+    "distinctPassingCases": 54,
+    "newCases": 4,
+    "proofs": [
+      {
+        "kind": "nativeSnapshot",
+        "passed": 11,
+        "logSha256": "4043c28b0bdca13ec869dd9122cb3316cff07c01f72c4c3c154988deef54cbb1"
+      },
+      {
+        "kind": "adapter",
+        "passed": 43,
+        "logSha256": "cf5d33fa588e392d684e0da9ca1d59dda73c51afa5ac96c6f4ab219575fcfaaa"
+      }
+    ],
+    "failingRegressionPreserved": true,
+    "redLogSha256": "6c369fa8611c1108b5630234281d61f6a2ecd8bfa021b6d259dc90af9c078a4f",
+    "clippy": [
+      {
+        "scope": "root",
+        "allTargets": true,
+        "warningsDenied": true,
+        "logSha256": "6ab64beb1d3d0a72922a46740aa5cba17832088320a8662c9a134138fb845a36"
+      },
+      {
+        "scope": "wake",
+        "allTargets": true,
+        "warningsDenied": true,
+        "logSha256": "3c873e323b51baa8f2319f8f829dc52ca2683017989edd4d5cd6509479716ca0"
+      }
+    ],
+    "format": "PASS"
+  },
+  "preservation": {
+    "currentDerivedPinsUnchanged": 5114,
+    "priorBaselinesRetained": true,
+    "derivedBaselineIsReleaseAuthority": false,
+    "newProviderMessages": 0,
+    "browserWakeOrOfficialStartsDuringSourceQualification": 0,
+    "newProductionPromotion": false
+  },
+  "priorInstalledEvidence": "RECEIPT_TOOL_MARKER_INSTALLED_2026_10_31.json",
+  "acceptance": {
+    "source": "PASS",
+    "correctedInstalledRead": "OPEN",
+    "actualToolExecutionOrPlatformRestrictionCause": "UNESTABLISHED",
+    "fullNativeTwoWebCoding": "OPEN"
+  },
+  "nextExecutableTask": "BUILD_MATCHED_CORRECTED_DEVELOPMENT_PACKAGE_AND_BOUNDED_EXACT_RECEIPT_READ_NO_RESEND",
+  "operatorActionRequired": false,
+  "goal": "ACTIVE"
+}

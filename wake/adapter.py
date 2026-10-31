@@ -691,15 +691,17 @@ def bounded_source_snapshot(bridge, sink, cdp, *, timeout=10, clock=None, sleep=
 def source_snapshot(bridge, sb, request):
     """Read an exact idle source chat only on an explicit private request."""
     review = request.get("reviewEvent")
-    keys = {"snapshot", "projectId", "source"} | ({"reviewEvent"} if review is not None else set())
-    if set(request) != keys or request["snapshot"] is not True:
+    sent = request.get("sentEvent")
+    event = review if review is not None else sent
+    keys = {"snapshot", "projectId", "source"} | ({"reviewEvent"} if review is not None else set()) | ({"sentEvent"} if sent is not None else set())
+    if set(request) != keys or request["snapshot"] is not True or (review is not None and sent is not None):
         raise bridge.Attention("SOURCE_SNAPSHOT_REQUEST_INVALID")
-    if review is not None and (
-            not isinstance(review, dict) or set(review) != {"eventId", "message", "messageDigest"} or
-            not isinstance(review["eventId"], str) or not bridge.SAFE_ID.fullmatch(review["eventId"]) or
-            not isinstance(review["message"], str) or not 0 < len(review["message"].encode("utf-8")) <= 2048 or
-            bridge.normalize_message(review["message"]) != review["message"] or
-            review["messageDigest"] != bridge.digest(review["message"])):
+    if event is not None and (
+            not isinstance(event, dict) or set(event) != {"eventId", "message", "messageDigest"} or
+            not isinstance(event["eventId"], str) or not bridge.SAFE_ID.fullmatch(event["eventId"]) or
+            not isinstance(event["message"], str) or not 0 < len(event["message"].encode("utf-8")) <= 2048 or
+            bridge.normalize_message(event["message"]) != event["message"] or
+            event["messageDigest"] != bridge.digest(event["message"])):
         raise bridge.Attention("SOURCE_SNAPSHOT_REQUEST_INVALID")
     if not isinstance(request["projectId"], str) or not bridge.SAFE_ID.fullmatch(request["projectId"]):
         raise bridge.Attention("SOURCE_SNAPSHOT_REQUEST_INVALID")
@@ -718,9 +720,9 @@ def source_snapshot(bridge, sb, request):
     if not sink.exact(cdp.get_current_url()) or sink.readiness_reason(cdp) is not None:
         raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
     def require_review_turn():
-        if review is None:
+        if event is None:
             return
-        count, after = sink.trusted_turn_anchor_state(cdp, review["message"])
+        count, after = sink.trusted_turn_anchor_state(cdp, event["message"])
         if count == 0:
             raise bridge.Attention("SOURCE_REVIEW_USER_NOT_FOUND")
         if count > 1:
@@ -732,19 +734,33 @@ def source_snapshot(bridge, sb, request):
     require_review_turn()
     snapshot = bounded_source_snapshot(bridge, sink, cdp,
         max_message_bytes=32768 if review is not None else 8192, review_pair=review is not None)
-    if review is not None:
+    if event is not None:
         messages = snapshot["messages"]
-        if (len(messages) != 2 or [item["role"] for item in messages] != ["USER", "ASSISTANT"] or
-                not messages[0]["textComplete"] or
-                bridge.normalize_message(messages[0]["text"]) != review["message"]):
+        pair = messages[-2:]
+        if ((review is not None and len(messages) != 2) or len(pair) != 2 or
+                [item["role"] for item in pair] != ["USER", "ASSISTANT"] or
+                not pair[0]["textComplete"] or
+                bridge.normalize_message(pair[0]["text"]) != event["message"]):
             raise bridge.Attention("SOURCE_REVIEW_USER_WITNESS_REQUIRED")
+        if sent is not None and len(messages) > 2:
+            # This explicit read needs only the proven current pair. Do not
+            # return older task contexts/keys from the generic capture window.
+            coverage = dict(snapshot["coverage"], returned=2,
+                omittedBeforeWindow=max(0,snapshot["coverage"].get("visibleRoleCount",len(messages))-2))
+            for field, predicate in (
+                    ("identityMissing",lambda m:m.get("identityBasis")=="MISSING"),
+                    ("identityUncertain",lambda m:m.get("identityBasis")=="ROLE_TURN_ONLY"),
+                    ("revisionIncomplete",lambda m:not m.get("revisionComplete",False)),
+                    ("textIncomplete",lambda m:not m.get("textComplete",False))):
+                if field in coverage: coverage[field]=sum(predicate(m) for m in pair)
+            snapshot = dict(snapshot,messages=pair,coverage=coverage,truncated=True)
         require_review_turn()
         # Optional, closed UI telemetry from the same exact exchange. It is
         # neither an MCP execution receipt nor proof that an absent marker
         # means no tool was attempted. No labels, arguments or call IDs leave.
         tool_diagnostic = {}
         try:
-            sink.response_snapshot(cdp, review["message"], diagnostic={},
+            sink.response_snapshot(cdp, event["message"], diagnostic={},
                                    tool_diagnostic=tool_diagnostic)
         except Exception:
             tool_diagnostic = {}

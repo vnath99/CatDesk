@@ -338,6 +338,64 @@ class AdapterTests(unittest.TestCase):
                 self.assertFalse(cdp.sent)
                 self.assertEqual(cdp.keys,[])
 
+    def test_ordinary_sent_snapshot_keeps_small_budget_and_returns_only_proven_pair(self):
+        for body_state in ('complete','wrong-user','incomplete-user'):
+            with self.subTest(body_state=body_state):
+                cdp=FakeCdp();budgets=[]
+                class Sink:
+                    def __init__(self,url,*_): self.url,self.ui_timeout=url,1
+                    def exact(self,url): return url==self.url
+                    def wait_for_page_readiness(self,_sb,current): return current
+                    def wait_for_idle(self,*_): pass
+                    def readiness_reason(self,_): return None
+                    def trusted_turn_anchor_state(self,_,message): return (1,1)
+                    def visible_message_snapshot(self,_,*,max_message_bytes,review_pair=False):
+                        budgets.append((max_message_bytes,review_pair))
+                        return {'messages':[dict(role=role,text=text,textComplete=complete,revisionComplete=True,
+                            revisionHash='a'*64,identityBasis='UNIT_KEY') for role,text,complete in [
+                            ('USER','PRIVATE_PREDECESSOR_CONTEXT',True),('ASSISTANT','Old answer',True),
+                            ('USER','wrong user' if body_state=='wrong-user' else 'ordinary wake',body_state!='incomplete-user'),
+                            ('ASSISTANT','Current answer',True)]],'truncated':False,
+                            'coverage':{'visibleRoleCount':4,'returned':4,'identityMissing':0,'textIncomplete':0}}
+                    def response_snapshot(self,_,message,*,diagnostic,tool_diagnostic):
+                        if message!='ordinary wake': raise AssertionError('wrong witness')
+                        tool_diagnostic.update({'schemaVersion':1,'basis':'VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT',
+                            'scope':'EXACT_USER_EXCHANGE','selectorCoverage':'KNOWN_MARKERS_ONLY',
+                            'callMarkers':1,'resultMarkers':0,'errorMarkers':0,'busyMarkers':0,'countOverflow':False})
+                        return (0,0,True,True)
+                source={'url':cdp.url,'digest':bridge.digest(cdp.url),'generation':1}
+                request={'snapshot':True,'projectId':'alpha','source':source,'sentEvent':
+                    {'eventId':'sent-one','message':'ordinary wake','messageDigest':bridge.digest('ordinary wake')}}
+                with patch.object(bridge,'NewConversationSink',Sink), patch.object(adapter,'prepare_cdp_target',return_value=cdp), patch.object(adapter,'emit') as emitted:
+                    if body_state!='complete':
+                        with self.assertRaisesRegex(bridge.Attention,'SOURCE_REVIEW_USER_WITNESS_REQUIRED'):
+                            adapter.source_snapshot(bridge,object(),request)
+                        emitted.assert_not_called()
+                    else:
+                        adapter.source_snapshot(bridge,object(),request)
+                        value=emitted.call_args.args[0]['snapshot']
+                        self.assertEqual([m['text'] for m in value['messages']],['ordinary wake','Current answer'])
+                        self.assertEqual(value['coverage']['returned'],2)
+                        self.assertEqual(value['coverage']['omittedBeforeWindow'],2)
+                        self.assertTrue(value['truncated'])
+                        self.assertEqual(value['toolDiagnostics']['callMarkers'],1)
+                        self.assertNotIn('PRIVATE_PREDECESSOR',json.dumps(value))
+                self.assertTrue(budgets and all(value==(8192,False) for value in budgets))
+                self.assertFalse(cdp.sent);self.assertEqual(cdp.keys,[])
+
+    def test_ordinary_sent_snapshot_refuses_ambiguous_profiles_or_invalid_witness_before_browser(self):
+        source={'url':'https://chatgpt.com/c/exact','digest':bridge.digest('https://chatgpt.com/c/exact'),'generation':1}
+        witness={'eventId':'sent-one','message':'ordinary wake','messageDigest':bridge.digest('ordinary wake')}
+        for changed in ({'message':'x'*2049},{'messageDigest':'0'*64},{'eventId':'bad/id'}):
+            with patch.object(adapter,'prepare_cdp_target') as opened:
+                with self.assertRaisesRegex(bridge.Attention,'SOURCE_SNAPSHOT_REQUEST_INVALID'):
+                    adapter.source_snapshot(bridge,object(),{'snapshot':True,'projectId':'alpha','source':source,'sentEvent':witness|changed})
+                opened.assert_not_called()
+        with patch.object(adapter,'prepare_cdp_target') as opened:
+            with self.assertRaisesRegex(bridge.Attention,'SOURCE_SNAPSHOT_REQUEST_INVALID'):
+                adapter.source_snapshot(bridge,object(),{'snapshot':True,'projectId':'alpha','source':source,'sentEvent':witness,'reviewEvent':witness})
+            opened.assert_not_called()
+
     def test_sent_review_snapshot_rejects_changed_digest_before_browser(self):
         source={"url":"https://chatgpt.com/c/exact","digest":bridge.digest("https://chatgpt.com/c/exact"),"generation":1}
         with patch.object(adapter,"prepare_cdp_target") as opened:

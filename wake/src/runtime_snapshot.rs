@@ -180,13 +180,14 @@ fn snapshot(
                 .map_err(|_| "BROWSER_ADAPTER_UNAVAILABLE")?;
             let bridge_bytes = std::fs::read(installed.join("wake_bridge.py"))
                 .map_err(|_| "BROWSER_PRIMITIVES_UNAVAILABLE")?;
-            if !adapter_bytes
-                .windows(b"def source_snapshot(".len())
-                .any(|v| v == b"def source_snapshot(")
-                || !bridge_bytes
-                    .windows(b"roleTurnHash".len())
-                    .any(|v| v == b"roleTurnHash")
-            {
+            let needs_sent_event = if let Some(id) = delivered_review {
+                store
+                    .delivery(id)?
+                    .is_some_and(|d| d.event.event_type != "source_review")
+            } else {
+                false
+            };
+            if !supports_snapshot_profile(&adapter_bytes, &bridge_bytes, needs_sent_event) {
                 return Err("SOURCE_SNAPSHOT_INSTALLED_PACKAGE_UNSUPPORTED".into());
             }
             guard()?;
@@ -202,6 +203,19 @@ fn snapshot(
             )
         },
     )
+}
+
+fn supports_snapshot_profile(adapter: &[u8], bridge: &[u8], sent_event: bool) -> bool {
+    adapter
+        .windows(b"def source_snapshot(".len())
+        .any(|v| v == b"def source_snapshot(")
+        && bridge
+            .windows(b"roleTurnHash".len())
+            .any(|v| v == b"roleTurnHash")
+        && (!sent_event
+            || adapter
+                .windows(b"sentEvent".len())
+                .any(|v| v == b"sentEvent"))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -328,29 +342,34 @@ fn snapshot_request(
         let delivery = store
             .delivery(id)?
             .ok_or("SOURCE_REVIEW_RECEIPT_REQUIRED")?;
-        if delivery.event.event_type == "source_review" {
-            let receipt = delivery
-                .receipt
-                .as_ref()
-                .ok_or("SOURCE_REVIEW_RECEIPT_REQUIRED")?;
-            if delivery.phase != Phase::Sent
-                || delivery.target != *source
-                || delivery.event.project_id != project
-                || delivery.event.event_id != id
-                || delivery.event.target_generation != source.generation
-                || delivery.event.message.len() > 2048
-                || receipt.event_id != id
-                || receipt.target_generation != source.generation
-                || receipt.target_digest != source.digest
-                || receipt.evidence != "EXACT_USER_MESSAGE_APPENDED"
-                || receipt.message_digest != delivery.message_digest
-                || receipt.message_digest != crate::protocol::digest(&delivery.event.message)
-            {
-                return Err("SOURCE_REVIEW_RECEIPT_REQUIRED".into());
-            }
-            request["reviewEvent"] = serde_json::json!({"eventId":id,
-                "message":delivery.event.message,"messageDigest":delivery.message_digest});
+        let receipt = delivery
+            .receipt
+            .as_ref()
+            .ok_or("SOURCE_REVIEW_RECEIPT_REQUIRED")?;
+        if delivery.phase != Phase::Sent
+            || delivery.target != *source
+            || delivery.event.project_id != project
+            || delivery.event.event_id != id
+            || delivery.event.target_generation != source.generation
+            || delivery.event.message.len() > 2048
+            || receipt.event_id != id
+            || receipt.target_generation != source.generation
+            || receipt.target_digest != source.digest
+            || receipt.evidence != "EXACT_USER_MESSAGE_APPENDED"
+            || receipt.message_digest != delivery.message_digest
+            || receipt.message_digest != crate::protocol::digest(&delivery.event.message)
+        {
+            return Err("SOURCE_REVIEW_RECEIPT_REQUIRED".into());
         }
+        // Keep the large source-review profile restricted to that type.
+        // Ordinary SENT witnesses retain the generic 8 KiB snapshot cap.
+        let profile = if delivery.event.event_type == "source_review" {
+            "reviewEvent"
+        } else {
+            "sentEvent"
+        };
+        request[profile] = serde_json::json!({"eventId":id,
+                "message":delivery.event.message,"messageDigest":delivery.message_digest});
     }
     Ok(request)
 }
@@ -422,6 +441,67 @@ mod tests {
             cleanup_budget: Rc::new(Cell::new(Duration::ZERO)),
             consume_cleanup_budget: false,
         }
+    }
+
+    #[test]
+    fn ordinary_sent_profile_refuses_old_adapter_before_browser_start() {
+        let old = b"def source_snapshot(bridge,sb,request): reviewEvent";
+        let new = b"def source_snapshot(bridge,sb,request): sentEvent reviewEvent";
+        assert!(supports_snapshot_profile(old, b"roleTurnHash", false));
+        assert!(!supports_snapshot_profile(old, b"roleTurnHash", true));
+        assert!(supports_snapshot_profile(new, b"roleTurnHash", true));
+        assert!(!supports_snapshot_profile(new, b"missing", true));
+    }
+
+    #[test]
+    fn ordinary_sent_snapshot_forwards_witness_without_enabling_large_review_profile() {
+        let (store, target) = fixture();
+        let event = store
+            .produce_expected(
+                "ordinary-pair",
+                "alpha",
+                "engineering_attention",
+                "Continue the assigned fixture",
+                &target,
+            )
+            .unwrap();
+        let lease = store.host_lock().unwrap();
+        store.claim(&event, &lease).unwrap();
+        assert!(snapshot_request(&store, "alpha", &target, Some(&event.event_id)).is_err());
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        let receipt = crate::store::Receipt {
+            schema_version: 1,
+            event_id: event.event_id.clone(),
+            target_generation: target.generation,
+            target_digest: target.digest.clone(),
+            message_digest: crate::protocol::digest(&event.message),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Sent,
+                Some(receipt),
+                None,
+            )
+            .unwrap();
+        let request = snapshot_request(&store, "alpha", &target, Some(&event.event_id)).unwrap();
+        assert_eq!(request["sentEvent"]["message"], event.message);
+        assert!(request.get("reviewEvent").is_none() && request.get("submit").is_none());
+        assert_eq!(
+            snapshot_request(&store, "other", &target, Some(&event.event_id)).unwrap_err(),
+            "SOURCE_REVIEW_RECEIPT_REQUIRED"
+        );
     }
 
     #[test]
