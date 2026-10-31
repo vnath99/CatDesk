@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "observedUtc": "2026-10-31T02:16:19.384247+00:00",
-  "classification": "TESTED_SOURCE_PENDING_REASON_WITH_ACTUAL_PRIOR_HYDRATION_QUALIFICATION",
+  "observedUtc": "2026-10-31T02:25:16.053959+00:00",
+  "classification": "ACTUAL_SELECTED_DEVELOPMENT_PASSIVE_RESPONSE_DIAGNOSTIC_QUALIFIED",
   "sourceBaseCommit": "194983f0360c1a3c9bfd4837cfe5a3751ecc1e6b",
   "tests": {
     "currentDom": {
-      "passed": 46,
-      "logSha256": "d92689ef8ee48cc3092dbb12365eca430df416781cbe045969a95d07977662e6"
+      "passed": 47,
+      "logSha256": "250804c02f633a3a969f6309f4c5fb80152122b928f55834554d94ea5cbec7e5"
     },
     "adapter": {
       "passed": 37,
-      "logSha256": "bcff4df181dacddf5ddee6480ad0fb6bfa068bac545b9eb358d16e3d15a9e464"
+      "logSha256": "5b626e3538925031c8916947c8f6b6830900cd1a3525d9aed797f3bc6fcb4e58"
     },
     "bridgeResponse": {
       "passed": 16,
@@ -33,7 +33,7 @@
       "logSha256": "36ad04c48b742c3bd3c8a89cda93b94f404e89a6d08b0cdbf5da32e52ddc5f64"
     }
   },
-  "distinctPassingTests": 578,
+  "distinctPassingTests": 579,
   "implementation": {
     "newOwnerOrScheduler": false,
     "sameReceiptObservationAndCasPreserved": true,
@@ -74,11 +74,88 @@
     "producerStarted": false,
     "messagesResent": 0
   },
-  "sourceDiagnosticInstalled": false,
+  "sourceDiagnosticInstalled": true,
   "newSourceProtectedProductionAcceptance": false,
   "twoChatWebCodingAcceptance": "OPEN",
   "broadBridgeSuite": "STOPPED_FOR_RUNTIME_BOUND_NOT_A_PASS; diagnostic trace found existing real idle-settle waits;16 focused response cases passed",
-  "nextExecutableTask": "BUILD_AND_QUALIFY_THIS_SOURCE_THEN_ONE_RECEIPT_BOUND_READONLY_OBSERVATION; NEVER_RESEND",
+  "nextExecutableTask": "QUALIFY_MINIMAL_ASSISTANT_UNIT_ROLE_CORRECTION_THEN_ONE_EXISTING_RECEIPT_OBSERVATION_NO_RESEND",
   "operatorActionRequired": false,
-  "goal": "ACTIVE"
+  "goal": "ACTIVE",
+  "actualSelectedDevelopment": {
+    "sourceCommit": "54423e65292299471b7b58f8f15f9b066a2e5ed0",
+    "candidateSha256": "21f68ab7893be20767e7c635bc539d70be2aff09aa739b7a3a43c2988cd9291e",
+    "previousSha256": "42e9991ed99dd20ddb0adb07cb2f49772a3baa7879aa1f6226f485d86f09fadd",
+    "selectedPackageId": "1.0.0-dev.85-8be8767d735ab08064669db7577fe63e60706be447b5332c1dbf3d1b0c082448",
+    "elapsedSeconds": 123.046,
+    "reobserveExitCode": 0,
+    "hostStopped": true,
+    "previousVerifiedRetained": true,
+    "criticalPinsChecked": 5069,
+    "criticalMismatchCount": 0,
+    "previousFilesChecked": 7,
+    "previousMismatchCount": 0,
+    "observedResponseState": "PENDING",
+    "diagnosticReason": "ASSISTANT_COMPLETION_ACTION_UNPROVEN",
+    "timerCompleted": false,
+    "transportClosed": false,
+    "responseTimerState": "OBSERVING",
+    "health": [
+      {
+        "label": "installed-debug-health",
+        "maximumRuntimeSeconds": 15,
+        "expectedSha256": "21f68ab7893be20767e7c635bc539d70be2aff09aa739b7a3a43c2988cd9291e",
+        "actualSha256": "21f68ab7893be20767e7c635bc539d70be2aff09aa739b7a3a43c2988cd9291e",
+        "recovery": "CURRENT_PACKAGE_VERIFIED",
+        "packageId": "1.0.0-dev.85-8be8767d735ab08064669db7577fe63e60706be447b5332c1dbf3d1b0c082448",
+        "unauthorizedStatus": 401,
+        "initializeStatus": 200,
+        "catalogStatus": 200,
+        "toolCount": 79,
+        "registeredProjectsRead": true,
+        "ownerExitCode": 0,
+        "readersClosed": true,
+        "ownedTreeExitProved": true,
+        "endpointClosed": true,
+        "observedUtc": "2026-10-31T02:19:44.070256+00:00"
+      }
+    ]
+  },
+  "preservation": {
+    "timerStartedUtcPreserved": true,
+    "otherLedgerRecordsPreserved": true,
+    "allGrantsPreserved": true,
+    "adapterLogPrefixPreserved": true,
+    "profileIdentityPreserved": true,
+    "nonUsageConfigurationPreserved": true,
+    "messagesSent": 0,
+    "productionChanged": false,
+    "recurringOrTunnelOwnerStarts": 0,
+    "nativeTaskOrSessionCommandsInvoked": false
+  },
+  "cleanup": {
+    "state": "PROFILE_QUIESCENT",
+    "observedUtc": "2026-10-31T02:22:13.431277+00:00",
+    "testOwnedRemaining": 0
+  },
+  "privateEvidenceSha256": {
+    "oct31-response-layer-debug-build-result.private.json": "8dcf11b432841ba8f7ddb8b29708c74fb90eaf79e3fa9394cb353d97d73221e3",
+    "oct31-response-layer-debug-live-v2-result.private.json": "0eed4976bb75440ebf28457fb4f945d9c136bde7394a67f3a397df8de8500c09",
+    "oct31-response-layer-debug-live-v2-owner.private.json": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "oct31-profile-quiescence-response-layer-cleanup-result.private.json": "b049f019df1e28f0628e6033b1939c510cc39340e200d6f8073a691a9ac00cea"
+  },
+  "auxiliaryUnitCorrection": {
+    "classification": "RED_GREEN_SOURCE_QUALIFIED_NOT_YET_INSTALLED",
+    "sourceBaseCommit": "54423e65292299471b7b58f8f15f9b066a2e5ed0",
+    "redFailures": 2,
+    "redLogSha256": "ac066f7167c4adda7b0817ca8e29eae12e2065a8c68d4783a87d02cf21184adf",
+    "currentDomTests": 47,
+    "greenDomLogSha256": "250804c02f633a3a969f6309f4c5fb80152122b928f55834554d94ea5cbec7e5",
+    "adapterTests": 37,
+    "greenAdapterLogSha256": "5b626e3538925031c8916947c8f6b6830900cd1a3525d9aed797f3bc6fcb4e58",
+    "requireExplicitAssistantRole": true,
+    "sharedToolbarExcludesAllSearchUnits": true,
+    "realInstalledPendingCauseEstablished": false,
+    "acceptNonAssistantCopy": false,
+    "retryReloadOrSendAdded": false
+  }
 }

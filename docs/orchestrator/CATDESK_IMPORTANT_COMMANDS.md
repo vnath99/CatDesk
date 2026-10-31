@@ -1,3 +1,7 @@
+## 2026-10-31 — actual development diagnostic qualification
+
+Source54423e6 is now selected/live-qualified in the isolated development package. The existing receipt-only reobserve reported PENDING/ASSISTANT_COMPLETION_ACTION_UNPROVEN; no new USER message or generic recovery action was issued. Protected production remains unchanged. Native final inventory is PROFILE_QUIESCENT. The source diagnostic vocabulary below is live-qualified for this actual outcome; the complete failure matrix remains separately source-tested. Evidence: `docs/verification/PASSIVE_RESPONSE_DIAGNOSTICS_2026_10_31.json`.
+
 ## 2026-10-31 — receipt observation diagnostics
 
 The existing `operator web review reobserve --project-id <registered-id> --event-id <already-sent-event>` remains a stopped-host, bounded read-only operation. New source returns optional closed `observation.diagnosticReason` on PENDING: DOCUMENT_LOADING, GENERATION_ACTIVE, EDITOR_NOT_READY, ASSISTANT_NOT_MOUNTED, ASSISTANT_BODY_UNPROVEN or ASSISTANT_COMPLETION_ACTION_UNPROVEN. It records the same reason in the existing response-reobserve journal without renewing or completing the timer. COMPLETE still requires the original receipt and full completion witness. Older five-field witnesses remain compatible. No sender, navigation, generic Retry or Regenerate is added. Source tests pass; current-source live qualification remains separate. Prior selected source194983f reached PENDING safely with backend health and cleanup verified. See `docs/verification/PASSIVE_RESPONSE_DIAGNOSTICS_2026_10_31.json`.

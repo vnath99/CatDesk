@@ -132,6 +132,13 @@ if (options.userTimeoutQuote) {
   append(user.children[0], button('Retry'));
 }
 const children = options.userOnly ? [user] : [user, assistant];
+if (options.auxiliaryUnit) {
+  const auxiliary = el('div', {'data-content-search-unit-key':'tool-status'}, '', [
+    el('div', {'data-markdown-text-style':'assistant-message'}, 'Tool status only'),
+    el('div', {class:'turn-action-controls'}, '', [button('Copy')]),
+  ]);
+  children.splice(options.auxiliaryUnit === 'before' ? 1 : children.length, 0, auxiliary);
+}
 if (options.duplicateUser) children.splice(1, 0, user.cloneNode());
 for (const control of options.submitControls || []) children.push(el('button', {
   'aria-label':control.label, type:control.type, disabled:control.disabled || false
@@ -621,6 +628,16 @@ class CurrentDomTests(unittest.TestCase):
     def test_user_and_code_block_copy_cannot_complete_response(self):
         self.assertEqual(self.sink.response_snapshot(CurrentDom(toolbar=False, userCopy="Copy"),
                          "exact wake message", require_usable_body=True), (0, 0, True, False))
+
+    def test_auxiliary_search_unit_is_neither_assistant_nor_completion_authority(self):
+        for where in ['before', 'after']:
+            with self.subTest(where=where):
+                cdp = CurrentDom(auxiliaryUnit=where)
+                self.assertEqual(self.sink.response_snapshot(cdp, "exact wake message",
+                    require_usable_body=True), (0, 0, True, True))
+        cdp = CurrentDom(auxiliaryUnit='after', userOnly=True, toolbar=False)
+        self.assertEqual(self.sink.response_snapshot(cdp, "exact wake message",
+            require_usable_body=True), (0, 0, False, False))
 
     def test_ambiguous_toolbar_or_assistant_cannot_complete_response(self):
         for options in ({"duplicateToolbar": True}, {"extraAssistant": True}):

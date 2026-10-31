@@ -1281,6 +1281,7 @@ class CdpSink:
             )).filter(element => inWakeExchange(element));
             const pairedAssistantUnits = pairedTurn
                 ? Array.from(latestUser.querySelectorAll("[data-content-search-unit-key]")).filter(unit =>
+                    Boolean(unit.querySelector('h4[data-conversation-role="assistant"]')) &&
                     !unit.matches("[data-user-message-bubble], [class~='group/user-message']") &&
                     !unit.querySelector("[data-user-message-bubble], [class~='group/user-message']"))
                 : [];
@@ -1364,6 +1365,10 @@ class CdpSink:
                 const actions = Array.from(latestUser.querySelectorAll(
                     ".turn-action-controls button[aria-label='Copy']"
                 )).filter(button => !button.closest(userNodeSelector) &&
+                    // Auxiliary tool/search units can have their own Copy.
+                    // Only the shared assistant toolbar outside every message
+                    // unit qualifies here; in-unit actions use the path above.
+                    !button.closest('[data-content-search-unit-key]') &&
                     !pairedAssistantUnits[0].contains(button) &&
                     Boolean(pairedAssistantUnits[0].compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING));
                 if (actions.length === 1) assistantCompletionAction = actions[0];
