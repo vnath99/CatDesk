@@ -16,16 +16,73 @@ fn apply_observation(store: &Store, delivery: &Delivery, value: &Value) -> Resul
     Ok(complete)
 }
 
+fn valid_completion_controls(value: &Value) -> bool {
+    const COUNTS: &[&str] = &[
+        "semanticAssistantUnits",
+        "roleAssistantNodes",
+        "copyTestIdInTurn",
+        "copyLabelInTurn",
+        "copyResponseLabelInTurn",
+        "copyMessageLabelInTurn",
+        "copyTextInTurn",
+        "knownCopyInAssistant",
+        "knownCopyInBody",
+        "sharedCopyAfterAssistant",
+        "toolbarContainersInTurn",
+        "buttonsInTurn",
+        "copyTestIdInParent",
+        "copyLabelInParent",
+        "copyResponseLabelInParent",
+        "copyMessageLabelInParent",
+    ];
+    const FLAGS: &[&str] = &[
+        "pairedTurn",
+        "assistantBodyPresent",
+        "completionActionFound",
+        "assistantInsideSemanticUnit",
+    ];
+    value
+        .as_object()
+        .is_some_and(|map| map.len() == COUNTS.len() + FLAGS.len())
+        && COUNTS.iter().all(|key| {
+            value
+                .get(key)
+                .and_then(Value::as_u64)
+                .is_some_and(|n| n <= 64)
+        })
+        && FLAGS
+            .iter()
+            .all(|key| value.get(key).and_then(Value::as_bool).is_some())
+}
+
 pub(crate) fn validate_observation(delivery: &Delivery, value: &Value) -> Result<bool> {
     let receipt = delivery
         .receipt
         .as_ref()
         .ok_or("RESPONSE_PROBE_RECEIPT_REQUIRED")?;
     let stage = value.get("stage").and_then(Value::as_str);
+    let controls_valid = value.get("completionControls").is_none_or(|controls| {
+        value.get("diagnosticReason").is_some()
+            && valid_completion_controls(controls)
+            && (stage != Some("RESPONSE_COMPLETE")
+                || (controls
+                    .get("assistantBodyPresent")
+                    .and_then(Value::as_bool)
+                    == Some(true)
+                    && controls
+                        .get("completionActionFound")
+                        .and_then(Value::as_bool)
+                        == Some(true)))
+    });
+    let expected_fields = 5 + usize::from(value.get("completionControls").is_some());
     let diagnostic_valid = match value.get("diagnosticReason") {
-        None => value.as_object().is_some_and(|map| map.len() == 5),
+        None => value
+            .as_object()
+            .is_some_and(|map| map.len() == expected_fields),
         Some(reason) => {
-            value.as_object().is_some_and(|map| map.len() == 6)
+            value
+                .as_object()
+                .is_some_and(|map| map.len() == expected_fields + 1)
                 && match stage {
                     Some("RESPONSE_COMPLETE") => reason.as_str() == Some("COMPLETE"),
                     Some("RESPONSE_PENDING") => matches!(
@@ -46,6 +103,7 @@ pub(crate) fn validate_observation(delivery: &Delivery, value: &Value) -> Result
     if delivery.phase != Phase::Sent
         || !matches!(stage, Some("RESPONSE_PENDING" | "RESPONSE_COMPLETE"))
         || !diagnostic_valid
+        || !controls_valid
         || value.get("eventId").and_then(Value::as_str) != Some(delivery.event.event_id.as_str())
         || value.get("targetGeneration").and_then(Value::as_u64) != Some(delivery.target.generation)
         || value.get("targetDigest").and_then(Value::as_str)
@@ -292,6 +350,58 @@ mod tests {
             )
             .unwrap_err(),
             "RESPONSE_PROBE_TARGET_CHANGED"
+        );
+        assert_eq!(
+            store.timer("alpha-1").unwrap().unwrap().response_state,
+            ResponseState::Observing
+        );
+    }
+
+    #[test]
+    fn completion_control_metadata_is_closed_capped_scoped_and_not_completion_authority() {
+        let (store, lease) = fixture("probe-control-shape");
+        let delivery = sent(&store, &lease, "alpha-1");
+        let controls = json!({"semanticAssistantUnits":1,"roleAssistantNodes":0,
+            "copyTestIdInTurn":0,"copyLabelInTurn":1,"copyResponseLabelInTurn":0,
+            "copyMessageLabelInTurn":0,"copyTextInTurn":1,"knownCopyInAssistant":0,
+            "knownCopyInBody":0,"sharedCopyAfterAssistant":0,"toolbarContainersInTurn":0,
+            "buttonsInTurn":1,"copyTestIdInParent":1,"copyLabelInParent":1,
+            "copyResponseLabelInParent":0,"copyMessageLabelInParent":0,
+            "pairedTurn":true,"assistantBodyPresent":true,"completionActionFound":false,
+            "assistantInsideSemanticUnit":true});
+        let mut value = observation(&delivery, "RESPONSE_PENDING");
+        value["diagnosticReason"] = json!("ASSISTANT_COMPLETION_ACTION_UNPROVEN");
+        value["completionControls"] = controls.clone();
+        assert!(!apply_observation(&store, &delivery, &value).unwrap());
+        for (field, bad) in [
+            ("copyLabelInTurn", json!(65)),
+            ("copyLabelInTurn", json!(-1)),
+            ("copyLabelInTurn", json!(true)),
+            ("copyLabelInTurn", json!("private text")),
+            ("pairedTurn", json!(1)),
+            ("extra", json!("private draft")),
+        ] {
+            let mut invalid = value.clone();
+            invalid["completionControls"][field] = bad;
+            assert_eq!(
+                apply_observation(&store, &delivery, &invalid).unwrap_err(),
+                "RESPONSE_PROBE_SCOPE_INVALID"
+            );
+        }
+        let mut no_reason = value.clone();
+        no_reason
+            .as_object_mut()
+            .unwrap()
+            .remove("diagnosticReason");
+        assert_eq!(
+            apply_observation(&store, &delivery, &no_reason).unwrap_err(),
+            "RESPONSE_PROBE_SCOPE_INVALID"
+        );
+        value["stage"] = json!("RESPONSE_COMPLETE");
+        value["diagnosticReason"] = json!("COMPLETE");
+        assert_eq!(
+            apply_observation(&store, &delivery, &value).unwrap_err(),
+            "RESPONSE_PROBE_SCOPE_INVALID"
         );
         assert_eq!(
             store.timer("alpha-1").unwrap().unwrap().response_state,

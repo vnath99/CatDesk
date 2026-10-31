@@ -132,6 +132,8 @@ if (options.userTimeoutQuote) {
   append(user.children[0], button('Retry'));
 }
 const children = options.userOnly ? [user] : [user, assistant];
+for (let i = 0; i < (options.diagnosticExtraButtons || 0); i++)
+  children.push(button(options.diagnosticButtonLabel || 'Unrelated control'));
 if (options.auxiliaryUnit) {
   const auxiliary = el('div', {'data-content-search-unit-key':'tool-status'}, '', [
     el('div', {'data-markdown-text-style':'assistant-message'}, 'Tool status only'),
@@ -628,6 +630,47 @@ class CurrentDomTests(unittest.TestCase):
     def test_user_and_code_block_copy_cannot_complete_response(self):
         self.assertEqual(self.sink.response_snapshot(CurrentDom(toolbar=False, userCopy="Copy"),
                          "exact wake message", require_usable_body=True), (0, 0, True, False))
+
+    def test_completion_control_shape_is_closed_content_free_and_advisory(self):
+        for options, complete, shared in [({}, True, 1), ({"toolbar":False}, False, 0),
+                ({"duplicateToolbar":True}, False, 2)]:
+            with self.subTest(options=options):
+                diagnostic = {}
+                result = self.sink.response_snapshot(CurrentDom(answer="PRIVATE_ANSWER_MARKER", **options),
+                    "exact wake message", require_usable_body=True, diagnostic=diagnostic)
+                controls = diagnostic["controls"]
+                self.assertTrue(bridge.valid_response_control_diagnostics(controls))
+                self.assertEqual(controls["semanticAssistantUnits"], 1)
+                self.assertEqual(controls["knownCopyInBody"], 1)
+                self.assertEqual(controls["sharedCopyAfterAssistant"], shared)
+                self.assertEqual(controls["assistantBodyPresent"], True)
+                self.assertEqual(controls["completionActionFound"], complete)
+                self.assertEqual(result[3], complete)
+                self.assertNotIn("PRIVATE_", json.dumps(diagnostic))
+                self.assertLess(len(json.dumps(diagnostic)), 1500)
+        self.sink.observe_cooperative_response(CurrentDom(observationEditor=True),
+            "exact wake message", bridge.digest("exact wake message"))
+        self.assertIsNotNone(self.sink.response_observation_controls)
+        self.sink.observe_cooperative_response(CurrentDom(observationEditor=True, observationStop=True),
+            "exact wake message", bridge.digest("exact wake message"))
+        self.assertIsNone(self.sink.response_observation_controls)
+        diagnostic = {}
+        self.sink.response_snapshot(CurrentDom(diagnosticExtraButtons=100,
+            diagnosticButtonLabel='PRIVATE_CONTROL_LABEL'), 'exact wake message',
+            require_usable_body=True, diagnostic=diagnostic)
+        self.assertEqual(diagnostic['controls']['buttonsInTurn'], 64)
+        self.assertNotIn('PRIVATE_CONTROL_LABEL', json.dumps(diagnostic))
+
+    def test_completion_control_shape_rejects_text_unknown_keys_types_and_unbounded_counts(self):
+        diagnostic = {}
+        self.sink.response_snapshot(CurrentDom(), "exact wake message", require_usable_body=True,
+            diagnostic=diagnostic)
+        valid = diagnostic["controls"]
+        for field, bad in [("copyTextInTurn", "PRIVATE_LABEL"), ("copyTextInTurn", True),
+                ("copyTextInTurn", -1), ("copyTextInTurn", 65), ("pairedTurn", 1),
+                ("extra", "PRIVATE_DRAFT")]:
+            with self.subTest(field=field, bad=bad):
+                self.assertFalse(bridge.valid_response_control_diagnostics(valid | {field:bad}))
 
     def test_auxiliary_search_unit_is_neither_assistant_nor_completion_authority(self):
         for where in ['before', 'after']:

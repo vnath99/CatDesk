@@ -98,6 +98,9 @@ where
         if let Some(reason) = witness.get("diagnosticReason") {
             result["diagnosticReason"] = reason.clone();
         }
+        if let Some(controls) = witness.get("completionControls") {
+            result["completionControls"] = controls.clone();
+        }
         Ok(result)
     })();
     if let Err(reason) = result.as_ref() {
@@ -239,6 +242,14 @@ mod tests {
             |current, _, _| {
                 let mut value = witness(current, "RESPONSE_PENDING");
                 value["diagnosticReason"] = json!("ASSISTANT_COMPLETION_ACTION_UNPROVEN");
+                value["completionControls"] = json!({"semanticAssistantUnits":1,"roleAssistantNodes":0,
+                    "copyTestIdInTurn":0,"copyLabelInTurn":0,"copyResponseLabelInTurn":1,
+                    "copyMessageLabelInTurn":0,"copyTextInTurn":0,"knownCopyInAssistant":0,
+                    "knownCopyInBody":0,"sharedCopyAfterAssistant":0,"toolbarContainersInTurn":1,
+                    "buttonsInTurn":1,"copyTestIdInParent":0,"copyLabelInParent":0,
+                    "copyResponseLabelInParent":1,"copyMessageLabelInParent":0,
+                    "pairedTurn":true,"assistantBodyPresent":true,"completionActionFound":false,
+                    "assistantInsideSemanticUnit":true});
                 Ok(value)
             },
         )
@@ -249,6 +260,7 @@ mod tests {
             "ASSISTANT_COMPLETION_ACTION_UNPROVEN"
         );
         assert_eq!(timer_bytes(&store), before);
+        assert_eq!(result["completionControls"]["copyResponseLabelInTurn"], 1);
         let outcomes: Vec<Value> = std::fs::read_dir(store.root().join("logs"))
             .unwrap()
             .filter_map(|entry| entry.ok())
@@ -268,6 +280,10 @@ mod tests {
         assert_eq!(
             outcomes[0]["witness"]["diagnosticReason"],
             result["diagnosticReason"]
+        );
+        assert_eq!(
+            outcomes[0]["witness"]["completionControls"],
+            result["completionControls"]
         );
     }
 

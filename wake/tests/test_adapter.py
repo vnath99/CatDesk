@@ -796,6 +796,33 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual([(frame["eventId"], frame["diagnosticReason"]) for frame in terminal],
             [("alpha", "ASSISTANT_BODY_UNPROVEN"), ("beta", "COMPLETE")])
 
+    def test_completion_control_metadata_is_scoped_and_invalid_metadata_cannot_emit(self):
+        controls = dict.fromkeys(bridge.RESPONSE_CONTROL_COUNTS, 0)
+        controls.update(dict.fromkeys(bridge.RESPONSE_CONTROL_FLAGS, False))
+        controls['assistantBodyPresent'] = True
+        class Diagnosed(FakeProbeSink):
+            def observe_cooperative_response(self, cdp, message, expected_digest):
+                self.response_observation_reason = 'ASSISTANT_COMPLETION_ACTION_UNPROVEN'
+                self.response_observation_controls = cdp.controls
+                return super().observe_cooperative_response(cdp, message, expected_digest)
+        frames = []
+        with patch.object(bridge, 'CdpSink', Diagnosed), patch.object(adapter, 'emit', frames.append), \
+                patch.object(adapter.time, 'sleep'), patch.object(adapter.time, 'monotonic', side_effect=range(1000)):
+            for event_id, shape in [('invalid', controls | {'label':'PRIVATE_DRAFT'}), ('valid', controls)]:
+                cdp = FakeCdp(); cdp.probe_stage = 'RESPONSE_PENDING'; cdp.controls = shape
+                sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
+                if event_id == 'invalid':
+                    with self.assertRaisesRegex(bridge.Attention, 'RESPONSE_PROBE_DIAGNOSTIC_INVALID'):
+                        adapter.observe_response(bridge, sb, self.probe_request(event_id=event_id))
+                else:
+                    adapter.observe_response(bridge, sb, self.probe_request(event_id=event_id))
+                self.assertFalse(cdp.sent); self.assertEqual(cdp.keys, [])
+        terminal = [frame for frame in frames if 'completionControls' in frame]
+        self.assertEqual(len(terminal), 1)
+        self.assertEqual(terminal[0]['eventId'], 'valid')
+        self.assertEqual(terminal[0]['completionControls'], controls)
+        self.assertNotIn('PRIVATE_DRAFT', json.dumps(terminal))
+
     def test_probe_rejects_boolean_generation_and_schema_before_browser_open(self):
         class NoBrowser:
             @property

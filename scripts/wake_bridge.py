@@ -86,6 +86,26 @@ RESPONSE_RETRY_START_WINDOW_SECONDS = 15.0
 RESPONSE_GENERATION_WINDOW_SECONDS = 35.0 * 60.0
 RESPONSE_TOTAL_WINDOW_SECONDS = 90.0 * 60.0
 RESPONSE_MAX_RETRIES = 3
+RESPONSE_CONTROL_COUNTS = (
+    "semanticAssistantUnits", "roleAssistantNodes", "copyTestIdInTurn",
+    "copyLabelInTurn", "copyResponseLabelInTurn", "copyMessageLabelInTurn",
+    "copyTextInTurn", "knownCopyInAssistant", "knownCopyInBody",
+    "sharedCopyAfterAssistant", "toolbarContainersInTurn", "buttonsInTurn",
+    "copyTestIdInParent", "copyLabelInParent", "copyResponseLabelInParent",
+    "copyMessageLabelInParent",
+)
+RESPONSE_CONTROL_FLAGS = (
+    "pairedTurn", "assistantBodyPresent", "completionActionFound", "assistantInsideSemanticUnit",
+)
+
+
+def valid_response_control_diagnostics(value: Any) -> bool:
+    """Closed, capped DOM-shape metadata; never text or action authority."""
+    return (isinstance(value, dict) and set(value) == set(RESPONSE_CONTROL_COUNTS + RESPONSE_CONTROL_FLAGS)
+            and all(type(value[key]) is int and 0 <= value[key] <= 64 for key in RESPONSE_CONTROL_COUNTS)
+            and all(type(value[key]) is bool for key in RESPONSE_CONTROL_FLAGS))
+
+
 RESPONSE_LOAD_ERROR_DETECTOR = """
 const assistantLoadError = element => {
     if (!element || typeof element.cloneNode !== 'function') return false;
@@ -1393,13 +1413,51 @@ class CdpSink:
                 !latestAssistant ? 'ASSISTANT_NOT_MOUNTED' :
                 !assistantBodyText.length ? 'ASSISTANT_BODY_UNPROVEN' :
                 !assistantCompletionAction ? 'ASSISTANT_COMPLETION_ACTION_UNPROVEN' : 'COMPLETE');
+            if (includeDiagnostic) {{
+                // Fixed categories only: no labels, attributes, DOM ids or text
+                // leave this read. Parent counts are advisory and can include
+                // historical controls; they never qualify an assistant action.
+                const count = (scope, selector) => Math.min(scope ? scope.querySelectorAll(selector).length : 0, 64);
+                const knownCopySelector = "button[data-testid='copy-turn-action-button'], .turn-action-controls button[aria-label='Copy']";
+                const turn = pairedTurn ? latestUser : latestAssistantTurn;
+                const parent = turn && turn.parentElement;
+                const shared = turn && latestAssistant ? Array.from(turn.querySelectorAll(
+                    ".turn-action-controls button[aria-label='Copy']"
+                )).filter(button => !button.closest(userNodeSelector) &&
+                    !button.closest('[data-content-search-unit-key]') &&
+                    Boolean(latestAssistant.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING)) : [];
+                result.push({{
+                    semanticAssistantUnits: Math.min(pairedAssistantUnits.length, 64),
+                    roleAssistantNodes: Math.min(roleAssistants.length, 64),
+                    copyTestIdInTurn: count(turn, "button[data-testid='copy-turn-action-button']"),
+                    copyLabelInTurn: count(turn, "button[aria-label='Copy']"),
+                    copyResponseLabelInTurn: count(turn, "button[aria-label='Copy response']"),
+                    copyMessageLabelInTurn: count(turn, "button[aria-label='Copy message']"),
+                    copyTextInTurn: Math.min(turn ? Array.from(turn.querySelectorAll('button')).filter(button =>
+                        normalize(button.innerText || button.textContent) === 'Copy').length : 0, 64),
+                    knownCopyInAssistant: count(latestAssistant, knownCopySelector),
+                    knownCopyInBody: count(bodyNode, knownCopySelector),
+                    sharedCopyAfterAssistant: Math.min(shared.length, 64),
+                    toolbarContainersInTurn: count(turn, ".turn-action-controls, [role='toolbar']"),
+                    buttonsInTurn: count(turn, 'button'),
+                    copyTestIdInParent: count(parent, "button[data-testid='copy-turn-action-button']"),
+                    copyLabelInParent: count(parent, "button[aria-label='Copy']"),
+                    copyResponseLabelInParent: count(parent, "button[aria-label='Copy response']"),
+                    copyMessageLabelInParent: count(parent, "button[aria-label='Copy message']"),
+                    pairedTurn,
+                    assistantBodyPresent: assistantBodyText.length > 0,
+                    completionActionFound: Boolean(assistantCompletionAction),
+                    assistantInsideSemanticUnit: Boolean(latestAssistant && pairedAssistantUnits.some(unit =>
+                        unit === latestAssistant || unit.contains(latestAssistant))),
+                }});
+            }}
             return result;
         }})()"""
         try:
             value = self.cdp_value(cdp.evaluate(script))
         except Exception as error:
             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED") from error
-        if (not isinstance(value, list) or len(value) not in {5, 6} or
+        if (not isinstance(value, list) or len(value) not in {5, 7} or
                 value[0] not in {"ready", "missing-user", "invalid", "load-error"} or
                 not isinstance(value[1], int) or isinstance(value[1], bool) or
                 not isinstance(value[2], int) or isinstance(value[2], bool) or
@@ -1413,9 +1471,11 @@ class CdpSink:
         if diagnostic is not None:
             allowed = {"ASSISTANT_NOT_MOUNTED", "ASSISTANT_BODY_UNPROVEN",
                        "ASSISTANT_COMPLETION_ACTION_UNPROVEN", "COMPLETE"}
-            if len(value) != 6 or not isinstance(value[5], str) or value[5] not in allowed:
+            if (len(value) != 7 or not isinstance(value[5], str) or value[5] not in allowed or
+                    not valid_response_control_diagnostics(value[6])):
                 raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
             diagnostic["reason"] = value[5]
+            diagnostic["controls"] = value[6]
         elif len(value) != 5:
             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
         return value[1], value[2], value[3], value[4]
@@ -1429,6 +1489,7 @@ class CdpSink:
         # Local to this receipt-bound sink; never shared across projects. Only
         # fixed structural reasons leave the browser, never text or selectors.
         self.response_observation_reason = None
+        self.response_observation_controls = None
         try:
             current = str(cdp.get_current_url())
         except Exception as error:
@@ -1484,6 +1545,7 @@ class CdpSink:
         if timeout_count:
             raise Attention("RESPONSE_TIMEOUT_RETRY_REQUIRED")
         self.response_observation_reason = diagnostic.get("reason")
+        self.response_observation_controls = diagnostic.get("controls")
         return "RESPONSE_COMPLETE" if assistant_after_user and completed else "RESPONSE_PENDING"
 
     def click_response_timeout_retry(self, cdp: Any, message: str) -> None:

@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T02:38:01.223517+00:00",
+  "classification": "TESTED_SOURCE_COMPLETION_CONTROL_SHAPE_NOT_YET_INSTALLED",
+  "sourceBaseCommit": "c0808c009c64bb488628a7c0627aec75cd7145c6",
+  "tests": {
+    "dom": {
+      "passed": 49,
+      "logSha256": "8fe2a58ffeb7514a32024d4a6250c47f61bc7bc2ede5775fdc4df8885462f6ef"
+    },
+    "adapter": {
+      "passed": 38,
+      "logSha256": "128bbbf0bc6b4a679797f0ebe90e329963046dbf1111166f9fb62242ca29782d"
+    },
+    "wakeLibrary": {
+      "passed": 480,
+      "logSha256": "d5d04efb569794e220e9b45d2289b4d1c030dc8f7f90ae729d59588f79c914c8"
+    },
+    "bridgeResponse": {
+      "passed": 16,
+      "logSha256": "50a13a5a85bf660fb9959093d47e0ba7d62a936bbc2faf23f2f1aa8c287f9a30"
+    },
+    "rootClippy": {
+      "allTargets": true,
+      "warningsDenied": true,
+      "passed": true,
+      "logSha256": "70640b252c3d1fd0bedd7af4a3fca0fc8982bf6bcb1fb6e5e566bdc1cf1a6d41"
+    },
+    "wakeClippy": {
+      "allTargets": true,
+      "warningsDenied": true,
+      "passed": true,
+      "logSha256": "f197614480c028a36763b95628b1ebb85f057eeaa5a06d768f3e358675284a7b"
+    }
+  },
+  "distinctPassingTests": 583,
+  "implementation": {
+    "fixedCountFields": 16,
+    "fixedBooleanFields": 4,
+    "countMinimum": 0,
+    "countMaximum": 64,
+    "rawButtonLabelsOrDomIdsOrAttributesExported": false,
+    "draftOrConversationBodyExported": false,
+    "sameReceiptBoundDomRead": true,
+    "sameNativeOwnerAndCas": true,
+    "oldFiveAndSixFieldWitnessesSupported": true,
+    "newSevenFieldWitnessRequiresClosedDiagnosticAndControlSchema": true,
+    "contradictoryCompleteMetadataRefused": true,
+    "pendingMetadataReturnedAndJournaledWithoutChangingTimer": true,
+    "parentCountsAreHistoricalAdvisoryOnly": true,
+    "newSubmissionRetryReloadOrRegenerate": false,
+    "newOwnerOrScheduler": false
+  },
+  "privacyCapFocusedTests": {
+    "passed": 2,
+    "overlapsFullDomSuite": true,
+    "logSha256": "f0635bb11dc8d2b63669b74d3c01b2624fa080751fc57a144183f2f297a68d90"
+  },
+  "priorActualSelectedDevelopment": {
+    "sourceCommit": "5609ac29a1f4c23a03abc4ccb4dcf1f5414956a4",
+    "appSha256": "730a5683b0d5fc5b61542e480fc13f6cab1fae558fdcb2d82effc0949dec0086",
+    "responseState": "PENDING",
+    "reason": "ASSISTANT_COMPLETION_ACTION_UNPROVEN",
+    "hostStopped": true
+  },
+  "newSourceLiveQualified": false,
+  "productionChanged": false,
+  "messagesSent": 0,
+  "originalReviewVerdict": "INCONCLUSIVE",
+  "newPromotionAuthority": false,
+  "twoChatWebCoding": "OPEN",
+  "operatorActionRequired": false,
+  "nextExecutableTask": "BUILD_AND_QUALIFY_THIS_METADATA_CHANGE_THEN_ONE_READONLY_EXISTING_SENT_RECEIPT_OBSERVATION_NO_RESEND",
+  "goal": "ACTIVE"
+}

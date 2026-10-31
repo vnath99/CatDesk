@@ -971,6 +971,13 @@ def observe_response(bridge, sb, request):
         if not isinstance(reason, str) or (reason not in pending if stage == "RESPONSE_PENDING" else reason != "COMPLETE"):
             raise bridge.Attention("RESPONSE_PROBE_DIAGNOSTIC_INVALID")
         frame["diagnosticReason"] = reason
+    controls = getattr(sink, "response_observation_controls", None)
+    if controls is not None:
+        if (reason is None or not bridge.valid_response_control_diagnostics(controls) or
+                (stage == "RESPONSE_COMPLETE" and
+                 not (controls["assistantBodyPresent"] and controls["completionActionFound"]))):
+            raise bridge.Attention("RESPONSE_PROBE_DIAGNOSTIC_INVALID")
+        frame["completionControls"] = controls
     emit(frame)
 
 
