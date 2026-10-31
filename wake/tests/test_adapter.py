@@ -96,6 +96,17 @@ class FakeProbeSink:
 
 
 class AdapterTests(unittest.TestCase):
+    def test_private_context_retains_ordinary_frame_bound_while_only_bootstrap_uses_large_frames(self):
+        request = {"cooperative": True, "event": {"message": "x" * 9000}, "target": {}}
+        wire = (json.dumps(request) + "\n").encode()
+        with patch.object(sys, "stdin", types.SimpleNamespace(buffer=io.BytesIO(wire))):
+            with self.assertRaisesRegex(ValueError, "invalid job request"):
+                adapter.read_job_request()
+        request["bootstrap"] = True
+        wire = (json.dumps(request) + "\n").encode()
+        with patch.object(sys, "stdin", types.SimpleNamespace(buffer=io.BytesIO(wire))):
+            self.assertEqual(adapter.read_job_request(), request)
+
     def test_submission_diagnosis_classifies_without_text_or_browser_writes(self):
         expected = "frozen review request"
         for actual, legacy, classification in ((expected, "frozen  review request", "EXACT"),

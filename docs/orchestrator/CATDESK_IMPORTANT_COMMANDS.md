@@ -1,3 +1,7 @@
+## 2026-10-31T07:16:36.469869+00:00 - initial context frame compatibility and completed delivery
+
+Ordinary initial-task context requests must fit 8,192 serialized UTF-8 bytes including JSON escaping and the terminating LF, for both Submit and read-only Reconcile. Source validates this before preparation writes and browser startup, returning TASK_CONTEXT_REQUEST_TOO_LARGE without enlarging adapter/bootstrap permissions. The separate commit 90030ce controller already delivered one independently checked 4,469-byte frozen context and recorded SENT. Do not resend it. Only a separate existing-grant continuation is next; its 600-second TTL begins when queued, so prepare the bounded runtime window first. USER delivery does not establish assistant acknowledgment or actual project tool use. The new admission correction is source-qualified; it does not replace the selected browser package or production executable.
+
 ## 2026-10-31T06:36:53.834197+00:00 - private initial task-context commands (SOURCE-QUALIFIED ONLY)
 
 Use a qualified separate controller built from this feature's published commit. The retained installed C254 and source6993 selected development executable do not implement these commands. Existing runtime selection, browser authentication, project/Wake bindings and native sessions remain unchanged.

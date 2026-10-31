@@ -181,6 +181,7 @@ fn load(
     {
         return Err("WEB_TASK_CONTEXT_SCOPE_CHANGED".into());
     }
+    validate_wire(&reference, &payload.message)?;
     authorize(scope, record, &payload)?;
     Ok((reference, payload, root))
 }
@@ -210,6 +211,21 @@ fn authorize(
             .ok_or("WEB_TASK_GRANT_REQUIRED")?,
     )?;
     Ok(())
+}
+fn validate_wire(reference: &Reference, message: &str) -> Result<(), String> {
+    let event_id = format!("task-context-{}", reference.storage_id);
+    let mut request = TaskContextSubmission {
+        project_id: &reference.project_id,
+        event_id: &event_id,
+        target: &reference.target,
+        message,
+        operation: TaskContextOperation::Submit,
+        maximum_seconds: 120,
+    };
+    request.validate()?;
+    // Leave room for the existing read-only reconciliation flag as well.
+    request.operation = TaskContextOperation::Reconcile;
+    request.validate()
 }
 fn state(root: &Path, reference: &Reference) -> Result<State, String> {
     let value: State =
@@ -352,6 +368,7 @@ pub(crate) fn prepare_initial_context(
                 .join(" "),
         ),
     };
+    validate_wire(&reference, &payload.message)?;
     let root = private_root(scope, &reference, true)?;
     exact_file(&root.join("initial-payload.json"), &bytes)?;
     let value = State {

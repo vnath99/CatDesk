@@ -19,6 +19,13 @@ pub struct TaskContextSubmission<'a> {
     pub operation: TaskContextOperation,
     pub maximum_seconds: u64,
 }
+impl TaskContextSubmission<'_> {
+    /// Validate the unchanged installed adapter's ordinary request bound before
+    /// freezing a private payload or starting any browser process.
+    pub fn validate(&self) -> Result<()> {
+        checked_wire(self).map(|_| ())
+    }
+}
 
 /// The caller must durably fence this exact task/payload before entering this
 /// function and persist SUBMITTING in before_submit before it returns success.
@@ -47,13 +54,7 @@ pub fn run_private_task_context(
     )
 }
 
-fn run_with_adapter<A: SubmissionAdapter>(
-    store: &Store,
-    request: &TaskContextSubmission<'_>,
-    before_submit: &mut dyn FnMut() -> Result<()>,
-    keep_running: &dyn Fn() -> Result<()>,
-    connect: impl FnOnce(Instant, &dyn Fn() -> Result<()>) -> Result<A>,
-) -> Result<Receipt> {
+fn checked_wire(request: &TaskContextSubmission<'_>) -> Result<(Value, String)> {
     let TaskContextSubmission {
         project_id,
         event_id,
@@ -86,10 +87,29 @@ fn run_with_adapter<A: SubmissionAdapter>(
         .map_err(|_| "TASK_CONTEXT_ARGUMENTS_INVALID")?
         .len()
         + 1
-        > 32 * 1024
+        > 8192
     {
-        return Err("TASK_CONTEXT_ARGUMENTS_INVALID".into());
+        return Err("TASK_CONTEXT_REQUEST_TOO_LARGE".into());
     }
+    Ok((wire, message_digest))
+}
+
+fn run_with_adapter<A: SubmissionAdapter>(
+    store: &Store,
+    request: &TaskContextSubmission<'_>,
+    before_submit: &mut dyn FnMut() -> Result<()>,
+    keep_running: &dyn Fn() -> Result<()>,
+    connect: impl FnOnce(Instant, &dyn Fn() -> Result<()>) -> Result<A>,
+) -> Result<Receipt> {
+    let (wire, message_digest) = checked_wire(request)?;
+    let TaskContextSubmission {
+        project_id,
+        event_id,
+        target,
+        operation,
+        maximum_seconds,
+        ..
+    } = *request;
     let deadline = Instant::now() + Duration::from_secs(maximum_seconds);
     let guard = || {
         if Instant::now() >= deadline {
@@ -614,6 +634,42 @@ mod tests {
             "TASK_CONTEXT_TIMEOUT"
         );
         assert!(sent.borrow().is_empty());
+    }
+    #[test]
+    fn context_normal_frame_refuses_large_handoff_before_browser_start() {
+        let (store, target) = fixture("context-ordinary-frame");
+        let large = "x".repeat(8192);
+        let mut request = request(&target);
+        request.message = &large;
+        assert_eq!(
+            request.validate().unwrap_err(),
+            "TASK_CONTEXT_REQUEST_TOO_LARGE"
+        );
+        assert_eq!(
+            run_with_adapter::<Fake>(
+                &store,
+                &request,
+                &mut || panic!(),
+                &|| Ok(()),
+                |_, _| panic!("oversized frame cannot start browser")
+            )
+            .unwrap_err(),
+            "TASK_CONTEXT_REQUEST_TOO_LARGE"
+        );
+    }
+    #[test]
+    fn context_frame_bound_counts_json_escaping_instead_of_plain_message_length() {
+        let (_, target) = fixture("context-escaped-frame");
+        let mut request = request(&target);
+        let plain = "x".repeat(4096);
+        request.message = &plain;
+        request.validate().unwrap();
+        let escaped = "\"".repeat(4096);
+        request.message = &escaped;
+        assert_eq!(
+            request.validate().unwrap_err(),
+            "TASK_CONTEXT_REQUEST_TOO_LARGE"
+        );
     }
     #[test]
     fn context_bounds_and_target_drift_refuse_before_adapter_start() {
