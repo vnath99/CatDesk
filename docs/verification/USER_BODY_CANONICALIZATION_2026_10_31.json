@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T02:57:39.704967+00:00",
+  "classification": "RED_GREEN_SHARED_USER_BODY_SOURCE_NOT_YET_INSTALLED",
+  "sourceBaseCommit": "51c7b1324bf05968c448a3991940c958c3110551",
+  "tests": {
+    "dom": {
+      "passed": 54,
+      "logSha256": "8ac98cefc456590745660d988607576bedc71c78467fcb9b0028faefcbf318bd"
+    },
+    "adapter": {
+      "passed": 38,
+      "logSha256": "4191140c1b7891d340e2a0d063f6e2a580efc6fe8486dad07571c661b1b5e48c"
+    },
+    "bridgeResponse": {
+      "passed": 16,
+      "logSha256": "0dd9a44383b3be2a1ddbde92209c5ad6af86bf75c6449bc2214cca49301e43ed"
+    }
+  },
+  "retainedUnchangedNativeTests": 480,
+  "distinctPassingTestsWithUnchangedNative": 588,
+  "focusedUpdatedAssertionsPassed": 1,
+  "focusedTestOverlapsDomSuite": true,
+  "focusedLogSha256": "3a671b71beca05f62181364c1f263e5b525a68004de9470437e9bef850da4552",
+  "redFailures": 2,
+  "redLogSha256": "04f6c2570606ec86d38f9f591514e0ef86ec750f15152744275643477a5150c6",
+  "implementation": {
+    "samePlaintextExtractorAsComposer": true,
+    "receiptAndPrivateSnapshotShareUserBodyReader": true,
+    "knownBodySelfMatchSupported": true,
+    "presentationControlsRemovedOnlyFromDetachedClone": true,
+    "authoredLiteralTextAndParagraphBoundariesPreserved": true,
+    "unknownBodyFallbackRemainsUnproven": true,
+    "exactDigestDuplicateLatestTurnRouteAndUnknownOutcomeGuardsUnchanged": true,
+    "scopeAnchorAloneCannotAuthorizeCompletion": true,
+    "newWaitRetryReloadClickOrUserSubmit": false,
+    "newOwnerOrScheduler": false,
+    "rawNewConversationOrDraftExport": false
+  },
+  "precedingSelectedLive": {
+    "sourceCommit": "51c7b1324bf05968c448a3991940c958c3110551",
+    "appSha256": "501de7c479cc99367bc4ee4ace03817c5bd28274c056f454a38547c26f6b5018",
+    "reason": "RESPONSE_USER_REPRESENTATION_MISMATCH",
+    "elapsedSeconds": 120.797,
+    "timerAndLedgerPreserved": true,
+    "criticalPinsUnchanged": 5069,
+    "previousFilesUnchanged": 7,
+    "userMessagesSent": 0,
+    "hostStopped": true,
+    "profileState": "PROFILE_QUIESCENT",
+    "assistantCompletionPredicateReached": false
+  },
+  "liveCauseEstablished": false,
+  "newSourceLiveQualified": false,
+  "sourceAccepted": false,
+  "producerStarted": false,
+  "productionChanged": false,
+  "operatorActionRequired": false,
+  "nextExecutableTask": "BUILD_AND_QUALIFY_THIS_READER_THEN_ONE_EXISTING_RECEIPT_ONLY_OBSERVATION",
+  "goal": "ACTIVE"
+}

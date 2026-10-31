@@ -43,6 +43,16 @@ const composerText = root => {
     return text.endsWith('\n') ? text.slice(0, -1) : text;
 };
 """
+USER_BODY_TEXT_READER = COMPOSER_TEXT_READER + r"""
+const userBodyText = content => {
+    // Only detach presentation controls from a copy of a known USER body.
+    // Preserve authored text and paragraph/BR boundaries; never edit the DOM.
+    const copy = content.cloneNode(true);
+    copy.querySelectorAll('button, [role="button"], [role="toolbar"], [aria-hidden="true"]')
+        .forEach(control => control.remove());
+    return composerText(copy);
+};
+"""
 EDITOR_SELECTORS = (
     "#prompt-textarea",
     "div.ProseMirror[contenteditable='true']",
@@ -807,6 +817,7 @@ class CdpSink:
         # some current surfaces; hash the dedicated message-content node when
         # present so those controls cannot change the receipt digest.
         script = """(() => {
+            __CATDESK_USER_BODY_READER__
             const roleUsers = Array.from(document.querySelectorAll(\"[data-message-author-role='user'], article[data-turn='user']:not(:has([data-message-author-role='user']))\"));
             const bubbles = Array.from(document.querySelectorAll('[data-user-message-bubble]'));
             const classUsers = Array.from(document.querySelectorAll("[class~='group/user-message']"));
@@ -835,10 +846,11 @@ class CdpSink:
             const containers = semanticUsers.length ? semanticUsers : roleUsers.length ? roleUsers :
                 bubbles.length ? bubbles : classUsers.length ? classUsers : fallbackUsers;
             return containers.map(container => {
-            const content = container.querySelector(\"[data-message-content], [data-markdown-text-tone='user-message'], .whitespace-pre-wrap\") || container;
-            return content.innerText || content.textContent || '';
+            const contentSelector = "[data-message-content], [data-markdown-text-tone='user-message'], .whitespace-pre-wrap";
+            const content = container.matches(contentSelector) ? container : container.querySelector(contentSelector);
+            return content ? userBodyText(content) : (container.innerText || container.textContent || '');
             });
-        })()"""
+        })()""".replace("__CATDESK_USER_BODY_READER__", USER_BODY_TEXT_READER)
         try:
             return CdpSink.bounded_cdp_strings(cdp.evaluate(script))
         except Exception as error:
@@ -2901,6 +2913,7 @@ class NewConversationSink(CdpSink):
             raise ValueError("unsupported private snapshot message budget")
         script = """(() => {
             const messageLimit = __CATDESK_SNAPSHOT_MESSAGE_BYTES__;
+            __CATDESK_USER_BODY_READER__
             const reviewPair = __CATDESK_REVIEW_PAIR__;
             const visible = element => {
                 const style = window.getComputedStyle(element);
@@ -2969,10 +2982,14 @@ class NewConversationSink(CdpSink):
                 const completeBody = Boolean(content && visible(content));
                 let text = '';
                 if (completeBody) {
-                    const bodyCopy = content.cloneNode(true);
-                    bodyCopy.querySelectorAll('button, [role="button"], [role="toolbar"], [aria-hidden="true"]')
-                        .forEach(control => control.remove());
-                    text = String(bodyCopy.textContent || '');
+                    if (role(node) === 'user') {
+                        text = userBodyText(content);
+                    } else {
+                        const bodyCopy = content.cloneNode(true);
+                        bodyCopy.querySelectorAll('button, [role="button"], [role="toolbar"], [aria-hidden="true"]')
+                            .forEach(control => control.remove());
+                        text = String(bodyCopy.textContent || '');
+                    }
                 } else {
                     // Retain only a bounded diagnostic excerpt for a missing
                     // body. It must never be counted as complete answer text.
@@ -2999,7 +3016,8 @@ class NewConversationSink(CdpSink):
             const unique = rows.filter(row => row !== null);
             return [tier, Math.min(unique.length, 1024), unique.length > 1024,
                 Math.min(nested.size, 1024), Math.min(keyedCollapsed, 1024), unique.slice(-__CATDESK_SNAPSHOT_ROWS__)];
-        })()""".replace("__CATDESK_SNAPSHOT_MESSAGE_BYTES__", str(max_message_bytes)).replace(
+        })()""".replace("__CATDESK_USER_BODY_READER__", USER_BODY_TEXT_READER).replace(
+            "__CATDESK_SNAPSHOT_MESSAGE_BYTES__", str(max_message_bytes)).replace(
             "__CATDESK_SNAPSHOT_ROWS__", "2" if review_pair else "16").replace(
             "__CATDESK_REVIEW_PAIR__", "true" if review_pair else "false")
         try:

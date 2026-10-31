@@ -114,6 +114,19 @@ if (options.nestedUserMarkers) {
   }
 }
 if (options.userShowMore) user.children[0].children.push(el('span', {}, '…'), button('Show more'));
+if (options.userControlsInsideBody)
+  append(user.children[0].children[0], button('PRIVATE_CONTROL_LABEL'));
+if (options.userParagraphs) {
+  const body = user.children[0].children[0];
+  body.text = ''; body.children = [el('p', {}, 'first paragraph'), el('p', {}, 'second paragraph')];
+}
+if (options.userBodyIsUnit) {
+  user.text = user.children[0].children[0].text;
+  user.attrs['data-markdown-text-tone'] = 'user-message';
+  user.attrs['data-user-message-bubble'] = 'true';
+  user.children = [user.children[0].children[1]];
+  user.children[0].parentElement = user;
+}
 const answer = options.loadError ? "This response couldn’t load" : (options.answer ?? 'A useful answer');
 const assistant = el('div', {'data-content-search-unit-key':'fallback-turn-0:2:assistant'}, '', [
   el('h4', {'data-conversation-role':'assistant'}, 'ChatGPT said:'),
@@ -576,6 +589,32 @@ class CurrentDomTests(unittest.TestCase):
         self.assertTrue(observed["textComplete"])
         self.assertEqual(bridge.digest(bridge.normalize_message(observed["text"])),
                          self.sink.user_message_digests(cdp)[0])
+
+    def test_user_body_readers_exclude_controls_even_when_unit_is_the_body(self):
+        for options in [dict(userControlsInsideBody=True), dict(userBodyIsUnit=True)]:
+            with self.subTest(options=options):
+                cdp = CurrentDom(**options)
+                self.assertEqual(self.sink.user_message_digests(cdp), [bridge.digest('exact wake message')])
+                message = self.sink.visible_message_snapshot(cdp)['messages'][0]
+                self.assertEqual(message['text'], 'exact wake message')
+                self.assertNotIn('PRIVATE_CONTROL_LABEL', message['text'])
+                self.assertEqual(self.sink.observe_cooperative_response(
+                    CurrentDom(observationEditor=True, **options), 'exact wake message',
+                    bridge.digest('exact wake message')), 'RESPONSE_COMPLETE')
+        literal = CurrentDom(userText='Copy message', userControlsInsideBody=True)
+        self.assertEqual(self.sink.user_message_digests(literal), [bridge.digest('Copy message')])
+        with self.assertRaisesRegex(bridge.Attention, 'RESPONSE_USER_REPRESENTATION_MISMATCH'), \
+                patch.object(self.sink, 'response_snapshot', side_effect=AssertionError('must refuse before assistant')):
+            self.sink.observe_cooperative_response(CurrentDom(userText='unrelated',
+                userControlsInsideBody=True, observationEditor=True), 'PRIVATE_CONTROL_LABEL',
+                bridge.digest('PRIVATE_CONTROL_LABEL'))
+
+    def test_user_paragraph_boundaries_match_receipts_and_private_snapshots(self):
+        cdp = CurrentDom(userParagraphs=True)
+        expected = bridge.digest(bridge.normalize_message('first paragraph\n\nsecond paragraph'))
+        self.assertEqual(self.sink.user_message_digests(cdp), [expected])
+        snapshot = self.sink.visible_message_snapshot(cdp)['messages'][0]
+        self.assertEqual(bridge.digest(bridge.normalize_message(snapshot['text'])), expected)
 
     def test_new_chat_plain_send_requires_submit_type_and_unique_enabled_control(self):
         send = {"label":"Send", "type":"submit"}

@@ -1,3 +1,11 @@
+## 2026-10-31 - USER receipt representation guard
+
+Selected source51c7b13 passed backend health but receipt-only reobserve refused RESPONSE_USER_REPRESENTATION_MISMATCH before assistant completion. Its Copy message predicate is not live-accepted. The shared USER plaintext-reader correction is source-tested only; no exact receipt or unknown-outcome protection was relaxed. Do not resend the existing event or ask for a screenshot to override this guard. Next is qualified package observation of the corrected reader. See `docs/verification/USER_BODY_CANONICALIZATION_2026_10_31.json`.
+
+## 2026-10-31 - selected completion-control metadata qualified
+
+Source51c7b13 is live-qualified in the selected development package. Existing receipt-only reobserve returned REFUSED/RESPONSE_USER_REPRESENTATION_MISMATCH and closed `observation.completionControls` metadata; no new browser action or sender was added. Protected production and current source acceptance are separate. Final native profile state is QUIESCENT. Evidence: `docs/verification/COMPLETION_CONTROL_OBSERVATION_2026_10_31.json`.
+
 ## 2026-10-31 - selected completion-control metadata qualified
 
 Source878631e is live-qualified in the selected development package. Existing receipt-only reobserve returned PENDING/ASSISTANT_COMPLETION_ACTION_UNPROVEN and closed `observation.completionControls` metadata; no new browser action or sender was added. Protected production and current source acceptance are separate. Final native profile state is QUIESCENT. Evidence: `docs/verification/COMPLETION_CONTROL_OBSERVATION_2026_10_31.json`.
