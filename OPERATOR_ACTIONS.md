@@ -1,3 +1,7 @@
+## 2026-10-31T08:35:56.125565+00:00 - existing blocker now visible in the durable work report
+
+The previously verified assistant-reported safety restriction is now projected through the existing work-ledger report API. The request remains OPEN with reported state blocked; ownership, grant and receipt history remain intact. It is coordinator-reported metadata, not task completion or an independently verified platform rejection. No new operator decision or repeated Web request is requested. Source/outcome evidence: `docs/verification/COORDINATOR_BLOCKED_REPORT_2026_10_31.json`. Continue independent receipt accounting; do not replay the unestablished operation or switch transport to evade its reported restriction.
+
 ## 2026-10-31 - actual continuation verified; reported platform restriction held without replay
 
 The corrected central-control owner is now live-qualified with trusted installed C254. Three finite windows passed local authentication checks and each received an actual connector-status response; no HTTP 429 was observed. The existing profile delivered one exact task continuation, and a separate receipt-bound read verified its current assistant response. No new screenshot, login, browser profile, tunnel or source-review approval is requested.
