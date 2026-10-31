@@ -1852,7 +1852,9 @@ class WakeBridgeTests(unittest.TestCase):
         self.assertIn("if (tierTurns.some(turn => classifyTurn(turn)[0]))", anchor.script)
         self.assertIn("turns = tierTurns;", anchor.script)
         self.assertNotIn("const rawTurns =", anchor.script)
-        self.assertIn("isUserTurn && !isAssistantTurn && text.includes(expected)", anchor.script)
+        self.assertIn("if (!isUserTurn || isAssistantTurn) return;", anchor.script)
+        self.assertIn("normalize(userBodyText(content || turn))", anchor.script)
+        self.assertIn("if (text === expected) matches.push(index);", anchor.script)
         self.assertNotIn("if (text.includes(expected)) matches.push(index);", anchor.script)
 
         class ResponseCdp:

@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T04:03:53.327170+00:00",
+  "classification": "CANONICAL_TURN_ANCHOR_SOURCE_QUALIFIED_LIVE_READER_STILL_UNVERIFIED",
+  "sourceBaseCommit": "0250f816f2941ead049056537d3d11f82850c9b1",
+  "sourceFilesSha256": {
+    "scripts/wake_bridge.py": "78fc068d83fa19aa2f1d96316943b52157510a5993d141929335da6aeadfa078",
+    "wake/adapter.py": "f0abd1309afbb4132ba01b951bbcbd31ae7da87edf8054081db89f6f3c4a6727",
+    "wake/src/runtime_snapshot.rs": "1137465254a28c3108616c66fbdc99f7ef7ea1763284bc22ca5ce8d3425e1ead",
+    "tests/test_wake_bridge.py": "e0ab20b2dbc33009446567bf28cf9434036541bd6ff4ef397cef34aac8a00bb8",
+    "tests/test_wake_bridge_current_dom.py": "f8399602340d7ee2653e79e919a2abd30121d6d42bcb79dd0e8603303a86abb4",
+    "wake/tests/test_adapter.py": "883959fc5953c14ed2fc80457a5e5a4643f140200471fc560d4241f193f640ac"
+  },
+  "tests": {
+    "currentDom": {
+      "passed": 56,
+      "logSha256": "6e28f00c29ec89ba6345c6048e97febd43021139449cce534ff6599da5add786"
+    },
+    "adapter": {
+      "passed": 38,
+      "logSha256": "54a57539c8d862dbe9f0f99464cdb196bb2c14fe0e7d67b3dcd0e0f152984997"
+    },
+    "bridgeAnchor": {
+      "passed": 1,
+      "logSha256": "2e8f872339b628061fed31c91c137a57e645d866a3d7892f97c535d8d19aa60e"
+    },
+    "nativeSnapshot": {
+      "passed": 9,
+      "logSha256": "1fd49129b9d039dbb4ba9382e3256c8ce4c32c02686bbcdac063c67df896601b"
+    }
+  },
+  "distinctPassingTests": 104,
+  "wakeAllTargetsClippy": {
+    "passed": true,
+    "warningsDenied": true,
+    "logSha256": "5068ecf3838e84ed4fe2affc00dfcba653909c97e8f68795d28a21260156143c"
+  },
+  "redRegression": {
+    "tests": 2,
+    "failingAssertions": 3,
+    "cases": [
+      "paragraph_boundary_missed",
+      "partial_body_accepted",
+      "control_label_accepted"
+    ]
+  },
+  "implementation": {
+    "turnAnchorSharesCanonicalUserBodyReader": true,
+    "exactWholeBodyEqualityRequired": true,
+    "presentationControlsRemovedOnlyFromDetachedClone": true,
+    "newClosedRefusalReasons": [
+      "SOURCE_REVIEW_USER_NOT_FOUND",
+      "SOURCE_REVIEW_DUPLICATE_USER",
+      "SOURCE_REVIEW_ASSISTANT_NOT_MOUNTED",
+      "SOURCE_REVIEW_SEQUENCE_DRIFT"
+    ],
+    "nativePrivacyAllowlistUpdated": true,
+    "existingGenericUnknownReasonStillAccepted": true,
+    "beforeAndAfterSequenceGuardsRetained": true,
+    "newRetryReloadClickSendOrOwner": false
+  },
+  "precedingMaterialReview": {
+    "carrier": "bug-bounty",
+    "reviewedProject": "catdesk",
+    "reviewSourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+    "oneExactUserDeliveryVerified": true,
+    "messagesSentByReader": 0,
+    "readerReason": "SOURCE_REVIEW_SEQUENCE_UNPROVEN",
+    "elapsedSeconds": 42.5,
+    "unrelatedCriticalPins": 5101,
+    "unrelatedPinMismatches": 0,
+    "hostStopped": true,
+    "profileState": "PROFILE_QUIESCENT",
+    "sourceAccepted": false,
+    "nativeFinalized": false,
+    "producerStarted": false,
+    "unknownOutcomeReplayAllowed": false
+  },
+  "liveCauseEstablished": false,
+  "correctedReaderInstalledLiveQualified": false,
+  "protectedProductionChanged": false,
+  "twoIndependentWebCodingConversationsAccepted": false,
+  "nextExecutableTask": "BUILD_AND_QUALIFY_CORRECTED_DEVELOPMENT_READER_THEN_READ_EXISTING_SENT_EVENT_ONCE_WITH_NO_SEND"
+}

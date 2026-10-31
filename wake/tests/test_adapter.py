@@ -240,7 +240,10 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(cdp.keys, [])
 
     def test_sent_review_pair_scope_stability_and_escaping_preserve_user(self):
-        for count, answer in [((1, 1), "r" * 16000), ((1, 1), "😀" * 8192), ((2, 1), "answer"), ((1, 2), "answer")]:
+        reasons = {(0, 0): "SOURCE_REVIEW_USER_NOT_FOUND", (2, 1): "SOURCE_REVIEW_DUPLICATE_USER",
+                   (1, 0): "SOURCE_REVIEW_ASSISTANT_NOT_MOUNTED", (1, 2): "SOURCE_REVIEW_SEQUENCE_DRIFT"}
+        for count, answer in [((1, 1), "r" * 16000), ((1, 1), "😀" * 8192),
+                              *[(state, "answer") for state in reasons]]:
             with self.subTest(count=count, unicode=answer.startswith("😀")):
                 cdp = FakeCdp()
                 class Sink:
@@ -264,7 +267,7 @@ class AdapterTests(unittest.TestCase):
                     {"eventId":"review-one","message":"approved review","messageDigest":bridge.digest("approved review")}}
                 with patch.object(bridge,"NewConversationSink",Sink), patch.object(adapter,"prepare_cdp_target",return_value=cdp), patch.object(adapter,"emit") as emit:
                     if count != (1,1):
-                        with self.assertRaisesRegex(bridge.Attention,"SOURCE_REVIEW_SEQUENCE_UNPROVEN"):
+                        with self.assertRaisesRegex(bridge.Attention, reasons[count]):
                             adapter.source_snapshot(bridge,object(),request)
                         emit.assert_not_called()
                     else:

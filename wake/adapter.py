@@ -718,8 +718,17 @@ def source_snapshot(bridge, sb, request):
     if not sink.exact(cdp.get_current_url()) or sink.readiness_reason(cdp) is not None:
         raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
     def require_review_turn():
-        if review is not None and sink.trusted_turn_anchor_state(cdp, review["message"]) != (1, 1):
-            raise bridge.Attention("SOURCE_REVIEW_SEQUENCE_UNPROVEN")
+        if review is None:
+            return
+        count, after = sink.trusted_turn_anchor_state(cdp, review["message"])
+        if count == 0:
+            raise bridge.Attention("SOURCE_REVIEW_USER_NOT_FOUND")
+        if count > 1:
+            raise bridge.Attention("SOURCE_REVIEW_DUPLICATE_USER")
+        if after == 0:
+            raise bridge.Attention("SOURCE_REVIEW_ASSISTANT_NOT_MOUNTED")
+        if (count, after) != (1, 1):
+            raise bridge.Attention("SOURCE_REVIEW_SEQUENCE_DRIFT")
     require_review_turn()
     snapshot = bounded_source_snapshot(bridge, sink, cdp,
         max_message_bytes=32768 if review is not None else 8192, review_pair=review is not None)

@@ -901,6 +901,7 @@ class CdpSink:
         """Return exact wake-turn match count and trusted turns after it."""
         expected = normalize_message(message)
         script = f"""(() => {{
+            __CATDESK_USER_BODY_READER__
             const expected = {json.dumps(expected)};
             const normalize = value => String(value || '').replace(/\\s+/g, ' ').trim();
             const classifyTurn = turn => {{
@@ -947,13 +948,18 @@ class CdpSink:
             const matches = [];
             turns.forEach((turn, index) => {{
                 const [isUserTurn, isAssistantTurn] = classifyTurn(turn);
-                const text = normalize(turn.innerText || turn.textContent);
-                if (isUserTurn && !isAssistantTurn && text.includes(expected)) matches.push(index);
+                if (!isUserTurn || isAssistantTurn) return;
+                // Match the same canonical body as the exact USER receipt.
+                // Container controls and partial text are not task identity.
+                const selector = "[data-message-content], [data-markdown-text-tone='user-message'], .whitespace-pre-wrap";
+                const content = turn.matches(selector) ? turn : turn.querySelector(selector);
+                const text = normalize(userBodyText(content || turn));
+                if (text === expected) matches.push(index);
             }});
             if (matches.length > 8) return ['invalid', 0, 0];
             if (matches.length !== 1) return ['ready', matches.length, 0];
             return ['ready', 1, turns.length - matches[0] - 1];
-        }})()"""
+        }})()""".replace("__CATDESK_USER_BODY_READER__", USER_BODY_TEXT_READER)
         try:
             value = CdpSink.cdp_value(cdp.evaluate(script))
         except Exception as error:

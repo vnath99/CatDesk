@@ -456,6 +456,17 @@ class CurrentDomTests(unittest.TestCase):
         self.assertEqual(self.sink.user_message_digests(CurrentDom()), [bridge.digest("exact wake message")])
         self.assertEqual(self.sink.trusted_turn_anchor_state(CurrentDom(), "exact wake message"), (1, 1))
 
+    def test_turn_anchor_uses_canonical_user_body_not_control_or_container_text(self):
+        cdp = CurrentDom(userParagraphs=True, userControlsInsideBody=True)
+        message = "first paragraph\n\nsecond paragraph"
+        self.assertEqual(self.sink.user_message_digests(cdp), [bridge.digest(bridge.normalize_message(message))])
+        self.assertEqual(self.sink.trusted_turn_anchor_state(cdp, message), (1, 1))
+
+    def test_turn_anchor_requires_whole_user_body_and_never_a_control_label(self):
+        for message in ("wake message", "exact wake message Copy message", "Copy message"):
+            with self.subTest(message=message):
+                self.assertEqual(self.sink.trusted_turn_anchor_state(CurrentDom(), message), (0, 0))
+
     def test_sent_review_pair_preserves_user_beside_large_complete_answer(self):
         cdp = CurrentDom(answer="r" * 16000, historicalLoadError=True)
         observed = self.sink.visible_message_snapshot(cdp, max_message_bytes=32768, review_pair=True)
@@ -603,7 +614,7 @@ class CurrentDomTests(unittest.TestCase):
                     bridge.digest('exact wake message')), 'RESPONSE_COMPLETE')
         literal = CurrentDom(userText='Copy message', userControlsInsideBody=True)
         self.assertEqual(self.sink.user_message_digests(literal), [bridge.digest('Copy message')])
-        with self.assertRaisesRegex(bridge.Attention, 'RESPONSE_USER_REPRESENTATION_MISMATCH'), \
+        with self.assertRaisesRegex(bridge.Attention, 'RESPONSE_EXPECTED_USER_NOT_FOUND'), \
                 patch.object(self.sink, 'response_snapshot', side_effect=AssertionError('must refuse before assistant')):
             self.sink.observe_cooperative_response(CurrentDom(userText='unrelated',
                 userControlsInsideBody=True, observationEditor=True), 'PRIVATE_CONTROL_LABEL',
