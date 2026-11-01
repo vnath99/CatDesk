@@ -15,6 +15,8 @@ $seams=@{
  Listener={[pscustomobject]@{MatchesCanonical=$true}}
  DoctorRuntimeClient={'fixture-client'}
  DoctorCodexCommand={'fixture-command'}
+ DoctorAuthConfiguration={'MCP_BEARER_NOT_CONFIGURED'}
+ DoctorSupervisorPolicy={'SUPERVISOR_REGISTERED_MONITOR_STOPPED'}
 }
 $forbid={ $script:forbidden++;throw 'DOCTOR_FORBIDDEN_OPERATION' }
 foreach($name in @('Recovery','RecoveryReadiness','LocalMcpReadiness','RuntimeStatus','CodexStatus','StopProcess','WakeRepair','WakeRuntime','WakeMcp','AutostartTasks')){$seams[$name]=$forbid}
@@ -39,11 +41,31 @@ try{
  $before=@{};foreach($path in [IO.Directory]::EnumerateFiles($testRoot,'*',[IO.SearchOption]::AllDirectories)){$before[$path]=[IO.File]::ReadAllText($path)}
  $report=Invoke-Doctor
  Require ($report.command -ceq 'doctor' -and $report.readOnly -and $report.networkRequests -eq 0 -and $report.repairs -eq 0) 'doctor contract invalid'
- Require ($report.layers.Count -eq 17) 'doctor omitted a layer'
+ Require ($report.layers.Count -eq 19) 'doctor omitted a layer'
  Require ((Layer $report 'RELEASE_PAIR').status -ceq 'PASS') 'valid release not observed'
  Require ((Layer $report 'PROJECT_REGISTRY').facts.pairedWakeTargets -eq 1) 'paired metadata not observed'
+ $registryFixture=Join-Path $projectRoot '.catdesk/projects/projects.json'
+ Save $registryFixture @{schemaVersion=1;projects=@(@{projectId='alpha';workspace=$projectRoot;chatgptTargetUrl=$url;chatgptTargetSha256=$digest},@{projectId='beta';workspace=$projectRoot})}
+ $unbound=Layer (Invoke-Doctor) 'PROJECT_REGISTRY'
+ Require ($unbound.code -ceq 'PROJECT_WEB_TARGET_UNBOUND' -and $unbound.status -ceq 'UNVERIFIED' -and $unbound.facts.unboundProjects -eq 1 -and $unbound.facts.unpairedWebBindings -eq 0) 'unbound project disappeared behind healthy paired rows'
+ [IO.File]::WriteAllText($registryFixture,$before[$registryFixture])
  Require ((Layer $report 'WAKE_QUEUE').code -ceq 'WAKE_UNKNOWN_OUTCOME') 'unknown send was hidden'
  Require ((Layer $report 'LOCAL_MCP').status -ceq 'NOT_RUN' -and (Layer $report 'CONNECTOR').status -ceq 'NOT_RUN') 'unexecuted probes claimed success'
+ Require ((Layer $report 'MCP_AUTH_CONFIGURATION').code -ceq 'MCP_BEARER_NOT_CONFIGURED' -and (Layer $report 'MCP_AUTH_CONFIGURATION').status -ceq 'FAIL') 'missing bearer did not identify central authentication gap'
+ Require ((Layer $report 'PERSISTENT_SUPERVISOR').code -ceq 'SUPERVISOR_REGISTERED_MONITOR_STOPPED' -and (Layer $report 'PERSISTENT_SUPERVISOR').status -ceq 'FAIL') 'registered stopped monitor reported ready'
+ foreach($code in @('MCP_BEARER_PROCESS_CONFIGURED','MCP_BEARER_USER_PRESENT_PROCESS_UNSET')){
+  $current=$code;$authReport=Invoke-Doctor @{DoctorAuthConfiguration={ $current }.GetNewClosure()};$authLayer=Layer $authReport 'MCP_AUTH_CONFIGURATION'
+  Require ($authLayer.status -ceq 'UNVERIFIED' -and $authLayer.code -ceq $code -and -not $authLayer.facts.runningDaemonAuthVerified -and -not $authLayer.facts.clientCatalogVerified -and -not $authLayer.facts.projectTaskGrantVerified -and -not $authLayer.facts.environmentChanged) 'environment configuration claimed daemon, Web or task acceptance'
+ }
+ foreach($code in @('MCP_BEARER_INVALID','MCP_BEARER_ENV_CONFLICT')){
+  $current=$code;Require ((Layer (Invoke-Doctor @{DoctorAuthConfiguration={ $current }.GetNewClosure()}) 'MCP_AUTH_CONFIGURATION').status -ceq 'FAIL') 'invalid or conflicting bearer accepted'
+ }
+ foreach($code in @('SUPERVISOR_NOT_REGISTERED','SUPERVISOR_REGISTRATION_CONFLICT')){
+  $current=$code;Require ((Layer (Invoke-Doctor @{DoctorSupervisorPolicy={ $current }.GetNewClosure()}) 'PERSISTENT_SUPERVISOR').status -ceq 'FAIL') 'missing or foreign supervisor registration accepted'
+ }
+ $monitor=Layer (Invoke-Doctor @{DoctorSupervisorPolicy={'SUPERVISOR_MONITOR_SIGNAL_PRESENT'}}) 'PERSISTENT_SUPERVISOR'
+ Require ($monitor.status -ceq 'UNVERIFIED' -and -not $monitor.facts.rebootRecoveryVerified -and -not $monitor.facts.externalOwnerRecoveryVerified -and -not $monitor.facts.processLivenessVerified) 'mutex signal claimed supervisor recovery acceptance'
+ Require ((Layer (Invoke-Doctor @{DoctorSupervisorPolicy={'PRIVATE_MARKER'}}) 'PERSISTENT_SUPERVISOR').code -ceq 'SUPERVISOR_POLICY_UNVERIFIED') 'unknown supervisor metadata projected or accepted'
  $dead=Invoke-Doctor @{Listener={$null}}
  Require ((Layer $dead 'LOCAL_DAEMON').code -ceq 'LOCAL_MCP_LISTENER_MISSING') 'dead backend classification'
  $wrong=Invoke-Doctor @{Listener={[pscustomobject]@{MatchesCanonical=$false}}}
@@ -152,7 +174,19 @@ try{
  [void](New-Item -ItemType Junction -Path $link -Target $wakeRoot)
  try{$refused=$false;try{Assert-DoctorLocalPath (Join-Path $link 'control.json')}catch{$refused=$true};Require $refused 'redirected metadata ancestor accepted'}finally{[IO.Directory]::Delete($link)}
  $human=@(& $facade doctor -Workspace $testRoot -ProjectWorkspace $projectRoot -WakeRoot $wakeRoot -Human -TestSeams $seams)
- Require ($human.Count -eq 17 -and ($human -join "`n") -notmatch 'PRIVATE_MARKER|C:\\|https://') 'human summary not safe'
+ Require ($human.Count -eq 19 -and ($human -join "`n") -notmatch 'PRIVATE_MARKER|C:\\|https://') 'human summary not safe'
+ $doctorTokens=$null;$doctorErrors=$null
+ $doctorAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'catdesk-doctor.ps1'),[ref]$doctorTokens,[ref]$doctorErrors)
+ Require ($doctorErrors.Count -eq 0) 'doctor parse failed'
+ $authFunction=@($doctorAst.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq 'Get-DoctorBearerConfiguration'},$true))
+ . ([scriptblock]::Create($authFunction[0].Extent.Text))
+ foreach($case in @(
+  @('','','MCP_BEARER_NOT_CONFIGURED'),@(('a'*24),'','MCP_BEARER_PROCESS_CONFIGURED'),
+  @('',('a'*24),'MCP_BEARER_USER_PRESENT_PROCESS_UNSET'),@(('a'*24),('a'*24),'MCP_BEARER_PROCESS_CONFIGURED'),
+  @(('a'*24),('b'*24),'MCP_BEARER_ENV_CONFLICT'),@('short','','MCP_BEARER_INVALID'),
+  @('',(('a'*24)+"`n"),'MCP_BEARER_INVALID'),@((([string][char]233)*24),'','MCP_BEARER_INVALID'))){
+  Require ((Get-DoctorBearerConfiguration $case[0] $case[1]) -ceq $case[2]) 'bearer configuration classification failed'
+ }
  $source=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'catdesk-doctor.ps1'))
  Require ($source -notmatch '(?im)^\s*(Start-Process|Stop-Process|Set-Content|Add-Content|Remove-Item|Invoke-WebRequest|Invoke-RestMethod)\b|\.WriteAll|Store::open\(') 'doctor gained active operations'
  "doctor tests passed: $checks assertions"

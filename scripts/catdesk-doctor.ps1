@@ -59,17 +59,29 @@ function Get-DoctorDefinitions {
         @('LOCAL_DAEMON','CANONICAL_DAEMON','BOUNDED_WINDOWS_LISTENER_INVENTORY','catdesk.ps1 diagnose',@('CANONICAL_LISTENER_PRESENT','LOCAL_MCP_LISTENER_MISSING','LOCAL_MCP_LISTENER_IDENTITY_MISMATCH','LOCAL_OWNER_UNVERIFIED')),
         @('LOCAL_HEALTH','CANONICAL_DAEMON','LOCAL_HEALTH_ENDPOINTS','RUN_BOUNDED_LOCAL_HEALTH_TEST',@('LOCAL_HEALTH_NOT_PROBED','LOCAL_HEALTH_READY','LOCAL_HEALTH_FAILED')),
         @('LOCAL_MCP','CANONICAL_DAEMON','LOCAL_MCP_INITIALIZE_AND_CATALOG','catdesk.ps1 diagnose',@('LOCAL_MCP_NOT_PROBED','LOCAL_MCP_READY','LOCAL_MCP_AUTH_REJECTED','LOCAL_MCP_PROTOCOL_UNREADY')),
+        @('MCP_AUTH_CONFIGURATION','LOCAL_OPERATOR','STANDARD_MCP_BEARER_ENVIRONMENT','VERIFY_AUTHENTICATED_CATALOG_WITH_EXISTING_OWNER',@('MCP_BEARER_NOT_CONFIGURED','MCP_BEARER_PROCESS_CONFIGURED','MCP_BEARER_USER_PRESENT_PROCESS_UNSET','MCP_BEARER_ENV_CONFLICT','MCP_BEARER_INVALID','MCP_BEARER_CONFIG_UNAVAILABLE')),
+        @('PERSISTENT_SUPERVISOR','EXISTING_LIFECYCLE_OWNER','OWNED_AUTOSTART_REGISTRATION_AND_MONITOR_SIGNAL','QUALIFY_EXISTING_SUPERVISOR_RESTART_WITHOUT_STARTING_WAKE',@('SUPERVISOR_POLICY_UNVERIFIED','SUPERVISOR_NOT_REGISTERED','SUPERVISOR_REGISTERED_MONITOR_STOPPED','SUPERVISOR_MONITOR_SIGNAL_PRESENT','SUPERVISOR_REGISTRATION_CONFLICT')),
         @('OFFICIAL_RUNTIME','EXISTING_OFFICIAL_OWNER','CONFIGURED_NATIVE_RUNTIME_PROFILE','RUN_EXISTING_OWNER_READONLY_STATUS',@('RUNTIME_CLIENT_UNAVAILABLE','RUNTIME_OWNER_UNVERIFIED','RUNTIME_OWNER_ABSENT','RUNTIME_PROFILE_ROUTE_MISMATCH','RUNTIME_LOCAL_READY')),
         @('UPSTREAM_CONTROL_PLANE','EXTERNAL_SERVICE','OFFICIAL_OWNER_POLL_OBSERVATION','WAIT_FOR_CHANGED_UPSTREAM_EVIDENCE',@('UPSTREAM_NOT_PROBED','UPSTREAM_RATE_OR_CONNECTOR_UNAVAILABLE','UPSTREAM_READY','UPSTREAM_UNAVAILABLE')),
         @('CONNECTOR','CHATGPT_CONNECTOR','CONNECTOR_RESPONSE_OBSERVATION','WAIT_FOR_CHANGED_CONNECTOR_EVIDENCE',@('CONNECTOR_NOT_PROBED','UPSTREAM_RATE_OR_CONNECTOR_UNAVAILABLE','CONNECTOR_TRANSPORT_NO_HTTP_STATUS','CONNECTOR_RESPONSE_VERIFIED','CONNECTOR_TOOL_DISCOVERY_UNVERIFIED','CONNECTOR_TASK_CALL_REPORTED_BLOCKED')),
         @('BROWSER','EXISTING_BROWSER_OWNER','APPROVED_PROFILE_READINESS_OBSERVATION','operator web-dev-runtime inspect-readiness --project-id <registered-project>',@('BROWSER_NOT_INSPECTED','HOME_EDITOR_MISSING','BROWSER_DRAFT_UNKNOWN','BROWSER_TARGET_MISSING','BROWSER_EXACT_READY','BROWSER_RESPONSE_LOAD_ERROR','BROWSER_AUTH_REQUIRED','BROWSER_OWNER_CLEANUP_UNVERIFIED')),
-        @('PROJECT_REGISTRY','PROJECT_REGISTRY','.catdesk/projects/projects.json','operator web projects',@('REGISTRY_METADATA_PAIRED','PROJECT_WAKE_TARGET_MISMATCH','REGISTRY_UNAVAILABLE','REGISTRY_INVALID','WAKE_CONFIG_INVALID')),
+        @('PROJECT_REGISTRY','PROJECT_REGISTRY','.catdesk/projects/projects.json','operator web projects',@('REGISTRY_METADATA_PAIRED','PROJECT_WAKE_TARGET_MISMATCH','PROJECT_WEB_TARGET_UNBOUND','REGISTRY_UNAVAILABLE','REGISTRY_INVALID','WAKE_CONFIG_INVALID')),
         @('WAKE_QUEUE','EXISTING_WAKE_OWNER','WAKE_CONFIG_CONTROL_AND_DELIVERIES','operator web projects',@('WAKE_METADATA_OBSERVED','WAKE_METADATA_UNAVAILABLE','WAKE_METADATA_PARTIAL','WAKE_UNKNOWN_OUTCOME')),
         @('CODEX_CLI','CURRENT_USER_CODEX','TRUSTED_CODEX_COMMAND_DISCOVERY','operator codex diagnose --project-id <registered-project>',@('CODEX_PRESENT_AUTH_UNVERIFIED','CODEX_CLI_UNAVAILABLE')),
         @('NATIVE_SESSION','EXISTING_NATIVE_PROJECT_OWNER','PROJECT_OWNER_LEASE_OBSERVATION','operator codex diagnose --project-id <registered-project>',@('WORKER_OWNER_NOT_PROBED','WORKER_GONE','WORKER_OWNER_VERIFIED')),
         @('LOCAL_PROVIDER','LOCAL_MODEL_OWNER','LOCAL_OLLAMA_EXECUTABLE_DISCOVERY','RUN_BOUNDED_LOCAL_PROVIDER_STATUS',@('LOCAL_PROVIDER_NOT_PROBED','LOCAL_PROVIDER_UNAVAILABLE','LOCAL_PROVIDER_READY')),
         @('OBSERVATIONS','CALLER','IMPORTED_ADVISORY_DOCUMENT','SUPPLY_VALID_REDACTED_OBSERVATIONS',@('OBSERVATIONS_NOT_SUPPLIED','OBSERVATIONS_IMPORTED_ADVISORY','OBSERVATIONS_INVALID'))
     )
+}
+
+function Get-DoctorBearerConfiguration([string]$ProcessToken,[string]$UserToken) {
+    $processPresent=-not [string]::IsNullOrEmpty($ProcessToken)
+    $userPresent=-not [string]::IsNullOrEmpty($UserToken)
+    if(($processPresent -and $ProcessToken -cnotmatch '\A[\x21-\x7E]{24,}\z') -or ($userPresent -and $UserToken -cnotmatch '\A[\x21-\x7E]{24,}\z')){return 'MCP_BEARER_INVALID'}
+    if($processPresent -and $userPresent -and $ProcessToken -cne $UserToken){return 'MCP_BEARER_ENV_CONFLICT'}
+    if($processPresent){return 'MCP_BEARER_PROCESS_CONFIGURED'}
+    if($userPresent){return 'MCP_BEARER_USER_PRESENT_PROCESS_UNSET'}
+    return 'MCP_BEARER_NOT_CONFIGURED'
 }
 
 function Invoke-CatDeskDoctor([string]$ObservationFile = '', [string]$ProjectWorkspace = '', [string]$WakeRoot = '', [switch]$Human) {
@@ -115,6 +127,35 @@ function Invoke-CatDeskDoctor([string]$ObservationFile = '', [string]$ProjectWor
     } catch { Set-DoctorLayer 'RECOVERY_AUTHORITY' 'UNVERIFIED' 'RECOVERY_AUTHORITY_UNVERIFIED' }
     try { $local=Get-LifecycleLocalMcp; Set-DoctorLayer 'LOCAL_CONFIG' 'PASS' 'LOCAL_CONFIG_READABLE' }
     catch { Set-DoctorLayer 'LOCAL_CONFIG' 'FAIL' 'LOCAL_CONFIG_UNAVAILABLE' }
+    try {
+        # Read only the existing environment interface. Never output a value,
+        # length or digest, import it into this process, or infer the running
+        # daemon's authentication from the doctor's inherited environment.
+        $auth=Invoke-LifecycleSeam -Name 'DoctorAuthConfiguration' -Arguments @() -Default {
+            $processToken=[Environment]::GetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN','Process')
+            $userToken=[Environment]::GetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN','User')
+            Get-DoctorBearerConfiguration -ProcessToken $processToken -UserToken $userToken
+        }
+        if($auth -isnot [string] -or $auth -cnotin @('MCP_BEARER_NOT_CONFIGURED','MCP_BEARER_PROCESS_CONFIGURED','MCP_BEARER_USER_PRESENT_PROCESS_UNSET','MCP_BEARER_ENV_CONFLICT','MCP_BEARER_INVALID')){throw 'AUTH_METADATA_INVALID'}
+        $state=if($auth -cin @('MCP_BEARER_NOT_CONFIGURED','MCP_BEARER_ENV_CONFLICT','MCP_BEARER_INVALID')){'FAIL'}else{'UNVERIFIED'}
+        Set-DoctorLayer 'MCP_AUTH_CONFIGURATION' $state $auth @{runningDaemonAuthVerified=$false;clientCatalogVerified=$false;projectTaskGrantVerified=$false;environmentChanged=$false}
+    }catch{Set-DoctorLayer 'MCP_AUTH_CONFIGURATION' 'UNVERIFIED' 'MCP_BEARER_CONFIG_UNAVAILABLE'}
+    try {
+        $policy=Invoke-LifecycleSeam -Name 'DoctorSupervisorPolicy' -Arguments @() -Default {
+            $definition=Get-AutostartDefinition
+            $task=Get-AutostartTask -Definition $definition
+            $taskOwned=Test-OwnedAutostartTask -Task $task -Definition $definition
+            $run=Get-OwnedAutostartRunKeyValue -Definition $definition
+            $runOwned=Test-OwnedAutostartRunKey -Value $run -Definition $definition
+            if(($null -ne $task -and -not $taskOwned) -or ($null -ne $run -and -not $runOwned)){return 'SUPERVISOR_REGISTRATION_CONFLICT'}
+            if(-not $taskOwned -and -not $runOwned){return 'SUPERVISOR_NOT_REGISTERED'}
+            if(Test-AutostartSupervisorRunning -Definition $definition){return 'SUPERVISOR_MONITOR_SIGNAL_PRESENT'}
+            return 'SUPERVISOR_REGISTERED_MONITOR_STOPPED'
+        }
+        if($policy -isnot [string] -or $policy -cnotin @('SUPERVISOR_NOT_REGISTERED','SUPERVISOR_REGISTERED_MONITOR_STOPPED','SUPERVISOR_MONITOR_SIGNAL_PRESENT','SUPERVISOR_REGISTRATION_CONFLICT')){throw 'SUPERVISOR_METADATA_INVALID'}
+        $state=if($policy -ceq 'SUPERVISOR_MONITOR_SIGNAL_PRESENT'){'UNVERIFIED'}else{'FAIL'}
+        Set-DoctorLayer 'PERSISTENT_SUPERVISOR' $state $policy @{metadataOnly=$true;processLivenessVerified=$false;rebootRecoveryVerified=$false;externalOwnerRecoveryVerified=$false}
+    }catch{Set-DoctorLayer 'PERSISTENT_SUPERVISOR' 'UNVERIFIED' 'SUPERVISOR_POLICY_UNVERIFIED'}
     if($identity -and $local){
         try {
             $listener=Get-LifecycleListener -LocalMcp $local -Canonical $identity
@@ -161,8 +202,9 @@ function Invoke-CatDeskDoctor([string]$ObservationFile = '', [string]$ProjectWor
                 $digest -is [string] -and $digest -cmatch '\A[a-f0-9]{64}\z' -and $digest -ceq (Get-LifecycleSha256Hex $url) -and
                 (Get-DoctorProperty $target 'url') -ceq $url -and (Get-DoctorProperty $target 'digest') -ceq $digest -and ($generation -is [int] -or $generation -is [long]) -and $generation -gt 0){$paired++}
         }
-        $facts=@{registeredProjects=$projects.Count;webBindings=$web;pairedWakeTargets=$paired;nativeOwnerRegistrations=$native;metadataOnly=$true;nativeOwnerLivenessVerified=$false}
+        $facts=@{registeredProjects=$projects.Count;webBindings=$web;unboundProjects=($projects.Count-$web);pairedWakeTargets=$paired;unpairedWebBindings=($web-$paired);nativeOwnerRegistrations=$native;metadataOnly=$true;nativeOwnerLivenessVerified=$false}
         if($invalidWake -and $web -gt 0){Set-DoctorLayer 'PROJECT_REGISTRY' 'FAIL' 'WAKE_CONFIG_INVALID' $facts}
+        elseif($paired -eq $web -and $web -lt $projects.Count){Set-DoctorLayer 'PROJECT_REGISTRY' 'UNVERIFIED' 'PROJECT_WEB_TARGET_UNBOUND' $facts}
         elseif($paired -eq $web){Set-DoctorLayer 'PROJECT_REGISTRY' 'PASS' 'REGISTRY_METADATA_PAIRED' $facts}
         else{Set-DoctorLayer 'PROJECT_REGISTRY' 'FAIL' 'PROJECT_WAKE_TARGET_MISMATCH' $facts}
     }catch{

@@ -79,14 +79,17 @@ function ConvertTo-NativeCommandLineArgument {
 }
 
 function Initialize-BoundedNativeProcessType {
-    if ("CatDesk.BoundedNativeProcess" -as [type]) { return }
+    # Lifecycle also loads a bounded runner, with a different overload set.
+    # Scope this existing runner to Secure MCP so load order cannot discard
+    # child-only authentication forwarding or change lifecycle behavior.
+    if ("CatDesk.SecureMcp.BoundedNativeProcess" -as [type]) { return }
     Add-Type -TypeDefinition @'
 using System;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
-namespace CatDesk {
+namespace CatDesk.SecureMcp {
     public sealed class BoundedNativeResult { public string Stdout; public string Stderr; public bool Overflow; public bool TimedOut; public bool TerminationFailed; public bool OutputDrainTimedOut; public int ExitCode; }
     internal sealed class BoundedCapture { internal string Text; internal bool Overflow; }
     public static class BoundedNativeProcess {
@@ -148,9 +151,9 @@ function Invoke-BoundedTunnelClient {
     Initialize-BoundedNativeProcessType
     $commandLine = [string]::Join(" ", @($CommandArgs | ForEach-Object { ConvertTo-NativeCommandLineArgument -Value $_ }))
     $result = if ([string]::IsNullOrEmpty($McpAuthorization)) {
-        [CatDesk.BoundedNativeProcess]::Run($Path, $commandLine, $TimeoutSeconds * 1000, $MaxOutputBytes)
+        [CatDesk.SecureMcp.BoundedNativeProcess]::Run($Path, $commandLine, $TimeoutSeconds * 1000, $MaxOutputBytes)
     } else {
-        [CatDesk.BoundedNativeProcess]::Run($Path, $commandLine, $TimeoutSeconds * 1000, $MaxOutputBytes, $McpAuthorization)
+        [CatDesk.SecureMcp.BoundedNativeProcess]::Run($Path, $commandLine, $TimeoutSeconds * 1000, $MaxOutputBytes, $McpAuthorization)
     }
     if ($result.TimedOut) {
         if ($result.TerminationFailed) { throw "tunnel-client command exceeded bounded timeout and did not terminate" }

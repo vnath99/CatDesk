@@ -1,5 +1,16 @@
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
+# Reproduce the ordinary lifecycle-first load order without running any
+# lifecycle command. Its four-argument native helper must not shadow the
+# Secure MCP helper's child-only bearer forwarding overload.
+$bootstrap=Join-Path $PSScriptRoot 'start-catdesk-stack.ps1'
+$bootstrapTokens=$null;$bootstrapErrors=$null
+$bootstrapAst=[Management.Automation.Language.Parser]::ParseFile($bootstrap,[ref]$bootstrapTokens,[ref]$bootstrapErrors)
+if($bootstrapErrors.Count){throw 'BOOTSTRAP_PARSE_FAILED'}
+$bootstrapDefinitions=@($bootstrapAst.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq 'Initialize-BoundedNativeProcessType'},$true))
+if($bootstrapDefinitions.Count -ne 1){throw 'BOOTSTRAP_HELPER_IDENTITY_INVALID'}
+. ([scriptblock]::Create($bootstrapDefinitions[0].Extent.Text))
+Initialize-BoundedNativeProcessType
 # Extract helpers only. Never enter a setup mode or touch a real profile/runtime.
 $setup=Join-Path $PSScriptRoot 'setup-secure-mcp.ps1'
 $tokens=$null;$errors=$null
