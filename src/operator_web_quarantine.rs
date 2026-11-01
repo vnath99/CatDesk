@@ -804,6 +804,7 @@ mod tests {
             native_thread_id: None,
             event_id: record.handoff_event_id.clone().unwrap(),
             message: handoff_request_message_v2("alpha", &record.intent_id, "source-task", &None),
+            bootstrap_app_mention: None,
         };
         store.save_handoff_request(&handoff).unwrap();
         let hashes = original_hashes(&store, &record).unwrap();

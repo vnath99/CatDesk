@@ -1,3 +1,7 @@
+## 2026-11-01 — app selection in automatic source handoffs (source-qualified)
+
+A new handoff request may record `bootstrapAppMention` only from this project's digest-verified completed bootstrap and continuation. The frozen source instruction requires the structured handoff to echo `chatgptAppMention`; omission/change returns `WEB_HANDOFF_APP_MENTION_CHANGED`. Only the qualified v5 mention is supported. Existing requests without this optional field remain byte-compatible and are never regenerated. The mention is presentation metadata, not connector authentication, task permission or native execution authority. No new operator command is needed. Matching development and installed/live qualification remain separate. See `docs/verification/APP_HANDOFF_CARRY_FORWARD_2026_11_01.json`.
+
 ## 2026-11-01 — second fresh project paired, continued and admitted for new tasks
 
 A second real controlled project conversation was created through the existing authenticated browser owner. The actual issued URL was verified; registry and Wake advanced together to generation 2, with predecessor history preserved. Its one queued continuation has an exact receipt and a verified COMPLETE response. The supported local initialization transition passed for NEW tasks only, without an execution grant or native resumption. This is explicit project initialization, not automatic near-capacity acceptance. Sibling registrations, old work, native sessions and the original context policy were preserved.

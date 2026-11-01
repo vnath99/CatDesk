@@ -63,34 +63,12 @@ fn completed_proof(wake: &Store, record: &Record, current: &Target) -> Result<St
     {
         return Err("WEB_INITIALIZATION_OPERATOR_BOOTSTRAP_REQUIRED".into());
     }
-    let delivery = wake
-        .delivery(&record.continuation_event_id)?
-        .ok_or("WEB_INITIALIZATION_CONTINUATION_REQUIRED")?;
-    let timer = wake
-        .timer(&record.continuation_event_id)?
-        .ok_or("WEB_INITIALIZATION_CONTINUATION_REQUIRED")?;
-    validate_continuation_selection(record, current, &delivery.event)?;
-    let receipt = delivery
-        .receipt
-        .as_ref()
-        .ok_or("WEB_INITIALIZATION_CONTINUATION_REQUIRED")?;
-    if delivery.phase != DeliveryPhase::Sent
-        || delivery.target != *current
-        || delivery.message_digest != digest(&delivery.event.message)
-        || receipt.event_id != record.continuation_event_id
-        || receipt.target_generation != current.generation
-        || receipt.target_digest != current.digest
-        || receipt.message_digest != delivery.message_digest
-        || receipt.evidence != "EXACT_USER_MESSAGE_APPENDED"
-        || timer.event_id != record.continuation_event_id
-        || timer.project_id != record.project_id
-        || timer.target_generation != current.generation
-        || timer.target_digest != current.digest
-        || timer.response_state != ResponseState::Complete
-        || timer.completed_utc.is_none()
-    {
-        return Err("WEB_INITIALIZATION_CONTINUATION_REQUIRED".into());
-    }
+    let (delivery, timer) = completed_continuation(
+        wake,
+        record,
+        current,
+        "WEB_INITIALIZATION_CONTINUATION_REQUIRED",
+    )?;
     hash(&(delivery, timer))
 }
 

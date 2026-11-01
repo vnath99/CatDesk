@@ -287,6 +287,8 @@ struct HandoffRequest {
     native_thread_id: Option<String>,
     event_id: String,
     message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    bootstrap_app_mention: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -349,17 +351,23 @@ impl HandoffRequest {
             2 => handoff_request_message_v2,
             _ => return Err("WEB_HANDOFF_REQUEST_INVALID".into()),
         };
+        let mut message = expected(
+            project,
+            &self.intent_id,
+            &self.source_task_id,
+            &self.native_thread_id,
+        );
+        if let Some(mention) = &self.bootstrap_app_mention {
+            if self.schema_version != 2 || !runtime::valid_bootstrap_app_mention(mention) {
+                return Err("WEB_HANDOFF_APP_MENTION_UNQUALIFIED".into());
+            }
+            message.push_str(&handoff_app_instruction(mention));
+        }
         if self.project_id != project
             || !valid_id(&self.intent_id)
             || !valid_id(&self.source_task_id)
             || self.event_id != format!("web-handoff-{}", self.intent_id)
-            || self.message
-                != expected(
-                    project,
-                    &self.intent_id,
-                    &self.source_task_id,
-                    &self.native_thread_id,
-                )
+            || self.message != message
             || self.message.len() > 2048
             || self
                 .native_thread_id
@@ -1279,6 +1287,59 @@ fn handoff_request_message_v2(
     )
 }
 
+fn handoff_app_instruction(mention: &str) -> String {
+    format!(
+        " The verified prior bootstrap selected {mention} for this project. Preserve that presentation selection by including \"chatgptAppMention\":\"{mention}\" in your handoff JSON. This is not credential or execution authority."
+    )
+}
+
+// Carry only a completed bootstrap's explicit, qualified presentation choice.
+// Never infer another project's app or grant execution from this metadata.
+fn inherited_bootstrap_app_mention(
+    previous: Option<&Record>,
+    wake: &Store,
+    project: &str,
+    current: &Target,
+) -> Result<Option<String>, String> {
+    let Some(previous) = previous else {
+        return Ok(None);
+    };
+    if previous.project_id != project {
+        return Err("WEB_HANDOFF_APP_SOURCE_CHANGED".into());
+    }
+    let Some(app) = previous
+        .handoff
+        .strip_prefix(runtime::APP_JSON_BOOTSTRAP_HANDOFF_PREFIX)
+    else {
+        return Ok(None);
+    };
+    let (mention, content) = app
+        .split_once('\n')
+        .ok_or("WEB_HANDOFF_APP_MENTION_UNQUALIFIED")?;
+    if !runtime::valid_bootstrap_app_mention(mention) || content.trim().is_empty() {
+        return Err("WEB_HANDOFF_APP_MENTION_UNQUALIFIED".into());
+    }
+    if runtime::bootstrap_message_digest(
+        project,
+        &previous.intent_id,
+        &previous.source,
+        &task_handoff::content(previous)?,
+    )? != previous.message_digest
+    {
+        return Err("WEB_HANDOFF_APP_SOURCE_CHANGED".into());
+    }
+    if previous.reconciliation_reason.is_some() || previous.quarantine.is_some() {
+        return Err("WEB_HANDOFF_APP_CONTINUATION_REQUIRED".into());
+    }
+    completed_continuation(
+        wake,
+        previous,
+        current,
+        "WEB_HANDOFF_APP_CONTINUATION_REQUIRED",
+    )?;
+    Ok(Some(mention.into()))
+}
+
 fn message_digest(
     project: &str,
     intent: &str,
@@ -2026,6 +2087,8 @@ pub(super) fn request_handoff_guarded(
         source_task_id,
         &registered,
     )?;
+    let bootstrap_app_mention =
+        inherited_bootstrap_app_mention(active.as_ref(), &wake, project, &source)?;
 
     // The selected Wake browser owner observes the exact idle source before the
     // advisory context ledger claims a quiescent point. This is a private read.
@@ -2049,6 +2112,15 @@ pub(super) fn request_handoff_guarded(
     if intent.source_task_id != source_task_id {
         return Err("WEB_HANDOFF_TASK_CHANGED".into());
     }
+    let mut message = handoff_request_message_v2(
+        project,
+        &intent.intent_id,
+        source_task_id,
+        &registered.codex_thread_id,
+    );
+    if let Some(mention) = &bootstrap_app_mention {
+        message.push_str(&handoff_app_instruction(mention));
+    }
     let request = HandoffRequest {
         schema_version: 2,
         project_id: project.into(),
@@ -2058,12 +2130,8 @@ pub(super) fn request_handoff_guarded(
         native_workspace: registered.workspace.clone(),
         native_thread_id: registered.codex_thread_id.clone(),
         event_id: format!("web-handoff-{}", intent.intent_id),
-        message: handoff_request_message_v2(
-            project,
-            &intent.intent_id,
-            source_task_id,
-            &registered.codex_thread_id,
-        ),
+        message,
+        bootstrap_app_mention,
     };
     request.validate(project)?;
     let request = store.preserve_recorded_handoff_request(request)?;
@@ -2238,6 +2306,13 @@ fn handoff_from_source_snapshot(
     handoff.validate(&request.project_id)?;
     if request.schema_version == 2 && handoff.schema_version != 2 {
         return Err("WEB_HANDOFF_CONTEXT_REQUIRED".into());
+    }
+    if request
+        .bootstrap_app_mention
+        .as_ref()
+        .is_some_and(|mention| handoff.chatgpt_app_mention.as_ref() != Some(mention))
+    {
+        return Err("WEB_HANDOFF_APP_MENTION_CHANGED".into());
     }
     if handoff.source_task_id != request.source_task_id {
         return Err("WEB_HANDOFF_TASK_CHANGED".into());
@@ -3586,6 +3661,42 @@ fn validate_continuation_selection(
         return Err("WEB_CONTINUATION_SELECTION_CHANGED".into());
     }
     Ok(())
+}
+
+// One completion witness is shared by initialization and app carry-forward.
+// Keeping the exact delivery/timer tuple preserves existing acceptance hashes.
+fn completed_continuation(
+    wake: &Store,
+    record: &Record,
+    current: &Target,
+    incomplete: &'static str,
+) -> Result<(Delivery, TurnTimer), String> {
+    let delivery = wake
+        .delivery(&record.continuation_event_id)?
+        .ok_or(incomplete)?;
+    let timer = wake
+        .timer(&record.continuation_event_id)?
+        .ok_or(incomplete)?;
+    validate_continuation_selection(record, current, &delivery.event)?;
+    let receipt = delivery.receipt.as_ref().ok_or(incomplete)?;
+    if delivery.phase != DeliveryPhase::Sent
+        || delivery.target != *current
+        || delivery.message_digest != digest(&delivery.event.message)
+        || receipt.event_id != record.continuation_event_id
+        || receipt.target_generation != current.generation
+        || receipt.target_digest != current.digest
+        || receipt.message_digest != delivery.message_digest
+        || receipt.evidence != "EXACT_USER_MESSAGE_APPENDED"
+        || timer.event_id != record.continuation_event_id
+        || timer.project_id != record.project_id
+        || timer.target_generation != current.generation
+        || timer.target_digest != current.digest
+        || timer.response_state != ResponseState::Complete
+        || timer.completed_utc.is_none()
+    {
+        return Err(incomplete.into());
+    }
+    Ok((delivery, timer))
 }
 
 /// Explicit bounded delivery of the one journal-owned rollover continuation.
@@ -5155,6 +5266,14 @@ mod tests {
     fn fresh_initialization_fixture(
         completed: bool,
     ) -> (PathBuf, PathBuf, PathBuf, Record, Target) {
+        fresh_initialization_fixture_with_app(completed, None)
+    }
+
+    #[cfg(windows)]
+    fn fresh_initialization_fixture_with_app(
+        completed: bool,
+        app: Option<&str>,
+    ) -> (PathBuf, PathBuf, PathBuf, Record, Target) {
         let (parent, control, dev, source, _) = paired_handoff_fixture();
         mcp::operator_bind_project_web_target_at_root(
             &control,
@@ -5168,6 +5287,12 @@ mod tests {
         let current = paired(&control, "alpha").unwrap();
         let wake = Store::open(&dev).unwrap();
         let mut r = record();
+        if let Some(app) = app {
+            r.handoff = format!(
+                "{}{app}\nprivate handoff",
+                runtime::APP_JSON_BOOTSTRAP_HANDOFF_PREFIX
+            );
+        }
         r.source = source;
         r.source_task_id = "fresh-initialization-only".into();
         r.message_digest =
@@ -6725,6 +6850,7 @@ mod tests {
                 source_task_id,
                 &native_thread_id,
             ),
+            bootstrap_app_mention: None,
         }
     }
     fn completed_delivery(request: &HandoffRequest) -> (Delivery, TurnTimer) {
@@ -6846,6 +6972,124 @@ mod tests {
             &request.native_thread_id,
         );
         request
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn handoff_app_choice_survives_source_compaction_without_changing_frozen_requests() {
+        let mention = "@CatDesk-Local-Tunnel-v5";
+        let (parent, control, dev, r, current) =
+            fresh_initialization_fixture_with_app(true, Some(mention));
+        let wake = Store::open(&dev).unwrap();
+        assert_eq!(
+            inherited_bootstrap_app_mention(Some(&r), &wake, "alpha", &current)
+                .unwrap()
+                .as_deref(),
+            Some(mention)
+        );
+        let mut request = context_request(&control);
+        let registered = registered_project(&control, "alpha").unwrap();
+        request.source = current.clone();
+        request.intent_id = "next-app-intent".into();
+        request.event_id = "web-handoff-next-app-intent".into();
+        request.native_workspace = registered.workspace.clone();
+        request.native_thread_id = registered.codex_thread_id.clone();
+        request.message = handoff_request_message_v2(
+            &request.project_id,
+            &request.intent_id,
+            &request.source_task_id,
+            &request.native_thread_id,
+        );
+        let legacy = serde_json::to_vec(&request).unwrap();
+        assert!(
+            serde_json::to_value(&request)
+                .unwrap()
+                .get("bootstrapAppMention")
+                .is_none()
+        );
+        assert_eq!(
+            serde_json::to_vec(&serde_json::from_slice::<HandoffRequest>(&legacy).unwrap())
+                .unwrap(),
+            legacy
+        );
+        request.bootstrap_app_mention = Some(mention.into());
+        request.message.push_str(&handoff_app_instruction(mention));
+        request.validate("alpha").unwrap();
+        let mut handoff = context_handoff();
+        assert_eq!(
+            handoff_from_source_snapshot(
+                &request,
+                &source_snapshot(&request, &request.message, &handoff)
+            )
+            .unwrap_err(),
+            "WEB_HANDOFF_APP_MENTION_CHANGED"
+        );
+        handoff.chatgpt_app_mention = Some(mention.into());
+        let collected = handoff_from_source_snapshot(
+            &request,
+            &source_snapshot(&request, &request.message, &handoff),
+        )
+        .unwrap();
+        let content = compose_handoff_content(&registered, &collected).unwrap();
+        let wire =
+            runtime::compose_bootstrap_message("alpha", "next-app-intent", &current, &content)
+                .unwrap();
+        assert!(wire.starts_with(mention));
+        let store = ProjectStore::open_existing(&control, "alpha").unwrap();
+        store.save_handoff_request(&request).unwrap();
+        let frozen_path = store
+            .root
+            .join(format!("handoff-{}.json", request.intent_id));
+        let frozen = fs::read(&frozen_path).unwrap();
+        request.bootstrap_app_mention = None;
+        request.message = handoff_request_message_v2(
+            &request.project_id,
+            &request.intent_id,
+            &request.source_task_id,
+            &request.native_thread_id,
+        );
+        assert!(store.preserve_recorded_handoff_request(request).is_err());
+        assert_eq!(fs::read(frozen_path).unwrap(), frozen);
+        drop(store);
+        drop(wake);
+        remove_initialization_fixture(parent);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn handoff_app_choice_refuses_unfinished_or_wrong_project_proof_and_never_guesses() {
+        let mention = "@CatDesk-Local-Tunnel-v5";
+        let (parent, _control, dev, mut r, current) =
+            fresh_initialization_fixture_with_app(false, Some(mention));
+        let wake = Store::open(&dev).unwrap();
+        assert!(inherited_bootstrap_app_mention(Some(&r), &wake, "alpha", &current).is_err());
+        wake.complete_timer(&r.continuation_event_id).unwrap();
+        assert!(inherited_bootstrap_app_mention(Some(&r), &wake, "beta", &current).is_err());
+        let wrong = Target::new(
+            current.generation,
+            "https://chatgpt.com/c/other-app-target".into(),
+        )
+        .unwrap();
+        assert!(inherited_bootstrap_app_mention(Some(&r), &wake, "alpha", &wrong).is_err());
+        r.message_digest = "0".repeat(64);
+        assert!(inherited_bootstrap_app_mention(Some(&r), &wake, "alpha", &current).is_err());
+        r.handoff = "legacy handoff without an app selection".into();
+        assert_eq!(
+            inherited_bootstrap_app_mention(Some(&r), &wake, "alpha", &current).unwrap(),
+            None
+        );
+        assert_eq!(
+            inherited_bootstrap_app_mention(None, &wake, "alpha", &current).unwrap(),
+            None
+        );
+        let mut request = context_request(&parent);
+        request.bootstrap_app_mention = Some("@Unrelated-App".into());
+        assert_eq!(
+            request.validate("alpha").unwrap_err(),
+            "WEB_HANDOFF_APP_MENTION_UNQUALIFIED"
+        );
+        drop(wake);
+        remove_initialization_fixture(parent);
     }
 
     #[test]
@@ -7669,6 +7913,7 @@ mod tests {
                 "task-a",
                 &registered.codex_thread_id,
             ),
+            bootstrap_app_mention: None,
         };
         store.save_handoff_request(&second).unwrap();
         assert_eq!(
