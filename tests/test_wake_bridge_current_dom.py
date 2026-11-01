@@ -117,6 +117,10 @@ if (options.nestedUserMarkers) {
 if (options.userShowMore) user.children[0].children.push(el('span', {}, '…'), button('Show more'));
 if (options.userControlsInsideBody)
   append(user.children[0].children[0], button('PRIVATE_CONTROL_LABEL'));
+if (options.userNoDedicatedBody) {
+  user.children[0].children[0].attrs = {};
+  if (options.userPlainSuffix) append(user.children[0], el('span', {}, options.userPlainSuffix));
+}
 if (options.userParagraphs) {
   const body = user.children[0].children[0];
   body.text = ''; body.children = [el('p', {}, 'first paragraph'), el('p', {}, 'second paragraph')];
@@ -514,6 +518,25 @@ class CurrentDomTests(unittest.TestCase):
         cdp = CurrentDom(userClassOnly=True, duplicateUser=True)
         self.assertEqual(self.sink.user_message_digests(cdp), [expected, expected])
         self.assertEqual(self.sink.trusted_turn_anchor_state(cdp, "exact wake message"), (2, 0))
+
+    def test_missing_dedicated_user_body_readers_agree_without_mutation(self):
+        for text in ("exact wake message", "Authored Copy message and Show more are retained"):
+            with self.subTest(text=text):
+                cdp = CurrentDom(userNoDedicatedBody=True, userText=text, traceMutations=True)
+                self.assertEqual(self.sink.trusted_turn_anchor_state(cdp, text), (1, 1))
+                self.assertEqual(self.sink.user_message_digests(cdp), [bridge.digest(text)])
+                self.assertEqual(cdp.mutations, 0)
+
+    def test_missing_dedicated_user_body_preserves_unknown_text_and_duplicates(self):
+        text = "exact wake message"
+        cdp = CurrentDom(userNoDedicatedBody=True, userPlainSuffix=" FOREIGN_TEXT", traceMutations=True)
+        self.assertNotIn(bridge.digest(text), self.sink.user_message_digests(cdp))
+        self.assertEqual(self.sink.trusted_turn_anchor_state(cdp, text), (0, 0))
+        self.assertEqual(cdp.mutations, 0)
+        duplicate = CurrentDom(userNoDedicatedBody=True, duplicateUser=True, traceMutations=True)
+        self.assertEqual(self.sink.user_message_digests(duplicate), [bridge.digest(text)] * 2)
+        self.assertEqual(self.sink.trusted_turn_anchor_state(duplicate, text), (2, 0))
+        self.assertEqual(duplicate.mutations, 0)
 
     def test_nested_current_user_markers_count_one_logical_turn(self):
         cdp = CurrentDom(nestedUserMarkers=True)

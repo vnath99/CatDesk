@@ -894,7 +894,10 @@ class CdpSink:
             return containers.map(container => {
             const contentSelector = "[data-message-content], [data-markdown-text-tone='user-message'], .whitespace-pre-wrap";
             const content = container.matches(contentSelector) ? container : container.querySelector(contentSelector);
-            return content ? userBodyText(content) : (container.innerText || container.textContent || '');
+            // Match the trusted-turn reader even when this UI omits the
+            // dedicated body selector. Only presentation controls are stripped
+            // from a clone; authored text and exact digest checks remain.
+            return userBodyText(content || container);
             });
         })()""".replace("__CATDESK_USER_BODY_READER__", USER_BODY_TEXT_READER)
         try:
