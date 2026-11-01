@@ -1,4 +1,4 @@
-//! Explicit stopped-only retirement of an audited failed promotion.
+//! Explicit stopped-only retirement of an audited terminal promotion.
 //! Original authority and handoff bytes are moved, never erased or rewritten.
 use super::*;
 use std::collections::BTreeMap;
@@ -38,6 +38,30 @@ struct Plan {
     records: BTreeMap<String, String>,
     historical_handoff_sha256: Option<String>,
     trusted_release_evidence_sha256: String,
+    #[serde(default, skip_serializing_if = "is_false")]
+    completed_promotion: bool,
+}
+
+impl Plan {
+    fn canonical_sha256(&self) -> &str {
+        if self.completed_promotion {
+            &self.candidate_sha256
+        } else {
+            &self.prior_sha256
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CompletedPromotionReceipt {
+    schema_version: u8,
+    transaction_id: String,
+    authorization_id: String,
+    stage: String,
+    candidate_hash: String,
+    canonical_relative_path: String,
+    canonical_sha256: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -149,7 +173,10 @@ fn journal(parent: &Guard) -> Result<Option<Journal>, String> {
     let value: Journal =
         serde_json::from_slice(&raw).map_err(|_| format!("{LABEL} journal invalid"))?;
     if value.schema_version != 1
-        || value.plan.schema_version != 1
+        || !matches!(
+            (value.plan.schema_version, value.plan.completed_promotion),
+            (1, false) | (2, true)
+        )
         || !valid_id(&value.plan.transaction_id)
         || !valid_digest(&value.evidence_sha256)
         || digest(&bytes(&value.plan)?) != value.evidence_sha256
@@ -324,6 +351,30 @@ fn inspect_owners_context(
     bridge_pid: Option<u32>,
     intent: Option<&BackendOnlyIntent>,
 ) -> Result<serde_json::Value, String> {
+    inspect_owners_for_pair(
+        workspace,
+        auth,
+        handoff,
+        helper_hash,
+        owned_worker,
+        bridge_pid,
+        intent,
+        &auth.prior_canonical_sha256,
+    )
+}
+
+#[cfg(windows)]
+#[allow(clippy::too_many_arguments)]
+fn inspect_owners_for_pair(
+    workspace: &Path,
+    auth: &ReviewedPromotionAuthorizationV1,
+    handoff: Option<&ReloadHandoffStateV1>,
+    helper_hash: &str,
+    owned_worker: bool,
+    bridge_pid: Option<u32>,
+    intent: Option<&BackendOnlyIntent>,
+    expected_canonical_sha256: &str,
+) -> Result<serde_json::Value, String> {
     use crate::reviewed_candidate_owner::OwnedCandidateChild;
     let interpreter = crate::operator_facade::trusted_windows_powershell(workspace)?;
     let mut scripts = Guard::acquire(workspace, LABEL)?;
@@ -353,7 +404,7 @@ fn inspect_owners_context(
     let mut owner = OwnedCandidateChild::spawn(&mut command)?;
     let input = serde_json::json!({"workspace":crate::command::normalize_windows_verbatim_path(workspace.to_path_buf()),
         "candidate":crate::command::normalize_windows_verbatim_path(workspace.join(&auth.candidate_relative_path)),
-        "priorSha256":auth.prior_canonical_sha256,"transactionId":auth.transaction_id,"historicalPids":intent.map(|v|vec![v.old_pid]).unwrap_or_else(||handoff.map(|v|vec![v.old_pid,v.new_pid.unwrap_or(0)]).unwrap_or_default()),
+        "priorSha256":expected_canonical_sha256,"transactionId":auth.transaction_id,"historicalPids":intent.map(|v|vec![v.old_pid]).unwrap_or_else(||handoff.map(|v|vec![v.old_pid,v.new_pid.unwrap_or(0)]).unwrap_or_default()),
         "historicalCompletedUnix":handoff.map(|v|v.completed_at_unix).unwrap_or(0),
         "intentCreatedAtUtc":intent.map(|v|v.created_at_utc.as_str()),"authorizationGeneration":auth.generation,"authorizationExpires":auth.expires_at_unix,
         "bridgePid":bridge_pid,"ownedWorkerPid":owned_worker.then_some(std::process::id()),
@@ -414,7 +465,7 @@ fn inspect_owners_context(
         Some(pid) => proof["listenerVerified"] == true && proof["bridgePid"] == pid,
         None => proof["ownersEmpty"] == true,
     };
-    if !scope_matches || proof["canonicalSha256"] != auth.prior_canonical_sha256 {
+    if !scope_matches || proof["canonicalSha256"] != expected_canonical_sha256 {
         return Err(format!("{LABEL} ownership proof differs"));
     }
     Ok(proof)
@@ -487,7 +538,7 @@ pub(crate) fn qualify_stopped_source(
     let _lock = create_delete_on_close_regular_lock(&parent, "promotion-operation.lock", LABEL)?;
     let _lifecycle = super::source_bridge::lifecycle_lease(workspace)?;
     let previous = journal(&parent)?;
-    let plan = inspect_locked(workspace, &parent, transaction, previous.as_ref())?;
+    let plan = inspect_locked(workspace, &parent, transaction, previous.as_ref(), false)?;
     if digest(&bytes(&plan)?) != expected {
         return Err("promotion source evidence differs".into());
     }
@@ -505,6 +556,18 @@ fn validate_terminal_binding(
     owner: &[u8],
     transaction: &str,
 ) -> Result<(), String> {
+    validate_terminal_binding_for_kind(auth, preflight, claim, result, owner, transaction, false)
+}
+
+fn validate_terminal_binding_for_kind(
+    auth: &ReviewedPromotionAuthorizationV1,
+    preflight: &ReviewedPromotionPreflightV1,
+    claim: &ReviewedPromotionClaimV1,
+    result: &ReviewedPromotionResultV1,
+    owner: &[u8],
+    transaction: &str,
+    completed: bool,
+) -> Result<(), String> {
     if auth.schema_version != 1
         || !auth.local_backend_only
         || auth.transaction_id != transaction
@@ -520,11 +583,16 @@ fn validate_terminal_binding(
         || claim.claim_id != auth.claim_id
         || claim.candidate_relative_path != auth.candidate_relative_path
         || result.schema_version != 1
-        || result.state != "PROMOTION_FAILED_OR_AMBIGUOUS"
+        || result.state
+            != if completed {
+                "PROMOTION_COMPLETED"
+            } else {
+                "PROMOTION_FAILED_OR_AMBIGUOUS"
+            }
         || result.transaction_id != transaction
         || result.authorization_generation != auth.generation
         || result.candidate_sha256 != auth.candidate_sha256
-        || result.serving_state.is_some()
+        || result.serving_state.as_deref() != completed.then_some("STOPPED_AFTER_BOUNDED_OWNER")
         || owner != transaction.as_bytes()
         || !valid_digest(&auth.prior_canonical_sha256)
         || auth.prior_canonical_sha256 == auth.candidate_sha256
@@ -532,6 +600,23 @@ fn validate_terminal_binding(
         return Err(format!(
             "{LABEL} exact terminal pre-mutation evidence required"
         ));
+    }
+    Ok(())
+}
+
+fn validate_completed_receipt(
+    receipt: &CompletedPromotionReceipt,
+    auth: &ReviewedPromotionAuthorizationV1,
+) -> Result<(), String> {
+    if receipt.schema_version != 1
+        || receipt.transaction_id != auth.transaction_id
+        || receipt.authorization_id != auth.authorization_id
+        || receipt.stage != "CANONICAL_HANDOFF_PROVEN"
+        || receipt.candidate_hash != auth.candidate_sha256
+        || receipt.canonical_sha256 != auth.candidate_sha256
+        || receipt.canonical_relative_path.replace('\\', "/") != "target/release/catdesk.exe"
+    {
+        return Err(format!("{LABEL} completed promotion receipt differs"));
     }
     Ok(())
 }
@@ -580,7 +665,13 @@ fn inspect_locked(
     parent: &Guard,
     transaction: &str,
     prior: Option<&Journal>,
+    completed: bool,
 ) -> Result<Plan, String> {
+    if prior.is_some_and(|v| {
+        v.plan.transaction_id == transaction && v.plan.completed_promotion != completed
+    }) {
+        return Err(format!("{LABEL} terminal mode differs"));
+    }
     let archived = archive_name(transaction)?;
     let control =
         if prior.is_some_and(|v| v.plan.transaction_id == transaction && v.phase != "COMPLETED") {
@@ -600,14 +691,20 @@ fn inspect_locked(
     let claim: ReviewedPromotionClaimV1 = read_json(&control, "claim.json")?;
     let result: ReviewedPromotionResultV1 = read_json(&control, "result.json")?;
     let preflight: ReviewedPromotionPreflightV1 = read_json(&control, "preflight.json")?;
-    validate_terminal_binding(
-        &auth,
-        &preflight,
-        &claim,
-        &result,
-        &read_relative_regular(&control, "worker-owner", 32, LABEL)?,
-        transaction,
-    )?;
+    let owner = read_relative_regular(&control, "worker-owner", 32, LABEL)?;
+    if completed {
+        validate_terminal_binding_for_kind(
+            &auth,
+            &preflight,
+            &claim,
+            &result,
+            &owner,
+            transaction,
+            true,
+        )?;
+    } else {
+        validate_terminal_binding(&auth, &preflight, &claim, &result, &owner, transaction)?;
+    }
     if workspace
         .join(".catdesk/promotion-recovery/promotion-transaction.json")
         .try_exists()
@@ -630,6 +727,39 @@ fn inspect_locked(
         || attestation.build_attempt_id != auth.build_attempt_id
     {
         return Err(format!("{LABEL} attestation differs"));
+    }
+    if completed {
+        let recovery = child(parent, "promotion-recovery")?;
+        let raw = read_relative_regular(&recovery, "reviewed-promotion.json", 16384, LABEL)?;
+        let receipt: CompletedPromotionReceipt = serde_json::from_slice(&raw)
+            .map_err(|_| format!("{LABEL} completed receipt invalid"))?;
+        validate_completed_receipt(&receipt, &auth)?;
+        let helper = accepted_helper(workspace, &auth)?;
+        let mut proof = inspect_owners_for_pair(
+            workspace,
+            &auth,
+            None,
+            &helper,
+            false,
+            None,
+            None,
+            &auth.candidate_sha256,
+        )?;
+        proof["completedReceiptSha256"] = serde_json::Value::String(digest(&raw));
+        let plan = Plan {
+            schema_version: 2,
+            transaction_id: transaction.into(),
+            prior_sha256: auth.prior_canonical_sha256,
+            candidate_sha256: auth.candidate_sha256,
+            records: hashes,
+            historical_handoff_sha256: None,
+            trusted_release_evidence_sha256: digest(&bytes(&proof)?),
+            completed_promotion: true,
+        };
+        if prior.is_some_and(|j| j.plan.transaction_id == transaction && j.plan != plan) {
+            return Err(format!("{LABEL} recovery evidence changed"));
+        }
+        return Ok(plan);
     }
     let mut handoffs = parent.try_clone(LABEL)?;
     handoffs.descend_existing("restart-handoff", LABEL)?;
@@ -714,6 +844,7 @@ fn inspect_locked(
         records: hashes,
         historical_handoff_sha256: raw.as_ref().map(|v| digest(v)),
         trusted_release_evidence_sha256: digest(&bytes(&proof)?),
+        completed_promotion: false,
     };
     if prior.is_some_and(|j| j.plan.transaction_id == transaction && j.plan != plan) {
         return Err(format!("{LABEL} recovery evidence changed"));
@@ -723,16 +854,42 @@ fn inspect_locked(
 
 #[cfg(windows)]
 pub(crate) fn inspect(workspace: &Path, transaction: &str) -> Result<serde_json::Value, String> {
+    inspect_for_kind(workspace, transaction, false)
+}
+
+#[cfg(windows)]
+pub(crate) fn inspect_completed(
+    workspace: &Path,
+    transaction: &str,
+) -> Result<serde_json::Value, String> {
+    inspect_for_kind(workspace, transaction, true)
+}
+
+#[cfg(windows)]
+fn inspect_for_kind(
+    workspace: &Path,
+    transaction: &str,
+    completed: bool,
+) -> Result<serde_json::Value, String> {
     let parent = metadata(workspace)?;
     let _lock = create_delete_on_close_regular_lock(&parent, "promotion-operation.lock", LABEL)?;
     let previous = journal(&parent)?;
     if let Some(value) = &previous {
         if value.phase == "COMPLETED" && value.plan.transaction_id == transaction {
+            if value.plan.completed_promotion != completed {
+                return Err(format!("{LABEL} terminal mode differs"));
+            }
             verify_archive(&parent, value)?;
             return Ok(summary(value));
         }
     }
-    let plan = inspect_locked(workspace, &parent, transaction, previous.as_ref())?;
+    let plan = inspect_locked(
+        workspace,
+        &parent,
+        transaction,
+        previous.as_ref(),
+        completed,
+    )?;
     Ok(summary(&Journal {
         schema_version: 1,
         phase: "ELIGIBLE".into(),
@@ -802,6 +959,25 @@ pub(crate) fn retire(
     transaction: &str,
     expected: &str,
 ) -> Result<serde_json::Value, String> {
+    retire_for_kind(workspace, transaction, expected, false)
+}
+
+#[cfg(windows)]
+pub(crate) fn retire_completed(
+    workspace: &Path,
+    transaction: &str,
+    expected: &str,
+) -> Result<serde_json::Value, String> {
+    retire_for_kind(workspace, transaction, expected, true)
+}
+
+#[cfg(windows)]
+fn retire_for_kind(
+    workspace: &Path,
+    transaction: &str,
+    expected: &str,
+    completed: bool,
+) -> Result<serde_json::Value, String> {
     if !valid_digest(expected) {
         return Err(format!("{LABEL} evidence digest invalid"));
     }
@@ -810,6 +986,9 @@ pub(crate) fn retire(
     let previous = journal(&parent)?;
     if let Some(value) = &previous {
         if value.phase == "COMPLETED" && value.plan.transaction_id == transaction {
+            if value.plan.completed_promotion != completed {
+                return Err(format!("{LABEL} terminal mode differs"));
+            }
             if value.evidence_sha256 != expected {
                 return Err(format!("{LABEL} evidence differs"));
             }
@@ -832,7 +1011,13 @@ pub(crate) fn retire(
         .share_mode(0)
         .open(lifecycle.path().join("stopped-owner.lock"))
         .map_err(|_| format!("{LABEL} public lifecycle owner is active"))?;
-    let plan = inspect_locked(workspace, &parent, transaction, previous.as_ref())?;
+    let plan = inspect_locked(
+        workspace,
+        &parent,
+        transaction,
+        previous.as_ref(),
+        completed,
+    )?;
     let evidence = digest(&bytes(&plan)?);
     if evidence != expected {
         return Err(format!("{LABEL} material evidence changed"));
@@ -845,7 +1030,7 @@ pub(crate) fn retire(
     let _canonical = crate::windows_protected_fs::retain_reviewed_regular_artifact(
         &release,
         "catdesk.exe",
-        &plan.prior_sha256,
+        plan.canonical_sha256(),
         128 * 1024 * 1024,
         LABEL,
     )?;
@@ -854,7 +1039,7 @@ pub(crate) fn retire(
         .map_err(|_| "retirement fingerprint invalid")?
         .trim()
         .to_ascii_lowercase()
-        != plan.prior_sha256
+        != plan.canonical_sha256()
     {
         return Err(format!("{LABEL} canonical fingerprint changed"));
     }
@@ -1025,6 +1210,79 @@ mod tests {
         }
     }
 
+    #[test]
+    fn completed_retirement_requires_exact_verified_stopped_success() {
+        let (a, p, c, mut r) = terminal_fixture();
+        let id = a.transaction_id.clone();
+        r.state = "PROMOTION_COMPLETED".into();
+        r.serving_state = Some("STOPPED_AFTER_BOUNDED_OWNER".into());
+        validate_terminal_binding_for_kind(&a, &p, &c, &r, id.as_bytes(), &id, true).unwrap();
+        assert!(validate_terminal_binding(&a, &p, &c, &r, id.as_bytes(), &id).is_err());
+        for state in [None, Some("UNVERIFIED"), Some("SERVING")] {
+            let mut changed = r.clone();
+            changed.serving_state = state.map(str::to_string);
+            assert!(
+                validate_terminal_binding_for_kind(&a, &p, &c, &changed, id.as_bytes(), &id, true)
+                    .is_err()
+            );
+        }
+        for state in [
+            "PROMOTION_FAILED_OR_AMBIGUOUS",
+            "RUNNING",
+            "CLAIMED_PENDING",
+        ] {
+            let mut changed = r.clone();
+            changed.state = state.into();
+            assert!(
+                validate_terminal_binding_for_kind(&a, &p, &c, &changed, id.as_bytes(), &id, true)
+                    .is_err()
+            );
+        }
+        assert!(
+            validate_terminal_binding_for_kind(&a, &p, &c, &r, b"wrong-owner", &id, true).is_err()
+        );
+        let mut live = a.clone();
+        live.expires_at_unix = u64::MAX;
+        let mut current = p.clone();
+        current.expires_at_unix = live.expires_at_unix;
+        current.authorization = live.clone();
+        assert!(
+            validate_terminal_binding_for_kind(&live, &current, &c, &r, id.as_bytes(), &id, true)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn completed_receipt_must_bind_the_actual_canonical_promotion() {
+        let (a, _, _, _) = terminal_fixture();
+        let receipt = serde_json::json!({"schemaVersion":1,"transactionId":a.transaction_id,
+            "authorizationId":a.authorization_id,"stage":"CANONICAL_HANDOFF_PROVEN",
+            "candidateHash":a.candidate_sha256,"canonicalRelativePath":"target\\release\\catdesk.exe",
+            "canonicalSha256":a.candidate_sha256});
+        validate_completed_receipt(&serde_json::from_value(receipt.clone()).unwrap(), &a).unwrap();
+        for field in [
+            "transactionId",
+            "authorizationId",
+            "stage",
+            "candidateHash",
+            "canonicalRelativePath",
+            "canonicalSha256",
+        ] {
+            let mut changed = receipt.clone();
+            changed[field] = serde_json::json!("foreign");
+            assert!(
+                validate_completed_receipt(&serde_json::from_value(changed).unwrap(), &a).is_err(),
+                "{field}"
+            );
+        }
+        let mut changed = receipt.clone();
+        changed["schemaVersion"] = serde_json::json!(2);
+        assert!(validate_completed_receipt(&serde_json::from_value(changed).unwrap(), &a).is_err());
+        let mut changed = receipt;
+        changed["unknownAuthority"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<CompletedPromotionReceipt>(changed).is_err());
+    }
+
     fn fixture() -> (PathBuf, Journal) {
         let root =
             std::env::temp_dir().join(format!("CatDesk-Retirement-Fixture-{}", Uuid::new_v4()));
@@ -1046,6 +1304,7 @@ mod tests {
             records,
             historical_handoff_sha256: Some(digest(receipt)),
             trusted_release_evidence_sha256: digest(b"DISPOSABLE_FIXTURE_NOT_RELEASE_AUTHORITY"),
+            completed_promotion: false,
         };
         let journal = Journal {
             schema_version: 1,
@@ -1057,6 +1316,75 @@ mod tests {
         update_journal(&parent, &journal).unwrap();
         drop(parent);
         (root, journal)
+    }
+
+    #[test]
+    fn completed_archive_preserves_unrelated_handoff_and_recovers_interruption() {
+        for stop in ["PROMOTION_RENAMED", "HANDOFF_RENAMED"] {
+            let (root, mut value) = fixture();
+            value.plan.schema_version = 2;
+            value.plan.completed_promotion = true;
+            value.plan.historical_handoff_sha256 = None;
+            value.evidence_sha256 = digest(&bytes(&value.plan).unwrap());
+            assert_eq!(value.plan.canonical_sha256(), value.plan.candidate_sha256);
+            let parent = metadata(&root).unwrap();
+            update_journal(&parent, &value).unwrap();
+            assert!(
+                archive_locked(&parent, &mut value, |point| {
+                    if point == stop {
+                        Err("fixture interruption".into())
+                    } else {
+                        Ok(())
+                    }
+                })
+                .is_err()
+            );
+            let mut recovered = journal(&parent).unwrap().unwrap();
+            archive_locked(&parent, &mut recovered, |_| Ok(())).unwrap();
+            assert_eq!(recovered.phase, "COMPLETED");
+            assert!(recovered.plan.completed_promotion);
+            assert_eq!(
+                fs::read(root.join(".catdesk/restart-handoff/latest.json")).unwrap(),
+                b"disposable historical receipt"
+            );
+            verify_archive(&parent, &recovered).unwrap();
+            archive_locked(&parent, &mut recovered, |_| {
+                panic!("completed archive replayed mutation")
+            })
+            .unwrap();
+            drop(parent);
+            cleanup_fixture(root);
+        }
+    }
+
+    #[test]
+    fn legacy_retirement_plan_bytes_and_terminal_domains_remain_distinct() {
+        let (root, mut value) = fixture();
+        let old = bytes(&value.plan).unwrap();
+        assert!(
+            !String::from_utf8(old.clone())
+                .unwrap()
+                .contains("completedPromotion")
+        );
+        assert_eq!(
+            bytes(&serde_json::from_slice::<Plan>(&old).unwrap()).unwrap(),
+            old
+        );
+        assert_eq!(value.plan.canonical_sha256(), value.plan.prior_sha256);
+        let parent = metadata(&root).unwrap();
+        value.plan.completed_promotion = true;
+        value.evidence_sha256 = digest(&bytes(&value.plan).unwrap());
+        update_journal(&parent, &value).unwrap();
+        assert!(
+            journal(&parent).is_err(),
+            "completed mode cannot borrow legacy plan schema"
+        );
+        value.plan.schema_version = 2;
+        value.evidence_sha256 = digest(&bytes(&value.plan).unwrap());
+        update_journal(&parent, &value).unwrap();
+        assert!(journal(&parent).unwrap().unwrap().plan.completed_promotion);
+        drop(parent);
+        cleanup_fixture(root);
     }
 
     #[test]

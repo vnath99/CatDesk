@@ -224,7 +224,14 @@ pub(crate) enum ReleasePairOperatorAction {
     InspectFailedPromotion {
         transaction_id: String,
     },
+    InspectCompletedPromotion {
+        transaction_id: String,
+    },
     RetireFailedPromotion {
+        transaction_id: String,
+        evidence_sha256: String,
+    },
+    RetireCompletedPromotion {
         transaction_id: String,
         evidence_sha256: String,
     },
@@ -691,7 +698,7 @@ fn parse_release_pair_action(args: &[String]) -> Result<Option<OperatorAction>, 
             }
         }
         Some("result-stopped") if args.len() == 3 => ReleasePairOperatorAction::ResultStopped,
-        Some("inspect-failed-promotion")
+        Some(command @ ("inspect-failed-promotion" | "inspect-completed-promotion"))
             if args.len() == 5
                 && args[3] == "--transaction-id"
                 && args[4].len() == 32
@@ -699,25 +706,39 @@ fn parse_release_pair_action(args: &[String]) -> Result<Option<OperatorAction>, 
                     .bytes()
                     .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase()) =>
         {
-            ReleasePairOperatorAction::InspectFailedPromotion {
-                transaction_id: args[4].clone(),
+            if command == "inspect-completed-promotion" {
+                ReleasePairOperatorAction::InspectCompletedPromotion {
+                    transaction_id: args[4].clone(),
+                }
+            } else {
+                ReleasePairOperatorAction::InspectFailedPromotion {
+                    transaction_id: args[4].clone(),
+                }
             }
         }
-        Some(command @ ("retire-failed-promotion" | "qualify-promotion-source"))
-            if args.len() == 7
-                && args[3] == "--transaction-id"
-                && args[5] == "--expected-evidence-sha256"
-                && args[4].len() == 32
-                && args[4]
-                    .bytes()
-                    .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase())
-                && args[6].len() == 64
-                && args[6]
-                    .bytes()
-                    .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase()) =>
+        Some(
+            command @ ("retire-failed-promotion"
+            | "retire-completed-promotion"
+            | "qualify-promotion-source"),
+        ) if args.len() == 7
+            && args[3] == "--transaction-id"
+            && args[5] == "--expected-evidence-sha256"
+            && args[4].len() == 32
+            && args[4]
+                .bytes()
+                .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase())
+            && args[6].len() == 64
+            && args[6]
+                .bytes()
+                .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase()) =>
         {
             if command == "qualify-promotion-source" {
                 ReleasePairOperatorAction::QualifyPromotionSource {
+                    transaction_id: args[4].clone(),
+                    evidence_sha256: args[6].clone(),
+                }
+            } else if command == "retire-completed-promotion" {
+                ReleasePairOperatorAction::RetireCompletedPromotion {
                     transaction_id: args[4].clone(),
                     evidence_sha256: args[6].clone(),
                 }
@@ -1253,6 +1274,42 @@ pub(crate) async fn execute_operator_action(
                     {
                         let _ = transaction_id;
                         Err("promotion retirement requires Windows".into())
+                    }
+                }
+                ReleasePairOperatorAction::InspectCompletedPromotion { transaction_id } => {
+                    #[cfg(windows)]
+                    return tokio::task::spawn_blocking(move || {
+                        crate::daemon_reload::retirement::inspect_completed(
+                            &workspace,
+                            &transaction_id,
+                        )
+                    })
+                    .await
+                    .map_err(|_| "completed promotion inspection failed")?;
+                    #[cfg(not(windows))]
+                    {
+                        let _ = transaction_id;
+                        Err("completed promotion retirement requires Windows".into())
+                    }
+                }
+                ReleasePairOperatorAction::RetireCompletedPromotion {
+                    transaction_id,
+                    evidence_sha256,
+                } => {
+                    #[cfg(windows)]
+                    return tokio::task::spawn_blocking(move || {
+                        crate::daemon_reload::retirement::retire_completed(
+                            &workspace,
+                            &transaction_id,
+                            &evidence_sha256,
+                        )
+                    })
+                    .await
+                    .map_err(|_| "completed promotion retirement requires recovery")?;
+                    #[cfg(not(windows))]
+                    {
+                        let _ = (transaction_id, evidence_sha256);
+                        Err("completed promotion retirement requires Windows".into())
                     }
                 }
                 ReleasePairOperatorAction::RetireFailedPromotion {
@@ -2023,6 +2080,63 @@ mod tests {
     use serde_json::Value;
     use sha2::Digest;
     use uuid::Uuid;
+
+    #[test]
+    fn completed_promotion_cli_requires_exact_transaction_and_evidence() {
+        let args = |values: &[&str]| values.iter().map(|v| (*v).to_owned()).collect::<Vec<_>>();
+        let id = "a".repeat(32);
+        let digest = "b".repeat(64);
+        let inspect = args(&[
+            "operator",
+            "release-pair",
+            "inspect-completed-promotion",
+            "--transaction-id",
+            &id,
+        ]);
+        assert!(matches!(
+            parse_operator_action(inspect.clone()),
+            Ok(Some(OperatorAction::ReleasePair(
+                ReleasePairOperatorAction::InspectCompletedPromotion { .. }
+            )))
+        ));
+        let retire = args(&[
+            "operator",
+            "release-pair",
+            "retire-completed-promotion",
+            "--transaction-id",
+            &id,
+            "--expected-evidence-sha256",
+            &digest,
+        ]);
+        assert!(matches!(
+            parse_operator_action(retire.clone()),
+            Ok(Some(OperatorAction::ReleasePair(
+                ReleasePairOperatorAction::RetireCompletedPromotion { .. }
+            )))
+        ));
+        for original in [inspect, retire] {
+            let mut extra = original.clone();
+            extra.push("--force".into());
+            assert!(parse_operator_action(extra).is_err());
+            let mut foreign = original;
+            foreign[4] = "../foreign".into();
+            assert!(parse_operator_action(foreign).is_err());
+        }
+        for invalid in ["", "b", "G", "../foreign"] {
+            assert!(
+                parse_operator_action(args(&[
+                    "operator",
+                    "release-pair",
+                    "retire-completed-promotion",
+                    "--transaction-id",
+                    &id,
+                    "--expected-evidence-sha256",
+                    invalid
+                ]))
+                .is_err()
+            );
+        }
+    }
 
     #[test]
     fn installed_backend_cli_has_only_a_finite_run_action() {

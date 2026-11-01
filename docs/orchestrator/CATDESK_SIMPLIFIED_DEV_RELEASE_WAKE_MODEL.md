@@ -1,3 +1,16 @@
+## 2026-11-01T21:45:43.379260+00:00 — candidate attested and locally qualified; successful-promotion transition source tested
+
+The following commands exist in the new source only. They have not been executed against production and must use an independently reviewed, qualified controller; the retained C254 executable does not provide this transition.
+
+```powershell
+& $qualifiedController operator release-pair inspect-completed-promotion --transaction-id <original-completed-transaction>
+& $qualifiedController operator release-pair retire-completed-promotion --transaction-id <same-transaction> --expected-evidence-sha256 <inspection-digest>
+```
+
+Inspection checks the exact expired stopped-success authority, producer/snapshot, canonical handoff receipt, trusted installed pair and owner quiescence. Retirement revalidates that same evidence under the existing mutation/public-lifecycle leases, retains the canonical EXE/fingerprint handles and archives original control records through PREPARED → PROMOTION_ARCHIVED → COMPLETED. An interrupted transition resumes with the same identity and digest after reconciliation; no force/clear option exists. Unrelated restart handoffs and release artifacts remain intact. Failed/ambiguous transactions continue to require their existing failed-promotion recovery path. After independent qualification and actual stopped migration, use a fresh existing normal-promotion preflight; development-package selection remains separate from protected promotion.
+
+Evidence and installed acceptance limits: `docs/verification/ATTESTED_CANDIDATE_AND_COMPLETED_PROMOTION_SOURCE_2026_11_01.json`.
+
 ## 2026-11-01T20:41:13.683088+00:00 — updated operator roadmap reconciled; acceptance remains OPEN
 
 The updated one-file handoff is additive and retains requirements A-F and later G. T-0484 requires separate observed MCP traffic, unique active-conversation pressure and uncertainty; o200k_base and local 96k/24k/8k policy values are proxies rather than exact provider capacity. Attribution, revision/content deduplication, surfaced-result limits, unknown attachments/model metadata and calibration remain mandatory. Current controlled evidence is preserved and does not establish installed or unattended acceptance.
