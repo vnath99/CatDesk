@@ -1,3 +1,9 @@
+## 2026-11-01 — second fresh project paired, continued and admitted for new tasks
+
+A second real controlled project conversation was created through the existing authenticated browser owner. The actual issued URL was verified; registry and Wake advanced together to generation 2, with predecessor history preserved. Its one queued continuation has an exact receipt and a verified COMPLETE response. The supported local initialization transition passed for NEW tasks only, without an execution grant or native resumption. This is explicit project initialization, not automatic near-capacity acceptance. Sibling registrations, old work, native sessions and the original context policy were preserved.
+
+The initial helper used an MCP envelope where the CLI expects a policy object; it was refused before browser startup or state mutation. The existing corrected input procedure retained the exact frozen handoff. Final inventory found zero test-owned browser/Python/Wake processes. The intentional existing backend and tunnel remain serving, port 3200 has its expected owner, and installed fingerprint parity holds. Two-project Web coding/native verification, broader release review/producer promotion and installed reboot recovery remain OPEN. Evidence: `docs/verification/SECOND_FRESH_WEB_PROJECT_2026_11_01.json`. No operator action is currently required.
+
 ## 2026-11-01 — two real Web source reviews under one scoped authorization
 
 For `operator web context configure --project-id <id> --input-file <file>`, the file contains the **policy object alone**. The MCP configure operation instead takes a project/target/policy envelope. Do not pass that envelope to the operator CLI. A confirmed pre-submit schema refusal can be corrected while preserving the frozen handoff; an unknown browser submission cannot be retried this way.
