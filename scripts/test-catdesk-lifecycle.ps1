@@ -447,6 +447,14 @@ try {
     $actions.Clear()
     $again = Invoke-FixtureFacade -Command 'autostart' -AutostartAction 'enable' -Seams $autostart | ConvertFrom-Json
     Require ($again.state -eq 'AUTOSTART_ENABLED' -and $actions.Count -eq 0) 'enable is idempotent for exact owned task'
+    $Global:CatDeskAutostartSupervisorRunning = $false
+    $stoppedMonitor = Invoke-FixtureFacade -Command 'autostart' -AutostartAction 'status' -Seams $autostart | ConvertFrom-Json
+    Require ($stoppedMonitor.state -eq 'AUTOSTART_REGISTERED_MONITOR_STOPPED' -and $actions.Count -eq 0) 'owned registration without its monitor is not enabled live recovery and status starts nothing'
+    $unavailableMonitor = $autostart.Clone()
+    $unavailableMonitor.AutostartSupervisorRunning = { param($definition) throw 'private fixture monitor query failure' }
+    $unavailableStatus = Invoke-FixtureFacade -Command 'autostart' -AutostartAction 'status' -Seams $unavailableMonitor | ConvertFrom-Json
+    Require ($unavailableStatus.state -eq 'AUTOSTART_UNAVAILABLE' -and $actions.Count -eq 0 -and ($unavailableStatus | ConvertTo-Json) -notmatch 'private fixture') 'unavailable monitor observation fails closed without exposing query details or starting anything'
+    $Global:CatDeskAutostartSupervisorRunning = $true
     $actions.Clear()
     $conflict = $autostart.Clone()
     $conflict.ScheduledTaskGet = { param($definition) $task = New-OwnedTask $definition; $task.Actions[0].Arguments = 'mismatch'; $task }
@@ -479,6 +487,9 @@ try {
     $actions.Clear()
     $fallbackStatus = Invoke-FixtureFacade -Command 'autostart' -AutostartAction 'status' -Seams $fallback | ConvertFrom-Json
     Require ($fallbackStatus.state -eq 'AUTOSTART_ENABLED' -and $actions.Count -eq 0) 'run-key fallback status is owned and non-mutating'
+    $Global:CatDeskAutostartSupervisorRunning = $false
+    $stoppedFallback = Invoke-FixtureFacade -Command 'autostart' -AutostartAction 'status' -Seams $fallback | ConvertFrom-Json
+    Require ($stoppedFallback.state -eq 'AUTOSTART_REGISTERED_MONITOR_STOPPED' -and $actions.Count -eq 0) 'logon Run persistence does not imply a live same-session monitor or restart it during status'
     $fallbackDisable = Invoke-FixtureFacade -Command 'autostart' -AutostartAction 'disable' -Seams $fallback | ConvertFrom-Json
     Require ($fallbackDisable.state -eq 'AUTOSTART_DISABLED' -and ([string]::Join(',', $actions)) -eq 'runkey-unregister') 'disable removes only the exact owned run-key fallback'
     $actions.Clear()

@@ -562,7 +562,11 @@ function Invoke-AutostartLifecycle {
         if ($taskConflict -or $runConflict) { Write-LifecycleStatus 'AUTOSTART_CONFLICT'; return }
         switch ($AutostartAction) {
             'status' {
-                if ($taskOwned -or $runOwned) { Write-LifecycleStatus 'AUTOSTART_ENABLED'; return }
+                if ($taskOwned -or $runOwned) {
+                    if (Test-AutostartSupervisorRunning -Definition $definition) { Write-LifecycleStatus 'AUTOSTART_ENABLED' }
+                    else { Write-LifecycleStatus 'AUTOSTART_REGISTERED_MONITOR_STOPPED' }
+                    return
+                }
                 Write-LifecycleStatus 'AUTOSTART_DISABLED'; return
             }
             'enable' {
