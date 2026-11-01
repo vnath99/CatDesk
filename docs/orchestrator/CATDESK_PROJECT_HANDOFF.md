@@ -1,3 +1,9 @@
+## 2026-11-01T20:06:47.213298+00:00 — two material checkpoints completed under one scoped batch
+
+The receipt/collection/preparation guard checkpoint and backend changed-test/prior-line checkpoint are COMPLETE, exact-event read, coordinator-closed and corroborated by 8 and 17 actual server source-command logs. Both report no concrete defect and remain REVIEWED_PARTIAL. Coordinator tests, independent source inspection and future installed qualification remain distinct. No native task completion or producer authority is inferred.
+
+Generation 5 now has an advisory proxy of 36,377 tokens after the first 25 material source calls were imported; a separate CLI repeat changed no ledger bytes. Coverage and hidden/provider context remain unknown. Third and fourth frozen reviews continue under the same exact-source claim. A peer snapshot showed three native turns in progress with new revisions and one idle after a completed turn; no messages or ownership changes were made. Source remains `9ea9e7b`, selected development controller remains `846b90b2`, retained production remains C254, and recurring WakeHost stays stopped. Evidence: `docs/verification/MATERIAL_SOURCE_FIRST_TWO_2026_11_01.json`.
+
 ## 2026-11-01T19:45:05.587332+00:00 — independent size-correction checkpoint corroborated
 
 The exact current-source review completed as REVIEWED_PARTIAL, finding no actionable defect in the inspected collector correction and supporting its source-level suitability. All five actual source inputs are corroborated by task-timed server command logs. The exact USER receipt and completed assistant body are verified, and the coordinator closed this request. It is not cumulative release approval.
