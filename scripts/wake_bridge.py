@@ -3191,7 +3191,12 @@ class NewConversationSink(CdpSink):
         load_error = "BOOTSTRAP_SOURCE_LOAD_ERROR_PLACEHOLDER" if source else "BOOTSTRAP_ASSISTANT_LOAD_ERROR_PLACEHOLDER"
         error_type = Attention if source else PostSubmitUnknown
         try:
-            messages = self.visible_message_snapshot(cdp)["messages"]
+            # The ordinary context window deliberately retains 4 KiB excerpts.
+            # Its incomplete flag cannot establish whether a longer answer is
+            # usable. Inspect only the latest private pair under the existing
+            # 32 KiB/message, 64 KiB/frame review bound; export no body here.
+            messages = self.visible_message_snapshot(
+                cdp, max_message_bytes=32768, review_pair=True)["messages"]
         except Attention as error:
             raise error_type(unavailable) from error
         if not messages or messages[-1]["role"] != "ASSISTANT":

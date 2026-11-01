@@ -71,7 +71,7 @@ class StructuralCdp:
             return ["ready", self.draft]
         if "const count = selector" in script:
             return [self.users, self.assistants, self.turns]
-        if "unique.slice(-16)" in script:
+        if "unique.slice(-16)" in script or "unique.slice(-2)" in script:
             return self.snapshot
         if "if (visible.length !== 1) return ['count'" in script:
             return ["ready", not self.draft]
@@ -1011,6 +1011,31 @@ class NewConversationTests(unittest.TestCase):
             sink.require_usable_latest_assistant(cdp, source=False)
             cdp.snapshot = observed_rows(("user", "handoff", None, None, None))
             with self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_SOURCE_ASSISTANT_UNAVAILABLE"):
+                sink.require_usable_latest_assistant(cdp, source=True)
+
+    def test_bootstrap_usable_answer_uses_bounded_full_pair_not_default_excerpt(self):
+        with tempfile.TemporaryDirectory() as profile:
+            sink = bridge.NewConversationSink(SOURCE, Path(profile), 1, 1)
+            class BudgetCdp(StructuralCdp):
+                def evaluate(self, script):
+                    if "const messageLimit = " in script:
+                        limit = int(script.split("const messageLimit = ", 1)[1].split(";", 1)[0])
+                        snapshot = json.loads(json.dumps(self.snapshot))
+                        for row in snapshot[5]:
+                            original = row[1]
+                            row[1] = original[:limit]
+                            row[2] = len(original.encode()) <= limit
+                        return snapshot
+                    return super().evaluate(script)
+            cdp = BudgetCdp(SOURCE)
+            cdp.snapshot = observed_rows(("user", "handoff", None, None, None),
+                ("assistant", "Usable review. " + "x" * 8000, None, None, None))
+            self.assertFalse(sink.visible_message_snapshot(cdp)["messages"][-1]["textComplete"])
+            sink.require_usable_latest_assistant(cdp, source=True)
+            sink.require_usable_latest_assistant(cdp, source=False)
+            cdp.snapshot = observed_rows(("user", "handoff", None, None, None),
+                ("assistant", "x" * 40000, None, None, None))
+            with self.assertRaises(bridge.Attention):
                 sink.require_usable_latest_assistant(cdp, source=True)
 
     def test_actual_source_and_fresh_receipt_gates_reject_placeholder(self):
