@@ -427,6 +427,16 @@ try {
     $disabled = Invoke-FixtureFacade -Command 'autostart' -AutostartAction 'status' -Seams $autostart | ConvertFrom-Json
     Require ($disabled.state -eq 'AUTOSTART_DISABLED') 'absent autostart task is reported disabled without mutation'
     Require ($actions.Count -eq 0) 'autostart status is non-mutating'
+    $normalDefinition = $Global:CatDeskAutostartDefinitions[$Global:CatDeskAutostartDefinitions.Count - 1]
+    $caseStatus = Invoke-FixtureFacade -Command 'autostart' -AutostartAction 'status' -Seams $autostart -FixtureWorkspace $workspace.ToUpperInvariant() | ConvertFrom-Json
+    $caseDefinition = $Global:CatDeskAutostartDefinitions[$Global:CatDeskAutostartDefinitions.Count - 1]
+    Require ($caseStatus.state -eq 'AUTOSTART_DISABLED' -and $actions.Count -eq 0) 'case-alias status never registers or starts a monitor'
+    Require ($normalDefinition.SupervisorWorkspaceId -ceq $caseDefinition.SupervisorWorkspaceId) 'public facade and supervisor use one physical directory spelling for their singleton'
+    $caseRoot = (Resolve-Path -LiteralPath $workspace.ToUpperInvariant()).Path
+    $caseHash = [Security.Cryptography.SHA256]::Create()
+    try { $legacyCaseId = (([BitConverter]::ToString($caseHash.ComputeHash([Text.Encoding]::UTF8.GetBytes($caseRoot)))).Replace('-', '').ToLowerInvariant()).Substring(0, 16) } finally { $caseHash.Dispose() }
+    Require ($caseDefinition.WorkspaceId -ceq $legacyCaseId -and $caseDefinition.TaskName -ceq "CatDesk.Autostart.$legacyCaseId" -and $caseDefinition.RunKeyName -ceq $caseDefinition.TaskName) 'case-alias persistence retains its exact legacy names'
+    Require ($caseDefinition.Arguments.Contains((' -Workspace "{0}"' -f $caseRoot))) 'case-alias persistence retains original launch arguments'
     $priorDirectory = Get-Location
     try {
         Set-Location ([IO.Path]::GetTempPath())

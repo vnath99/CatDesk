@@ -297,11 +297,32 @@ function Get-LifecycleSha256Hex {
     }
 }
 
+function Get-AutostartSupervisorWorkspaceId {
+    param([string]$Root, [string]$Supervisor)
+    $file = Get-Item -LiteralPath $Supervisor -Force -ErrorAction Stop
+    if ($file -isnot [IO.FileInfo] -or ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'autostart supervisor is unavailable' }
+    # Read only the existing owner's identity function, avoiding its script
+    # parameter block and any top-level monitor action in this facade's scope.
+    $tokens = $null; $errors = $null
+    $ast = [Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$errors)
+    $definitions = @($ast.FindAll({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Get-SupervisorWorkspaceId' }, $true))
+    if ($errors.Count -ne 0 -or $definitions.Count -ne 1) { throw 'autostart supervisor identity is unavailable' }
+    $reader = [scriptblock]::Create($definitions[0].Extent.Text + "`nGet-SupervisorWorkspaceId -Root `$args[0]")
+    $identity = & $reader $Root
+    if ($identity -isnot [string] -or $identity -cnotmatch '^[0-9a-f]{16}$') { throw 'autostart supervisor identity is unavailable' }
+    return $identity
+}
+
 function Get-AutostartDefinition {
     $root = (Resolve-Path -LiteralPath $Workspace -ErrorAction Stop).Path
+    $directory = Get-Item -LiteralPath $root -Force -ErrorAction Stop
+    if ($directory -isnot [IO.DirectoryInfo]) { throw 'autostart workspace is not a directory' }
+    # Preserve existing task/Run names and arguments. Only the singleton's
+    # directory identity is independent of caller casing.
     $workspaceId = (Get-LifecycleSha256Hex $root).Substring(0, 16)
     $supervisor = Join-Path $PSScriptRoot 'scripts\catdesk-autostart-supervisor.ps1'
     if (-not (Test-Path -LiteralPath $supervisor -PathType Leaf)) { throw 'autostart supervisor is unavailable' }
+    $supervisorWorkspaceId = Get-AutostartSupervisorWorkspaceId -Root $root -Supervisor $supervisor
     $powershellHost = Get-AutostartPowerShellHost
     $arguments = '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Workspace "{1}"' -f $supervisor, $root
     $monitorArguments = '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Workspace "{1}" -InitialDelaySeconds 0' -f $supervisor, $root
@@ -310,6 +331,7 @@ function Get-AutostartDefinition {
         TaskPath = '\'
         TaskName = $runKeyName
         WorkspaceId = $workspaceId
+        SupervisorWorkspaceId = $supervisorWorkspaceId
         Execute = $powershellHost
         Arguments = $arguments
         MonitorArguments = $monitorArguments
@@ -499,9 +521,13 @@ function Test-AutostartSupervisorRunning {
         param($expected)
         $handle = $null
         try {
-            if ([Threading.Mutex]::TryOpenExisting("Local\CatDesk.Autostart.$($expected.WorkspaceId)", [ref]$handle)) {
-                $handle.Dispose()
-                return $true
+            $ids = @($expected.WorkspaceId)
+            if ($expected.PSObject.Properties['SupervisorWorkspaceId']) { $ids += $expected.SupervisorWorkspaceId }
+            foreach ($id in ($ids | Select-Object -Unique)) {
+                if ([Threading.Mutex]::TryOpenExisting("Local\CatDesk.Autostart.$id", [ref]$handle)) {
+                    $handle.Dispose()
+                    return $true
+                }
             }
         } catch {}
         if ($null -ne $handle) { try { $handle.Dispose() } catch {} }

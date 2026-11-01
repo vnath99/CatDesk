@@ -15,10 +15,76 @@ function Require([bool]$Condition, [string]$Message) {
 
 function States($Output) { return @($Output | ForEach-Object { ($_ | ConvertFrom-Json).state }) }
 
+function Invoke-RealGuardChild {
+    param([string]$Root, [switch]$LegacyOnly)
+    $quotedSource = $supervisorPath.Replace("'", "''")
+    $quotedRoot = $Root.Replace("'", "''")
+    $code = ". '$quotedSource' -Workspace '$quotedRoot' -LoadOnly; " +
+        "`$guard=Acquire-SupervisorGuard -Root '$quotedRoot'; " +
+        "try { @{acquired=`$guard.Acquired}|ConvertTo-Json -Compress } finally { Release-SupervisorGuard -Guard `$guard }"
+    if ($LegacyOnly) {
+        $code = ". '$quotedSource' -Workspace '$quotedRoot' -LoadOnly; " +
+            "`$created=`$false; `$id=Get-SupervisorWorkspaceId '$quotedRoot' -Legacy; " +
+            "`$mutex=[Threading.Mutex]::new(`$true,('Local\CatDesk.Autostart.'+`$id),[ref]`$created); " +
+            "try { @{acquired=`$created}|ConvertTo-Json -Compress } finally { if(`$created){`$mutex.ReleaseMutex()};`$mutex.Dispose() }"
+    }
+    $code = "`$ProgressPreference='SilentlyContinue'; " + $code
+    $info = [Diagnostics.ProcessStartInfo]::new()
+    $info.FileName = (Get-Process -Id $PID).Path
+    $info.Arguments = '-NoProfile -NonInteractive -EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($code))
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.RedirectStandardOutput = $true
+    $info.RedirectStandardError = $true
+    $child = [Diagnostics.Process]::new()
+    $child.StartInfo = $info
+    $started = $false
+    try {
+        $started = $child.Start()
+        Require $started 'guard test child started'
+        Require ($child.WaitForExit(10000)) 'guard test child exited within ten seconds'
+        $output = $child.StandardOutput.ReadToEnd()
+        $errors = $child.StandardError.ReadToEnd()
+        Require ($child.ExitCode -eq 0 -and $errors.Length -eq 0 -and $output.Length -lt 1024) "guard child returned one bounded successful result (exit=$($child.ExitCode), stderrBytes=$($errors.Length), stdoutBytes=$($output.Length))"
+        return $output | ConvertFrom-Json
+    } finally {
+        if ($started -and -not $child.HasExited) { $child.Kill(); Require ($child.WaitForExit(5000)) 'owned guard child cleanup completed' }
+        $child.Dispose()
+    }
+}
+
 New-Item -ItemType Directory -Path $workspace -Force | Out-Null
 try {
     . $supervisorPath -Workspace $workspace -LoadOnly
     $script:SupervisorSeams = @{}
+    Require ((Get-SupervisorWorkspaceId $workspace) -ceq (Get-SupervisorWorkspaceId $workspace -Legacy)) 'canonical input retains its existing singleton name'
+    # Real OS mutexes and a separate Windows process, without a supervisor,
+    # backend, persistence registration or lifecycle seam being started.
+    $guard = Acquire-SupervisorGuard -Root $workspace
+    try {
+        Require $guard.Acquired 'first fixture workspace guard is owned'
+        $duplicateCase = Invoke-RealGuardChild -Root $workspace.ToUpperInvariant()
+        Require (-not $duplicateCase.acquired) 'case-only workspace alias cannot acquire a second supervisor guard'
+        $independent = Join-Path $workspace 'independent'
+        [void](New-Item -ItemType Directory -Path $independent)
+        Require ((Invoke-RealGuardChild -Root $independent).acquired) 'independent workspace guard is not blocked'
+    } finally { Release-SupervisorGuard -Guard $guard }
+    Require ((Invoke-RealGuardChild -Root $workspace.ToLowerInvariant()).acquired) 'natural owner release permits a later case-alias owner'
+    $guard = Acquire-SupervisorGuard -Root $workspace.ToUpperInvariant()
+    try {
+        Require $guard.Acquired 'new owner acquires canonical and legacy alias reservations'
+        Require (-not (Invoke-RealGuardChild -Root $workspace.ToUpperInvariant() -LegacyOnly).acquired) 'new owner retains original mutex namespace for legacy callers'
+    } finally { Release-SupervisorGuard -Guard $guard }
+    $created = $false
+    $legacyId = Get-SupervisorWorkspaceId $workspace.ToUpperInvariant() -Legacy
+    $legacy = [Threading.Mutex]::new($true, "Local\CatDesk.Autostart.$legacyId", [ref]$created)
+    try {
+        Require $created 'isolated legacy owner reserved original input-spelling mutex'
+        Require (-not (Invoke-RealGuardChild -Root $workspace.ToUpperInvariant()).acquired) 'existing matching legacy owner refuses a new monitor'
+        $probe = $null
+        Require (-not [Threading.Mutex]::TryOpenExisting("Local\CatDesk.Autostart.$(Get-SupervisorWorkspaceId $workspace)", [ref]$probe)) 'failed legacy reservation releases the newly acquired canonical mutex'
+    } finally { $legacy.ReleaseMutex(); $legacy.Dispose() }
+
     $calls = [Collections.Generic.List[string]]::new()
     $delays = [Collections.Generic.List[int]]::new()
     $script:SupervisorSeams['AcquireGuard'] = { param($root) [pscustomobject]@{ Acquired = $true; Handle = $null } }

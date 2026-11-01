@@ -23,10 +23,25 @@ function Invoke-SupervisorSeam {
 }
 
 function Get-SupervisorWorkspaceId {
-    param([string]$Root)
+    param([string]$Root, [switch]$Legacy)
+    $identity = $Root
+    if (-not $Legacy) {
+        # Resolve-Path and Windows PowerShell's Get-Item retain caller casing.
+        # Resolve one exact existing component at a time; do not case-fold
+        # directory names or merge distinct case-sensitive siblings.
+        $full = [IO.Path]::GetFullPath($Root)
+        if (-not [IO.Directory]::Exists($full)) { throw 'supervisor workspace is not a directory' }
+        $base = [IO.Path]::GetPathRoot($full)
+        $identity = $base.ToUpperInvariant()
+        foreach ($part in $full.Substring($base.Length).Split([char[]]'\/', [StringSplitOptions]::RemoveEmptyEntries)) {
+            $matches = @([IO.Directory]::GetDirectories($identity, $part, [IO.SearchOption]::TopDirectoryOnly))
+            if ($matches.Count -ne 1) { throw 'supervisor workspace spelling is unavailable' }
+            $identity = $matches[0]
+        }
+    }
     $sha = [Security.Cryptography.SHA256]::Create()
     try {
-        $digest = (($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($Root)) | ForEach-Object { $_.ToString('x2') }) -join '')
+        $digest = (($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($identity)) | ForEach-Object { $_.ToString('x2') }) -join '')
         return $digest.Substring(0, 16)
     } finally {
         $sha.Dispose()
@@ -37,17 +52,38 @@ function Acquire-SupervisorGuard {
     param([string]$Root)
     Invoke-SupervisorSeam -Name 'AcquireGuard' -Arguments @($Root) -Default {
         param($workspaceRoot)
-        $created = $false
-        $mutex = [Threading.Mutex]::new($true, "Local\CatDesk.Autostart.$(Get-SupervisorWorkspaceId $workspaceRoot)", [ref]$created)
-        [pscustomobject]@{ Acquired = $created; Handle = $mutex }
+        $held = [Collections.Generic.List[Threading.Mutex]]::new()
+        try {
+            # Keep the original input-spelling reservation for compatibility
+            # with an existing monitor and its unchanged persistence record.
+            $ids = @(Get-SupervisorWorkspaceId $workspaceRoot; Get-SupervisorWorkspaceId $workspaceRoot -Legacy) | Select-Object -Unique
+            foreach ($id in $ids) {
+                $created = $false
+                $mutex = [Threading.Mutex]::new($true, "Local\CatDesk.Autostart.$id", [ref]$created)
+                if (-not $created) {
+                    $mutex.Dispose()
+                    foreach ($owned in $held) { $owned.ReleaseMutex(); $owned.Dispose() }
+                    return [pscustomobject]@{ Acquired = $false; Handle = $null; CompatibilityHandle = $null }
+                }
+                $held.Add($mutex)
+            }
+            return [pscustomobject]@{ Acquired = $true; Handle = $held[0]; CompatibilityHandle = if ($held.Count -gt 1) { $held[1] } else { $null } }
+        } catch {
+            foreach ($owned in $held) { try { $owned.ReleaseMutex() } catch {}; $owned.Dispose() }
+            throw
+        }
     }
 }
 
 function Release-SupervisorGuard {
     param($Guard)
     if ($null -eq $Guard -or $null -eq $Guard.Handle) { return }
-    try { $Guard.Handle.ReleaseMutex() } catch {}
-    $Guard.Handle.Dispose()
+    $handles = @($Guard.Handle)
+    if ($Guard.PSObject.Properties['CompatibilityHandle'] -and $null -ne $Guard.CompatibilityHandle) { $handles += $Guard.CompatibilityHandle }
+    foreach ($handle in $handles) {
+        try { $handle.ReleaseMutex() } catch {}
+        $handle.Dispose()
+    }
 }
 
 function Resolve-TrustedLifecycleFacadePath {
