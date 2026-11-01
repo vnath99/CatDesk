@@ -1,0 +1,88 @@
+{
+  "date": "2026-11-01",
+  "timezone": "America/New_York",
+  "classification": "ACTUAL_CONTROLLED_BOOTSTRAP_CREATED_PAIRED_CONTINUATION_QUEUED",
+  "sourceCommit": "d828a4c585e4a3b56458b2b6b370299302332334",
+  "implementationCommit": "16504385590e33425bf4e23dbb725156440096f7",
+  "developmentExecutableSha256": "bcad1a826dd16eca315e6640d8c55f4f40c61e2a84e8577d4e339a61a4dcd953",
+  "previousVerifiedExecutableSha256": "caee1fe743f8848b0f77c6c43ea79f2b865476dadc21c2c08792d50322a5973b",
+  "packageGate": {
+    "unmatchedScriptBytesRefused": "DEV_PACKAGE_SCRIPT_SOURCE_MISMATCH",
+    "refusalBeforeSelection": true,
+    "matchedRebuildRequired": true,
+    "matchedPackageSelected": true,
+    "developmentVerificationRecorded": true,
+    "productionAuthorityCreated": false
+  },
+  "actualDevelopmentHealth": {
+    "unauthorizedStatus": 401,
+    "initializeStatus": 200,
+    "catalogStatus": 200,
+    "toolCount": 79,
+    "registeredProjectsRead": true,
+    "ownedTreeExitProved": true,
+    "endpointClosed": true
+  },
+  "preservation": {
+    "oldVerifiedPackageMismatches": 0,
+    "projectOrJournalPinMismatches": 0,
+    "profileIdentityPreserved": true
+  },
+  "bootstrap": {
+    "frozenHandoffChanged": false,
+    "intentReplaced": false,
+    "historicalRequestReplay": false,
+    "sourceLoadErrorRefusal": "BOOTSTRAP_SOURCE_LOAD_ERROR_PLACEHOLDER",
+    "textEntryReachedInThatRefusal": false,
+    "temporaryPolicyRestored": true,
+    "exactReadOnlyReviewResponseRecovered": true,
+    "reviewResponseBytes": 6019,
+    "reviewVerdict": "INCONCLUSIVE",
+    "newPromotionAuthority": false,
+    "finalChangedEvidenceResume": "CLI_TIMEOUT_AFTER_CONFIRMED_BINDING_NO_BOOTSTRAP_RESEND",
+    "actualConversationCreated": true,
+    "issuedUrlIndependentlyVerified": true,
+    "exactUserReceipt": true,
+    "assistantResponseCompleted": true,
+    "bindingGeneration": 2,
+    "predecessorPreserved": true,
+    "localRecovery": "BOUND_TO_CONTINUATION_QUEUED_NO_BROWSER_OR_SEND",
+    "contextMeterStatus": "RECORDED",
+    "continuationDelivery": "QUEUED_UNSENT",
+    "appActivationVerified": false,
+    "siblingsAndWorkLedgerUnchanged": true
+  },
+  "scopeLimits": [
+    "Development package qualification is not protected production promotion.",
+    "An app mention in the frozen message does not prove app activation.",
+    "No two-project Web source-edit/native-execution acceptance is established.",
+    "No recurring/reboot supervisor qualification is established.",
+    "C49 and historical unknown submissions remain preserved."
+  ],
+  "fullMilestoneComplete": false,
+  "boundedReadOnlyRecovery": {
+    "seconds": 44.438,
+    "responseBytes": 6019,
+    "sameRetainedResponseHash": true,
+    "newMessages": 0,
+    "sourceReviewVerdict": "INCONCLUSIVE",
+    "newPromotionAuthority": false
+  },
+  "sourceFollowup": {
+    "existingScopedSenderExtended": "ONE_JOURNAL_SELECTED_ROLLOVER_CONTINUATION",
+    "senderBoundSeconds": 120,
+    "observationBoundSeconds": 90,
+    "globalSchedulerStarted": false,
+    "sourceTests": {
+      "rootWebModulePassed": 149,
+      "rootWebModuleIgnored": 1,
+      "ignoredFixtureNote": "Bounded process fixture child is invoked by its parent test.",
+      "scopedSenderPassed": 17,
+      "responseReobservePassed": 12,
+      "strictRootAllTargetClippy": "PASS",
+      "strictWakeAllTargetClippy": "PASS",
+      "formatting": "PASS"
+    },
+    "liveAcceptance": "PENDING_MATCHED_BUILD"
+  }
+}

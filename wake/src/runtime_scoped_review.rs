@@ -6,6 +6,36 @@ use serde_json::{Value, json};
 enum Selection<'a> {
     Review,
     TaskContinuation(&'a Event, &'a Target),
+    RolloverContinuation(&'a Event, &'a Target),
+}
+
+/// Deliver only the rollover event selected and revalidated by its journal
+/// owner. This uses the same bounded sender and never drains sibling queues.
+pub fn run_scoped_rollover_continuation(
+    store: &Store,
+    event: &Event,
+    target: &Target,
+    maximum_seconds: u64,
+    before_submit: &mut dyn FnMut(&Event, &Target) -> Result<()>,
+    keep_running: &dyn Fn() -> Result<()>,
+) -> Result<Value> {
+    run_selected_with_adapter(
+        store,
+        &event.event_id,
+        maximum_seconds,
+        Selection::RolloverContinuation(event, target),
+        before_submit,
+        keep_running,
+        |deadline, guard| {
+            let installed = installed_bootstrap_directory(store)?;
+            Adapter::spawn_from_installed_guarded(
+                store.root(),
+                &installed,
+                deadline.saturating_duration_since(Instant::now()),
+                guard,
+            )
+        },
+    )
 }
 
 /// The local task owner supplies the immutable event selected from its existing
@@ -128,8 +158,20 @@ fn run_selected_with_adapter<A: SubmissionAdapter>(
             .audit_references
             .iter()
             .any(|item| item == "catdesk-review-v1:");
+    let rollover = matches!(&selection, Selection::RolloverContinuation(..));
     let permitted = match selection {
         Selection::Review => review,
+        Selection::RolloverContinuation(expected, target) => {
+            target.validate()?;
+            &event == expected
+                && event.event_type == "engineering_attention"
+                && event.audit_references.is_empty()
+                && event
+                    .event_id
+                    .strip_prefix("web-continue-")
+                    .is_some_and(crate::protocol::valid_id)
+                && store.config()?.targets.get(&event.project_id) == Some(target)
+        }
         Selection::TaskContinuation(expected, target) => {
             target.validate()?;
             &event == expected
@@ -220,7 +262,7 @@ fn run_selected_with_adapter<A: SubmissionAdapter>(
         return Err("SCOPED_REVIEW_RECEIPT_REQUIRED".into());
     }
     Ok(
-        json!({"action":if review {"scoped_review_run"} else {"scoped_task_continuation_run"},"eventId":event_id,"projectId":event.project_id,
+        json!({"action":if review {"scoped_review_run"} else if rollover {"scoped_rollover_continuation_run"} else {"scoped_task_continuation_run"},"eventId":event_id,"projectId":event.project_id,
         "targetGeneration":final_delivery.target.generation,"targetDigest":final_delivery.target.digest,
         "phase":final_delivery.phase,"receipt":final_delivery.receipt,"maximumSeconds":maximum_seconds,
         "hostStarted":false,"schedulerStarted":false,"desiredStateChanged":false}),
@@ -357,6 +399,120 @@ mod tests {
                 },
             )
             .unwrap()
+    }
+
+    #[test]
+    fn scoped_rollover_continuation_isolated_delivery_and_unknown_outcome_never_replay() {
+        for unknown in [false, true] {
+            let (store, review, target) = fixture(if unknown {
+                "rollover-unknown"
+            } else {
+                "rollover-exact"
+            });
+            let event = store
+                .produce_expected(
+                    "web-continue-stable-intent",
+                    "alpha",
+                    "engineering_attention",
+                    "Continue only the journal-owned rollover",
+                    &target,
+                )
+                .unwrap();
+            let foreign = store.root().join("queue/beta-unreadable.json");
+            std::fs::write(&foreign, b"preserve unrelated queue").unwrap();
+            let control = std::fs::read(store.root().join("control.json")).unwrap();
+            let mut fake = adapter(&event, &target);
+            if unknown {
+                fake.receipt.message_digest = "0".repeat(64);
+            }
+            let admitted = fake.admitted.clone();
+            let acknowledgments = fake.ack_count.clone();
+            let result = run_selected_with_adapter(
+                &store,
+                &event.event_id,
+                120,
+                Selection::RolloverContinuation(&event, &target),
+                &mut |actual, actual_target| {
+                    assert_eq!(actual, &event);
+                    assert_eq!(actual_target, &target);
+                    admitted.set(true);
+                    Ok(())
+                },
+                &|| Ok(()),
+                |_, _| Ok(fake),
+            );
+            assert_eq!(result.is_err(), unknown);
+            if !unknown {
+                assert_eq!(
+                    result.unwrap()["action"],
+                    "scoped_rollover_continuation_run"
+                );
+            }
+            assert_eq!(acknowledgments.get(), 1);
+            assert!(store.delivery(&review.event_id).unwrap().is_none());
+            assert_eq!(
+                std::fs::read(&foreign).unwrap(),
+                b"preserve unrelated queue"
+            );
+            assert_eq!(
+                std::fs::read(store.root().join("control.json")).unwrap(),
+                control
+            );
+            assert_eq!(
+                run_selected_with_adapter::<FakeAdapter>(
+                    &store,
+                    &event.event_id,
+                    120,
+                    Selection::RolloverContinuation(&event, &target),
+                    &mut |_, _| panic!("no replay authorization"),
+                    &|| Ok(()),
+                    |_, _| panic!("no replay browser"),
+                )
+                .unwrap_err(),
+                "SCOPED_REVIEW_REPLAY_REFUSED"
+            );
+            assert_eq!(acknowledgments.get(), 1);
+        }
+    }
+
+    #[test]
+    fn scoped_rollover_continuation_refuses_changed_selection_and_owner_before_ack() {
+        for changed in ["body", "target", "owner"] {
+            let (store, _, target) = fixture(&format!("rollover-{changed}"));
+            let event = store
+                .produce_expected(
+                    "web-continue-intent",
+                    "alpha",
+                    "engineering_attention",
+                    "Continue exact rollover",
+                    &target,
+                )
+                .unwrap();
+            let mut expected = event.clone();
+            let mut selected_target = target.clone();
+            if changed == "body" {
+                expected.message.push_str(" altered");
+            }
+            if changed == "target" {
+                selected_target.generation += 1;
+            }
+            let fake = adapter(&event, &target);
+            let acknowledgments = fake.ack_count.clone();
+            let result = run_selected_with_adapter(
+                &store,
+                &event.event_id,
+                120,
+                Selection::RolloverContinuation(&expected, &selected_target),
+                &mut |_, _| Err("JOURNAL_OWNER_CHANGED".into()),
+                &|| Ok(()),
+                |_, _| {
+                    assert_eq!(changed, "owner");
+                    Ok(fake)
+                },
+            );
+            assert!(result.is_err());
+            assert_eq!(acknowledgments.get(), 0);
+        }
     }
 
     #[test]

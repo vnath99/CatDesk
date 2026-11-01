@@ -1,3 +1,9 @@
+## 2026-11-01 — matched primitives and scoped continuation compatibility
+
+Development controllers embed accepted adapter/bridge hashes. A Python-only bridge fix still requires a matched controller build before update-package; mismatched bytes correctly refuse DEV_PACKAGE_SCRIPT_SOURCE_MISMATCH before selection. Do not overwrite immutable package files or relax this guard. A separately built package passed finite authenticated health and retained its verified predecessor; this creates no protected production authority.
+
+New-chat browser submission, verified issued URL, paired local binding and continuation publication remain distinct durable stages. The actual fresh controlled bootstrap reached BOUND before an outer timeout; supported local recovery queued the continuation without another browser submission. New source commands reuse the existing bounded scoped sender and read-only response observer for only this journal-owned event. They do not start a scheduler, grant native work, change external ownership or replace review/producer requirements. Source qualification and pending real app activation are separately recorded in `docs/verification/V5_PROJECT_CHAT_BOOTSTRAP_2026_11_01.json`.
+
 ## 2026-10-31 22:46 EDT — existing central authentication and recovery reused
 
 Source `ed4e2a4e65dd850a9a66a0566ac674d033e6dc25` and `docs/verification/V5_AUTHENTICATED_SERVING_2026_10_31.json`: central publication now works on the unchanged trusted installed image after configuring its existing bearer interface and forwarding that bearer through the same official managed owner. Local discovery102 tools, missing/wrong bearer401, valid bearer200; structured connector status also succeeds. No parallel execution subsystem, registry, browser owner, tunnel or release authority was introduced. Preserve the independent control-plane credential and selected immutable development releases.

@@ -162,6 +162,12 @@ pub(crate) enum WebAction {
     RolloverExecute {
         project_id: String,
     },
+    RolloverDeliverContinuation {
+        project_id: String,
+    },
+    RolloverReobserveContinuation {
+        project_id: String,
+    },
     RolloverInspectDraft {
         project_id: String,
         expected_intent_id: String,
@@ -538,6 +544,16 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         ("rollover", "execute") if options.is_empty() => Ok(WebAction::RolloverExecute {
             project_id: project_id.into(),
         }),
+        ("rollover", "deliver-continuation") if options.is_empty() => {
+            Ok(WebAction::RolloverDeliverContinuation {
+                project_id: project_id.into(),
+            })
+        }
+        ("rollover", "reobserve-continuation") if options.is_empty() => {
+            Ok(WebAction::RolloverReobserveContinuation {
+                project_id: project_id.into(),
+            })
+        }
         ("rollover", "repair-draft") => {
             let expected_intent_id = options
                 .remove("--expected-intent-id")
@@ -1580,6 +1596,12 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             rollover::read_handoff(&handoff_file)?,
         ),
         WebAction::RolloverExecute { project_id } => rollover::execute(&workspace, &project_id),
+        WebAction::RolloverDeliverContinuation { project_id } => {
+            rollover::deliver_continuation(&workspace, &project_id)
+        }
+        WebAction::RolloverReobserveContinuation { project_id } => {
+            rollover::reobserve_continuation(&workspace, &project_id)
+        }
         WebAction::RolloverInspectDraft {
             project_id,
             expected_intent_id,
@@ -1645,6 +1667,26 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rollover_continuation_commands_select_only_registered_project_not_caller_payload() {
+        for verb in ["deliver-continuation", "reobserve-continuation"] {
+            let command = args(&["operator", "web", "rollover", verb, "--project-id", "alpha"]);
+            let parsed = parse(&command).unwrap();
+            assert!(matches!(parsed,
+                WebAction::RolloverDeliverContinuation { project_id }
+                | WebAction::RolloverReobserveContinuation { project_id } if project_id == "alpha"));
+            for extra in [
+                ["--event-id", "foreign"],
+                ["--message", "altered"],
+                ["--url", "https://chatgpt.com/c/foreign"],
+            ] {
+                let mut changed = command.clone();
+                changed.extend(args(&extra));
+                assert!(parse(&changed).is_err());
+            }
+        }
+    }
 
     #[test]
     fn review_tool_markers_are_closed_optional_ui_telemetry_without_execution_authority() {

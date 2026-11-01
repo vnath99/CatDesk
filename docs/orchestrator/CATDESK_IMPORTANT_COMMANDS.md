@@ -1,3 +1,14 @@
+## 2026-11-01 — scoped rollover continuation commands (source-qualified; development build/live pending)
+
+Run through the separately qualified development controller, in its registered control workspace:
+
+```powershell
+& '<qualified-controller.exe>' operator web rollover deliver-continuation --project-id '<registered-id>'
+& '<qualified-controller.exe>' operator web rollover reobserve-continuation --project-id '<registered-id>'
+```
+
+These are new source commands, not claims about the protected installed CLI. Delivery selects only the existing journal event and reconstructed exact message. It requires CONTINUATION_QUEUED, completed bootstrap receipt, exact current registry/Wake binding, stopped host and existing ownership/draft guards. Maximum send duration120 seconds; a SENT result proves delivery, not completed response or native execution. A completed/ambiguous send cannot be replayed. The separate90-second observation is read-only and uses the existing receipt-bound response machinery; it cannot send. No caller-supplied URL, event or message is accepted. Normal task/release authority remains separately required. Do not rerun a bootstrap whose journal already proves BOUND or later. Evidence: `docs/verification/V5_PROJECT_CHAT_BOOTSTRAP_2026_11_01.json`.
+
 ## 2026-10-31 22:46 EDT — current authenticated route and command qualification
 
 Verified implementation `ed4e2a4e65dd850a9a66a0566ac674d033e6dc25`; `docs/verification/V5_AUTHENTICATED_SERVING_2026_10_31.json` distinguishes source, installed and connector evidence. The installed canonical C254 executable remains unchanged. Its supported `catdesk.ps1 start -BackendOnly`, `recover -BackendOnly`, `stop` and `diagnose` own backend lifecycle. Authenticate probes and launches with the same existing `CATDESK_MCP_AUTH_TOKEN` reference. A separately generated MCP bearer is now retained in the Windows User environment; an already-open terminal may still have no process value. Preserve an existing process credential and refuse conflicts. Never print the value, pass it as an argument, rewrite fingerprints or toggle reserved `mcp.require_auth_token` to try to enable the dispatcher.

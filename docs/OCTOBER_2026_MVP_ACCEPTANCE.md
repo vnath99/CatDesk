@@ -1,3 +1,17 @@
+## 2026-11-01 — fresh project conversation progress; full October acceptance remains OPEN
+
+| Layer | Evidence / remaining acceptance |
+| --- | --- |
+| Source app-prefixed bootstrap and lifecycle auth reference | Qualified; old wire format preserved, explicit process credential precedence retained. |
+| Matched development package | Actual finite authenticated79-tool health, previous verified package preserved, owner exit and endpoint closure proved. Not production promotion. |
+| One actual controlled project chat | Created once; exact USER receipt, completed assistant answer, verified issued URL, paired generation2, predecessor and sibling state preserved. |
+| Timeout recovery | Durable BOUND state recovered locally to CONTINUATION_QUEUED without browser launch or bootstrap resend. |
+| v5 activation / continuation | OPEN: existing scoped sender extension is source-qualified; live delivery remains pending; mention text alone is insufficient proof. |
+| Two Web coding callers / native execution | OPEN; no new source edits or native model turns accepted by this bootstrap. |
+| Protected source promotion / unattended recovery | OPEN; retained Web review is INCONCLUSIVE and creates no new producer authority. |
+
+The full October31 milestone was not completed. Preserve existing installed serving, all native sessions, C49 and historical unknown outcomes. Detailed distinctions: `docs/verification/V5_PROJECT_CHAT_BOOTSTRAP_2026_11_01.json`.
+
 ## 2026-10-31 22:46 EDT — v5 authenticated installed serving and bounded recovery
 
 Implementation commit `ed4e2a4e65dd850a9a66a0566ac674d033e6dc25` on `codex/web-rollover-oct17`; evidence `docs/verification/V5_AUTHENTICATED_SERVING_2026_10_31.json`. The unchanged trusted C254 installed image (`608c2e97…`) now requires a separate MCP bearer through its existing environment interface. Missing and incorrect bearers return HTTP401; valid authentication returns HTTP200 and **102 tools, including `catdesk_web_task_tool`**. The existing tunnel alias/profile is healthy and ready with qualified child-only bearer forwarding; a bounded exposed-connector call returned structured `BEARER_REQUIRED` and canonical/serving `MATCH`. No plugin, tunnel, browser profile or protected release was replaced. `CONFIGURED_UNVERIFIED` remains the transport status field when its active health probe is disabled; it is separate from the recorded successful checks.

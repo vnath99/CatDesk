@@ -2,7 +2,10 @@
 //! are separate checkpoints; a possibly submitted bootstrap is never replayed.
 
 use crate::{
-    delegated::autonomy_projects::{AutonomousProjectRegistryStoreV1, AutonomousProjectV1},
+    delegated::autonomy_projects::{
+        AutonomousProjectRegistryStoreV1, AutonomousProjectV1,
+        resolve_registered_project_from_control_root,
+    },
     mcp,
     web_conversation_context::{
         ConversationKey, Observation, PressureStatus, VisibleSourceKind, WebContextStore,
@@ -10,7 +13,7 @@ use crate::{
     web_work_state::WorkLedger,
 };
 use catdesk_wake::{
-    protocol::{Target, digest, valid_id},
+    protocol::{Event, Target, digest, valid_id},
     runtime,
     store::{Delivery, Phase as DeliveryPhase, ResponseState, Store, TurnTimer, atomic, now, read},
 };
@@ -3524,6 +3527,144 @@ pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> 
     execute_with_mode(workspace, project, false, &|| Ok(()))
 }
 
+fn validate_continuation_selection(
+    record: &Record,
+    current: &Target,
+    event: &Event,
+) -> Result<(), String> {
+    event.validate()?;
+    if record.phase != Phase::ContinuationQueued
+        || record.bound_target.as_ref() != Some(current)
+        || record.continuation_event_id != format!("web-continue-{}", record.intent_id)
+        || event.event_id != record.continuation_event_id
+        || event.project_id != record.project_id
+        || event.event_type != "engineering_attention"
+        || event.target_generation != current.generation
+        || !event.audit_references.is_empty()
+        || event.message != continuation_message(record, current)
+        || validate_receipt(
+            record,
+            record
+                .receipt
+                .as_ref()
+                .ok_or("WEB_CONTINUATION_RECEIPT_REQUIRED")?,
+        )? != *current
+    {
+        return Err("WEB_CONTINUATION_SELECTION_CHANGED".into());
+    }
+    Ok(())
+}
+
+/// Explicit bounded delivery of the one journal-owned rollover continuation.
+/// A delivered or ambiguous event stays under the sender's no-replay fence.
+/// This command neither creates a conversation nor starts a scheduler.
+pub(super) fn deliver_continuation(workspace: &Path, project: &str) -> Result<Value, String> {
+    let store = ProjectStore::open_existing(workspace, project)?;
+    let record = store.active()?.ok_or("WEB_ROLLOVER_INTENT_REQUIRED")?;
+    if !valid_id(&record.intent_id)
+        || record.continuation_event_id != format!("web-continue-{}", record.intent_id)
+    {
+        return Err("WEB_CONTINUATION_SELECTION_CHANGED".into());
+    }
+    let current = paired(workspace, project)?;
+    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
+    let wake = Store::open(&root)?;
+    let event: Event = match wake.delivery(&record.continuation_event_id)? {
+        Some(delivery) => delivery.event,
+        None => read(
+            &wake
+                .root()
+                .join("queue")
+                .join(format!("{}.json", record.continuation_event_id)),
+        )?,
+    };
+    validate_continuation_selection(&record, &current, &event)?;
+    task_handoff::authorize(workspace, &record)?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        workspace,
+        wake.root(),
+        &current.url,
+    )?;
+    let mut before_submit = |actual: &Event, actual_target: &Target| {
+        let saved = store.active()?.ok_or("WEB_ROLLOVER_INTENT_REQUIRED")?;
+        if saved.intent_id != record.intent_id
+            || actual != &event
+            || actual_target != &current
+            || paired(workspace, project)? != current
+        {
+            return Err("WEB_CONTINUATION_SELECTION_CHANGED".into());
+        }
+        validate_continuation_selection(&saved, &current, actual)?;
+        task_handoff::authorize(workspace, &saved)
+    };
+    runtime::run_scoped_rollover_continuation(
+        &wake,
+        &event,
+        &current,
+        120,
+        &mut before_submit,
+        &|| Ok(()),
+    )
+}
+
+/// Read an already SENT continuation without reacquiring the normal-work
+/// lease, which correctly stays closed until this continuation completes.
+/// The rollover journal lock and registry commit CAS retain its authority.
+pub(super) fn reobserve_continuation(workspace: &Path, project: &str) -> Result<Value, String> {
+    let store = ProjectStore::open_existing(workspace, project)?;
+    let record = store.active()?.ok_or("WEB_ROLLOVER_INTENT_REQUIRED")?;
+    let current = paired(workspace, project)?;
+    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
+    let wake = Store::open(&root)?;
+    let delivery = wake
+        .delivery(&record.continuation_event_id)?
+        .ok_or("WEB_CONTINUATION_EXACT_RECEIPT_REQUIRED")?;
+    validate_continuation_selection(&record, &current, &delivery.event)?;
+    if delivery.target != current {
+        return Err("WEB_CONTINUATION_SELECTION_CHANGED".into());
+    }
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        workspace,
+        wake.root(),
+        &current.url,
+    )?;
+    let registry =
+        AutonomousProjectRegistryStoreV1::open_read_only(workspace.join(".catdesk/projects"))
+            .map_err(|_| "WEB_CONTINUATION_REGISTRY_UNAVAILABLE")?;
+    let check_pair = || {
+        if paired(workspace, project)? != current {
+            return Err("WEB_CONTINUATION_SELECTION_CHANGED".into());
+        }
+        Ok(())
+    };
+    let observation = runtime::reobserve_sent_response_guarded(
+        &wake,
+        project,
+        &current,
+        &record.continuation_event_id,
+        &check_pair,
+        |commit| {
+            registry.with_registration_lock(|| {
+                // Do not take the paired-target mutex while holding registry lock.
+                let scope = resolve_registered_project_from_control_root(workspace, project)
+                    .map_err(|_| "WEB_CONTINUATION_REGISTRY_UNAVAILABLE")?;
+                if scope.project.chatgpt_target_url.as_deref() != Some(current.url.as_str())
+                    || scope.project.chatgpt_target_sha256.as_deref()
+                        != Some(current.digest.as_str())
+                {
+                    return Err("WEB_CONTINUATION_SELECTION_CHANGED".into());
+                }
+                commit()
+            })
+        },
+    )?;
+    check_pair()?;
+    Ok(
+        json!({"action":"web_rollover_continuation_reobserve", "projectId":project,
+        "eventId":record.continuation_event_id, "observation":observation, "sendAttempted":false}),
+    )
+}
+
 fn creation_identity(record: &Record) -> admission::Identity {
     admission::Identity {
         project_id: record.project_id.clone(),
@@ -4935,6 +5076,46 @@ mod tests {
             evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
             completion: "RESPONSE_COMPLETED".into(),
         }
+    }
+
+    #[test]
+    fn bounded_continuation_requires_completed_bootstrap_exact_event_and_current_binding() {
+        let current = Target::new(2, "https://chatgpt.com/c/new".into()).unwrap();
+        let mut record = record();
+        record.phase = Phase::ContinuationQueued;
+        record.receipt = Some(receipt_for(&record));
+        record.bound_target = Some(current.clone());
+        record.continuation_event_id = format!("web-continue-{}", record.intent_id);
+        let event = Event {
+            schema_version: 1,
+            event_id: record.continuation_event_id.clone(),
+            project_id: record.project_id.clone(),
+            event_type: "engineering_attention".into(),
+            created_utc: now(),
+            message: continuation_message(&record, &current),
+            target_generation: current.generation,
+            audit_references: vec![],
+        };
+        validate_continuation_selection(&record, &current, &event).unwrap();
+        for changed in ["project", "body", "generation", "event", "audit"] {
+            let mut wrong = event.clone();
+            match changed {
+                "project" => wrong.project_id = "beta".into(),
+                "body" => wrong.message.push_str(" changed"),
+                "generation" => wrong.target_generation += 1,
+                "event" => wrong.event_id = "web-continue-foreign".into(),
+                _ => wrong.audit_references.push("foreign-authority".into()),
+            }
+            assert!(validate_continuation_selection(&record, &current, &wrong).is_err());
+        }
+        let mut drifted = current.clone();
+        drifted.generation += 1;
+        assert!(validate_continuation_selection(&record, &drifted, &event).is_err());
+        record.receipt.as_mut().unwrap().completion = "RESPONSE_PENDING".into();
+        assert!(validate_continuation_selection(&record, &current, &event).is_err());
+        record.receipt.as_mut().unwrap().completion = "RESPONSE_COMPLETED".into();
+        record.phase = Phase::Quarantined;
+        assert!(validate_continuation_selection(&record, &current, &event).is_err());
     }
 
     #[test]
