@@ -2757,6 +2757,53 @@ fn operator_web_error_code(error: &str) -> &str {
     code
 }
 
+/// Release diagnostics expose only fixed failure layers, never raw authority,
+/// filesystem, process, credential or helper error details.
+fn operator_release_pair_error_code(error: &str) -> &'static str {
+    match error {
+        "stopped promotion retirement ownership or trust unproven"
+        | "stopped promotion retirement ownership proof differs" => {
+            "PROMOTION_RETIREMENT_OWNER_OR_TRUST_UNPROVEN"
+        }
+        "stopped promotion retirement exact terminal pre-mutation evidence required" => {
+            "PROMOTION_RETIREMENT_TERMINAL_BINDING_INVALID"
+        }
+        "stopped promotion retirement completed promotion receipt differs"
+        | "stopped promotion retirement completed receipt invalid" => {
+            "PROMOTION_RETIREMENT_RECEIPT_INVALID"
+        }
+        "stopped promotion retirement public lifecycle owner is active" => {
+            "PROMOTION_RETIREMENT_LIFECYCLE_BUSY"
+        }
+        "stopped promotion retirement disk transaction requires its original recovery" => {
+            "PROMOTION_DISK_TRANSACTION_PENDING"
+        }
+        "stopped promotion retirement another recovery is pending"
+        | "stopped promotion retirement requires explicit resume" => {
+            "PROMOTION_RETIREMENT_RECOVERY_PENDING"
+        }
+        "stopped promotion retirement archive drifted" => "PROMOTION_RETIREMENT_ARCHIVE_CHANGED",
+        "stopped promotion retirement material evidence changed"
+        | "stopped promotion retirement evidence differs"
+        | "stopped promotion retirement evidence digest invalid"
+        | "stopped promotion retirement recovery evidence changed"
+        | "stopped promotion retirement terminal mode differs" => {
+            "PROMOTION_RETIREMENT_EVIDENCE_CHANGED"
+        }
+        "stopped promotion retirement canonical fingerprint changed" => {
+            "PROMOTION_RETIREMENT_PAIR_CHANGED"
+        }
+        "REVIEWED_BUILD_ATTESTATION_UNAVAILABLE"
+        | "REVIEWED_BUILD_EVIDENCE_DRIFTED"
+        | "REVIEWED_SOURCE_SNAPSHOT_REQUIRED" => "PROMOTION_REVIEW_AUTHORITY_UNPROVEN",
+        "reviewed promotion candidate hash did not match" => "PROMOTION_CANDIDATE_HASH_MISMATCH",
+        "reviewed promotion is claimed; inspect RESULT and use explicit stopped retirement" => {
+            "PROMOTION_ALREADY_CLAIMED"
+        }
+        _ => "RELEASE_PAIR_OPERATION_REFUSED",
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -2771,6 +2818,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         && args.get(1).is_some_and(|arg| arg == "project");
     let operator_installed_backend = args.first().is_some_and(|arg| arg == "operator")
         && args.get(1).is_some_and(|arg| arg == "installed-backend");
+    let operator_release_pair = args.first().is_some_and(|arg| arg == "operator")
+        && args.get(1).is_some_and(|arg| arg == "release-pair");
     match operator_facade::parse_operator_action(args.clone()) {
         Ok(Some(action)) => {
             let workspace = std::env::current_dir()?;
@@ -2800,6 +2849,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             "{}",
                             serde_json::json!({"status":"attention","errorCode":operator_facade::installed_backend_error_code(&error)})
                         );
+                    } else if operator_release_pair {
+                        println!(
+                            "{}",
+                            serde_json::json!({"status":"attention","errorCode":operator_release_pair_error_code(&error)})
+                        );
                     } else {
                         println!("{{\"status\":\"attention\"}}");
                     }
@@ -2828,6 +2882,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!(
                     "{}",
                     serde_json::json!({"status":"attention","errorCode":operator_facade::installed_backend_error_code(&error)})
+                );
+            } else if operator_release_pair {
+                println!(
+                    "{}",
+                    serde_json::json!({"status":"attention","errorCode":operator_release_pair_error_code(&error)})
                 );
             } else {
                 println!("{{\"status\":\"attention\"}}");
@@ -3880,6 +3939,38 @@ mod tests {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use std::net::{SocketAddr, TcpListener, TcpStream, UdpSocket};
     use std::time::Duration;
+
+    #[test]
+    fn release_pair_attention_distinguishes_layers_without_exporting_error_details() {
+        let code = super::operator_release_pair_error_code;
+        assert_eq!(
+            code("stopped promotion retirement ownership or trust unproven"),
+            "PROMOTION_RETIREMENT_OWNER_OR_TRUST_UNPROVEN"
+        );
+        assert_eq!(
+            code("REVIEWED_BUILD_ATTESTATION_UNAVAILABLE"),
+            "PROMOTION_REVIEW_AUTHORITY_UNPROVEN"
+        );
+        assert_eq!(
+            code("stopped promotion retirement completed promotion receipt differs"),
+            "PROMOTION_RETIREMENT_RECEIPT_INVALID"
+        );
+        for detail in [
+            "C:\\private\\authority.json",
+            "Bearer private-test-value",
+            "PROMOTION_SECRET_INJECTED",
+            "operator release-pair accepts only fixed actions",
+        ] {
+            assert_eq!(code(detail), "RELEASE_PAIR_OPERATION_REFUSED");
+            assert_eq!(
+                code(&format!(
+                    "stopped promotion retirement ownership or trust unproven: {detail}"
+                )),
+                "RELEASE_PAIR_OPERATION_REFUSED"
+            );
+        }
+        assert_eq!(code(&"X".repeat(65536)), "RELEASE_PAIR_OPERATION_REFUSED");
+    }
 
     #[test]
     fn operator_web_attention_exposes_only_bounded_stable_codes() {

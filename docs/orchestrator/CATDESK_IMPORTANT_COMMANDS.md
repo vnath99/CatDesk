@@ -1,3 +1,9 @@
+## 2026-11-01T22:35:05.568960+00:00 — release refusal diagnostics qualified; obsolete source claim safely cancelled
+
+This is new-source qualification, not an installed C254 capability. Release-pair failures now return status=attention plus a closed errorCode, including PROMOTION_RETIREMENT_OWNER_OR_TRUST_UNPROVEN, PROMOTION_REVIEW_AUTHORITY_UNPROVEN and PROMOTION_RETIREMENT_RECEIPT_INVALID. Unknown or decorated errors map to RELEASE_PAIR_OPERATION_REFUSED; arbitrary error text, paths and credentials are never exported by this projection. Keep exit 2 as refusal. A combined owner/trust refusal does not authorize stop, retirement, fingerprint changes or promotion; use the existing qualified lifecycle and independent review gates.
+
+The former 57ab32f review is cancelled after this material correction; its real partial evidence is preserved. Reassess the updated three-file delta within all 84 declared paths before protected metadata work. No operator action is currently required. Evidence: `docs/verification/RELEASE_PAIR_ERROR_DIAGNOSTICS_2026_11_01.json`.
+
 ## 2026-11-01T21:45:43.379260+00:00 — candidate attested and locally qualified; successful-promotion transition source tested
 
 The following commands exist in the new source only. They have not been executed against production and must use an independently reviewed, qualified controller; the retained C254 executable does not provide this transition.
