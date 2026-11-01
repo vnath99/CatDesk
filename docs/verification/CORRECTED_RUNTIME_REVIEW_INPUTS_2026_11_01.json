@@ -1,0 +1,276 @@
+{
+ "date": "2026-11-01",
+ "observedUtc": "2026-11-01T11:06:06.095255+00:00",
+ "classification": "CORRECTED_SOURCE_REVIEW_AND_REAL_TWO_CONVERSATION_CONTEXT_QUALIFICATION_NOT_PRODUCTION_ACCEPTANCE",
+ "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+ "trustedReviewedBase": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+ "scopeCodePaths": [
+  "catdesk.ps1",
+  "scripts/catdesk-autostart-supervisor.ps1",
+  "scripts/catdesk-doctor.ps1",
+  "scripts/promote-reviewed-catdesk-build.ps1",
+  "scripts/setup-secure-mcp.ps1",
+  "scripts/start-catdesk-stack.ps1",
+  "scripts/test-backend-only-native-capability.ps1",
+  "scripts/test-catdesk-autostart-supervisor.ps1",
+  "scripts/test-catdesk-doctor.ps1",
+  "scripts/test-catdesk-lifecycle.ps1",
+  "scripts/test-catdesk-production-acceptance.ps1",
+  "scripts/test-local-mcp-readiness-strict.ps1",
+  "scripts/test-local-mcp-user-bearer.ps1",
+  "scripts/test-promotion-handoff-script-status.ps1",
+  "scripts/test-release-worker-command-line.ps1",
+  "scripts/test-secure-mcp-bearer-forwarding.ps1",
+  "scripts/test-start-catdesk-stack.ps1",
+  "scripts/wake_bridge.py",
+  "scripts/wake_profile_quiescence.py",
+  "scripts/wake_readiness_visual_probe.py",
+  "src/command.rs",
+  "src/daemon_reload.rs",
+  "src/delegated/autonomy_projects.rs",
+  "src/delegated/autonomy_runtime.rs",
+  "src/delegated/autonomy_supervisor.rs",
+  "src/delegated/codex_app_server.rs",
+  "src/main.rs",
+  "src/mcp.rs",
+  "src/operator_codex_cli.rs",
+  "src/operator_codex_cli/queue.rs",
+  "src/operator_codex_cli/queue/native_continuation.rs",
+  "src/operator_codex_cli/queue/native_dispatch.rs",
+  "src/operator_codex_cli/queue/owned_native.rs",
+  "src/operator_development_backend.rs",
+  "src/operator_development_project.rs",
+  "src/operator_facade.rs",
+  "src/operator_installed_backend.rs",
+  "src/operator_installed_project.rs",
+  "src/operator_web_auto.rs",
+  "src/operator_web_cli.rs",
+  "src/operator_web_initialization.rs",
+  "src/operator_web_observe.rs",
+  "src/operator_web_quarantine.rs",
+  "src/operator_web_receipts.rs",
+  "src/operator_web_rollover.rs",
+  "src/project_mcp.rs",
+  "src/project_mcp_task.rs",
+  "src/project_task_context.rs",
+  "src/promotion_retirement.rs",
+  "src/promotion_source_bridge.rs",
+  "src/reviewed_build.rs",
+  "src/reviewed_candidate_owner.rs",
+  "src/server.rs",
+  "src/wake_protocol_client.rs",
+  "src/web_context_user_receipts.rs",
+  "src/web_conversation_context.rs",
+  "src/web_review_work.rs",
+  "src/web_rollover_admission.rs",
+  "src/web_task_dispatch.rs",
+  "src/web_work.rs",
+  "src/windows_protected_fs.rs",
+  "src/windows_supervisor_startup.rs",
+  "tests/test_wake_bridge.py",
+  "tests/test_wake_bridge_current_dom.py",
+  "tests/test_wake_profile_quiescence.py",
+  "tests/test_wake_readiness_probe.py",
+  "wake/adapter.py",
+  "wake/src/bin/CatDeskWakeProfileProbe.rs",
+  "wake/src/development_login_recovery.rs",
+  "wake/src/development_runtime.rs",
+  "wake/src/lib.rs",
+  "wake/src/protocol.rs",
+  "wake/src/readiness_probe.rs",
+  "wake/src/runtime.rs",
+  "wake/src/runtime_reobserve.rs",
+  "wake/src/runtime_response.rs",
+  "wake/src/runtime_scheduler.rs",
+  "wake/src/runtime_scoped_review.rs",
+  "wake/src/runtime_snapshot.rs",
+  "wake/src/runtime_task_context.rs",
+  "wake/src/store.rs",
+  "wake/tests/protocol_store.rs",
+  "wake/tests/test_adapter.py",
+  "wake/tests/test_new_conversation.py"
+ ],
+ "fullDeclaredCodePathCount": 84,
+ "scopeNarrowed": false,
+ "previousBroadReview": {
+  "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+  "inspectedPaths": 64,
+  "verdict": "INCONCLUSIVE",
+  "actionableFindingsEstablished": 0,
+  "notInheritedAsAcceptance": true,
+  "reference": "docs/verification/CANONICAL_TURN_ANCHOR_2026_10_31.json"
+ },
+ "existingComponentEvidence": [
+  "docs/verification/CURRENT_NATIVE_MANAGED_REVIEW_2026_11_01.json",
+  "docs/verification/NATIVE_DEPENDENCY_WEB_REVIEWS_2026_11_01.json",
+  "docs/verification/REGISTRATION_OWNER_CRASH_RECOVERY_2026_11_01.json",
+  "docs/verification/USER_BODY_FALLBACK_2026_11_01.json",
+  "docs/verification/MATCHED_REGISTRATION_PACKAGE_CONTEXT_2026_11_01.json"
+ ],
+ "correctedSourceReviews": [
+  {
+   "number": 1,
+   "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+   "verdict": "REVIEWED_PARTIAL",
+   "inspectedPaths": [
+    "src/delegated/autonomy_projects.rs",
+    "src/main.rs"
+   ],
+   "responseSha256": "00a946e5f83a733cc78bb9a4427d271e461ff26c434be81d196e32a6aabdcb64",
+   "exactDeliveryAndResponseVerified": true,
+   "taskTimedSourceCalls": 1,
+   "reviewRequired": [
+    {
+     "severity": "REVIEW_REQUIRED",
+     "location": "autonomy_projects.rs:1950-1966",
+     "finding": "The Windows open flags request DELETE access and DELETE_ON_CLOSE together with OPEN_REPARSE_POINT. Correct handling of existing files, reparse points and unexpected filesystem failures requires Windows execution evidence.",
+     "recommendation": "Run the dedicated Windows crash test on the supported filesystem and confirm ownership and cleanup behavior."
+    },
+    {
+     "severity": "REVIEW_REQUIRED",
+     "location": "autonomy_projects.rs:1950-1966",
+     "finding": "The correction changes registration-lock acquisition semantics. Existing legacy markers remain intentionally blocking, so previously stranded markers are not automatically recovered.",
+     "recommendation": "Document bounded operator recovery for confirmed legacy-marker cases without introducing automatic stale-lock deletion."
+    },
+    {
+     "severity": "REVIEW_REQUIRED",
+     "location": "main.rs:2687-2700",
+     "finding": "The diagnostic classification is based on exact error strings. Other contention errors may retain the generic refusal classification, which is safe but less informative.",
+     "recommendation": "Confirm that every intended registration-contention path produces one of the two supported strings."
+    }
+   ]
+  },
+  {
+   "number": 2,
+   "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+   "verdict": "REVIEWED_PARTIAL",
+   "inspectedPaths": [
+    "scripts/wake_bridge.py",
+    "tests/test_wake_bridge_current_dom.py"
+   ],
+   "responseSha256": "098c4debc07e03cc1bcfc06a4564527fbd61dd0f203ba30b6ab20e9d3bc2d850",
+   "exactDeliveryAndResponseVerified": true,
+   "taskTimedSourceCalls": 1,
+   "reviewRequired": [
+    {
+     "severity": "REVIEW_REQUIRED",
+     "location": "scripts/wake_bridge.py:894-904",
+     "finding": "Correctness depends on USER_BODY_TEXT_READER removing only presentation controls while preserving authored text, whitespace and ordering.",
+     "recommendation": "Review the canonical reader implementation and test against actual supported ChatGPT DOM structures."
+    },
+    {
+     "severity": "REVIEW_REQUIRED",
+     "location": "tests/test_wake_bridge_current_dom.py:117-125",
+     "finding": "The new fixture removes body attributes and optionally appends extra text. It exercises the intended fallback but cannot establish compatibility with every live DOM variation.",
+     "recommendation": "Run the current-DOM regression suite and separately verify representative live read-only DOM snapshots."
+    },
+    {
+     "severity": "REVIEW_REQUIRED",
+     "location": "Overall correction",
+     "finding": "No-replay and unknown-outcome behavior is not directly changed by this patch, but its complete enforcement depends on unreviewed downstream Wake delivery and reconciliation logic."
+    }
+   ]
+  }
+ ],
+ "sourceQualification": {
+  "registrationTests": 40,
+  "registrationFixture": "Actual Windows process termination; legacy marker preserved; new writer admitted.",
+  "diagnosticTests": 1,
+  "domTests": 65,
+  "focusedBridgeTests": 6,
+  "adapterTests": 43,
+  "nativeDispatcherDistinctCasesPassed": 27,
+  "nativeDispatcherRuns": "10 completed before the first 240-second caller limit; the other 17 passed in 343.891 seconds with completed cases excluded.",
+  "nativeDispatcherCompleteRunLogSha256": "ae454c5b603300867ecc54eb110beff9e9612e55e0a491a6174a4a0214a48424",
+  "actualNativeModelTurns": 0,
+  "lastStrictAllTargetClippy": "PASS at 6cff7dd; Rust sources unchanged at current source.",
+  "selectedDevelopmentSource": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+  "selectedDevelopmentArtifactSha256": "533b2d60b0f08e188781e5a638d722dd88ebdec704918004fecf3eed06929dcc",
+  "previousVerifiedDevelopmentArtifactSha256": "e1b557b7c808862807b195109c88da3f0693debfe0ab57e1db241bb8855b63e5",
+  "finiteDevelopmentHealth": {
+   "missingBearer": 401,
+   "authenticatedInitialize": 200,
+   "authenticatedCatalog": 200,
+   "capabilityScopedToolCount": 79,
+   "ownedTreeExited": true,
+   "endpointClosed": true
+  },
+  "newProtectedReleaseAuthority": false
+ },
+ "contextQualification": {
+  "browserCaptures": [
+   {
+    "projectId": "bug-bounty",
+    "generation": 2,
+    "beforeToolAccountingTokenProxy": 4363,
+    "coverage": "RECENT_VISIBLE_EXCERPT_WITH_UNKNOWN_HISTORY",
+    "providerContextExact": false,
+    "historyAndSiblingPinsPreserved": true
+   },
+   {
+    "projectId": "portfoliodesk",
+    "generation": 2,
+    "beforeToolAccountingTokenProxy": 4790,
+    "coverage": "RECENT_VISIBLE_EXCERPT_WITH_UNKNOWN_HISTORY",
+    "providerContextExact": false,
+    "historyAndSiblingPinsPreserved": true
+   }
+  ],
+  "knownToolTrafficBasis": "Exact approved requests, verified task response and task-timed source logs matching existing privacy redaction. Only known command/stdout text is counted.",
+  "taskCorrelatedSourceCalls": 25,
+  "truncatedResultBodiesNotImported": 1,
+  "originAuthenticated": false,
+  "providerContextExact": false,
+  "coverageForcedComplete": false,
+  "wrongProjectKeyRefusedWithoutMutation": true,
+  "repeatImportChangedLedgers": false,
+  "projects": [
+   {
+    "projectId": "bug-bounty",
+    "generation": 2,
+    "observedTokenProxy": 51989,
+    "observedToolArgumentTokens": 689,
+    "observedToolResultTokens": 46937,
+    "pressureAssessment": "UNKNOWN_OR_INCOMPLETE",
+    "coverageKnown": false,
+    "duplicateImportChangedLedger": false,
+    "siblingContextPreserved": true
+   },
+   {
+    "projectId": "portfoliodesk",
+    "generation": 2,
+    "observedTokenProxy": 51531,
+    "observedToolArgumentTokens": 1090,
+    "observedToolResultTokens": 45651,
+    "pressureAssessment": "UNKNOWN_OR_INCOMPLETE",
+    "coverageKnown": false,
+    "duplicateImportChangedLedger": false,
+    "siblingContextPreserved": true
+   }
+  ],
+  "policyOrBindingChanges": 0,
+  "hostStarted": false
+ },
+ "sourceReviewFollowupEvidence": {
+  "windowsOpenAndCrashBehavior": "Actual Windows fixture and 40 registry tests passed; see REGISTRATION_OWNER_CRASH_RECOVERY.",
+  "legacyMarkerDisposition": "Unknown markers remain refused. Only the exact failed test artifact was quarantined after owner-exit, identity and pin proof; no generic stale-lock deletion is authorized.",
+  "canonicalBodyReader": "Current helper at scripts/wake_bridge.py lines 32-55 is available for direct pinned Git inspection; all 65 DOM tests passed and the existing no-send observation subsequently completed. Exact live DOM cause remains unestablished.",
+  "journalAndContinuation": "The previous component reviews cover queue/native continuation code and metadata-boundary tests; the 27 dispatcher cases now cover HTTP cancellation, replay, rollover, revocation and independent peer progress. These remain source/fixture evidence.",
+  "nonCleanReviewCheckout": "Generic Web git-status metadata refers to the canonical checkout with retained untracked state. Its tracked tree was independently clean at 4bec4d5; immutable diff inputs name the exact current source commit. No untracked state was deleted.",
+  "oldManagedSourceClaim": "Cancelled after the reproduced crash defect. No acceptance or producer authority is borrowed from it."
+ },
+ "sourceAcceptanceDecision": "PENDING_GENUINE_CUMULATIVE_REVIEW",
+ "postPromotionAcceptanceOpen": [
+  "Exact protected candidate provenance, guarded promotion and installed image/fingerprint verification.",
+  "Installed startup, authenticated MCP, qualified rollback and normal restart.",
+  "Two ChatGPT Web callers editing their assigned project workspaces with native Codex verification.",
+  "Canonical project authority transfer, independent Wake receipts and persistent supervisor/reboot restoration."
+ ],
+ "noReplay": [
+  "C49",
+  "historical unknown sends",
+  "completed canaries"
+ ],
+ "operatorActionRequired": false,
+ "fullMilestoneAccepted": false
+}
