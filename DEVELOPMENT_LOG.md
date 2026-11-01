@@ -1,3 +1,9 @@
+## 2026-11-01T19:07:32.475193+00:00 — preserve completed source handoff while correcting collection size
+
+A real completed source-handoff reply was refused with WEB_HANDOFF_TOO_LARGE: its valid JSON is 3,932 UTF-8 bytes (3,664 compact), above a separate 3,500-byte collector cap but below the existing 10 KiB handoff format bound. The collector now shares that bounded format limit. No source context is truncated and receipt, revision, task, route, app selection and native ownership checks remain. The delivered request is complete; do not resend it or rewrite its evidence.
+
+The old limit reproduced the failure. All 60 handoff cases pass, including three new regressions for complete context, oversized/padded input and task/native ownership refusal. Strict all-target Clippy passes. The initial formatting failure is retained; rustfmt and subsequent formatting/diff checks pass without repeating successful tests. Matching development-package qualification and read-only collection of the original completed response are next. Protected production and actual two-project Web/native coding acceptance remain open. Evidence: `docs/verification/SOURCE_HANDOFF_SIZE_RECOVERY_2026_11_01.json`.
+
 ## 2026-11-01T18:11:39.091286+00:00 — fourteen current deltas reviewed; one response read recovered without resend
 
 Two frozen checkpoints completed under one scoped authorization and the same84-path managed source claim. Fourteen requested current-path diffs were inspected without reported truncation. Task-timed source logs match pinned Git inputs under the existing privacy filter. Both verdicts remain REVIEWED_PARTIAL; no definite defect was reported and prior partial evidence is not inherited approval. Actual UTF-8 input totals were verified locally; the reviewer reported character counts and explicitly did not claim independent byte measurement.

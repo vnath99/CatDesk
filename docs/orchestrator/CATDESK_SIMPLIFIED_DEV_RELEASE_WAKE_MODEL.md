@@ -1,3 +1,9 @@
+## 2026-11-01T19:07:32.475193+00:00 — preserve completed source handoff while correcting collection size
+
+A real completed source-handoff reply was refused with WEB_HANDOFF_TOO_LARGE: its valid JSON is 3,932 UTF-8 bytes (3,664 compact), above a separate 3,500-byte collector cap but below the existing 10 KiB handoff format bound. The collector now shares that bounded format limit. No source context is truncated and receipt, revision, task, route, app selection and native ownership checks remain. The delivered request is complete; do not resend it or rewrite its evidence.
+
+The old limit reproduced the failure. All 60 handoff cases pass, including three new regressions for complete context, oversized/padded input and task/native ownership refusal. Strict all-target Clippy passes. The initial formatting failure is retained; rustfmt and subsequent formatting/diff checks pass without repeating successful tests. Matching development-package qualification and read-only collection of the original completed response are next. Protected production and actual two-project Web/native coding acceptance remain open. Evidence: `docs/verification/SOURCE_HANDOFF_SIZE_RECOVERY_2026_11_01.json`.
+
 ## 2026-11-01T13:59:39.265966+00:00 — source-authored context handoff and verified project rollover
 
 Source `6e97db1fdaaf91f9d6393997e930023a387f0403` adds journal-selected handoff delivery and read-only reobservation through the existing scoped Wake path while the shared host stays STOPPED. Local qualification passed 18 Wake and 57 controller tests, strict Clippy for both crates, formatting and diff checks. The initial compile error and corrected passing run are retained. A separately verified development package passed missing-authentication 401 and authenticated initialize/catalog 200 checks; the previous immutable package remains available. This is not protected production promotion.

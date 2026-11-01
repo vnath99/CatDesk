@@ -35,6 +35,10 @@ mod disposition;
 #[path = "operator_web_initialization.rs"]
 mod initialization;
 
+// Source-authored and operator-supplied handoffs share one bounded format.
+// The shorter size requested in a model prompt is a hint, not a second limit.
+const MAX_HANDOFF_BYTES: usize = 10 * 1024;
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(super) enum GitStateBasis {
@@ -147,7 +151,7 @@ impl Handoff {
             return Err("WEB_HANDOFF_DECISIONS_INVALID".into());
         }
         let bytes = serde_json::to_vec(self).map_err(|_| "WEB_HANDOFF_INVALID")?;
-        if bytes.len() > 10 * 1024 || bytes.contains(&0) {
+        if bytes.len() > MAX_HANDOFF_BYTES || bytes.contains(&0) {
             return Err("WEB_HANDOFF_TOO_LARGE".into());
         }
         Ok(())
@@ -1948,10 +1952,10 @@ pub(super) fn read_handoff(path: &Path) -> Result<Handoff, String> {
     let mut bytes = Vec::new();
     File::open(path)
         .map_err(|_| "WEB_HANDOFF_UNAVAILABLE")?
-        .take(10 * 1024 + 1)
+        .take(MAX_HANDOFF_BYTES as u64 + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| "WEB_HANDOFF_UNAVAILABLE")?;
-    if bytes.len() > 10 * 1024 {
+    if bytes.len() > MAX_HANDOFF_BYTES {
         return Err("WEB_HANDOFF_TOO_LARGE".into());
     }
     serde_json::from_slice(&bytes).map_err(|_| "WEB_HANDOFF_INVALID".into())
@@ -2448,7 +2452,7 @@ fn handoff_from_source_snapshot(
     let response = assistant["text"]
         .as_str()
         .ok_or("WEB_HANDOFF_JSON_REQUIRED")?;
-    if response.len() > 3500 {
+    if response.len() > MAX_HANDOFF_BYTES {
         return Err("WEB_HANDOFF_TOO_LARGE".into());
     }
     let handoff: Handoff =
@@ -7799,6 +7803,85 @@ mod tests {
             )
             .unwrap()
             .is_none()
+        );
+    }
+
+    #[test]
+    fn source_handoff_budget_accepts_valid_source_context_above_old_prompt_cap() {
+        let root = fixture();
+        let mut request = context_request(&root);
+        request.bootstrap_app_mention = Some("@CatDesk-Local-Tunnel-v5".into());
+        let mut handoff = context_handoff();
+        handoff.chatgpt_app_mention = request.bootstrap_app_mention.clone();
+        handoff.objective =
+            "Preserve the verified source work and its remaining review. ".repeat(65);
+        handoff.validate("alpha").unwrap();
+        let snapshot = source_snapshot(&request, &request.message, &handoff);
+        let response = snapshot["messages"][1]["text"].as_str().unwrap();
+        assert!(response.len() > 3500 && response.len() <= 10 * 1024);
+        let collected = handoff_from_source_snapshot(&request, &snapshot).unwrap();
+        assert_eq!(
+            serde_json::to_value(collected).unwrap(),
+            serde_json::to_value(handoff).unwrap(),
+            "collect the complete source-authored context without truncating fields"
+        );
+    }
+
+    #[test]
+    fn source_handoff_budget_refuses_oversized_structured_or_padded_responses() {
+        let root = fixture();
+        let request = context_request(&root);
+        let mut handoff = context_handoff();
+        handoff.objective = "x".repeat(10 * 1024);
+        assert_eq!(
+            handoff_from_source_snapshot(
+                &request,
+                &source_snapshot(&request, &request.message, &handoff)
+            )
+            .unwrap_err(),
+            "WEB_HANDOFF_TOO_LARGE"
+        );
+        let mut snapshot = source_snapshot(&request, &request.message, &context_handoff());
+        let padded = format!(
+            "{}{}",
+            " ".repeat(10 * 1024),
+            snapshot["messages"][1]["text"].as_str().unwrap()
+        );
+        snapshot["messages"][1]["text"] = json!(padded);
+        snapshot["messages"][1]["revisionHash"] = json!(digest(&format!(
+            "catdesk-snapshot-revision-v1\0{}\0{}",
+            request.source.digest, padded
+        )));
+        assert_eq!(
+            handoff_from_source_snapshot(&request, &snapshot).unwrap_err(),
+            "WEB_HANDOFF_TOO_LARGE"
+        );
+    }
+
+    #[test]
+    fn source_handoff_budget_preserves_task_and_native_ownership_refusals() {
+        let root = fixture();
+        let request = context_request(&root);
+        let mut handoff = context_handoff();
+        handoff.objective = "Preserve the source task and ownership checks. ".repeat(90);
+        handoff.source_task_id = "another-task".into();
+        assert_eq!(
+            handoff_from_source_snapshot(
+                &request,
+                &source_snapshot(&request, &request.message, &handoff)
+            )
+            .unwrap_err(),
+            "WEB_HANDOFF_TASK_CHANGED"
+        );
+        handoff.source_task_id = request.source_task_id.clone();
+        handoff.owned_paths.push("src/main.rs".into());
+        assert_eq!(
+            handoff_from_source_snapshot(
+                &request,
+                &source_snapshot(&request, &request.message, &handoff)
+            )
+            .unwrap_err(),
+            "WEB_HANDOFF_OWNERSHIP_UNVERIFIED"
         );
     }
 
