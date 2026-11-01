@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-01T23:20:36.578841+00:00",
+  "classification": "TESTED_CONTROLLED_LIVE_PARTIAL_REVIEW",
+  "sourceCommit": "e6a3e5e86843a41c74261a821dbb9cd0748477b7",
+  "fullDeclaredPaths": 84,
+  "unchangedAcceptedPredecessorBlobs": 81,
+  "completedReview": {
+    "verdict": "REVIEWED_PARTIAL",
+    "findings": 0,
+    "responseSha256": "8c6feb3eed624e8e4a5e8ca7003de797fd66b44a2d3b1b7efbbdd74e0fd53326",
+    "reviewerEstablishedFullCommit": false,
+    "reviewerSourceAbbreviation": "e6a3e5e",
+    "coordinatorVerifiedUniqueCommitObject": true,
+    "taskCorrelatedSourceCommands": 6,
+    "matchingCommandLogCounts": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "originalResponsePreserved": true,
+    "coordinatorClosed": true,
+    "cumulativeSourceAccepted": false
+  },
+  "scopeCorrection": {
+    "unusedFrozenRequestsRevoked": 2,
+    "unusedRequestsSubmitted": 0,
+    "nativeClaimReused": true,
+    "newSourceClaims": 0,
+    "remainingFrozenRequests": 2,
+    "newGrantPreflightsPassed": 2,
+    "fullGitIdentityReadIncluded": true,
+    "currentScopeEvidenceIncluded": true,
+    "mutationWrapperRangeExtended": "src/promotion_retirement.rs:940-1080",
+    "sourceCodeChanged": false,
+    "remainingReviewsCompleted": false
+  },
+  "preparationFailure": {
+    "code": "FROZEN_TASK_TEXT_EXCEEDS_1024_BYTES",
+    "observedBytes": 1045,
+    "refusedBeforeBatchCreation": true,
+    "correctedBeforeAuthorization": true,
+    "messagesSentByFailedPreparation": 0
+  },
+  "preservation": {
+    "productionActions": 0,
+    "bindingChanges": 0,
+    "nativeProjectActions": 0,
+    "recurringAutomationStarts": 0
+  },
+  "acceptance": {
+    "currentSourceCumulative": "OPEN",
+    "protectedPromotion": "OPEN",
+    "canonicalControlledAuthorityReconciliation": "OPEN",
+    "actualTwoWebWorkspaceCoding": "OPEN",
+    "installedRecovery": "OPEN",
+    "fullContextMeterQualification": "OPEN",
+    "laterProviderMcpClients": "OPEN"
+  }
+}

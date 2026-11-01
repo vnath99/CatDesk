@@ -1,3 +1,9 @@
+## 2026-11-01T23:20:36.578841+00:00 — partial retirement review preserved; remaining source identity made explicit
+
+One new public-source owner/terminal-receipt checkpoint completed as REVIEWED_PARTIAL with no findings. All six reads are corroborated by task-timed logs. The reviewer explicitly did not establish the full source SHA; its null field and abbreviation remain unchanged. Coordinator Git-object and redacted-output verification supports the partial evidence only, not cumulative source acceptance. The coordinator work record closed; the same full84-path source claim remains active.
+
+Two unused requests were revoked without submission. The remaining two frozen requests add a full Git identity read, current84/81 scope evidence and retirement wrapper940-1080 coverage. Both new grant preflights passed under existing standing authorization; their review results are still pending. A1045-byte preparation was refused before batch creation, shortened before freezing/authorization, and sent nothing. No source code, native project owner, production release, binding, authentication or recurring automation changed. Next reconcile the current send and complete genuine cumulative review, then qualify the current controller and guarded promotion. Existing attested candidate is retained; installed two-Web coding and recovery remain OPEN. Evidence: `docs/verification/E6_REVIEW_SOURCE_IDENTITY_RECOVERY_2026_11_01.json`.
+
 ## 2026-11-01T23:07:47.596421+00:00 — current diagnostic review preserved; observed-pressure rollover completed
 
 The current e6a3e5e managed source review remains active with all84 paths retained and81 accepted predecessor blobs unchanged. Its exact diagnostic review is REVIEWED_PARTIAL with no findings, one task-correlated source read and a verified completed response. Coordinator closure is not cumulative source acceptance or producer authority. The old cancelled source claim and its partial evidence remain preserved.
