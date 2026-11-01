@@ -1,3 +1,20 @@
+## 2026-11-01T12:31:04.074114+00:00 — supervisor case-alias duplicate reproduced and fixed in source
+
+Source `4fb0285c340402f333b6b71d4212b0edb1c4000c` fixes a real Windows singleton defect: differently cased spellings of one workspace could acquire separate supervisor mutexes. A second actual Windows process reproduced the failure before the fix. The existing owner now uses stored directory-component spelling, retains its matching legacy reservation, and shares its identity function with the public facade. Existing Task Scheduler/Run names and launch arguments remain unchanged. The supervisor and public lifecycle suites pass under both the actual Windows PowerShell 5.1 launcher host and PowerShell 7.6.5; test children exited and the trusted serving owner remains intact. No production, persistence, browser, Wake-binding or native-session changes occurred.
+
+This is source qualification, not installed/autostart/reboot acceptance. The historical shutdown cause remains unestablished. Four code files differ from the frozen `2876ea3` review, while 80 of its 84 declared code paths retain identical Git blobs. The original frozen-source managed review was cancelled through its supported version-checked API after the material source change; status confirms CANCELLED at version 5. All 4,819 pinned preexisting files, accounting, project state and prior event prefixes were preserved. No project goal was paused and no replacement review claim was created. Carry forward prior reports and unchanged blobs, but obtain exact current-source review before release; no producer authority is inherited. Both controlled review conversations have substantial incomplete context estimates; plan the existing handoff path before adding large source reads. Evidence: `docs/verification/SUPERVISOR_DIRECTORY_CASE_2026_11_01.json`. No new operator action is required.
+Source qualification commands, from the reviewed source checkout (both scripts use isolated fixtures):
+
+```powershell
+powershell.exe -NoProfile -File .\scripts\test-catdesk-autostart-supervisor.ps1
+powershell.exe -NoProfile -File .\scripts\test-catdesk-lifecycle.ps1
+pwsh -NoProfile -File .\scripts\test-catdesk-autostart-supervisor.ps1
+pwsh -NoProfile -File .\scripts\test-catdesk-lifecycle.ps1
+```
+
+The existing installed operator command is ` .\catdesk.ps1 autostart status ` from the reviewed installation, using its registered workspace. Do not enable persistence to reproduce these fixture tests. `autostart disable` removes owned persistence entries; it does not prove that an existing monitor stopped. A persistent-monitor upgrade still requires qualified owner shutdown/restart and actual installed recovery evidence. Matching legacy mutex names remain supported, but coexistence with a running pre-fix monitor launched through another path spelling is unqualified. This patch neither stops that owner nor edits its registration.
+
+
 ## 2026-11-01 — registration contention and crash compatibility
 
 The source-qualified Windows guard uses the existing `registration-confirm.lock` path with an exclusive create-new, delete-on-close handle. New and legacy writers remain mutually exclusive; existing unknown legacy markers are refused. Non-Windows crash cleanup and installation of this correction are not claimed. The bounded public contention diagnostic is `WEB_CONTEXT_REGISTRATION_BUSY`. Never infer safe reclamation from age or process absence alone. The one recorded cleanup was limited to an exact test-owned artifact with verified failure-window identity, owner exit, quiescence, frozen preflight and unchanged project/journal pins; it preserved that artifact in private quarantine. It is not a general stale-lock command or release authority.
