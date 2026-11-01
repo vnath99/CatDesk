@@ -1,0 +1,253 @@
+{
+  "date": "2026-11-01",
+  "observedUtc": "2026-11-01T14:31:41.063022+00:00",
+  "classification": "ACTUAL_TWO_SCOPED_REVIEWS_AFTER_ROLLOVER_AND_INSTALLED_NATIVE_CAPABILITY_DIAGNOSIS_NOT_RELEASE_ACCEPTANCE",
+  "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+  "fullDeclaredCodePaths": 84,
+  "materiallyChangedPathsReviewed": 8,
+  "unchangedGitBlobsSincePriorFrozenReview": 76,
+  "scopeNarrowed": false,
+  "routineReviewAuthorization": {
+    "existingRegistryReused": true,
+    "oneScopedGrant": true,
+    "individuallyFrozenMessages": 2,
+    "destinationGeneration": 3,
+    "messagesDeliveredOnceEach": true,
+    "exactResponsesCompletedAndRead": true,
+    "taskTimedServerSourceLogsCorroborated": true,
+    "newManagedNativeClaims": 0,
+    "formerCancelledReviewResumed": false,
+    "sourceAccepted": false,
+    "producerAuthority": false
+  },
+  "reviews": [
+    {
+      "number": 1,
+      "verdict": "REVIEWED_PARTIAL",
+      "inspectedPaths": [
+        "src/operator_web_cli.rs",
+        "src/operator_web_rollover.rs",
+        "wake/src/runtime.rs",
+        "wake/src/runtime_scoped_review.rs"
+      ],
+      "findingsAndVerificationQuestions": [
+        {
+          "severity": "INFO",
+          "status": "SOURCE_REVIEWED",
+          "detail": "New deliver-handoff and reobserve-handoff CLI actions require a project ID and reject caller-supplied event IDs, messages, URLs, source task IDs and force options."
+        },
+        {
+          "severity": "INFO",
+          "status": "SOURCE_REVIEWED",
+          "detail": "Handoff delivery validates the retained journal request against the registered owner, paired target, exact event, generation, message and event type. A pre-submit callback rechecks selection and policy."
+        },
+        {
+          "severity": "INFO",
+          "status": "SOURCE_REVIEWED",
+          "detail": "Scoped runtime selection distinguishes handoffs from continuations and review events. Added tests cover changed selection, sibling queue isolation, invalid event roles and replay refusal after known or uncertain outcomes."
+        },
+        {
+          "severity": "MEDIUM",
+          "status": "UNRESOLVED",
+          "detail": "The new reobservation path takes a registry registration lock and invokes a commit callback. The exact callback's transitive locking behavior was not inspected. Absence of lock inversion or deadlock is not independently established."
+        },
+        {
+          "severity": "MEDIUM",
+          "status": "UNRESOLVED",
+          "detail": "The before-submit callback uses separate journal, registration, target and policy observations. Its behavior under concurrent modification requires cross-module verification. No exploitable race is established by this diff alone."
+        },
+        {
+          "severity": "MEDIUM",
+          "status": "UNVERIFIED",
+          "detail": "The added tests exercise selected runtime paths with a fake adapter. Installed browser behavior, process crashes, durable recovery and cross-process concurrency were not independently tested."
+        }
+      ],
+      "limitations": [
+        "Native ownership could not be independently queried.",
+        "Only the requested four-file delta was inspected.",
+        "Transitive dependencies and unchanged implementations were not fully inspected.",
+        "No tests or installed acceptance were executed.",
+        "The 84-path cumulative source acceptance remains open.",
+        "This review grants no native task, release or production authority."
+      ],
+      "exactResponseSha256": "e87b377df4ab135f7c65566844277acc918872a3f1b0608daaf034f0a99bf77b",
+      "sourceCorroboration": {
+        "observedUtc": "2026-11-01T14:16:19.896022+00:00",
+        "reviewNumber": 1,
+        "verdict": "REVIEWED_PARTIAL",
+        "frozenSourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+        "responseSha256": "e87b377df4ab135f7c65566844277acc918872a3f1b0608daaf034f0a99bf77b",
+        "exactUserReceipt": true,
+        "completedResponseVerified": true,
+        "coordinatorClosed": true,
+        "matchingCommandLogCounts": [
+          1
+        ],
+        "matchingCommandLogSha256": [
+          "ed4eac5183a4f4ecd40cd597d94e77c9afa5c747283c913bdb451c8b6502ef15"
+        ],
+        "sourceLogMatchesExistingPrivacyRedactionOfFrozenInputs": true,
+        "rawUnredactedLogClaimed": false,
+        "sourceAccepted": false,
+        "producerAuthority": false
+      },
+      "stageBoundsSeconds": 170,
+      "actualStageElapsedSeconds": {
+        "send": 124.031,
+        "observe": 65.688,
+        "read": 44.375,
+        "resolve": 7.047
+      }
+    },
+    {
+      "number": 2,
+      "verdict": "REVIEWED_PARTIAL",
+      "inspectedPaths": [
+        "catdesk.ps1",
+        "scripts/catdesk-autostart-supervisor.ps1",
+        "scripts/test-catdesk-autostart-supervisor.ps1",
+        "scripts/test-catdesk-lifecycle.ps1"
+      ],
+      "findingsAndVerificationQuestions": [
+        {
+          "severity": "INFO",
+          "status": "SOURCE_REVIEWED",
+          "detail": "Supervisor workspace identity now resolves existing directory components and hashes their observed spelling. This addresses case-only aliases while preserving distinct case-sensitive sibling directories."
+        },
+        {
+          "severity": "INFO",
+          "status": "SOURCE_REVIEWED",
+          "detail": "The supervisor acquires canonical and legacy named mutexes, retaining both until release. Failed second acquisition releases the first mutex. This provides transitional compatibility with matching legacy monitor identities."
+        },
+        {
+          "severity": "INFO",
+          "status": "SOURCE_REVIEWED",
+          "detail": "The lifecycle facade retains historical task names, Run-key names and launch arguments. It additionally checks the supervisor's canonical mutex identity when reporting whether a monitor is running."
+        },
+        {
+          "severity": "MEDIUM",
+          "status": "UNRESOLVED",
+          "detail": "A legacy monitor started through another case spelling can hold a different legacy mutex while the new monitor acquires the canonical mutex. Full interoperability with all already-running legacy case aliases is therefore not established."
+        },
+        {
+          "severity": "MEDIUM",
+          "status": "UNRESOLVED",
+          "detail": "Canonical identity relies on Directory.GetDirectories with a component search pattern rather than a retained directory handle. Directory replacement races and wildcard-containing components require independent examination."
+        },
+        {
+          "severity": "MEDIUM",
+          "status": "UNRESOLVED",
+          "detail": "The facade extracts a function from the supervisor's parsed PowerShell AST and executes it as a scriptblock. The source checks its file type and reparse attribute, but does not demonstrate pinned file identity against concurrent replacement."
+        },
+        {
+          "severity": "LOW",
+          "status": "TEST_COVERAGE_LIMIT",
+          "detail": "Real cross-process tests cover case aliases, independent workspaces, release and matching legacy reservations. They do not establish every migration, crash or concurrent replacement scenario."
+        }
+      ],
+      "limitations": [
+        "Native task ownership could not be independently established.",
+        "Only the four requested changed paths were inspected.",
+        "Tests were reviewed but not executed.",
+        "No installed Windows autostart acceptance was performed.",
+        "Unchanged transitive dependencies remain outside this review.",
+        "No findings outside this delta are accepted.",
+        "All 84 cumulative release paths remain declared."
+      ],
+      "exactResponseSha256": "7217b300a69d7cc97802df5c39a5d5916671222f7f409577738a21a119aeedc2",
+      "sourceCorroboration": {
+        "observedUtc": "2026-11-01T14:29:14.610608+00:00",
+        "reviewNumber": 2,
+        "verdict": "REVIEWED_PARTIAL",
+        "frozenSourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+        "responseSha256": "7217b300a69d7cc97802df5c39a5d5916671222f7f409577738a21a119aeedc2",
+        "exactUserReceipt": true,
+        "completedResponseVerified": true,
+        "coordinatorClosed": true,
+        "matchingCommandLogCounts": [
+          1
+        ],
+        "matchingCommandLogSha256": [
+          "fae5000ef9f85eba801e44837fa7d8e6bd3c68feaace42f35fddf46a664e7ee9"
+        ],
+        "sourceLogMatchesExistingPrivacyRedactionOfFrozenInputs": true,
+        "rawUnredactedLogClaimed": false,
+        "sourceAccepted": false,
+        "producerAuthority": false
+      },
+      "stageBoundsSeconds": 170,
+      "actualStageElapsedSeconds": {
+        "send": 129.985,
+        "observe": 68.703,
+        "read": 45.672,
+        "resolve": 7.282
+      }
+    }
+  ],
+  "installedCatalog": {
+    "observedUtc": "2026-11-01T14:15:38.325832+00:00",
+    "classification": "ACTUAL_AUTHENTICATED_LOCAL_INSTALLED_CATALOG_READ_ONLY_NOT_WEB_CLIENT_DISCOVERY",
+    "sourceCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+    "installedSha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf",
+    "httpStatus": 200,
+    "catalogToolCount": 102,
+    "namedDispatcherAdvertised": true,
+    "declaredOperations": [
+      "read",
+      "search",
+      "patch.preview",
+      "patch.apply",
+      "patch.compare",
+      "diff.actual",
+      "verify.command"
+    ],
+    "nativeCodexDispatchAdvertised": false,
+    "nativeCodexStatusAdvertised": false,
+    "dispatcherSchemaSha256": "f40abf4e7e282b1c5273d3fcc6c8649187df180962d57f748d203653dab7d579",
+    "mcpRequests": 1,
+    "taskCalls": 0,
+    "userMessages": 0,
+    "processActions": 0,
+    "authenticationOrProfileChanges": 0,
+    "projectOrBindingChanges": 0,
+    "cachedWebClientCatalogVerified": false
+  },
+  "registryScopeFinding": {
+    "controlledRolloverPairInternallyConsistent": true,
+    "controlledGeneration": 3,
+    "v5CanonicalNativeProjectGenerationObservedByNewChat": 1,
+    "automaticNativeTaskResumption": "STOPPED_ON_UNVERIFIED_OWNERSHIP_AND_DISTINCT_CONTROL_SCOPE",
+    "publicSourceReviewResumption": "TWO_NEW_EXPLICITLY_SCOPED_READ_ONLY_REVIEWS_COMPLETED_THROUGH_V5",
+    "nativeProjectExecutionAccepted": false,
+    "registriesCopiedOrRebound": false,
+    "qualifiedExistingPath": "Existing finite installed-backend run-central accepts the prepared control workspace; prior local qualification exists. Persistent/connector serving of that scope and new-source native execution remain separate gates."
+  },
+  "coordinatorInspection": {
+    "reobservationCommitOrder": "Project owner retained; final registry lock wraps owner/binding checks then Wake CAS. Callback avoids paired-target mutex under registration lock.",
+    "beforeSubmit": "Existing project journal lock, pre-submit identity/policy checks, durable SUBMITTING fence and exact receipt remain. No new exploitable race established by this diff-only review.",
+    "supervisorCompatibility": "Matching legacy reservations supported. An already-running pre-fix monitor through a different case alias remains unqualified; require known owner quiescence before installed upgrade.",
+    "qualification": "Coordinator inspection is not independent acceptance. Preserve questions rather than fabricate proof or add speculative security mechanisms."
+  },
+  "preservation": {
+    "stagePinMismatches": 0,
+    "unrelatedWorkRecordsPreserved": true,
+    "testOwnedFinalProcesses": 0,
+    "trustedInstalledBackendRetained": true,
+    "existingTunnelRetained": true,
+    "hostStopped": true,
+    "browserLoginMarkerPresent": false,
+    "productionChanges": 0,
+    "nativeSessionActions": 0,
+    "bindingChanges": 0,
+    "recurringAutomationEnabled": false
+  },
+  "nextExecutableTask": "Independent targeted inspection of transitive reobservation/registration locking and supervisor compatibility, preserving the 84-path cumulative source scope; obtain genuine accepted managed review before ACK/snapshot/producer/promotion.",
+  "remainingAcceptance": [
+    "Protected promotion of newer native-dispatch source; retained installed dispatcher lacks native Codex operations.",
+    "Connector serving of the intended registered control scope without copying registries or changing native ownership.",
+    "Two actual ChatGPT Web conversations performing owned workspace edits and native verification with negative isolation checks.",
+    "Qualified installed supervisor restart/recovery and normal unattended serving."
+  ],
+  "operatorActionRequired": false,
+  "milestoneComplete": false
+}
