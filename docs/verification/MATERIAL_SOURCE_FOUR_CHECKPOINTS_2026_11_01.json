@@ -1,0 +1,51 @@
+{
+  "observedUtc": "2026-11-01T20:20:52.242649+00:00",
+  "sourceCommit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+  "classification": "FOUR_COMPLETED_WEB_SOURCE_CHECKPOINTS_NOT_CUMULATIVE_ACCEPTANCE",
+  "checkpoints": [
+    {
+      "scope": "COLLECTION_GUARDS_AND_QUALIFICATION_EVIDENCE",
+      "verdict": "REVIEWED_PARTIAL",
+      "responseSha256": "6d96d8d0af178b1b38900ee701e26dbeff990b36b110c899ac5066146f465365",
+      "actualSourceReads": 8,
+      "reportedOutputTruncated": false,
+      "actionableFindings": []
+    },
+    {
+      "scope": "BACKEND_CHANGED_TESTS_AND_PRIOR_LINES",
+      "verdict": "REVIEWED_PARTIAL",
+      "responseSha256": "280fdbaaecc3cc720f2f8541f9e147812a4ae16636db2b6d2e8e5f05b05d4daa",
+      "actualSourceReads": 17,
+      "reportedOutputTruncated": false,
+      "actionableFindings": []
+    },
+    {
+      "scope": "ADAPTER_CHANGED_TESTS_AND_PRIOR_LINES",
+      "verdict": "REVIEWED_PARTIAL",
+      "responseSha256": "1e108f985d30baaa57572220d79904dd464f43a3b8d09e4951dc1117037dd658",
+      "actualSourceReads": 12,
+      "reportedOutputTruncated": false,
+      "actionableFindings": []
+    },
+    {
+      "scope": "FULL_INSTALLED_PROJECT_PRODUCTION_1_767",
+      "verdict": "REVIEWED_PARTIAL",
+      "responseSha256": "de9aa4a4661b74cf8e060d6015170d4d005c02290b1100178c6493c7c72d1f69",
+      "actualSourceReads": 8,
+      "reportedOutputTruncated": false,
+      "actionableFindings": []
+    }
+  ],
+  "actualSourceReadsCorroborated": 45,
+  "contextGeneration": 5,
+  "observedTokenProxy": 59313,
+  "providerContextExact": false,
+  "coverageKnown": false,
+  "duplicateImportsChangedLedger": false,
+  "scopePathCount": 84,
+  "finalMaterialInputPrepared": true,
+  "finalCumulativeVerdict": "NOT_REQUESTED_YET",
+  "sourceAccepted": false,
+  "producerAuthority": false,
+  "productionChanges": 0
+}
