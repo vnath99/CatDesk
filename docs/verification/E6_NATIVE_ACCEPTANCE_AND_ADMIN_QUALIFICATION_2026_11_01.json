@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-01T23:57:47.678643+00:00",
+  "sourceCommit": "e6a3e5e86843a41c74261a821dbb9cd0748477b7",
+  "classification": "TESTED_CONTROLLED_LIVE_NATIVE_REVIEW_AND_LOCAL_CONTROLLER_NOT_PRODUCTION_PROMOTION",
+  "independentReview": {
+    "verdict": "PASS",
+    "retainedPaths": 84,
+    "unchangedAcceptedBlobs": 81,
+    "changedPaths": 3,
+    "findings": 0,
+    "taskCorrelatedSourceReads": 7,
+    "matchingCounts": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "rawResponseSha256": "c743b0bfa509765ac26b9576bd7f09ff5744121e8cedc26779a29b36f922b7d1",
+    "jsonArtifactSha256": "dafaac833784f84be96d6f993f0ddbcc5f1f84130b8c8c1119e033828caae9d0",
+    "jsonArtifactPreservesOriginalContiguousUtf8Span": true,
+    "priorInconclusiveVerdictPreserved": true,
+    "sourceReportFieldsRewritten": false
+  },
+  "nativeReview": {
+    "state": "COMPLETED_VERIFIED",
+    "stateVersion": 7,
+    "active": false,
+    "acknowledged": true,
+    "sourceFastForwarded": true,
+    "sourceTrackedPathsAdvanced": 30,
+    "oldUntrackedFilesPreserved": 19,
+    "integrationPreservationPins": 4716,
+    "integrationPreservationMismatches": 0,
+    "snapshotId": "bd4bff3105459be11dd1143903bff0301b900a0738fab5ad879f2f99b9875b1d",
+    "snapshotManifestFileSha256": "48b1a30a03e4aaf541f14b93ba1f881e54812836d9eb52f25e59151929b7a1e9",
+    "snapshotEntries": 232,
+    "sourceAndSnapshotByteMatch": true,
+    "previousNativeFilesUnchanged": true,
+    "oldOtherAccountingRowsPreserved": true,
+    "oldInboxRowsPreserved": true,
+    "ownerNaturalExit": true,
+    "endpointClosed": true
+  },
+  "administrativeController": {
+    "sourceCommit": "e6a3e5e86843a41c74261a821dbb9cd0748477b7",
+    "sha256": "896e2c285692c9fca5e3b87e7e064620512b507ba85e41b9e0c3a9794a69bf31",
+    "role": "SEPARATELY_REVIEWED_ADMINISTRATIVE_CONTROLLER_NOT_RELEASE_PAYLOAD",
+    "backendOnlySupport": true,
+    "isolatedComputerSupervisorCatalog": true,
+    "toolCount": 79,
+    "centralDispatcherPresent": true,
+    "promotionToolPresent": true,
+    "authStatuses": [
+      401,
+      401,
+      200,
+      200
+    ],
+    "naturalExit": true,
+    "preservationPins": 5680,
+    "preservationMismatches": 0
+  },
+  "retainedPayload": {
+    "sourceCommit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+    "sha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "stateAfterCanonicalSourceAdvance": "BUILD_ATTESTED",
+    "newBuildStarted": false,
+    "reconfirmedProducer": false,
+    "installed": false
+  },
+  "preparationCorrection": {
+    "ownReadOnlyPreparerStoppedBeforeStateCreation": true,
+    "reason": "Unnecessary scan entered retained build caches. Existing qualified preservation inventory plus current review/snapshot replaced the scan.",
+    "filesDeleted": 0,
+    "otherProcessActions": 0
+  },
+  "productionActions": 0,
+  "nativeProjectTurnsStarted": 0,
+  "browserOrWakeStartedByFinalizationOrQualification": false,
+  "remaining": [
+    "Fresh trusted current-pair/effective-owner preflight, stopped completed-promotion retirement and guarded normal promotion.",
+    "Actual installed new-payload startup, authentication, rollback and supervisor recovery.",
+    "Supported canonical/control authority reconciliation and genuine two-Web workspace coding/native verification.",
+    "Full T-0484 uncertainty/calibration qualification and later CD-P7 client capability/live proof."
+  ]
+}
