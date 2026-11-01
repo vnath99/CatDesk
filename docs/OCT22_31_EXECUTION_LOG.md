@@ -1,3 +1,9 @@
+## 2026-11-01T19:36:27.639678+00:00 — exact current-source review scope retained
+
+The superseded source claim was cancelled through its version-checked API after the material collector correction. Only that claim state and one appended event changed; old event bytes, protected pins and 573 other accounting rows were preserved. The initial local verifier used filename instead of exact session directory; its failed record and corrected path/prefix proof remain. A new report-only contract for source `9ea9e7beedf986db95cd5bea7b750544e452caa8` is WAITING_FOR_CHATGPT at version 4, with all 84 code/test paths declared. All 4,681 preexisting native files and 574 old accounting rows were preserved; one new row belongs to the report claim. No native model, accepted report, ACK or producer exists.
+
+The first frozen administrative review covers the one changed code file; 83 blobs are unchanged. Its five MCP input preflights matched exact bytes. Remaining backend and adapter test/prior-line inputs are carried forward with unchanged blob proof and current-source commands; they are prepared, not yet inspected. Old partial reviews retain their limits. Production/native ownership and installed acceptance remain separate.
+
 ## 2026-11-01T19:22:21.394115+00:00 — completed handoff collected without resend; real rollover recovered
 
 The matching development package passed finite authenticated health and retained its verified predecessor. The same completed source-authored handoff that previously failed size collection was collected through the corrected controller with zero new messages. The original failed result remains unchanged. One new-chat creation timed out after a verified issued URL and completed bootstrap receipt; its test-owned processes exited. Supported receipt-only resume then rechecked the source and paired registry/Wake at generation 5, preserving history without resubmission. One continuation was delivered and its exact completed response read.
