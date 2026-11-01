@@ -1,0 +1,110 @@
+{
+  "date": "2026-11-01",
+  "observedUtc": "2026-11-01T09:36:16.355448+00:00",
+  "classification": "REAL_WINDOWS_REGISTRATION_CRASH_DEFECT_REPRODUCED_SOURCE_FIXED_AND_OWNED_TEST_SCOPE_RECOVERED",
+  "affectedReviewedSource": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+  "legacyMechanismAlsoPresentInTrustedReviewedBase": true,
+  "trigger": {
+    "operation": "Existing local context receipt reconciliation",
+    "callerTimeoutSeconds": 15,
+    "preciseOperationLatencyCause": "UNESTABLISHED; a short caller deadline is not evidence of a provider or network failure.",
+    "confirmedUserReceiptsRecordedBeforeStop": 5,
+    "scope": "CONTROLLED_DEVELOPMENT_REGISTRY_ONLY",
+    "upstream429Observed": false,
+    "productionShutdownAttributedToThis": false
+  },
+  "defect": {
+    "legacyLock": "CREATE_NEW sentinel with deletion only in normal destructor",
+    "processTerminationLeavesMarker": true,
+    "canBlockOtherProjectsSharingRegistry": true,
+    "genericClosureDiagnosticBeforeFix": "WEB_OPERATION_REFUSED",
+    "directlyReproducedWithRealWindowsProcessKill": true
+  },
+  "implementation": {
+    "existingRegistrationLockPathAndRegistryReused": true,
+    "windowsOwnership": "Retain an exclusive non-shared CREATE_NEW file handle with DELETE_ON_CLOSE and OPEN_REPARSE_POINT. Kernel handle cleanup removes only this created marker.",
+    "unknownLegacyMarkersAutoReclaimed": false,
+    "legacyWritersRemainExcluded": true,
+    "nonWindowsCrashCleanupClaimed": false,
+    "newRecoveryOrAuthorizationSubsystem": false,
+    "knownContentionCode": "WEB_CONTEXT_REGISTRATION_BUSY",
+    "privateErrorSuffixesStillRefused": true
+  },
+  "tests": {
+    "red": "Real killed owner stranded its marker before the correction.",
+    "focusedLockAndCallerCasesPassed": 5,
+    "focusedFixtureChildrenIgnored": 1,
+    "registryCasesPassed": 40,
+    "registryFixtureChildrenIgnored": 1,
+    "testCountsOverlap": true,
+    "boundedDiagnosticCasePassed": 1,
+    "strictAllTargetClippy": "PASS",
+    "formatAndDiffWhitespace": "PASS",
+    "actualInstalledNewLockAcceptance": false
+  },
+  "ownedTestCleanup": {
+    "preflightVerifiedExactTestWindowAndOwnerExit": true,
+    "otherTestApiOwnersPresent": false,
+    "exactArtifactFileIdentityAndBytesPreservedInPrivateQuarantine": true,
+    "projectAndJournalPinsChecked": 126,
+    "projectOrJournalChanges": 0,
+    "generalLegacyReclamationAuthorized": false,
+    "productionOrNativeSessionStop": false
+  },
+  "actualClosureReconciliation": {
+    "previousClosureConfirmedUnapplied": true,
+    "sameFrozenResolutionUsed": true,
+    "changedPrerequisite": "Exact owned test orphan quarantined after quiescence proof.",
+    "elapsedSeconds": 8.172,
+    "exactCoordinatorClosureVerified": true,
+    "unrelatedWorkRecordsPreserved": true,
+    "newMessagesOrBrowserActions": 0,
+    "sourceAccepted": false
+  },
+  "currentReviewEvidence": {
+    "completedDistinctDependencyInspections": [
+      {
+        "number": 1,
+        "topic": "claim and final receipt transitions",
+        "verdict": "REVIEWED_PARTIAL",
+        "responseSha256": "6cf85b1266156044a3cd2088d8bf69530d77a63d084657573119829f369fd73b",
+        "exactUserReceipt": true,
+        "completedResponseVerified": true,
+        "sourceAccepted": false
+      },
+      {
+        "number": 2,
+        "topic": "native transport caller and owned-process helper delta",
+        "verdict": "REVIEWED_PARTIAL",
+        "responseSha256": "dd031784f2952f911392dd72fa1bbeb2404072aefa9a94530257a9819535d16c",
+        "exactUserReceipt": true,
+        "completedResponseVerified": true,
+        "sourceAccepted": false
+      }
+    ],
+    "remainingFourFrozenRequestsUnsent": true,
+    "oldManagedClaimCancelledUsingExistingApi": true,
+    "oldClaimStateVersion": 5,
+    "oldClaimSourceAccepted": false,
+    "producerAuthority": false,
+    "evidencePreservedForUnchangedSourceComponents": true
+  },
+  "contextEvidence": {
+    "classification": "ADVISORY_PARTIAL_CONTEXT_NOT_PROVIDER_USAGE",
+    "currentConversationsIndependentlyRecorded": 2,
+    "oneProjectConfirmedUserReceiptsRecorded": 5,
+    "otherProjectContextUnchangedDuringThatOperation": true,
+    "coverage": "UNKNOWN_OR_INCOMPLETE",
+    "genericPublicSourceToolTrafficNotClaimedAsAuthenticatedProjectTraffic": true,
+    "completeAutomaticContextAcceptance": false
+  },
+  "remaining": [
+    "Build/select/qualify the matching development package before claiming live corrected-lock acceptance.",
+    "Reconcile remaining known context receipts with a sufficient bounded caller deadline, checking idempotence and cleanup.",
+    "Complete genuine cumulative review/acknowledgement/snapshot/producer and guarded promotion for the corrected candidate.",
+    "Two actual ChatGPT Web conversations editing assigned workspaces with native Codex verification remain unaccepted."
+  ],
+  "operatorActionRequired": false,
+  "fullMilestoneAccepted": false,
+  "reference": "https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew"
+}

@@ -2687,6 +2687,13 @@ async fn run_native_daemon(backend_only: bool) -> Result<(), Box<dyn std::error:
 
 fn operator_web_error_code(error: &str) -> &str {
     const REFUSED: &str = "WEB_OPERATION_REFUSED";
+    if matches!(
+        error,
+        "project registration is already in progress"
+            | "registration confirmation is already in progress"
+    ) {
+        return "WEB_CONTEXT_REGISTRATION_BUSY";
+    }
     let code = error.split_once(':').map_or(error, |(code, _)| code);
     // These fixed browser-state codes do not fit the normal component-prefix
     // vocabulary. Preserve them without disclosing arbitrary adapter errors.
@@ -3877,6 +3884,14 @@ mod tests {
     #[test]
     fn operator_web_attention_exposes_only_bounded_stable_codes() {
         assert_eq!(
+            operator_web_error_code("project registration is already in progress"),
+            "WEB_CONTEXT_REGISTRATION_BUSY"
+        );
+        assert_eq!(
+            operator_web_error_code("registration confirmation is already in progress"),
+            "WEB_CONTEXT_REGISTRATION_BUSY"
+        );
+        assert_eq!(
             operator_web_error_code("BROWSER_SESSION_BUSY"),
             "BROWSER_SESSION_BUSY"
         );
@@ -3942,6 +3957,8 @@ mod tests {
             "TYPING_NOT_CONFIRMED_SECRET",
             "SCOPED_RECONCILE_PRIVATE_TOKEN",
             "SCOPED_RECONCILE_RECEIPT_UNPROVEN\nprivate message",
+            "project registration is already in progress: C:\\private\\token",
+            "registration confirmation is already in progress\nprivate owner",
         ] {
             assert_eq!(operator_web_error_code(untrusted), "WEB_OPERATION_REFUSED");
         }

@@ -1947,8 +1947,19 @@ impl AutonomousProjectRegistryStoreV1 {
     }
     fn acquire_registration_lock(&self) -> Result<RegistrationLockV1, RuntimeError> {
         let path = self.registration_lock_path();
-        match OpenOptions::new().write(true).create_new(true).open(&path) {
-            Ok(_) => Ok(RegistrationLockV1 { path }),
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(windows)]
+        options
+            .access_mode(0x4000_0000 | 0x0001_0000) // GENERIC_WRITE | DELETE
+            .share_mode(0)
+            .custom_flags(0x0400_0000 | 0x0020_0000); // DELETE_ON_CLOSE | OPEN_REPARSE_POINT
+        match options.open(&path) {
+            Ok(file) => Ok(RegistrationLockV1 {
+                #[cfg(not(windows))]
+                path,
+                _file: file,
+            }),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Err(
                 RuntimeError::Validation("registration confirmation is already in progress".into()),
             ),
@@ -2024,8 +2035,14 @@ impl AutonomousProjectRegistryStoreV1 {
 }
 
 struct RegistrationLockV1 {
+    #[cfg(not(windows))]
     path: PathBuf,
+    // Retain ownership for the complete critical section. On Windows, closing
+    // this non-shared handle deletes only its own CREATE_NEW marker, including
+    // after process termination. Existing legacy markers are never reclaimed.
+    _file: File,
 }
+#[cfg(not(windows))]
 impl Drop for RegistrationLockV1 {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.path);
@@ -2511,6 +2528,113 @@ fn io_error(error: std::io::Error) -> RuntimeError {
 mod tests {
     use super::*;
     use std::process::Command;
+
+    #[test]
+    fn registration_lock_preserves_unattributed_legacy_marker() {
+        let root = std::env::temp_dir().join(format!("catdesk-registry-legacy-{}", Uuid::new_v4()));
+        let store = AutonomousProjectRegistryStoreV1::open(root.join("registry")).unwrap();
+        let path = store.registration_lock_path();
+        fs::write(&path, b"").unwrap();
+        let before = fs::metadata(&path).unwrap().modified().unwrap();
+        assert!(store.acquire_registration_lock().is_err());
+        assert_eq!(fs::read(&path).unwrap(), b"");
+        assert_eq!(fs::metadata(&path).unwrap().modified().unwrap(), before);
+        let canonical = root.canonicalize().unwrap();
+        assert!(canonical.starts_with(std::env::temp_dir().canonicalize().unwrap()));
+        fs::remove_dir_all(canonical).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "Dedicated child fixture for the bounded registration-lock crash test"]
+    fn registration_lock_crash_child() {
+        let root = PathBuf::from(std::env::var_os("CATDESK_TEST_REGISTRATION_CRASH_ROOT").unwrap());
+        assert!(
+            root.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("catdesk-registry-crash-")
+        );
+        let store = AutonomousProjectRegistryStoreV1::open(root.join("registry")).unwrap();
+        let _lock = store.acquire_registration_lock().unwrap();
+        fs::write(root.join("child-ready"), b"owned").unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(20));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn registration_lock_process_crash_releases_exclusion_without_stale_reclamation() {
+        use std::os::windows::process::CommandExt;
+        use std::process::{Child, Stdio};
+        use std::time::{Duration, Instant};
+        struct OwnedChild(Child);
+        impl Drop for OwnedChild {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+        let root = std::env::temp_dir().join(format!("catdesk-registry-crash-{}", Uuid::new_v4()));
+        let store = AutonomousProjectRegistryStoreV1::open(root.join("registry")).unwrap();
+        store.initialize(2, 1).unwrap();
+        let before = fs::read(store.registry_path()).unwrap();
+        let mut child = OwnedChild(
+            Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "delegated::autonomy_projects::tests::registration_lock_crash_child",
+                    "--ignored",
+                    "--nocapture",
+                ])
+                .env("CATDESK_TEST_REGISTRATION_CRASH_ROOT", &root)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .creation_flags(0x0800_0000)
+                .spawn()
+                .unwrap(),
+        );
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !root.join("child-ready").exists() && Instant::now() < deadline {
+            assert!(
+                child.0.try_wait().unwrap().is_none(),
+                "fixture exited before ownership"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            root.join("child-ready").exists(),
+            "fixture did not acquire ownership"
+        );
+        assert!(
+            store.acquire_registration_lock().is_err(),
+            "live owner must exclude another writer"
+        );
+        child.0.kill().unwrap();
+        child.0.wait().unwrap();
+        assert!(
+            !store.registration_lock_path().exists(),
+            "terminated owner stranded registration marker"
+        );
+        let lock = store
+            .acquire_registration_lock()
+            .expect("independent next writer");
+        assert!(
+            OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(store.registration_lock_path())
+                .is_err(),
+            "legacy writer must also be excluded"
+        );
+        drop(lock);
+        assert!(!store.registration_lock_path().exists());
+        assert_eq!(fs::read(store.registry_path()).unwrap(), before);
+        drop(child);
+        let canonical = root.canonicalize().unwrap();
+        assert!(canonical.starts_with(std::env::temp_dir().canonicalize().unwrap()));
+        fs::remove_dir_all(canonical).unwrap();
+    }
 
     fn project(id: &str, workspace: PathBuf) -> AutonomousProjectV1 {
         AutonomousProjectV1 {
