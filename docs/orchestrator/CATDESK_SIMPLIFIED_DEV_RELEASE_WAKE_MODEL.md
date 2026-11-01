@@ -1,3 +1,9 @@
+## 2026-11-01T20:41:13.683088+00:00 — updated operator roadmap reconciled; acceptance remains OPEN
+
+The updated one-file handoff is additive and retains requirements A-F and later G. T-0484 requires separate observed MCP traffic, unique active-conversation pressure and uncertainty; o200k_base and local 96k/24k/8k policy values are proxies rather than exact provider capacity. Attribution, revision/content deduplication, surfaced-result limits, unknown attachments/model metadata and calibration remain mandatory. Current controlled evidence is preserved and does not establish installed or unattended acceptance.
+
+Immediate order remains exact-source review/producer/promotion and canonical/control authority reconciliation, then actual two-project Web coding/Wake/rollover/recovery qualification. Remaining full meter acceptance follows; Gemini/DeepSeek and optional local MCP clients are later CD-P7 with separate identity and live capability evidence. Reuse existing components. No new registry, profile, plugin, tunnel, security framework or protected release permission is introduced. Existing action-specific authorization and gates continue to apply.
+
 ## 2026-11-01T19:22:21.394115+00:00 — completed handoff collected without resend; real rollover recovered
 
 The matching development package passed finite authenticated health and retained its verified predecessor. The same completed source-authored handoff that previously failed size collection was collected through the corrected controller with zero new messages. The original failed result remains unchanged. One new-chat creation timed out after a verified issued URL and completed bootstrap receipt; its test-owned processes exited. Supported receipt-only resume then rechecked the source and paired registry/Wake at generation 5, preserving history without resubmission. One continuation was delivered and its exact completed response read.

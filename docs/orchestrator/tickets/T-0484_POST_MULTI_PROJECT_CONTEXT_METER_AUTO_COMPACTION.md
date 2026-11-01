@@ -1,5 +1,39 @@
 # T-0484 — Per-conversation context pressure, token accounting and safe automatic rollover
 
+## November 1 operator clarification — full meter contract remains OPEN
+
+Keep three separate metrics: observed per-call MCP argument/result traffic,
+estimated unique active-conversation pressure, and uncertainty/headroom. Existing
+lifetime totals and historical generations are not the replacement chat's input
+context. `o200k_base` is a content-aware proxy, not a validated exact tokenizer
+for the selected ChatGPT model. The 96,000 budget, 24,000 headroom and 8,000
+unknown-source reserve are conservative local policy examples, not provider
+capacity claims.
+
+Extend and qualify the existing versioned ledger with authenticated origin where
+available, canonical turn/upstream-call identity, content digest, revision,
+bounded visible length, method/model hints and reliability. Replace streamed
+revisions; reconcile replayed representations of one result without incrementing
+unique context again. Distinct legitimate observations remain distinct. Count
+worker output only when delivered to the conversation; preserve unknown hidden
+context, opaque attachments, truncated results and incomplete browser coverage.
+Never infer full model visibility from a local file or server-log byte count.
+
+Calibration must cover known text/code/JSON, Unicode and multilingual samples,
+special characters, huge/truncated results, nested calls, replay, changed/absent
+model metadata and native attachments. Compare trusted provider usage only when
+available. Record method version, measured sample distribution, under-counts and
+policy adjustments without invented exact confidence intervals.
+
+Retain the completed controlled handoffs, observed-pressure rollover and
+no-resend recovery. Qualify remaining cases using `TESTED_SOURCE`,
+`TESTED_CONTROLLED_LIVE`, `TESTED_INSTALLED`, `TESTED_UNATTENDED` or `OPEN`.
+Current-source review/producer/promotion and actual installed two-project Web
+coding/Wake/recovery remain the immediate priority. Detailed meter acceptance
+stays mandatory; Gemini/DeepSeek and optional local MCP clients are the later
+CD-P7 deliverable, with separate identity and capability evidence. This adds no
+new registry, browser owner, plugin, release authority or completion claim.
+
 ## Mandatory October 22 acceptance clarification
 
 October 23 source increment C10 implements durable fair creation admission

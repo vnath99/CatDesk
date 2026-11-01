@@ -1,3 +1,9 @@
+## 2026-11-01T20:41:13.683088+00:00 — updated operator roadmap reconciled; acceptance remains OPEN
+
+The updated one-file handoff is additive and retains requirements A-F and later G. T-0484 requires separate observed MCP traffic, unique active-conversation pressure and uncertainty; o200k_base and local 96k/24k/8k policy values are proxies rather than exact provider capacity. Attribution, revision/content deduplication, surfaced-result limits, unknown attachments/model metadata and calibration remain mandatory. Current controlled evidence is preserved and does not establish installed or unattended acceptance.
+
+Immediate order remains exact-source review/producer/promotion and canonical/control authority reconciliation, then actual two-project Web coding/Wake/rollover/recovery qualification. Remaining full meter acceptance follows; Gemini/DeepSeek and optional local MCP clients are later CD-P7 with separate identity and live capability evidence. Reuse existing components. No new registry, profile, plugin, tunnel, security framework or protected release permission is introduced. Existing action-specific authorization and gates continue to apply.
+
 ## 2026-11-01T20:20:52.242649+00:00 — four material source checkpoints completed; cumulative judgment next
 
 All four individually frozen messages under one scoped batch authorization are COMPLETE, exact-event read, coordinator-closed and corroborated by 45 actual source-command logs. They cover collection guards, backend changed tests/prior lines, adapter changed tests/prior lines and the full installed-project production module1-767. None reports a concrete defect; all remain REVIEWED_PARTIAL. The source declaration retains all84 code/test paths. No report, ACK or producer authority has been fabricated.
