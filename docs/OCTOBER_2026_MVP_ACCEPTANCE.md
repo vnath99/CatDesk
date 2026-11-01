@@ -1,3 +1,7 @@
+## 2026-11-01 — actual bounded continuation PASS; Web coding remains OPEN
+
+The new controlled project chat has verified issued URL, generation2 pairing, predecessor history, exact bootstrap receipt and response. Its one existing continuation now has SENT/exact receipt, COMPLETE response and an exact task-marked body read. Matched development build health and cleanup passed; other project pins remained unchanged. The assistant reports v5 available but no native launch and waits for a task grant. App availability claimed by that answer is not a source-edit/native-execution receipt. Canonical authority transfer, evidence-backed fresh-initialization work admission, genuine protected producer/promotion, two real Web coding callers and installed persistent/reboot recovery remain OPEN. No completed bootstrap or continuation should be resent. Evidence: `docs/verification/V5_PROJECT_CHAT_BOOTSTRAP_2026_11_01.json`.
+
 ## 2026-11-01 — fresh project conversation progress; full October acceptance remains OPEN
 
 | Layer | Evidence / remaining acceptance |

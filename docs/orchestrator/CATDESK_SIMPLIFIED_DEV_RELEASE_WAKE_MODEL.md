@@ -1,3 +1,7 @@
+## 2026-11-01 — matched development continuation qualified; production ownership unchanged
+
+Source `7782a94` was separately built and selected through the existing development release checks; finite authenticated health and rollback-artifact preservation passed. Its existing scoped sender delivered only the durable rollover continuation, and separate no-send observation/read proved completion. This creates no new protected producer authority and does not transfer the controlled chat to the canonical installed project. Preserve explicit scope ownership and normal-work admission: an operator-provided bootstrap must not be treated as a witnessed predecessor handoff. No production executable, external tunnel, global scheduler or native session changed. Evidence: `docs/verification/V5_PROJECT_CHAT_BOOTSTRAP_2026_11_01.json`.
+
 ## 2026-11-01 — matched primitives and scoped continuation compatibility
 
 Development controllers embed accepted adapter/bridge hashes. A Python-only bridge fix still requires a matched controller build before update-package; mismatched bytes correctly refuse DEV_PACKAGE_SCRIPT_SOURCE_MISMATCH before selection. Do not overwrite immutable package files or relax this guard. A separately built package passed finite authenticated health and retained its verified predecessor; this creates no protected production authority.

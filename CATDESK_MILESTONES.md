@@ -1,3 +1,7 @@
+## 2026-11-01 — one controlled fresh chat and continuation accepted live
+
+The separately qualified development build of `7782a94` delivered the one journal-owned continuation with an exact receipt; read-only observation and exact response read proved completion and task identity. No global scheduler, native task or protected promotion ran. The response reports v5 available and waits for a separate task grant. Two real Web coding projects, canonical conversation-authority transfer, safe initialization admission and installed unattended recovery remain OPEN; the October31 full milestone was not achieved. Preserve completed requests without replay. Evidence: `docs/verification/V5_PROJECT_CHAT_BOOTSTRAP_2026_11_01.json`.
+
 ## 2026-11-01 — October milestone remains incomplete; actual new-chat checkpoint reached
 
 One fresh controlled project ChatGPT Web conversation was created with verified issued URL, exact USER receipt, completed assistant answer, atomic registry/Wake generation2 and preserved predecessor/sibling state. A post-binding timeout recovered through the existing local journal without resend. Continuation is queued, not yet delivered; v5 activation is unproved. The existing scoped sender has been source-qualified for this exact continuation so unrelated project queues stay untouched. Source/package tests do not establish installed production, two-Web coding or unattended supervisor acceptance. Those remain OPEN. Evidence: `docs/verification/V5_PROJECT_CHAT_BOOTSTRAP_2026_11_01.json`.

@@ -1,7 +1,7 @@
 {
   "date": "2026-11-01",
   "timezone": "America/New_York",
-  "classification": "ACTUAL_CONTROLLED_BOOTSTRAP_CREATED_PAIRED_CONTINUATION_QUEUED",
+  "classification": "ACTUAL_CONTROLLED_PROJECT_BOOTSTRAP_PAIRED_AND_CONTINUED",
   "sourceCommit": "d828a4c585e4a3b56458b2b6b370299302332334",
   "implementationCommit": "16504385590e33425bf4e23dbb725156440096f7",
   "developmentExecutableSha256": "bcad1a826dd16eca315e6640d8c55f4f40c61e2a84e8577d4e339a61a4dcd953",
@@ -48,9 +48,10 @@
     "predecessorPreserved": true,
     "localRecovery": "BOUND_TO_CONTINUATION_QUEUED_NO_BROWSER_OR_SEND",
     "contextMeterStatus": "RECORDED",
-    "continuationDelivery": "QUEUED_UNSENT",
+    "continuationDelivery": "SENT_EXACT_RECEIPT_RESPONSE_COMPLETE",
     "appActivationVerified": false,
-    "siblingsAndWorkLedgerUnchanged": true
+    "siblingsAndWorkLedgerUnchanged": true,
+    "appAvailabilityReportedByExactResponse": true
   },
   "scopeLimits": [
     "Development package qualification is not protected production promotion.",
@@ -83,6 +84,43 @@
       "strictWakeAllTargetClippy": "PASS",
       "formatting": "PASS"
     },
-    "liveAcceptance": "PENDING_MATCHED_BUILD"
-  }
+    "liveAcceptance": "PASS_CONTROLLED_DEVELOPMENT_SINGLE_EVENT_SEND_AND_READONLY_RESPONSE",
+    "sourceCommit": "7782a94851019b5ae5064c26056f9b0fde4f9f04",
+    "developmentExecutableSha256": "58e022bfc981c58cd1e84178ed5bba8633cbec7aa4705f50bfae38b8b1060279",
+    "matchedPackageHealthQualified": true,
+    "previousVerifiedPackagePreserved": true
+  },
+  "actualContinuation": {
+    "sendSeconds": 53.687,
+    "deliveryPhase": "SENT",
+    "exactUserReceiptVerified": true,
+    "bootstrapResent": false,
+    "hostStarted": false,
+    "schedulerStarted": false,
+    "responseObservationSeconds": 64.235,
+    "responseState": "COMPLETE",
+    "observationSentMessages": 0,
+    "exactReadSeconds": 44.25,
+    "exactReadVerified": true,
+    "responseBytes": 925,
+    "taskMarkerVerified": true,
+    "responseReportsPluginAvailable": true,
+    "responseReportsNativeProviderLaunch": false,
+    "responseReportsAwaitingSeparateTaskGrant": true,
+    "actualNativeTaskStarts": 0,
+    "actualSourceEdits": 0,
+    "newInstalledSourcePromotion": false,
+    "preservationMismatches": 0,
+    "readPreservedBindingLedgerAndDelivery": true,
+    "testOwnersExited": true,
+    "sourceCodeSharedSchedulerStarted": false
+  },
+  "remainingAcceptance": [
+    "Exact continuation reports v5 availability; the current-turn UI marker count is zero and the preceding capability call is not an independent execution receipt.",
+    "Two authenticated Web conversations performing actual authorized edits/native execution remain unproved.",
+    "The new controlled URL has not been transferred to the canonical installed project; production bindings and native owners remain preserved.",
+    "Normal-work admission for an operator-provided initialization must use a supported, evidence-backed transition; do not fabricate a predecessor handoff witness.",
+    "Retained independent source review is INCONCLUSIVE; later-source ACK/producer/protected promotion remains unestablished.",
+    "Installed persistent/reboot supervisor acceptance remains open."
+  ]
 }

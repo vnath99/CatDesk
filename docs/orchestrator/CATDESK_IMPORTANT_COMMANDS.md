@@ -1,3 +1,7 @@
+## 2026-11-01 — continuation commands qualified in the matched development package
+
+The `7782a94` matching development controller (`58e022bf…`) has live-qualified `operator web rollover deliver-continuation --project-id <id>` for one journal-selected event and `operator web rollover reobserve-continuation --project-id <id>` for its already-delivered response. Send bound120 seconds; separate read-only observation bound90 seconds. The controlled acceptance event is already SENT/COMPLETE: **do not invoke its delivery again**. These commands accept no caller message, URL or event override and do not start a global host/scheduler. Normal task authority, canonical target migration and protected promotion remain separate. Earlier source-only qualification notes below are historical. Evidence: `docs/verification/V5_PROJECT_CHAT_BOOTSTRAP_2026_11_01.json`.
+
 ## 2026-11-01 — scoped rollover continuation commands (source-qualified; development build/live pending)
 
 Run through the separately qualified development controller, in its registered control workspace:
