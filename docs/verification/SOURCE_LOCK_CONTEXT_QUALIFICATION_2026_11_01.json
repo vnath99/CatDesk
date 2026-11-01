@@ -1,0 +1,267 @@
+{
+  "recordedUtc": "2026-11-01T17:35:06.209749+00:00",
+  "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+  "classification": "BOUNDED_SOURCE_DEPENDENCY_REVIEW_AND_ADVISORY_CONTEXT_NOT_INSTALLED_ACCEPTANCE",
+  "sameManagedClaimAnd84PathScope": true,
+  "reviews": [
+    {
+      "observedUtc": "2026-11-01T17:23:11.833531+00:00",
+      "reviewNumber": 1,
+      "verdict": "REVIEWED_PARTIAL",
+      "frozenSourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "responseSha256": "ce78e11bf34fc2b67725b49c333ffc1f254d83013cb2c78de3015a1ef1f7ac89",
+      "exactUserReceipt": true,
+      "completedResponseVerified": true,
+      "coordinatorClosed": true,
+      "matchingCommandLogCounts": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "matchingCommandLogSha256": [
+        "285a73a2a6333961cbbde8feab1a84e2aec5620a84dc609716de8ab9590df515",
+        "fd4020f9c442dce2b14edf1fadefed564c1af98cd4bf971eb374fe6425597f77",
+        "fdd33c6acb4a18a8f596e6643b12296b60757304bff83ad1486cb6ee3814a0f8",
+        "8588f600b833201707234c4309fea8bf504a8094e6ed821cb61a83ff199365ba"
+      ],
+      "sourceLogMatchesExistingPrivacyRedactionOfFrozenInputs": true,
+      "rawUnredactedLogClaimed": false,
+      "sourceAccepted": false,
+      "producerAuthority": false
+    },
+    {
+      "observedUtc": "2026-11-01T17:29:42.598862+00:00",
+      "reviewNumber": 2,
+      "verdict": "REVIEWED_PARTIAL",
+      "frozenSourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "responseSha256": "6143da4eca0d4d8812591785bb1b769ab7f2170f478eb2a7b7d5fe3ee6f1b7c1",
+      "exactUserReceipt": true,
+      "completedResponseVerified": true,
+      "coordinatorClosed": true,
+      "matchingCommandLogCounts": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "matchingCommandLogSha256": [
+        "285a73a2a6333961cbbde8feab1a84e2aec5620a84dc609716de8ab9590df515",
+        "e8803f9bf5dfd57baf5f84816b6ea7bd01e7a6e551832b9d19feaab9874ef01c",
+        "96ea9e17f45ac34961c2be6f326622a948178f15d17c882b06be23a1661936fb",
+        "b3ef172c87bfb9c1ccc851cc3fae18357efa0c1b6c7686f053e981fcfc83aa7b"
+      ],
+      "sourceLogMatchesExistingPrivacyRedactionOfFrozenInputs": true,
+      "rawUnredactedLogClaimed": false,
+      "sourceAccepted": false,
+      "producerAuthority": false
+    }
+  ],
+  "boundaryDiagnostics": [
+    {
+      "observedUtc": "2026-11-01T17:22:31.935957+00:00",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "reviewNumber": 1,
+      "exactResponseSha256": "ce78e11bf34fc2b67725b49c333ffc1f254d83013cb2c78de3015a1ef1f7ac89",
+      "verdict": "REVIEWED_PARTIAL",
+      "ranges": [
+        {
+          "path": "src/operator_web_rollover.rs",
+          "range": [
+            385,
+            397
+          ],
+          "firstCodeMatches": true,
+          "lastNonblankMatches": false,
+          "returnedLastFieldMatchesPhysicalLastLine": false,
+          "physicalLastLineBlank": false,
+          "reviewerReportsUntruncated": true,
+          "requestedNonblankBoundaryQualification": false
+        },
+        {
+          "path": "src/operator_web_rollover.rs",
+          "range": [
+            467,
+            542
+          ],
+          "firstCodeMatches": true,
+          "lastNonblankMatches": false,
+          "returnedLastFieldMatchesPhysicalLastLine": true,
+          "physicalLastLineBlank": true,
+          "reviewerReportsUntruncated": true,
+          "requestedNonblankBoundaryQualification": false
+        },
+        {
+          "path": "src/operator_web_rollover.rs",
+          "range": [
+            579,
+            662
+          ],
+          "firstCodeMatches": true,
+          "lastNonblankMatches": true,
+          "returnedLastFieldMatchesPhysicalLastLine": true,
+          "physicalLastLineBlank": false,
+          "reviewerReportsUntruncated": true,
+          "requestedNonblankBoundaryQualification": true
+        }
+      ],
+      "normalization": "Remove only Git blame hash/line framing before code comparison; preserve returned report unchanged",
+      "fullFileReviewOrComprehensionProved": false,
+      "sourceAccepted": false,
+      "producerAuthority": false,
+      "allRequestedNonblankBoundariesQualified": false,
+      "retainedInitialStrictVerifierFailure": "Initial assertion failed on the requested lastNonblank witness at line542: reviewer returned framing for a physically blank line. Report remains unchanged; the requested nonblank witness is unqualified, while exact first/physical-end observations are recorded separately. No resend or acceptance."
+    },
+    {
+      "observedUtc": "2026-11-01T17:28:40.407382+00:00",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "reviewNumber": 2,
+      "exactResponseSha256": "6143da4eca0d4d8812591785bb1b769ab7f2170f478eb2a7b7d5fe3ee6f1b7c1",
+      "verdict": "REVIEWED_PARTIAL",
+      "ranges": [
+        {
+          "path": "src/operator_web_rollover.rs",
+          "range": [
+            705,
+            755
+          ],
+          "firstCodeMatches": true,
+          "lastNonblankMatches": true,
+          "returnedLastFieldMatchesPhysicalLastLine": true,
+          "physicalLastLineBlank": false,
+          "reviewerReportsUntruncated": true,
+          "requestedNonblankBoundaryQualification": true
+        },
+        {
+          "path": "wake/src/store.rs",
+          "range": [
+            2403,
+            2476
+          ],
+          "firstCodeMatches": true,
+          "lastNonblankMatches": true,
+          "returnedLastFieldMatchesPhysicalLastLine": true,
+          "physicalLastLineBlank": false,
+          "reviewerReportsUntruncated": true,
+          "requestedNonblankBoundaryQualification": true
+        },
+        {
+          "path": "src/mcp.rs",
+          "range": [
+            4142,
+            4200
+          ],
+          "firstCodeMatches": true,
+          "lastNonblankMatches": true,
+          "returnedLastFieldMatchesPhysicalLastLine": true,
+          "physicalLastLineBlank": false,
+          "reviewerReportsUntruncated": true,
+          "requestedNonblankBoundaryQualification": true
+        }
+      ],
+      "normalization": "Remove only Git blame hash/line framing before code comparison; preserve returned report unchanged",
+      "fullFileReviewOrComprehensionProved": false,
+      "sourceAccepted": false,
+      "producerAuthority": false,
+      "allRequestedNonblankBoundariesQualified": true
+    }
+  ],
+  "boundaryClarification": {
+    "observedUtc": "2026-11-01T17:24:10.930714+00:00",
+    "scope": "Clarification of first dependency-review boundary verification only",
+    "originalReportUnchanged": true,
+    "initialStrictFailure": "First range385-397 lastNonblank omitted its trailing comma; this is the first failed assertion. Range467-542 additionally returned Git framing for a blank physical last line. The earlier verifier note named only the second issue.",
+    "qualifiedNonblankRanges": 1,
+    "unqualifiedNonblankRanges": 2,
+    "noResend": true,
+    "sourceAccepted": false
+  },
+  "interpretation": {
+    "supportedSourceMechanisms": [
+      "WorkLease retains project-scoped ProjectStore and locked File",
+      "File::try_lock refuses competing project owner",
+      "Exact generation/digest and continuation proof fence admission",
+      "Temporary-file sync and platform atomic replacement",
+      "Bounded retry of known transient Windows sharing errors"
+    ],
+    "confirmedNewSourceDefect": false,
+    "sourceCodeChanged": false,
+    "formalAllInterleavingsProofRequiredByCurrentContract": false,
+    "reviewerFormalProofLimitDoesNotCreateNewReleaseGate": true,
+    "partialVerdictsRemainPartial": true,
+    "independentTestAndInstalledEvidenceNotInvented": true
+  },
+  "boundedWorkflowTiming": {
+    "messagesUnderOneScopedAuthorization": 2,
+    "sendSeconds": [
+      122.532,
+      127.047
+    ],
+    "bothExactReceipts": true,
+    "controllerAndAuthorizationLimitsChanged": false,
+    "wrapper": "Existing separate preflight; authoritative checks repeat in review run; controller deadline/cleanup fit within180-second containment",
+    "timeoutsThisBatch": 0
+  },
+  "generation4ContextCapture": {
+    "generation": 4,
+    "beforeObservedTokenProxy": 1189,
+    "afterObservedTokenProxy": 3141,
+    "conversationHistoryEntries": 4,
+    "browserCoverage": {
+      "identityGap": false,
+      "initialHistoryGap": true,
+      "lastObservedAtUnix": 1793554258,
+      "observed": true,
+      "overflowGap": true,
+      "textGap": true
+    },
+    "captureCoverage": "RECENT_VISIBLE_EXCERPT_WITH_UNKNOWN_HISTORY",
+    "coverageKnown": false,
+    "providerContextExact": false,
+    "preservationMismatches": 0,
+    "unexpectedContextFiles": 0,
+    "profileIdentityPreserved": true
+  },
+  "correlatedContextTraffic": {
+    "knownMcpCalls": 13,
+    "observations": 26,
+    "observedTokenProxy": 22988,
+    "observedToolArgumentTokens": 768,
+    "observedToolResultTokens": 19079,
+    "pressureAssessment": "UNKNOWN_OR_INCOMPLETE",
+    "coverageKnown": false,
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "duplicateImportChangedLedger": false,
+    "separateCliProcessesReopenedDurableLedger": true,
+    "rawTextPersisted": false,
+    "preservationMismatches": 0
+  },
+  "remainingMaterialDeltaInputs": {
+    "olderChangedPaths": 16,
+    "diffBytesWithNoContext": 103749,
+    "fullScopeReduced": false,
+    "allRemainingLinesReviewed": false
+  },
+  "preservation": {
+    "testOwnedProcessesRemaining": 0,
+    "trustedInstalledBackendRetained": true,
+    "hostStopped": true,
+    "loginMarkerPresent": false,
+    "productionChanges": 0,
+    "nativeSessionActions": 0,
+    "bindingChanges": 0,
+    "recurringAutomationEnabled": false
+  },
+  "acceptance": {
+    "sourceSuitability": "REVIEWED_PARTIAL",
+    "sourceAccepted": false,
+    "producerAuthority": false,
+    "protectedPromotion": "NOT_PERFORMED",
+    "connectedCanonicalControlAuthorityTransfer": "OPEN",
+    "twoWebNativeCoding": "OPEN",
+    "installedPersistentRecovery": "OPEN"
+  },
+  "nextExecutableTask": "Review outstanding current deltas and receipt-producing/dependent code under the same active source claim; existing guarded producer/promotion follows genuine source acceptance",
+  "operatorActionRequired": false
+}
