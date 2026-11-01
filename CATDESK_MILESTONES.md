@@ -1,3 +1,13 @@
+## 2026-11-01T16:40:00.296549+00:00 — productive source review crosses unchanged context trigger
+
+The same 84-path managed source review completed two bounded checkpoints with exact receipts and responses. Nine task-timed source calls corroborate the first checkpoint, whose combined display was truncated; no comprehensive inspection is claimed. A smaller 7,872-byte read qualified first, internal and physical-last-line visibility witnesses. Both verdicts remain REVIEWED_PARTIAL, with no accepted report or producer authority.
+
+Known-content advisory usage reached 72,030 tokens against the unchanged 72,000 trigger (96,000 budget, 24,000 headroom). Coverage remains incomplete and provider-exact usage is unknown. The existing workflow recorded OBSERVED_PRESSURE, obtained a structured source-authored handoff, created and independently verified a replacement conversation, rechecked source state, paired registry/Wake at generation 4, preserved predecessor history, and verified the one continuation response. This is new productive-work pressure, not a replay of an earlier canary. The same managed review remains unfinished.
+
+The exact continuation response confirmed v5 connectivity but correctly stopped before task resumption because the connected canonical native-bound registry still differs from the controlled generation-4 scope. Delivery and controlled pairing do not establish authority through that server. Separately scoped administrative public-source review remains eligible under the same report-only claim.
+
+All preservation checks passed, the original context policy was restored, and final inventory found zero test-owned processes. Trusted serving owners remain; shared WakeHost and recurring automation stay stopped. Protected promotion, connector control scope, two actual Web/native coding callers and installed persistent recovery remain OPEN. Evidence: `docs/verification/FULL_SOURCE_CONTEXT_CONTINUATION_2026_11_01.json`. No operator action is currently required for the next eligible review checkpoint.
+
 ## 2026-11-01T13:59:39.265966+00:00 — source-authored context handoff and verified project rollover
 
 Source `6e97db1fdaaf91f9d6393997e930023a387f0403` adds journal-selected handoff delivery and read-only reobservation through the existing scoped Wake path while the shared host stays STOPPED. Local qualification passed 18 Wake and 57 controller tests, strict Clippy for both crates, formatting and diff checks. The initial compile error and corrected passing run are retained. A separately verified development package passed missing-authentication 401 and authenticated initialize/catalog 200 checks; the previous immutable package remains available. This is not protected production promotion.
