@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+  "fullDeclaredCodePaths": 84,
+  "scope": "FULL_CURRENT_INSTALLED_PROJECT_PRODUCTION_1_767_EXCLUDES_TEST_MODULE",
+  "reason": "Earlier complete backend production review delegates project listener ownership and requested this module.",
+  "reads": [
+    {
+      "path": "src/operator_installed_project.rs",
+      "firstLine": 1,
+      "lastLine": 110,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 1,110 9ea9e7beedf986db95cd5bea7b750544e452caa8 -- src/operator_installed_project.rs",
+      "bytes": 5437,
+      "sha256": "c61eb11a3b4c10e5dfb70f86f0dffdd9b5abe5d63dba607eaa2fc9fb93903216"
+    },
+    {
+      "path": "src/operator_installed_project.rs",
+      "firstLine": 111,
+      "lastLine": 220,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 111,220 9ea9e7beedf986db95cd5bea7b750544e452caa8 -- src/operator_installed_project.rs",
+      "bytes": 5850,
+      "sha256": "93d6017503f85adf2f34e8f2ba4f6a55342ab822fe9c7632e243f5eee8624f09"
+    },
+    {
+      "path": "src/operator_installed_project.rs",
+      "firstLine": 221,
+      "lastLine": 330,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 221,330 9ea9e7beedf986db95cd5bea7b750544e452caa8 -- src/operator_installed_project.rs",
+      "bytes": 6642,
+      "sha256": "bc4884fe7d782faa3227a4f962c8e7828777f4f5c08daba3cf5cfdd500edeed4"
+    },
+    {
+      "path": "src/operator_installed_project.rs",
+      "firstLine": 331,
+      "lastLine": 440,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 331,440 9ea9e7beedf986db95cd5bea7b750544e452caa8 -- src/operator_installed_project.rs",
+      "bytes": 5539,
+      "sha256": "bfc37fe531425c22b2b3d2bbfc917d19790e31b6cc2ef2190e54eb1158fc0fc0"
+    },
+    {
+      "path": "src/operator_installed_project.rs",
+      "firstLine": 441,
+      "lastLine": 550,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 441,550 9ea9e7beedf986db95cd5bea7b750544e452caa8 -- src/operator_installed_project.rs",
+      "bytes": 5715,
+      "sha256": "24faa821901bf8626dc915e236fbbc71afb90c5f93f777e104bde6a8bcea33ef"
+    },
+    {
+      "path": "src/operator_installed_project.rs",
+      "firstLine": 551,
+      "lastLine": 660,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 551,660 9ea9e7beedf986db95cd5bea7b750544e452caa8 -- src/operator_installed_project.rs",
+      "bytes": 6332,
+      "sha256": "b4c3c665c7b9a4c4e470f4f2878e3a23c4174532d0c518b72297885791068657"
+    },
+    {
+      "path": "src/operator_installed_project.rs",
+      "firstLine": 661,
+      "lastLine": 767,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 661,767 9ea9e7beedf986db95cd5bea7b750544e452caa8 -- src/operator_installed_project.rs",
+      "bytes": 6394,
+      "sha256": "18b80a137bd93e0f80649e1c87fc72e1d427d933c6601ed0814aaee38169954c"
+    }
+  ],
+  "totalCodeBytes": 41909,
+  "questions": [
+    "Assess workspace/project identity, stable route/token pins and no inheritance of broad parent credentials.",
+    "Assess process ownership, bounded cleanup, holder/controller exit, endpoint and pin verification.",
+    "Assess compatibility and project independence. Report concrete findings or exact neededReads; source-only suitability is separate from installed qualification."
+  ],
+  "sourceAccepted": false,
+  "producerAuthority": false
+}

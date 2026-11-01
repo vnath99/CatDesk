@@ -1,3 +1,9 @@
+## 2026-11-01T19:45:05.587332+00:00 — independent size-correction checkpoint corroborated
+
+The exact current-source review completed as REVIEWED_PARTIAL, finding no actionable defect in the inspected collector correction and supporting its source-level suitability. All five actual source inputs are corroborated by task-timed server command logs. The exact USER receipt and completed assistant body are verified, and the coordinator closed this request. It is not cumulative release approval.
+
+Remaining requested receipt/collector surroundings and the test execution record are prepared, alongside the earlier unread backend/adapter test sections and current installed-project owner production code. These use the same source-exact report claim. The test record explicitly distinguishes coordinator execution, retained initial formatting failure and matching development live recovery from protected/installed acceptance. No source change, native worker, binding or production operation was made for this review. Evidence: `docs/verification/HANDOFF_SIZE_INDEPENDENT_REVIEW_2026_11_01.json`.
+
 ## 2026-11-01T19:36:27.639678+00:00 — exact current-source review scope retained
 
 The superseded source claim was cancelled through its version-checked API after the material collector correction. Only that claim state and one appended event changed; old event bytes, protected pins and 573 other accounting rows were preserved. The initial local verifier used filename instead of exact session directory; its failed record and corrected path/prefix proof remain. A new report-only contract for source `9ea9e7beedf986db95cd5bea7b750544e452caa8` is WAITING_FOR_CHATGPT at version 4, with all 84 code/test paths declared. All 4,681 preexisting native files and 574 old accounting rows were preserved; one new row belongs to the report claim. No native model, accepted report, ACK or producer exists.
