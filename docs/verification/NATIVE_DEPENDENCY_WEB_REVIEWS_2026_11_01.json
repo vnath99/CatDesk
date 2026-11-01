@@ -1,0 +1,205 @@
+{
+  "date": "2026-11-01",
+  "observedUtc": "2026-11-01T10:19:48.336687+00:00",
+  "classification": "SIX_DISTINCT_REAL_WEB_COMPONENT_REVIEWS_ONE_SCOPED_GRANT_NOT_CUMULATIVE_ACCEPTANCE",
+  "reviewedSourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+  "correctedDeliveryControllerSourceCommit": "6cff7dd25164875ffcf55f2070c3559a53437572",
+  "frozenPayloadsChanged": false,
+  "reviewedComponentsUnchangedAtCorrectedSource": true,
+  "componentBlobComparisons": 15,
+  "singleProjectScopedGrant": true,
+  "approvedMessageCount": 6,
+  "messagesSentExactlyOnce": 6,
+  "actualSeparateSourceToolCalls": 13,
+  "reviews": [
+    {
+      "observedUtc": "2026-11-01T09:59:14.403923+00:00",
+      "reviewNumber": 1,
+      "verdict": "REVIEWED_PARTIAL",
+      "frozenSourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+      "responseSha256": "6cf85b1266156044a3cd2088d8bf69530d77a63d084657573119829f369fd73b",
+      "exactUserReceipt": true,
+      "completedResponseVerified": true,
+      "coordinatorClosed": true,
+      "matchingCommandLogCounts": [
+        1,
+        1
+      ],
+      "matchingCommandLogSha256": [
+        "ab80e3cbf0fb06d4fbaf1073f31df8feef1cdae7d23d095113d5a03c9dd144de",
+        "201a63cd9668894da0664e5db8d81c68cca626fb2b75684c16edac95da1b1c64"
+      ],
+      "sourceLogMatchesExistingPrivacyRedactionOfFrozenInputs": true,
+      "rawUnredactedLogClaimed": false,
+      "sourceAccepted": false,
+      "producerAuthority": false,
+      "topic": "claim and final receipt transitions"
+    },
+    {
+      "observedUtc": "2026-11-01T09:59:14.843135+00:00",
+      "reviewNumber": 2,
+      "verdict": "REVIEWED_PARTIAL",
+      "frozenSourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+      "responseSha256": "dd031784f2952f911392dd72fa1bbeb2404072aefa9a94530257a9819535d16c",
+      "exactUserReceipt": true,
+      "completedResponseVerified": true,
+      "coordinatorClosed": true,
+      "matchingCommandLogCounts": [
+        1,
+        1
+      ],
+      "matchingCommandLogSha256": [
+        "2b9e9a3f12359ef81ab12b04ad8ceb7b910059cbab92159ff575975e3c3c7d60",
+        "ec5dfc108ab248b0f91718c3f64baf849eee5332edcaac4f06d42d18760cc808"
+      ],
+      "sourceLogMatchesExistingPrivacyRedactionOfFrozenInputs": true,
+      "rawUnredactedLogClaimed": false,
+      "sourceAccepted": false,
+      "producerAuthority": false,
+      "topic": "native transport caller and owned-process helper delta"
+    },
+    {
+      "observedUtc": "2026-11-01T09:53:34.373592+00:00",
+      "reviewNumber": 3,
+      "verdict": "REVIEWED_PARTIAL",
+      "frozenSourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+      "responseSha256": "194b511c52010a827086c5e10a3567c0c7505e1f331d1ea42a052236977ab0be",
+      "exactUserReceipt": true,
+      "completedResponseVerified": true,
+      "coordinatorClosed": true,
+      "matchingCommandLogCounts": [
+        1,
+        1
+      ],
+      "matchingCommandLogSha256": [
+        "c50e36c8d7d76d6ae77dabecbe59503c3ac0119b9d6b1c7ece4fb1d53389eec3",
+        "3b818a357b853bdd5ecf735a8a9aad26c3f737ff3af7c37767a4ed260524bdaa"
+      ],
+      "sourceLogMatchesExistingPrivacyRedactionOfFrozenInputs": true,
+      "rawUnredactedLogClaimed": false,
+      "sourceAccepted": false,
+      "producerAuthority": false,
+      "topic": "actual central HTTP bearer and mode routing"
+    },
+    {
+      "observedUtc": "2026-11-01T09:54:14.563401+00:00",
+      "reviewNumber": 4,
+      "verdict": "REVIEWED_PARTIAL",
+      "frozenSourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+      "responseSha256": "0676d3cb050ba1aa415a46c405710714d0c3f8ab147526b7937b464ca8222f8b",
+      "exactUserReceipt": true,
+      "completedResponseVerified": true,
+      "coordinatorClosed": true,
+      "matchingCommandLogCounts": [
+        1,
+        1,
+        1
+      ],
+      "matchingCommandLogSha256": [
+        "a02b60b42e95b856afb43e4f1e522696d7eb8e20050b17ef099076008bc838b7",
+        "af94f55d282df001235e134588b5cbf2ddc9f8ec72211dc16aee9640e92b76ea",
+        "da130f9ed0d77db7724ac3976342800f9168d0ef7143053ddca193b2191cbbd1"
+      ],
+      "sourceLogMatchesExistingPrivacyRedactionOfFrozenInputs": true,
+      "rawUnredactedLogClaimed": false,
+      "sourceAccepted": false,
+      "producerAuthority": false,
+      "topic": "project lease and durable native call journal"
+    },
+    {
+      "observedUtc": "2026-11-01T09:59:50.825746+00:00",
+      "reviewNumber": 5,
+      "verdict": "REVIEWED_PARTIAL",
+      "frozenSourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+      "responseSha256": "6575d7e79d7954e681fcd7b00d831da8759968dff40f9d5740774003b48ab9a0",
+      "exactUserReceipt": true,
+      "completedResponseVerified": true,
+      "coordinatorClosed": true,
+      "matchingCommandLogCounts": [
+        1,
+        1,
+        1
+      ],
+      "matchingCommandLogSha256": [
+        "a03e8de8f6a70d954a086fd7095af0c485cb84cf7f7aa8dfac9974995c3d4191",
+        "6a8cce1d85d2b83a25db7fa87f3ae47368427704e4fe39f05827e07164780917",
+        "9155446821b284b0ac5279df8a287ddd799c14082b3c327f28093069cda5acef"
+      ],
+      "sourceLogMatchesExistingPrivacyRedactionOfFrozenInputs": true,
+      "rawUnredactedLogClaimed": false,
+      "sourceAccepted": false,
+      "producerAuthority": false,
+      "topic": "execution grant and continuation crash recovery tests"
+    },
+    {
+      "observedUtc": "2026-11-01T10:18:57.438168+00:00",
+      "reviewNumber": 6,
+      "verdict": "REVIEWED_PARTIAL",
+      "frozenSourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+      "responseSha256": "0e3e514d3e16bf66ac9a650e35cbcba533048c346d96bb03a6966a4a4df5e742",
+      "exactUserReceipt": true,
+      "completedResponseVerified": true,
+      "coordinatorClosed": true,
+      "matchingCommandLogCounts": [
+        1
+      ],
+      "matchingCommandLogSha256": [
+        "d641821520e5e8eae84c0b77d4aa84484cbf8f53df2e2f4ea472e4aee3412b5c"
+      ],
+      "sourceLogMatchesExistingPrivacyRedactionOfFrozenInputs": true,
+      "rawUnredactedLogClaimed": false,
+      "sourceAccepted": false,
+      "producerAuthority": false,
+      "topic": "current app handoff carry-forward and compatibility delta"
+    }
+  ],
+  "evidenceLimits": [
+    "Each request is explicitly partial and preserves its dependencies and uninspected ranges.",
+    "Exact task-timed server command logs corroborate tool execution; UI markers alone do not.",
+    "Server source logs apply existing privacy redaction and are not unredacted copies.",
+    "The old managed source claim remains CANCELLED after the reproduced crash defect; no acceptance is borrowed from it.",
+    "These public-source reads are not authenticated per-project workspace edits or native Codex task execution."
+  ],
+  "recoveredOwnedClosure": {
+    "failedClosureConfirmedUnapplied": true,
+    "exactOwnTestArtifactQuarantinedAfterEvidence": true,
+    "sameFrozenClosureSucceeded": true,
+    "messagesReplayed": 0,
+    "newReleaseAuthority": false
+  },
+  "finalCleanup": {
+    "testOwnedProcesses": 0,
+    "trustedBackendAndExistingTunnelRetained": true,
+    "trustedInstalledHashMatches": true,
+    "hostStopped": true,
+    "recurringAutomationEnabled": false,
+    "productionPromotion": false
+  },
+  "remainingPrerequisites": [
+    "Independent review of the registration crash and canonical USER fallback corrections, then genuine cumulative current-source acceptance retaining all 84 changed code paths.",
+    "Existing acknowledgement, reviewed snapshot, producer attestation and supported guarded promotion for the corrected candidate.",
+    "Canonical project authority/ownership qualification and two real Web source edits with native Codex verification.",
+    "Independent installed Wake delivery and persistent supervisor/restart acceptance."
+  ],
+  "nextExecutableTask": "INDEPENDENTLY_REVIEW_CORRECTED_SOURCE_DELTA_THEN_CONSOLIDATE_PRIOR_COMPONENT_EVIDENCE_FOR_CURRENT_SOURCE_CUMULATIVE_ACCEPTANCE_WITH_FULL_84_PATH_SCOPE",
+  "operatorActionRequired": false,
+  "fullMilestoneAccepted": false,
+  "responseObserverRecovery": {
+    "originalReason": "RESPONSE_USER_REPRESENTATION_MISMATCH",
+    "independentExactEventSnapshotVerified": true,
+    "originalClosureRefused": "WEB_WORK_COMPLETED_RESPONSE_REQUIRED",
+    "canonicalBodyFallbackSourceInconsistencyReproducedAndFixed": true,
+    "matchingDevelopmentPackageQualified": true,
+    "currentSourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+    "currentArtifactSha256": "533b2d60b0f08e188781e5a638d722dd88ebdec704918004fecf3eed06929dcc",
+    "verifiedPreviousArtifactSha256": "e1b557b7c808862807b195109c88da3f0693debfe0ab57e1db241bb8855b63e5",
+    "oneNoSendObservation": "COMPLETE",
+    "observationSeconds": 71.39,
+    "unchangedFrozenClosureSucceeded": true,
+    "closureSeconds": 9.391,
+    "exactLiveDomCausalProof": "UNESTABLISHED; source regression and subsequent live success are distinct evidence.",
+    "completionMetadataForced": false,
+    "userMessagesResent": 0,
+    "precommandClosureHarnessFailure": "LF-versus-CRLF byte comparison; corrected to frozen file hash plus structured equality without rewriting the file."
+  }
+}
