@@ -119,8 +119,14 @@
     "Exact continuation reports v5 availability; the current-turn UI marker count is zero and the preceding capability call is not an independent execution receipt.",
     "Two authenticated Web conversations performing actual authorized edits/native execution remain unproved.",
     "The new controlled URL has not been transferred to the canonical installed project; production bindings and native owners remain preserved.",
-    "Normal-work admission for an operator-provided initialization must use a supported, evidence-backed transition; do not fabricate a predecessor handoff witness.",
     "Retained independent source review is INCONCLUSIVE; later-source ACK/producer/protected promotion remains unestablished.",
     "Installed persistent/reboot supervisor acceptance remains open."
-  ]
+  ],
+  "initializationAdmission": {
+    "status": "ACCEPTED_NEW_TASKS_ONLY",
+    "sourceCommit": "549817859c94f56a7696f998848d8ace429b1663",
+    "continuationProved": true,
+    "executionGranted": false,
+    "canonicalAuthorityTransferred": false
+  }
 }

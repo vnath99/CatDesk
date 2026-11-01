@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "purpose": "PARTIAL_SOURCE_REVIEW_ONLY_NOT_RELEASE_AUTHORITY",
+  "batchId": "b016",
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "sourceCommit": "549817859c94f56a7696f998848d8ace429b1663",
+  "patchBytes": 63683,
+  "sourcePaths": [
+    "src/promotion_retirement.rs",
+    "src/promotion_source_bridge.rs",
+    "src/reviewed_build.rs"
+  ],
+  "units": [
+    {
+      "unitId": "u065",
+      "path": "src/promotion_retirement.rs",
+      "skipLines": 496,
+      "takeLines": 496,
+      "bytes": 19969,
+      "sha256": "4f9248a5e36e6a2f01dbaa8cf16250fa2fb2875bf4138eaedd4c017198925b3c",
+      "baseBlob": null,
+      "targetBlob": "8d3825761dc1f283ede4664ab77f6404c05f67fe"
+    },
+    {
+      "unitId": "u066",
+      "path": "src/promotion_retirement.rs",
+      "skipLines": 992,
+      "takeLines": 475,
+      "bytes": 19989,
+      "sha256": "67c4addc0a68df3f7f27c743c4be1b05a3d24730f025f559c9455ef74f3ac84f",
+      "baseBlob": null,
+      "targetBlob": "8d3825761dc1f283ede4664ab77f6404c05f67fe"
+    },
+    {
+      "unitId": "u067",
+      "path": "src/promotion_retirement.rs",
+      "skipLines": 1467,
+      "takeLines": 18,
+      "bytes": 503,
+      "sha256": "bcc878ded91549230a67f00cb5609ec5375bf589193bc61ae0dc54e18168c7b7",
+      "baseBlob": null,
+      "targetBlob": "8d3825761dc1f283ede4664ab77f6404c05f67fe"
+    },
+    {
+      "unitId": "u068",
+      "path": "src/promotion_source_bridge.rs",
+      "skipLines": 0,
+      "takeLines": 302,
+      "bytes": 12693,
+      "sha256": "6803f421873f1d955744aab23c72a107c496684c7209d884e153e247cd6d8ea9",
+      "baseBlob": null,
+      "targetBlob": "b1421a956f9fbd0738362448053cb69ed09eeb2d"
+    },
+    {
+      "unitId": "u069",
+      "path": "src/reviewed_build.rs",
+      "skipLines": 0,
+      "takeLines": 230,
+      "bytes": 10529,
+      "sha256": "c81f6844530eff4d07869dad6236f2ba1e5476afe9fedd1e85ea2e58ec07ce91",
+      "baseBlob": "96672fb13d84df9bcd4e778bd0dcb1aa51a5ceed",
+      "targetBlob": "879f72dc7346ba3bd57f8d1bfd120d9717def3da"
+    }
+  ],
+  "cumulativeSourceAccepted": false,
+  "requiredReplyMarker": "NOV01_GIT_SOURCE_BATCH_ONLY",
+  "requiredReplyFields": [
+    "marker",
+    "sourceCommit",
+    "batchId",
+    "verdict",
+    "findings",
+    "inspectedUnitIds",
+    "inspectedPaths",
+    "limitations",
+    "cumulativeSourceAccepted"
+  ],
+  "permittedVerdicts": [
+    "REVIEWED_BATCH",
+    "FAIL",
+    "INCONCLUSIVE"
+  ]
+}
