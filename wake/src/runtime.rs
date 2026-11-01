@@ -28,7 +28,8 @@ mod scoped_review;
 pub(crate) use response::validate_observation as validate_response_observation;
 pub use review_reconcile::{diagnose_scoped_review_guarded, reconcile_scoped_review_guarded};
 pub use scoped_review::{
-    run_scoped_review, run_scoped_rollover_continuation, run_scoped_task_continuation,
+    run_scoped_review, run_scoped_rollover_continuation, run_scoped_rollover_handoff,
+    run_scoped_task_continuation,
 };
 #[path = "runtime_task_context.rs"]
 mod task_context;

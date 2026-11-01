@@ -2011,6 +2011,156 @@ fn request_policy_still_due(
     Ok(())
 }
 
+fn validate_handoff_selection(
+    request: &HandoffRequest,
+    registered: &AutonomousProjectV1,
+    current: &Target,
+    event: &Event,
+) -> Result<(), String> {
+    request.validate(&request.project_id)?;
+    event.validate()?;
+    if request.source != *current
+        || !native_owner_matches(request, registered)
+        || registered.chatgpt_target_url.as_deref() != Some(current.url.as_str())
+        || registered.chatgpt_target_sha256.as_deref() != Some(current.digest.as_str())
+        || event.event_id != request.event_id
+        || event.project_id != request.project_id
+        || event.target_generation != current.generation
+        || event.event_type != "engineering_attention"
+        || !event.audit_references.is_empty()
+        || event.message != request.message
+    {
+        return Err("WEB_HANDOFF_SELECTION_CHANGED".into());
+    }
+    Ok(())
+}
+
+/// One journal-owned handoff, through the existing stopped-host sender. No
+/// caller-supplied event/message and no shared queue draining or scheduler.
+pub(super) fn deliver_handoff(workspace: &Path, project: &str) -> Result<Value, String> {
+    let store = ProjectStore::open_existing(workspace, project)?;
+    let request = store
+        .handoff_request()?
+        .ok_or("WEB_HANDOFF_REQUEST_REQUIRED")?;
+    if store
+        .active()?
+        .is_some_and(|record| record.intent_id == request.intent_id)
+    {
+        return Err("WEB_HANDOFF_ALREADY_PREPARED".into());
+    }
+    let current = paired(workspace, project)?;
+    let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
+        workspace,
+    )?)?;
+    let event = match wake.delivery(&request.event_id)? {
+        Some(delivery) => delivery.event,
+        None => read(
+            &wake
+                .root()
+                .join("queue")
+                .join(format!("{}.json", request.event_id)),
+        )?,
+    };
+    validate_handoff_selection(
+        &request,
+        &registered_project(workspace, project)?,
+        &current,
+        &event,
+    )?;
+    let meter = WebContextStore::open_read_only(workspace.join(".catdesk/web-context"))?;
+    request_policy_still_due(&meter, &request)?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        workspace,
+        wake.root(),
+        &current.url,
+    )?;
+    let mut before_submit = |actual: &Event, actual_target: &Target| {
+        if store.handoff_request()?.as_ref() != Some(&request)
+            || actual != &event
+            || actual_target != &current
+            || paired(workspace, project)? != current
+        {
+            return Err("WEB_HANDOFF_SELECTION_CHANGED".into());
+        }
+        validate_handoff_selection(
+            &request,
+            &registered_project(workspace, project)?,
+            &current,
+            actual,
+        )?;
+        request_policy_still_due(&meter, &request)
+    };
+    runtime::run_scoped_rollover_handoff(&wake, &event, &current, 120, &mut before_submit, &|| {
+        Ok(())
+    })
+}
+
+/// Observe an already delivered handoff even if automatic rollover was later
+/// disabled. Exact receipt, journal, registration and target checks still hold.
+pub(super) fn reobserve_handoff(workspace: &Path, project: &str) -> Result<Value, String> {
+    let store = ProjectStore::open_existing(workspace, project)?;
+    let request = store
+        .handoff_request()?
+        .ok_or("WEB_HANDOFF_REQUEST_REQUIRED")?;
+    let current = paired(workspace, project)?;
+    let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
+        workspace,
+    )?)?;
+    let delivery = wake
+        .delivery(&request.event_id)?
+        .ok_or("WEB_HANDOFF_EXACT_USER_RECEIPT_REQUIRED")?;
+    validate_handoff_selection(
+        &request,
+        &registered_project(workspace, project)?,
+        &current,
+        &delivery.event,
+    )?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        workspace,
+        wake.root(),
+        &current.url,
+    )?;
+    let registry =
+        AutonomousProjectRegistryStoreV1::open_read_only(workspace.join(".catdesk/projects"))
+            .map_err(|_| "WEB_HANDOFF_REGISTRY_UNAVAILABLE")?;
+    let check_pair = || {
+        if store.handoff_request()?.as_ref() != Some(&request)
+            || paired(workspace, project)? != current
+        {
+            return Err("WEB_HANDOFF_SELECTION_CHANGED".into());
+        }
+        Ok(())
+    };
+    let observation = runtime::reobserve_sent_response_guarded(
+        &wake,
+        project,
+        &current,
+        &request.event_id,
+        &check_pair,
+        |commit| {
+            registry.with_registration_lock(|| {
+                // Preserve registry -> Wake commit order, without taking the
+                // paired-target mutex under the registry transaction.
+                let scope = resolve_registered_project_from_control_root(workspace, project)
+                    .map_err(|_| "WEB_HANDOFF_REGISTRY_UNAVAILABLE")?;
+                if scope.project.chatgpt_target_url.as_deref() != Some(current.url.as_str())
+                    || scope.project.chatgpt_target_sha256.as_deref()
+                        != Some(current.digest.as_str())
+                    || !native_owner_matches(&request, &scope.project)
+                {
+                    return Err("WEB_HANDOFF_SELECTION_CHANGED".into());
+                }
+                commit()
+            })
+        },
+    )?;
+    Ok(
+        json!({"action":"web_rollover_handoff_reobserve","projectId":project,
+        "eventId":request.event_id,"target":current,"observation":observation,
+        "readOnly":true,"sendAttempted":false}),
+    )
+}
+
 pub(super) fn request_handoff(
     workspace: &Path,
     project: &str,
@@ -7775,6 +7925,61 @@ mod tests {
         assert!(request.message.contains("native-thread-a"));
         registered.codex_thread_id = Some("native-thread-b".into());
         assert!(!native_owner_matches(&request, &registered));
+    }
+
+    #[test]
+    fn scoped_handoff_selection_pins_message_route_and_registered_owner() {
+        let root = fixture();
+        let request = handoff_request(&root);
+        let registered = AutonomousProjectV1 {
+            project_id: request.project_id.clone(),
+            workspace: root.clone(),
+            git_identity: "fixture".into(),
+            verification_profile: "fixture".into(),
+            codex_thread_id: request.native_thread_id.clone(),
+            chatgpt_target_url: Some(request.source.url.clone()),
+            chatgpt_target_sha256: Some(request.source.digest.clone()),
+            chatgpt_target_history: vec![request.source.url.clone()],
+        };
+        let event = completed_delivery(&request).0.event;
+        validate_handoff_selection(&request, &registered, &request.source, &event).unwrap();
+        for changed in [
+            "event",
+            "project",
+            "generation",
+            "body",
+            "type",
+            "audit",
+            "owner",
+            "workspace",
+            "target",
+            "registry-target",
+            "request",
+        ] {
+            let mut selected = request.clone();
+            let mut actual = event.clone();
+            let mut scope = registered.clone();
+            let mut target = request.source.clone();
+            match changed {
+                "event" => actual.event_id = "web-handoff-foreign".into(),
+                "project" => actual.project_id = "beta".into(),
+                "generation" => actual.target_generation += 1,
+                "body" => actual.message.push_str(" changed"),
+                "type" => actual.event_type = "test".into(),
+                "audit" => actual.audit_references.push("unrelated-reference".into()),
+                "owner" => scope.codex_thread_id = Some("another-native-owner".into()),
+                "workspace" => scope.workspace = root.join("unrelated"),
+                "target" => target.generation += 1,
+                "registry-target" => scope.chatgpt_target_sha256 = Some("f".repeat(64)),
+                "request" => selected.intent_id = "different-intent".into(),
+                _ => unreachable!(),
+            }
+            assert!(
+                validate_handoff_selection(&selected, &scope, &target, &actual).is_err(),
+                "{changed}"
+            );
+        }
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

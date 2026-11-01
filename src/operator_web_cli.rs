@@ -159,6 +159,12 @@ pub(crate) enum WebAction {
     RolloverHandoffCollect {
         project_id: String,
     },
+    RolloverDeliverHandoff {
+        project_id: String,
+    },
+    RolloverReobserveHandoff {
+        project_id: String,
+    },
     RolloverExecute {
         project_id: String,
     },
@@ -533,6 +539,16 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         }),
         ("rollover", "handoff-collect") if options.is_empty() => {
             Ok(WebAction::RolloverHandoffCollect {
+                project_id: project_id.into(),
+            })
+        }
+        ("rollover", "deliver-handoff") if options.is_empty() => {
+            Ok(WebAction::RolloverDeliverHandoff {
+                project_id: project_id.into(),
+            })
+        }
+        ("rollover", "reobserve-handoff") if options.is_empty() => {
+            Ok(WebAction::RolloverReobserveHandoff {
                 project_id: project_id.into(),
             })
         }
@@ -1629,6 +1645,12 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
         WebAction::RolloverHandoffCollect { project_id } => {
             rollover::collect_handoff(&workspace, &project_id)
         }
+        WebAction::RolloverDeliverHandoff { project_id } => {
+            rollover::deliver_handoff(&workspace, &project_id)
+        }
+        WebAction::RolloverReobserveHandoff { project_id } => {
+            rollover::reobserve_handoff(&workspace, &project_id)
+        }
         WebAction::RolloverPrepare {
             project_id,
             handoff_file,
@@ -1740,6 +1762,29 @@ mod tests {
                 let mut changed = command.clone();
                 changed.extend(args(&extra));
                 assert!(parse(&changed).is_err());
+            }
+        }
+    }
+
+    #[test]
+    fn scoped_handoff_commands_select_only_the_registered_project_journal() {
+        for verb in ["deliver-handoff", "reobserve-handoff"] {
+            let command = args(&["operator", "web", "rollover", verb, "--project-id", "alpha"]);
+            assert!(matches!(
+                parse(&command).unwrap(),
+                WebAction::RolloverDeliverHandoff { project_id }
+                | WebAction::RolloverReobserveHandoff { project_id } if project_id == "alpha"
+            ));
+            for option in [
+                "--event-id",
+                "--message",
+                "--url",
+                "--source-task-id",
+                "--force",
+            ] {
+                let mut invalid = command.clone();
+                invalid.extend(args(&[option, "caller-supplied"]));
+                assert!(parse(&invalid).is_err(), "{verb} {option}");
             }
         }
     }
