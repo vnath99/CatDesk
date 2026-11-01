@@ -1,3 +1,7 @@
+## 2026-11-01 — fresh initialization admission source-qualified
+
+An explicit local transition can recognize a completed operator-provided new chat without pretending it has a predecessor-authored handoff. It admits only new tasks and preserves old-task/native fences, histories and independent project progress.152 Web tests and strict Clippy pass. Matched-build/live local acceptance is pending; canonical transfer, two real Web coding callers, protected producer/promotion and installed unattended recovery remain OPEN. Evidence: `docs/verification/FRESH_WEB_INITIALIZATION_ADMISSION_2026_11_01.json`.
+
 ## 2026-11-01 — one controlled fresh chat and continuation accepted live
 
 The separately qualified development build of `7782a94` delivered the one journal-owned continuation with an exact receipt; read-only observation and exact response read proved completion and task identity. No global scheduler, native task or protected promotion ran. The response reports v5 available and waits for a separate task grant. Two real Web coding projects, canonical conversation-authority transfer, safe initialization admission and installed unattended recovery remain OPEN; the October31 full milestone was not achieved. Preserve completed requests without replay. Evidence: `docs/verification/V5_PROJECT_CHAT_BOOTSTRAP_2026_11_01.json`.

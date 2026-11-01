@@ -32,6 +32,8 @@ mod task_handoff;
 
 #[path = "operator_web_quarantine.rs"]
 mod disposition;
+#[path = "operator_web_initialization.rs"]
+mod initialization;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -465,7 +467,6 @@ fn continuation_ready_for_work(
     if record.phase != Phase::ContinuationQueued
         || record.context_meter_status == ContextMeterStatus::Pending
         || record.bound_target.as_ref() != Some(current)
-        || record.handoff_event_id.is_none()
         || (record.context_meter_status == ContextMeterStatus::RetryRequired
             && (record.reconciliation_reason.is_some()
                 || !record.source_snapshot_verified
@@ -473,12 +474,20 @@ fn continuation_ready_for_work(
     {
         return Err("WEB_WORK_ROLLOVER_PENDING".into());
     }
+    let registered =
+        registered_project(workspace, project).map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
+    if initialization::accepted(workspace, store, wake, &registered, record, current)
+        .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
+    {
+        return Ok(());
+    }
+    if record.handoff_event_id.is_none() {
+        return Err("WEB_WORK_ROLLOVER_PENDING".into());
+    }
     let request = store
         .handoff_request()
         .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
         .ok_or("WEB_WORK_ROLLOVER_PENDING")?;
-    let registered =
-        registered_project(workspace, project).map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
     let delivery = wake
         .delivery(&record.continuation_event_id)
         .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
@@ -627,12 +636,18 @@ fn acquire_web_project_lease(
         approved_source_task_id: approved_target.as_ref().and_then(|_| {
             active
                 .as_ref()
-                .filter(|record| record.phase == Phase::ContinuationQueued)
+                .filter(|record| {
+                    record.phase == Phase::ContinuationQueued && record.handoff_event_id.is_some()
+                })
                 .map(|record| record.source_task_id.clone())
         }),
         fenced_source_task_id: active
             .as_ref()
-            .filter(|record| record.phase == Phase::Quarantined)
+            .filter(|record| {
+                record.phase == Phase::Quarantined
+                    || (record.phase == Phase::ContinuationQueued
+                        && record.handoff_event_id.is_none())
+            })
             .map(|record| record.source_task_id.clone()),
         approved_target,
     })
@@ -3527,6 +3542,24 @@ pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> 
     execute_with_mode(workspace, project, false, &|| Ok(()))
 }
 
+pub(super) fn accept_initialization(
+    workspace: &Path,
+    project: &str,
+    intent: &str,
+    generation: u64,
+    target_digest: &str,
+    acknowledgement: &str,
+) -> Result<Value, String> {
+    initialization::accept(
+        workspace,
+        project,
+        intent,
+        generation,
+        target_digest,
+        acknowledgement,
+    )
+}
+
 fn validate_continuation_selection(
     record: &Record,
     current: &Target,
@@ -5116,6 +5149,319 @@ mod tests {
         record.receipt.as_mut().unwrap().completion = "RESPONSE_COMPLETED".into();
         record.phase = Phase::Quarantined;
         assert!(validate_continuation_selection(&record, &current, &event).is_err());
+    }
+
+    #[cfg(windows)]
+    fn fresh_initialization_fixture(
+        completed: bool,
+    ) -> (PathBuf, PathBuf, PathBuf, Record, Target) {
+        let (parent, control, dev, source, _) = paired_handoff_fixture();
+        mcp::operator_bind_project_web_target_at_root(
+            &control,
+            Some(&dev),
+            "alpha",
+            "https://chatgpt.com/c/new",
+            Some(&source.digest),
+            source.generation,
+        )
+        .unwrap();
+        let current = paired(&control, "alpha").unwrap();
+        let wake = Store::open(&dev).unwrap();
+        let mut r = record();
+        r.source = source;
+        r.source_task_id = "fresh-initialization-only".into();
+        r.message_digest =
+            message_digest("alpha", &r.intent_id, &r.source.url, &r.handoff).unwrap();
+        r.phase = Phase::ContinuationQueued;
+        r.context_meter_status = ContextMeterStatus::Recorded;
+        r.receipt = Some(receipt_for(&r));
+        r.bound_target = Some(current.clone());
+        r.continuation_event_id = format!("web-continue-{}", r.intent_id);
+        let meter = WebContextStore::open(control.join(".catdesk/web-context")).unwrap();
+        meter
+            .bind_observed_target(key("alpha", &r.source), None)
+            .unwrap();
+        drop(meter);
+        record_context_meter(&control, &r, &current).unwrap();
+        let store = ProjectStore::open(&control, "alpha").unwrap();
+        store.save(&r).unwrap();
+        atomic(&store.root.join("active.json"), &r.intent_id).unwrap();
+        drop(store);
+        let message = continuation_message(&r, &current);
+        let event = wake
+            .produce_expected(
+                &r.continuation_event_id,
+                "alpha",
+                "engineering_attention",
+                &message,
+                &current,
+            )
+            .unwrap();
+        let owner = wake.host_lock().unwrap();
+        wake.claim(&event, &owner).unwrap();
+        wake.transition(
+            &event.event_id,
+            owner.owner(),
+            DeliveryPhase::Submitting,
+            None,
+            None,
+        )
+        .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: event.event_id.clone(),
+            target_generation: current.generation,
+            target_digest: current.digest.clone(),
+            message_digest: digest(&message),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        wake.record_exact_receipt_timer(&event.event_id, &receipt)
+            .unwrap();
+        wake.transition(
+            &event.event_id,
+            owner.owner(),
+            DeliveryPhase::Sent,
+            Some(receipt),
+            None,
+        )
+        .unwrap();
+        if completed {
+            wake.complete_timer(&event.event_id).unwrap();
+        }
+        drop(owner);
+        (parent, control, dev, r, current)
+    }
+
+    #[cfg(windows)]
+    fn remove_initialization_fixture(parent: PathBuf) {
+        assert!(parent.starts_with(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target")));
+        assert!(
+            parent
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .starts_with("web-handoff-paired-")
+        );
+        fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn fresh_initialization_admits_only_new_work_and_preserves_old_owners_and_journals() {
+        let (parent, control, dev, r, current) = fresh_initialization_fixture(true);
+        let registry_path = control.join(".catdesk/projects/projects.json");
+        let registry_before = fs::read(&registry_path).unwrap();
+        let config_before = fs::read(dev.join("config.json")).unwrap();
+        let wake = Store::open(&dev).unwrap();
+        let beta = wake.config().unwrap().targets["beta"].clone();
+        let foreign = wake
+            .produce_expected(
+                "beta-unknown",
+                "beta",
+                "engineering_attention",
+                "preserve beta unknown submission",
+                &beta,
+            )
+            .unwrap();
+        let owner = wake.host_lock().unwrap();
+        wake.claim(&foreign, &owner).unwrap();
+        wake.transition(
+            &foreign.event_id,
+            owner.owner(),
+            DeliveryPhase::Submitting,
+            None,
+            None,
+        )
+        .unwrap();
+        drop(owner);
+        let foreign_path = dev.join("deliveries/beta-unknown.json");
+        let foreign_before = fs::read(&foreign_path).unwrap();
+        let old_task = control.join(".catdesk/project-mcp-tasks/alpha/legacy-task/journal");
+        fs::create_dir_all(&old_task).unwrap();
+        fs::write(
+            old_task.join("preserved.json"),
+            b"legacy state is not initialization authority",
+        )
+        .unwrap();
+        assert!(acquire_web_work_lease(&control, "alpha").is_err());
+        assert!(
+            accept_initialization(
+                &control,
+                "alpha",
+                &r.intent_id,
+                current.generation,
+                &current.digest,
+                "wrong acknowledgement"
+            )
+            .is_err()
+        );
+        let accepted = accept_initialization(
+            &control,
+            "alpha",
+            &r.intent_id,
+            current.generation,
+            &current.digest,
+            initialization::ACK,
+        )
+        .unwrap();
+        assert_eq!(accepted["status"], "ACCEPTED_NEW_TASKS_ONLY");
+        assert_eq!(accepted["executionGranted"], false);
+        assert_eq!(accepted["predecessorTaskResumeAuthorized"], false);
+        let lease = acquire_web_work_lease(&control, "alpha").unwrap();
+        lease
+            .check_source_task(&current, &current, "brand-new-work")
+            .unwrap();
+        assert!(
+            lease
+                .check_source_task(&r.source, &current, "legacy-work")
+                .is_err()
+        );
+        assert!(
+            lease
+                .check_source_task(&current, &current, &r.source_task_id)
+                .is_err()
+        );
+        assert!(
+            lease
+                .check_native_continuation(
+                    &control,
+                    "alpha",
+                    &r.source,
+                    &current,
+                    &r.source_task_id
+                )
+                .is_err()
+        );
+        drop(lease);
+        let ledger = WorkLedger::open(&control, "alpha").unwrap();
+        let event = format!("web-work-{}", digest("alpha\0new-authorized-work"));
+        ledger
+            .prepare("new-authorized-work", &event, &digest("new work"), &current)
+            .unwrap();
+        // A completed local acceptance is idempotent even after legitimate new work arrives.
+        assert_eq!(
+            accept_initialization(
+                &control,
+                "alpha",
+                &r.intent_id,
+                current.generation,
+                &current.digest,
+                initialization::ACK
+            )
+            .unwrap()["replayed"],
+            true
+        );
+        drop(acquire_web_work_lease(&control, "alpha").unwrap());
+        assert_eq!(fs::read(&registry_path).unwrap(), registry_before);
+        assert_eq!(fs::read(dev.join("config.json")).unwrap(), config_before);
+        assert_eq!(fs::read(&foreign_path).unwrap(), foreign_before);
+        assert_eq!(
+            fs::read(old_task.join("preserved.json")).unwrap(),
+            b"legacy state is not initialization authority"
+        );
+        remove_initialization_fixture(parent);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn fresh_initialization_refuses_pending_response_unknown_work_and_changed_scope() {
+        for condition in [
+            "response",
+            "unknown",
+            "web-work",
+            "source-handoff",
+            "history",
+            "scope-tamper",
+        ] {
+            let (parent, control, dev, r, current) =
+                fresh_initialization_fixture(condition != "response");
+            let wake = Store::open(&dev).unwrap();
+            if condition == "unknown" {
+                let event = wake
+                    .produce_expected(
+                        "unknown-alpha",
+                        "alpha",
+                        "engineering_attention",
+                        "preserve unknown submission",
+                        &current,
+                    )
+                    .unwrap();
+                let owner = wake.host_lock().unwrap();
+                wake.claim(&event, &owner).unwrap();
+                wake.transition(
+                    &event.event_id,
+                    owner.owner(),
+                    DeliveryPhase::Submitting,
+                    None,
+                    None,
+                )
+                .unwrap();
+            } else if condition == "web-work" {
+                let ledger = WorkLedger::open(&control, "alpha").unwrap();
+                ledger
+                    .prepare(
+                        "old-owned-work",
+                        &format!("web-work-{}", digest("alpha\0old-owned-work")),
+                        &digest("old owned work"),
+                        &r.source,
+                    )
+                    .unwrap();
+            } else if condition == "source-handoff" {
+                let store = ProjectStore::open(&control, "alpha").unwrap();
+                let mut changed = r.clone();
+                changed.handoff_event_id = Some("web-handoff-source-owned".into());
+                store.save(&changed).unwrap();
+            } else if condition == "history" {
+                let path = control.join(".catdesk/projects/projects.json");
+                let mut registry: Value = read(&path).unwrap();
+                let row = registry["projects"]
+                    .as_array_mut()
+                    .unwrap()
+                    .iter_mut()
+                    .find(|p| p["projectId"] == "alpha")
+                    .unwrap();
+                row["chatgptTargetHistory"] = json!([current.url]);
+                atomic(&path, &registry).unwrap();
+            }
+            let before_registry =
+                fs::read(control.join(".catdesk/projects/projects.json")).unwrap();
+            let before_config = fs::read(dev.join("config.json")).unwrap();
+            let result = accept_initialization(
+                &control,
+                "alpha",
+                &r.intent_id,
+                current.generation,
+                &current.digest,
+                initialization::ACK,
+            );
+            if condition == "scope-tamper" {
+                result.unwrap();
+                let path = control.join(".catdesk/projects/projects.json");
+                let mut registry: Value = read(&path).unwrap();
+                let row = registry["projects"]
+                    .as_array_mut()
+                    .unwrap()
+                    .iter_mut()
+                    .find(|p| p["projectId"] == "alpha")
+                    .unwrap();
+                row["codexThreadId"] = json!("00000000-0000-4000-8000-000000000001");
+                atomic(&path, &registry).unwrap();
+                assert!(acquire_web_work_lease(&control, "alpha").is_err());
+                fs::write(&path, &before_registry).unwrap();
+                drop(acquire_web_work_lease(&control, "alpha").unwrap());
+            } else {
+                assert!(result.is_err(), "{condition}");
+                assert!(acquire_web_work_lease(&control, "alpha").is_err());
+            }
+            assert_eq!(
+                fs::read(control.join(".catdesk/projects/projects.json")).unwrap(),
+                before_registry
+            );
+            assert_eq!(fs::read(dev.join("config.json")).unwrap(), before_config);
+            remove_initialization_fixture(parent);
+        }
     }
 
     #[test]

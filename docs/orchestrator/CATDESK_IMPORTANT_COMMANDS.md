@@ -1,3 +1,11 @@
+## 2026-11-01 — explicit fresh initialization acceptance (source-qualified; matched build pending)
+
+```powershell
+& '<qualified-controller.exe>' operator web rollover accept-initialization --project-id '<registered-id>' --expected-intent-id '<existing-intent>' --expected-target-generation '<current-generation>' --expected-target-sha256 '<current-digest>' --acknowledgement NEW_TASKS_ONLY_PRESERVE_PREDECESSOR_OWNERS
+```
+
+Use only a matching qualified development controller that implements this new command; the current protected installed CLI is not claimed to implement it. Preconditions are completed exact bootstrap/continuation receipts, current context, preserved predecessor history, unchanged registration and quiescent Web work. This performs one local intent-keyed journal commit with no browser, message or binding operation. It grants no execution permission and does not authorize predecessor/native task resumption. New tasks require their own ordinary grants. Existing quarantine/unknown outcomes and task-retirement checks remain mandatory. Evidence: `docs/verification/FRESH_WEB_INITIALIZATION_ADMISSION_2026_11_01.json`.
+
 ## 2026-11-01 — continuation commands qualified in the matched development package
 
 The `7782a94` matching development controller (`58e022bf…`) has live-qualified `operator web rollover deliver-continuation --project-id <id>` for one journal-selected event and `operator web rollover reobserve-continuation --project-id <id>` for its already-delivered response. Send bound120 seconds; separate read-only observation bound90 seconds. The controlled acceptance event is already SENT/COMPLETE: **do not invoke its delivery again**. These commands accept no caller message, URL or event override and do not start a global host/scheduler. Normal task authority, canonical target migration and protected promotion remain separate. Earlier source-only qualification notes below are historical. Evidence: `docs/verification/V5_PROJECT_CHAT_BOOTSTRAP_2026_11_01.json`.

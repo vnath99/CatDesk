@@ -1,0 +1,75 @@
+{
+  "date": "2026-11-01",
+  "timezone": "America/New_York",
+  "observedUtc": "2026-11-01T04:41:45.957843+00:00",
+  "comparisonBase": "2a1b03252cf636760a27d5ab859fe9ded8e1b0e1",
+  "classification": "SOURCE_QUALIFIED_LOCAL_INITIALIZATION_ACCEPTANCE_PENDING",
+  "problem": "A completed operator-provided fresh-chat bootstrap had no predecessor-authored handoff witness, so the normal-work lease correctly remained closed even after its exact continuation completed.",
+  "implementation": {
+    "entry": "operator web rollover accept-initialization",
+    "scope": "Explicit local acceptance for NEW tasks only, using the existing per-project rollover journal. No new registry or browser owner.",
+    "prerequisites": [
+      "Exact caller-selected project, intent, target generation and digest, plus explicit new-tasks-only acknowledgement.",
+      "Completed bootstrap and exact continuation receipt/timer proof.",
+      "Current context key and pressure sampled atomically, preserved predecessor history and unchanged full registration identity.",
+      "No source-authored/task-granted handoff, unresolved quarantine or current Web work.",
+      "Existing registry-to-Wake lock ordering and quiescent-source transaction held across the immutable local acceptance write."
+    ],
+    "authorizationLimits": [
+      "No execution key or native queue grant is created.",
+      "Predecessor task IDs and cross-generation native resumption stay fenced.",
+      "New work still needs its own normal request, ownership, contract, execution permission and call-ID journal.",
+      "No production executable, fingerprint, tunnel, browser profile or binding is changed.",
+      "Ordinary automatic rollover still requires the real predecessor-authored handoff."
+    ],
+    "durability": "One immutable intent-keyed receipt seals the exact record, registration/history, continuation proof and quiescent progress. Cold validation rejects changed evidence or scope; a repeated acceptance is idempotent after legitimate new work starts."
+  },
+  "tests": {
+    "focusedIntegrationAndClosedCLI": 3,
+    "rootWebPassed": 152,
+    "rootWebIgnored": 1,
+    "ignoredNote": "Fixture child is invoked by its bounded parent test.",
+    "strictAllTargetClippy": "PASS",
+    "formatting": "PASS",
+    "centralDispatchRegression": {
+      "passed": 27,
+      "failed": 0,
+      "scope": "Native dispatch/status/rollover, authenticated central and cached routes, call journals, peer progress and manual Wake ownership."
+    }
+  },
+  "failureCases": [
+    "Pending assistant response",
+    "Unknown project submission",
+    "Existing active Web work",
+    "Source-authored handoff cannot be converted into fresh initialization",
+    "Missing predecessor history",
+    "Changed native registration identity",
+    "Caller payload/URL/force overrides refused",
+    "Old source-task and cross-generation native continuation refused"
+  ],
+  "independence": "A valid held submission for the sibling project remains byte-identical while the selected project admits only new work.",
+  "retainedFailedExperiments": [
+    "Initial CLI ownership conversion failed compilation and was corrected.",
+    "The pending-response fixture first attempted to change a terminal timer and correctly hit TIMER_TERMINAL. It now constructs an unfinished response at creation; the production guard was not relaxed.",
+    "Strict Clippy caught an unnecessary string reference; corrected without policy changes."
+  ],
+  "liveAdmission": "NOT_RUN",
+  "protectedProductionPromotion": false,
+  "fullMultiProjectAcceptance": false,
+  "remaining": [
+    "Qualify a matched development package and execute this exact local initialization transition once.",
+    "Canonical target/authority transfer still requires its existing owner/task-quiescence checks.",
+    "Historical assigned-task journals include RUNNING resumable state and completed calls; those facts do not prove terminal contracts or authorize retirement. Preserve them.",
+    "Genuine later-source review/ACK/producer authority, two actual Web coding callers and installed unattended/reboot recovery remain open."
+  ],
+  "reviewWorkflowPreflight": {
+    "publicCommitAvailableInServingRepository": true,
+    "developmentAndServingShareGitObjectDatabase": true,
+    "v5RunCommandResult": "PLAN_REQUIRED_BEFORE_EXECUTION",
+    "planRequiredRetained": true,
+    "recordedPlanBodyEmpty": true,
+    "overrideUsed": false,
+    "commandExecuted": false,
+    "nextSupportedAction": "Record a bounded read-only public Git-source inspection plan through plan_update with plan_required explicitly true, then retry only after that guard state has genuinely changed."
+  }
+}

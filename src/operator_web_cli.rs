@@ -168,6 +168,13 @@ pub(crate) enum WebAction {
     RolloverReobserveContinuation {
         project_id: String,
     },
+    RolloverAcceptInitialization {
+        project_id: String,
+        expected_intent_id: String,
+        expected_target_generation: u64,
+        expected_target_sha256: String,
+        acknowledgement: String,
+    },
     RolloverInspectDraft {
         project_id: String,
         expected_intent_id: String,
@@ -552,6 +559,41 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         ("rollover", "reobserve-continuation") if options.is_empty() => {
             Ok(WebAction::RolloverReobserveContinuation {
                 project_id: project_id.into(),
+            })
+        }
+        ("rollover", "accept-initialization") => {
+            let expected_intent_id = options
+                .remove("--expected-intent-id")
+                .ok_or("WEB_USAGE: --expected-intent-id is required")?;
+            let expected_target_generation = options
+                .remove("--expected-target-generation")
+                .ok_or("WEB_USAGE: --expected-target-generation is required")?
+                .parse::<u64>()
+                .map_err(|_| "WEB_USAGE: invalid target generation")?;
+            let expected_target_sha256 = options
+                .remove("--expected-target-sha256")
+                .ok_or("WEB_USAGE: --expected-target-sha256 is required")?;
+            let acknowledgement = options
+                .remove("--acknowledgement")
+                .ok_or("WEB_USAGE: --acknowledgement is required")?;
+            if !catdesk_wake::protocol::valid_id(expected_intent_id)
+                || expected_target_generation == 0
+                || expected_target_sha256.len() != 64
+                || !expected_target_sha256
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                || !options.is_empty()
+            {
+                return Err(
+                    "WEB_USAGE: invalid initialization identity or unexpected option".into(),
+                );
+            }
+            Ok(WebAction::RolloverAcceptInitialization {
+                project_id: project_id.into(),
+                expected_intent_id: expected_intent_id.into(),
+                expected_target_generation,
+                expected_target_sha256: expected_target_sha256.into(),
+                acknowledgement: acknowledgement.into(),
             })
         }
         ("rollover", "repair-draft") => {
@@ -1602,6 +1644,20 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
         WebAction::RolloverReobserveContinuation { project_id } => {
             rollover::reobserve_continuation(&workspace, &project_id)
         }
+        WebAction::RolloverAcceptInitialization {
+            project_id,
+            expected_intent_id,
+            expected_target_generation,
+            expected_target_sha256,
+            acknowledgement,
+        } => rollover::accept_initialization(
+            &workspace,
+            &project_id,
+            &expected_intent_id,
+            expected_target_generation,
+            &expected_target_sha256,
+            &acknowledgement,
+        ),
         WebAction::RolloverInspectDraft {
             project_id,
             expected_intent_id,
@@ -1685,6 +1741,44 @@ mod tests {
                 changed.extend(args(&extra));
                 assert!(parse(&changed).is_err());
             }
+        }
+    }
+
+    #[test]
+    fn fresh_initialization_command_requires_explicit_identity_and_has_no_force_or_payload() {
+        let command = args(&[
+            "operator",
+            "web",
+            "rollover",
+            "accept-initialization",
+            "--project-id",
+            "alpha",
+            "--expected-intent-id",
+            "intent-a",
+            "--expected-target-generation",
+            "2",
+            "--expected-target-sha256",
+            &"a".repeat(64),
+            "--acknowledgement",
+            "NEW_TASKS_ONLY_PRESERVE_PREDECESSOR_OWNERS",
+        ]);
+        assert!(
+            matches!(parse(&command).unwrap(), WebAction::RolloverAcceptInitialization {
+            project_id, expected_target_generation: 2, .. } if project_id == "alpha")
+        );
+        for index in [6, 8, 10, 12] {
+            let mut missing = command.clone();
+            missing.drain(index..index + 2);
+            assert!(parse(&missing).is_err());
+        }
+        for extra in [
+            ["--force", "true"],
+            ["--message", "new payload"],
+            ["--url", "https://chatgpt.com/c/foreign"],
+        ] {
+            let mut changed = command.clone();
+            changed.extend(args(&extra));
+            assert!(parse(&changed).is_err());
         }
     }
 

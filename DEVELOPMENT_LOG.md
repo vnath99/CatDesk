@@ -1,3 +1,7 @@
+## 2026-11-01 — explicit fresh-chat NEW-task admission source-qualified
+
+Implemented local intent/generation/digest-checked initialization acceptance using existing rollover, registry and quiescent Wake transactions. It admits new work only, seals actual completion/scope evidence and preserves predecessor/native resumption fences and all old journals. Three focused tests and 152 broader Web tests pass; strict Clippy/formatting pass. All 27 central dispatcher regressions pass; matching development build/live local acceptance is next. Private authoritative handoff updated without discarding original bytes; intentional PUBLIC publication policy clarified. No protected runtime or existing binding changed. Evidence: `docs/verification/FRESH_WEB_INITIALIZATION_ADMISSION_2026_11_01.json`.
+
 ## 2026-11-01 — scoped continuation live-qualified from published source7782a94
 
 Matched development build health passed. One exact queued continuation was delivered in53.687 seconds, observed COMPLETE read-only in64.235 seconds and its925-byte task-marked response verified in44.25 seconds. No bootstrap replay, global host/scheduler, native task, protected promotion or preservation mismatch occurred. The assistant reports v5 available and waits for a task grant. Actual two-Web coding, canonical authority transfer and normal fresh-initialization work admission remain separate work. All149 Web,17 scoped sender and12 response-recovery tests passed; strict root/Wake Clippy and formatting passed. Evidence: `docs/verification/V5_PROJECT_CHAT_BOOTSTRAP_2026_11_01.json`.
