@@ -1,3 +1,16 @@
+## 2026-10-31 22:46 EDT — updated dependencies after successful v5 authentication
+
+| Task | Current state and exact next prerequisite |
+| --- | --- |
+| Existing backend/tunnel serving and central authentication | COMPLETED_VERIFIED for this bounded configuration/restart slice:102 tools, named dispatcher, missing/wrong bearer401, valid200, structured connector response. Preserve current intended serving owners. |
+| Two installed initial registry/Wake pairs | COMPLETED_VERIFIED for metadata pairing only; URLs and native ownership unchanged. Delivery unproved. |
+| Native model execution through installed central route | OPEN: current C254 lacks later native-dispatch operations. Reconcile existing independent review evidence, then existing ACK/snapshot/producer/promotion gates. No fingerprint rewrite or arbitrary development EXE copy. |
+| Actual two-project Web callers | Missing caller information only: which two existing project conversations have v5 enabled? A new test chat's catalog does not establish them. No new permission request or duplicate C49 call. |
+| Wake2 installed authority / CatDesk mismatch | OPEN: supported scope/ownership transfer and exact journal reconciliation; retain controlled companion bindings and unknown histories rather than copying URLs or clearing flags. |
+| Persistent startup/reboot | OPEN: finite source monitor proved installed-backend recovery; canonical recurring supervisor has not been updated/qualified. Do not enable an indefinite loop to manufacture acceptance. |
+
+No operator command or new discretionary approval is currently requested. Preserve the historical rows below as dated evidence; an old backend-stopped/unchanged429 description is not the current serving state. Source `ed4e2a4e65dd850a9a66a0566ac674d033e6dc25`; detailed audit `docs/verification/V5_AUTHENTICATED_SERVING_2026_10_31.json`. Goal ACTIVE; continue eligible source/review reconciliation while caller information is pending.
+
 ## 2026-10-31T21:59:16.246027-04:00 - existing serving restored and retained; no repeated setup or connector retry requested
 
 The canonical backend and existing native managed tunnel alias are running and verified locally. They were intentionally retained after the finite verification helpers exited. No new login, plugin, tunnel, profile, credential, production promotion or C49 action is requested. Do not run old one-shot canaries or cleanup scripts against these intended serving owners. The single connector attempt failed before a tool response/HTTP status; retain it separately from the earlier setup 424/upstream 429 correlation and wait for changed transport evidence rather than repeating probes.

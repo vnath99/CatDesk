@@ -1,3 +1,21 @@
+## 2026-10-31 22:46 EDT — current authenticated route and command qualification
+
+Verified implementation `ed4e2a4e65dd850a9a66a0566ac674d033e6dc25`; `docs/verification/V5_AUTHENTICATED_SERVING_2026_10_31.json` distinguishes source, installed and connector evidence. The installed canonical C254 executable remains unchanged. Its supported `catdesk.ps1 start -BackendOnly`, `recover -BackendOnly`, `stop` and `diagnose` own backend lifecycle. Authenticate probes and launches with the same existing `CATDESK_MCP_AUTH_TOKEN` reference. A separately generated MCP bearer is now retained in the Windows User environment; an already-open terminal may still have no process value. Preserve an existing process credential and refuse conflicts. Never print the value, pass it as an argument, rewrite fingerprints or toggle reserved `mcp.require_auth_token` to try to enable the dispatcher.
+
+The qualified `scripts/setup-secure-mcp.ps1 -Mode connect -ForwardLocalMcpBearer` helper forwards the configured bearer to the **same existing managed owner**. Supply its existing exact alias/profile/tunnel parameters from protected local authority, never copied public examples or a newly created tunnel. The corrected Secure MCP managed type is isolated from the lifecycle runner's overload set. Existing profile bytes and control-plane credential are preserved.
+
+Authenticated local discovery now returns102 tools including `catdesk_web_task_tool`. A cached Web app catalog may still show101. Existing `run_command` supports the closed `CATDESK_WEB_TASK=` JSON adapter with the same task envelope, key, call ID, journal and authentication guards. It is not shell execution, a replacement for a native task grant, or permission to re-express held C49 work. Use only genuinely new authorized tasks; never switch transports to retry an unknown call.
+
+Source-qualified finite monitor command shape:
+
+```powershell
+& '<qualified-source>/scripts/catdesk-autostart-supervisor.ps1' -Workspace '<canonical-workspace>' -BackendOnly -InitialDelaySeconds 0 -MaximumAttempts 1 -MaximumMonitorCycles 2 -HealthPollSeconds 15
+```
+
+Prerequisites: exact reviewed script, valid installed release/fingerprint, matching process bearer, existing owner/lease checks and active finite monitoring. This does not register persistent startup or take over the tunnel/Wake owner. Only a verified absent local listener permits this narrow recovery; release/authentication/foreign-owner or malformed evidence holds. Use file-backed output for a retained daemon; output-pipe EOF is not owner-process exit. The actual bounded test passed in35.016 seconds and the temporary monitor exited.
+
+The new19-layer `doctor` is **source-qualified**, with144 assertions and read-only installed-state observation using installed lifecycle definitions. The current canonical facade does **not** accept `doctor`; use installed `diagnose` for its supported live protocol checks. Do not document source `doctor` as an already installed command. Authentication environment metadata does not prove daemon enforcement or project execution, and an autostart Run key does not prove a running/recovery-qualified monitor. Installing the newer doctor/supervisor remains a reviewed lifecycle deployment step.
+
 ## 2026-10-31T21:59:16.246027-04:00 - actual serving restored; connector, central authorization and unattended recovery remain separate
 
 The trusted installed C254 executable (`608c2e97...`, source `e4a99a8`) started through the canonical public `catdesk.ps1 start -BackendOnly` lifecycle. The existing qualified `tunnel-client runtimes connect` reused the exact registered alias/profile/tunnel and retained environment key reference. No replacement tunnel, profile, credential, release or Wake owner was created. Public diagnosis is HEALTHY. Local MCP initialize/catalog return 200; the existing opaque route rejects a wrong route with 404. This profile has no configured MCP bearer: a wrong bearer at the correct opaque route still returns 200, and the central dispatcher independently refuses an empty-argument guard check with `WEB_TASK_CENTRAL_AUTH_REQUIRED`. No project/task identity or execution key was supplied; no task ran. Do not describe this as bearer-authenticated central execution.
