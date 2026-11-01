@@ -822,13 +822,31 @@ function New-LocalMcpReadinessResult {
     return [pscustomobject]@{Ready=$Ready;Gate=$Gate}
 }
 
-function Get-LocalMcpProbeHeaders {
-    param($LocalMcp)
+function Get-ConfiguredLocalMcpAuthToken {
     $environment = [Environment]::GetEnvironmentVariables([EnvironmentVariableTarget]::Process)
-    if (-not $environment.Contains('CATDESK_MCP_AUTH_TOKEN')) { return @{} }
-    $token = [string]$environment['CATDESK_MCP_AUTH_TOKEN']
+    if ($environment.Contains('CATDESK_MCP_AUTH_TOKEN')) {
+        # An explicit per-process setting belongs to this owner, including an
+        # isolated development owner. Never replace an invalid explicit value
+        # with another credential or an unauthenticated launch.
+        $token = [string]$environment['CATDESK_MCP_AUTH_TOKEN']
+    } else {
+        try {
+            $token = Invoke-BootstrapSeam -Name 'LocalMcpUserAuthToken' -Arguments @() -Default {
+                [Environment]::GetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN', 'User')
+            }
+        } catch { throw 'LOCAL_MCP_AUTH_TOKEN_INVALID' }
+        if ($null -eq $token -or $token -ceq '') { return $null }
+        if ($token -isnot [string]) { throw 'LOCAL_MCP_AUTH_TOKEN_INVALID' }
+    }
     # Match server::valid_mcp_auth_token: >=24 ASCII graphic bytes, no trim.
     if ($token -cnotmatch '\A[\x21-\x7E]{24,}\z') { throw 'LOCAL_MCP_AUTH_TOKEN_INVALID' }
+    return $token
+}
+
+function Get-LocalMcpProbeHeaders {
+    param($LocalMcp)
+    $token = Get-ConfiguredLocalMcpAuthToken
+    if ($null -eq $token) { return @{} }
     $uri = $null
     if (-not [Uri]::TryCreate([string]$LocalMcp.Uri, [UriKind]::Absolute, [ref]$uri) -or
         $uri.Scheme -cne 'http' -or $uri.Host -cne '127.0.0.1' -or
@@ -1133,22 +1151,38 @@ function Test-BackendOnlySupport {
     } catch { return $false }
 }
 
+function New-CanonicalDaemonStartInfo {
+    param($Canonical, [string]$Root, [string]$Config, [switch]$BackendOnly)
+    $token = Get-ConfiguredLocalMcpAuthToken
+    $info = [Diagnostics.ProcessStartInfo]::new()
+    $info.FileName = $Canonical.Path
+    $info.Arguments = if ($BackendOnly) { '--catdesk-daemon --backend-only' } else { '--catdesk-daemon' }
+    $info.WorkingDirectory = $Root
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
+    $info.EnvironmentVariables['WORKSPACE_ROOT'] = $Root
+    $info.EnvironmentVariables['CATDESK_BACKEND_CONFIG_PATH'] = $Config
+    if ($null -ne $token) { $info.EnvironmentVariables['CATDESK_MCP_AUTH_TOKEN'] = $token }
+    return $info
+}
+
+function Start-CanonicalDaemon {
+    param($Canonical, [string]$Root, [string]$Config, [switch]$BackendOnly)
+    Invoke-BootstrapSeam -Name 'DaemonStart' -Arguments @($Canonical, $Root, $Config, [bool]$BackendOnly) -Default {
+        param($identity, $workspaceRoot, $configPath, $localOnly)
+        $info = New-CanonicalDaemonStartInfo -Canonical $identity -Root $workspaceRoot -Config $configPath -BackendOnly:$localOnly
+        $process = [Diagnostics.Process]::Start($info)
+        $null = $process.Handle
+        return $process
+    }
+}
+
 function Start-BackendOnlyDaemon {
     param($Canonical, [string]$Root, [string]$Config)
     Invoke-BootstrapSeam -Name 'BackendOnlyStart' -Arguments @($Canonical, $Root, $Config) -Default {
         param($identity, $workspaceRoot, $configPath)
-        $info = [Diagnostics.ProcessStartInfo]::new()
-        $info.FileName = $identity.Path
-        $info.Arguments = '--catdesk-daemon --backend-only'
-        $info.WorkingDirectory = $workspaceRoot
-        $info.UseShellExecute = $false
-        $info.CreateNoWindow = $true
-        $info.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
-        $info.EnvironmentVariables['WORKSPACE_ROOT'] = $workspaceRoot
-        $info.EnvironmentVariables['CATDESK_BACKEND_CONFIG_PATH'] = $configPath
-        $process = [Diagnostics.Process]::Start($info)
-        $null = $process.Handle
-        return $process
+        Start-CanonicalDaemon -Canonical $identity -Root $workspaceRoot -Config $configPath -BackendOnly
     }
 }
 
@@ -1246,6 +1280,7 @@ function Invoke-CanonicalStackBootstrapCore {
     }
     if ($BackendOnly) { Invoke-BackendOnlyBootstrap -Root $root -Canonical $canonical; return }
     $localMcp=Get-ConfiguredLocalMcp -Path $ConfigPath;$runtimeAlias=Get-ConfiguredRuntimeAlias -Path $ConfigPath;$client=Find-TunnelClient -ExplicitPath $TunnelClientPath;if(-not $client){throw "official runtime client unavailable"};$setup=Join-Path $root "scripts\setup-secure-mcp.ps1";$diskMode=Read-OfficialRuntimeProcessMode -Path $ConfigPath;$existing=Get-LoopbackCatDeskListener -Port $localMcp.Port -Canonical $canonical;$launched=$false
+    [void](Get-LocalMcpProbeHeaders -LocalMcp $localMcp)
     Test-CodexOnDemandPrerequisites
     $wakeReady=Test-WakeBridgeRuntime -Root $root
     if($Mode -eq "plan"){
@@ -1292,7 +1327,7 @@ function Invoke-CanonicalStackBootstrapCore {
     $readinessDeadline=[DateTime]::UtcNow.AddSeconds($ReadyTimeoutSeconds)
     $launchedDaemonProcess=$null
     if(-not $existing){
-        $launchedDaemonProcess=Start-Process -FilePath $canonical.Path -ArgumentList "--catdesk-daemon" -WorkingDirectory $root -WindowStyle Hidden -PassThru
+        $launchedDaemonProcess=Start-CanonicalDaemon -Canonical $canonical -Root $root -Config $ConfigPath
         # Pin the exact child immediately. Readiness below must bind to this
         # process instance rather than accepting a canonical same-path racer.
         $null=$launchedDaemonProcess.Handle

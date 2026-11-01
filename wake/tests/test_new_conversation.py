@@ -819,6 +819,26 @@ class NewConversationTests(unittest.TestCase):
             bridge.compose_bootstrap_message("project-one", "rollover-1", SOURCE,
                 bridge.JSON_BOOTSTRAP_HANDOFF_PREFIX + "/" * 3000)
 
+    def test_app_mention_bootstrap_is_explicit_frozen_and_bounded(self):
+        content = 'Keep https://example.test/a/b, "quotes", caf\u00e9, and \\path.\nNext.'
+        handoff = bridge.APP_JSON_BOOTSTRAP_HANDOFF_PREFIX + "@CatDesk-Local-Tunnel-v5\n" + content
+        message = bridge.compose_bootstrap_message("project-one", "rollover-1", SOURCE, handoff)
+        prefix = "@CatDesk-Local-Tunnel-v5\n" + bridge.JSON_BOOTSTRAP_MESSAGE_PREFIX
+        self.assertTrue(message.startswith(prefix))
+        self.assertEqual(json.loads(message[len(prefix):])["handoff"], content)
+        self.assertNotIn("/", message)
+        self.assertNotEqual(message, bridge.compose_bootstrap_message("project-one", "rollover-1", SOURCE,
+            bridge.JSON_BOOTSTRAP_HANDOFF_PREFIX + content))
+        self.assertEqual(bridge.digest(bridge.normalize_message(message)),
+                         "9c1d304d77662cc8b3ea328927dbcf67cf82f92c377e7b1a5a280dff9e2d1343")
+        for bad in ("@Different-App\nbody", "@CatDesk-Local-Tunnel-v5", "@CatDesk-Local-Tunnel-v5\n", "@CatDesk-Local-Tunnel-v5 extra\nbody"):
+            with self.subTest(bad=bad), self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_REQUEST_INVALID"):
+                bridge.compose_bootstrap_message("project-one", "rollover-1", SOURCE,
+                    bridge.APP_JSON_BOOTSTRAP_HANDOFF_PREFIX + bad)
+        with self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_MESSAGE_TOO_LONG"):
+            bridge.compose_bootstrap_message("project-one", "rollover-1", SOURCE,
+                bridge.APP_JSON_BOOTSTRAP_HANDOFF_PREFIX + "@CatDesk-Local-Tunnel-v5\n" + "/" * 3000)
+
     def test_real_sink_rejects_wrong_home_draft_messages_and_login(self):
         with tempfile.TemporaryDirectory() as profile:
             sink = bridge.NewConversationSink(SOURCE, Path(profile), 1, 1)
@@ -1013,7 +1033,7 @@ class NewConversationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as profile:
             sink = bridge.NewConversationSink(SOURCE, Path(profile), 1, 1)
             cdp = types.SimpleNamespace(evaluate=lambda script: ["load-error", 0, 0, True, False])
-            with self.assertRaisesRegex(bridge.PostSubmitUnknown, "RESPONSE_COMPLETION_UNPROVEN"):
+            with self.assertRaisesRegex(bridge.PostSubmitUnknown, "RESPONSE_LOAD_ERROR"):
                 sink.response_snapshot(cdp, "expected user turn")
 
     def test_private_source_snapshot_bounds_text_without_browser_write(self):

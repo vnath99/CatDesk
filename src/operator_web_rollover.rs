@@ -94,10 +94,19 @@ pub(super) struct Handoff {
     pub git_state: Option<HandoffGitState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub important_decisions: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chatgpt_app_mention: Option<String>,
 }
 
 impl Handoff {
     fn validate(&self, project: &str) -> Result<(), String> {
+        if self
+            .chatgpt_app_mention
+            .as_deref()
+            .is_some_and(|value| !runtime::valid_bootstrap_app_mention(value))
+        {
+            return Err("WEB_HANDOFF_APP_MENTION_UNQUALIFIED".into());
+        }
         if !matches!(self.schema_version, 1 | 2)
             || self.project_id != project
             || !valid_id(&self.source_task_id)
@@ -2396,6 +2405,16 @@ fn compose_handoff_content(
     registered: &AutonomousProjectV1,
     handoff: &Handoff,
 ) -> Result<String, String> {
+    if let Some(mention) = &handoff.chatgpt_app_mention {
+        if !runtime::valid_bootstrap_app_mention(mention) {
+            return Err("WEB_HANDOFF_APP_MENTION_UNQUALIFIED".into());
+        }
+        return Ok(format!(
+            "{}{mention}\n{}",
+            runtime::APP_JSON_BOOTSTRAP_HANDOFF_PREFIX,
+            compose_legacy_handoff_content(registered, handoff)?
+        ));
+    }
     Ok(format!(
         "{}{}",
         runtime::JSON_BOOTSTRAP_HANDOFF_PREFIX,
@@ -2662,17 +2681,17 @@ fn record_context_meter(workspace: &Path, record: &Record, bound: &Target) -> Re
     // Include the actual encoded wire text for new envelopes. Legacy events
     // keep their old observation bytes and dedup identity on interrupted retry.
     let handoff = task_handoff::content(record)?;
-    let encoded = handoff
-        .starts_with(runtime::JSON_BOOTSTRAP_HANDOFF_PREFIX)
-        .then(|| {
-            runtime::compose_bootstrap_message(
-                &record.project_id,
-                &record.intent_id,
-                &record.source,
-                &handoff,
-            )
-        })
-        .transpose()?;
+    let encoded = (handoff.starts_with(runtime::JSON_BOOTSTRAP_HANDOFF_PREFIX)
+        || handoff.starts_with(runtime::APP_JSON_BOOTSTRAP_HANDOFF_PREFIX))
+    .then(|| {
+        runtime::compose_bootstrap_message(
+            &record.project_id,
+            &record.intent_id,
+            &record.source,
+            &handoff,
+        )
+    })
+    .transpose()?;
     meter.record_observation(
         &next_key,
         Observation {
@@ -2974,6 +2993,9 @@ fn source_snapshot_matches_record(
     let expected = if record
         .handoff
         .starts_with(runtime::JSON_BOOTSTRAP_HANDOFF_PREFIX)
+        || record
+            .handoff
+            .starts_with(runtime::APP_JSON_BOOTSTRAP_HANDOFF_PREFIX)
     {
         compose_handoff_content(registered, &handoff)?
     } else {
@@ -6247,7 +6269,30 @@ mod tests {
             blockers: Vec::new(),
             git_state: None,
             important_decisions: None,
+            chatgpt_app_mention: None,
         }
+    }
+
+    #[test]
+    fn app_mention_requires_explicit_qualified_handoff_and_preserves_old_bytes() {
+        let mut handoff = source_handoff();
+        let old = serde_json::to_value(&handoff).unwrap();
+        assert!(old.get("chatgptAppMention").is_none());
+        assert_eq!(
+            serde_json::to_value(serde_json::from_value::<Handoff>(old.clone()).unwrap()).unwrap(),
+            old
+        );
+        handoff.chatgpt_app_mention = Some("@CatDesk-Local-Tunnel-v5".into());
+        handoff.validate("alpha").unwrap();
+        assert_eq!(
+            serde_json::to_value(&handoff).unwrap()["chatgptAppMention"],
+            "@CatDesk-Local-Tunnel-v5"
+        );
+        handoff.chatgpt_app_mention = Some("@Different-App".into());
+        assert_eq!(
+            handoff.validate("alpha").unwrap_err(),
+            "WEB_HANDOFF_APP_MENTION_UNQUALIFIED"
+        );
     }
 
     fn context_handoff() -> Handoff {
