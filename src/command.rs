@@ -1427,6 +1427,67 @@ mod tests {
         let _ = std::fs::remove_dir_all(workspace_root);
     }
 
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_shell_preserves_native_utf8_diff_and_exit_status() {
+        let root = test_workspace("utf8-native-diff");
+        std::fs::create_dir(&root).unwrap();
+        let before = root.join("before.txt");
+        let after = root.join("after.txt");
+        std::fs::write(&before, "before\n").unwrap();
+        let expected_text = "This response couldn’t load — café 日本語 🐈\n";
+        std::fs::write(&after, expected_text).unwrap();
+        let args = [
+            "--no-pager",
+            "diff",
+            "--no-index",
+            "--no-ext-diff",
+            "--no-textconv",
+            "before.txt",
+            "after.txt",
+        ];
+        let direct = run_program("git", &args, &root, 30_000).await;
+        // Exercise an alternate code page in a hidden, separate console. This
+        // does not assume a console code page caused a connector discrepancy.
+        let actual = run_command(
+            "git --no-pager diff --no-index --no-ext-diff --no-textconv before.txt after.txt",
+            &root,
+            30_000,
+        )
+        .await;
+        let script = "[Console]::OutputEncoding = [Text.Encoding]::GetEncoding(1252); git --no-pager diff --no-index --no-ext-diff --no-textconv before.txt after.txt";
+        let mut child = Command::new("powershell.exe");
+        child
+            .args([
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                script,
+            ])
+            .current_dir(&root)
+            .creation_flags(0x0800_0000)
+            .kill_on_drop(true);
+        let output = timeout(Duration::from_secs(30), child.output())
+            .await
+            .unwrap()
+            .unwrap();
+        std::fs::remove_file(before).unwrap();
+        std::fs::remove_file(after).unwrap();
+        std::fs::remove_dir(root).unwrap();
+        assert_eq!(direct.exit_code, Some(1), "{}", direct.stderr);
+        assert!(direct.stdout.contains(expected_text.trim_end()));
+        assert_eq!(actual.exit_code, direct.exit_code, "{}", actual.stderr);
+        assert_eq!(actual.stdout, direct.stdout);
+        assert_eq!(output.status.code(), direct.exit_code);
+        assert!(!output.status.success());
+        assert_eq!(
+            bounded_output_text(&output.stdout),
+            direct.stdout,
+            "PowerShell must preserve native UTF-8 bytes"
+        );
+    }
+
     #[test]
     fn summarize_result_includes_exit_code_errors_and_key_output() {
         let summary = summarize_result(&CommandResult {

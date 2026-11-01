@@ -1,0 +1,129 @@
+{
+  "date": "2026-11-01",
+  "observedUtc": "2026-11-01T06:10:47.776789+00:00",
+  "timezone": "America/New_York",
+  "classification": "ACTUAL_SINGLE_WEB_CONVERSATION_TWO_PARTIAL_PUBLIC_SOURCE_REVIEWS_ONE_SCOPED_AUTHORIZATION",
+  "reviewedSourceCommit": "549817859c94f56a7696f998848d8ace429b1663",
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "inputPublicationCommit": "a4f7dc22c8d730d3289bff779b4b9506d36f387b",
+  "scope": {
+    "registeredVerifiedConversationsUsed": 1,
+    "distinctFrozenMessages": 2,
+    "authorizationRegistry": "EXISTING_PROJECT_WORK_LEDGER",
+    "maximumMessages": 2,
+    "maximumSendExecutionSeconds": 120,
+    "maximumGrantLifetimeSeconds": 21600,
+    "newAuthorizationSubsystem": false,
+    "newNativeClaims": 0,
+    "publicCatDeskSourceOnly": true,
+    "projectWorkspaceCodingProved": false
+  },
+  "reviews": [
+    {
+      "number": 1,
+      "sourcePath": "src/operator_web_initialization.rs",
+      "expectedGitPatchBytes": 10369,
+      "verdict": "REVIEWED_PARTIAL",
+      "oneSendCommand": true,
+      "exactDeliveryReceipt": true,
+      "completedResponseVerified": true,
+      "responseSha256": "d6e77727e59a1478ae79bcff29670e0f7ab81127c8cb508695b3e987cba24861",
+      "correlatedServerCommandLogCount": 1,
+      "serverLogSha256": [
+        "91e334f37ddabe8c18a263c500c0a8a97233344ae8d8cd5ae897249834508b38"
+      ],
+      "repeatedReadonlySourceReadObserved": false,
+      "readonlyReadIsMessageOrNativeTaskReplay": false,
+      "uiCallMarkerCount": 0,
+      "uiCountsAreExecutionProof": false,
+      "reportedMcpTools": [
+        "CatDesk-Local-Tunnel-v5/run_command"
+      ],
+      "sourceHashIndependentlyVerifiedByWeb": false,
+      "sourceOnlyPartial": true,
+      "nativeExecution": false,
+      "sendElapsedSeconds": 134.531,
+      "observeElapsedSeconds": 68.984,
+      "readElapsedSeconds": 46.438,
+      "preservationMismatches": 0,
+      "coordinatorClosureIsArtifactAcceptance": false
+    },
+    {
+      "number": 2,
+      "sourcePath": "src/operator_web_cli.rs",
+      "expectedGitPatchBytes": 32401,
+      "verdict": "REVIEWED_PARTIAL",
+      "oneSendCommand": true,
+      "exactDeliveryReceipt": true,
+      "completedResponseVerified": true,
+      "responseSha256": "565512ad411c82036e065f486f0b3b6e69ecc0b77190f469dd633825d96eafbb",
+      "correlatedServerCommandLogCount": 2,
+      "serverLogSha256": [
+        "c8e7a145964a8a1a40f974939ff2364c6c17fb815831995660d3d514411063aa",
+        "c8e7a145964a8a1a40f974939ff2364c6c17fb815831995660d3d514411063aa"
+      ],
+      "repeatedReadonlySourceReadObserved": true,
+      "readonlyReadIsMessageOrNativeTaskReplay": false,
+      "uiCallMarkerCount": 0,
+      "uiCountsAreExecutionProof": false,
+      "reportedMcpTools": [
+        "CatDesk-Local-Tunnel-v5/git_status_summary",
+        "CatDesk-Local-Tunnel-v5/run_command"
+      ],
+      "sourceHashIndependentlyVerifiedByWeb": false,
+      "sourceOnlyPartial": true,
+      "nativeExecution": false,
+      "sendElapsedSeconds": 132.953,
+      "observeElapsedSeconds": 71.234,
+      "readElapsedSeconds": 45.906,
+      "preservationMismatches": 0,
+      "coordinatorClosureIsArtifactAcceptance": false
+    }
+  ],
+  "diagnosticCorrection": {
+    "localHttpRawResponseExact": true,
+    "localStdoutBytes": 32401,
+    "expectedGitSha256": "b31e968b62a85dac43dfc1502a39ce1d5fed5c117856b260288be046269f79ed",
+    "connectorStdoutBytes": 32401,
+    "connectorSha256": "b31e968b62a85dac43dfc1502a39ce1d5fed5c117856b260288be046269f79ed",
+    "connectorAndLocalResponseExact": true,
+    "diagnosticCause": "AD_HOC_PYTHON_READ_TEXT_USED_WINDOWS_DEFAULT_INSTEAD_OF_EXPLICIT_UTF8",
+    "serverAndCommandChangesRequired": false,
+    "unnecessaryUncommittedHeaderCandidateWithdrawn": true,
+    "localLogIsRedactedAndNotARawByteWitness": true,
+    "blindProbeRetry": false
+  },
+  "sourceChanges": {
+    "retained": "Windows actual-process UTF-8 Git diff and native exit-code regression only",
+    "applicationRuntimeBehaviorChanged": false,
+    "unnecessaryHeaderCandidate": "WITHDRAWN_UNINSTALLED",
+    "privateDiagnosticReadersUseExplicitUtf8": true
+  },
+  "tests": {
+    "commandModulePassed": 18,
+    "strictAllTargetClippy": "PASS",
+    "formatting": "PASS",
+    "hostedActionsRequired": false,
+    "exploratoryWithdrawnCandidateTestsAreInstalledAcceptance": false
+  },
+  "reviewFindings": {
+    "initialization": "Two dependency hypotheses remain preliminary. The project store holds the same exclusive lock acquired by normal Web work; saved admission progress/count are audit facts, deliberately not a requirement that later legitimate work remain unchanged. Final independent dependency review remains required.",
+    "cli": "Alternate response-error presentations, informational-only UI telemetry, permission handlers and idempotent delivery dependencies require broader review. No final source PASS inferred."
+  },
+  "preservation": {
+    "productionExecutablePromotion": false,
+    "profileOrAuthenticationChange": false,
+    "newTunnel": false,
+    "historicalCanaryOrC49Replay": false,
+    "nativeSessionsInterrupted": false,
+    "recurringAutomationStarted": false
+  },
+  "remaining": [
+    "Genuine cumulative source review, acknowledgment, reviewed producer and protected promotion of later executable features.",
+    "Two independent Web conversations performing authorized edits and native Codex verification against their assigned workspaces.",
+    "Additional fresh project initialization subject to current work ownership and unknown-send guards.",
+    "Canonical controlled-target authority transfer and installed unattended/reboot recovery."
+  ],
+  "fullMultiProjectAcceptance": false,
+  "operatorActionRequiredForNextEligibleWork": false
+}
