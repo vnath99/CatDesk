@@ -1,3 +1,9 @@
+## 2026-11-01 — second Web caller executed source tools; oversized review input held
+
+The second freshly initialized project conversation made real v5 public-source calls, verified by exact event/response receipts and task-correlated server logs. Two distinct registered Web conversations have now used the serving pipeline. The additional web_work review is REVIEWED_PARTIAL; the 40,264-byte rollover review is INCONCLUSIVE because the delivered output was truncated. It stopped without a resend. Existing verified patch windows were prepared as three small Git blobs; native byte reconstruction passed, and their actual MCP read preflight is next. No runtime guard, profile, production executable or native owner changed.
+
+This proves two read-only public-source callers while other project work holds remain isolated. It does not prove source edits/native verification in two assigned workspaces or cumulative release acceptance. Evidence: `docs/verification/TWO_WEB_CALLERS_SOURCE_REVIEW_2026_11_01.json`. No operator action is required for the bounded input preflight.
+
 ## 2026-11-01 — second fresh project paired, continued and admitted for new tasks
 
 A second real controlled project conversation was created through the existing authenticated browser owner. The actual issued URL was verified; registry and Wake advanced together to generation 2, with predecessor history preserved. Its one queued continuation has an exact receipt and a verified COMPLETE response. The supported local initialization transition passed for NEW tasks only, without an execution grant or native resumption. This is explicit project initialization, not automatic near-capacity acceptance. Sibling registrations, old work, native sessions and the original context policy were preserved.

@@ -1,0 +1,493 @@
+diff --git a/src/operator_web_rollover.rs b/src/operator_web_rollover.rs
+index e4bc2e1434c699a0d5b77e022a46782c89fc72a4..ae47e7bac4529b98ce7c9ccfe89536daa2812df2 100644
+--- a/src/operator_web_rollover.rs
++++ b/src/operator_web_rollover.rs
+@@ -2,7 +2,10 @@
+ //! are separate checkpoints; a possibly submitted bootstrap is never replayed.
+ 
+ use crate::{
+-    delegated::autonomy_projects::{AutonomousProjectRegistryStoreV1, AutonomousProjectV1},
++    delegated::autonomy_projects::{
++        AutonomousProjectRegistryStoreV1, AutonomousProjectV1,
++        resolve_registered_project_from_control_root,
++    },
+     mcp,
+     web_conversation_context::{
+         ConversationKey, Observation, PressureStatus, VisibleSourceKind, WebContextStore,
+@@ -10,7 +13,7 @@ use crate::{
+     web_work_state::WorkLedger,
+ };
+ use catdesk_wake::{
+-    protocol::{Target, digest, valid_id},
++    protocol::{Event, Target, digest, valid_id},
+     runtime,
+     store::{Delivery, Phase as DeliveryPhase, ResponseState, Store, TurnTimer, atomic, now, read},
+ };
+@@ -29,6 +32,8 @@ mod task_handoff;
+ 
+ #[path = "operator_web_quarantine.rs"]
+ mod disposition;
++#[path = "operator_web_initialization.rs"]
++mod initialization;
+ 
+ #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+ #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+@@ -94,10 +99,19 @@ pub(super) struct Handoff {
+     pub git_state: Option<HandoffGitState>,
+     #[serde(default, skip_serializing_if = "Option::is_none")]
+     pub important_decisions: Option<Vec<String>>,
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub chatgpt_app_mention: Option<String>,
+ }
+ 
+ impl Handoff {
+     fn validate(&self, project: &str) -> Result<(), String> {
++        if self
++            .chatgpt_app_mention
++            .as_deref()
++            .is_some_and(|value| !runtime::valid_bootstrap_app_mention(value))
++        {
++            return Err("WEB_HANDOFF_APP_MENTION_UNQUALIFIED".into());
++        }
+         if !matches!(self.schema_version, 1 | 2)
+             || self.project_id != project
+             || !valid_id(&self.source_task_id)
+@@ -376,6 +390,35 @@ pub(crate) struct WorkLease {
+ }
+ 
+ impl WorkLease {
++    /// Native routing may follow only this lease's completed continuation.
++    /// The queue must also preserve its own no-effect and ownership evidence.
++    pub(crate) fn check_native_continuation(
++        &self,
++        workspace: &Path,
++        project: &str,
++        original: &Target,
++        current: &Target,
++        event_id: &str,
++    ) -> Result<(), String> {
++        self.check_source_task(original, current, event_id)?;
++        let root = workspace
++            .canonicalize()
++            .map_err(|_| "WEB_WORK_CONTINUATION_SOURCE_REQUIRED")?;
++        let store = self
++            ._store
++            .root
++            .canonicalize()
++            .map_err(|_| "WEB_WORK_CONTINUATION_SOURCE_REQUIRED")?;
++        if original == current
++            || store != root.join(".catdesk/web-rollovers").join(project)
++            || self.approved_target.as_ref() != Some(current)
++            || self.approved_source_task_id.as_deref() != Some(event_id)
++        {
++            return Err("WEB_WORK_CONTINUATION_SOURCE_REQUIRED".into());
++        }
++        Ok(())
++    }
++
+     /// A completed continuation authorizes only its proved generation.
+     /// Manual target binding does not take ProjectStore's lock, so the caller
+     /// rechecks its selected target against this witness before changing work.
+@@ -424,7 +467,6 @@ fn continuation_ready_for_work(
+     if record.phase != Phase::ContinuationQueued
+         || record.context_meter_status == ContextMeterStatus::Pending
+         || record.bound_target.as_ref() != Some(current)
+-        || record.handoff_event_id.is_none()
+         || (record.context_meter_status == ContextMeterStatus::RetryRequired
+             && (record.reconciliation_reason.is_some()
+                 || !record.source_snapshot_verified
+@@ -432,12 +474,20 @@ fn continuation_ready_for_work(
+     {
+         return Err("WEB_WORK_ROLLOVER_PENDING".into());
+     }
++    let registered =
++        registered_project(workspace, project).map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
++    if initialization::accepted(workspace, store, wake, &registered, record, current)
++        .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
++    {
++        return Ok(());
++    }
++    if record.handoff_event_id.is_none() {
++        return Err("WEB_WORK_ROLLOVER_PENDING".into());
++    }
+     let request = store
+         .handoff_request()
+         .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
+         .ok_or("WEB_WORK_ROLLOVER_PENDING")?;
+-    let registered =
+-        registered_project(workspace, project).map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
+     let delivery = wake
+         .delivery(&record.continuation_event_id)
+         .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
+@@ -586,12 +636,18 @@ fn acquire_web_project_lease(
+         approved_source_task_id: approved_target.as_ref().and_then(|_| {
+             active
+                 .as_ref()
+-                .filter(|record| record.phase == Phase::ContinuationQueued)
++                .filter(|record| {
++                    record.phase == Phase::ContinuationQueued && record.handoff_event_id.is_some()
++                })
+                 .map(|record| record.source_task_id.clone())
+         }),
+         fenced_source_task_id: active
+             .as_ref()
+-            .filter(|record| record.phase == Phase::Quarantined)
++            .filter(|record| {
++                record.phase == Phase::Quarantined
++                    || (record.phase == Phase::ContinuationQueued
++                        && record.handoff_event_id.is_none())
++            })
+             .map(|record| record.source_task_id.clone()),
+         approved_target,
+     })
+@@ -1858,6 +1914,12 @@ fn source_ready_for_handoff(snapshot: &Value) -> Result<(), String> {
+     {
+         return Err("WEB_HANDOFF_SOURCE_RESPONSE_REQUIRED".into());
+     }
++    if super::observe::failed_assistant_placeholder(
++        "ASSISTANT",
++        latest.get("text").and_then(Value::as_str).unwrap_or(""),
++    ) {
++        return Err("WEB_HANDOFF_SOURCE_RESPONSE_FAILED".into());
++    }
+     Ok(())
+ }
+ 
+@@ -2361,6 +2423,16 @@ fn compose_handoff_content(
+     registered: &AutonomousProjectV1,
+     handoff: &Handoff,
+ ) -> Result<String, String> {
++    if let Some(mention) = &handoff.chatgpt_app_mention {
++        if !runtime::valid_bootstrap_app_mention(mention) {
++            return Err("WEB_HANDOFF_APP_MENTION_UNQUALIFIED".into());
++        }
++        return Ok(format!(
++            "{}{mention}\n{}",
++            runtime::APP_JSON_BOOTSTRAP_HANDOFF_PREFIX,
++            compose_legacy_handoff_content(registered, handoff)?
++        ));
++    }
+     Ok(format!(
+         "{}{}",
+         runtime::JSON_BOOTSTRAP_HANDOFF_PREFIX,
+@@ -2627,17 +2699,17 @@ fn record_context_meter(workspace: &Path, record: &Record, bound: &Target) -> Re
+     // Include the actual encoded wire text for new envelopes. Legacy events
+     // keep their old observation bytes and dedup identity on interrupted retry.
+     let handoff = task_handoff::content(record)?;
+-    let encoded = handoff
+-        .starts_with(runtime::JSON_BOOTSTRAP_HANDOFF_PREFIX)
+-        .then(|| {
+-            runtime::compose_bootstrap_message(
+-                &record.project_id,
+-                &record.intent_id,
+-                &record.source,
+-                &handoff,
+-            )
+-        })
+-        .transpose()?;
++    let encoded = (handoff.starts_with(runtime::JSON_BOOTSTRAP_HANDOFF_PREFIX)
++        || handoff.starts_with(runtime::APP_JSON_BOOTSTRAP_HANDOFF_PREFIX))
++    .then(|| {
++        runtime::compose_bootstrap_message(
++            &record.project_id,
++            &record.intent_id,
++            &record.source,
++            &handoff,
++        )
++    })
++    .transpose()?;
+     meter.record_observation(
+         &next_key,
+         Observation {
+@@ -2939,6 +3011,9 @@ fn source_snapshot_matches_record(
+     let expected = if record
+         .handoff
+         .starts_with(runtime::JSON_BOOTSTRAP_HANDOFF_PREFIX)
++        || record
++            .handoff
++            .starts_with(runtime::APP_JSON_BOOTSTRAP_HANDOFF_PREFIX)
+     {
+         compose_handoff_content(registered, &handoff)?
+     } else {
+@@ -3467,6 +3542,162 @@ pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String>
+     execute_with_mode(workspace, project, false, &|| Ok(()))
+ }
+ 
++pub(super) fn accept_initialization(
++    workspace: &Path,
++    project: &str,
++    intent: &str,
++    generation: u64,
++    target_digest: &str,
++    acknowledgement: &str,
++) -> Result<Value, String> {
++    initialization::accept(
++        workspace,
++        project,
++        intent,
++        generation,
++        target_digest,
++        acknowledgement,
++    )
++}
++
++fn validate_continuation_selection(
++    record: &Record,
++    current: &Target,
++    event: &Event,
++) -> Result<(), String> {
++    event.validate()?;
++    if record.phase != Phase::ContinuationQueued
++        || record.bound_target.as_ref() != Some(current)
++        || record.continuation_event_id != format!("web-continue-{}", record.intent_id)
++        || event.event_id != record.continuation_event_id
++        || event.project_id != record.project_id
++        || event.event_type != "engineering_attention"
++        || event.target_generation != current.generation
++        || !event.audit_references.is_empty()
++        || event.message != continuation_message(record, current)
++        || validate_receipt(
++            record,
++            record
++                .receipt
++                .as_ref()
++                .ok_or("WEB_CONTINUATION_RECEIPT_REQUIRED")?,
++        )? != *current
++    {
++        return Err("WEB_CONTINUATION_SELECTION_CHANGED".into());
++    }
++    Ok(())
++}
++
++/// Explicit bounded delivery of the one journal-owned rollover continuation.
++/// A delivered or ambiguous event stays under the sender's no-replay fence.
++/// This command neither creates a conversation nor starts a scheduler.
++pub(super) fn deliver_continuation(workspace: &Path, project: &str) -> Result<Value, String> {
++    let store = ProjectStore::open_existing(workspace, project)?;
++    let record = store.active()?.ok_or("WEB_ROLLOVER_INTENT_REQUIRED")?;
++    if !valid_id(&record.intent_id)
++        || record.continuation_event_id != format!("web-continue-{}", record.intent_id)
++    {
++        return Err("WEB_CONTINUATION_SELECTION_CHANGED".into());
++    }
++    let current = paired(workspace, project)?;
++    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
++    let wake = Store::open(&root)?;
++    let event: Event = match wake.delivery(&record.continuation_event_id)? {
++        Some(delivery) => delivery.event,
++        None => read(
++            &wake
++                .root()
++                .join("queue")
++                .join(format!("{}.json", record.continuation_event_id)),
++        )?,
++    };
++    validate_continuation_selection(&record, &current, &event)?;
++    task_handoff::authorize(workspace, &record)?;
++    catdesk_wake::development_runtime::validate_selected_target_isolation(
++        workspace,
++        wake.root(),
++        &current.url,
++    )?;
++    let mut before_submit = |actual: &Event, actual_target: &Target| {
++        let saved = store.active()?.ok_or("WEB_ROLLOVER_INTENT_REQUIRED")?;
++        if saved.intent_id != record.intent_id
++            || actual != &event
++            || actual_target != &current
++            || paired(workspace, project)? != current
++        {
++            return Err("WEB_CONTINUATION_SELECTION_CHANGED".into());
++        }
++        validate_continuation_selection(&saved, &current, actual)?;
++        task_handoff::authorize(workspace, &saved)
++    };
++    runtime::run_scoped_rollover_continuation(
++        &wake,
++        &event,
++        &current,
++        120,
++        &mut before_submit,
++        &|| Ok(()),
++    )
++}
++
++/// Read an already SENT continuation without reacquiring the normal-work
++/// lease, which correctly stays closed until this continuation completes.
++/// The rollover journal lock and registry commit CAS retain its authority.
++pub(super) fn reobserve_continuation(workspace: &Path, project: &str) -> Result<Value, String> {
++    let store = ProjectStore::open_existing(workspace, project)?;
++    let record = store.active()?.ok_or("WEB_ROLLOVER_INTENT_REQUIRED")?;
++    let current = paired(workspace, project)?;
++    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
++    let wake = Store::open(&root)?;
++    let delivery = wake
++        .delivery(&record.continuation_event_id)?
++        .ok_or("WEB_CONTINUATION_EXACT_RECEIPT_REQUIRED")?;
++    validate_continuation_selection(&record, &current, &delivery.event)?;
++    if delivery.target != current {
++        return Err("WEB_CONTINUATION_SELECTION_CHANGED".into());
++    }
++    catdesk_wake::development_runtime::validate_selected_target_isolation(
++        workspace,
++        wake.root(),
++        &current.url,
++    )?;
++    let registry =
++        AutonomousProjectRegistryStoreV1::open_read_only(workspace.join(".catdesk/projects"))
++            .map_err(|_| "WEB_CONTINUATION_REGISTRY_UNAVAILABLE")?;
++    let check_pair = || {
++        if paired(workspace, project)? != current {
++            return Err("WEB_CONTINUATION_SELECTION_CHANGED".into());
++        }
++        Ok(())
++    };
++    let observation = runtime::reobserve_sent_response_guarded(
++        &wake,
++        project,
++        &current,
++        &record.continuation_event_id,
++        &check_pair,
++        |commit| {
++            registry.with_registration_lock(|| {
++                // Do not take the paired-target mutex while holding registry lock.
++                let scope = resolve_registered_project_from_control_root(workspace, project)
++                    .map_err(|_| "WEB_CONTINUATION_REGISTRY_UNAVAILABLE")?;
++                if scope.project.chatgpt_target_url.as_deref() != Some(current.url.as_str())
++                    || scope.project.chatgpt_target_sha256.as_deref()
++                        != Some(current.digest.as_str())
++                {
++                    return Err("WEB_CONTINUATION_SELECTION_CHANGED".into());
++                }
++                commit()
++            })
++        },
++    )?;
++    check_pair()?;
++    Ok(
++        json!({"action":"web_rollover_continuation_reobserve", "projectId":project,
++        "eventId":record.continuation_event_id, "observation":observation, "sendAttempted":false}),
++    )
++}
++
+ fn creation_identity(record: &Record) -> admission::Identity {
+     admission::Identity {
+         project_id: record.project_id.clone(),
+@@ -3754,10 +3985,177 @@ fn execute_with_mode(
+     Ok(summary(&record))
+ }
+ 
++#[cfg(all(test, windows))]
++pub(crate) fn native_continuation_fixture(
++    root: &Path,
++    wake: &Store,
++    project: &str,
++    source_event: &str,
++) -> (Target, Target) {
++    tests::native_continuation_fixture(root, wake, project, source_event)
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+ 
++    #[test]
++    fn handoff_source_error_card_is_not_a_completed_assistant_answer() {
++        for text in [
++            "This response couldn't load",
++            "This response couldn’t load.",
++            " \nThis\tresponse\ncouldn‘t load... ",
++            "THIS RESPONSE COULDN'T LOAD",
++        ] {
++            let snapshot = json!({"messages":[{"role":"ASSISTANT","text":text,
++                "textComplete":true,"revisionComplete":true}]});
++            assert_eq!(
++                source_ready_for_handoff(&snapshot).unwrap_err(),
++                "WEB_HANDOFF_SOURCE_RESPONSE_FAILED"
++            );
++        }
++    }
++
++    #[test]
++    fn handoff_source_historical_error_and_useful_error_explanation_remain_usable() {
++        for text in [
++            "The task is checkpointed; inspect the assigned tests next.",
++            "The UI says This response couldn't load; do not resend the request.",
++        ] {
++            let snapshot = json!({"messages":[
++                {"role":"ASSISTANT","text":"This response couldn’t load.","textComplete":true,"revisionComplete":true},
++                {"role":"USER","text":"Inspect the existing failure without resending.","textComplete":true,"revisionComplete":true},
++                {"role":"ASSISTANT","text":text,"textComplete":true,"revisionComplete":true}]});
++            source_ready_for_handoff(&snapshot).unwrap();
++        }
++        for last in [
++            json!({"role":"USER","text":"This response couldn't load","textComplete":true,"revisionComplete":true}),
++            json!({"role":"ASSISTANT","text":"Still generating","textComplete":false,"revisionComplete":true}),
++            json!({"role":"ASSISTANT","text":"Partial revision","textComplete":true,"revisionComplete":false}),
++        ] {
++            assert_eq!(
++                source_ready_for_handoff(&json!({"messages":[last]})).unwrap_err(),
++                "WEB_HANDOFF_SOURCE_RESPONSE_REQUIRED"
++            );
++        }
++    }
++
++    // Synthetic durable proof only: no browser, provider or native process.
++    #[cfg(windows)]
++    pub(super) fn native_continuation_fixture(
++        root: &Path,
++        wake: &Store,
++        project: &str,
++        source_event: &str,
++    ) -> (Target, Target) {
++        let registry_path = root.join(".catdesk/projects/projects.json");
++        let mut registry: crate::delegated::autonomy_projects::AutonomousProjectRegistryV1 =
++            serde_json::from_slice(&fs::read(&registry_path).unwrap()).unwrap();
++        let registered = registry
++            .projects
++            .iter_mut()
++            .find(|p| p.project_id == project)
++            .unwrap();
++        let source = wake.config().unwrap().targets[project].clone();
++        let current = wake
++            .set_target(
++                project,
++                source.generation,
++                &format!(
++                    "https://chatgpt.com/c/fixture-next-{}",
++                    uuid::Uuid::new_v4()
++                ),
++            )
++            .unwrap();
++        if !registered.chatgpt_target_history.contains(&source.url) {
++            registered.chatgpt_target_history.push(source.url.clone());
++        }
++        registered.chatgpt_target_history.push(current.url.clone());
++        registered.chatgpt_target_url = Some(current.url.clone());
++        registered.chatgpt_target_sha256 = Some(current.digest.clone());
++        let mut request = handoff_request(&registered.workspace);
++        request.project_id = project.into();
++        request.intent_id = uuid::Uuid::new_v4().to_string();
++        request.source_task_id = source_event.into();
++        request.source = source.clone();
++        request.native_thread_id = registered.codex_thread_id.clone();
++        request.event_id = format!("web-handoff-{}", request.intent_id);
++        request.message = handoff_request_message(
++            project,
++            &request.intent_id,
++            source_event,
++            &request.native_thread_id,
++        );
++        fs::write(registry_path, serde_json::to_vec(&registry).unwrap()).unwrap();
++        let mut record = record();
++        record.project_id = project.into();
++        record.source_task_id = source_event.into();
++        record.intent_id = request.intent_id.clone();
++        record.source = source.clone();
++        record.message_digest =
++            message_digest(project, &record.intent_id, &source.url, &record.handoff).unwrap();
++        record.phase = Phase::ContinuationQueued;
++        let mut bootstrap = receipt_for(&record);
++        bootstrap.destination_url = current.url.clone();
++        bootstrap.destination_digest = current.digest.clone();
++        record.receipt = Some(bootstrap);
++        record.bound_target = Some(current.clone());

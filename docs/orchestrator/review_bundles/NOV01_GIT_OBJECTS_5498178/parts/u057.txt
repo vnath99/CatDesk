@@ -1,0 +1,10 @@
++        handoff.chatgpt_app_mention = Some("@Different-App".into());
++        assert_eq!(
++            handoff.validate("alpha").unwrap_err(),
++            "WEB_HANDOFF_APP_MENTION_UNQUALIFIED"
++        );
++    }
++
+     fn context_handoff() -> Handoff {
+         let mut handoff = source_handoff();
+         handoff.schema_version = 2;
