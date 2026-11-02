@@ -71,7 +71,6 @@
     "checkpoint": 3,
     "verdict": "REVIEWED_PARTIAL",
     "reportedDefects": 0,
-    "sourceSha256": "7de9d8204a4ed894a6966a0348330b08da77bc734e18e96c02171aef1e2eccf4",
     "exactUserReceipt": true,
     "assistantCompleteBodyVerified": true,
     "coordinatorClosed": true,
@@ -90,7 +89,8 @@
     "sourceAccepted": false,
     "nativeClaimStillWaitingVersion": 4,
     "nativeProviderStarts": 0,
-    "neededSemanticDependenciesRemain": true
+    "neededSemanticDependenciesRemain": true,
+    "responseSha256": "7de9d8204a4ed894a6966a0348330b08da77bc734e18e96c02171aef1e2eccf4"
   },
   "context": {
     "sourceGeneration1HistoricalProxy": 75576,
