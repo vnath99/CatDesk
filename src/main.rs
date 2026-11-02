@@ -2761,6 +2761,20 @@ fn operator_web_error_code(error: &str) -> &str {
 /// filesystem, process, credential or helper error details.
 fn operator_release_pair_error_code(error: &str) -> &'static str {
     match error {
+        "completed handoff identity invalid"
+        | "completed handoff digest invalid"
+        | "completed handoff receipt changed"
+        | "completed handoff evidence invalid"
+        | "completed handoff evidence changed" => "PROMOTION_HANDOFF_EVIDENCE_CHANGED",
+        "completed canonical handoff fields invalid"
+        | "completed canonical handoff differs"
+        | "completed handoff producer binding differs" => "PROMOTION_HANDOFF_RECEIPT_INVALID",
+        "completed handoff outcome or location differs" | "completed handoff archive unproven" => {
+            "PROMOTION_HANDOFF_LOCATION_UNPROVEN"
+        }
+        "completed retirement authority absent"
+        | "completed handoff retirement boundary differs" => "PROMOTION_HANDOFF_BOUNDARY_UNPROVEN",
+        "completed handoff fingerprint changed" => "PROMOTION_RETIREMENT_PAIR_CHANGED",
         "stopped promotion retirement ownership or trust unproven"
         | "stopped promotion retirement ownership proof differs" => {
             "PROMOTION_RETIREMENT_OWNER_OR_TRUST_UNPROVEN"

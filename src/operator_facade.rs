@@ -235,6 +235,15 @@ pub(crate) enum ReleasePairOperatorAction {
         transaction_id: String,
         evidence_sha256: String,
     },
+    InspectCompletedHandoff {
+        transaction_id: String,
+        receipt_sha256: String,
+    },
+    RetireCompletedHandoff {
+        transaction_id: String,
+        receipt_sha256: String,
+        evidence_sha256: String,
+    },
     QualifyPromotionSource {
         transaction_id: String,
         evidence_sha256: String,
@@ -698,6 +707,43 @@ fn parse_release_pair_action(args: &[String]) -> Result<Option<OperatorAction>, 
             }
         }
         Some("result-stopped") if args.len() == 3 => ReleasePairOperatorAction::ResultStopped,
+        Some(command @ ("inspect-completed-handoff" | "retire-completed-handoff"))
+            if args.len()
+                == (if command == "inspect-completed-handoff" {
+                    7
+                } else {
+                    9
+                })
+                && args[3] == "--transaction-id"
+                && args[5] == "--expected-receipt-sha256"
+                && args[4].len() == 32
+                && args[4]
+                    .bytes()
+                    .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase())
+                && args[6].len() == 64
+                && args[6]
+                    .bytes()
+                    .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase())
+                && (command == "inspect-completed-handoff"
+                    || (args[7] == "--expected-evidence-sha256"
+                        && args[8].len() == 64
+                        && args[8]
+                            .bytes()
+                            .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase()))) =>
+        {
+            if command == "inspect-completed-handoff" {
+                ReleasePairOperatorAction::InspectCompletedHandoff {
+                    transaction_id: args[4].clone(),
+                    receipt_sha256: args[6].clone(),
+                }
+            } else {
+                ReleasePairOperatorAction::RetireCompletedHandoff {
+                    transaction_id: args[4].clone(),
+                    receipt_sha256: args[6].clone(),
+                    evidence_sha256: args[8].clone(),
+                }
+            }
+        }
         Some(command @ ("inspect-failed-promotion" | "inspect-completed-promotion"))
             if args.len() == 5
                 && args[3] == "--transaction-id"
@@ -1310,6 +1356,48 @@ pub(crate) async fn execute_operator_action(
                     {
                         let _ = (transaction_id, evidence_sha256);
                         Err("completed promotion retirement requires Windows".into())
+                    }
+                }
+                ReleasePairOperatorAction::InspectCompletedHandoff {
+                    transaction_id,
+                    receipt_sha256,
+                } => {
+                    #[cfg(windows)]
+                    return tokio::task::spawn_blocking(move || {
+                        crate::daemon_reload::retirement::inspect_completed_handoff(
+                            &workspace,
+                            &transaction_id,
+                            &receipt_sha256,
+                        )
+                    })
+                    .await
+                    .map_err(|_| "completed handoff inspection failed")?;
+                    #[cfg(not(windows))]
+                    {
+                        let _ = (transaction_id, receipt_sha256);
+                        Err("completed handoff retirement requires Windows".into())
+                    }
+                }
+                ReleasePairOperatorAction::RetireCompletedHandoff {
+                    transaction_id,
+                    receipt_sha256,
+                    evidence_sha256,
+                } => {
+                    #[cfg(windows)]
+                    return tokio::task::spawn_blocking(move || {
+                        crate::daemon_reload::retirement::retire_completed_handoff(
+                            &workspace,
+                            &transaction_id,
+                            &receipt_sha256,
+                            &evidence_sha256,
+                        )
+                    })
+                    .await
+                    .map_err(|_| "completed handoff retirement requires recovery")?;
+                    #[cfg(not(windows))]
+                    {
+                        let _ = (transaction_id, receipt_sha256, evidence_sha256);
+                        Err("completed handoff retirement requires Windows".into())
                     }
                 }
                 ReleasePairOperatorAction::RetireFailedPromotion {
@@ -2135,6 +2223,59 @@ mod tests {
                 ]))
                 .is_err()
             );
+        }
+    }
+
+    #[test]
+    fn completed_handoff_cli_requires_frozen_receipt_and_explicit_retirement_evidence() {
+        let id = "a".repeat(32);
+        let receipt = "b".repeat(64);
+        let evidence = "c".repeat(64);
+        let inspect = vec![
+            "operator",
+            "release-pair",
+            "inspect-completed-handoff",
+            "--transaction-id",
+            &id,
+            "--expected-receipt-sha256",
+            &receipt,
+        ];
+        let retire = vec![
+            "operator",
+            "release-pair",
+            "retire-completed-handoff",
+            "--transaction-id",
+            &id,
+            "--expected-receipt-sha256",
+            &receipt,
+            "--expected-evidence-sha256",
+            &evidence,
+        ];
+        let strings = |values: &[&str]| values.iter().map(|v| (*v).to_string()).collect::<Vec<_>>();
+        assert!(matches!(
+            parse_operator_action(strings(&inspect)),
+            Ok(Some(OperatorAction::ReleasePair(
+                ReleasePairOperatorAction::InspectCompletedHandoff { .. }
+            )))
+        ));
+        assert!(matches!(
+            parse_operator_action(strings(&retire)),
+            Ok(Some(OperatorAction::ReleasePair(
+                ReleasePairOperatorAction::RetireCompletedHandoff { .. }
+            )))
+        ));
+        for original in [inspect, retire] {
+            let mut extra = strings(&original);
+            extra.push("--force".into());
+            assert!(parse_operator_action(extra).is_err());
+            for index in [4, 6] {
+                let mut bad = strings(&original);
+                bad[index] = "../foreign".into();
+                assert!(parse_operator_action(bad).is_err());
+            }
+            let mut missing = strings(&original);
+            missing.pop();
+            assert!(parse_operator_action(missing).is_err());
         }
     }
 

@@ -92,6 +92,26 @@ struct BackendOnlyIntent {
     mcp_authenticated: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CompletedCanonicalHandoff {
+    schema_version: u8,
+    status: String,
+    completed_at_utc: String,
+    old_pid: u32,
+    new_pid: u32,
+    new_process_started_at_utc: String,
+    mcp_port: u16,
+    old_listener_ports: Vec<u16>,
+    workspace_path: String,
+    build_path: String,
+    build_sha256: String,
+    stage: String,
+    recovery: String,
+    profile: String,
+    mcp_authenticated: bool,
+}
+
 fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
@@ -319,6 +339,17 @@ try {
   $p=Get-Process -Id $pidValue -ErrorAction SilentlyContinue
   if($p -and $p.StartTime.ToUniversalTime() -le ([DateTimeOffset]::FromUnixTimeSeconds($historyUnix).UtcDateTime.AddSeconds(2))){throw 'historical owner'}
  }
+ if($i.completedHandoff){
+  $h=$i.completedHandoff
+  $completed=[DateTimeOffset]::ParseExact($h.completedAtUtc,"yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'",[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::AssumeUniversal)
+  $created=[DateTimeOffset]::ParseExact($h.newProcessStartedAtUtc,"yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'",[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::AssumeUniversal)
+  $done=$completed.ToUnixTimeSeconds()
+  if($created -gt $completed -or $created.ToUnixTimeSeconds() -lt ([long]$i.authorizationGeneration-30) -or $done -gt ([long]$i.authorizationExpires+600) -or $done -gt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()+30){throw 'completed receipt time'}
+  foreach($pidValue in @($h.oldPid,$h.newPid)){
+   try{$p=Get-Process -Id $pidValue -ErrorAction Stop}catch{if($_.FullyQualifiedErrorId.StartsWith('NoProcessFoundForGivenId,')){$p=$null}else{throw}}
+   if($p -and $p.StartTime.ToUniversalTime() -le $completed.UtcDateTime.AddSeconds(2)){throw 'completed receipt owner'}
+  }
+ }
  $original=$null; $qualified=$null
  if($i.historicalPids.Count){
   [void](Get-CatDeskQualifiedStoppedAuthority $i.workspace $pair.Hash)
@@ -360,6 +391,7 @@ fn inspect_owners_context(
         bridge_pid,
         intent,
         &auth.prior_canonical_sha256,
+        None,
     )
 }
 
@@ -374,6 +406,7 @@ fn inspect_owners_for_pair(
     bridge_pid: Option<u32>,
     intent: Option<&BackendOnlyIntent>,
     expected_canonical_sha256: &str,
+    completed_handoff: Option<&CompletedCanonicalHandoff>,
 ) -> Result<serde_json::Value, String> {
     use crate::reviewed_candidate_owner::OwnedCandidateChild;
     let interpreter = crate::operator_facade::trusted_windows_powershell(workspace)?;
@@ -407,7 +440,7 @@ fn inspect_owners_for_pair(
         "priorSha256":expected_canonical_sha256,"transactionId":auth.transaction_id,"historicalPids":intent.map(|v|vec![v.old_pid]).unwrap_or_else(||handoff.map(|v|vec![v.old_pid,v.new_pid.unwrap_or(0)]).unwrap_or_default()),
         "historicalCompletedUnix":handoff.map(|v|v.completed_at_unix).unwrap_or(0),
         "intentCreatedAtUtc":intent.map(|v|v.created_at_utc.as_str()),"authorizationGeneration":auth.generation,"authorizationExpires":auth.expires_at_unix,
-        "bridgePid":bridge_pid,"ownedWorkerPid":owned_worker.then_some(std::process::id()),
+        "completedHandoff":completed_handoff,"bridgePid":bridge_pid,"ownedWorkerPid":owned_worker.then_some(std::process::id()),
         "ownedWorkerImage":if owned_worker {Some(crate::command::normalize_windows_verbatim_path(std::env::current_exe().map_err(|_|"promotion worker image unavailable")?))}else{None}});
     owner
         .child_mut()
@@ -744,6 +777,7 @@ fn inspect_locked(
             None,
             None,
             &auth.candidate_sha256,
+            None,
         )?;
         proof["completedReceiptSha256"] = serde_json::Value::String(digest(&raw));
         let plan = Plan {
@@ -1079,6 +1113,216 @@ fn retire_for_kind(
     Ok(summary(&value))
 }
 
+fn validate_completed_canonical_handoff(
+    raw: &[u8],
+    workspace: &Path,
+    auth: &ReviewedPromotionAuthorizationV1,
+) -> Result<CompletedCanonicalHandoff, String> {
+    let root = canonical_directory(workspace, "retirement workspace")?;
+    let value: CompletedCanonicalHandoff = serde_json::from_value(receipt_json(raw)?)
+        .map_err(|_| "completed canonical handoff fields invalid")?;
+    if value.schema_version != 4
+        || value.status != "RECOVERED_PENDING_TRANSPORT_CHECK"
+        || value.stage != "complete"
+        || value.profile != "LOCAL_BACKEND_ONLY"
+        || !value.mcp_authenticated
+        || value.mcp_port != 3200
+        || value.old_listener_ports != [3200]
+        || value.old_pid == 0
+        || value.new_pid == 0
+        || value.old_pid == value.new_pid
+        || value.build_sha256 != auth.candidate_sha256
+        || value.completed_at_utc.len() != 28
+        || value.new_process_started_at_utc.len() != 28
+        || value.recovery.len() > 512
+        || canonical_directory(Path::new(&value.workspace_path), "handoff workspace")? != root
+        || canonical_workspace_file(&root, Path::new(&value.build_path), "handoff release")?
+            != canonical_workspace_file(
+                &root,
+                &root.join("target/release/catdesk.exe"),
+                "canonical release",
+            )?
+    {
+        return Err("completed canonical handoff differs".into());
+    }
+    Ok(value)
+}
+
+// One exact native rename is the entire mutation. The completed promotion
+// journal/authority stay unchanged, and the digest-named destination is the
+// durable completion witness after a lost response. No new release authority,
+// recovery journal, or implicit deletion of an unrelated latest receipt.
+fn archive_completed_handoff_exact(
+    handoffs: &Guard,
+    expected_receipt: &str,
+) -> Result<bool, String> {
+    if !valid_digest(expected_receipt) {
+        return Err("completed handoff digest invalid".into());
+    }
+    let destination = format!("retired-{expected_receipt}.json");
+    match (
+        read_optional_relative_regular(handoffs, "latest.json", 4096, LABEL)?,
+        read_optional_relative_regular(handoffs, &destination, 4096, LABEL)?,
+    ) {
+        (Some(raw), None) if digest(&raw) == expected_receipt => {
+            rename_exact_regular_child(handoffs, "latest.json", &destination, &raw, LABEL)?;
+            if read_relative_regular(handoffs, &destination, 4096, LABEL)? != raw {
+                return Err("completed handoff archive unproven".into());
+            }
+            Ok(true)
+        }
+        (None, Some(raw)) if digest(&raw) == expected_receipt => Ok(false),
+        _ => Err("completed handoff outcome or location differs".into()),
+    }
+}
+
+fn completed_handoff_evidence(
+    workspace: &Path,
+    parent: &Guard,
+    transaction: &str,
+    receipt_sha256: &str,
+) -> Result<(serde_json::Value, String), String> {
+    if !valid_id(transaction) || !valid_digest(receipt_sha256) {
+        return Err("completed handoff identity invalid".into());
+    }
+    let prior = journal(parent)?.ok_or("completed retirement authority absent")?;
+    if prior.phase != "COMPLETED"
+        || !prior.plan.completed_promotion
+        || prior.plan.transaction_id != transaction
+        || optional_child(parent, "promotion-control")?.is_some()
+        || workspace
+            .join(".catdesk/promotion-recovery/promotion-transaction.json")
+            .try_exists()
+            .map_err(|_| "promotion transaction unavailable")?
+    {
+        return Err("completed handoff retirement boundary differs".into());
+    }
+    verify_archive(parent, &prior)?;
+    let archived = child(parent, &archive_name(transaction)?)?;
+    let auth: ReviewedPromotionAuthorizationV1 = read_json(&archived, "authorization.json")?;
+    validate_terminal_binding_for_kind(
+        &auth,
+        &read_json(&archived, "preflight.json")?,
+        &read_json(&archived, "claim.json")?,
+        &read_json(&archived, "result.json")?,
+        &read_relative_regular(&archived, "worker-owner", 32, LABEL)?,
+        transaction,
+        true,
+    )?;
+    let attestation = validate_producer_attestation(
+        workspace,
+        &auth.review_session_id,
+        &auth.review_record_id,
+        &auth.review_record_sha256,
+        &auth.snapshot_expected,
+        &auth.candidate_relative_path,
+        &auth.candidate_sha256,
+    )?;
+    if attestation.attestation_digest != auth.build_attestation_sha256
+        || attestation.build_attempt_id != auth.build_attempt_id
+        || prior.plan.candidate_sha256 != auth.candidate_sha256
+        || prior.plan.prior_sha256 != auth.prior_canonical_sha256
+    {
+        return Err("completed handoff producer binding differs".into());
+    }
+    let recovery = child(parent, "promotion-recovery")?;
+    validate_completed_receipt(&read_json(&recovery, "reviewed-promotion.json")?, &auth)?;
+    let handoffs = child(parent, "restart-handoff")?;
+    let saved = format!("retired-{receipt_sha256}.json");
+    let (raw, done) = match (
+        read_optional_relative_regular(&handoffs, "latest.json", 4096, LABEL)?,
+        read_optional_relative_regular(&handoffs, &saved, 4096, LABEL)?,
+    ) {
+        (Some(raw), None) => (raw, false),
+        (None, Some(raw)) => (raw, true),
+        _ => return Err("completed handoff outcome or location differs".into()),
+    };
+    if digest(&raw) != receipt_sha256 {
+        return Err("completed handoff receipt changed".into());
+    }
+    let handoff = validate_completed_canonical_handoff(&raw, workspace, &auth)?;
+    let proof = inspect_owners_for_pair(
+        workspace,
+        &auth,
+        None,
+        &accepted_helper(workspace, &auth)?,
+        false,
+        None,
+        None,
+        &auth.candidate_sha256,
+        Some(&handoff),
+    )?;
+    let evidence = digest(&bytes(&serde_json::json!({
+        "schemaVersion":1,"retirementEvidenceSha256":prior.evidence_sha256,
+        "receiptSha256":receipt_sha256,"trustedOwnerProof":proof
+    }))?);
+    Ok((
+        serde_json::json!({"state":if done {"COMPLETED"}else{"ELIGIBLE"},
+        "transactionId":transaction,"receiptSha256":receipt_sha256,"evidenceSha256":evidence,
+        "canonicalSha256":auth.candidate_sha256,"productionBinaryChanged":false,
+        "sourceAuthorityCreated":false}),
+        auth.candidate_sha256,
+    ))
+}
+
+pub(crate) fn inspect_completed_handoff(
+    workspace: &Path,
+    transaction: &str,
+    receipt_sha256: &str,
+) -> Result<serde_json::Value, String> {
+    let parent = metadata(workspace)?;
+    let _lock = create_delete_on_close_regular_lock(&parent, "promotion-operation.lock", LABEL)?;
+    let _lifecycle = super::source_bridge::lifecycle_lease(workspace)?;
+    completed_handoff_evidence(workspace, &parent, transaction, receipt_sha256).map(|v| v.0)
+}
+
+pub(crate) fn retire_completed_handoff(
+    workspace: &Path,
+    transaction: &str,
+    receipt_sha256: &str,
+    expected_evidence: &str,
+) -> Result<serde_json::Value, String> {
+    if !valid_digest(expected_evidence) {
+        return Err("completed handoff evidence invalid".into());
+    }
+    let parent = metadata(workspace)?;
+    let _lock = create_delete_on_close_regular_lock(&parent, "promotion-operation.lock", LABEL)?;
+    let _lifecycle = super::source_bridge::lifecycle_lease(workspace)?;
+    let (mut result, canonical_sha256) =
+        completed_handoff_evidence(workspace, &parent, transaction, receipt_sha256)?;
+    if result["evidenceSha256"] != expected_evidence {
+        return Err("completed handoff evidence changed".into());
+    }
+    let mut release = Guard::acquire(workspace, LABEL)?;
+    release.descend_existing("target", LABEL)?;
+    release.descend_existing("release", LABEL)?;
+    let _binary = crate::windows_protected_fs::retain_reviewed_regular_artifact(
+        &release,
+        "catdesk.exe",
+        &canonical_sha256,
+        128 * 1024 * 1024,
+        LABEL,
+    )?;
+    let fingerprint = read_relative_regular(&release, "catdesk.exe.sha256", 128, LABEL)?;
+    if std::str::from_utf8(&fingerprint)
+        .map_err(|_| "handoff fingerprint invalid")?
+        .trim()
+        != canonical_sha256
+    {
+        return Err("completed handoff fingerprint changed".into());
+    }
+    let _fingerprint = crate::windows_protected_fs::retain_reviewed_regular_artifact(
+        &release,
+        "catdesk.exe.sha256",
+        &digest(&fingerprint),
+        128,
+        LABEL,
+    )?;
+    archive_completed_handoff_exact(&child(&parent, "restart-handoff")?, receipt_sha256)?;
+    result["state"] = serde_json::Value::String("COMPLETED".into());
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1163,6 +1407,111 @@ mod tests {
             serving_state: None,
         };
         (auth, preflight, claim, result)
+    }
+
+    #[test]
+    fn completed_handoff_requires_exact_success_profile_current_pair_and_workspace() {
+        let (root, _) = fixture();
+        fs::create_dir_all(root.join("target/release")).unwrap();
+        fs::write(root.join("target/release/catdesk.exe"), b"fixture image").unwrap();
+        let (auth, ..) = terminal_fixture();
+        let value = serde_json::json!({
+            "schemaVersion":4,"status":"RECOVERED_PENDING_TRANSPORT_CHECK",
+            "completedAtUtc":"2026-01-01T01:01:02.0000000Z","oldPid":10,"newPid":11,
+            "newProcessStartedAtUtc":"2026-01-01T01:01:01.0000000Z","mcpPort":3200,
+            "oldListenerPorts":[3200],"workspacePath":root,"buildPath":root.join("target/release/catdesk.exe"),
+            "buildSha256":auth.candidate_sha256,"stage":"complete","recovery":"fixture",
+            "profile":"LOCAL_BACKEND_ONLY","mcpAuthenticated":true
+        });
+        let raw = bytes(&value).unwrap();
+        validate_completed_canonical_handoff(&raw, &root, &auth).unwrap();
+        let mut bom = vec![0xef, 0xbb, 0xbf];
+        bom.extend_from_slice(&raw);
+        validate_completed_canonical_handoff(&bom, &root, &auth).unwrap();
+        for (key, invalid) in [
+            ("schemaVersion", serde_json::json!(1)),
+            ("status", serde_json::json!("SEND_ATTEMPTED")),
+            ("stage", serde_json::json!("starting")),
+            ("profile", serde_json::json!("UNKNOWN")),
+            ("mcpAuthenticated", serde_json::json!(false)),
+            ("mcpPort", serde_json::json!(3201)),
+            ("oldListenerPorts", serde_json::json!([3200, 3201])),
+            ("oldPid", serde_json::json!(0)),
+            ("newPid", serde_json::json!(10)),
+            (
+                "buildSha256",
+                serde_json::json!(auth.prior_canonical_sha256),
+            ),
+            ("workspacePath", serde_json::json!(root.join("target"))),
+            ("buildPath", serde_json::json!(root.join("absent.exe"))),
+            ("completedAtUtc", serde_json::json!("unknown")),
+            ("newProcessStartedAtUtc", serde_json::json!("unknown")),
+            ("unknownApproval", serde_json::json!(true)),
+        ] {
+            let mut changed = value.clone();
+            changed[key] = invalid;
+            assert!(
+                validate_completed_canonical_handoff(&bytes(&changed).unwrap(), &root, &auth)
+                    .is_err(),
+                "{key}"
+            );
+        }
+        cleanup_fixture(root);
+    }
+
+    #[test]
+    fn completed_handoff_atomic_archive_recovers_lost_response_and_preserves_new_unknown() {
+        let (root, mut value) = fixture();
+        value.plan.schema_version = 2;
+        value.plan.completed_promotion = true;
+        value.plan.historical_handoff_sha256 = None;
+        value.evidence_sha256 = digest(&bytes(&value.plan).unwrap());
+        let parent = metadata(&root).unwrap();
+        update_journal(&parent, &value).unwrap();
+        archive_locked(&parent, &mut value, |_| Ok(())).unwrap();
+        let original_journal = fs::read(root.join(".catdesk").join(JOURNAL)).unwrap();
+        let handoffs = child(&parent, "restart-handoff").unwrap();
+        let raw = fs::read(handoffs.path().join("latest.json")).unwrap();
+        let receipt = digest(&raw);
+        assert!(archive_completed_handoff_exact(&handoffs, &"0".repeat(64)).is_err());
+        assert_eq!(fs::read(handoffs.path().join("latest.json")).unwrap(), raw);
+        assert!(archive_completed_handoff_exact(&handoffs, &receipt).unwrap());
+        assert!(!archive_completed_handoff_exact(&handoffs, &receipt).unwrap());
+        assert_eq!(
+            fs::read(handoffs.path().join(format!("retired-{receipt}.json"))).unwrap(),
+            raw
+        );
+        assert_eq!(
+            fs::read(root.join(".catdesk").join(JOURNAL)).unwrap(),
+            original_journal
+        );
+        verify_archive(&parent, &value).unwrap();
+        fs::write(handoffs.path().join("latest.json"), b"new unknown receipt").unwrap();
+        assert!(archive_completed_handoff_exact(&handoffs, &receipt).is_err());
+        assert_eq!(
+            fs::read(handoffs.path().join("latest.json")).unwrap(),
+            b"new unknown receipt"
+        );
+        drop(handoffs);
+        drop(parent);
+        cleanup_fixture(root);
+    }
+
+    #[test]
+    fn completed_handoff_refuses_destination_collision_without_changing_either_file() {
+        let (root, _) = fixture();
+        let parent = metadata(&root).unwrap();
+        let handoffs = child(&parent, "restart-handoff").unwrap();
+        let raw = fs::read(handoffs.path().join("latest.json")).unwrap();
+        let receipt = digest(&raw);
+        let destination = handoffs.path().join(format!("retired-{receipt}.json"));
+        fs::write(&destination, b"foreign destination").unwrap();
+        assert!(archive_completed_handoff_exact(&handoffs, &receipt).is_err());
+        assert_eq!(fs::read(destination).unwrap(), b"foreign destination");
+        assert_eq!(fs::read(handoffs.path().join("latest.json")).unwrap(), raw);
+        drop(handoffs);
+        drop(parent);
+        cleanup_fixture(root);
     }
 
     #[test]
