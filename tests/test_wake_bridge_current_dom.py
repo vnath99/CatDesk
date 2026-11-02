@@ -150,6 +150,19 @@ if (options.userTimeoutQuote) {
   append(user.children[0], button('Retry'));
 }
 const children = options.userOnly ? [user] : [user, assistant];
+if (options.unmountedLoadError) {
+  for (let i = 0; i < (options.unmountedErrorCount || 1); i++) {
+    const card = el('div', {}, '', [el('p', {}, 'This response couldn’t load')]);
+    if (options.unmountedPlacement === 'user') append(user.children[0], card);
+    else if (options.unmountedPlacement === 'code') children.push(el('pre', {}, '', [card]));
+    else if (options.unmountedPlacement === 'tool') children.push(el('div', {'data-testid':'mcp-tool-result'}, '', [card]));
+    else if (options.unmountedPlacement === 'unit') children.push(el('div', {'data-content-search-unit-key':'unknown-tool'}, '', [card]));
+    else if (options.unmountedPlacement === 'quote') children.push(el('blockquote', {}, '', [card]));
+    else if (options.unmountedPlacement === 'control') children.push(el('button', {}, '', [card]));
+    else if (options.unmountedPlacement === 'before') children.unshift(card);
+    else children.push(card);
+  }
+}
 for (let i = 0; i < (options.toolMarkerCount || 0); i++) {
   const card = el('div', {'data-testid':'mcp-tool-call', 'data-tool-call-id':'PRIVATE_CALL_ID',
     'aria-busy':options.toolBusy ? 'true' : 'false', hidden:options.toolHidden || false},
@@ -847,6 +860,39 @@ class CurrentDomTests(unittest.TestCase):
         self.assertFalse(observed["messages"][-1]["textComplete"])
         self.assertFalse(self.sink.response_snapshot(CurrentDom(controlsOnly=True), "exact wake message",
                                                    require_usable_body=True)[3])
+
+    def test_unmounted_current_error_card_is_diagnosed_without_any_mutation(self):
+        cdp = CurrentDom(userOnly=True, unmountedLoadError=True,
+                         observationEditor=True, traceClicks=True)
+        self.assertEqual(self.sink.trusted_turn_anchor_state(cdp, 'exact wake message'), (1, 0))
+        with self.assertRaisesRegex(bridge.Attention, '^RESPONSE_LOAD_ERROR$'):
+            self.sink.observe_cooperative_response(cdp, 'exact wake message', bridge.digest('exact wake message'))
+        self.assertEqual(cdp.mutations, 0)
+
+    def test_unmounted_error_detection_excludes_quotes_tools_history_and_ambiguity(self):
+        for options in [
+            *[{'unmountedLoadError': True, 'unmountedPlacement': where}
+              for where in ['user', 'code', 'tool', 'unit', 'quote', 'control', 'before']],
+            {'unmountedLoadError': True, 'unmountedErrorCount': 2},
+            {'historicalLoadError': True}, {},
+        ]:
+            with self.subTest(options=options):
+                cdp = CurrentDom(userOnly=True, observationEditor=True, traceClicks=True, **options)
+                self.assertEqual(self.sink.observe_cooperative_response(
+                    cdp, 'exact wake message', bridge.digest('exact wake message')), 'RESPONSE_PENDING')
+                self.assertEqual(self.sink.response_observation_reason, 'ASSISTANT_NOT_MOUNTED')
+                self.assertEqual(cdp.mutations, 0)
+
+    def test_unmounted_error_does_not_override_active_generation_or_duplicate_user(self):
+        cdp = CurrentDom(userOnly=True, unmountedLoadError=True,
+                         observationEditor=True, observationStop=True)
+        self.assertEqual(self.sink.observe_cooperative_response(
+            cdp, 'exact wake message', bridge.digest('exact wake message')), 'RESPONSE_PENDING')
+        self.assertEqual(self.sink.response_observation_reason, 'GENERATION_ACTIVE')
+        with self.assertRaisesRegex(bridge.Attention, '^RESPONSE_EXPECTED_USER_DUPLICATED$'):
+            self.sink.observe_cooperative_response(
+                CurrentDom(userOnly=True, unmountedLoadError=True, duplicateUser=True, observationEditor=True),
+                'exact wake message', bridge.digest('exact wake message'))
 
     def test_readonly_surface_separates_usable_conversation_and_unattributed_load_error(self):
         result = self.sink.browser_surface_observation(CurrentDom(loadError=True, observationEditor=True))

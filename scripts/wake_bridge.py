@@ -153,6 +153,29 @@ const assistantLoadError = element => {
     return [element, ...element.querySelectorAll('div, p, span')]
         .some(node => visible(node) && clean(node) === marker);
 };
+// Some failed replies have no ASSISTANT role/header at all. This is only a
+// failure observation, never response completion or permission to click Retry.
+const unmountedExchangeLoadError = (boundary, userSelector) => {
+    if (!boundary) return false;
+    const users = Array.from(boundary.querySelectorAll(userSelector));
+    if (!users.length || users.length > 128) return false;
+    const excluded = userSelector + ', pre, code, blockquote, button, input, textarea, [contenteditable], [data-content-search-unit-key], ' +
+        '[data-message-content], .markdown, [class~="prose"], ' +
+        '[data-markdown-text-style="assistant-message"], ' +
+        '[data-testid="mcp-tool-call"], [data-testid="mcp-tool-result"], ' +
+        '[data-tool-call-id], [data-mcp-tool-call-id], [role="button"], ' +
+        '[role="toolbar"], [aria-hidden="true"]';
+    const nodes = Array.from(boundary.querySelectorAll('div, p, span'));
+    if (nodes.length > 2048) return false;
+    const candidates = nodes.filter(node =>
+        visible(node) && !node.closest(excluded) &&
+        users.every(user => Boolean(user.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)) &&
+        assistantLoadError(node));
+    // A parent and its child can describe one card; two separate cards are
+    // ambiguous and remain unverified instead of borrowing historical UI.
+    const leaves = candidates.filter(node => !candidates.some(other => other !== node && node.contains(other)));
+    return leaves.length === 1;
+};
 """
 # Shared by observation and the sole qualified assistant Retry action. Never
 # climb out of the wake's assistant/exchange boundary or borrow USER controls.
@@ -1451,6 +1474,9 @@ class CdpSink:
             {RESPONSE_LOAD_ERROR_DETECTOR}
             if (assistantLoadError(latestAssistant))
                 return ['load-error', 0, 0, true, false];
+            if (!latestAssistant && pairedTurn && turnsAfterWake.length === 0 &&
+                    unmountedExchangeLoadError(responseBoundary, userNodeSelector))
+                return ['load-error', 0, 0, false, false];
             const latestAssistantTurn = latestAssistant
                 ? (latestAssistant.closest("[data-content-search-turn-key]") ||
                    latestAssistant.closest("[data-testid^='conversation-turn-']") ||

@@ -294,6 +294,45 @@ class AdapterTests(unittest.TestCase):
                 self.assertFalse(cdp.sent)
                 self.assertEqual(cdp.keys,[])
 
+    def test_missing_assistant_checks_existing_observer_without_snapshot_or_send(self):
+        for behavior, reason in [('load', 'RESPONSE_LOAD_ERROR'),
+                                  ('active', 'CHATGPT_NOT_IDLE'),
+                                  ('drift', 'SOURCE_REVIEW_SEQUENCE_DRIFT'),
+                                  ('pending', 'SOURCE_REVIEW_ASSISTANT_NOT_MOUNTED')]:
+            with self.subTest(behavior=behavior):
+                cdp = FakeCdp()
+                probes = []
+                class Sink:
+                    def __init__(self, url, *_): self.url, self.ui_timeout, self.checks = url, 1, 0
+                    def exact(self, url): return url == self.url
+                    def wait_for_page_readiness(self, _sb, current): return current
+                    def wait_for_idle(self, *_): pass
+                    def readiness_reason(self, _): return None
+                    def trusted_turn_anchor_state(self, _, message):
+                        self.checks += 1
+                        return (2, 0) if behavior == 'drift' and self.checks > 1 else (1, 0)
+                    def observe_cooperative_response(self, _, message, digest):
+                        probes.append((message, digest))
+                        self.response_observation_reason = 'GENERATION_ACTIVE' if behavior == 'active' else 'ASSISTANT_NOT_MOUNTED'
+                        if behavior in ('load', 'drift'): raise bridge.Attention('RESPONSE_LOAD_ERROR')
+                        return 'RESPONSE_PENDING'
+                    def visible_message_snapshot(self, *_args, **_kwargs):
+                        raise AssertionError('an absent assistant cannot produce a body snapshot')
+                source = {'url': cdp.url, 'digest': bridge.digest(cdp.url), 'generation': 1}
+                message = 'approved review'
+                request = {'snapshot': True, 'projectId': 'alpha', 'source': source,
+                    'reviewEvent': {'eventId': 'review-one', 'message': message,
+                                    'messageDigest': bridge.digest(message)}}
+                with patch.object(bridge, 'NewConversationSink', Sink), \
+                        patch.object(adapter, 'prepare_cdp_target', return_value=cdp), \
+                        patch.object(adapter, 'emit') as emitted:
+                    with self.assertRaisesRegex(bridge.Attention, '^' + reason + '$'):
+                        adapter.source_snapshot(bridge, object(), request)
+                    emitted.assert_not_called()
+                self.assertEqual(probes, [(message, bridge.digest(message))])
+                self.assertFalse(cdp.sent)
+                self.assertEqual(cdp.keys, [])
+
     def test_sent_review_tool_metadata_is_optional_closed_and_rechecks_exchange(self):
         for behavior in ('observed', 'unavailable', 'malformed', 'drift'):
             with self.subTest(behavior=behavior):

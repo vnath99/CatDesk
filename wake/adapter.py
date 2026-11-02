@@ -761,6 +761,30 @@ def source_snapshot(bridge, sb, request):
         if count > 1:
             raise bridge.Attention("SOURCE_REVIEW_DUPLICATE_USER")
         if after == 0:
+            # A failed response can lose every assistant-role node. Inspect
+            # only the already-proven exact USER exchange using the existing
+            # read-only observer; no snapshot, editor action or Retry is valid.
+            observe = getattr(sink, "observe_cooperative_response", None)
+            if callable(observe):
+                failure = None
+                try:
+                    observe(cdp, event["message"], event["messageDigest"])
+                except bridge.Attention as error:
+                    allowed = {"RESPONSE_LOAD_ERROR", "RESPONSE_NETWORK_ERROR",
+                               "LOGIN_OR_PROFILE_REQUIRED", "RESPONSE_STATE_UNPROVEN",
+                               "RESPONSE_SEQUENCE_DRIFT", "RESPONSE_EXPECTED_USER_DUPLICATED",
+                               "RESPONSE_USER_REPRESENTATION_MISMATCH"}
+                    failure = str(error) if str(error) in allowed else "RESPONSE_STATE_QUERY_FAILED"
+                except Exception:
+                    failure = "RESPONSE_STATE_QUERY_FAILED"
+                if not sink.exact(cdp.get_current_url()):
+                    raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
+                if sink.trusted_turn_anchor_state(cdp, event["message"]) != (count, after):
+                    raise bridge.Attention("SOURCE_REVIEW_SEQUENCE_DRIFT")
+                if failure is not None:
+                    raise bridge.Attention(failure)
+                if getattr(sink, "response_observation_reason", None) == "GENERATION_ACTIVE":
+                    raise bridge.Attention("CHATGPT_NOT_IDLE")
             raise bridge.Attention("SOURCE_REVIEW_ASSISTANT_NOT_MOUNTED")
         if (count, after) != (1, 1):
             raise bridge.Attention("SOURCE_REVIEW_SEQUENCE_DRIFT")
