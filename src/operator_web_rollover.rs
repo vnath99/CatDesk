@@ -34,6 +34,8 @@ mod task_handoff;
 mod disposition;
 #[path = "operator_web_initialization.rs"]
 mod initialization;
+#[path = "operator_web_onboarding.rs"]
+pub(super) mod onboarding;
 
 // Source-authored and operator-supplied handoffs share one bounded format.
 // The shorter size requested in a model prompt is a hint, not a second limit.
@@ -582,6 +584,7 @@ fn acquire_web_project_lease(
     completed_target: impl FnOnce(&ProjectStore, &Record) -> Result<Target, String>,
 ) -> Result<WorkLease, String> {
     let store = ProjectStore::open(workspace, project)?;
+    onboarding::ensure_ready(&store)?;
     let active = store.active()?;
     let approved_target = match active.as_ref() {
         None if store.handoff_request()?.is_none() => None,
@@ -2700,6 +2703,7 @@ fn prepare_with_request(
         return Err("WEB_HANDOFF_SOURCE_FINGERPRINT_INVALID".into());
     }
     let store = ProjectStore::open(workspace, project)?;
+    onboarding::ensure_ready(&store)?;
     let source = paired(workspace, project)?;
     if let Some(previous) = store.active()? {
         if (previous.phase != Phase::ContinuationQueued || previous.source == source)
@@ -3965,6 +3969,7 @@ pub(super) fn reobserve_continuation(workspace: &Path, project: &str) -> Result<
 
 fn creation_identity(record: &Record) -> admission::Identity {
     admission::Identity {
+        purpose: admission::Purpose::Rollover,
         project_id: record.project_id.clone(),
         intent_id: record.intent_id.clone(),
         source_generation: record.source.generation,
@@ -3974,6 +3979,9 @@ fn creation_identity(record: &Record) -> admission::Identity {
 }
 
 fn queued_creation_eligible(workspace: &Path, identity: &admission::Identity) -> bool {
+    if identity.purpose == admission::Purpose::InitialConversation {
+        return onboarding::queued_eligible(workspace, identity);
+    }
     let store = match ProjectStore::open_existing(workspace, &identity.project_id) {
         Ok(store) => store,
         // Another operation still owns this project. Do not retire its ticket.

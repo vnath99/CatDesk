@@ -17,9 +17,25 @@ use std::{
 const MAX_ENTRIES: usize = 512;
 const MAX_BYTES: u64 = 256 * 1024;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub(super) enum Purpose {
+    #[default]
+    Rollover,
+    InitialConversation,
+}
+
+impl Purpose {
+    fn is_rollover(&self) -> bool {
+        *self == Self::Rollover
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct Identity {
+    #[serde(default, skip_serializing_if = "Purpose::is_rollover")]
+    pub purpose: Purpose,
     pub project_id: String,
     pub intent_id: String,
     pub source_generation: u64,
@@ -37,7 +53,10 @@ impl Identity {
         };
         if !valid_id(&self.project_id)
             || !valid_id(&self.intent_id)
-            || self.source_generation == 0
+            || match self.purpose {
+                Purpose::Rollover => self.source_generation == 0,
+                Purpose::InitialConversation => self.source_generation != 0,
+            }
             || !digest(&self.source_digest)
             || !digest(&self.message_digest)
         {
@@ -346,6 +365,41 @@ pub(super) fn status(root: &Path, identity: &Identity) -> Result<Value, String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn first_conversation_and_rollover_share_fifo_with_explicit_noninterchangeable_origins() {
+        let root = fixture();
+        let legacy = key("alpha");
+        let bytes = serde_json::to_string(&legacy).unwrap();
+        assert!(!bytes.contains("purpose"));
+        assert_eq!(serde_json::from_str::<Identity>(&bytes).unwrap(), legacy);
+        let first = try_acquire(&root, legacy.clone(), |_| true)
+            .unwrap()
+            .unwrap();
+        let mut initial = key("beta");
+        initial.purpose = Purpose::InitialConversation;
+        initial.source_generation = 0;
+        assert!(
+            try_acquire(&root, initial.clone(), |_| true)
+                .unwrap()
+                .is_none()
+        );
+        first.creation_recorded().unwrap();
+        let initial_owner = try_acquire(&root, initial.clone(), |_| true)
+            .unwrap()
+            .unwrap();
+        let mut wrong = initial.clone();
+        wrong.purpose = Purpose::Rollover;
+        assert!(wrong.validate().is_err());
+        wrong = legacy;
+        wrong.purpose = Purpose::InitialConversation;
+        assert!(wrong.validate().is_err());
+        initial_owner.creation_recorded().unwrap();
+        assert_eq!(
+            status(&root, &initial).unwrap()["phase"],
+            "CREATION_RECORDED"
+        );
+    }
     fn fixture() -> PathBuf {
         let root =
             std::env::temp_dir().join(format!("web-rollover-admission-{}", uuid::Uuid::new_v4()));
@@ -354,6 +408,7 @@ mod tests {
     }
     fn key(project: &str) -> Identity {
         Identity {
+            purpose: Purpose::Rollover,
             project_id: project.into(),
             intent_id: format!("intent-{project}"),
             source_generation: 1,

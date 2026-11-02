@@ -1,0 +1,115 @@
+{
+  "observedUtc": "2026-11-02T04:25:33.629853+00:00",
+  "baseSourceCommit": "0a710126df038342d8423a37a85d630d05f4ea2f",
+  "classification": "IMPLEMENTED_TESTED_SOURCE_NOT_INSTALLED_OR_LIVE_INITIALIZATION",
+  "sourceInputs": {
+    "scripts/wake_bridge.py": "2e94afcbbb07c30cbf240cc0c6e8c12a19d5f34f",
+    "src/operator_web_cli.rs": "60bff7879f3e7344b651ab7e0c69e64fd866fd24",
+    "src/operator_web_rollover.rs": "b93a580e9c2ba962fa89562f0407e23d61051338",
+    "src/operator_web_onboarding.rs": "346163a0dd65e8bd4138d8d61f68eb23c860c5f6",
+    "src/web_rollover_admission.rs": "b5d798e8ad55b502d9833ef9233983157812452f",
+    "wake/adapter.py": "7b2f4d209e2528a479c690611ef3a7b729354727",
+    "wake/src/runtime.rs": "08c7c0e1a2a72e5812b3e3efd0621e245ff8e525",
+    "wake/tests/test_project_initialization.py": "2fe8549a7da7e8ee61a2cccc41ea48b722005d0a"
+  },
+  "implementation": [
+    "Explicit first-conversation origin with null predecessor and frozen registration identity; no borrowed source Target.",
+    "Existing project lock, shared browser FIFO and durable three-stage composer acknowledgments; unknown Send refuses replay.",
+    "Existing qualified CDP owner, empty Home/draft guards, issued URL receipt and exact project/intent/registration acknowledgment.",
+    "Existing paired registry/Wake CAS pinned to the selected Wake root; Wake-first interruption and post-binding context reconciliation resume idempotently.",
+    "Existing context ledger counts only the verified initialization USER and exact assistant acknowledgment; hidden coverage remains unknown.",
+    "Initialization supplies context only, retains native owner and grants no project execution."
+  ],
+  "verification": {
+    "pythonRegression": {
+      "passed": 136,
+      "failed": 0,
+      "receipt": {
+        "sha256": "856d4f5b9c3a29e2d0b33156c27641e7e485c7be9be35848b677b96d5156a780",
+        "startedUtc": "2026-11-02T04:17:01.0445035+00:00",
+        "finishedUtc": "2026-11-02T04:17:28.8164502+00:00"
+      }
+    },
+    "additionalUnicodeWireVector": {
+      "passed": 1,
+      "logSha256": "1a52ff93b2b7c8bc576900f70c9062f5baedb573cf55507ec33070c999cd9b12"
+    },
+    "wakeBootstrap": {
+      "passed": 24,
+      "failed": 0,
+      "receipt": {
+        "sha256": "fbbcf8e6d72378cd6ef25e35b488a20b9711aa35fc00e1b8f4668ff5589a90e6",
+        "startedUtc": "2026-11-02T04:20:17.4571423+00:00",
+        "finishedUtc": "2026-11-02T04:20:26.4556839+00:00"
+      }
+    },
+    "rootFocused": {
+      "passed": 6,
+      "failed": 0,
+      "receipt": {
+        "sha256": "6e407f6802e08c6988a44aaeca657c1c84d47978d287cf78513932024cbc2b0a",
+        "startedUtc": "2026-11-02T04:14:46.1796425+00:00",
+        "finishedUtc": "2026-11-02T04:16:55.9724523+00:00"
+      }
+    },
+    "expandedWebRegression": {
+      "passed": 164,
+      "failed": 1,
+      "ignored": 1,
+      "failure": "Existing five-second contention assertion exceeded under parallel execution; assertion unchanged. Original failure retained."
+    },
+    "contentionIsolatedRetest": {
+      "passed": 1,
+      "failed": 0,
+      "testSeconds": 4.93,
+      "receipt": {
+        "sha256": "4256b9a074a947d3f5773edde8be78c1cab969d349178d7f862d59bba14e266e",
+        "startedUtc": "2026-11-02T04:23:32.5360115+00:00",
+        "finishedUtc": "2026-11-02T04:23:38.1690993+00:00"
+      }
+    },
+    "strictClippy": {
+      "backend": {
+        "sha256": "75c651d681a5952f30c13883f65062096dac8865b3ecd799cede9507ffc7277b",
+        "startedUtc": "2026-11-02T04:23:54.7026360+00:00",
+        "finishedUtc": "2026-11-02T04:24:39.7689543+00:00"
+      },
+      "wake": {
+        "sha256": "a9133072f5d5856a7fbffb88e64245f9afdb6594d555a2ab87de1cf5f5388ec7",
+        "startedUtc": "2026-11-02T04:22:02.0804006+00:00",
+        "finishedUtc": "2026-11-02T04:22:13.7974417+00:00"
+      }
+    },
+    "correctedFailures": [
+      "Legacy probe diagnostic classification retained.",
+      "Real snapshot reader rejected unsupported 16 KiB review-pair profile; changed caller to existing qualified 32 KiB profile and added unmocked-reader regression.",
+      "Three needless borrows corrected after strict Clippy refusal."
+    ],
+    "remainingTestLimitation": "Expanded parallel run was not clean. Isolated success does not prove the sole cause of the deadline sensitivity."
+  },
+  "compatibility": {
+    "legacyRolloverOriginBytesUnchanged": true,
+    "initialBootstrapProtocol": 3,
+    "initialReceiptSchema": 2,
+    "initialJournal": "Existing per-project web-rollovers directory / initial-conversation.json",
+    "initialAdmissionPurpose": "INITIAL_CONVERSATION",
+    "packageRequirement": "Matched reviewed adapter and primitives must advertise initialization and exact-ack functions before browser launch.",
+    "oldControllerBehavior": "New explicit-purpose admission entries fail closed in old strict readers. Qualify matched controller/package and quiesce old browser creators before introducing them; preserve journals and pending effects.",
+    "unknownSubmission": "Preserve SEND_ATTEMPTED and original draft/receipt evidence. Status is read-only; execute refuses blind resend. No forced clearing command is provided."
+  },
+  "productionOperations": 0,
+  "browserStarts": 0,
+  "wakeStarts": 0,
+  "bindingChanges": 0,
+  "nativeProjectTasksExecuted": 0,
+  "acceptance": {
+    "actualFirstConversationInitialization": "OPEN",
+    "actualTwoWebCoding": "OPEN",
+    "installedIndependentWakeAndRollover": "OPEN",
+    "rebootAndUnattendedRecovery": "OPEN",
+    "fullContextCalibration": "OPEN",
+    "laterProviderClients": "OPEN"
+  },
+  "nextReadyTask": "Review frozen source and qualify a matching isolated controller/adapter package through existing development-release controls, then one bounded first-chat initialization in the approved registered scope. Preserve completed native registration and all old unknowns.",
+  "operatorActionRequiredForSourceWork": false
+}

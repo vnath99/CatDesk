@@ -1,3 +1,17 @@
+## 2026-11-02T04:25:33.629853+00:00 — first registered conversation (SOURCE ONLY; matched package required)
+
+Use the qualified controller's existing `operator web` entry with the registered control workspace selected through its normal launcher. These commands do not replace native project registration or grant code execution:
+
+```text
+operator web initialize prepare --project-id <registered-id> --intent-id <stable-id> --input-file <private-context.json>
+operator web initialize status --project-id <registered-id>
+operator web initialize execute --project-id <registered-id>
+```
+
+Private context schema: `schemaVersion:1`, exact `projectId`, stable `taskId`, `objective`, nonempty `nextActions`; optional `verifiedAccomplishments`, `decisions`, `blockers`, `ownedPaths`, `declaredSourceCommit`. These are declared initialization context, not predecessor-authored history or execution permission. Maximum serialized context is 4 KiB; entries are bounded. Prepare requires an unbound registered Git workspace and no conflicting work/history. Prepare is idempotent only for the same intent/context; status opens no browser. Execute serializes only shared creation, requires an empty existing-profile composer, sends once, verifies the issued URL/exact acknowledgment and commits through existing paired binding. No URL override or force flag exists.
+
+On RESPONSE_PENDING, repeat execute only to observe the same durable receipt. On SEND_ATTEMPTED without a receipt, execute returns `WEB_INITIAL_SUBMISSION_UNKNOWN_NO_REPLAY`: preserve the journal, draft and browser evidence; do not prepare a replacement intent or clear a flag. Receipt-free unknown reconciliation remains a safe hold, not an automatic retry. After BOUND, repeated execute returns the recorded terminal result and grants no task. Retain all predecessor/native ownership safeguards. Qualify a matched controller/adapter package before any live use; this source change is not yet installed or browser-accepted. Existing rollover schema stays compatible; new explicit-purpose FIFO records deliberately fail closed in older readers, so do not mix old browser creators with the new transaction.
+
 ## 2026-11-02T03:43:57.713464+00:00 — installed finite supervisor, existing cached dispatcher and isolated native scope
 
 The promoted installed backend passed its existing finite backend-only supervisor with RECOVERED → READY → MONITORING_COMPLETE after a controlled stop, in32.468 seconds. Missing bearer returned401, authenticated catalog200/102 tools, the monitor exited, and all recorded preservation pins matched. The replacement canonical daemon remains intentionally serving. No recurring registration, browser, Wake or tunnel restart was enabled; the original tunnel instance/profile are preserved. This qualifies bounded installed recovery, not reboot or unattended persistence.

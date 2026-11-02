@@ -58,6 +58,17 @@ pub(crate) async fn join_auto_schedulers(tasks: Vec<tokio::task::JoinHandle<()>>
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum WebAction {
     Status,
+    InitializePrepare {
+        project_id: String,
+        intent_id: String,
+        input_file: PathBuf,
+    },
+    InitializeExecute {
+        project_id: String,
+    },
+    InitializeStatus {
+        project_id: String,
+    },
     RegisterProject {
         project_id: String,
         workspace: PathBuf,
@@ -534,6 +545,32 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                 })
             }
         }
+        ("initialize", "prepare") => {
+            let intent_id = options
+                .remove("--intent-id")
+                .ok_or("WEB_USAGE: --intent-id is required")?;
+            let input_file = PathBuf::from(
+                options
+                    .remove("--input-file")
+                    .ok_or("WEB_USAGE: --input-file is required")?,
+            );
+            if !catdesk_wake::protocol::valid_id(intent_id) || !options.is_empty() {
+                return Err(
+                    "WEB_USAGE: invalid initialization identity or unexpected option".into(),
+                );
+            }
+            Ok(WebAction::InitializePrepare {
+                project_id: project_id.into(),
+                intent_id: intent_id.into(),
+                input_file,
+            })
+        }
+        ("initialize", "execute") if options.is_empty() => Ok(WebAction::InitializeExecute {
+            project_id: project_id.into(),
+        }),
+        ("initialize", "status") if options.is_empty() => Ok(WebAction::InitializeStatus {
+            project_id: project_id.into(),
+        }),
         ("rollover", "status") if options.is_empty() => Ok(WebAction::RolloverStatus {
             project_id: project_id.into(),
         }),
@@ -1416,6 +1453,8 @@ fn read_status_projection(workspace: &Path, include_legacy_details: bool) -> Res
                 "context":context_status(&workspace,&project.project_id),
                 "rollover":operator_rollover_status(&workspace,&project.project_id)
                     .unwrap_or_else(|_| json!({"status":"UNAVAILABLE_OR_BUSY"})),
+                "initialization":rollover::onboarding::status(&workspace,&project.project_id)
+                    .unwrap_or_else(|_| json!({"status":"UNAVAILABLE_OR_BUSY"})),
             })
         })
         .collect();
@@ -1651,6 +1690,22 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
         WebAction::RolloverReobserveHandoff { project_id } => {
             rollover::reobserve_handoff(&workspace, &project_id)
         }
+        WebAction::InitializePrepare {
+            project_id,
+            intent_id,
+            input_file,
+        } => rollover::onboarding::prepare(
+            &workspace,
+            &project_id,
+            &intent_id,
+            read_input(&input_file)?,
+        ),
+        WebAction::InitializeExecute { project_id } => {
+            rollover::onboarding::execute(&workspace, &project_id, &|| Ok(()))
+        }
+        WebAction::InitializeStatus { project_id } => {
+            rollover::onboarding::status(&workspace, &project_id)
+        }
         WebAction::RolloverPrepare {
             project_id,
             handoff_file,
@@ -1745,6 +1800,53 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn first_conversation_commands_require_frozen_context_and_refuse_source_or_destination_override()
+     {
+        let command = args(&[
+            "operator",
+            "web",
+            "initialize",
+            "prepare",
+            "--project-id",
+            "first",
+            "--intent-id",
+            "initial-first",
+            "--input-file",
+            "context.json",
+        ]);
+        assert!(
+            matches!(parse(&command).unwrap(),WebAction::InitializePrepare{ project_id,intent_id,.. } if project_id=="first" && intent_id=="initial-first")
+        );
+        for index in [4, 6, 8] {
+            let mut missing = command.clone();
+            missing.drain(index..index + 2);
+            assert!(parse(&missing).is_err());
+        }
+        for verb in ["execute", "status"] {
+            let command = args(&[
+                "operator",
+                "web",
+                "initialize",
+                verb,
+                "--project-id",
+                "first",
+            ]);
+            assert!(parse(&command).is_ok());
+            for option in [
+                "--url",
+                "--message",
+                "--force",
+                "--source-task-id",
+                "--predecessor",
+            ] {
+                let mut changed = command.clone();
+                changed.extend(args(&[option, "foreign"]));
+                assert!(parse(&changed).is_err());
+            }
+        }
+    }
 
     #[test]
     fn rollover_continuation_commands_select_only_registered_project_not_caller_payload() {
