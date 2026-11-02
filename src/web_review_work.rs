@@ -376,6 +376,7 @@ mod tests {
                         max_execution_seconds: 160,
                         approval_evidence_sha256: "b".repeat(64),
                         messages: vec![identity.clone()],
+                        unused_messages_from_grant: None,
                     },
                     at - 5,
                 )

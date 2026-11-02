@@ -2,7 +2,7 @@
 //! Callers retain the same registration lock required by every ledger mutation.
 //! A grant permits dispatch only: it is never review, build or release evidence.
 use super::*;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 const MAX_GRANTS: usize = 32;
 const MAX_MESSAGES: usize = 32;
@@ -29,6 +29,11 @@ pub(crate) struct ReviewGrantRequest {
     pub(crate) max_execution_seconds: u64,
     pub(crate) approval_evidence_sha256: String,
     pub(crate) messages: Vec<ReviewMessageIdentity>,
+    /// Explicitly transfer only never-reserved identities from a revoked grant.
+    /// Historical grants remain immutable. Older strict readers fail closed
+    /// after this optional feature is used; absent fields retain legacy bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) unused_messages_from_grant: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -85,6 +90,42 @@ fn valid_request_scope(request: &ReviewGrantRequest, project: &str, created: u64
             .messages
             .iter()
             .all(|message| valid_message(message, project))
+        && request
+            .unused_messages_from_grant
+            .as_deref()
+            .is_none_or(|id| valid_request(id) && id != request.grant_id)
+}
+
+fn unused_predecessor(grants: &[ReviewGrant], index: usize) -> Result<Option<usize>, String> {
+    let grant = &grants[index];
+    let Some(id) = &grant.request.unused_messages_from_grant else {
+        return Ok(None);
+    };
+    let Some(previous_index) = grants[..index]
+        .iter()
+        .position(|previous| previous.request.grant_id == *id)
+    else {
+        return Err("WEB_REVIEW_GRANTS_INVALID".into());
+    };
+    let previous = &grants[previous_index];
+    if previous.revoked_utc.is_none_or(|at| at > grant.created_utc)
+        || grant.created_utc >= previous.request.expires_utc
+        || grant.request.expires_utc > previous.request.expires_utc
+        || grant.request.max_execution_seconds > previous.request.max_execution_seconds
+        || grant.request.max_messages != grant.request.messages.len()
+        || grant.request.target.generation <= previous.request.target.generation
+        || grant.request.target.digest == previous.request.target.digest
+        || grant.request.messages.iter().any(|message| {
+            !previous.request.messages.contains(message)
+                || previous
+                    .reservations
+                    .iter()
+                    .any(|saved| saved.message == *message)
+        })
+    {
+        return Err("WEB_REVIEW_GRANTS_INVALID".into());
+    }
+    Ok(Some(previous_index))
 }
 
 pub(super) fn validate_grants(grants: &[ReviewGrant], project: &str) -> Result<(), String> {
@@ -92,11 +133,12 @@ pub(super) fn validate_grants(grants: &[ReviewGrant], project: &str) -> Result<(
         return Err("WEB_REVIEW_GRANTS_INVALID".into());
     }
     let mut grant_ids = BTreeSet::new();
-    let mut request_ids = BTreeSet::new();
-    let mut event_ids = BTreeSet::new();
-    let mut message_hashes = BTreeSet::new();
-    let mut review_keys = BTreeSet::new();
-    for grant in grants {
+    let mut request_ids = BTreeMap::new();
+    let mut event_ids = BTreeMap::new();
+    let mut message_hashes = BTreeMap::new();
+    let mut review_keys = BTreeMap::new();
+    let mut forwarded = vec![0usize; grants.len()];
+    for (index, grant) in grants.iter().enumerate() {
         if !valid_request_scope(&grant.request, project, grant.created_utc)
             || !grant_ids.insert(&grant.request.grant_id)
             || grant.revoked_utc.is_some_and(|at| at < grant.created_utc)
@@ -104,12 +146,23 @@ pub(super) fn validate_grants(grants: &[ReviewGrant], project: &str) -> Result<(
         {
             return Err("WEB_REVIEW_GRANTS_INVALID".into());
         }
+        let previous = unused_predecessor(grants, index)?;
+        if let Some(previous) = previous {
+            forwarded[previous] += grant.request.messages.len();
+            if forwarded[previous] + grants[previous].reservations.len()
+                > grants[previous].request.max_messages
+            {
+                return Err("WEB_REVIEW_GRANTS_INVALID".into());
+            }
+        }
         for message in &grant.request.messages {
-            // Reauthorization never resets an old request, even after revocation.
-            if !request_ids.insert(&message.request_id)
-                || !event_ids.insert(&message.event_id)
-                || !message_hashes.insert(&message.message_sha256)
-                || !review_keys.insert(&message.review_key)
+            // Only exact, explicitly transferred unused identities may recur.
+            // The latest owner must be the named predecessor: a fork, renamed
+            // request, changed payload/key or quota reset remains impossible.
+            if request_ids.insert(&message.request_id, index) != previous
+                || event_ids.insert(&message.event_id, index) != previous
+                || message_hashes.insert(&message.message_sha256, index) != previous
+                || review_keys.insert(&message.review_key, index) != previous
             {
                 return Err("WEB_REVIEW_GRANTS_INVALID".into());
             }
@@ -176,6 +229,7 @@ impl ReviewGrant {
             "createdUtc":self.created_utc,"expiresUtc":self.request.expires_utc,
             "maxMessages":self.request.max_messages,"reservedMessages":self.reservations.len(),
             "maxExecutionSeconds":self.request.max_execution_seconds,"revokedUtc":self.revoked_utc,
+            "unusedMessagesFromGrant":self.request.unused_messages_from_grant,
             "idempotent":idempotent,"reviewVerified":false,"releaseAuthorized":false})
     }
 }
@@ -315,13 +369,20 @@ impl WorkLedger {
         }) {
             return Err("WEB_REVIEW_REQUEST_ALREADY_EXISTS".into());
         }
+        let unused_transfer = request.unused_messages_from_grant.is_some();
         ledger.review_authorizations.push(ReviewGrant {
             request,
             created_utc: now,
             revoked_utc: None,
             reservations: Vec::new(),
         });
-        validate_grants(&ledger.review_authorizations, &self.project_id)?;
+        validate_grants(&ledger.review_authorizations, &self.project_id).map_err(|error| {
+            if unused_transfer {
+                "WEB_REVIEW_UNUSED_TRANSFER_INVALID".into()
+            } else {
+                error
+            }
+        })?;
         let result = ledger
             .review_authorizations
             .last()
@@ -527,8 +588,248 @@ mod tests {
                 message_sha256: "b".repeat(64),
                 review_key: "e".repeat(64),
             }],
+            unused_messages_from_grant: None,
         };
         (root, ledger, request)
+    }
+
+    fn unused_successor(request: &ReviewGrantRequest, id: &str) -> ReviewGrantRequest {
+        let mut next = request.clone();
+        next.grant_id = id.into();
+        next.target = Target::new(
+            request.target.generation + 1,
+            format!("https://chatgpt.com/c/{id}"),
+        )
+        .unwrap();
+        next.max_messages = next.messages.len();
+        next.unused_messages_from_grant = Some(request.grant_id.clone());
+        next
+    }
+
+    fn extra_message(project: &str, id: &str, hash: char) -> ReviewMessageIdentity {
+        ReviewMessageIdentity {
+            request_id: id.into(),
+            event_id: expected_event(project, id),
+            message_sha256: hash.to_string().repeat(64),
+            review_key: protocol::digest(id),
+        }
+    }
+
+    #[test]
+    fn unused_transfer_preserves_spent_history_payload_and_restart_identity() {
+        let (root, ledger, mut request) = fixture("alpha");
+        request
+            .messages
+            .push(extra_message("alpha", "review-two", 'c'));
+        request.max_messages = 2;
+        ledger.authorize_review(request.clone(), 100).unwrap();
+        ledger
+            .reserve_review(
+                &request.grant_id,
+                &request.messages[0],
+                &request.target,
+                101,
+            )
+            .unwrap();
+        ledger.revoke_review(&request.grant_id, 102).unwrap();
+        let before = ledger.load().unwrap();
+        let mut next = unused_successor(&request, "grant-two");
+        next.messages.remove(0);
+        next.max_messages = 1;
+        let response = ledger.authorize_review(next.clone(), 103).unwrap();
+        assert_eq!(response["unusedMessagesFromGrant"], request.grant_id);
+        assert_eq!(
+            ledger.load().unwrap().review_authorizations[0],
+            before.review_authorizations[0]
+        );
+        let reopened = WorkLedger::open(&root, "alpha").unwrap();
+        let saved = fs::read(&reopened.path).unwrap();
+        assert!(
+            reopened.authorize_review(next.clone(), 104).unwrap()["idempotent"]
+                .as_bool()
+                .unwrap()
+        );
+        assert_eq!(fs::read(&reopened.path).unwrap(), saved);
+        let permit = reopened
+            .reserve_review(&next.grant_id, &next.messages[0], &next.target, 104)
+            .unwrap();
+        assert_eq!(permit.message_sha256, request.messages[1].message_sha256);
+        assert_eq!(permit.request_id, request.messages[1].request_id);
+        assert_eq!(permit.review_key, request.messages[1].review_key);
+        assert!(
+            reopened
+                .check_review(
+                    &request.grant_id,
+                    &request.messages[1],
+                    &request.target,
+                    104
+                )
+                .is_err()
+        );
+        assert!(
+            !serde_json::to_value(&request)
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .contains_key("unusedMessagesFromGrant")
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn unused_transfer_rejects_changed_payload_identity_destination_or_limits_without_writes() {
+        let (root, ledger, request) = fixture("alpha");
+        ledger.authorize_review(request.clone(), 100).unwrap();
+        ledger.revoke_review(&request.grant_id, 101).unwrap();
+        let before = fs::read(&ledger.path).unwrap();
+        for mutation in 0..12 {
+            let mut next = unused_successor(&request, "grant-two");
+            match mutation {
+                0 => next.unused_messages_from_grant = None,
+                1 => next.unused_messages_from_grant = Some("unknown".into()),
+                2 => next.unused_messages_from_grant = Some(next.grant_id.clone()),
+                3 => next.target.generation = request.target.generation,
+                4 => next.target = Target::new(2, request.target.url.clone()).unwrap(),
+                5 => {
+                    next.messages[0].request_id = "renamed".into();
+                    next.messages[0].event_id = expected_event("alpha", "renamed");
+                }
+                6 => next.messages[0].message_sha256 = "d".repeat(64),
+                7 => next.messages[0].review_key = "f".repeat(64),
+                8 => next.expires_utc = request.expires_utc + 1,
+                9 => {
+                    // Within the general 180-second bound, beyond this grant.
+                    next.max_execution_seconds = 180;
+                    let mut state = ledger.load().unwrap();
+                    state.review_authorizations[0].request.max_execution_seconds = 160;
+                    ledger.save(&state).unwrap();
+                }
+                10 => next.max_messages = 2,
+                11 => next.messages[0] = extra_message("beta", "review-two", 'c'),
+                _ => unreachable!(),
+            }
+            let mutation_before = fs::read(&ledger.path).unwrap();
+            assert!(
+                ledger.authorize_review(next, 103).is_err(),
+                "mutation {mutation}"
+            );
+            assert_eq!(fs::read(&ledger.path).unwrap(), mutation_before);
+            if mutation == 9 {
+                fs::write(&ledger.path, &before).unwrap();
+            }
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn unused_transfer_never_replays_reserved_dispatched_or_unknown_requests() {
+        for dispatched in [false, true] {
+            let (root, ledger, request) = fixture("alpha");
+            ledger.authorize_review(request.clone(), 100).unwrap();
+            let permit = ledger
+                .reserve_review(
+                    &request.grant_id,
+                    &request.messages[0],
+                    &request.target,
+                    101,
+                )
+                .unwrap();
+            if dispatched {
+                ledger
+                    .prepare(
+                        &permit.request_id,
+                        &permit.event_id,
+                        &permit.message_sha256,
+                        &permit.target,
+                    )
+                    .unwrap();
+                ledger.mark_review_dispatch_started(&permit, 102).unwrap();
+                // No receipt/closure follows: the external outcome is unknown.
+            }
+            ledger.revoke_review(&request.grant_id, 103).unwrap();
+            let before = fs::read(&ledger.path).unwrap();
+            assert!(
+                ledger
+                    .authorize_review(unused_successor(&request, "grant-two"), 104)
+                    .is_err()
+            );
+            assert_eq!(fs::read(&ledger.path).unwrap(), before);
+            fs::remove_dir_all(root).unwrap();
+        }
+    }
+
+    #[test]
+    fn unused_transfer_requires_revocation_and_unexpired_predecessor() {
+        let (root, ledger, request) = fixture("alpha");
+        ledger.authorize_review(request.clone(), 100).unwrap();
+        let before = fs::read(&ledger.path).unwrap();
+        assert!(
+            ledger
+                .authorize_review(unused_successor(&request, "grant-two"), 101)
+                .is_err()
+        );
+        assert_eq!(fs::read(&ledger.path).unwrap(), before);
+        ledger.revoke_review(&request.grant_id, 102).unwrap();
+        let before = fs::read(&ledger.path).unwrap();
+        let mut late = unused_successor(&request, "grant-two");
+        late.expires_utc = 300;
+        assert!(ledger.authorize_review(late, 201).is_err());
+        assert_eq!(fs::read(&ledger.path).unwrap(), before);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn unused_transfer_chains_without_forks_or_original_quota_reset() {
+        let (root, ledger, mut request) = fixture("alpha");
+        request
+            .messages
+            .push(extra_message("alpha", "review-two", 'c'));
+        // Two frozen choices, but permission to send at most one of them.
+        ledger.authorize_review(request.clone(), 100).unwrap();
+        ledger.revoke_review(&request.grant_id, 101).unwrap();
+        let mut second = unused_successor(&request, "grant-two");
+        second.messages.truncate(1);
+        second.max_messages = 1;
+        ledger.authorize_review(second.clone(), 102).unwrap();
+        let before = fs::read(&ledger.path).unwrap();
+        let mut fork = unused_successor(&request, "grant-fork");
+        fork.messages.truncate(1);
+        fork.max_messages = 1;
+        assert!(ledger.authorize_review(fork, 103).is_err());
+        let mut overspent = unused_successor(&request, "grant-overspent");
+        overspent.messages.remove(0);
+        overspent.max_messages = 1;
+        assert!(ledger.authorize_review(overspent, 103).is_err());
+        assert_eq!(fs::read(&ledger.path).unwrap(), before);
+        ledger.revoke_review(&second.grant_id, 104).unwrap();
+        let third = unused_successor(&second, "grant-three");
+        ledger.authorize_review(third.clone(), 105).unwrap();
+        let reopened = WorkLedger::open(&root, "alpha").unwrap();
+        reopened
+            .preflight_review(&third.grant_id, &third.messages[0], &third.target, 106)
+            .unwrap();
+        assert_eq!(reopened.load().unwrap().review_authorizations.len(), 3);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn unused_transfer_failure_does_not_block_an_independent_project() {
+        let (root, alpha, request) = fixture("alpha");
+        alpha.authorize_review(request.clone(), 100).unwrap();
+        let alpha_before = fs::read(&alpha.path).unwrap();
+        assert!(
+            alpha
+                .authorize_review(unused_successor(&request, "grant-two"), 101)
+                .is_err()
+        );
+        let beta = WorkLedger::open(&root, "beta").unwrap();
+        let mut own = request;
+        own.messages = vec![extra_message("beta", "review-beta", 'c')];
+        beta.authorize_review(own.clone(), 102).unwrap();
+        beta.reserve_review(&own.grant_id, &own.messages[0], &own.target, 103)
+            .unwrap();
+        assert_eq!(fs::read(&alpha.path).unwrap(), alpha_before);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
