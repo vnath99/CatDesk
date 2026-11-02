@@ -1,0 +1,68 @@
+{
+  "observedUtc": "2026-11-02T11:01:46.049007+00:00",
+  "classification": "TESTED_CONTROLLED_LIVE",
+  "sourceCommit": "ef6815358965fe8458f01abca6807e820dbc5ceb",
+  "artifacts": {
+    "CatDeskBinagotchy.exe": {
+      "sha256": "54c5ea4eb471abe690e64f96b47ca0bc40a161438c51ebfca485cac9b2ec20e5",
+      "bytes": 75169792
+    },
+    "CatDeskWakeHost.exe": {
+      "sha256": "718651273b8329b24238bccd073f41c372926aba5653330834f2d61fc45b07cc",
+      "bytes": 3697152
+    },
+    "adapter.py": {
+      "sha256": "710e2e4538ea061a64f0fa935ad3766a3d75c419fb5b2240b9137c5326ed26de",
+      "bytes": 65389
+    },
+    "wake_bridge.py": {
+      "sha256": "f12ce34f99456a17f9787975aab2721a02e2fce771a980f97df92ec5c78a9fc4",
+      "bytes": 211996
+    }
+  },
+  "buildSeconds": 51.015,
+  "qualificationSeconds": 44.313,
+  "developmentQualification": {
+    "unauthorizedStatus": 401,
+    "initializeStatus": 200,
+    "catalogStatus": 200,
+    "toolCount": 79,
+    "registeredProjectsRead": true,
+    "ownerExitCode": 0,
+    "ownedTreeExitProved": true,
+    "endpointClosed": true
+  },
+  "previousVerifiedDevelopmentController": "40ca54cf759c8bf180068ceb25d7c7dd09f547e849f0efc5794bc0e8afce57cc",
+  "oldPackageMismatches": 0,
+  "projectJournalMismatches": 0,
+  "profileIdentityPreserved": true,
+  "liveDiagnosis": {
+    "seconds": 46.438,
+    "scope": "CONFIRMED_SENT_RESPONSE",
+    "snapshotVerified": false,
+    "reason": "SOURCE_REVIEW_ASSISTANT_NOT_MOUNTED",
+    "phase": "TARGET_OPEN",
+    "responseBodyExported": false,
+    "preservationPins": 4893,
+    "preservationMismatches": 0
+  },
+  "existingSentReceiptPreserved": true,
+  "messagesSent": 0,
+  "submissionRetries": 0,
+  "bindingChanges": 0,
+  "nativeTaskStarts": 0,
+  "productionChanges": 0,
+  "cleanup": {
+    "testOwnedProcesses": 0,
+    "soleTrustedBackendListenerRetained": true,
+    "originalTunnelRetained": true,
+    "recurringWakeHost": "STOPPED",
+    "processActions": 0
+  },
+  "reviewBodyRecovery": "NOT_VERIFIED",
+  "independentSourceOrReleaseAuthority": false,
+  "installedDiagnosticAcceptance": "OPEN",
+  "pendingB": "EXACT_DELIVERY_RESPONSE_UNVERIFIED_NO_RESEND",
+  "checkpointCSubmitted": false,
+  "nextTask": "Inspect existing event-scoped assistant/body and error-card selectors with deterministic cases. Distinguish absent response from a current response-loading failure without matching USER/tool/code text or historical failed turns. No further unchanged live probe or USER replay. Canonical/control and reviewed Wake publication remain source integration gaps; real two-Web native editing remains open."
+}
