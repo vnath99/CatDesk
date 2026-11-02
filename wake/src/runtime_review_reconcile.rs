@@ -133,11 +133,21 @@ fn submitting_delivery(
     target: &Target,
     event: &str,
 ) -> Result<Delivery> {
+    pending_review_delivery(store, project, target, event, &[Phase::Submitting])
+}
+
+fn pending_review_delivery(
+    store: &Store,
+    project: &str,
+    target: &Target,
+    event: &str,
+    phases: &[Phase],
+) -> Result<Delivery> {
     let delivery = store
         .delivery(event)?
         .ok_or("SCOPED_RECONCILE_DELIVERY_MISSING")?;
     delivery.event.validate()?;
-    if delivery.phase != Phase::Submitting
+    if !phases.contains(&delivery.phase)
         || delivery.receipt.is_some()
         || delivery.event.event_id != event
         || delivery.event.project_id != project
@@ -308,7 +318,17 @@ where
         return Err("SCOPED_RECONCILE_ARGUMENTS_INVALID".into());
     }
     let _owner = store.host_lock()?;
-    let delivery = submitting_delivery(store, project, target, event)?;
+    // An owner may stop after recording grant dispatch but before Wake persists
+    // SUBMITTING. Inspect its exact retained CLAIMED event through the same
+    // read-only adapter; this does not clear dispatch or permit another send.
+    // Receipt reconciliation deliberately continues to require SUBMITTING.
+    let delivery = pending_review_delivery(
+        store,
+        project,
+        target,
+        event,
+        &[Phase::Claimed, Phase::Submitting],
+    )?;
     let unchanged = || -> Result<()> {
         if store.config()?.targets.get(project) != Some(target)
             || store.delivery(event)?.as_ref() != Some(&delivery)
@@ -363,7 +383,8 @@ where
     with_authority(&delivery, &mut || Ok(()))?;
     guard()?;
     Ok(
-        json!({"observation":observation,"browserReadOnly":true,"stateChanged":false,
+        json!({"observation":observation,"deliveryPhase":delivery.phase,
+        "retryAuthorized":false,"browserReadOnly":true,"stateChanged":false,
         "receiptCreated":false,"sendAttempted":false,"diagnostic":{"phase":"COMPLETE",
         "elapsedMillis":started.elapsed().as_millis(),"budgetMillis":maximum.as_millis()}}),
     )
@@ -466,6 +487,10 @@ mod tests {
         }
     }
     fn fixture() -> (Store, Delivery, Receipt) {
+        fixture_at_phase(Phase::Submitting)
+    }
+    fn fixture_at_phase(phase: Phase) -> (Store, Delivery, Receipt) {
+        assert!(matches!(phase, Phase::Claimed | Phase::Submitting));
         let (store, lease) = super::super::scheduler::tests::fixture("scoped-reconcile");
         drop(lease);
         atomic(
@@ -485,16 +510,20 @@ mod tests {
             )
             .unwrap();
         let lease = store.host_lock().unwrap();
-        store.claim(&event, &lease).unwrap();
-        let delivery = store
-            .transition(
-                &event.event_id,
-                lease.owner(),
-                Phase::Submitting,
-                None,
-                None,
-            )
-            .unwrap();
+        let claimed = store.claim(&event, &lease).unwrap();
+        let delivery = if phase == Phase::Claimed {
+            claimed
+        } else {
+            store
+                .transition(
+                    &event.event_id,
+                    lease.owner(),
+                    Phase::Submitting,
+                    None,
+                    None,
+                )
+                .unwrap()
+        };
         let receipt = Receipt {
             schema_version: 1,
             event_id: event.event_id,
@@ -747,87 +776,188 @@ mod tests {
     }
 
     #[test]
-    fn diagnosis_rejects_old_adapter_foreign_frames_and_unbounded_or_private_fields() {
-        assert_eq!(
-            require_diagnosis_adapter(b"def reconcile_submission(): pass").unwrap_err(),
-            "SCOPED_DIAGNOSE_PACKAGE_UNSUPPORTED"
-        );
-        require_diagnosis_adapter(b"def diagnose_submission(bridge, sb, request): pass").unwrap();
-        let (store, d, _) = fixture();
+    fn claimed_diagnosis_is_read_only_and_does_not_authorize_receipt_or_resend() {
+        let (store, d, _) = fixture_at_phase(Phase::Claimed);
         let control = std::fs::read(store.root().join("control.json")).unwrap();
-        for kind in ["scope", "private", "count", "submit"] {
-            let mut frame = diagnosis(&d);
-            match kind {
-                "scope" => frame["projectId"] = json!("beta"),
-                "private" => frame["observation"]["rawText"] = json!("private draft"),
-                "count" => frame["observation"]["composerBytes"] = json!(16385),
-                _ => frame = json!({"stage":"BEFORE_SUBMIT"}),
-            }
-            let fake = reader(vec![frame]);
-            let requests = fake.requests.clone();
-            let result = diagnose_with_adapter(
+        let queued = store.events().unwrap();
+        let fake = reader(vec![diagnosis(&d)]);
+        let requests = fake.requests.clone();
+        let finished = fake.finished.clone();
+        let checks = Cell::new(0);
+        let result = diagnose_with_adapter(
+            &store,
+            "alpha",
+            &d.target,
+            &d.event.event_id,
+            &|| Ok(()),
+            |delivery, commit| {
+                assert_eq!(delivery, &d);
+                checks.set(checks.get() + 1);
+                commit()
+            },
+            Duration::from_secs(1),
+            |_, _| Ok(fake),
+        )
+        .unwrap();
+        assert_eq!(checks.get(), 2);
+        assert!(finished.get());
+        assert_eq!(result["deliveryPhase"], "CLAIMED");
+        assert_eq!(result["retryAuthorized"], false);
+        assert_eq!(result["sendAttempted"], false);
+        assert_eq!(result["receiptCreated"], false);
+        assert_eq!(result["stateChanged"], false);
+        assert_eq!(requests.borrow().len(), 1);
+        assert_eq!(
+            requests.borrow()[0],
+            json!({"diagnoseSubmission":true,"event":d.event,"target":d.target})
+        );
+        preserved(&store, &d, &control);
+        assert_eq!(store.events().unwrap(), queued);
+        assert_eq!(
+            reconcile_with_adapter::<Reader, _>(
                 &store,
                 "alpha",
                 &d.target,
                 &d.event.event_id,
                 &|| Ok(()),
-                |_, commit| commit(),
+                |_, _| Ok(()),
                 Duration::from_secs(1),
-                |_, _| Ok(fake),
+                |_, _| panic!("CLAIMED cannot enter receipt reconciliation")
+            )
+            .unwrap_err(),
+            "SCOPED_RECONCILE_DELIVERY_INVALID"
+        );
+        preserved(&store, &d, &control);
+    }
+
+    #[test]
+    fn claimed_diagnosis_requires_dispatch_authority_before_and_after_browser() {
+        for fail_at in [1, 2] {
+            let (store, d, _) = fixture_at_phase(Phase::Claimed);
+            let control = std::fs::read(store.root().join("control.json")).unwrap();
+            let fake = reader(vec![diagnosis(&d)]);
+            let requests = fake.requests.clone();
+            let finished = fake.finished.clone();
+            let checks = Cell::new(0);
+            let opened = Cell::new(false);
+            assert_eq!(
+                diagnose_with_adapter(
+                    &store,
+                    "alpha",
+                    &d.target,
+                    &d.event.event_id,
+                    &|| Ok(()),
+                    |_, commit| {
+                        checks.set(checks.get() + 1);
+                        if checks.get() == fail_at {
+                            Err("DISPATCH_AUTHORITY_UNAVAILABLE".into())
+                        } else {
+                            commit()
+                        }
+                    },
+                    Duration::from_secs(1),
+                    |_, _| {
+                        opened.set(true);
+                        Ok(fake)
+                    },
+                )
+                .unwrap_err(),
+                "DISPATCH_AUTHORITY_UNAVAILABLE"
             );
-            assert_eq!(result.unwrap_err(), "SCOPED_DIAGNOSE_FRAME_INVALID");
+            assert_eq!(opened.get(), fail_at == 2);
+            assert_eq!(finished.get(), fail_at == 2);
+            assert_eq!(requests.borrow().len(), usize::from(fail_at == 2));
             assert!(requests.borrow().iter().all(|v| v.get("submit").is_none()));
             preserved(&store, &d, &control);
         }
     }
 
     #[test]
-    fn diagnosis_scope_cancellation_and_cleanup_timeout_never_write_state() {
-        let (store, d, _) = fixture();
-        let control = std::fs::read(store.root().join("control.json")).unwrap();
-        let wrong = Target::new(2, "https://chatgpt.com/c/wrong".into()).unwrap();
-        assert!(
-            diagnose_with_adapter::<Reader, _>(
-                &store,
-                "alpha",
-                &wrong,
-                &d.event.event_id,
-                &|| Ok(()),
-                |_, _| Ok(()),
-                Duration::from_secs(1),
-                |_, _| panic!("wrong scope opened browser")
-            )
-            .is_err()
-        );
-        assert!(
-            diagnose_with_adapter::<Reader, _>(
-                &store,
-                "alpha",
-                &d.target,
-                &d.event.event_id,
-                &|| Err("CANCELLED".into()),
-                |_, _| Ok(()),
-                Duration::from_secs(1),
-                |_, _| panic!("cancelled browser")
-            )
-            .is_err()
-        );
-        let mut fake = reader(vec![diagnosis(&d)]);
-        fake.cleanup_delay = Duration::from_millis(20);
+    fn diagnosis_rejects_old_adapter_foreign_frames_and_unbounded_or_private_fields() {
         assert_eq!(
-            diagnose_with_adapter(
-                &store,
-                "alpha",
-                &d.target,
-                &d.event.event_id,
-                &|| Ok(()),
-                |_, commit| commit(),
-                Duration::from_millis(10),
-                |_, _| Ok(fake)
-            )
-            .unwrap_err(),
-            "SCOPED_DIAGNOSE_TIMEOUT"
+            require_diagnosis_adapter(b"def reconcile_submission(): pass").unwrap_err(),
+            "SCOPED_DIAGNOSE_PACKAGE_UNSUPPORTED"
         );
-        preserved(&store, &d, &control);
+        require_diagnosis_adapter(b"def diagnose_submission(bridge, sb, request): pass").unwrap();
+        for phase in [Phase::Claimed, Phase::Submitting] {
+            let (store, d, _) = fixture_at_phase(phase);
+            let control = std::fs::read(store.root().join("control.json")).unwrap();
+            for kind in ["scope", "private", "count", "submit"] {
+                let mut frame = diagnosis(&d);
+                match kind {
+                    "scope" => frame["projectId"] = json!("beta"),
+                    "private" => frame["observation"]["rawText"] = json!("private draft"),
+                    "count" => frame["observation"]["composerBytes"] = json!(16385),
+                    _ => frame = json!({"stage":"BEFORE_SUBMIT"}),
+                }
+                let fake = reader(vec![frame]);
+                let requests = fake.requests.clone();
+                let result = diagnose_with_adapter(
+                    &store,
+                    "alpha",
+                    &d.target,
+                    &d.event.event_id,
+                    &|| Ok(()),
+                    |_, commit| commit(),
+                    Duration::from_secs(1),
+                    |_, _| Ok(fake),
+                );
+                assert_eq!(result.unwrap_err(), "SCOPED_DIAGNOSE_FRAME_INVALID");
+                assert!(requests.borrow().iter().all(|v| v.get("submit").is_none()));
+                preserved(&store, &d, &control);
+            }
+        }
+    }
+
+    #[test]
+    fn diagnosis_scope_cancellation_and_cleanup_timeout_never_write_state() {
+        for phase in [Phase::Claimed, Phase::Submitting] {
+            let (store, d, _) = fixture_at_phase(phase);
+            let control = std::fs::read(store.root().join("control.json")).unwrap();
+            let wrong = Target::new(2, "https://chatgpt.com/c/wrong".into()).unwrap();
+            assert!(
+                diagnose_with_adapter::<Reader, _>(
+                    &store,
+                    "alpha",
+                    &wrong,
+                    &d.event.event_id,
+                    &|| Ok(()),
+                    |_, _| Ok(()),
+                    Duration::from_secs(1),
+                    |_, _| panic!("wrong scope opened browser")
+                )
+                .is_err()
+            );
+            assert!(
+                diagnose_with_adapter::<Reader, _>(
+                    &store,
+                    "alpha",
+                    &d.target,
+                    &d.event.event_id,
+                    &|| Err("CANCELLED".into()),
+                    |_, _| Ok(()),
+                    Duration::from_secs(1),
+                    |_, _| panic!("cancelled browser")
+                )
+                .is_err()
+            );
+            let mut fake = reader(vec![diagnosis(&d)]);
+            fake.cleanup_delay = Duration::from_millis(20);
+            assert_eq!(
+                diagnose_with_adapter(
+                    &store,
+                    "alpha",
+                    &d.target,
+                    &d.event.event_id,
+                    &|| Ok(()),
+                    |_, commit| commit(),
+                    Duration::from_millis(10),
+                    |_, _| Ok(fake)
+                )
+                .unwrap_err(),
+                "SCOPED_DIAGNOSE_TIMEOUT"
+            );
+            preserved(&store, &d, &control);
+        }
     }
 }

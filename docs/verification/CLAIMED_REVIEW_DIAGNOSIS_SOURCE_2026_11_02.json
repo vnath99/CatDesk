@@ -1,0 +1,112 @@
+{
+  "observedUtc": "2026-11-02T23:58:48.553960+00:00",
+  "classification": "TESTED_SOURCE_DIAGNOSTIC_FIX_WITH_SEPARATE_CONTROLLED_WEB_REVIEW_EVIDENCE",
+  "testedWorkingTreeBase": "49bb742c147bdd7464b60444196106923d14ce45",
+  "codeSha256": {
+    "src/operator_web_review.rs": "9dc2d71e5d32df8a3e6485120b21076081bcb6124242d3693581ed3fb8637809",
+    "wake/src/runtime_review_reconcile.rs": "d7d67d8fdbae113a61a1cd894b797568bc8a69ba559c08eb99570bdfbed188f6"
+  },
+  "codeGitBlobs": {
+    "src/operator_web_review.rs": "92887e9db66bc5f2e27e1a9894f44c66f45456fe",
+    "wake/src/runtime_review_reconcile.rs": "856a08b1107cff16a59f2c183b7b99b4413410b4"
+  },
+  "currentSourceScope": {
+    "codePathsSinceOriginalReviewBase": 90,
+    "originalFrozenReviewScope": 89,
+    "newlyChangedDependency": "wake/src/runtime_review_reconcile.rs",
+    "currentCumulativeAcceptance": false
+  },
+  "completedControlledWebReviews": [
+    {
+      "checkpoint": 4,
+      "responseSha256": "6c65ea51b757ba3fc9192b9fc855ac220137de521d67602e61b6601414600e79",
+      "verdict": "REVIEWED_PARTIAL",
+      "taskCorrelatedGitCalls": 8,
+      "oneLogPerDeclaredCommand": true,
+      "singleExactUserReceipt": true,
+      "responseCompleteAndCoordinatorClosed": true
+    },
+    {
+      "checkpoint": 5,
+      "responseSha256": "8eb2c8720ef00a4d7014a9bd738c9baf1f7cf67ee94e0aff0e9be502ca29248e",
+      "verdict": "REVIEWED_PARTIAL",
+      "taskCorrelatedGitCalls": 8,
+      "oneLogPerDeclaredCommand": true,
+      "singleExactUserReceipt": true,
+      "responseCompleteAndCoordinatorClosed": true
+    }
+  ],
+  "reviewInterruption": {
+    "checkpoint": 6,
+    "innerMaximumSeconds": 170,
+    "elapsedSeconds": 170.016,
+    "outcome": "TIMEOUT_RETAINED_CLAIMED_WITH_DISPATCH_MARKER",
+    "grantDispatchRecorded": true,
+    "deliveryPhase": "CLAIMED",
+    "receiptPresent": false,
+    "timerPresent": false,
+    "submissionStartWitnessPresent": false,
+    "originalFailurePreserved": true,
+    "messageResent": false,
+    "grantReset": false,
+    "unknownOutcomeBypassed": false
+  },
+  "diagnosticChange": {
+    "existingQualifiedOwnerProtocolReused": true,
+    "newBrowserOwner": false,
+    "claimedInspection": "METADATA_ONLY",
+    "historicalDispatchAuthorityCheckedBeforeAndAfter": true,
+    "receiptReconciliationStillRequiresSubmitting": true,
+    "retryAuthorized": false,
+    "rawDraftOrConversationContentExported": false,
+    "productionInstalled": false,
+    "liveObservationQualified": false
+  },
+  "sourceTests": {
+    "redBeforeFix": {
+      "failed": 1,
+      "reason": "SCOPED_RECONCILE_DELIVERY_INVALID"
+    },
+    "wakeReconciliationAndDiagnosisPassed": 9,
+    "operatorReviewRoutingPassed": 4,
+    "strictWakeAndRootAllTargetClippy": "PASS",
+    "rustFormatting": "PASS",
+    "diffCheck": "PASS",
+    "actualBrowserOrTwoProjectNativeEditingAcceptance": false,
+    "hostedCiRun": false
+  },
+  "context": {
+    "generation": 2,
+    "observedTokenProxy": 27333,
+    "argumentTokens": 1449,
+    "resultTokens": 23574,
+    "coverage": "UNKNOWN_OR_INCOMPLETE",
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "repeatImportChangedLedger": false,
+    "predecessorAndSiblingLedgersPreserved": true,
+    "rawTextPersisted": false
+  },
+  "cleanup": {
+    "observedUtc": "2026-11-02T23:57:14.7003771+00:00",
+    "testOwnedProcesses": 0,
+    "sameIntentionalTrustedBackendAndExistingTunnelRetained": true,
+    "recurringWakeHostStopped": true,
+    "loginMarkerPresent": false,
+    "processActions": 0
+  },
+  "nativeReview": {
+    "frozenSourceCommit": "6d737c9a0f6f34496fc88b9fec02433bd1599117",
+    "state": "WAITING_FOR_CHATGPT",
+    "active": true,
+    "reportAbsent": true,
+    "sourceAccepted": false,
+    "producerAuthority": false,
+    "newSourceNotCoveredByOldClaim": true
+  },
+  "productionChanges": 0,
+  "nativeProjectTasksStarted": 0,
+  "bindingsChanged": 0,
+  "operatorActionRequired": false,
+  "nextTask": "Qualify the changed development controller, then metadata-only observation of the retained exact CLAIMED request through existing review diagnose. Preserve its dispatch marker and draft; no resume/reset/send is authorized by diagnosis. Resolve this recovery boundary through an explicitly reviewed supported transition if justified, include the new dependency in cumulative source review, and continue existing protected producer/promotion and real two-Web native acceptance."
+}

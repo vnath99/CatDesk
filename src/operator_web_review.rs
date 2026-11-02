@@ -417,35 +417,37 @@ mod tests {
     }
 
     #[test]
-    fn submitting_diagnosis_never_uses_sent_reader_or_creates_receipt() {
+    fn pending_diagnosis_never_uses_sent_reader_or_creates_receipt_without_dispatch_authority() {
         let (control, store, mut delivery) = sent_fixture();
-        delivery.phase = Phase::Submitting;
-        delivery.receipt = None;
-        let path = store
-            .root()
-            .join(format!("deliveries/{}.json", delivery.event.event_id));
-        catdesk_wake::store::atomic(&path, &delivery).unwrap();
-        let before = std::fs::read(&path).unwrap();
-        // This fixture has no historical dispatched review authorization. The
-        // original submitting path must refuse it rather than using the new
-        // receipt-based observer or inventing a successful submission.
-        assert!(
-            diagnose_using(
-                &control,
-                "alpha",
-                &delivery.event.event_id,
-                |_, _, _, _, _| panic!("unknown submission cannot use sent observer")
-            )
-            .is_err()
-        );
-        assert_eq!(std::fs::read(path).unwrap(), before);
-        assert!(
-            store
-                .delivery(&delivery.event.event_id)
-                .unwrap()
-                .unwrap()
-                .receipt
-                .is_none()
-        );
+        for phase in [Phase::Claimed, Phase::Submitting] {
+            delivery.phase = phase;
+            delivery.receipt = None;
+            let path = store
+                .root()
+                .join(format!("deliveries/{}.json", delivery.event.event_id));
+            catdesk_wake::store::atomic(&path, &delivery).unwrap();
+            let before = std::fs::read(&path).unwrap();
+            // This fixture has no historical dispatched review authorization. The
+            // pending-review path must refuse it rather than using the new
+            // receipt-based observer or inventing a successful submission.
+            assert!(
+                diagnose_using(
+                    &control,
+                    "alpha",
+                    &delivery.event.event_id,
+                    |_, _, _, _, _| panic!("unknown submission cannot use sent observer")
+                )
+                .is_err()
+            );
+            assert_eq!(std::fs::read(path).unwrap(), before);
+            assert!(
+                store
+                    .delivery(&delivery.event.event_id)
+                    .unwrap()
+                    .unwrap()
+                    .receipt
+                    .is_none()
+            );
+        }
     }
 }
