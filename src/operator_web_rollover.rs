@@ -63,8 +63,11 @@ impl HandoffGitState {
     fn validate(&self) -> Result<(), String> {
         let known =
             self.branch.is_some() || self.head_commit.is_some() || self.worktree_summary.is_some();
+        // Source evidence may concern inspected objects while every native Git
+        // field remains unknown. Preserve that evidence without inventing a
+        // branch, HEAD or worktree claim; source reporting is never attestation.
         if (self.basis == GitStateBasis::Unknown && known)
-            || (self.basis == GitStateBasis::SourceReported && (!known || self.evidence.is_empty()))
+            || (self.basis == GitStateBasis::SourceReported && self.evidence.is_empty())
             || self.branch.as_ref().is_some_and(|s| {
                 s.trim().is_empty() || s.len() > 256 || s.chars().any(char::is_control)
             })
@@ -7403,6 +7406,106 @@ mod tests {
             saved["importantDecisions"][0],
             "Preserve the native task owner"
         );
+    }
+
+    #[test]
+    fn handoff_context_evidence_only_source_report_keeps_native_git_unknown_and_source_bytes() {
+        let root = fixture();
+        let request = context_request(&root);
+        let mut handoff = context_handoff();
+        let git = handoff.git_state.as_mut().unwrap();
+        git.basis = GitStateBasis::SourceReported;
+        git.evidence = vec![
+            "Pinned source objects were inspected; native HEAD/branch/worktree were not verified."
+                .into(),
+        ];
+        let snapshot = source_snapshot(&request, &request.message, &handoff);
+        let original_bytes = serde_json::to_vec(&snapshot).unwrap();
+        let expected_git = serde_json::to_value(&handoff.git_state).unwrap();
+        let parsed = handoff_from_source_snapshot(&request, &snapshot).unwrap();
+        let git = parsed.git_state.as_ref().unwrap();
+        assert_eq!(git.basis, GitStateBasis::SourceReported);
+        assert!(
+            git.branch.is_none() && git.head_commit.is_none() && git.worktree_summary.is_none()
+        );
+        assert_eq!(
+            serde_json::to_value(&parsed.git_state).unwrap(),
+            expected_git
+        );
+        assert_eq!(serde_json::to_vec(&snapshot).unwrap(), original_bytes);
+        assert!(parsed.owned_paths.is_empty());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn handoff_context_evidence_only_does_not_admit_missing_evidence_or_false_git_fields() {
+        let mut handoff = context_handoff();
+        let git = handoff.git_state.as_mut().unwrap();
+        git.basis = GitStateBasis::SourceReported;
+        assert_eq!(git.validate().unwrap_err(), "WEB_HANDOFF_GIT_STATE_INVALID");
+        git.evidence.push("Native Git state is unobserved".into());
+        git.validate().unwrap();
+        for value in ["", "bad\0evidence"] {
+            let mut invalid = git.clone();
+            invalid.evidence = vec![value.into()];
+            assert_eq!(
+                invalid.validate().unwrap_err(),
+                "WEB_HANDOFF_GIT_STATE_INVALID"
+            );
+        }
+        let mut invalid = git.clone();
+        invalid.head_commit = Some("shortsha".into());
+        assert_eq!(
+            invalid.validate().unwrap_err(),
+            "WEB_HANDOFF_GIT_STATE_INVALID"
+        );
+        let mut invalid = git.clone();
+        invalid.basis = GitStateBasis::Unknown;
+        invalid.branch = Some("claimed-under-unknown".into());
+        assert_eq!(
+            invalid.validate().unwrap_err(),
+            "WEB_HANDOFF_GIT_STATE_INVALID"
+        );
+    }
+
+    #[test]
+    fn handoff_context_evidence_only_preserves_task_ownership_and_revision_fences() {
+        let root = fixture();
+        let request = context_request(&root);
+        let mut handoff = context_handoff();
+        let git = handoff.git_state.as_mut().unwrap();
+        git.basis = GitStateBasis::SourceReported;
+        git.evidence
+            .push("Source inspected objects; native state unknown".into());
+        handoff.source_task_id = "foreign-task".into();
+        assert_eq!(
+            handoff_from_source_snapshot(
+                &request,
+                &source_snapshot(&request, &request.message, &handoff)
+            )
+            .unwrap_err(),
+            "WEB_HANDOFF_TASK_CHANGED"
+        );
+        handoff.source_task_id = request.source_task_id.clone();
+        handoff.owned_paths.push("unverified-owned-path".into());
+        assert_eq!(
+            handoff_from_source_snapshot(
+                &request,
+                &source_snapshot(&request, &request.message, &handoff)
+            )
+            .unwrap_err(),
+            "WEB_HANDOFF_OWNERSHIP_UNVERIFIED"
+        );
+        handoff.owned_paths.clear();
+        let mut snapshot = source_snapshot(&request, &request.message, &handoff);
+        let messages = snapshot["messages"].as_array_mut().unwrap();
+        let last = messages.last_mut().unwrap();
+        last["revisionHash"] = json!("0".repeat(64));
+        assert_eq!(
+            handoff_from_source_snapshot(&request, &snapshot).unwrap_err(),
+            "WEB_HANDOFF_SOURCE_SNAPSHOT_INVALID"
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
