@@ -4055,14 +4055,43 @@ pub(crate) fn operator_read_project_web_target_diagnosed(
     control_workspace: &Path,
     project_id: &str,
 ) -> Result<Option<ProjectWebTargetV1>, ProjectWebTargetReadFailureV1> {
-    let lock = wake_target_lock(control_workspace).map_err(|_| {
+    diagnosed_target_with_preparation(control_workspace, project_id, || {})
+}
+
+pub(crate) fn diagnosed_target_with_preparation(
+    control_workspace: &Path,
+    project_id: &str,
+    before_preparation: impl FnOnce(),
+) -> Result<Option<ProjectWebTargetV1>, ProjectWebTargetReadFailureV1> {
+    // Registered Git identity is independent preparation. A delayed probe for
+    // one project must not retain the shared registry/Wake binding mutex.
+    before_preparation();
+    let (control_workspace, wake_store) =
+        project_web_store_expected_diagnosed(control_workspace, project_id, None, true)?;
+    let prepared_root = wake_store.root().canonicalize().map_err(|_| {
+        ProjectWebTargetReadFailureV1::unavailable("WEB_TARGET_WAKE_ROOT_UNAVAILABLE")
+    })?;
+    let lock = wake_target_lock_at_root(&prepared_root).map_err(|_| {
         ProjectWebTargetReadFailureV1::unavailable("WEB_TARGET_COORDINATION_UNAVAILABLE")
     })?;
     let _guard = lock.lock().map_err(|_| {
         ProjectWebTargetReadFailureV1::unavailable("WEB_TARGET_COORDINATION_UNAVAILABLE")
     })?;
-    let (control_workspace, wake_store) =
-        project_web_store_expected_diagnosed(control_workspace, project_id, None, true)?;
+    // Selection may change while preparation runs. Recheck the selected root
+    // under its existing coordination lock before reading the paired state.
+    let selected_root = crate::wake_protocol_client::wake_root_for_workspace(&control_workspace)
+        .and_then(|root| {
+            root.canonicalize()
+                .map_err(|_| "WAKE_TARGET_ROOT_UNAVAILABLE".into())
+        })
+        .map_err(|_| {
+            ProjectWebTargetReadFailureV1::unavailable("WEB_TARGET_WAKE_ROOT_UNAVAILABLE")
+        })?;
+    if selected_root != prepared_root {
+        return Err(ProjectWebTargetReadFailureV1::mismatch(
+            "WEB_TARGET_WAKE_ROOT_CHANGED",
+        ));
+    }
     let config = wake_store.config().map_err(|reason| {
         ProjectWebTargetReadFailureV1::mismatch(if reason == "CONFIG_LOCK_BUSY" {
             "WEB_TARGET_WAKE_CONFIG_BUSY"

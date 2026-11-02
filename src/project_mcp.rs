@@ -1263,6 +1263,38 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn slow_diagnosed_project_preparation_does_not_block_sibling_target_readback() {
+        let (control, _wake, _alpha, _beta) = fixture().await;
+        let (started, observed) = std::sync::mpsc::channel();
+        let (release, released) = std::sync::mpsc::channel();
+        let alpha_root = control.clone();
+        let alpha = std::thread::spawn(move || {
+            mcp::diagnosed_target_with_preparation(&alpha_root, "alpha", || {
+                started.send(()).unwrap();
+                released.recv_timeout(Duration::from_secs(15)).unwrap();
+            })
+        });
+        let preparation_started = observed.recv_timeout(Duration::from_secs(5)).is_ok();
+        let (completed, completion) = std::sync::mpsc::channel();
+        let beta = std::thread::spawn(move || {
+            let result = mcp::operator_read_project_web_target_diagnosed(&control, "beta");
+            let _ = completed.send(());
+            result
+        });
+        let sibling_completed_before_release =
+            completion.recv_timeout(Duration::from_secs(5)).is_ok();
+        // Release and join both native readers even when the liveness check
+        // fails. No test thread is left holding the fixture's shared lock.
+        let _ = release.send(());
+        let alpha = alpha.join().unwrap();
+        let beta = beta.join().unwrap();
+        assert!(preparation_started);
+        assert_eq!(alpha.unwrap().unwrap().project_id, "alpha");
+        assert_eq!(beta.unwrap().unwrap().project_id, "beta");
+        assert!(sibling_completed_before_release);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn project_mcp_connections_route_independently_and_follow_only_paired_rollover() {
         let (control, wake, alpha, beta) = fixture().await;
         let a = OwnedServer::start(alpha.clone(), ALPHA_TOKEN).await;
