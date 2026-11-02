@@ -1,0 +1,36 @@
+{
+  "recordedUtc": "2026-11-02T01:21:28.035102+00:00",
+  "sourceCommit": "313f6a31f13c04c90d6098fad57f1e6a6c99cfd7",
+  "acceptedBase": "e6a3e5e86843a41c74261a821dbb9cd0748477b7",
+  "declaredSourcePaths": 84,
+  "unchangedAcceptedBlobs": 79,
+  "changedSourcePaths": 5,
+  "boundedReadGroups": [
+    8,
+    10
+  ],
+  "sourceAccepted": false,
+  "nativeClaimCreatedAtPreparation": false,
+  "reviewMessagesSentAtPreparation": 0,
+  "context": {
+    "additionalCorrelatedCalls": 7,
+    "observations": 14,
+    "advisoryProxy": 37598,
+    "coverageKnown": false,
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "duplicateImportChangedLedger": false,
+    "browserStarts": 0,
+    "messagesSent": 0,
+    "bindingChanges": 0,
+    "preservationMismatches": 0
+  },
+  "connectorAfterPublicRestart": {
+    "oneReadOnlyCapabilitiesCall": true,
+    "structuredResponse": true,
+    "http429Observed": false,
+    "nativeProviderLaunchAdvertised": false
+  },
+  "remaining": "Genuine current-source review and qualified administrative controller before protected handoff retirement or new-payload promotion.",
+  "operatorActionRequired": false
+}

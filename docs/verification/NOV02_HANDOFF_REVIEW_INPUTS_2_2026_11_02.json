@@ -1,0 +1,103 @@
+{
+  "sourceCommit": "313f6a31f13c04c90d6098fad57f1e6a6c99cfd7",
+  "acceptedBase": "e6a3e5e86843a41c74261a821dbb9cd0748477b7",
+  "fullDeclaredPaths": 84,
+  "unchangedAcceptedBlobs": 79,
+  "allChangedPaths": [
+    "scripts/start-catdesk-stack.ps1",
+    "scripts/test-start-catdesk-stack.ps1",
+    "src/main.rs",
+    "src/operator_facade.rs",
+    "src/promotion_retirement.rs"
+  ],
+  "group": 2,
+  "scope": "PUBLIC_SOURCE_ONLY_NO_INSTALLED_OR_RELEASE_AUTHORITY",
+  "purpose": "CLI, diagnostic changes, strict optional fields and cumulative source suitability",
+  "inputs": [
+    {
+      "path": "scripts/start-catdesk-stack.ps1",
+      "range": [
+        953,
+        972
+      ],
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 953,972 313f6a31f13c04c90d6098fad57f1e6a6c99cfd7 -- scripts/start-catdesk-stack.ps1",
+      "utf8Bytes": 2824,
+      "sha256": "f6a0aeedf7bd9c80aabfc61ec3e45ad2bfa24012c17b6ea0eba1e325c45a764b"
+    },
+    {
+      "path": "scripts/test-start-catdesk-stack.ps1",
+      "range": [
+        200,
+        237
+      ],
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 200,237 313f6a31f13c04c90d6098fad57f1e6a6c99cfd7 -- scripts/test-start-catdesk-stack.ps1",
+      "utf8Bytes": 4025,
+      "sha256": "36d38325babf1ab39182825135718dc4d9964cd064d64e1f2a13e30dfca10414"
+    },
+    {
+      "path": "src/main.rs",
+      "range": [
+        2759,
+        2782
+      ],
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 2759,2782 313f6a31f13c04c90d6098fad57f1e6a6c99cfd7 -- src/main.rs",
+      "utf8Bytes": 1745,
+      "sha256": "013697b5aca0600b669d05ecc5687358551cf7bfe75820fba0609257df38fa8a"
+    },
+    {
+      "path": "src/operator_facade.rs",
+      "range": [
+        233,
+        251
+      ],
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 233,251 313f6a31f13c04c90d6098fad57f1e6a6c99cfd7 -- src/operator_facade.rs",
+      "utf8Bytes": 723,
+      "sha256": "8190e274661c593ac06e40b815d26222d5cbb431b6703d9b2f698a9409ce5e2a"
+    },
+    {
+      "path": "src/operator_facade.rs",
+      "range": [
+        705,
+        751
+      ],
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 705,751 313f6a31f13c04c90d6098fad57f1e6a6c99cfd7 -- src/operator_facade.rs",
+      "utf8Bytes": 2714,
+      "sha256": "4854675e7403907b448c63e8beedeb05e6916f551a833d3d3612f132e5b4eae3"
+    },
+    {
+      "path": "src/operator_facade.rs",
+      "range": [
+        1356,
+        1407
+      ],
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 1356,1407 313f6a31f13c04c90d6098fad57f1e6a6c99cfd7 -- src/operator_facade.rs",
+      "utf8Bytes": 3069,
+      "sha256": "a7657bf8acab063b2ed06b8b0dd30e1890ad35c1d6fb605231d8ff6403d18b90"
+    },
+    {
+      "path": "src/operator_facade.rs",
+      "range": [
+        2224,
+        2286
+      ],
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 2224,2286 313f6a31f13c04c90d6098fad57f1e6a6c99cfd7 -- src/operator_facade.rs",
+      "utf8Bytes": 3125,
+      "sha256": "c143d670cdbbbe17c19c765e001384d37308875d2aefe0c71c370e69d3322d8f"
+    },
+    {
+      "command": "git --no-optional-locks --no-pager diff --raw --no-abbrev e6a3e5e86843a41c74261a821dbb9cd0748477b7 313f6a31f13c04c90d6098fad57f1e6a6c99cfd7 -- src scripts wake tests Cargo.toml Cargo.lock",
+      "utf8Bytes": 627,
+      "sha256": "779b46f1fc7b8bca4e78393c57367c3e73ad9d6e3ef2e961ab323f3c9188c3bc"
+    },
+    {
+      "command": "git --no-optional-locks --no-pager show c55e28582fa1e8a3734de8de4e4dfdb29422e3d8:docs/verification/E6_NATIVE_ACCEPTANCE_AND_ADMIN_QUALIFICATION_2026_11_01.json",
+      "utf8Bytes": 3427,
+      "sha256": "398c413c348d0980345e2c6e6ea6fc469dc190d48bec334036644256bfba7f1b"
+    },
+    {
+      "command": "git --no-optional-locks --no-pager show 313f6a31f13c04c90d6098fad57f1e6a6c99cfd7:docs/verification/COMPLETED_CANONICAL_HANDOFF_RETIREMENT_SOURCE_2026_11_02.json",
+      "utf8Bytes": 4105,
+      "sha256": "8d214c6eddbc7bd41067ca24382a2bf2af5b95ccb8cb96a19e590d02851d46b6"
+    }
+  ]
+}
