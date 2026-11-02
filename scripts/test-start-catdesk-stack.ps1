@@ -202,6 +202,34 @@ try {
   }
   $script:runtimeCalls=0;$script:BootstrapSeams["RuntimeStatus"]={param($r,$t)$script:runtimeCalls++;if($script:runtimeCalls -eq 1){throw "transient unavailable"};[pscustomobject]@{processRunning=$true;healthOk=$true;isReady=$true;healthUrl="http://127.0.0.1:4411"}}
   $script:BootstrapSeams["RuntimeHttp"]={param($uri)[pscustomobject]@{StatusCode=200}}
+  & {
+    Set-StrictMode -Version Latest
+    foreach($shape in @(
+      @{process_running=$true;healthy=$true;ready=$true;health_url='http://127.0.0.1:4411'},
+      @{processRunning=$true;healthOk=$true;isReady=$true;healthUrl='http://127.0.0.1:4411'},
+      @{running=$true;healthy=$true;ready=$true;health_url='http://127.0.0.1:4411'},
+      @{status='ready';health_url='http://127.0.0.1:4411'},
+      @{state='connected';health_url='http://127.0.0.1:4411'}
+    )){
+      $script:strictRuntimeShape=[pscustomobject]$shape
+      $script:BootstrapSeams['RuntimeStatus']={param($r,$t)$script:strictRuntimeShape}
+      $strictReady=Get-OfficialRuntimeVerification $root 5
+      if(-not $strictReady.Verified -or $strictReady.Gate -ne 'READY'){throw 'strict-mode optional runtime fields rejected healthy status'}
+    }
+    foreach($shape in @(
+      @{},
+      @{process_running=$true;healthy=$true},
+      @{process_running=$true;healthy=$true;ready=$false},
+      @{process_running=$false;healthy=$true;ready=$true}
+    )){
+      $script:strictRuntimeShape=[pscustomobject]$shape
+      $script:BootstrapSeams['RuntimeStatus']={param($r,$t)$script:strictRuntimeShape}
+      $strictNotReady=Get-OfficialRuntimeVerification $root 5
+      if($strictNotReady.Verified -or $strictNotReady.Gate -ne 'RUNTIME_STATUS_NOT_READY'){throw 'strict-mode incomplete runtime status escaped readiness gate'}
+    }
+    Remove-Variable strictRuntimeShape -Scope Script
+  }
+  $script:BootstrapSeams['RuntimeStatus']={param($r,$t)$script:runtimeCalls++;if($script:runtimeCalls -eq 1){throw 'transient unavailable'};[pscustomobject]@{processRunning=$true;healthOk=$true;isReady=$true;healthUrl='http://127.0.0.1:4411'}}
   $transient=Get-OfficialRuntimeVerification $root 5;if($transient.Verified -or $transient.Gate -ne 'RUNTIME_STATUS_TRANSIENT'){throw "transient status failure was not classified"};if(-not(Test-OfficialRuntimeVerified $root 5)){throw "normalized runtime fields rejected"}
   $script:BootstrapSeams["RuntimeHttp"]={param($uri)if($uri -match 'readyz$'){[pscustomobject]@{StatusCode=503}}else{[pscustomobject]@{StatusCode=200}}};if(Test-OfficialRuntimeVerified $root 5){throw "readyz failure accepted"}
   $readyz=Get-OfficialRuntimeVerification $root 5;if($readyz.Gate -ne 'RUNTIME_READYZ_FAILED'){throw "readyz failure gate was not retained"}

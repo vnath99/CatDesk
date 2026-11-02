@@ -955,8 +955,16 @@ function Get-OfficialRuntimeVerification {
         $gate = 'RUNTIME_STATUS_TRANSIENT'
         $status=Invoke-BootstrapSeam -Name "RuntimeStatus" -Arguments @($Root,$TimeoutSeconds,$Alias,$ClientPath,$Deadline) -Default {param($workspace,$timeout,$runtimeAlias,$clientPath,$commandDeadline)if(-not $clientPath){throw "official runtime client unavailable"};$timeoutMilliseconds=Get-RemainingReadinessMilliseconds -Deadline $commandDeadline -RequestedMilliseconds ([Math]::Min($timeout * 1000,$script:MaxTunnelClientCommandMilliseconds));$result=Invoke-BoundedTunnelClient -ClientPath $clientPath -Arguments @("runtimes","status",$runtimeAlias,"--json") -TimeoutMilliseconds $timeoutMilliseconds;$json=$result.Stdout;if($json.Length -gt $script:MaxTunnelClientOutputBytes){throw "runtime status unavailable"};$json|ConvertFrom-Json -ErrorAction Stop}
         if($null -eq $status){return New-OfficialRuntimeVerificationResult -Verified $false -Gate 'RUNTIME_STATUS_UNAVAILABLE'}
-        $state=if($status.status){[string]$status.status}elseif($status.state){[string]$status.state}else{""}
-        $running=[bool]($status.running -or $status.process_running -or $status.processRunning -or $state -in @("running","ready","connected"));$healthy=[bool]($status.healthy -or $status.health_ok -or $status.healthOk -or $state -in @("healthy","ready","connected"));$ready=[bool]($status.ready -or $status.isReady -or $state -in @("ready","connected"))
+        # Runtime versions publish different optional aliases. Read only
+        # present properties so a strict-mode caller does not turn a healthy
+        # process_running/healthy/ready response into RUNTIME_STATUS_TRANSIENT.
+        $fields=@{}
+        foreach($name in @('status','state','running','process_running','processRunning','healthy','health_ok','healthOk','ready','isReady')){
+            $property=$status.PSObject.Properties[$name]
+            if($null -ne $property){$fields[$name]=$property.Value}
+        }
+        $state=if($fields['status']){[string]$fields['status']}elseif($fields['state']){[string]$fields['state']}else{""}
+        $running=[bool]($fields['running'] -or $fields['process_running'] -or $fields['processRunning'] -or $state -in @("running","ready","connected"));$healthy=[bool]($fields['healthy'] -or $fields['health_ok'] -or $fields['healthOk'] -or $state -in @("healthy","ready","connected"));$ready=[bool]($fields['ready'] -or $fields['isReady'] -or $state -in @("ready","connected"))
         if(-not($running -and $healthy -and $ready)){return New-OfficialRuntimeVerificationResult -Verified $false -Gate 'RUNTIME_STATUS_NOT_READY'}
         $gate = 'RUNTIME_HEALTH_REFERENCE_INVALID'
         $base=Get-AuthoritativeRuntimeBase -Status $status -Alias $Alias

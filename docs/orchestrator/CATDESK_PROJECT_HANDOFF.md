@@ -1,3 +1,11 @@
+## 2026-11-02T00:51:10.412283+00:00 — completed promotion record retired; trusted backend restored; strict runtime diagnosis corrected
+
+The existing reviewed completed-promotion/evidence-CAS procedure archived six original records and preserved prior retirement history. A supported public stop/start restored the same trusted C254 executable and fingerprint; authenticated MCP is READY (401/401/200/200), with 102 catalog tools. No new payload was installed. Eighteen preservation pins match, the existing tunnel/profile and project bindings are retained, recurring WakeHost remains stopped, and no test-owned process remains. All failed private-wrapper attempts remain recorded; retirement and startup were not replayed.
+
+Actual tunnel status reported running/healthy/ready. A strict-mode optional-property defect incorrectly classified it as transient. The source helper now reads only present aliases; nine added cases and the full bootstrap suite pass under PowerShell 7 and Windows PowerShell 5.1. Old behavior was reproduced; the corrected read-only function verified the existing tunnel's actual health/readiness endpoints as 200/200 without restarting it. Canonical scripts and release authority remain unchanged. This source correction is not an installed upgrade or two-Web coding acceptance.
+
+Next is the normal guarded promotion of the retained attested payload through the qualified administrative controller, followed by installed rollback/recovery and two-Web/native acceptance. No new candidate or producer confirmation is needed. No operator action is currently required. Evidence: `docs/verification/COMPLETED_RETIREMENT_RESTART_AND_RUNTIME_SHAPE_2026_11_02.json`.
+
 ## 2026-11-01T23:57:47.678643+00:00 — genuine current-source PASS, native acknowledgment and qualified administrative controller
 
 The focused main reassessment returned cumulative SOURCE PASS for e6a3e5e with all84 paths retained,81 accepted predecessor blobs unchanged and all three changed source paths reassessed. Seven exact source reads are independently corroborated; no findings were reported. Prior partial/inconclusive reports remain unchanged. The original contiguous JSON span was copied without field or whitespace rewriting; its SHA256 isdafaac833784f84be96d6f993f0ddbcc5f1f84130b8c8c1119e033828caae9d0. The raw assistant envelope remains separately preserved.
