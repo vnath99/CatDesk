@@ -951,6 +951,41 @@ class CurrentDomTests(unittest.TestCase):
                          observationEditor=True)
         self.assertEqual(self.sink.browser_surface_observation(cdp)["route"], "TARGET_DRIFT")
 
+    def test_completion_uses_actual_document_even_if_driver_metadata_is_stale(self):
+        cdp = CurrentDom(metadataLocation='https://chatgpt.com/', observationEditor=True)
+        self.assertEqual(self.sink.observe_cooperative_response(
+            cdp, 'exact wake message', bridge.digest('exact wake message')), 'RESPONSE_COMPLETE')
+
+    def test_completion_refuses_foreign_document_despite_expected_driver_metadata(self):
+        cdp = CurrentDom(location='https://chatgpt.com/c/foreign', metadataLocation=self.sink.url,
+                         observationEditor=True, traceClicks=True)
+        with self.assertRaisesRegex(bridge.Attention, '^RESPONSE_TARGET_DRIFT$'):
+            self.sink.observe_cooperative_response(cdp, 'exact wake message', bridge.digest('exact wake message'))
+        self.assertEqual(getattr(cdp, 'mutations', 0), 0)
+
+    def test_completion_rechecks_document_after_reading_exact_response(self):
+        cdp = CurrentDom(observationEditor=True)
+        original = self.sink.response_snapshot
+        def drift(*args, **kwargs):
+            result = original(*args, **kwargs)
+            cdp.options['location'] = 'https://chatgpt.com/c/foreign'
+            return result
+        with patch.object(self.sink, 'response_snapshot', side_effect=drift), \
+                self.assertRaisesRegex(bridge.Attention, '^RESPONSE_TARGET_DRIFT$'):
+            self.sink.observe_cooperative_response(cdp, 'exact wake message', bridge.digest('exact wake message'))
+
+    def test_completion_requires_readable_document_route_without_private_failure_text(self):
+        for value in [None, {}, 17]:
+            class InvalidDocument:
+                def evaluate(self, _): return value
+                def get_current_url(self): raise AssertionError('driver metadata is not document authority')
+            with self.assertRaisesRegex(bridge.Attention, '^RESPONSE_TARGET_DRIFT$'):
+                self.sink.require_response_document(InvalidDocument())
+        class Unavailable:
+            def evaluate(self, _): raise RuntimeError('PRIVATE_BROWSER_DETAILS')
+        with self.assertRaisesRegex(bridge.Attention, '^RESPONSE_TARGET_QUERY_FAILED$'):
+            self.sink.require_response_document(Unavailable())
+
     def test_unique_assistant_timeout_retry_is_scoped_and_not_a_user_submit(self):
         for legacy in [False, True]:
             with self.subTest(legacy=legacy):

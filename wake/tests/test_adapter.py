@@ -30,6 +30,9 @@ class FakeCdp:
         self.timeline = []
         self.keys = []
     def get_current_url(self): return self.url
+    def evaluate(self, script):
+        if script == "location.href": return self.url
+        raise AssertionError("unexpected fixture document query")
     def get(self, url): self.url = url
     def send_keys(self, selector, text, timeout):
         self.keys.append((selector, text, timeout))

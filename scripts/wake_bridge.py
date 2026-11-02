@@ -1641,6 +1641,15 @@ class CdpSink:
             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
         return value[1], value[2], value[3], value[4]
 
+    def require_response_document(self, cdp: Any) -> None:
+        """Bind observation to the evaluated document, not driver metadata."""
+        try:
+            current = self.cdp_value(cdp.evaluate("location.href"))
+        except Exception as error:
+            raise Attention("RESPONSE_TARGET_QUERY_FAILED") from error
+        if not isinstance(current, str) or not self.exact(current):
+            raise Attention("RESPONSE_TARGET_DRIFT")
+
     def observe_cooperative_response(self, cdp: Any, message: str, expected_digest: str) -> str:
         """One read-only check of a durably sent USER turn on a new document.
 
@@ -1651,12 +1660,7 @@ class CdpSink:
         # fixed structural reasons leave the browser, never text or selectors.
         self.response_observation_reason = None
         self.response_observation_controls = None
-        try:
-            current = str(cdp.get_current_url())
-        except Exception as error:
-            raise Attention("RESPONSE_TARGET_QUERY_FAILED") from error
-        if not self.exact(current):
-            raise Attention("RESPONSE_TARGET_DRIFT")
+        self.require_response_document(cdp)
         if self.post_submit_visible_any(cdp, NETWORK):
             raise Attention("RESPONSE_NETWORK_ERROR")
         if (self.post_submit_visible_any(cdp, LOGIN) or
@@ -1700,9 +1704,11 @@ class CdpSink:
                 cdp, message, require_usable_body=True, diagnostic=diagnostic
             )
         except PostSubmitUnknown as error:
+            self.require_response_document(cdp)
             if str(error) == "RESPONSE_LOAD_ERROR":
                 raise Attention("RESPONSE_LOAD_ERROR") from error
             raise Attention("RESPONSE_STATE_UNPROVEN") from error
+        self.require_response_document(cdp)
         if timeout_count:
             raise Attention("RESPONSE_TIMEOUT_RETRY_REQUIRED")
         self.response_observation_reason = diagnostic.get("reason")
