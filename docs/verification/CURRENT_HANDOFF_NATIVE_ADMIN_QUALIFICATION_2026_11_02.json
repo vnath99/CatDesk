@@ -1,0 +1,81 @@
+{
+  "recordedUtc": "2026-11-02T02:22:59.515499+00:00",
+  "sourceCommit": "313f6a31f13c04c90d6098fad57f1e6a6c99cfd7",
+  "acceptedScope": {
+    "paths": 84,
+    "unchangedAcceptedBaseBlobs": 79,
+    "changedPaths": 5,
+    "independentSourceVerdict": "PASS",
+    "taskCorrelatedCommandLogs": [
+      9,
+      11
+    ],
+    "rawAssistantResponseSha256": "5928eba7005d961a423675ebb363f95392c08aa02d803e264831b7fc3451c9a1",
+    "exactOriginalJsonSpanSha256": "6626a5da216a565db37eed258fc4e2bce6b1ffc0bb319d4216cd807437afb481",
+    "originalReportFieldsRewritten": false
+  },
+  "nativeChain": {
+    "state": "COMPLETED_VERIFIED",
+    "active": false,
+    "stateVersion": 7,
+    "acknowledged": true,
+    "snapshotId": "78bae7b4a3aa4dbcae90b20f161006569582ce98dc51f28efabae041208ae702",
+    "snapshotManifestFileSha256": "3bd7bef473b473d1b5973c0edac496c2d7dd4c87081ccda15005958c30762131",
+    "snapshotEntries": 232,
+    "savedObjectsAndCurrentBytesVerified": true,
+    "sourceOwnerNaturalExit": true,
+    "endpointClosed": true,
+    "oldNativePinsChanged": 0,
+    "otherAccountingAndInboxRowsPreserved": true
+  },
+  "sourceIntegration": {
+    "canonicalTrackedSourceCommit": "313f6a31f13c04c90d6098fad57f1e6a6c99cfd7",
+    "normalFastForward": true,
+    "trackedPathsAdvanced": 19,
+    "preexistingUntrackedFilesPreserved": 20,
+    "preservationPins": 4726,
+    "mismatches": 0,
+    "protectedExeAndFingerprintUnchanged": true
+  },
+  "administrativeController": {
+    "sha256": "4e655bb132ba31dee783f598cf4d660593c70a6f561438eba15511a896df4911",
+    "role": "REVIEWED_QUALIFIED_ADMIN_ONLY_NOT_RELEASE_PAYLOAD",
+    "backendOnlySupport": true,
+    "isolatedComputerSupervisorCatalog": 79,
+    "authStatuses": [
+      401,
+      401,
+      200,
+      200
+    ],
+    "centralToolPresent": true,
+    "nativeDispatchAndStatusAdvertised": true,
+    "naturalExit": true,
+    "preservationPins": 5685,
+    "preservationMismatches": 0,
+    "actualServingInspectionRefused": "PROMOTION_RETIREMENT_OWNER_OR_TRUST_UNPROVEN",
+    "stoppedProtectedReceiptTransition": "NOT_YET_EXECUTED"
+  },
+  "retainedReleasePayload": {
+    "sha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "state": "BUILD_ATTESTED_REVALIDATED_BY_EXISTING_NATIVE_PRODUCER",
+    "rebuilt": false,
+    "newProducerConfirmation": false,
+    "installed": false
+  },
+  "context": {
+    "advisoryProxy": 59719,
+    "coverageKnown": false,
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "repeatImportChangedLedger": false
+  },
+  "acceptanceLimits": [
+    "Qualified administrative runtime and current source are not an installed new-payload upgrade.",
+    "Actual ChatGPT client central-tool publication remains separate from the isolated administrative catalog.",
+    "Protected receipt retirement, normal payload promotion, installed rollback/recovery and two-Web/native coding remain open.",
+    "Full context-meter calibration and later provider-client work remain mandatory."
+  ],
+  "operatorActionRequired": false,
+  "goal": "ACTIVE"
+}
