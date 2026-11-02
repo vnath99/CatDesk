@@ -42,7 +42,8 @@ struct SnapshotOutcome {
     diagnostic: SnapshotDiagnostic,
 }
 
-fn diagnostic_failure(reason: &str) -> String {
+/// Closed, content-free codes shared by snapshot and operator diagnostics.
+pub fn snapshot_diagnostic_code(reason: &str) -> String {
     let code = reason.split_once(':').map_or(reason, |(code, _)| code);
     match code {
         "SOURCE_SNAPSHOT_TIMEOUT"
@@ -104,6 +105,11 @@ fn diagnostic_failure(reason: &str) -> String {
         | "RESPONSE_LOAD_ERROR"
         | "WEB_REVIEW_READ_TIMEOUT"
         | "WEB_REVIEW_TARGET_CHANGED"
+        | "WEB_REVIEW_SNAPSHOT_INVALID"
+        | "WEB_REVIEW_USER_WITNESS_REQUIRED"
+        | "WEB_REVIEW_EVENT_NOT_LATEST_OR_INCOMPLETE"
+        | "WEB_REVIEW_RESPONSE_NOT_COMPLETE"
+        | "WEB_REVIEW_RESPONSE_LOAD_ERROR"
         | "WEB_AUTO_OWNER_STOPPED" => code.into(),
         _ => "SOURCE_SNAPSHOT_FAILED".into(),
     }
@@ -113,7 +119,7 @@ impl SnapshotOutcome {
     fn report(self) -> SnapshotReadReport {
         let (snapshot, failure) = match self.result {
             Ok(snapshot) => (Some(snapshot), None),
-            Err(reason) => (None, Some(diagnostic_failure(&reason))),
+            Err(reason) => (None, Some(snapshot_diagnostic_code(&reason))),
         };
         SnapshotReadReport {
             snapshot,
@@ -734,10 +740,10 @@ mod tests {
             "CHATGPT_NOT_IDLE",
             "SELENIUMBASE_IMPORT_FAILED",
         ] {
-            assert_eq!(diagnostic_failure(reason), reason);
+            assert_eq!(snapshot_diagnostic_code(reason), reason);
         }
         assert_eq!(
-            diagnostic_failure("SOURCE_SNAPSHOT_TIMEOUT: private text"),
+            snapshot_diagnostic_code("SOURCE_SNAPSHOT_TIMEOUT: private text"),
             "SOURCE_SNAPSHOT_TIMEOUT"
         );
         for reason in [
@@ -749,7 +755,7 @@ mod tests {
             "",
             &"SOURCE_".repeat(12),
         ] {
-            assert_eq!(diagnostic_failure(reason), "SOURCE_SNAPSHOT_FAILED");
+            assert_eq!(snapshot_diagnostic_code(reason), "SOURCE_SNAPSHOT_FAILED");
         }
     }
 

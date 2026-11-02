@@ -38,6 +38,7 @@ pub use task_context::{TaskContextOperation, TaskContextSubmission, run_private_
 mod snapshot;
 pub use snapshot::{
     SnapshotDiagnostic, SnapshotReadPhase, SnapshotReadReport, diagnosed_sent_snapshot,
+    snapshot_diagnostic_code,
 };
 #[path = "runtime_scheduler.rs"]
 mod scheduler;
