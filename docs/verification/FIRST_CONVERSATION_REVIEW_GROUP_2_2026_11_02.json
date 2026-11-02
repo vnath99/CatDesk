@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "c52e9ef75490381becabaaf027f98f2845f1a183",
+  "acceptedBaselineCommit": "313f6a31f13c04c90d6098fad57f1e6a6c99cfd7",
+  "scopeCounts": {
+    "UNCHANGED_ACCEPTED": 78,
+    "CHANGED_REQUIRES_REVIEW": 6,
+    "NEW": 2
+  },
+  "fullDeclaredCodePaths": 86,
+  "scopeDigest": "a327e9405ec439ad43ccc983e90f1962bcde3cf7ce0197d4378be417d5c6558e",
+  "group": 2,
+  "status": "PREPARED_SOURCE_INPUTS_NOT_REVIEW_ACCEPTANCE",
+  "inputs": [
+    {
+      "number": 9,
+      "path": "src/operator_web_cli.rs",
+      "firstLine": 1854,
+      "lastLine": 1860,
+      "command": "git --no-optional-locks --no-pager blame -L 1854,1860 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_cli.rs",
+      "utf8Bytes": 777,
+      "sha256": "7212a47779c5bab54f7264067fa784ee28b7467ed979ffe755beb42ede723c2b"
+    },
+    {
+      "number": 10,
+      "path": "src/operator_web_onboarding.rs",
+      "firstLine": 1,
+      "lastLine": 60,
+      "command": "git --no-optional-locks --no-pager blame -L 1,60 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_onboarding.rs",
+      "utf8Bytes": 5011,
+      "sha256": "b957324111e037bc7e6b503b31fe3a359d49f85bdc7a578cd94d65bef79b47b0"
+    },
+    {
+      "number": 11,
+      "path": "src/operator_web_onboarding.rs",
+      "firstLine": 61,
+      "lastLine": 120,
+      "command": "git --no-optional-locks --no-pager blame -L 61,120 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_onboarding.rs",
+      "utf8Bytes": 5044,
+      "sha256": "7489697f927c9ec1d29480f873c944d5e0c74b22e1dafcc79442a754450880f9"
+    },
+    {
+      "number": 12,
+      "path": "src/operator_web_onboarding.rs",
+      "firstLine": 121,
+      "lastLine": 180,
+      "command": "git --no-optional-locks --no-pager blame -L 121,180 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_onboarding.rs",
+      "utf8Bytes": 5182,
+      "sha256": "0c968d26df1cb83f493962a95907573e4aa21f789b8fdcece1131ad8625973eb"
+    },
+    {
+      "number": 13,
+      "path": "src/operator_web_onboarding.rs",
+      "firstLine": 181,
+      "lastLine": 240,
+      "command": "git --no-optional-locks --no-pager blame -L 181,240 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_onboarding.rs",
+      "utf8Bytes": 5223,
+      "sha256": "81278297c1e69f6e26c94da8251b23e9cd81a0a5d2891b35ea229e8e7fd23ae0"
+    },
+    {
+      "number": 14,
+      "path": "src/operator_web_onboarding.rs",
+      "firstLine": 241,
+      "lastLine": 300,
+      "command": "git --no-optional-locks --no-pager blame -L 241,300 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_onboarding.rs",
+      "utf8Bytes": 4925,
+      "sha256": "59bd492ed587ea9b48726c47ebf50e75e0cd5ea9cd8e4a5c043719a90852defd"
+    },
+    {
+      "number": 15,
+      "path": "src/operator_web_onboarding.rs",
+      "firstLine": 301,
+      "lastLine": 360,
+      "command": "git --no-optional-locks --no-pager blame -L 301,360 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_onboarding.rs",
+      "utf8Bytes": 5139,
+      "sha256": "2283b73f89a557cc5c4bb7248e49760bfa61ec3526fe68e740fc9ba5b6df169f"
+    },
+    {
+      "number": 16,
+      "path": "src/operator_web_onboarding.rs",
+      "firstLine": 361,
+      "lastLine": 420,
+      "command": "git --no-optional-locks --no-pager blame -L 361,420 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_onboarding.rs",
+      "utf8Bytes": 5176,
+      "sha256": "62dbcd1ec8e71bd1c6c333b75159992295fbfe00bf7e6b014ef19a61045d7160"
+    }
+  ],
+  "limitations": [
+    "Prior baseline acceptance covers only unchanged Git blobs.",
+    "All 86 paths remain declared; inspect six changed and two new paths before cumulative current-source acceptance.",
+    "Package health and a source coordinator review do not establish independent review, producer or protected publication authority.",
+    "Retain expanded regression deadline failure and source/installed/live distinctions."
+  ]
+}
