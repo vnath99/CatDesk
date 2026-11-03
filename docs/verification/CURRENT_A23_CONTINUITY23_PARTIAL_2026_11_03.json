@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-03T15:46:04.028502+00:00",
+  "classification": "SANITIZED_ACTUAL_PARTIAL_REVIEW_NOT_CUMULATIVE_APPROVAL",
+  "sourceCommit": "a23a52a5fc5cb9bc2d2a5ff64bbd037f92f0a176",
+  "originalResponseSha256": "ee770e731c37043769cb97871d6a8517d7d98f1a1079ff2b0112cc625ea20686",
+  "controlledNamesGeneralized": true,
+  "substantiveFindingsPreserved": true,
+  "effectScope": {
+    "readOnly": true,
+    "projectNativeExecution": false,
+    "bindingChanges": false,
+    "protectedProductionChanges": false,
+    "historicalUnknownRequestsReplayed": false
+  },
+  "response": {
+    "marker": "NOV03_A23_G5_CONTINUITY_23",
+    "sourceCommit": "a23a52a5fc5cb9bc2d2a5ff64bbd037f92f0a176",
+    "verdict": "REVIEWED_PARTIAL",
+    "findings": [
+      "No independently established defect in the reviewed source ranges.",
+      "Current v5 session current-report-only-review is active, WAITING_FOR_CHATGPT, stateVersion 4.",
+      "Project controlled-project is absent from the current v5 registry snapshot; native ownership remains independently unverified.",
+      "Batch 4 visibility is ALL_VISIBLE: all seven stdout results were visible in this conversation, with exitCode 0, no output truncation and no repeated commands. This does not certify unredacted original source.",
+      "All seven successor continuity artifacts were retrieved successfully, exitCode 0.",
+      "Source scope reports 90 paths, 72 accepted baseline blobs and 89 unchanged A23-versus-38be blobs. These counts are artifact-reported, not independently rehashed here.",
+      "Historical timing regression cause remains UNKNOWN."
+    ],
+    "invariantFindings": [
+      "A23 changes generated retry guidance in src/mcp.rs; platform safety refusals require stopping, not automatic retries.",
+      "Ambiguous outcomes require durable-receipt reconciliation and current authorization before permitted retries.",
+      "Review dispatch requires matching grant, project, target, request, event, message digest and historical dispatch evidence.",
+      "Reservation recovery rejects altered OPEN records and unrelated active requests.",
+      "Batch 4 confirmed exact prepared-work matching, grant-scoped dispatch, pre-submit retry restrictions and duplicate-publication guards.",
+      "Pre-submit retry requires LOGIN_OR_PROFILE_REQUIRED, no receipt, exact delivery identity and matching queued event.",
+      "Project lease, registry lock, paired target and stopped-host checks constrain review operations.",
+      "Rollover rejects quarantined work and ambiguous submissions; USER replay is not authorized.",
+      "Supervisor authority, startup ownership and compensation failures are checked separately.",
+      "Source review, response completion, installed verification and production acceptance remain distinct."
+    ],
+    "completedArtifacts": [
+      "CURRENT_A23_SUCCESSOR_CONTINUITY_INPUTS_2026_11_03.json",
+      "CURRENT_A23_PARTIAL_SEMANTICS_1_2026_11_03.json",
+      "CURRENT_A23_PARTIAL_SEMANTICS_2_2026_11_03.json",
+      "GUIDANCE_FIXED_SOURCE_SCOPE_2026_11_03.json",
+      "GUIDANCE_REFUSAL_RETRY_FIX_SOURCE_2026_11_03.json",
+      "CURRENT_A23_SECOND_BOUNDED_REVIEW_2026_11_03.json",
+      "CURRENT_A23_CONTINUATION_PARTIAL_2026_11_03.json",
+      "CURRENT_A23_OBSERVED_PRESSURE_GENERATION5_2026_11_03.json",
+      "Earlier batches 1-3: 30 source reads; batch 4: seven source reads. No batch 4 replay."
+    ],
+    "outputTruncated": false,
+    "limitations": [
+      "Cumulative 90-path semantic acceptance not established.",
+      "One previously gateway-redacted Rust documentation line was characterized by a separate artifact; original unfiltered text was not imported.",
+      "Manifest-reported blob equivalence and historical test results are not new independent verification.",
+      "Historical 164-pass, one-failure, one-ignored timing evidence remains unresolved.",
+      "Canonical/control scope mismatch and registry ownership verification remain open.",
+      "Exact report, ACK, snapshot, producer, installed, native and live-browser acceptance remain outstanding."
+    ],
+    "neededReads": [
+      "Bounded dependency batches 5-10, without repeating batches 1-4.",
+      "Two global scope datasets and remaining exact grant, lease, CAS, receipt and no-replay dependencies.",
+      "Two omitted supporting guidance artifacts and documentation-line clarification for cumulative assessment.",
+      "Full 90-path scope evidence and independently verified unchanged-blob reuse.",
+      "Historical timing regression evidence and canonical/control authority boundaries."
+    ],
+    "continuationBatch4Visibility": "ALL_VISIBLE",
+    "cumulativeSourceAccepted": false
+  },
+  "sourceAccepted": false,
+  "producerAuthority": false
+}
