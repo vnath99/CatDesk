@@ -139,6 +139,110 @@ mod tests {
             .count()
     }
 
+    fn reconciled_acceptance_fixture(label: &str) -> (Store, crate::store::Delivery) {
+        let (store, lease) = fixture(label);
+        let event = store
+            .events()
+            .unwrap()
+            .into_iter()
+            .find(|event| event.event_id == "alpha-1")
+            .unwrap();
+        let claimed = store.claim(&event, &lease).unwrap();
+        store
+            .transition("alpha-1", lease.owner(), Phase::Submitting, None, None)
+            .unwrap();
+        store.start_submission_timer("alpha-1").unwrap();
+        let started = store.timer("alpha-1").unwrap().unwrap().started_utc;
+        let receipt = crate::store::Receipt {
+            schema_version: crate::PROTOCOL_VERSION,
+            event_id: event.event_id.clone(),
+            target_generation: claimed.target.generation,
+            target_digest: claimed.target.digest.clone(),
+            message_digest: claimed.message_digest,
+            // A later persistence witness must not rewrite acceptance time.
+            sent_utc: started + 10,
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        store
+            .record_exact_receipt_timer("alpha-1", &receipt)
+            .unwrap();
+        let delivery = store.reconcile_submitting_sent("alpha-1", receipt).unwrap();
+        assert_eq!(
+            store.timer("alpha-1").unwrap().unwrap().started_utc,
+            started
+        );
+        drop(lease);
+        (store, delivery)
+    }
+
+    #[test]
+    fn reobserve_reconciled_receipt_preserves_earlier_bound_acceptance_timer() {
+        let (store, delivery) = reconciled_acceptance_fixture("reobserve-reconciled-acceptance");
+        let timer = store.timer("alpha-1").unwrap().unwrap();
+        let receipt = delivery.receipt.as_ref().unwrap();
+        assert!(timer.started_utc < receipt.sent_utc);
+        let attempt = store
+            .begin_response_reobservation("alpha", &delivery.target, "alpha-1")
+            .unwrap();
+        assert!(
+            store
+                .finish_response_reobservation(&attempt, &witness(&delivery, "RESPONSE_COMPLETE"))
+                .unwrap()
+        );
+        let completed = store.timer("alpha-1").unwrap().unwrap();
+        assert_eq!(completed.started_utc, timer.started_utc);
+        assert_eq!(completed.response_state, ResponseState::Complete);
+        assert_eq!(store.delivery("alpha-1").unwrap().unwrap(), delivery);
+        assert_eq!(log_count(&store), 2);
+    }
+
+    #[test]
+    fn reobserve_earlier_timer_requires_exact_submission_window_witness() {
+        for invalid in ["missing", "foreign", "late-start", "after-receipt"] {
+            let (store, delivery) = reconciled_acceptance_fixture(invalid);
+            let path = store.root().join("logs/submission-start-alpha-1.json");
+            match invalid {
+                "missing" => std::fs::remove_file(path).unwrap(),
+                "foreign" | "late-start" => {
+                    let mut start: Value = read(&path).unwrap();
+                    if invalid == "foreign" {
+                        start["targetDigest"] = json!("a".repeat(64));
+                    } else {
+                        start["startedUtc"] = json!(delivery.receipt.as_ref().unwrap().sent_utc);
+                    }
+                    atomic(&path, &start).unwrap();
+                }
+                _ => {
+                    let mut timer = store.timer("alpha-1").unwrap().unwrap();
+                    timer.started_utc = delivery.receipt.as_ref().unwrap().sent_utc + 1;
+                    atomic(&store.root().join("turns/alpha-1.json"), &timer).unwrap();
+                }
+            }
+            let before = timer_bytes(&store);
+            assert!(
+                store
+                    .begin_response_reobservation("alpha", &delivery.target, "alpha-1")
+                    .is_err()
+            );
+            assert_eq!(timer_bytes(&store), before);
+            assert_eq!(store.delivery("alpha-1").unwrap().unwrap(), delivery);
+            assert_eq!(log_count(&store), 0);
+        }
+    }
+
+    #[test]
+    fn reobserve_equal_legacy_receipt_timer_needs_no_new_sidecar() {
+        let (store, lease) = fixture("reobserve-equal-legacy-timer");
+        let delivery = sent(&store, &lease, "alpha-1");
+        std::fs::remove_file(store.root().join("logs/submission-start-alpha-1.json")).unwrap();
+        let before = timer_bytes(&store);
+        store
+            .begin_response_reobservation("alpha", &delivery.target, "alpha-1")
+            .unwrap();
+        assert_eq!(timer_bytes(&store), before);
+        assert_eq!(log_count(&store), 1);
+    }
+
     #[test]
     fn reobserve_aged_attention_commits_only_fresh_witness_and_preserves_prior_timer() {
         let (store, lease) = fixture("reobserve-aged");

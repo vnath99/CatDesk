@@ -53,9 +53,24 @@ impl Store {
             || receipt.message_digest != delivery.message_digest
             || delivery.message_digest != digest(&delivery.event.message)
             || receipt.evidence != "EXACT_USER_MESSAGE_APPENDED"
-            || timer.started_utc != receipt.sent_utc
         {
             return Err("RESPONSE_REOBSERVE_SCOPE_INVALID".into());
+        }
+        if timer.started_utc != receipt.sent_utc {
+            // SUBMISSION_ACCEPTED can start the timer before a later exact
+            // receipt is recovered. Keep that original clock, but require the
+            // existing event/target-bound submission witness for this case.
+            // Legacy equal-time receipts retain their original read contract.
+            if timer.started_utc > receipt.sent_utc
+                || timer.started_utc < delivery.event.created_utc
+                || !self
+                    .submission_start_path(event)
+                    .try_exists()
+                    .map_err(|_| "RESPONSE_REOBSERVE_SCOPE_INVALID")?
+                || timer.started_utc < self.submission_started_utc(&delivery)?
+            {
+                return Err("RESPONSE_REOBSERVE_SCOPE_INVALID".into());
+            }
         }
         Ok((delivery, timer))
     }
