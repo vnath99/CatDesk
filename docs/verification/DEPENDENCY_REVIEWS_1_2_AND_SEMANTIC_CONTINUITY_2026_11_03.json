@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-03T02:01:24.724972+00:00",
+  "classification": "TESTED_CONTROLLED_LIVE_SOURCE_REVIEW",
+  "sourceCommit": "6d737c9a0f6f34496fc88b9fec02433bd1599117",
+  "reviewedDependencyBatches": [
+    1,
+    2
+  ],
+  "newCorroboratedGitCalls": 17,
+  "totalCorroboratedGitCalls": 99,
+  "completedPartialObservations": 13,
+  "partialResponseSha256": [
+    "091df67ec669ab572c7142d20000ae2650d9b3c9d53a67e2449df9cd05c3e922",
+    "c52d698d643a8915e384f462bdcf1ae36ffe96d73ecdc218579f4277ab468a0d"
+  ],
+  "exactDeliveryAndCompletedResponsesVerified": true,
+  "partialMarkerCompatibility": "Exact request marker or same marker plus exact frozen dependencyBatch suffix; no prefix heuristic or cumulative approval.",
+  "requestOrResponseBytesModified": false,
+  "unknownSubmissionsReplayed": false,
+  "currentFullModuleEvidenceActuallyInspected": true,
+  "historicalFailureSoleCauseEstablished": false,
+  "contextGeneration": 3,
+  "observedProxyTokens": 39153,
+  "toolArgumentTokens": 1931,
+  "toolResultTokens": 34506,
+  "repeatImportByteIdempotent": true,
+  "originAuthenticated": false,
+  "coverageKnown": false,
+  "semanticContinuityArtifacts": [
+    {
+      "path": "docs/verification/CURRENT_6D_PARTIAL_SEMANTIC_OBSERVATIONS_1_2026_11_03.json",
+      "sha256": "f307f99e5f0ac59d16509d779db1d33182fa55270a117337e12cee63806a3a23",
+      "utf8Bytes": 6252
+    },
+    {
+      "path": "docs/verification/CURRENT_6D_PARTIAL_SEMANTIC_OBSERVATIONS_2_2026_11_03.json",
+      "sha256": "5d27b3100b33e2c0d56031d38582cc21b9b05dd1448c90e5ab9cd34bfa266f99",
+      "utf8Bytes": 6116
+    },
+    {
+      "path": "docs/verification/CURRENT_6D_PARTIAL_SEMANTIC_OBSERVATIONS_3_2026_11_03.json",
+      "sha256": "b45455d908acfbb5c965a58ecd3c9fd277a7b27549f1f23a9869702f0cc5adb7",
+      "utf8Bytes": 5987
+    },
+    {
+      "path": "docs/verification/CURRENT_6D_PARTIAL_SEMANTIC_OBSERVATIONS_4_2026_11_03.json",
+      "sha256": "b1ae7c708bc401087879dd2c861c70729e7bddd4c80a21ce7a280d0183011dad",
+      "utf8Bytes": 6915
+    },
+    {
+      "path": "docs/verification/CURRENT_6D_PARTIAL_SEMANTIC_OBSERVATIONS_5_2026_11_03.json",
+      "sha256": "b180f899ee24222ab54f3f6ecf30dbd3da743c5f6e643dc578adb26ff4e691dc",
+      "utf8Bytes": 4124
+    }
+  ],
+  "semanticContinuityArtifactsConsumedByWebReviewer": false,
+  "remainingFrozenDependencyBatches": [
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18
+  ],
+  "originalExpirationPreserved": true,
+  "newNativeClaims": 0,
+  "cleanup": {
+    "observedUtc": "2026-11-03T02:01:19.8800873Z",
+    "testOwnedProcesses": 0,
+    "existingBackendAndTunnelPreserved": true,
+    "sharedWakeHostStopped": true
+  },
+  "cumulativeSourceAccepted": false,
+  "producerAuthority": false,
+  "productionPromotionPerformed": false,
+  "installedTwoWebCodingAcceptance": false,
+  "operatorActionRequired": false,
+  "previousEvidenceCommands": [
+    "git --no-optional-locks --no-pager blame -s --no-show-name -L 316,384 6d737c9a0f6f34496fc88b9fec02433bd1599117 -- scripts/wake_bridge.py",
+    "git --no-optional-locks --no-pager blame -s --no-show-name -L 1461,1495 6d737c9a0f6f34496fc88b9fec02433bd1599117 -- scripts/wake_bridge.py",
+    "git --no-optional-locks --no-pager blame -s --no-show-name -L 1628,1679 6d737c9a0f6f34496fc88b9fec02433bd1599117 -- scripts/wake_bridge.py",
+    "git --no-optional-locks --no-pager blame -s --no-show-name -L 421,435 6d737c9a0f6f34496fc88b9fec02433bd1599117 -- scripts/wake_bridge.py"
+  ],
+  "contextReadOutputs": [
+    {
+      "sha256": "ef5b1e54c6dda31cd7c336a7b69b1ade002847c45f663fde186c1827de3aff64",
+      "utf8Bytes": 4854
+    },
+    {
+      "sha256": "d8f68bb8b849d4b65f0961d1e3df0df92fc301976cfa90b09457b7a1aa713809",
+      "utf8Bytes": 2764
+    },
+    {
+      "sha256": "91bc2525fabc6d0e51f6f9773a276949c4d30791a31a62d4f21d37b392129a7b",
+      "utf8Bytes": 3706
+    },
+    {
+      "sha256": "2a93ceff608cc0955537d2659cca37f9c70b4f2275351242ae5e2cdcb30f8d5e",
+      "utf8Bytes": 878
+    }
+  ],
+  "semanticContinuityReadProcedure": "Read each semanticContinuityArtifacts path with git show at the exact same immutable publication commit as this record, then execute previousEvidenceCommands. Prior observations remain partial; assess source invariants and request only essential missing ranges with reasons. Preserve these artifact references in any subsequent source-authored handoff.",
+  "contextReadPurpose": "Three explicitly requested ranges were actually inspected in predecessor checkpoint5; bounded current-generation rereads restore needed semantic context. Fourth range421-435 is the new minimal follow-up from dependency batch1. No old USER event or native task is replayed."
+}
