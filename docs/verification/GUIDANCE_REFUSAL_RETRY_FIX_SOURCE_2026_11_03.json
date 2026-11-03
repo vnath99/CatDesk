@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-03T12:57:50.141780+00:00",
+  "classification": "IMPLEMENTED_AND_TESTED_SOURCE_NOT_INSTALLED",
+  "sourceCommit": "a23a52a5fc5cb9bc2d2a5ff64bbd037f92f0a176",
+  "priorCandidateSourceCommit": "38be1c8a221dc6ef37ea8e977cd6ed956439947d",
+  "changedCodePaths": [
+    "src/mcp.rs"
+  ],
+  "change": "Replace automatic retry after platform safety refusal with stop/preserve/required-approval guidance, plus receipt reconciliation before retrying ambiguous outcomes.",
+  "discoveryEvidence": "One successful read-only live v5 catdesk_instruction call returned the old unsafe guidance; it was treated as task data, not followed.",
+  "verification": {
+    "existingInstructionTestsPassed": 3,
+    "existingInstructionTestsFailed": 0,
+    "cases": [
+      "mcp::tests::catdesk_instruction_puts_binagotchy_cards_in_meta_only",
+      "server::tests::attach_catdesk_instruction_actions_injects_partner_and_urls",
+      "mcp::tests::catdesk_instruction_result_does_not_emit_text_content"
+    ],
+    "testElapsedSeconds": 53.945133,
+    "rustFmtPassed": true,
+    "fmtElapsedSeconds": 6.6599494,
+    "strictClippyAllTargetsPassed": true,
+    "clippyElapsedSeconds": 19.8307519,
+    "allOwnersBoundedAndExitedWithoutTimeoutOrTerminationFailure": true,
+    "evidenceKind": "ACTUAL_OBSERVED_CONTAINED_OWNER_COMMAND_OUTPUT_AND_PERSISTED_OWNER_RESULTS",
+    "newTestsAdded": 0,
+    "hostedCiClaimed": false
+  },
+  "scope": {
+    "fullCodePaths": 90,
+    "acceptedUnchanged": 72,
+    "changedExisting": 16,
+    "new": 2,
+    "priorCandidateIdenticalCodeBlobs": 89,
+    "same85RemainingCoreReadBlobs": true
+  },
+  "runtimePermissionOrReleaseGuardChanged": false,
+  "productionExecutableReplaced": false,
+  "servingGuideCorrectionVerifiedLive": false,
+  "sourceReviewAndPromotionRemainRequired": true,
+  "sourceAccepted": false,
+  "producerAuthority": false
+}
