@@ -1,0 +1,132 @@
+{
+  "observedUtc": "2026-11-03T00:56:16.620419+00:00",
+  "classification": "TESTED_CONTROLLED_WEB_SOURCE_REVIEWS_AND_CURRENT_FULL_MODULE_SOURCE_TESTS",
+  "implementationSourceCommit": "38be1c8a221dc6ef37ea8e977cd6ed956439947d",
+  "frozenReviewSourceCommit": "6d737c9a0f6f34496fc88b9fec02433bd1599117",
+  "frozenReviewScopePaths": 89,
+  "currentImplementationScopePaths": 90,
+  "newCheckpoints": [
+    {
+      "number": 8,
+      "verdict": "REVIEWED_PARTIAL",
+      "responseSha256": "1751bb35bb5dd197f1f8c8009b3c080854020154441bae702ed992d5910d2eeb",
+      "singleExactUserReceipt": true,
+      "responseCompleteAndBodyVerified": true,
+      "coordinatorClosed": true,
+      "taskCorrelatedGitCalls": 7,
+      "oneServerLogPerDeclaredCommand": true
+    },
+    {
+      "number": 9,
+      "verdict": "REVIEWED_PARTIAL",
+      "responseSha256": "65458db958d468cf287c5fc02cd397fdb5483bed06e18dac781306ae4b67a0a9",
+      "singleExactUserReceipt": true,
+      "responseCompleteAndBodyVerified": true,
+      "coordinatorClosed": true,
+      "taskCorrelatedGitCalls": 6,
+      "oneServerLogPerDeclaredCommand": true
+    },
+    {
+      "number": 10,
+      "verdict": "REVIEWED_PARTIAL",
+      "responseSha256": "61da911603d5b6da1a40613d588695fd81e2ece9410eb9fc92bfd95b782e8316",
+      "singleExactUserReceipt": true,
+      "responseCompleteAndBodyVerified": true,
+      "coordinatorClosed": true,
+      "taskCorrelatedGitCalls": 8,
+      "oneServerLogPerDeclaredCommand": true
+    }
+  ],
+  "successfulCheckpoints": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    7,
+    8,
+    9,
+    10
+  ],
+  "retiredCheckpoint": 6,
+  "totalCorroboratedGitCalls": 67,
+  "nativeReviewState": "WAITING_FOR_CHATGPT",
+  "nativeReportAbsent": true,
+  "cumulativeSourceAccepted": false,
+  "producerAuthority": false,
+  "fullWebModuleRegression": {
+    "evidence": "CURRENT_FULL_WEB_MODULE_REGRESSION_2026_11_03.json",
+    "selected": 173,
+    "passed": 172,
+    "failed": 0,
+    "ignored": 1,
+    "originalContentionCasePassed": true,
+    "sourceAssertionOrDeadlineWeakened": false,
+    "historicalFailureOrTimeoutReclassified": false,
+    "installedAcceptanceClaimed": false
+  },
+  "contextCapture": {
+    "generation": 2,
+    "browserReadOnly": true,
+    "messagesSent": 0,
+    "beforeObservedTokenProxy": 58378,
+    "afterObservedTokenProxy": 59646,
+    "coverage": "RECENT_VISIBLE_EXCERPT_WITH_UNKNOWN_HISTORY",
+    "browserCoverage": {
+      "identityGap": false,
+      "initialHistoryGap": true,
+      "lastObservedAtUnix": 1793666689,
+      "observed": true,
+      "overflowGap": true,
+      "textGap": true
+    },
+    "preservationMismatches": 0,
+    "unexpectedContextFiles": 0,
+    "profileIdentityPreserved": true
+  },
+  "latestContext": {
+    "generation": 2,
+    "observedTokenProxy": 68534,
+    "toolArgumentTokens": 3001,
+    "toolResultTokens": 60710,
+    "coverage": "UNKNOWN_OR_INCOMPLETE",
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "repeatImportChangedLedger": false,
+    "predecessorAndSiblingLedgersPreserved": true,
+    "rawTextPersisted": false,
+    "unchangedConfiguredBudgetTokens": 96000,
+    "unchangedSafetyHeadroomTokens": 24000,
+    "unchangedObservedTriggerTokens": 72000
+  },
+  "contextDecision": {
+    "status": "PREPARE_BOUNDED_SOURCE_HANDOFF_BEFORE_NEXT_LARGE_INPUT",
+    "reason": "Near local observed trigger with genuine incomplete-history coverage. Use the existing project-scoped incomplete-history guard at a quiescent boundary, without changing thresholds or inventing observed pressure.",
+    "guardOrThresholdChangeAlreadyApplied": false,
+    "sourceTaskCheckpoint": 10,
+    "originalPolicyMustBePreservedAndRestored": true,
+    "actualTriggerMustBeRecorded": true,
+    "newConversationOrBindingAlreadyCreated": false
+  },
+  "nativeFixtureEligibility": {
+    "currentNativeThreadPresent": true,
+    "currentWebBindingPresent": false,
+    "earlierCandidateOnlyPreflightNotAssumedCurrentExecutionReadiness": true,
+    "developmentProductionTargetIsolationGuardPreserved": "DEV_TARGET_SHARED_WITH_PRODUCTION",
+    "qualifiedCanonicalFirstConversationAndWakePublicationStillRequired": true,
+    "noBindingGrantNativeTaskOrNewBrowserOwnerCreated": true
+  },
+  "cleanup": {
+    "observedUtc": "2026-11-03T00:55:05.1069091+00:00",
+    "testOwnedProcesses": 0,
+    "sameTrustedBackendAndExistingTunnelRetained": true,
+    "recurringWakeHostStopped": true,
+    "loginMarkerPresent": false,
+    "processActions": 0
+  },
+  "protectedProductionChanges": 0,
+  "newAuthorizationsOrClaims": 0,
+  "originalUnknownRequestsReplayed": false,
+  "operatorActionRequired": false,
+  "nextTask": "Prepare and execute a bounded genuine source-authored handoff with the existing per-project incomplete-history guard, exact source task10 and original policy backup. Preserve unfinished source review, missing checkpoint6 ranges and requested dependencies; transfer only untouched11-13 if a verified paired successor is created. Complete genuine current-source acceptance and installed two-Web/Wake/recovery gates."
+}
