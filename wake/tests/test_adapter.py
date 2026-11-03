@@ -139,6 +139,27 @@ class AdapterTests(unittest.TestCase):
                     self.assertNotIn(bridge.digest(actual),json.dumps(frames))
                 self.assertFalse(cdp.sent);self.assertEqual(cdp.keys,[])
 
+    def test_submission_diagnosis_structure_metadata_is_closed_and_never_exports_probe_errors(self):
+        valid = {"schemaVersion": 1, "reason": "ATTRIBUTE_STYLE", "nodesExamined": 2}
+        for result in (valid, valid | {"attributeValue": "private value"},
+                       RuntimeError("private probe failure")):
+            with self.subTest(result=result):
+                cdp = FakeCdp()
+                def structure(_):
+                    if isinstance(result, Exception):
+                        raise result
+                    return result
+                sink = types.SimpleNamespace(exact=lambda url: url == cdp.url,
+                    document_ready_state=lambda _: "complete", composer_structure_diagnostics=structure,
+                    composer_plain_text=lambda _: "", legacy_composer_observation=lambda _: ("", True),
+                    user_message_digests=lambda _: [], trusted_turn_anchor_state=lambda *_: (0, 0))
+                observation, _ = adapter.submission_diagnostic_sample(bridge, sink, cdp, "expected review")
+                self.assertEqual(observation["composerStructure"], valid if result == valid else
+                    {"schemaVersion": 1, "reason": "UNAVAILABLE", "nodesExamined": 0})
+                self.assertNotIn("private", json.dumps(observation))
+                self.assertFalse(cdp.sent)
+                self.assertEqual(cdp.keys, [])
+
     def test_submission_diagnosis_refuses_wrong_scope_before_browser(self):
         bad={"diagnoseSubmission":True,"event":{"eventId":"one","projectId":"alpha",
             "eventType":"test","targetGeneration":1,"message":"review"},

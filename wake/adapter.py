@@ -889,6 +889,17 @@ def submission_diagnostic_sample(bridge, sink, cdp, message):
     }
     private_tokens = []
     if sink.document_ready_state(cdp) == "complete":
+        structure_reader = getattr(sink, "composer_structure_diagnostics", None)
+        if callable(structure_reader):
+            try:
+                structure = structure_reader(cdp)
+                if not bridge.valid_composer_structure_diagnostic(structure):
+                    raise ValueError("invalid structure diagnostic")
+                observation["composerStructure"] = structure
+            except Exception:
+                observation["composerStructure"] = {
+                    "schemaVersion": 1, "reason": "UNAVAILABLE", "nodesExamined": 0,
+                }
         try:
             actual = sink.composer_plain_text(cdp)
             normalized = bridge.normalize_message(actual)

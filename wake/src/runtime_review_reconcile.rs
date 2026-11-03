@@ -224,6 +224,39 @@ fn pending_review_delivery(
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ComposerStructureObservation {
+    schema_version: u8,
+    reason: String,
+    nodes_examined: u64,
+}
+
+impl ComposerStructureObservation {
+    fn valid(&self) -> bool {
+        if self.schema_version != 1 || self.nodes_examined > 256 {
+            return false;
+        }
+        match self.reason.as_str() {
+            "EDITOR_UNAVAILABLE" | "EDITOR_AMBIGUOUS" | "DOCUMENT_LOADING" | "UNAVAILABLE" => {
+                self.nodes_examined == 0
+            }
+            "PLAIN"
+            | "UNSUPPORTED_NODE"
+            | "UNSUPPORTED_TAG"
+            | "NONEMPTY_EMPTY_MARKER"
+            | "ATTRIBUTE_STYLE"
+            | "ATTRIBUTE_CONTENTEDITABLE"
+            | "ATTRIBUTE_DATA_OTHER"
+            | "ATTRIBUTE_OTHER"
+            | "INVALID_DIRECTION"
+            | "HIDDEN_NODE"
+            | "NODE_LIMIT" => self.nodes_examined > 0,
+            _ => false,
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SubmissionObservation {
     composer_class: String,
     composer_bytes: u64,
@@ -236,6 +269,8 @@ struct SubmissionObservation {
     turns_after: Option<u64>,
     stable: bool,
     coverage: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    composer_structure: Option<ComposerStructureObservation>,
 }
 
 #[derive(Deserialize)]
@@ -285,6 +320,10 @@ fn diagnosis_frame(value: Value, delivery: &Delivery) -> Result<SubmissionObserv
         .iter()
         .any(|present| *present != view.expected_user_count.is_some())
         || (view.last_user_matches == Some(true) && view.expected_user_count == Some(0))
+        || view
+            .composer_structure
+            .as_ref()
+            .is_some_and(|value| !value.valid())
     {
         return Err("SCOPED_DIAGNOSE_FRAME_INVALID".into());
     }
@@ -898,6 +937,79 @@ mod tests {
                 "readersAgree":false,"legacyMatchesExpected":false,"expectedUserCount":0,
                 "lastUserMatches":false,"trustedMatches":0,"turnsAfter":0,
                 "stable":true,"coverage":"VISIBLE_BOUNDED_ONLY"}})
+    }
+
+    #[test]
+    fn diagnosis_structure_metadata_is_optional_closed_and_bounded() {
+        let (_, delivery, _) = fixture();
+        let legacy = diagnosis_frame(diagnosis(&delivery), &delivery).unwrap();
+        assert!(
+            serde_json::to_value(legacy)
+                .unwrap()
+                .get("composerStructure")
+                .is_none()
+        );
+        for reason in [
+            "PLAIN",
+            "UNSUPPORTED_NODE",
+            "UNSUPPORTED_TAG",
+            "NONEMPTY_EMPTY_MARKER",
+            "ATTRIBUTE_STYLE",
+            "ATTRIBUTE_CONTENTEDITABLE",
+            "ATTRIBUTE_DATA_OTHER",
+            "ATTRIBUTE_OTHER",
+            "INVALID_DIRECTION",
+            "HIDDEN_NODE",
+            "NODE_LIMIT",
+            "EDITOR_UNAVAILABLE",
+            "EDITOR_AMBIGUOUS",
+            "DOCUMENT_LOADING",
+            "UNAVAILABLE",
+        ] {
+            let count = match reason {
+                "NODE_LIMIT" => 256,
+                "EDITOR_UNAVAILABLE" | "EDITOR_AMBIGUOUS" | "DOCUMENT_LOADING" | "UNAVAILABLE" => 0,
+                _ => 2,
+            };
+            let mut frame = diagnosis(&delivery);
+            frame["observation"]["composerStructure"] =
+                json!({"schemaVersion":1,"reason":reason,"nodesExamined":count});
+            let parsed = diagnosis_frame(frame, &delivery).unwrap();
+            let value = serde_json::to_value(parsed).unwrap();
+            assert_eq!(value["composerStructure"]["reason"], reason);
+            assert_eq!(value["composerStructure"].as_object().unwrap().len(), 3);
+        }
+        // An oversized placeholder can hit the budget from its child count
+        // before traversal, so retain the actual smaller examined count.
+        let mut frame = diagnosis(&delivery);
+        frame["observation"]["composerStructure"] =
+            json!({"schemaVersion":1,"reason":"NODE_LIMIT","nodesExamined":2});
+        assert!(diagnosis_frame(frame, &delivery).is_ok());
+    }
+
+    #[test]
+    fn diagnosis_structure_rejects_private_unknown_or_inconsistent_frames() {
+        let (_, delivery, _) = fixture();
+        let valid = json!({"schemaVersion":1,"reason":"ATTRIBUTE_STYLE","nodesExamined":2});
+        let mut cases = vec![
+            json!({"schemaVersion":1,"reason":"private detail","nodesExamined":2}),
+            json!({"schemaVersion":true,"reason":"PLAIN","nodesExamined":2}),
+            json!({"schemaVersion":1,"reason":"PLAIN","nodesExamined":257}),
+            json!({"schemaVersion":1,"reason":"PLAIN","nodesExamined":true}),
+            json!({"schemaVersion":1,"reason":"PLAIN","nodesExamined":0}),
+            json!({"schemaVersion":1,"reason":"NODE_LIMIT","nodesExamined":0}),
+            json!({"schemaVersion":1,"reason":"UNAVAILABLE","nodesExamined":2}),
+        ];
+        let mut private = valid;
+        private["attributeValue"] = json!("private value");
+        cases.push(private);
+        for structure in cases {
+            let mut frame = diagnosis(&delivery);
+            frame["observation"]["composerStructure"] = structure;
+            assert!(
+                matches!(diagnosis_frame(frame, &delivery), Err(reason) if reason == "SCOPED_DIAGNOSE_FRAME_INVALID")
+            );
+        }
     }
 
     #[test]

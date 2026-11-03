@@ -379,10 +379,15 @@ if (cfg.emptyParagraphMarker) {
     const contents = cfg.markerText === undefined ? [elementNode('BR', {class:'ProseMirror-trailingBreak'})] :
         [{nodeType:3, nodeValue:cfg.markerText}];
     if (cfg.markerRich) contents.push(elementNode('IMG', {src:'https://example.test/preserve'}));
+    if (cfg.markerManyBreaks) for (let n = 0; n < 300; n++) contents.push(elementNode('BR'));
     const paragraph = elementNode(cfg.markerTag || 'P', attrs, contents);
     if (cfg.markerHidden) paragraph.testStyle = {display:'none'};
     editor.childNodes = [paragraph];
 }
+if (cfg.structureStyle) editor.childNodes = [elementNode('SPAN', {style:cfg.structureStyle}, editor.childNodes)];
+if (cfg.structureDir) editor.childNodes = [elementNode('SPAN', {dir:cfg.structureDir}, editor.childNodes)];
+if (cfg.structureComment) editor.childNodes.push({nodeType:8, childNodes:[]});
+if (cfg.structureCount) for (let n = 0; n < cfg.structureCount; n++) editor.childNodes.push(elementNode('SPAN'));
 liveEditors = cfg.multiple ? [editor, makeEditor()] : [editor];
 const selection = {
     rangeCount: 0, anchorNode: null, focusNode: null,
@@ -448,6 +453,82 @@ process.stdout.write(JSON.stringify({result, inserts, command, text:getText(edit
         result = subprocess.run([node, "-e", self.DOM_FIXTURE], input=json.dumps(state),
                                 capture_output=True, text=True, encoding="utf-8", timeout=5, check=True)
         return json.loads(result.stdout)
+
+    def structure_script(self):
+        scripts = []
+        cdp = types.SimpleNamespace(get_current_url=lambda: SOURCE,
+            evaluate=lambda script: scripts.append(script) or
+                {"schemaVersion": 1, "reason": "PLAIN", "nodesExamined": 1})
+        with tempfile.TemporaryDirectory() as profile:
+            bridge.CdpSink(SOURCE, Path(profile), 1, 1).composer_structure_diagnostics(cdp)
+        self.assertEqual(len(scripts), 1)
+        for mutation in ("execCommand", ".focus(", "getSelection", "setSelectionRange", "send_keys"):
+            self.assertNotIn(mutation, scripts[0])
+        return scripts[0]
+
+    def run_structure_script(self, **state):
+        node = shutil.which("node")
+        if node is None:
+            self.skipTest("Node is required for the offline native editor DOM fixture")
+        state.update(script=self.structure_script(), url=SOURCE)
+        result = subprocess.run([node, "-e", self.DOM_FIXTURE], input=json.dumps(state),
+                                capture_output=True, text=True, encoding="utf-8", timeout=5, check=True)
+        result = json.loads(result.stdout)
+        self.assertEqual(result["inserts"], 0)
+        return result
+
+    def test_structure_diagnostics_execute_shared_guard_without_draft_or_attribute_values(self):
+        cases = (({}, "PLAIN"), ({"plainParagraph": True}, "PLAIN"),
+                 ({"emptyParagraphMarker": True}, "PLAIN"),
+                 ({"rich": "link"}, "ATTRIBUTE_OTHER"),
+                 ({"rich": "anchor"}, "UNSUPPORTED_TAG"),
+                 ({"rich": "chip"}, "ATTRIBUTE_CONTENTEDITABLE"),
+                 ({"rich": "image"}, "UNSUPPORTED_TAG"),
+                 ({"rich": "hidden"}, "HIDDEN_NODE"),
+                 ({"structureStyle": "private attribute value"}, "ATTRIBUTE_STYLE"),
+                 ({"structureDir": "private direction value"}, "INVALID_DIRECTION"),
+                 ({"structureComment": True}, "UNSUPPORTED_NODE"),
+                 ({"emptyParagraphMarker": True, "markerUnknownAttribute": True}, "ATTRIBUTE_DATA_OTHER"),
+                 ({"emptyParagraphMarker": True, "markerText": "private draft"}, "NONEMPTY_EMPTY_MARKER"),
+                 ({"multiple": True}, "EDITOR_AMBIGUOUS"),
+                 ({"hidden": True}, "EDITOR_UNAVAILABLE"),
+                 ({"loading": True}, "DOCUMENT_LOADING"))
+        for state, reason in cases:
+            with self.subTest(reason=reason, state=state):
+                result = self.run_structure_script(**state)
+                diagnostic = result["result"]
+                self.assertEqual(diagnostic["reason"], reason)
+                self.assertTrue(bridge.valid_composer_structure_diagnostic(diagnostic))
+                self.assertEqual(set(diagnostic), {"schemaVersion", "reason", "nodesExamined"})
+                self.assertNotIn("private", json.dumps(diagnostic))
+                self.assertNotIn("example.test", json.dumps(diagnostic))
+
+    def test_structure_probe_is_bounded_without_restricting_existing_plain_edit_traversal(self):
+        result = self.run_structure_script(structureCount=300)
+        self.assertEqual(result["result"], {"schemaVersion": 1, "reason": "NODE_LIMIT", "nodesExamined": 256})
+        # The diagnostic bound grants no edits and introduces no new edit limit.
+        inserted = self.run_script("expected handoff", structureCount=300)
+        self.assertEqual((inserted["result"], inserted["inserts"]), ("INSERTED", 1))
+        large_marker = self.run_structure_script(emptyParagraphMarker=True, markerManyBreaks=True)
+        self.assertEqual(large_marker["result"], {"schemaVersion": 1, "reason": "NODE_LIMIT", "nodesExamined": 2})
+        inserted = self.run_script("expected handoff", emptyParagraphMarker=True, markerManyBreaks=True)
+        self.assertEqual((inserted["result"], inserted["inserts"]), ("INSERTED", 1))
+
+    def test_structure_reader_rejects_unbounded_private_or_unknown_frames_and_target_drift(self):
+        valid = {"schemaVersion": 1, "reason": "PLAIN", "nodesExamined": 1}
+        for bad in (valid | {"text": "private draft"}, valid | {"reason": "private detail"},
+                    valid | {"nodesExamined": 257}, valid | {"nodesExamined": True},
+                    valid | {"schemaVersion": True}, valid | {"reason": "NODE_LIMIT", "nodesExamined": 0},
+                    valid | {"reason": "UNAVAILABLE"}, None):
+            with self.subTest(bad=bad), tempfile.TemporaryDirectory() as profile:
+                cdp = types.SimpleNamespace(get_current_url=lambda: SOURCE, evaluate=lambda _: bad)
+                with self.assertRaisesRegex(bridge.Attention, "COMPOSER_STRUCTURE_DIAGNOSTIC_INVALID"):
+                    bridge.CdpSink(SOURCE, Path(profile), 1, 1).composer_structure_diagnostics(cdp)
+        with tempfile.TemporaryDirectory() as profile:
+            locations = iter([SOURCE, ISSUED])
+            cdp = types.SimpleNamespace(get_current_url=lambda: next(locations), evaluate=lambda _: valid)
+            with self.assertRaisesRegex(bridge.Attention, "SUBMISSION_DIAGNOSE_TARGET_CHANGED"):
+                bridge.CdpSink(SOURCE, Path(profile), 1, 1).composer_structure_diagnostics(cdp)
 
     def test_native_insert_handles_long_unicode_contenteditable_and_textarea_once(self):
         message = 'Long JSON {"path":"https://example.test/a", "note":"two  spaces"}\n' + '😀 café 漢字 ' * 700

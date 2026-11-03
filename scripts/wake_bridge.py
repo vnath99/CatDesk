@@ -54,6 +54,73 @@ const userBodyText = content => {
     return composerText(copy);
 };
 """
+# One validator serves both native edit refusal and read-only diagnostics. Only
+# fixed categories and a bounded node count may leave the diagnostic reader.
+COMPOSER_STRUCTURE_READER = r"""
+const inspectPlainComposerStructure = (editor, maximumNodes = 256) => {
+    let examined = 0;
+    const tags = new Set(['P', 'DIV', 'SPAN', 'BR']);
+    const attributes = new Set(['class', 'dir', 'data-placeholder']);
+    const inspect = node => {
+        if (examined >= maximumNodes) return 'NODE_LIMIT';
+        examined++;
+        if (node.nodeType === 3) return 'PLAIN';
+        if (node.nodeType !== 1) return 'UNSUPPORTED_NODE';
+        if (node !== editor) {
+            const tag = String(node.tagName).toUpperCase();
+            const emptyParagraph = node.hasAttribute('data-empty-paragraph');
+            if (emptyParagraph && tag === 'P' &&
+                node.childNodes.length > maximumNodes - examined) return 'NODE_LIMIT';
+            if (emptyParagraph && (tag !== 'P' ||
+                !Array.from(node.childNodes).every(child =>
+                    child.nodeType === 3 ? !(child.nodeValue || '').trim() :
+                    child.nodeType === 1 && String(child.tagName).toUpperCase() === 'BR' &&
+                        child.childNodes.length === 0))) return 'NONEMPTY_EMPTY_MARKER';
+            if (!tags.has(tag)) return 'UNSUPPORTED_TAG';
+            for (const attribute of node.attributes) {
+                if (attributes.has(attribute.name) ||
+                    (emptyParagraph && attribute.name === 'data-empty-paragraph')) continue;
+                if (attribute.name === 'style') return 'ATTRIBUTE_STYLE';
+                if (attribute.name === 'contenteditable') return 'ATTRIBUTE_CONTENTEDITABLE';
+                if (attribute.name.startsWith('data-')) return 'ATTRIBUTE_DATA_OTHER';
+                return 'ATTRIBUTE_OTHER';
+            }
+            if (node.hasAttribute('dir') &&
+                !['auto', 'ltr', 'rtl'].includes(node.getAttribute('dir'))) return 'INVALID_DIRECTION';
+            const style = window.getComputedStyle(node);
+            if (node.hidden || node.inert || style.display === 'none' ||
+                ['hidden', 'collapse'].includes(style.visibility) || style.opacity === '0' ||
+                style.contentVisibility === 'hidden') return 'HIDDEN_NODE';
+        }
+        for (const child of node.childNodes) {
+            const reason = inspect(child);
+            if (reason !== 'PLAIN') return reason;
+        }
+        return 'PLAIN';
+    };
+    const reason = inspect(editor);
+    return {schemaVersion: 1, reason, nodesExamined: examined};
+};
+"""
+COMPOSER_STRUCTURE_REASONS = frozenset({
+    "PLAIN", "UNSUPPORTED_NODE", "UNSUPPORTED_TAG", "NONEMPTY_EMPTY_MARKER",
+    "ATTRIBUTE_STYLE", "ATTRIBUTE_CONTENTEDITABLE", "ATTRIBUTE_DATA_OTHER",
+    "ATTRIBUTE_OTHER", "INVALID_DIRECTION", "HIDDEN_NODE", "NODE_LIMIT",
+    "EDITOR_UNAVAILABLE", "EDITOR_AMBIGUOUS", "DOCUMENT_LOADING", "UNAVAILABLE",
+})
+
+
+def valid_composer_structure_diagnostic(value: Any) -> bool:
+    if (not isinstance(value, dict) or set(value) != {"schemaVersion", "reason", "nodesExamined"}
+            or type(value["schemaVersion"]) is not int or value["schemaVersion"] != 1
+            or not isinstance(value["reason"], str) or value["reason"] not in COMPOSER_STRUCTURE_REASONS
+            or type(value["nodesExamined"]) is not int or not 0 <= value["nodesExamined"] <= 256):
+        return False
+    if value["reason"] in {"EDITOR_UNAVAILABLE", "EDITOR_AMBIGUOUS", "DOCUMENT_LOADING", "UNAVAILABLE"}:
+        return value["nodesExamined"] == 0
+    return value["nodesExamined"] > 0
+
+
 EDITOR_SELECTORS = (
     "#prompt-textarea",
     "div.ProseMirror[contenteditable='true']",
@@ -810,6 +877,36 @@ class CdpSink:
             raise Attention("BOOTSTRAP_DRAFT_UNREADABLE") from error
         if not isinstance(observed, str) or len(observed.encode('utf-8')) > MAX_USER_MESSAGE_CHARS:
             raise Attention("BOOTSTRAP_DRAFT_UNREADABLE")
+        return observed
+
+    def composer_structure_diagnostics(self, cdp: Any) -> dict[str, Any]:
+        """Inspect the existing edit validator without focus, selection or input."""
+        current = cdp.get_current_url()
+        if not self.exact(current):
+            raise Attention("SUBMISSION_DIAGNOSE_TARGET_CHANGED")
+        script = f"""(() => {{
+            {COMPOSER_STRUCTURE_READER}
+            if (location.href !== {json.dumps(current)}) return null;
+            if (document.readyState === 'loading')
+                return {{schemaVersion:1, reason:'DOCUMENT_LOADING', nodesExamined:0}};
+            const visible = Array.from(document.querySelectorAll(
+                '#prompt-textarea, div.ProseMirror[contenteditable="true"], [contenteditable="true"][data-lexical-editor="true"]'
+            )).filter(element => {{
+                const style = window.getComputedStyle(element);
+                return element.getClientRects().length > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+            }});
+            if (visible.length !== 1) return {{schemaVersion:1,
+                reason:visible.length ? 'EDITOR_AMBIGUOUS' : 'EDITOR_UNAVAILABLE', nodesExamined:0}};
+            return inspectPlainComposerStructure(visible[0]);
+        }})()"""
+        try:
+            observed = CdpSink.cdp_value(cdp.evaluate(script))
+        except Exception as error:
+            raise Attention("COMPOSER_STRUCTURE_DIAGNOSTIC_UNAVAILABLE") from error
+        if not self.exact(cdp.get_current_url()):
+            raise Attention("SUBMISSION_DIAGNOSE_TARGET_CHANGED")
+        if not valid_composer_structure_diagnostic(observed):
+            raise Attention("COMPOSER_STRUCTURE_DIAGNOSTIC_INVALID")
         return observed
     @staticmethod
     def post_submit_visible_any(cdp: Any, selectors: tuple[str, ...]) -> bool:
@@ -2807,37 +2904,10 @@ class CdpSink:
             const visible = editors();
             if (visible.length !== 1) return 'PRE_EDITOR_COUNT';
             const editor = visible[0];
-            const plainStructure = () => {{
-                const tags = new Set(['P', 'DIV', 'SPAN', 'BR']);
-                const attributes = new Set(['class', 'dir', 'data-placeholder']);
-                const plain = node => {{
-                    if (node.nodeType === 3) return true;
-                    if (node.nodeType !== 1) return false;
-                    if (node !== editor) {{
-                        const tag = String(node.tagName).toUpperCase();
-                        // Current ProseMirror marks its empty P placeholder.
-                        // Accept that inert marker only on a truly empty
-                        // paragraph; it cannot hide text, rich nodes or chips.
-                        const emptyParagraph = node.hasAttribute('data-empty-paragraph');
-                        if (emptyParagraph && (tag !== 'P' ||
-                            !Array.from(node.childNodes).every(child =>
-                                child.nodeType === 3 ? !(child.nodeValue || '').trim() :
-                                child.nodeType === 1 && String(child.tagName).toUpperCase() === 'BR' &&
-                                    child.childNodes.length === 0))) return false;
-                        if (!tags.has(tag) ||
-                            Array.from(node.attributes).some(attribute => !attributes.has(attribute.name) &&
-                                !(emptyParagraph && attribute.name === 'data-empty-paragraph')) ||
-                            (node.hasAttribute('dir') && !['auto', 'ltr', 'rtl'].includes(node.getAttribute('dir'))))
-                            return false;
-                        const style = window.getComputedStyle(node);
-                        if (node.hidden || node.inert || style.display === 'none' ||
-                            ['hidden', 'collapse'].includes(style.visibility) || style.opacity === '0' ||
-                            style.contentVisibility === 'hidden') return false;
-                    }}
-                    return Array.from(node.childNodes).every(plain);
-                }};
-                return plain(editor);
-            }};
+            {COMPOSER_STRUCTURE_READER}
+            // Preserve the original edit validator's traversal/acceptance. The
+            // finite diagnostic budget applies only to the read-only reader.
+            const plainStructure = () => inspectPlainComposerStructure(editor, Infinity).reason === 'PLAIN';
             const draftRefusal = () => {{
                 const current = editors();
                 const raw = editor.value ?? editor.innerText ?? editor.textContent ?? '';
