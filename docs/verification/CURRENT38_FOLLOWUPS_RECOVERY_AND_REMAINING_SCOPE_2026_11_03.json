@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-03T11:34:07.634501+00:00",
+  "qualification": "TESTED_CONTROLLED_LIVE_COMPLETED_RESPONSE_RECOVERY_AND_SOURCE_REVIEW",
+  "sourceCommit": "38be1c8a221dc6ef37ea8e977cd6ed956439947d",
+  "fullDeclaredCodePaths": 90,
+  "newCompletedCheckpoints": [
+    3,
+    4
+  ],
+  "newCorroboratedGitCalls": 18,
+  "currentSourcePartialObservations": 4,
+  "currentSourceCorroboratedGitCalls": 30,
+  "currentPartialSemanticArtifacts": [
+    {
+      "path": "docs/verification/CURRENT_38BE_PARTIAL_SEMANTIC_OBSERVATIONS_1_2026_11_03.json",
+      "sha256": "3be0fc43901d1f8de0ad07f2386f415e1e71221b0c40f812a44535436ae32c1f",
+      "utf8Bytes": 5756
+    },
+    {
+      "path": "docs/verification/CURRENT_38BE_PARTIAL_SEMANTIC_OBSERVATIONS_2_2026_11_03.json",
+      "sha256": "86f1a41850602b2b800ef116bd289f29e0ed72d05c256200a4eedf6cf581335f",
+      "utf8Bytes": 2407
+    }
+  ],
+  "olderPartialObservations": 17,
+  "olderCorroboratedGitCalls": 133,
+  "olderObservedIdenticalCurrentBlobs": 88,
+  "current4ResponseSha256": "979693a17911af70392715fa740ab7fce6682d74caaedb8a62fc3774c7cd8861",
+  "recovery": {
+    "originalDeliveredAndCompleteBeforeLeaseExpired": true,
+    "terminalOwnerRecordVerifiedAfterOriginalHandleMissing": true,
+    "lateExactSnapshotVerified": true,
+    "historicalCommandCorrelationEndsAtOriginalCompletionObservation": true,
+    "originalUserMessageResent": false,
+    "elapsedSeconds": 52.547,
+    "preservationPins": 4917,
+    "preservationMismatches": 0,
+    "coordinatorOnlyClosure": true,
+    "expiredNativeLeaseNotRenewed": true,
+    "noNativeFinalizationOrSourceAcceptance": true
+  },
+  "expiredClaimClosure": {
+    "state": "CANCELLED",
+    "active": false,
+    "stateVersion": 5,
+    "elapsedSeconds": 20.437,
+    "oldEventPrefixPreserved": true,
+    "otherNativeFilesPreserved": true,
+    "allWebRecordsAndGrantsPreserved": true,
+    "providerThreadAbsent": true,
+    "reportStillAbsent": true,
+    "ownedServerExitProved": true,
+    "projectGoalPaused": false
+  },
+  "context": {
+    "targetGeneration": 4,
+    "observedTokenProxy": 38695,
+    "observedToolArgumentTokens": 1855,
+    "observedToolResultTokens": 33816,
+    "pressureAssessment": "UNKNOWN_OR_INCOMPLETE",
+    "coverageKnown": false,
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "duplicateImportChangedLedger": false,
+    "rawTextPersisted": false
+  },
+  "remainingSourceInputs": [
+    {
+      "path": "docs/verification/CURRENT_38BE_REMAINING_DEPENDENCY_INPUTS_1_2026_11_03.json",
+      "sha256": "4b372417c1f19882b0c13347f29a698ae71da705f20cc185bb27dac331b430e4",
+      "manifestUtf8Bytes": 7458,
+      "sourceCommands": 21,
+      "sourceOutputBytes": 43800,
+      "gatewayRedactedLines": 1
+    },
+    {
+      "path": "docs/verification/CURRENT_38BE_REMAINING_DEPENDENCY_INPUTS_2_2026_11_03.json",
+      "sha256": "06f39f6f101f78987bf26a1d107e92cd99c5dfab98feab0ea34f6ec754c5c3f5",
+      "manifestUtf8Bytes": 7441,
+      "sourceCommands": 21,
+      "sourceOutputBytes": 56496,
+      "gatewayRedactedLines": 1
+    },
+    {
+      "path": "docs/verification/CURRENT_38BE_REMAINING_DEPENDENCY_INPUTS_3_2026_11_03.json",
+      "sha256": "964424109f2bacc80f71bdc5847ccf09bfa290e8365981f9cc87b691b59d23a6",
+      "manifestUtf8Bytes": 7329,
+      "sourceCommands": 21,
+      "sourceOutputBytes": 49143,
+      "gatewayRedactedLines": 0
+    },
+    {
+      "path": "docs/verification/CURRENT_38BE_REMAINING_DEPENDENCY_INPUTS_4_2026_11_03.json",
+      "sha256": "e0ef9d560ca5c72f64c8c0315a639d80353405743ba2d5328019bd0bf8226f10",
+      "manifestUtf8Bytes": 6812,
+      "sourceCommands": 19,
+      "sourceOutputBytes": 57611,
+      "gatewayRedactedLines": 3
+    },
+    {
+      "path": "docs/verification/CURRENT_38BE_REMAINING_DEPENDENCY_INPUTS_5_2026_11_03.json",
+      "sha256": "23f8c477c9aa7042fa6b6248b8d420f2319c270d0184ca0e251129855351a717",
+      "manifestUtf8Bytes": 2087,
+      "sourceCommands": 3,
+      "sourceOutputBytes": 9341,
+      "gatewayRedactedLines": 0
+    }
+  ],
+  "all85PendingSourceReadsRetained": true,
+  "globalScopeInputs": [
+    {
+      "path": "docs/verification/CURRENT_38BE_GLOBAL_SCOPE_EVIDENCE_1_2026_11_03.json",
+      "sha256": "35fedf4482610abb0b8eeff533da03af740f3eff1769f85126fb8d7cc7ed43fa",
+      "sourceCommands": 6,
+      "manifestUtf8Bytes": 7276
+    },
+    {
+      "path": "docs/verification/CURRENT_38BE_GLOBAL_SCOPE_EVIDENCE_2_2026_11_03.json",
+      "sha256": "c984f044e0cdee9cc69ec83dc2c2f7a99ff053057e098e5ef8e844063168a2eb",
+      "sourceCommands": 2,
+      "manifestUtf8Bytes": 2475
+    }
+  ],
+  "newScopeCommandsExecutedByWebReviewer": false,
+  "newSourceMessagesSentByPreparation": 0,
+  "lastConcreteAuthorityNeedIncludedInRemainingBatch": 2,
+  "historicalTimingFailureSoleCauseKnown": false,
+  "diagnosticCorrection": "The prior Unicode mismatch was caused by local Python implicit CP1252 decoding. Original v5 responses and UTF-8 artifacts are correct. See LOCAL_DIAGNOSTIC_UTF8_READER_RECONCILIATION_2026_11_03.json; prior v5/writer attribution is superseded.",
+  "cleanup": {
+    "observedUtc": "2026-11-03T11:31:53.3959074Z",
+    "testOwnedProcesses": 0,
+    "existingTrustedBackendAndTunnelPreserved": true,
+    "sharedWakeHostStopped": true,
+    "queriesAreNotAnAtomicSnapshot": true
+  },
+  "sourceAccepted": false,
+  "producerAuthority": false,
+  "productionPromotionPerformed": false,
+  "installedTwoWebCodingAcceptance": false,
+  "operatorActionRequired": false,
+  "nextAction": "Continue remaining current90 source semantics through separately approved bounded authority after verified expired-epoch closure. Retain all actual observations; no replay of completed requests or renewal of expired authority."
+}
