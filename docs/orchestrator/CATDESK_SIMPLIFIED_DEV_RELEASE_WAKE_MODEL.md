@@ -1,5 +1,12 @@
 ## 2026-11-03T16:35:17.988364+00:00 — shared composer-structure diagnostics implemented,341 cases pass and exact held-event observation qualified
 
+## 2026-11-03T18:45:30.153605+00:00 — two canonical Web contexts paired; text context accounting independently idempotent
+
+Two operator-created project chats selected the existing app. One frozen context-only follow-up per verified actual destination received a unique USER turn and completed scoped acknowledgment. Supported guarded binding paired both at generation1, preserving all4 original canonical registrations, old Wake targets/history and354 unrelated state pins. This is operator-assisted setup, not automatic first-chat initialization, Wake delivery or native coding acceptance. The history projection omitted exactly one trailing LF; no exact wire-byte receipt was fabricated.
+
+Each new context ledger received4 actual observed text events. Separate-process replay preserved identical outputs and ledger bytes. Proxy estimates729/757 remain UNKNOWN_OR_INCOMPLETE; raw MCP arguments/results and provider context were not observed. No raw text is stored in those ledgers, and automatic policies remain disabled. Import preserved399 unrelated pins. WakeHost, browser and native coding workers stayed stopped; existing serving/native owners, protected production, selected development, old unknown requests and completed canaries remain preserved. No further operator action is needed for this setup. Genuine two-project Web/native edits and verification, independent Wake delivery, current-source release authority, full context calibration and later provider-client acceptance remain OPEN. Evidence: docs/verification/CANONICAL_WEB_CONTEXT_PAIRING_2026_11_03.json.
+
+
 ## 2026-11-03T17:37:50.847865+00:00 — fixed full-suite verification budget corrected in source
 
 Source b06f02d518c2e0eed294b1ff8353bd588074f517 changes only src/operator_codex_cli/queue.rs: the existing exact python_uv_group_dev_touched_v2 full pytest command now has a finite90-minute bound instead of30. Retained same-source full-suite evidence exceeds the old bound. Test selection/commands, offline dependencies, other profiles, generic15-minute commands, writer leases, stream limits, cleanup and browser/connector limits remain unchanged. No caller timeout override or reduced test gate is introduced.
