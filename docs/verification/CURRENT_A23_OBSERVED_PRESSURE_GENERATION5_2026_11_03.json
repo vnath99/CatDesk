@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-03T14:13:45.715324+00:00",
+  "classification": "TESTED_CONTROLLED_LIVE_NOT_INSTALLED_TWO_PROJECT_CODING_OR_UNATTENDED_ACCEPTANCE",
+  "reviewSourceCommit": "a23a52a5fc5cb9bc2d2a5ff64bbd037f92f0a176",
+  "administrativeControllerSourceCommit": "38be1c8a221dc6ef37ea8e977cd6ed956439947d",
+  "sourceScopeCodePaths": 90,
+  "currentFormalPartialReviewObservations": 4,
+  "additionalActualContinuationObservation": true,
+  "currentCorroboratedGitCalls": 45,
+  "review13": {
+    "responseSha256": "861400e74725d31302e1a1abb570e75e9f4c7c701a56c36c4d4838d2a05b96a0",
+    "verdict": "REVIEWED_PARTIAL",
+    "corroboratedGitCalls": 11,
+    "initialObservationPending": true,
+    "exactFinalBodyReadBeforeCompletionWitness": true,
+    "boundedReadOnlyReobservationConfirmedComplete": true,
+    "sameEventNoUserResend": true
+  },
+  "semanticContinuityArtifacts": [
+    {
+      "path": "docs/verification/CURRENT_A23_PARTIAL_SEMANTICS_1_2026_11_03.json",
+      "utf8Bytes": 6396,
+      "sha256": "218e280ad261d6215400d28b84b4a8f79a75a65dc46f2d22008660b982e06a17"
+    },
+    {
+      "path": "docs/verification/CURRENT_A23_PARTIAL_SEMANTICS_2_2026_11_03.json",
+      "utf8Bytes": 6581,
+      "sha256": "574ec43b8b81989e5af4ba97438b66e88482cf8391c99bd14269ec364ba03f75"
+    }
+  ],
+  "context": {
+    "sourceGeneration": 4,
+    "observedProxyAfterTrafficImport": 72714,
+    "observedProxyAfterCapture": 74386,
+    "argumentProxyTokens": 5361,
+    "resultProxyTokens": 62710,
+    "configuredBudgetTokens": 96000,
+    "safetyHeadroomTokens": 24000,
+    "observedTriggerTokens": 72000,
+    "thresholdsChanged": false,
+    "coverageKnown": false,
+    "providerContextExact": false,
+    "originAuthenticated": false,
+    "captureCoverage": "RECENT_VISIBLE_EXCERPT_WITH_UNKNOWN_HISTORY",
+    "duplicateTrafficImportChangedLedger": false,
+    "rawTranscriptPersistedInMeter": false,
+    "handoffTriggerReason": "OBSERVED_PRESSURE"
+  },
+  "handoff": {
+    "sourceAuthored": true,
+    "sourceTaskIdentityVerified": true,
+    "phaseAtCollection": "PREPARED",
+    "utf8Bytes": 4776,
+    "sha256": "c1c09f48c55d42bc5fd83b32fc8772e3c7acacfa098aa04d7b594ebef5ba34da",
+    "containsCurrentCandidate": true,
+    "containsCurrentManagedReview": true,
+    "schemaAndOwnershipValidated": true,
+    "rootAuthoredReplacementSummary": false
+  },
+  "rollover": {
+    "newGeneration": 5,
+    "actualChatGptIssuedUrlVerified": true,
+    "bootstrapUserSubmissions": 1,
+    "exactBootstrapReceiptVerified": true,
+    "bootstrapResponseCompleted": true,
+    "liveSourceRecheckBeforeBinding": true,
+    "pairedRegistryWakeCommit": true,
+    "predecessorPreserved": true,
+    "siblingProjectsPreserved": true,
+    "workspaceAndNativeOwnerPreserved": true,
+    "browserProfileIdentityPreserved": true,
+    "continuationUserSubmissions": 1,
+    "exactContinuationReceiptVerified": true,
+    "continuationResponseCompleteAndEventVerified": true,
+    "continuationResponseSha256": "026bcc9a5c534b36bc81d45a80d8914b1d3c476048eb950036dd102799c1c761",
+    "originalProjectPolicyRestored": true,
+    "sharedWakeHostStarted": false,
+    "successorV5SourceToolUseIndependentlyQualified": true,
+    "continuationSourceBatch": 4,
+    "continuationCorroboratedGitCalls": 8,
+    "coveredFrozenRequest14NeverDispatched": true,
+    "continuationResultVisibilityRequiresExplicitClarification": true,
+    "fullLoggedContinuationResultsAssumedModelVisible": false
+  },
+  "cleanup": {
+    "observedUtc": "2026-11-03T14:10:34.0731838Z",
+    "testOwnedProcesses": 0,
+    "intentionalServingOwnersRetained": true,
+    "canonicalMatchesRecordedRelease": true,
+    "loginMarkerPresent": false,
+    "recurringAutomationEnabled": false
+  },
+  "nativeProjectSessionsPausedOrReplaced": false,
+  "productionChanged": false,
+  "sourceAccepted": false,
+  "producerAuthority": false,
+  "remaining": [
+    "Transfer only never-reserved requests15-22 at original expiry; request14 covers source already executed by continuation and must not be replayed.",
+    "Restore semantic findings without inheriting approval; clarify batch4 visibility without repeating source commands. Six unexecuted core batches, two scope datasets and needed invariant reads remain.",
+    "Read the two omitted guidance scope/test artifacts and documentation-line clarification before genuine current90 cumulative judgment.",
+    "Exact accepted report/ACK/snapshot/producer and guarded promotion remain mandatory.",
+    "Actual installed two-Web source edits/native verification, independent Wake, canonical/control authority and persistent recovery remain open.",
+    "Full T-0484 uncertainty/visibility/calibration and later mandatory CD-P7 remain open."
+  ]
+}
