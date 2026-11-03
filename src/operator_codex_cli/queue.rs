@@ -75,7 +75,9 @@ const MAX_VERIFICATION_BYTES: u64 = 72 * 1024 * 1024;
 const MAX_REVIEW_PACKAGE_BYTES: u64 = 76 * 1024 * 1024;
 const MAX_VERIFY_STREAM_BYTES: usize = 16 * 1024 * 1024;
 const VERIFY_COMMAND_TIMEOUT: Duration = Duration::from_secs(15 * 60);
-const BYOVD_PYTEST_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+// Retained full-suite evidence exceeds 30m. Only the exact v2 pytest argv
+// receives this finite window; other commands keep their existing deadlines.
+const BYOVD_PYTEST_TIMEOUT: Duration = Duration::from_secs(90 * 60);
 const BUG_BOUNTY_PYTEST_TIMEOUT: Duration = Duration::from_secs(90 * 60);
 // Wake2's last frozen full suite took 36m24s; keep a bounded 60m full-suite gate.
 const WAKE2_PYTEST_TIMEOUT: Duration = Duration::from_secs(60 * 60);
