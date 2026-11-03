@@ -2907,7 +2907,7 @@ class CdpSink:
             {COMPOSER_STRUCTURE_READER}
             // Preserve the original edit validator's traversal/acceptance. The
             // finite diagnostic budget applies only to the read-only reader.
-            const plainStructure = () => inspectPlainComposerStructure(editor, Infinity).reason === 'PLAIN';
+            const plainStructure = () => inspectPlainComposerStructure(editor, Infinity);
             const draftRefusal = () => {{
                 const current = editors();
                 const raw = editor.value ?? editor.innerText ?? editor.textContent ?? '';
@@ -2915,7 +2915,11 @@ class CdpSink:
                 if ({json.dumps(not conversation)} && hasTurns()) return 'PRE_TURNS';
                 if (current.length !== 1) return 'PRE_EDITOR_COUNT';
                 if (current[0] !== editor || !editor.isConnected) return 'PRE_EDITOR_CHANGED';
-                if (!plainStructure()) return 'PRE_STRUCTURE';
+                const structure = plainStructure();
+                if (structure.reason !== 'PLAIN') return {{code:'PRE_STRUCTURE',
+                    preEditRefusal:{{schemaVersion:1,nativeInputAttempted:false,
+                        composerStructure:structure.nodesExamined <= 256 ? structure :
+                            {{schemaVersion:1,reason:'NODE_LIMIT',nodesExamined:256}}}}}};
                 if (!(expectedRaw === null ? composerText(editor).trim() === '' : raw === expectedRaw))
                     return 'PRE_RAW_CAS';
                 return null;
@@ -2968,6 +2972,18 @@ class CdpSink:
             observed = CdpSink.cdp_value(cdp.evaluate(script))
         except Exception as error:
             raise Attention(f"{failure}_EVALUATION_EXCEPTION") from error
+        refusal = None
+        if isinstance(observed, dict) and set(observed) == {"code", "preEditRefusal"}:
+            candidate = observed["preEditRefusal"]
+            if (observed["code"] == "PRE_STRUCTURE" and isinstance(candidate, dict)
+                    and set(candidate) == {"schemaVersion", "nativeInputAttempted", "composerStructure"}
+                    and type(candidate["schemaVersion"]) is int and candidate["schemaVersion"] == 1
+                    and candidate["nativeInputAttempted"] is False
+                    and valid_composer_structure_diagnostic(candidate["composerStructure"])
+                    and candidate["composerStructure"]["reason"] not in {
+                        "PLAIN", "UNAVAILABLE", "EDITOR_UNAVAILABLE", "EDITOR_AMBIGUOUS", "DOCUMENT_LOADING"}):
+                refusal = candidate
+                observed = "PRE_STRUCTURE"
         if observed != "INSERTED":
             diagnostics = {
                 "PRE_HOME", "PRE_TURNS", "PRE_NOT_READY", "PRE_EDITOR_COUNT",
@@ -2976,7 +2992,12 @@ class CdpSink:
                 "POST_SCOPE", "POST_TEXT", "POST_EXCEPTION",
             }
             code = observed if isinstance(observed, str) and observed in diagnostics else "RESULT_INVALID"
-            raise Attention(f"{failure}_{code}")
+            error = Attention(f"{failure}_{code}")
+            # Only the native conversation transaction can supply this proof.
+            # Legacy string errors and bootstrap/draft-repair errors cannot.
+            if refusal is not None and conversation:
+                error.pre_edit_refusal = refusal
+            raise error
         try:
             if conversation:
                 if not self.exact(cdp.get_current_url()) or normalize_message(self.text(cdp)) != normalize_message(message):

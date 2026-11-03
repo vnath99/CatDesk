@@ -350,6 +350,7 @@ mod tests {
         cancelled: Rc<Cell<bool>>,
         cancel_after_ack: bool,
         delay: Duration,
+        terminal_refusal: Option<Value>,
     }
     impl SubmissionAdapter for FakeAdapter {
         fn send(&mut self, value: Value) -> Result<()> {
@@ -362,8 +363,10 @@ mod tests {
                 if self.cancel_after_ack {
                     self.cancelled.set(true);
                 }
-                self.frames
-                    .push_back(json!({"stage":"SENT_PENDING_RESPONSE","receipt":self.receipt}));
+                let terminal = self.terminal_refusal.clone().unwrap_or_else(
+                    || json!({"stage":"SENT_PENDING_RESPONSE","receipt":self.receipt}),
+                );
+                self.frames.push_back(terminal);
             }
             Ok(())
         }
@@ -423,6 +426,7 @@ mod tests {
             cancelled: Rc::new(Cell::new(false)),
             cancel_after_ack: false,
             delay: Duration::ZERO,
+            terminal_refusal: None,
         }
     }
 
@@ -441,6 +445,95 @@ mod tests {
                 },
             )
             .unwrap()
+    }
+
+    #[test]
+    fn scoped_pre_edit_refusal_records_only_fresh_bound_before_input_evidence() {
+        for case in ["valid", "legacy", "foreign", "before-ack", "accepted"] {
+            let (store, event, target) = fixture(case);
+            let mut frame = json!({"stage":"ATTENTION","reason":"CONVERSATION_DRAFT_INSERT_UNVERIFIED_PRE_STRUCTURE",
+                "preEditRefusal":{"schemaVersion":1,"eventId":event.event_id,"projectId":event.project_id,
+                    "targetGeneration":target.generation,"targetDigest":target.digest,
+                    "messageDigest":crate::protocol::digest(&event.message),"nativeInputAttempted":false,
+                    "composerStructure":{"schemaVersion":1,"reason":"ATTRIBUTE_STYLE","nodesExamined":2}}});
+            if case == "legacy" {
+                frame.as_object_mut().unwrap().remove("preEditRefusal");
+            }
+            if case == "foreign" {
+                frame["preEditRefusal"]["projectId"] = json!("beta");
+            }
+            let mut fake = adapter(&event, &target);
+            if case == "before-ack" {
+                fake.frames = VecDeque::from([frame.clone()]);
+            }
+            if case == "accepted" {
+                fake.frames
+                    .push_back(json!({"stage":"SUBMISSION_ACCEPTED"}));
+            }
+            fake.terminal_refusal = Some(frame);
+            let admitted = fake.admitted.clone();
+            let acks = fake.ack_count.clone();
+            let result = run_selected_with_adapter(
+                &store,
+                &event.event_id,
+                10,
+                Selection::Review,
+                &mut |_, _| {
+                    admitted.set(true);
+                    Ok(())
+                },
+                &|| Ok(()),
+                |_, _| Ok(fake),
+            );
+            assert!(result.is_err());
+            assert_eq!(acks.get(), u32::from(case != "before-ack"));
+            let proof = store
+                .root()
+                .join("logs")
+                .join(format!("pre-edit-refusal-{}.json", event.event_id));
+            assert_eq!(proof.exists(), case == "valid");
+            let delivery = store.delivery(&event.event_id).unwrap().unwrap();
+            assert!(delivery.receipt.is_none());
+            assert_eq!(
+                delivery.phase,
+                if case == "before-ack" {
+                    Phase::Attention
+                } else {
+                    Phase::Submitting
+                }
+            );
+            if case == "valid" {
+                store
+                    .retire_stale_expected(
+                        &event.event_id,
+                        "alpha",
+                        &target,
+                        &crate::protocol::digest(&event.message),
+                    )
+                    .unwrap();
+                assert_eq!(
+                    store
+                        .delivery(&event.event_id)
+                        .unwrap()
+                        .unwrap()
+                        .reason
+                        .as_deref(),
+                    Some("PRE_EDIT_REFUSED_NO_SEND")
+                );
+                assert!(store.retry_pre_submit(&event.event_id).is_err());
+            } else if case != "before-ack" {
+                assert!(
+                    store
+                        .retire_stale_expected(
+                            &event.event_id,
+                            "alpha",
+                            &target,
+                            &crate::protocol::digest(&event.message)
+                        )
+                        .is_err()
+                );
+            }
+        }
     }
 
     fn rollover_selection<'a>(

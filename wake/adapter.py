@@ -169,6 +169,57 @@ def attempt(bridge, sb, event, target, *, cooperative=False):
     emit({"stage": "SENT_PENDING_RESPONSE" if cooperative else "SENT", "receipt": receipt_payload})
 
 
+def attention_frame(bridge, error, request=None):
+    """Keep the legacy error contract; bind only native pre-input proof."""
+    reason = "BROWSER_ATTEMPT_FAILED"
+    if isinstance(error, bridge.Attention):
+        candidate = str(error)
+        if candidate and len(candidate) <= 100 and all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789" for c in candidate):
+            reason = candidate
+    else:
+        error_class = "".join(c if c.isalnum() else "_" for c in type(error).__name__.upper())[:48]
+        if error_class:
+            reason = f"BROWSER_ATTEMPT_{error_class}"
+    frame = {"stage": "ATTENTION", "reason": reason}
+    proof = getattr(error, "pre_edit_refusal", None)
+    if (reason != "CONVERSATION_DRAFT_INSERT_UNVERIFIED_PRE_STRUCTURE"
+            or not isinstance(request, dict) or request.get("cooperative") is not True
+            or set(request) != {"event", "target", "cooperative"}
+            or not isinstance(proof, dict)
+            or set(proof) != {"schemaVersion", "nativeInputAttempted", "composerStructure"}
+            or type(proof["schemaVersion"]) is not int or proof["schemaVersion"] != 1
+            or proof["nativeInputAttempted"] is not False
+            or not bridge.valid_composer_structure_diagnostic(proof["composerStructure"])
+            or proof["composerStructure"]["reason"] in {
+                "PLAIN", "UNAVAILABLE", "EDITOR_UNAVAILABLE", "EDITOR_AMBIGUOUS", "DOCUMENT_LOADING"}):
+        return frame
+    event, target = request["event"], request["target"]
+    if (not isinstance(event, dict) or not isinstance(target, dict)
+            or set(target) != {"url", "digest", "generation"}
+            or event.get("eventType") != "source_review"
+            or not isinstance(event.get("projectId"), str) or not bridge.SAFE_ID.fullmatch(event["projectId"])
+            or not isinstance(event.get("eventId"), str) or not bridge.SAFE_ID.fullmatch(event["eventId"])
+            or not isinstance(event.get("message"), str) or not event["message"]
+            or len(event["message"].encode("utf-8")) > bridge.MAX_USER_MESSAGE_CHARS
+            or type(target.get("generation")) is not int or target["generation"] <= 0
+            or type(event.get("targetGeneration")) is not int
+            or event.get("targetGeneration") != target["generation"]):
+        return frame
+    try:
+        if (bridge.canonical_conversation_url(target["url"]) != target["url"]
+                or bridge.digest(target["url"]) != target["digest"]):
+            return frame
+    except Exception:
+        return frame
+    frame["preEditRefusal"] = {
+        "schemaVersion": 1, "eventId": event["eventId"], "projectId": event["projectId"],
+        "targetGeneration": target["generation"], "targetDigest": target["digest"],
+        "messageDigest": bridge.digest(event["message"]), "nativeInputAttempted": False,
+        "composerStructure": proof["composerStructure"],
+    }
+    return frame
+
+
 def bootstrap_message_scope(bridge, request, initial):
     """Normalize explicit unbound initialization or the unchanged source target."""
     source = request["source"]
@@ -1122,6 +1173,7 @@ def main():
             try:
                 with SB(uc=True, user_data_dir=str(ROOT / "browser-profile")) as sb:
                     emit({"stage": "READY"})
+                    request = None
                     try:
                         request = read_job_request()
                         if request.get("bootstrapQuarantineInspect") is True:
@@ -1161,20 +1213,7 @@ def main():
                     except EOFError:
                         return
                     except Exception as error:
-                        reason = "BROWSER_ATTEMPT_FAILED"
-                        if isinstance(error, bridge.Attention):
-                            candidate = str(error)
-                            if candidate and len(candidate) <= 100 and all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789" for c in candidate):
-                                reason = candidate
-                        else:
-                            # Preserve a bounded, content-free exception class so an
-                            # installed-path failure can be diagnosed without exposing
-                            # browser text, URLs, credentials, or exception messages.
-                            error_class = type(error).__name__.upper()
-                            error_class = "".join(c if c.isalnum() else "_" for c in error_class)[:48]
-                            if error_class:
-                                reason = f"BROWSER_ATTEMPT_{error_class}"
-                        emit({"stage": "ATTENTION", "reason": reason})
+                        emit(attention_frame(bridge, error, request))
                         return
             except Exception as error:
                 emit({"stage": "ATTENTION", "reason": startup_reason(error)})

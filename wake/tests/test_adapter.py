@@ -168,6 +168,37 @@ class AdapterTests(unittest.TestCase):
             with self.assertRaises(bridge.Attention): adapter.diagnose_submission(bridge,None,bad)
             opened.assert_not_called()
 
+    def test_pre_edit_attention_binds_only_native_proof_to_exact_cooperative_source_review(self):
+        cdp = FakeCdp()
+        request = {"cooperative": True, "event": {"eventId": "review-one", "projectId": "alpha",
+            "eventType": "source_review", "targetGeneration": 1, "message": "bounded source review"},
+            "target": {"url": cdp.url, "digest": bridge.digest(cdp.url), "generation": 1}}
+        error = bridge.Attention("CONVERSATION_DRAFT_INSERT_UNVERIFIED_PRE_STRUCTURE")
+        proof = {"schemaVersion": 1, "nativeInputAttempted": False,
+            "composerStructure": {"schemaVersion": 1, "reason": "ATTRIBUTE_STYLE", "nodesExamined": 2}}
+        error.pre_edit_refusal = proof
+        frame = adapter.attention_frame(bridge, error, request)
+        self.assertEqual(frame["preEditRefusal"], {"schemaVersion": 1, "nativeInputAttempted": False,
+            "eventId": "review-one", "projectId": "alpha", "targetGeneration": 1,
+            "targetDigest": bridge.digest(cdp.url), "messageDigest": bridge.digest("bounded source review"),
+            "composerStructure": proof["composerStructure"]})
+        self.assertNotIn(cdp.url, json.dumps(frame))
+        self.assertNotIn("bounded source review", json.dumps(frame))
+        legacy = bridge.Attention(str(error))
+        for refused_error, refused_request in ((legacy, request), (error, request | {"cooperative": False}),
+                (error, request | {"reconcile": True}), (error, request | {"bootstrap": True}),
+                (RuntimeError("private exception"), request),
+                (error, request | {"target": request["target"] | {"digest": "a" * 64}}),
+                (error, request | {"event": request["event"] | {"targetGeneration": True}})):
+            with self.subTest(request=refused_request):
+                result = adapter.attention_frame(bridge, refused_error, refused_request)
+                self.assertEqual(set(result), {"stage", "reason"})
+                self.assertNotIn("private exception", json.dumps(result))
+        for bad in (proof | {"nativeInputAttempted": True}, proof | {"private": "draft"},
+                    proof | {"composerStructure": proof["composerStructure"] | {"reason": "PLAIN"}}):
+            error.pre_edit_refusal = bad
+            self.assertNotIn("preEditRefusal", adapter.attention_frame(bridge, error, request))
+
     def test_source_snapshot_waits_for_complete_matching_frames_without_writes(self):
         now = [0.0]
         pauses = []

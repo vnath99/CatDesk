@@ -196,6 +196,21 @@ struct SubmissionStart {
     started_utc: u64,
 }
 
+/// Terminal, event-bound adapter evidence. It never grants another submit.
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PreEditRefusalRecord {
+    schema_version: u32,
+    event_id: String,
+    project_id: String,
+    owner: String,
+    target: Target,
+    message_digest: String,
+    submission_started_utc: u64,
+    recorded_utc: u64,
+    frame: serde_json::Value,
+}
+
 /// Passive assistant-response timing, anchored only to an exact USER receipt.
 /// It has no control input and cannot publish or replay a wake event.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -2175,6 +2190,164 @@ impl Store {
         atomic(&self.delivery_path(id), &delivery)
     }
 
+    fn pre_edit_refusal_path(&self, id: &str) -> PathBuf {
+        self.root
+            .join("logs")
+            .join(format!("pre-edit-refusal-{id}.json"))
+    }
+
+    fn checked_pre_edit_refusal(&self, delivery: &Delivery) -> Result<PreEditRefusalRecord> {
+        delivery.validate()?;
+        let proof: PreEditRefusalRecord =
+            read(&self.pre_edit_refusal_path(&delivery.event.event_id))?;
+        if proof.schema_version != PROTOCOL_VERSION
+            || proof.event_id != delivery.event.event_id
+            || proof.project_id != delivery.event.project_id
+            || proof.owner != delivery.owner
+            || proof.target != delivery.target
+            || proof.message_digest != delivery.message_digest
+            || delivery.event.event_type != "source_review"
+            || delivery.event.audit_references.len() != 1
+            || !delivery.event.audit_references[0].starts_with("catdesk-review-v1:")
+            || delivery.event.audit_references[0] == "catdesk-review-v1:"
+            || !self
+                .submission_start_path(&delivery.event.event_id)
+                .try_exists()
+                .map_err(|_| "PRE_EDIT_REFUSAL_EVIDENCE_UNAVAILABLE")?
+            || proof.submission_started_utc != self.submission_started_utc(delivery)?
+            || proof.recorded_utc < proof.submission_started_utc
+            || proof.recorded_utc > now()
+        {
+            return Err("PRE_EDIT_REFUSAL_EVIDENCE_INVALID".into());
+        }
+        crate::runtime::validate_pre_edit_refusal_frame(&proof.frame, delivery)?;
+        Ok(proof)
+    }
+
+    /// Called only while handling this owner's terminal adapter frame, never
+    /// from an operator-supplied attestation or a later negative DOM snapshot.
+    pub(crate) fn record_pre_edit_refusal(
+        &self,
+        id: &str,
+        lease: &HostLease,
+        frame: &serde_json::Value,
+    ) -> Result<()> {
+        if !valid_id(id) || lease.root != self.root {
+            return Err("PRE_EDIT_REFUSAL_OWNER_INVALID".into());
+        }
+        let _lock = self.lock()?;
+        let delivery = self.read_delivery(id)?.ok_or("SUBMISSION_CLAIM_MISSING")?;
+        if delivery.phase != Phase::Submitting
+            || delivery.owner != lease.owner()
+            || delivery.receipt.is_some()
+            || delivery.event.event_type != "source_review"
+            || delivery.event.audit_references.len() != 1
+            || !delivery.event.audit_references[0].starts_with("catdesk-review-v1:")
+            || delivery.event.audit_references[0] == "catdesk-review-v1:"
+            || self.read_config()?.targets.get(&delivery.event.project_id) != Some(&delivery.target)
+            || self.read_timer(id)?.is_some()
+            || self
+                .archive_path(id)
+                .try_exists()
+                .map_err(|_| "QUEUE_UNAVAILABLE")?
+            || !self
+                .submission_start_path(id)
+                .try_exists()
+                .map_err(|_| "SUBMISSION_START_UNAVAILABLE")?
+        {
+            return Err("PRE_EDIT_REFUSAL_RECORD_REFUSED".into());
+        }
+        let queued: Event = read(&self.event_path(id))?;
+        if queued != delivery.event {
+            return Err("PRE_EDIT_REFUSAL_RECORD_REFUSED".into());
+        }
+        crate::runtime::validate_pre_edit_refusal_frame(frame, &delivery)?;
+        let path = self.pre_edit_refusal_path(id);
+        if path
+            .try_exists()
+            .map_err(|_| "PRE_EDIT_REFUSAL_EVIDENCE_UNAVAILABLE")?
+        {
+            let prior = self.checked_pre_edit_refusal(&delivery)?;
+            return if prior.frame == *frame {
+                Ok(())
+            } else {
+                Err("PRE_EDIT_REFUSAL_EVIDENCE_CHANGED".into())
+            };
+        }
+        let proof = PreEditRefusalRecord {
+            schema_version: PROTOCOL_VERSION,
+            event_id: id.into(),
+            project_id: delivery.event.project_id.clone(),
+            owner: delivery.owner.clone(),
+            target: delivery.target.clone(),
+            message_digest: delivery.message_digest.clone(),
+            submission_started_utc: self.submission_started_utc(&delivery)?,
+            recorded_utc: now(),
+            frame: frame.clone(),
+        };
+        if proof.recorded_utc < proof.submission_started_utc {
+            return Err("PRE_EDIT_REFUSAL_EVIDENCE_INVALID".into());
+        }
+        atomic(&path, &proof)
+    }
+
+    fn retire_pre_edit_refusal_locked(
+        &self,
+        id: &str,
+        project: &str,
+        target: &Target,
+        message_digest: &str,
+    ) -> Result<()> {
+        // try_lock is nonblocking. A running or still-closing host must refuse
+        // rather than race its error handler or borrow its process ownership.
+        let _host = self.host_lock()?;
+        let control: crate::runtime::Control = read(&self.root.join("control.json"))?;
+        if control.schema_version != 1 || control.desired != "STOPPED" {
+            return Err("PRE_EDIT_REFUSAL_HOST_NOT_STOPPED".into());
+        }
+        let mut delivery = self.read_delivery(id)?.ok_or("SUBMISSION_CLAIM_MISSING")?;
+        require_expected_retirement_event(&delivery.event, project, target, message_digest)?;
+        if delivery.target != *target
+            || delivery.message_digest != message_digest
+            || self.read_config()?.targets.get(project) != Some(target)
+            || delivery.receipt.is_some()
+            || self.read_timer(id)?.is_some()
+            || !(delivery.phase == Phase::Submitting
+                || (delivery.phase == Phase::Stale
+                    && delivery.reason.as_deref() == Some("PRE_EDIT_REFUSED_NO_SEND")))
+        {
+            return Err("PRE_EDIT_REFUSAL_RETIREMENT_REFUSED".into());
+        }
+        self.checked_pre_edit_refusal(&delivery)?;
+        let queued = self.event_path(id);
+        let archive = self.archive_path(id);
+        let has_queue = queued.try_exists().map_err(|_| "QUEUE_UNAVAILABLE")?;
+        let has_archive = archive.try_exists().map_err(|_| "QUEUE_UNAVAILABLE")?;
+        if (has_queue && read::<Event>(&queued)? != delivery.event)
+            || (has_archive && read::<Event>(&archive)? != delivery.event)
+            || (has_archive && delivery.phase != Phase::Stale)
+            || (!has_queue && (!has_archive || delivery.phase != Phase::Stale))
+        {
+            return Err("PRE_EDIT_REFUSAL_RETIREMENT_REFUSED".into());
+        }
+        if delivery.phase != Phase::Stale {
+            delivery.phase = Phase::Stale;
+            delivery.reason = Some("PRE_EDIT_REFUSED_NO_SEND".into());
+            delivery.updated_utc = now();
+            delivery.validate()?;
+            atomic(&self.delivery_path(id), &delivery)?;
+        }
+        if !has_archive {
+            atomic(&archive, &delivery.event)?;
+        }
+        if has_queue {
+            fs::remove_file(queued).map_err(|_| "QUEUE_ARCHIVE_FAILED")?;
+        }
+        // The original submission marker and refusal witness remain. Retrying
+        // the old identity is still forbidden; no reservation is refunded.
+        Ok(())
+    }
+
     /// Retire one exact pre-submit queue event without deleting its evidence.
     /// SENT and SUBMITTING are immutable/ambiguous delivery boundaries and are
     /// always refused. The original event is copied to archive and the durable
@@ -2187,9 +2360,10 @@ impl Store {
         self.retire_stale_locked(id, None)
     }
 
-    /// Retire an exact, receiptless engineering-attention request during a
-    /// durable caller-side closure. A never-published request has no Wake
-    /// artifacts and is a safe no-op; any partial evidence refuses closure.
+    /// Retire an exact, receiptless request during a durable caller-side closure.
+    /// A newly witnessed source-review pre-edit refusal additionally requires
+    /// a stopped host; the caller verifies historical review authorization.
+    /// Legacy/unknown submission evidence still refuses closure.
     pub fn retire_stale_expected(
         &self,
         id: &str,
@@ -2212,6 +2386,15 @@ impl Store {
     }
 
     fn retire_stale_locked(&self, id: &str, expected: Option<(&str, &Target, &str)>) -> Result<()> {
+        if self
+            .pre_edit_refusal_path(id)
+            .try_exists()
+            .map_err(|_| "PRE_EDIT_REFUSAL_EVIDENCE_UNAVAILABLE")?
+        {
+            let (project, target, digest) =
+                expected.ok_or("STALE_RETIREMENT_EXPECTATION_REQUIRED")?;
+            return self.retire_pre_edit_refusal_locked(id, project, target, digest);
+        }
         let event_path = self.event_path(id);
         let archive_path = self.archive_path(id);
         let queued = event_path.try_exists().map_err(|_| "QUEUE_UNAVAILABLE")?;
@@ -3135,6 +3318,282 @@ mod submission_reconciliation_tests {
             message_digest: digest(&event.message),
             sent_utc: now(),
             evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        }
+    }
+
+    fn pre_edit_fixture(label: &str) -> (PathBuf, Store, Event, HostLease, serde_json::Value) {
+        let (base, store, _, lease) = fixture(label);
+        atomic(
+            &store.root.join("control.json"),
+            &serde_json::json!({"schemaVersion":1,"desired":"STOPPED"}),
+        )
+        .unwrap();
+        let target = store.config().unwrap().targets["catdesk"].clone();
+        let event = store
+            .produce_expected_with_audit(
+                &format!("pre-edit-{label}"),
+                "catdesk",
+                "source_review",
+                "Review bounded public source",
+                &target,
+                &["catdesk-review-v1:grant".into()],
+            )
+            .unwrap();
+        store.claim(&event, &lease).unwrap();
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        let frame = serde_json::json!({"stage":"ATTENTION","reason":"CONVERSATION_DRAFT_INSERT_UNVERIFIED_PRE_STRUCTURE",
+            "preEditRefusal":{"schemaVersion":1,"eventId":event.event_id,"projectId":event.project_id,
+                "targetGeneration":target.generation,"targetDigest":target.digest,"messageDigest":digest(&event.message),
+                "nativeInputAttempted":false,"composerStructure":{"schemaVersion":1,"reason":"ATTRIBUTE_STYLE","nodesExamined":2}}});
+        (base, store, event, lease, frame)
+    }
+
+    #[test]
+    fn pre_edit_refusal_is_durable_and_exact_retirement_never_creates_retry_or_receipt() {
+        let (_, store, event, lease, frame) = pre_edit_fixture("durable");
+        let target = store.config().unwrap().targets["catdesk"].clone();
+        let before = fs::read(store.delivery_path(&event.event_id)).unwrap();
+        let marker = fs::read(store.submission_start_path(&event.event_id)).unwrap();
+        store
+            .record_pre_edit_refusal(&event.event_id, &lease, &frame)
+            .unwrap();
+        assert_eq!(
+            fs::read(store.delivery_path(&event.event_id)).unwrap(),
+            before
+        );
+        let proof = fs::read(store.pre_edit_refusal_path(&event.event_id)).unwrap();
+        store
+            .record_pre_edit_refusal(&event.event_id, &lease, &frame)
+            .unwrap();
+        assert_eq!(
+            fs::read(store.pre_edit_refusal_path(&event.event_id)).unwrap(),
+            proof
+        );
+        drop(lease);
+        let reopened =
+            Store::open_scoped_for_test(store.root(), store.root().parent().unwrap()).unwrap();
+        reopened
+            .retire_stale_expected(&event.event_id, "catdesk", &target, &digest(&event.message))
+            .unwrap();
+        let retired = reopened.delivery(&event.event_id).unwrap().unwrap();
+        assert_eq!(retired.phase, Phase::Stale);
+        assert_eq!(retired.reason.as_deref(), Some("PRE_EDIT_REFUSED_NO_SEND"));
+        assert!(retired.receipt.is_none());
+        assert!(reopened.timer(&event.event_id).unwrap().is_none());
+        assert_eq!(
+            read::<Event>(&reopened.archive_path(&event.event_id)).unwrap(),
+            event
+        );
+        assert!(!reopened.event_path(&event.event_id).exists());
+        assert_eq!(
+            fs::read(reopened.submission_start_path(&event.event_id)).unwrap(),
+            marker
+        );
+        assert_eq!(
+            fs::read(reopened.pre_edit_refusal_path(&event.event_id)).unwrap(),
+            proof
+        );
+        let final_bytes = fs::read(reopened.delivery_path(&event.event_id)).unwrap();
+        reopened
+            .retire_stale_expected(&event.event_id, "catdesk", &target, &digest(&event.message))
+            .unwrap();
+        assert_eq!(
+            fs::read(reopened.delivery_path(&event.event_id)).unwrap(),
+            final_bytes
+        );
+        assert!(reopened.retry_pre_submit(&event.event_id).is_err());
+        assert!(reopened.retire_stale(&event.event_id).is_err());
+    }
+
+    #[test]
+    fn pre_edit_retirement_requires_stopped_quiescent_host_and_exact_scope() {
+        let (_, store, event, lease, frame) = pre_edit_fixture("owner");
+        let target = store.config().unwrap().targets["catdesk"].clone();
+        store
+            .record_pre_edit_refusal(&event.event_id, &lease, &frame)
+            .unwrap();
+        assert!(
+            store
+                .retire_stale_expected(&event.event_id, "catdesk", &target, &digest(&event.message))
+                .is_err()
+        );
+        drop(lease);
+        atomic(
+            &store.root.join("control.json"),
+            &serde_json::json!({"schemaVersion":1,"desired":"RUNNING"}),
+        )
+        .unwrap();
+        assert!(
+            store
+                .retire_stale_expected(&event.event_id, "catdesk", &target, &digest(&event.message))
+                .is_err()
+        );
+        atomic(
+            &store.root.join("control.json"),
+            &serde_json::json!({"schemaVersion":1,"desired":"STOPPED"}),
+        )
+        .unwrap();
+        assert!(
+            store
+                .retire_stale_expected(&event.event_id, "foreign", &target, &digest(&event.message))
+                .is_err()
+        );
+        assert!(
+            store
+                .retire_stale_expected(&event.event_id, "catdesk", &target, &"a".repeat(64))
+                .is_err()
+        );
+        assert_eq!(
+            store.delivery(&event.event_id).unwrap().unwrap().phase,
+            Phase::Submitting
+        );
+    }
+
+    #[test]
+    fn pre_edit_proof_refuses_legacy_reason_post_input_and_foreign_or_private_frames() {
+        for invalid in [
+            "legacy",
+            "accepted",
+            "foreign",
+            "private",
+            "post-input",
+            "wrong-owner",
+        ] {
+            let (_, store, event, lease, mut frame) = pre_edit_fixture(invalid);
+            let target = store.config().unwrap().targets["catdesk"].clone();
+            match invalid {
+                "legacy" => {
+                    frame.as_object_mut().unwrap().remove("preEditRefusal");
+                }
+                "accepted" => {
+                    store.start_submission_timer(&event.event_id).unwrap();
+                }
+                "foreign" => frame["preEditRefusal"]["projectId"] = serde_json::json!("foreign"),
+                "private" => {
+                    frame["preEditRefusal"]["rawText"] = serde_json::json!("private draft")
+                }
+                "post-input" => {
+                    frame["preEditRefusal"]["nativeInputAttempted"] = serde_json::json!(true)
+                }
+                _ => {
+                    let mut delivery = store.delivery(&event.event_id).unwrap().unwrap();
+                    delivery.owner = "foreign-owner".into();
+                    atomic(&store.delivery_path(&event.event_id), &delivery).unwrap();
+                }
+            }
+            let before = fs::read(store.delivery_path(&event.event_id)).unwrap();
+            assert!(
+                store
+                    .record_pre_edit_refusal(&event.event_id, &lease, &frame)
+                    .is_err()
+            );
+            assert!(!store.pre_edit_refusal_path(&event.event_id).exists());
+            drop(lease);
+            // A legacy string plus an empty later composer cannot take the new path.
+            assert!(
+                store
+                    .retire_stale_expected(
+                        &event.event_id,
+                        "catdesk",
+                        &target,
+                        &digest(&event.message)
+                    )
+                    .is_err()
+            );
+            assert_eq!(
+                fs::read(store.delivery_path(&event.event_id)).unwrap(),
+                before
+            );
+        }
+    }
+
+    #[test]
+    fn pre_edit_proof_tampering_cannot_change_unknown_delivery() {
+        for field in [
+            "owner",
+            "projectId",
+            "messageDigest",
+            "submissionStartedUtc",
+            "rawText",
+        ] {
+            let (_, store, event, lease, frame) = pre_edit_fixture(field);
+            let target = store.config().unwrap().targets["catdesk"].clone();
+            store
+                .record_pre_edit_refusal(&event.event_id, &lease, &frame)
+                .unwrap();
+            let path = store.pre_edit_refusal_path(&event.event_id);
+            let mut proof: serde_json::Value = read(&path).unwrap();
+            proof[field] = if field == "submissionStartedUtc" {
+                serde_json::json!(0)
+            } else {
+                serde_json::json!("foreign")
+            };
+            atomic(&path, &proof).unwrap();
+            drop(lease);
+            let before = fs::read(store.delivery_path(&event.event_id)).unwrap();
+            assert!(
+                store
+                    .retire_stale_expected(
+                        &event.event_id,
+                        "catdesk",
+                        &target,
+                        &digest(&event.message)
+                    )
+                    .is_err()
+            );
+            assert_eq!(
+                fs::read(store.delivery_path(&event.event_id)).unwrap(),
+                before
+            );
+            assert!(store.event_path(&event.event_id).exists());
+        }
+    }
+
+    #[test]
+    fn pre_edit_retirement_resumes_only_its_ordered_partial_commits() {
+        for phase in [
+            "delivery",
+            "archive",
+            "complete",
+            "archive-before-delivery",
+            "missing-event",
+        ] {
+            let (_, store, event, lease, frame) = pre_edit_fixture(phase);
+            let target = store.config().unwrap().targets["catdesk"].clone();
+            store
+                .record_pre_edit_refusal(&event.event_id, &lease, &frame)
+                .unwrap();
+            drop(lease);
+            if matches!(phase, "delivery" | "archive" | "complete") {
+                let mut delivery = store.delivery(&event.event_id).unwrap().unwrap();
+                delivery.phase = Phase::Stale;
+                delivery.reason = Some("PRE_EDIT_REFUSED_NO_SEND".into());
+                atomic(&store.delivery_path(&event.event_id), &delivery).unwrap();
+            }
+            if matches!(phase, "archive" | "complete" | "archive-before-delivery") {
+                atomic(&store.archive_path(&event.event_id), &event).unwrap();
+            }
+            if matches!(phase, "complete" | "missing-event") {
+                fs::remove_file(store.event_path(&event.event_id)).unwrap();
+            }
+            let result = store.retire_stale_expected(
+                &event.event_id,
+                "catdesk",
+                &target,
+                &digest(&event.message),
+            );
+            assert_eq!(
+                result.is_ok(),
+                matches!(phase, "delivery" | "archive" | "complete")
+            );
         }
     }
 

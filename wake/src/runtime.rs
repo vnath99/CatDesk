@@ -26,6 +26,7 @@ mod review_reconcile;
 #[path = "runtime_scoped_review.rs"]
 mod scoped_review;
 pub(crate) use response::validate_observation as validate_response_observation;
+pub(crate) use review_reconcile::validate_pre_edit_refusal_frame;
 pub use review_reconcile::{
     SubmissionDiagnosisReport, diagnose_scoped_review_guarded, diagnosed_scoped_review_guarded,
     reconcile_scoped_review_guarded,
@@ -7802,6 +7803,12 @@ fn attempt_inner<A: SubmissionAdapter>(
                         .to_string();
                     if reason.contains("LOGIN") {
                         status.login = "ATTENTION".into();
+                    }
+                    if value.get("preEditRefusal").is_some() {
+                        if !submit_dispatched || receipt_recorded {
+                            return Err("PRE_EDIT_REFUSAL_FRAME_INVALID".into());
+                        }
+                        store.record_pre_edit_refusal(&d.event.event_id, lease, &value)?;
                     }
                     status.browser = "ATTENTION".into();
                     let _ =

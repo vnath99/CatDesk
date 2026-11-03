@@ -991,8 +991,17 @@ pub(crate) fn resolve(workspace: &Path, args: Value) -> Result<Value, String> {
                 .as_ref()
                 .is_none_or(|delivery| delivery.phase != Phase::Sent)
         {
-            // This existing transaction archives only a known pre-submit event.
-            // SUBMITTING and SENT cannot be cleared through this path.
+            if let Some(delivery) = delivery.as_ref()
+                && delivery.event.event_type == "source_review"
+                && (delivery.phase == Phase::Submitting
+                    || delivery.reason.as_deref() == Some("PRE_EDIT_REFUSED_NO_SEND"))
+            {
+                // The Store can recognize only a new, durable native pre-edit
+                // refusal. Historical dispatch authorization is still required.
+                ledger.verify_review_reconciliation(&delivery.event, &record.target)?;
+            }
+            // Archive only a known pre-submit event or a newly witnessed native
+            // pre-edit refusal. Legacy/unknown SUBMITTING and SENT still refuse.
             wake.retire_stale_expected(
                 &record.event_id,
                 &validated.project_id,
@@ -1041,6 +1050,20 @@ pub(crate) mod tests {
     #[cfg(windows)]
     pub(crate) fn assignment_fixture_for(
         id: &str,
+    ) -> (
+        std::path::PathBuf,
+        std::path::PathBuf,
+        catdesk_wake::store::Store,
+        Value,
+        protocol::Event,
+    ) {
+        assignment_fixture_with_work(id, true)
+    }
+
+    #[cfg(windows)]
+    fn assignment_fixture_with_work(
+        id: &str,
+        prepare_work: bool,
     ) -> (
         std::path::PathBuf,
         std::path::PathBuf,
@@ -1148,15 +1171,17 @@ pub(crate) mod tests {
             target_generation: target.generation,
             audit_references: vec![],
         };
-        WorkLedger::open(&control, id)
-            .unwrap()
-            .prepare(
-                "request-a",
-                &event_id,
-                &protocol::digest(&event.message),
-                &target,
-            )
-            .unwrap();
+        if prepare_work {
+            WorkLedger::open(&control, id)
+                .unwrap()
+                .prepare(
+                    "request-a",
+                    &event_id,
+                    &protocol::digest(&event.message),
+                    &target,
+                )
+                .unwrap();
+        }
         let args = json!({"projectId":id,"requestId":"request-a","sourceEventId":event_id,"expectedTargetGeneration":target.generation,"expectedTargetSha256":target.digest,"assignmentSha256":protocol::digest(&fs::read_to_string(&assignment).unwrap())});
         (control, assignment, wake, args, event)
     }
@@ -1170,6 +1195,142 @@ pub(crate) mod tests {
         protocol::Event,
     ) {
         assignment_fixture_for("alpha")
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn witnessed_pre_edit_retirement_requires_historical_dispatch_and_never_authorizes_retry() {
+        use crate::web_work_state::{ReviewGrantRequest, ReviewMessageIdentity};
+        use catdesk_wake::store::Phase;
+        use std::fs;
+
+        let (control, _, wake, _, mut event) = assignment_fixture_with_work("alpha", false);
+        let target = wake.config().unwrap().targets["alpha"].clone();
+        let ledger = WorkLedger::open(&control, "alpha").unwrap();
+        let identity = ReviewMessageIdentity {
+            request_id: "request-a".into(),
+            event_id: event.event_id.clone(),
+            message_sha256: protocol::digest(&event.message),
+            review_key: "a".repeat(64),
+        };
+        let at = now();
+        ledger
+            .authorize_review(
+                ReviewGrantRequest {
+                    grant_id: "pre-edit-fixture".into(),
+                    category: "READ_ONLY_SOURCE_REVIEW".into(),
+                    target: target.clone(),
+                    expires_utc: at + 600,
+                    max_messages: 1,
+                    max_execution_seconds: 160,
+                    approval_evidence_sha256: "b".repeat(64),
+                    messages: vec![identity.clone()],
+                    unused_messages_from_grant: None,
+                },
+                at,
+            )
+            .unwrap();
+        let permit = ledger
+            .reserve_review("pre-edit-fixture", &identity, &target, at)
+            .unwrap();
+        ledger
+            .prepare(
+                &identity.request_id,
+                &identity.event_id,
+                &identity.message_sha256,
+                &target,
+            )
+            .unwrap();
+        event.event_type = "source_review".into();
+        event.audit_references = vec!["catdesk-review-v1:pre-edit-fixture".into()];
+        wake.publish(&event).unwrap();
+        let host = wake.host_lock().unwrap();
+        let claimed = wake.claim(&event, &host).unwrap();
+        let delivery = wake
+            .transition(
+                &event.event_id,
+                &claimed.owner,
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        drop(host);
+
+        // Synthetic terminal evidence exists only in this disposable fixture.
+        // Wake's scoped-runtime tests separately exercise the actual producer.
+        let logs = wake.root().join("logs");
+        let marker_path = logs.join(format!("submission-start-{}.json", event.event_id));
+        let marker_bytes = fs::read(&marker_path).unwrap();
+        let marker: Value = serde_json::from_slice(&marker_bytes).unwrap();
+        let proof_path = logs.join(format!("pre-edit-refusal-{}.json", event.event_id));
+        let proof = json!({"schemaVersion":1,"eventId":event.event_id,"projectId":"alpha",
+            "owner":delivery.owner,"target":target,"messageDigest":identity.message_sha256,
+            "submissionStartedUtc":marker["startedUtc"],"recordedUtc":now(),
+            "frame":{"stage":"ATTENTION","reason":"CONVERSATION_DRAFT_INSERT_UNVERIFIED_PRE_STRUCTURE",
+                "preEditRefusal":{"schemaVersion":1,"eventId":event.event_id,"projectId":"alpha",
+                    "targetGeneration":target.generation,"targetDigest":target.digest,
+                    "messageDigest":identity.message_sha256,"nativeInputAttempted":false,
+                    "composerStructure":{"schemaVersion":1,"reason":"ATTRIBUTE_STYLE","nodesExamined":2}}}});
+        let proof_bytes = serde_json::to_vec(&proof).unwrap();
+        fs::write(&proof_path, &proof_bytes).unwrap();
+        let resolution = json!({"projectId":"alpha","requestId":"request-a",
+            "expectedTargetGeneration":target.generation,"expectedTargetSha256":target.digest,
+            "outcome":"retired","summary":"Confirmed native pre-edit refusal; no retry"});
+        assert_eq!(
+            resolve(&control, resolution.clone()).unwrap_err(),
+            "WEB_REVIEW_RECONCILE_DISPATCH_REQUIRED"
+        );
+        ledger.mark_review_dispatch_started(&permit, now()).unwrap();
+        let ledger_path = control.join(".catdesk/web-work/alpha.json");
+        let before: Value = serde_json::from_slice(&fs::read(&ledger_path).unwrap()).unwrap();
+        let host = wake.host_lock().unwrap();
+        assert_eq!(
+            resolve(&control, resolution.clone()).unwrap_err(),
+            "HOST_ALREADY_RUNNING"
+        );
+        drop(host);
+        let mut foreign = proof.clone();
+        foreign["frame"]["preEditRefusal"]["projectId"] = json!("beta");
+        fs::write(&proof_path, serde_json::to_vec(&foreign).unwrap()).unwrap();
+        assert!(resolve(&control, resolution.clone()).is_err());
+        fs::remove_file(&proof_path).unwrap();
+        assert!(resolve(&control, resolution.clone()).is_err());
+        assert_eq!(
+            wake.delivery(&event.event_id).unwrap().unwrap().phase,
+            Phase::Submitting
+        );
+        assert_eq!(ledger.record("request-a").unwrap().unwrap().phase, "OPEN");
+        fs::write(&proof_path, &proof_bytes).unwrap();
+
+        let closed = resolve(&control, resolution.clone()).unwrap();
+        assert_eq!(closed["phase"], "CLOSED");
+        assert_eq!(closed["outcome"], "retired");
+        assert_eq!(closed["taskCompletionVerified"], false);
+        assert_eq!(resolve(&control, resolution).unwrap(), closed);
+        assert_eq!(
+            wake.delivery(&event.event_id).unwrap().unwrap().phase,
+            Phase::Stale
+        );
+        assert!(
+            wake.delivery(&event.event_id)
+                .unwrap()
+                .unwrap()
+                .receipt
+                .is_none()
+        );
+        assert!(wake.timer(&event.event_id).unwrap().is_none());
+        assert!(wake.events().unwrap().is_empty());
+        assert_eq!(fs::read(&marker_path).unwrap(), marker_bytes);
+        assert_eq!(fs::read(&proof_path).unwrap(), proof_bytes);
+        let after: Value = serde_json::from_slice(&fs::read(&ledger_path).unwrap()).unwrap();
+        assert_eq!(
+            before["reviewAuthorizations"],
+            after["reviewAuthorizations"]
+        );
+        assert!(wake.retry_pre_submit(&event.event_id).is_err());
+        assert!(ledger.require_ordinary_request("request-a").is_err());
+        assert!(!control.join(".catdesk/project-mcp-tasks").exists());
     }
 
     #[cfg(windows)]

@@ -428,7 +428,13 @@ global.document = {
 };
 let result;
 try { result = eval(cfg.script); } catch (error) { result = 'THREW'; }
-process.stdout.write(JSON.stringify({result, inserts, command, text:getText(editor)}));
+let preEditRefusal = null;
+if (result && typeof result === 'object' && result.code === 'PRE_STRUCTURE' &&
+    result.preEditRefusal && Object.keys(result).length === 2) {
+    preEditRefusal = result.preEditRefusal;
+    result = result.code;
+}
+process.stdout.write(JSON.stringify({result, preEditRefusal, inserts, command, text:getText(editor)}));
 """
 
     def insertion_script(self, message, repair_raw=None):
@@ -682,6 +688,26 @@ process.stdout.write(JSON.stringify({result, inserts, command, text:getText(edit
                     with self.assertRaises(bridge.Attention) as error:
                         sink.insert_empty_home_draft(cdp, "handoff")
                     self.assertEqual(str(error.exception), "BOOTSTRAP_DRAFT_INSERT_UNVERIFIED_RESULT_INVALID")
+
+    def test_pre_edit_refusal_proof_is_native_only_and_not_inferred_from_legacy_strings(self):
+        result = self.run_script("expected review", rich="chip")
+        proof = result["preEditRefusal"]
+        self.assertEqual((result["result"], result["inserts"]), ("PRE_STRUCTURE", 0))
+        self.assertEqual(proof, {"schemaVersion": 1, "nativeInputAttempted": False,
+            "composerStructure": {"schemaVersion": 1, "reason": "ATTRIBUTE_CONTENTEDITABLE", "nodesExamined": 2}})
+        payload = {"code": "PRE_STRUCTURE", "preEditRefusal": proof}
+        for observed, has_proof in ((payload, True), ("PRE_STRUCTURE", False),
+                (payload | {"rawText": "private draft"}, False),
+                ({"code": "PRE_STRUCTURE", "preEditRefusal": proof | {"nativeInputAttempted": True}}, False)):
+            for conversation in (True, False):
+                with self.subTest(conversation=conversation, observed=observed), tempfile.TemporaryDirectory() as profile:
+                    sink = bridge.CdpSink(SOURCE, Path(profile), 1, 1)
+                    cdp = types.SimpleNamespace(get_current_url=lambda: SOURCE, evaluate=lambda _: observed)
+                    with self.assertRaises(bridge.Attention) as error:
+                        sink._replace_home_draft_once(cdp, "review", None,
+                            "CONVERSATION_DRAFT_INSERT_UNVERIFIED" if conversation else "BOOTSTRAP_DRAFT_INSERT_UNVERIFIED",
+                            conversation=conversation)
+                    self.assertEqual(hasattr(error.exception, "pre_edit_refusal"), has_proof and conversation)
 
     def test_successful_native_insertion_followed_by_failed_readback_is_post_verify(self):
         with tempfile.TemporaryDirectory() as profile:

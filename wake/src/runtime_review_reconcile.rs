@@ -285,6 +285,55 @@ struct SubmissionDiagnosis {
     observation: SubmissionObservation,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PreEditRefusal {
+    schema_version: u8,
+    event_id: String,
+    project_id: String,
+    target_generation: u64,
+    target_digest: String,
+    message_digest: String,
+    native_input_attempted: bool,
+    composer_structure: ComposerStructureObservation,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PreEditRefusalFrame {
+    stage: String,
+    reason: String,
+    pre_edit_refusal: PreEditRefusal,
+}
+
+pub(crate) fn validate_pre_edit_refusal_frame(value: &Value, delivery: &Delivery) -> Result<()> {
+    let frame: PreEditRefusalFrame =
+        serde_json::from_value(value.clone()).map_err(|_| "PRE_EDIT_REFUSAL_FRAME_INVALID")?;
+    let view = frame.pre_edit_refusal;
+    if frame.stage != "ATTENTION"
+        || frame.reason != "CONVERSATION_DRAFT_INSERT_UNVERIFIED_PRE_STRUCTURE"
+        || view.schema_version != 1
+        || view.event_id != delivery.event.event_id
+        || view.project_id != delivery.event.project_id
+        || view.target_generation != delivery.target.generation
+        || view.target_digest != delivery.target.digest
+        || view.message_digest != delivery.message_digest
+        || view.native_input_attempted
+        || !view.composer_structure.valid()
+        || matches!(
+            view.composer_structure.reason.as_str(),
+            "PLAIN"
+                | "UNAVAILABLE"
+                | "EDITOR_UNAVAILABLE"
+                | "EDITOR_AMBIGUOUS"
+                | "DOCUMENT_LOADING"
+        )
+    {
+        return Err("PRE_EDIT_REFUSAL_FRAME_INVALID".into());
+    }
+    Ok(())
+}
+
 fn diagnosis_frame(value: Value, delivery: &Delivery) -> Result<SubmissionObservation> {
     let parsed: SubmissionDiagnosis =
         serde_json::from_value(value).map_err(|_| "SCOPED_DIAGNOSE_FRAME_INVALID")?;
