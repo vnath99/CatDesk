@@ -130,14 +130,43 @@ fn inspect_submitting(
             })
         };
     let result = if diagnostic {
-        catdesk_wake::runtime::diagnose_scoped_review_guarded(
+        let report = catdesk_wake::runtime::diagnosed_scoped_review_guarded(
             &store,
             project,
             &target,
             event,
             &check_pair,
             check_authority,
-        )
+        );
+        if let Some(reason) = report.failure.as_deref()
+            && !matches!(
+                reason,
+                "SCOPED_DIAGNOSE_TIMEOUT"
+                    | "SCOPED_DIAGNOSE_UNAVAILABLE"
+                    | "BROWSER_SESSION_START_TIMEOUT"
+                    | "BROWSER_PROFILE_ACCESS_DENIED"
+                    | "BROWSER_BINARY_OR_DRIVER_MISSING"
+                    | "BROWSER_SESSION_NOT_CREATED"
+                    | "BROWSER_DRIVER_START_FAILED"
+                    | "BROWSER_PROCESS_START_FAILED"
+                    | "BROWSER_SESSION_UNAVAILABLE"
+            )
+        {
+            // Authority, cancellation, scope and integrity refusals retain
+            // their existing error contract. Metadata is never permission.
+            return Err(reason.into());
+        }
+        Ok(match report.diagnosis {
+            Some(mut diagnosis) => {
+                diagnosis["diagnosisCompleted"] = json!(true);
+                diagnosis["diagnostic"] = json!(report.diagnostic);
+                diagnosis
+            }
+            None => json!({"diagnosisCompleted":false,"responseState":"UNVERIFIED",
+                "reason":report.failure,"diagnostic":report.diagnostic,
+                "browserReadOnly":true,"receiptCreated":false,"stateChanged":false,
+                "sendAttempted":false,"retryAuthorized":false,"workResolved":false}),
+        })
     } else {
         catdesk_wake::runtime::reconcile_scoped_review_guarded(
             &store,

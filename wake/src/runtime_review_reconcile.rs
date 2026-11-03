@@ -2,6 +2,64 @@
 use super::*;
 use crate::store::Delivery;
 use serde_json::{Value, json};
+use std::cell::Cell;
+
+/// Content-free failure detail for the existing no-send inspection path.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubmissionDiagnosisReport {
+    pub diagnosis: Option<Value>,
+    pub failure: Option<String>,
+    pub diagnostic: SnapshotDiagnostic,
+}
+
+struct DiagnosisOutcome {
+    result: Result<Value>,
+    diagnostic: SnapshotDiagnostic,
+}
+
+impl DiagnosisOutcome {
+    fn report(self) -> SubmissionDiagnosisReport {
+        let (diagnosis, failure) = match self.result {
+            Ok(value) => (Some(value), None),
+            Err(reason) => (None, Some(submission_diagnostic_code(&reason))),
+        };
+        SubmissionDiagnosisReport {
+            diagnosis,
+            failure,
+            diagnostic: self.diagnostic,
+        }
+    }
+}
+
+fn submission_diagnostic_code(reason: &str) -> String {
+    match reason {
+        "SCOPED_DIAGNOSE_TIMEOUT"
+        | "SCOPED_DIAGNOSE_FRAME_INVALID"
+        | "SCOPED_DIAGNOSE_UNAVAILABLE"
+        | "SCOPED_DIAGNOSE_PACKAGE_UNSUPPORTED"
+        | "SCOPED_RECONCILE_HOST_NOT_STOPPED"
+        | "SCOPED_RECONCILE_ARGUMENTS_INVALID"
+        | "SCOPED_RECONCILE_DELIVERY_MISSING"
+        | "SCOPED_RECONCILE_DELIVERY_INVALID"
+        | "SCOPED_RECONCILE_SCOPE_CHANGED"
+        | "SCOPED_RECONCILE_ADAPTER_FAILED"
+        | "WEB_REVIEW_RECONCILE_RECORD_MISSING"
+        | "WEB_REVIEW_RECONCILE_DISPATCH_REQUIRED"
+        | "WEB_REVIEW_PROJECT_UNAVAILABLE"
+        | "WEB_REVIEW_REGISTRY_UNAVAILABLE"
+        | "DISPATCH_AUTHORITY_UNAVAILABLE"
+        | "CANCELLED" => reason.into(),
+        _ => {
+            let code = snapshot_diagnostic_code(reason);
+            if code == "SOURCE_SNAPSHOT_FAILED" {
+                "SCOPED_DIAGNOSE_FAILED".into()
+            } else {
+                code
+            }
+        }
+    }
+}
 
 /// The caller holds its project registration lock while checking historical
 /// grant dispatch and running `commit`. Neither check grants another submit.
@@ -282,6 +340,46 @@ where
     )
 }
 
+/// Observe the same guarded submission, retaining the failed phase without
+/// exposing composer/history text or turning a timeout into receipt authority.
+pub fn diagnosed_scoped_review_guarded<F>(
+    store: &Store,
+    project: &str,
+    target: &Target,
+    event: &str,
+    keep_running: &dyn Fn() -> Result<()>,
+    with_authority: F,
+) -> SubmissionDiagnosisReport
+where
+    F: FnMut(&Delivery, &mut dyn FnMut() -> Result<()>) -> Result<()>,
+{
+    diagnose_monitored_with_adapter(
+        store,
+        project,
+        target,
+        event,
+        keep_running,
+        with_authority,
+        Duration::from_secs(90),
+        |deadline, guard, phase| {
+            let installed = installed_bootstrap_directory(store)?;
+            require_diagnosis_adapter(
+                &std::fs::read(installed.join("adapter.py"))
+                    .map_err(|_| "BROWSER_ADAPTER_UNAVAILABLE")?,
+            )?;
+            Adapter::spawn_from_installed_monitored(
+                store.root(),
+                &installed,
+                deadline.saturating_duration_since(Instant::now()),
+                guard,
+                phase,
+                AdapterResponseBudget::Ordinary,
+            )
+        },
+    )
+    .report()
+}
+
 #[allow(clippy::too_many_arguments)]
 fn diagnose_with_adapter<A, F>(
     store: &Store,
@@ -289,7 +387,7 @@ fn diagnose_with_adapter<A, F>(
     target: &Target,
     event: &str,
     keep_running: &dyn Fn() -> Result<()>,
-    mut with_authority: F,
+    with_authority: F,
     maximum: Duration,
     connect: impl FnOnce(Instant, &dyn Fn() -> Result<()>) -> Result<A>,
 ) -> Result<Value>
@@ -297,8 +395,37 @@ where
     A: SubmissionAdapter,
     F: FnMut(&Delivery, &mut dyn FnMut() -> Result<()>) -> Result<()>,
 {
+    diagnose_monitored_with_adapter(
+        store,
+        project,
+        target,
+        event,
+        keep_running,
+        with_authority,
+        maximum,
+        |deadline, guard, _| connect(deadline, guard),
+    )
+    .result
+}
+
+#[allow(clippy::too_many_arguments)]
+fn diagnose_monitored_with_adapter<A, F>(
+    store: &Store,
+    project: &str,
+    target: &Target,
+    event: &str,
+    keep_running: &dyn Fn() -> Result<()>,
+    mut with_authority: F,
+    maximum: Duration,
+    connect: impl FnOnce(Instant, &dyn Fn() -> Result<()>, &dyn Fn(AdapterStartPhase)) -> Result<A>,
+) -> DiagnosisOutcome
+where
+    A: SubmissionAdapter,
+    F: FnMut(&Delivery, &mut dyn FnMut() -> Result<()>) -> Result<()>,
+{
     let started = Instant::now();
     let deadline = started + maximum;
+    let phase = Cell::new(SnapshotReadPhase::OwnerCheck);
     let guard = || -> Result<()> {
         if Instant::now() >= deadline {
             return Err("SCOPED_DIAGNOSE_TIMEOUT".into());
@@ -312,82 +439,115 @@ where
         }
         Ok(())
     };
-    guard()?;
-    target.validate()?;
-    if !crate::protocol::valid_id(project) || !crate::protocol::valid_id(event) {
-        return Err("SCOPED_RECONCILE_ARGUMENTS_INVALID".into());
-    }
-    let _owner = store.host_lock()?;
-    // An owner may stop after recording grant dispatch but before Wake persists
-    // SUBMITTING. Inspect its exact retained CLAIMED event through the same
-    // read-only adapter; this does not clear dispatch or permit another send.
-    // Receipt reconciliation deliberately continues to require SUBMITTING.
-    let delivery = pending_review_delivery(
-        store,
-        project,
-        target,
-        event,
-        &[Phase::Claimed, Phase::Submitting],
-    )?;
-    let unchanged = || -> Result<()> {
-        if store.config()?.targets.get(project) != Some(target)
-            || store.delivery(event)?.as_ref() != Some(&delivery)
-        {
-            return Err("SCOPED_RECONCILE_SCOPE_CHANGED".into());
-        }
-        Ok(())
-    };
-    unchanged()?;
-    with_authority(&delivery, &mut || Ok(()))?;
-    guard()?;
-    let mut adapter = connect(deadline, &guard)?;
-    let observed = (|| {
+    let result = (|| {
         guard()?;
-        adapter.send(
-            json!({"diagnoseSubmission":true,"event":delivery.event,"target":delivery.target}),
-        )?;
-        loop {
-            guard()?;
-            let frame = adapter.receive(
-                deadline
-                    .saturating_duration_since(Instant::now())
-                    .min(Duration::from_millis(250)),
-            );
-            guard()?;
-            match frame {
-                Ok(Ok(value)) => match value.get("stage").and_then(Value::as_str) {
-                    Some("SUBMISSION_DIAGNOSED") => return diagnosis_frame(value, &delivery),
-                    Some(
-                        "CDP_REUSE_BEGIN" | "CDP_REUSE_DONE" | "CDP_ACTIVATE_BEGIN"
-                        | "CDP_ACTIVATE_DONE",
-                    ) => {}
-                    Some("ATTENTION") => return Err("SCOPED_DIAGNOSE_UNAVAILABLE".into()),
-                    _ => return Err("SCOPED_DIAGNOSE_FRAME_INVALID".into()),
-                },
-                Ok(Err(_)) | Err(mpsc::RecvTimeoutError::Disconnected) => {
-                    return Err("SCOPED_RECONCILE_ADAPTER_FAILED".into());
-                }
-                Err(mpsc::RecvTimeoutError::Timeout) => {}
-            }
+        phase.set(SnapshotReadPhase::ScopeCheck);
+        target.validate()?;
+        if !crate::protocol::valid_id(project) || !crate::protocol::valid_id(event) {
+            return Err("SCOPED_RECONCILE_ARGUMENTS_INVALID".into());
         }
-    })();
-    adapter.finish(
-        deadline
-            .saturating_duration_since(Instant::now())
-            .min(Duration::from_secs(5)),
-    );
-    drop(adapter);
-    let observation = observed?;
-    guard()?;
-    unchanged()?;
-    with_authority(&delivery, &mut || Ok(()))?;
-    guard()?;
-    Ok(
-        json!({"observation":observation,"deliveryPhase":delivery.phase,
+        phase.set(SnapshotReadPhase::OwnerCheck);
+        let _owner = store.host_lock()?;
+        phase.set(SnapshotReadPhase::ScopeCheck);
+        // An owner may stop after recording grant dispatch but before Wake persists
+        // SUBMITTING. Inspect its exact retained CLAIMED event through the same
+        // read-only adapter; this does not clear dispatch or permit another send.
+        // Receipt reconciliation deliberately continues to require SUBMITTING.
+        let delivery = pending_review_delivery(
+            store,
+            project,
+            target,
+            event,
+            &[Phase::Claimed, Phase::Submitting],
+        )?;
+        let unchanged = || -> Result<()> {
+            if store.config()?.targets.get(project) != Some(target)
+                || store.delivery(event)?.as_ref() != Some(&delivery)
+            {
+                return Err("SCOPED_RECONCILE_SCOPE_CHANGED".into());
+            }
+            Ok(())
+        };
+        unchanged()?;
+        with_authority(&delivery, &mut || Ok(()))?;
+        guard()?;
+        phase.set(SnapshotReadPhase::PackageCheck);
+        let mut adapter = connect(deadline, &guard, &|step| {
+            phase.set(match step {
+                AdapterStartPhase::BrowserLock => SnapshotReadPhase::BrowserLock,
+                AdapterStartPhase::AdapterStart => SnapshotReadPhase::AdapterStart,
+                AdapterStartPhase::AdapterReadyWait => SnapshotReadPhase::AdapterReadyWait,
+            })
+        })?;
+        phase.set(SnapshotReadPhase::SnapshotReply);
+        let observed = (|| {
+            guard()?;
+            adapter.send(
+                json!({"diagnoseSubmission":true,"event":delivery.event,"target":delivery.target}),
+            )?;
+            loop {
+                guard()?;
+                let frame = adapter.receive(
+                    deadline
+                        .saturating_duration_since(Instant::now())
+                        .min(Duration::from_millis(250)),
+                );
+                guard()?;
+                match frame {
+                    Ok(Ok(value)) => match value.get("stage").and_then(Value::as_str) {
+                        Some("SUBMISSION_DIAGNOSED") => {
+                            phase.set(SnapshotReadPhase::FrameValidation);
+                            return diagnosis_frame(value, &delivery);
+                        }
+                        Some(
+                            "CDP_REUSE_BEGIN" | "CDP_REUSE_DONE" | "CDP_ACTIVATE_BEGIN"
+                            | "CDP_ACTIVATE_DONE",
+                        ) => {
+                            phase.set(SnapshotReadPhase::TargetOpen);
+                        }
+                        Some("ATTENTION") => return Err("SCOPED_DIAGNOSE_UNAVAILABLE".into()),
+                        _ => return Err("SCOPED_DIAGNOSE_FRAME_INVALID".into()),
+                    },
+                    Ok(Err(_)) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+                        return Err("SCOPED_RECONCILE_ADAPTER_FAILED".into());
+                    }
+                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                }
+            }
+        })();
+        let observed_phase = phase.get();
+        phase.set(SnapshotReadPhase::Cleanup);
+        adapter.finish(
+            deadline
+                .saturating_duration_since(Instant::now())
+                .min(Duration::from_secs(5)),
+        );
+        drop(adapter);
+        if observed.is_err() {
+            phase.set(observed_phase);
+        }
+        let observation = observed?;
+        guard()?;
+        phase.set(SnapshotReadPhase::ScopeCheck);
+        unchanged()?;
+        with_authority(&delivery, &mut || Ok(()))?;
+        guard()?;
+        phase.set(SnapshotReadPhase::Complete);
+        Ok(
+            json!({"observation":observation,"deliveryPhase":delivery.phase,
         "retryAuthorized":false,"browserReadOnly":true,"stateChanged":false,
         "receiptCreated":false,"sendAttempted":false,"diagnostic":{"phase":"COMPLETE",
         "elapsedMillis":started.elapsed().as_millis(),"budgetMillis":maximum.as_millis()}}),
-    )
+        )
+    })();
+    DiagnosisOutcome {
+        result,
+        diagnostic: SnapshotDiagnostic {
+            phase: phase.get(),
+            elapsed_millis: started.elapsed().as_millis() as u64,
+            budget_millis: maximum.as_millis() as u64,
+        },
+    }
 }
 
 fn read_receipt<A: SubmissionAdapter>(
@@ -959,5 +1119,103 @@ mod tests {
             );
             preserved(&store, &d, &control);
         }
+    }
+    #[test]
+    fn diagnosed_submission_retains_startup_timeout_phase_without_authorizing_send() {
+        for phase in [Phase::Claimed, Phase::Submitting] {
+            let (store, d, _) = fixture_at_phase(phase);
+            let control = std::fs::read(store.root().join("control.json")).unwrap();
+            let outcome = diagnose_monitored_with_adapter::<Reader, _>(
+                &store,
+                "alpha",
+                &d.target,
+                &d.event.event_id,
+                &|| Ok(()),
+                |_, commit| commit(),
+                Duration::from_millis(10),
+                |_, guard, progress| {
+                    progress(AdapterStartPhase::AdapterReadyWait);
+                    thread::sleep(Duration::from_millis(20));
+                    guard()?;
+                    panic!("elapsed startup unexpectedly authorized a browser");
+                },
+            );
+            let report = outcome.report();
+            assert_eq!(report.failure.as_deref(), Some("SCOPED_DIAGNOSE_TIMEOUT"));
+            assert_eq!(report.diagnostic.phase, SnapshotReadPhase::AdapterReadyWait);
+            assert_eq!(report.diagnostic.budget_millis, 10);
+            assert!(report.diagnosis.is_none());
+            let serialized = serde_json::to_string(&report).unwrap();
+            assert!(!serialized.contains(&d.event.message));
+            assert!(!serialized.contains("chatgpt.com"));
+            preserved(&store, &d, &control);
+        }
+    }
+
+    #[test]
+    fn diagnosed_submission_sanitizes_adapter_errors_without_losing_phase() {
+        let (store, d, _) = fixture();
+        let control = std::fs::read(store.root().join("control.json")).unwrap();
+        let report = diagnose_monitored_with_adapter::<Reader, _>(
+            &store,
+            "alpha",
+            &d.target,
+            &d.event.event_id,
+            &|| Ok(()),
+            |_, commit| commit(),
+            Duration::from_secs(1),
+            |_, _, progress| {
+                progress(AdapterStartPhase::AdapterStart);
+                Err("private draft https://private.invalid/opaque Bearer confidential".into())
+            },
+        )
+        .report();
+        assert_eq!(report.failure.as_deref(), Some("SCOPED_DIAGNOSE_FAILED"));
+        assert_eq!(report.diagnostic.phase, SnapshotReadPhase::AdapterStart);
+        assert!(report.diagnosis.is_none());
+        let serialized = serde_json::to_string(&report).unwrap();
+        for text in [
+            "private",
+            "private.invalid",
+            "Bearer",
+            "confidential",
+            &d.event.message,
+        ] {
+            assert!(!serialized.contains(text));
+        }
+        preserved(&store, &d, &control);
+    }
+
+    #[test]
+    fn diagnosed_submission_separates_cleanup_timeout_from_valid_observation() {
+        let (store, d, _) = fixture();
+        let control = std::fs::read(store.root().join("control.json")).unwrap();
+        let mut fake = reader(vec![diagnosis(&d)]);
+        fake.cleanup_delay = Duration::from_millis(20);
+        let requests = fake.requests.clone();
+        let finished = fake.finished.clone();
+        let report = diagnose_monitored_with_adapter(
+            &store,
+            "alpha",
+            &d.target,
+            &d.event.event_id,
+            &|| Ok(()),
+            |_, commit| commit(),
+            Duration::from_millis(10),
+            |_, _, _| Ok(fake),
+        )
+        .report();
+        assert_eq!(report.failure.as_deref(), Some("SCOPED_DIAGNOSE_TIMEOUT"));
+        assert_eq!(report.diagnostic.phase, SnapshotReadPhase::Cleanup);
+        assert!(report.diagnosis.is_none());
+        assert!(finished.get());
+        assert_eq!(requests.borrow().len(), 1);
+        assert!(
+            requests.borrow()[0]["diagnoseSubmission"]
+                .as_bool()
+                .unwrap()
+        );
+        assert!(requests.borrow()[0].get("submit").is_none());
+        preserved(&store, &d, &control);
     }
 }
