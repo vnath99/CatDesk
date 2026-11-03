@@ -8,6 +8,36 @@ enum Selection<'a> {
     TaskContinuation(&'a Event, &'a Target),
     RolloverContinuation(&'a Event, &'a Target),
     RolloverHandoff(&'a Event, &'a Target),
+    WorkRequest(&'a Event, &'a Target),
+}
+
+/// Deliver one exact ordinary invitation chosen by its central work journal.
+/// Uses the existing sender/receipt protocol without starting the shared host.
+pub fn run_scoped_work_request(
+    store: &Store,
+    event: &Event,
+    target: &Target,
+    maximum_seconds: u64,
+    before_submit: &mut dyn FnMut(&Event, &Target) -> Result<()>,
+    keep_running: &dyn Fn() -> Result<()>,
+) -> Result<Value> {
+    run_selected_with_adapter(
+        store,
+        &event.event_id,
+        maximum_seconds,
+        Selection::WorkRequest(event, target),
+        before_submit,
+        keep_running,
+        |deadline, guard| {
+            let installed = installed_bootstrap_directory(store)?;
+            Adapter::spawn_from_installed_guarded(
+                store.root(),
+                &installed,
+                deadline.saturating_duration_since(Instant::now()),
+                guard,
+            )
+        },
+    )
 }
 
 /// Deliver only the source-handoff request selected by its retained project
@@ -190,8 +220,22 @@ fn run_selected_with_adapter<A: SubmissionAdapter>(
             .any(|item| item == "catdesk-review-v1:");
     let rollover = matches!(&selection, Selection::RolloverContinuation(..));
     let handoff = matches!(&selection, Selection::RolloverHandoff(..));
+    let work = matches!(&selection, Selection::WorkRequest(..));
     let permitted = match selection {
         Selection::Review => review,
+        Selection::WorkRequest(expected, target) => {
+            target.validate()?;
+            &event == expected
+                && event.event_type == "engineering_attention"
+                && event.audit_references.is_empty()
+                && event.event_id.strip_prefix("web-work-").is_some_and(|id| {
+                    id.len() == 64
+                        && id
+                            .bytes()
+                            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                })
+                && store.config()?.targets.get(&event.project_id) == Some(target)
+        }
         Selection::RolloverHandoff(expected, target) => {
             target.validate()?;
             &event == expected
@@ -304,7 +348,7 @@ fn run_selected_with_adapter<A: SubmissionAdapter>(
         return Err("SCOPED_REVIEW_RECEIPT_REQUIRED".into());
     }
     Ok(
-        json!({"action":if review {"scoped_review_run"} else if handoff {"scoped_rollover_handoff_run"} else if rollover {"scoped_rollover_continuation_run"} else {"scoped_task_continuation_run"},"eventId":event_id,"projectId":event.project_id,
+        json!({"action":if review {"scoped_review_run"} else if handoff {"scoped_rollover_handoff_run"} else if rollover {"scoped_rollover_continuation_run"} else if work {"scoped_work_request_run"} else {"scoped_task_continuation_run"},"eventId":event_id,"projectId":event.project_id,
         "targetGeneration":final_delivery.target.generation,"targetDigest":final_delivery.target.digest,
         "phase":final_delivery.phase,"receipt":final_delivery.receipt,"maximumSeconds":maximum_seconds,
         "hostStarted":false,"schedulerStarted":false,"desiredStateChanged":false}),
@@ -428,6 +472,160 @@ mod tests {
             delay: Duration::ZERO,
             terminal_refusal: None,
         }
+    }
+
+    fn work_event(store: &Store, project: &str, target: &Target) -> Event {
+        store
+            .produce_expected(
+                &format!("web-work-{}", crate::protocol::digest(project)),
+                project,
+                "engineering_attention",
+                "Existing journal-owned work invitation",
+                target,
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn scoped_work_request_unknown_alpha_does_not_block_beta_and_never_replays() {
+        let (store, review, alpha) = fixture("work-independent");
+        let beta = store.config().unwrap().targets["beta"].clone();
+        let alpha_event = work_event(&store, "alpha", &alpha);
+        let beta_event = work_event(&store, "beta", &beta);
+        let foreign = store.root().join("queue/gamma-unreadable.json");
+        std::fs::write(&foreign, b"unrelated queue must stay unread").unwrap();
+        let control = std::fs::read(store.root().join("control.json")).unwrap();
+        for (event, target, unknown) in [(&alpha_event, &alpha, true), (&beta_event, &beta, false)]
+        {
+            let mut fake = adapter(event, target);
+            if unknown {
+                fake.receipt.message_digest = "0".repeat(64);
+            }
+            let admitted = fake.admitted.clone();
+            let acks = fake.ack_count.clone();
+            let result = run_selected_with_adapter(
+                &store,
+                &event.event_id,
+                120,
+                Selection::WorkRequest(event, target),
+                &mut |actual, actual_target| {
+                    assert_eq!(actual, event);
+                    assert_eq!(actual_target, target);
+                    admitted.set(true);
+                    Ok(())
+                },
+                &|| Ok(()),
+                |_, _| Ok(fake),
+            );
+            assert_eq!(result.is_err(), unknown);
+            if !unknown {
+                assert_eq!(result.unwrap()["action"], "scoped_work_request_run");
+            }
+            assert_eq!(acks.get(), 1);
+            assert_eq!(
+                store.delivery(&event.event_id).unwrap().unwrap().phase,
+                if unknown {
+                    Phase::Submitting
+                } else {
+                    Phase::Sent
+                }
+            );
+            assert_eq!(
+                run_selected_with_adapter::<FakeAdapter>(
+                    &store,
+                    &event.event_id,
+                    120,
+                    Selection::WorkRequest(event, target),
+                    &mut |_, _| panic!("no replay admission"),
+                    &|| Ok(()),
+                    |_, _| panic!("no replay browser")
+                )
+                .unwrap_err(),
+                "SCOPED_REVIEW_REPLAY_REFUSED"
+            );
+        }
+        assert!(store.delivery(&review.event_id).unwrap().is_none());
+        assert_eq!(
+            std::fs::read(&foreign).unwrap(),
+            b"unrelated queue must stay unread"
+        );
+        assert_eq!(
+            std::fs::read(store.root().join("control.json")).unwrap(),
+            control
+        );
+    }
+
+    #[test]
+    fn scoped_work_request_refuses_changed_roles_witness_and_target_before_claim() {
+        for change in ["role", "prefix", "audit", "message", "project", "target"] {
+            let (store, _, target) = fixture(&format!("work-reject-{change}"));
+            let mut event = work_event(&store, "alpha", &target);
+            let mut expected = event.clone();
+            let mut selected_target = target.clone();
+            match change {
+                "role" => event.event_type = "source_review".into(),
+                "prefix" => event.event_id = "web-work-not-a-digest".into(),
+                "audit" => event
+                    .audit_references
+                    .push("catdesk-review-v1:other".into()),
+                "message" => expected.message.push_str(" changed"),
+                "project" => expected.project_id = "beta".into(),
+                "target" => selected_target.generation += 1,
+                _ => unreachable!(),
+            }
+            if matches!(change, "role" | "prefix" | "audit") {
+                expected = event.clone();
+                std::fs::write(
+                    store
+                        .root()
+                        .join("queue")
+                        .join(format!("{}.json", event.event_id)),
+                    serde_json::to_vec(&event).unwrap(),
+                )
+                .unwrap();
+            }
+            assert_eq!(
+                run_selected_with_adapter::<FakeAdapter>(
+                    &store,
+                    &event.event_id,
+                    120,
+                    Selection::WorkRequest(&expected, &selected_target),
+                    &mut |_, _| panic!("no invalid admission"),
+                    &|| Ok(()),
+                    |_, _| panic!("no invalid browser")
+                )
+                .unwrap_err(),
+                "SCOPED_REVIEW_EVENT_INVALID",
+                "{change}"
+            );
+            assert!(store.delivery(&event.event_id).unwrap().is_none());
+        }
+    }
+
+    #[test]
+    fn scoped_work_request_lost_owner_before_submit_never_acknowledges() {
+        let (store, _, target) = fixture("work-owner-lost");
+        let event = work_event(&store, "alpha", &target);
+        let fake = adapter(&event, &target);
+        let acks = fake.ack_count.clone();
+        assert_eq!(
+            run_selected_with_adapter(
+                &store,
+                &event.event_id,
+                120,
+                Selection::WorkRequest(&event, &target),
+                &mut |_, _| Err("WEB_WORK_PROJECT_REGISTRATION_CHANGED".into()),
+                &|| Ok(()),
+                |_, _| Ok(fake)
+            )
+            .unwrap_err(),
+            "WEB_WORK_PROJECT_REGISTRATION_CHANGED"
+        );
+        assert_eq!(acks.get(), 0);
+        assert_ne!(
+            store.delivery(&event.event_id).unwrap().unwrap().phase,
+            Phase::Sent
+        );
     }
 
     fn continuation(store: &Store, target: &Target) -> Event {

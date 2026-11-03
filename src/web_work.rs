@@ -17,6 +17,9 @@ use std::path::Path;
 #[path = "web_review_work.rs"]
 mod review;
 pub(crate) use review::action as review_action;
+#[path = "web_work_delivery.rs"]
+mod delivery;
+pub(crate) use delivery::deliver;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

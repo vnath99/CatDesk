@@ -123,6 +123,10 @@ pub(crate) enum WebAction {
         project_id: String,
         input_file: PathBuf,
     },
+    WorkDeliver {
+        project_id: String,
+        request_id: String,
+    },
     WorkResolve {
         project_id: String,
         input_file: PathBuf,
@@ -283,6 +287,19 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         return Err("WEB_USAGE: invalid project ID".into());
     }
     match (group, verb) {
+        ("work", "deliver") => {
+            let request_id = options
+                .remove("--request-id")
+                .filter(|id| id.len() <= 128 && catdesk_wake::protocol::valid_id(id))
+                .ok_or("WEB_USAGE: --request-id is required")?;
+            if !options.is_empty() {
+                return Err("WEB_USAGE: unexpected delivery option".into());
+            }
+            Ok(WebAction::WorkDeliver {
+                project_id: project_id.into(),
+                request_id: request_id.into(),
+            })
+        }
         ("project", "retire") => {
             let retirement_id = options
                 .remove("--retirement-id")
@@ -1574,6 +1591,10 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             project_id,
             input_file,
         } => crate::web_work::request(&workspace, read_work_input(&input_file, &project_id)?),
+        WebAction::WorkDeliver {
+            project_id,
+            request_id,
+        } => crate::web_work::deliver(&workspace, &project_id, &request_id),
         WebAction::WorkResolve {
             project_id,
             input_file,
@@ -2711,6 +2732,45 @@ mod tests {
                 assert!(parse(&invalid).is_err());
             }
         }
+    }
+
+    #[test]
+    fn scoped_work_delivery_cli_accepts_only_existing_request_identity() {
+        let base = args(&[
+            "operator",
+            "web",
+            "work",
+            "deliver",
+            "--project-id",
+            "alpha",
+            "--request-id",
+            "existing-one",
+        ]);
+        assert_eq!(
+            parse(&base).unwrap(),
+            WebAction::WorkDeliver {
+                project_id: "alpha".into(),
+                request_id: "existing-one".into()
+            }
+        );
+        for option in [
+            "--message",
+            "--event-id",
+            "--conversation-url",
+            "--workspace",
+            "--force",
+            "--input-file",
+            "--execution-key",
+            "--max-runtime-seconds",
+        ] {
+            let mut invalid = base.clone();
+            invalid.extend(args(&[option, "unexpected"]));
+            assert!(parse(&invalid).is_err(), "{option}");
+        }
+        assert!(parse(&base[..base.len() - 2]).is_err());
+        let mut invalid = base.clone();
+        *invalid.last_mut().unwrap() = "../other".into();
+        assert!(parse(&invalid).is_err());
     }
 
     #[test]

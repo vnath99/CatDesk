@@ -33,7 +33,7 @@ pub use review_reconcile::{
 };
 pub use scoped_review::{
     run_scoped_review, run_scoped_rollover_continuation, run_scoped_rollover_handoff,
-    run_scoped_task_continuation,
+    run_scoped_task_continuation, run_scoped_work_request,
 };
 #[path = "runtime_task_context.rs"]
 mod task_context;
