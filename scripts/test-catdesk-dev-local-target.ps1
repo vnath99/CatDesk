@@ -74,6 +74,24 @@ foreach ($pin in @(
 )) {
     $legacy = [IO.File]::ReadAllText((Join-Path $PSScriptRoot $pin[0])).Replace([string][char]13, '')
     if ($pin[0] -ceq 'catdesk-dev-lane.ps1') {
+# BEGIN_LOCAL_TARGET_OPTIN_NORMALIZATION
+$optInBranch=@'
+# Opt-in cache placement; the default path below is preserved byte-for-byte.
+if ($UseLocalTarget) {
+    if ($Command -cnotin @('build', 'verify')) { throw 'LOCAL_TARGET_OPERATION_REFUSED' }
+    $localHelper = Join-Path $PSScriptRoot 'catdesk-dev-lane-local-target.ps1'
+    $null = Assert-RegularFile $localHelper
+    . $localHelper
+    Invoke-DevLaneLocalTarget -Command $Command -SourceRoot ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))) -WarningFreeBytes $StorageWarningFreeBytes
+    return
+}
+
+'@
+$optInBranch=$optInBranch.Replace([string][char]13,'')+[char]10
+$optInParameter='    [long]$StorageWarningFreeBytes = 64GB,'+[char]10+'    [switch]$UseLocalTarget'
+if ([regex]::Matches($legacy,[regex]::Escape($optInBranch)).Count -ne 1 -or [regex]::Matches($legacy,[regex]::Escape($optInParameter)).Count -ne 1) { throw 'OPTIN_NORMALIZATION_SHAPE_CHANGED' }
+$legacy=$legacy.Replace($optInBranch,'').Replace($optInParameter,'    [long]$StorageWarningFreeBytes = 64GB')
+# END_LOCAL_TARGET_OPTIN_NORMALIZATION
         $t=$null; $e=$null
         $tree=[Management.Automation.Language.Parser]::ParseInput($legacy,[ref]$t,[ref]$e)
         $added=@($tree.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq 'Write-DevLaneStorageAdvisory'},$true))
@@ -82,6 +100,9 @@ foreach ($pin in @(
         Check ([regex]::Matches($legacy,[regex]::Escape($hook)).Count -eq 2) 'exactly_two_authorized_warning_hooks'
         $legacy=$legacy.Remove($added[0].Extent.StartOffset,$added[0].Extent.EndOffset-$added[0].Extent.StartOffset+2).Replace($hook,'')
     } else {
+        $normalization='(?ms)^# BEGIN_LOCAL_TARGET_OPTIN_NORMALIZATION\n.*?^# END_LOCAL_TARGET_OPTIN_NORMALIZATION\n'
+        if ([regex]::Matches($legacy,$normalization).Count -ne 1) { throw 'STORAGE_OPTIN_NORMALIZATION_SHAPE_CHANGED' }
+        $legacy=[regex]::Replace($legacy,$normalization,'')
         $names="'Read-DevLaneVolume','Get-DevLaneStorageStatus','Write-DevLaneStorageAdvisory'"
         $line=@'
 $roundTrip=$roundTrip.Replace('        Write-DevLaneStorageAdvisory -SourceRoot $root -WarningFreeBytes $StorageWarningFreeBytes' + [char]10,'')

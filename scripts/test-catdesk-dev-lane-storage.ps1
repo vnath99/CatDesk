@@ -2,6 +2,24 @@
 param()
 $ErrorActionPreference='Stop';Set-StrictMode -Version Latest
 $source=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'catdesk-dev-lane.ps1')).Replace([string][char]13,'')
+# BEGIN_LOCAL_TARGET_OPTIN_NORMALIZATION
+$optInBranch=@'
+# Opt-in cache placement; the default path below is preserved byte-for-byte.
+if ($UseLocalTarget) {
+    if ($Command -cnotin @('build', 'verify')) { throw 'LOCAL_TARGET_OPERATION_REFUSED' }
+    $localHelper = Join-Path $PSScriptRoot 'catdesk-dev-lane-local-target.ps1'
+    $null = Assert-RegularFile $localHelper
+    . $localHelper
+    Invoke-DevLaneLocalTarget -Command $Command -SourceRoot ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))) -WarningFreeBytes $StorageWarningFreeBytes
+    return
+}
+
+'@
+$optInBranch=$optInBranch.Replace([string][char]13,'')+[char]10
+$optInParameter='    [long]$StorageWarningFreeBytes = 64GB,'+[char]10+'    [switch]$UseLocalTarget'
+if ([regex]::Matches($source,[regex]::Escape($optInBranch)).Count -ne 1 -or [regex]::Matches($source,[regex]::Escape($optInParameter)).Count -ne 1) { throw 'OPTIN_NORMALIZATION_SHAPE_CHANGED' }
+$source=$source.Replace($optInBranch,'').Replace($optInParameter,'    [long]$StorageWarningFreeBytes = 64GB')
+# END_LOCAL_TARGET_OPTIN_NORMALIZATION
 $tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseInput($source,[ref]$tokens,[ref]$errors)
 if($errors.Count){throw 'SOURCE_PARSE_FAILED'}
 $cases=[Collections.Generic.List[string]]::new()
