@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-04T04:33:54.118427+00:00",
+  "localDate": "2026-11-03 America/New_York",
+  "classification": "TESTED_SOURCE",
+  "baseCommit": "a2f1b44a3ef943064325fe68858dc40466b6c408",
+  "behavior": "Opt-in storage-status reports one local-volume snapshot and configurable advisory low-space warning; no build admission or allocation attribution.",
+  "defaultWarningFreeBytes": 68719476736,
+  "legacyCompatibility": "Original status/build/verify source and receipt fields round-trip unchanged after removing the declared new interface.",
+  "baselineRoundTripLfSha256": "dc95643829f2a11b5fe4fa3c337647f943015c83c783a065344f95cef7e99a18",
+  "sourceRawSha256": "4aab592e85ba5dc75dcd491f9cf3625689c88cc2f3982df07a40dc91f5789f60",
+  "testRawSha256": "0483c2d6ed2433b5fa2a9fae2b3f58f01f0ae3999749ae4d337dfc03f7ea7bff",
+  "hosts": [
+    {
+      "edition": "Desktop",
+      "version": "5.1.26100.9711",
+      "passedCases": 32,
+      "emptyEnvironmentValueSupported": false
+    },
+    {
+      "edition": "Core",
+      "version": "7.6.5",
+      "passedCases": 36,
+      "emptyEnvironmentValueSupported": true
+    }
+  ],
+  "coverage": [
+    "default/custom/zero threshold",
+    "exact threshold boundary",
+    "negative configuration refusal",
+    "counter failure privacy",
+    "missing or ambiguous volume",
+    "negative or inconsistent counters",
+    "unavailable identity",
+    "original receipt/command/failure contract",
+    "verification success and each command failure",
+    "unset/existing/representable empty environment restoration"
+  ],
+  "initialFailure": "Compatibility test fixture removed one fewer newline than the declared new branch; corrected fixture, original source preservation assertion retained.",
+  "realCargoInvocations": 0,
+  "realVolumeQueries": 0,
+  "liveFacadeInvocations": 0,
+  "installedAcceptance": "UNVERIFIED",
+  "directoryScans": 0,
+  "cleanupOrGlobalConfigurationChanges": 0,
+  "goalResumed": false
+}

@@ -1,3 +1,9 @@
+## 2026-11-04T04:32:15Z (November 3 EST) — opt-in development storage observations
+
+Added source-only `storage-status` with configurable advisory free-space warnings (default 64 GiB), exact local-volume identity and a default source-target reference. Existing consumers specify fixed receipt fields, so storage data is a separate opt-in command; the original status/build/verify receipts, arguments, failures and environment restoration remain unchanged. Counter failure returns unavailable advisory data without exporting provider exceptions. No scan, allocation attribution, admission gate or automatic action is introduced.
+
+Focused synthetic coverage passes 32 cases on Desktop 5.1 and 36 on Core 7.6.5, with zero real Cargo or volume calls. The initial compatibility fixture had an extra newline; its correction retains the full original-source hash assertion. Published source behavior is not installed/live acceptance. Runtime, project/Wake state, unknown outcomes and the paused goal are preserved. See `docs/orchestrator/DEVELOPMENT_STORAGE_ADVISORY.md` and `docs/verification/DEVELOPMENT_STORAGE_ADVISORY_SOURCE_2026_11_03.json`.
+
 ## 2026-11-04T04:17:52Z (November 3 EST) — disable incremental objects during source verification
 
 Integrated the reviewed resource-recovery fix into the ordinary source-only development facade. Only `verify` sets process-local `CARGO_INCREMENTAL=0` around the existing synchronous fmt/Clippy/test commands and restores the caller's prior value or absence in `finally`. Build/status, arguments, target paths and the closed reviewed-build worker policy are preserved.
