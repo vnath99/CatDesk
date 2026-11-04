@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-04T04:17:52Z",
+  "localDate": "2026-11-03 America/New_York",
+  "classification": "TESTED_SOURCE",
+  "sourceBaseCommit": "f71a17be41d73875a82a553eda77a40e81cb72fc",
+  "changedSource": ["scripts/catdesk-dev-lane.ps1"],
+  "sourceBaseRawSha256": "945a7e7ac0767c468a9a305525ba1986b726cfa5d91e9adbabc95e3e68e1179b",
+  "integratedSourceLfSha256": "dc95643829f2a11b5fe4fa3c337647f943015c83c783a065344f95cef7e99a18",
+  "reviewedPatchLfSha256": "2a403bb6d4eb7dc340b16f8032e8afe4618275b0714933d4dde80d36249012bd",
+  "behavior": "Only verify forces process-local CARGO_INCREMENTAL=0 during the existing synchronous fmt, clippy and test commands, restoring prior environment presence/value in finally.",
+  "validation": {
+    "integratedSourceEqualsReviewedProposal": true,
+    "focusedHarnessEvaluatesHelperOnly": true,
+    "fullSourceBaselineRoundTripPassed": true,
+    "hosts": [
+      {"edition": "Desktop", "version": "5.1.26100.9711", "passed": 9, "emptyValueCasesSkippedAsUnsupported": true},
+      {"edition": "Core", "version": "7.6.5", "passed": 11, "emptyValueCasesSkippedAsUnsupported": false}
+    ],
+    "coverage": ["unset and existing environment values", "representable empty environment value", "failure at each verification command", "original failure propagation", "fixed command arguments", "environment restoration", "build/status and other baseline source unchanged"],
+    "actualCargoInvocations": 0,
+    "fullCargoVerificationRunForThisChange": false
+  },
+  "boundaries": {
+    "productionInstallationChanges": 0,
+    "reviewedWorkerPolicyChanges": 0,
+    "globalEnvironmentChanges": 0,
+    "targetRelocations": 0,
+    "newCleanup": 0,
+    "goalResumed": false,
+    "installedRuntimeAcceptance": "UNVERIFIED",
+    "performanceOrStorageSavingsMeasured": false
+  },
+  "limitations": ["Focused mock execution is not a real verification workload.", "This process environment override is not runspace-local; retain single-owner synchronous invocation.", "Existing reviewed-build workers clear inherited environment and retain separate policy/release gates.", "Previously qualified executables and completed verification receipts retain their original source revisions."]
+}

@@ -1,3 +1,7 @@
+## 2026-11-04T04:17:52Z (November 3 EST) — ordinary verification incremental policy qualified at source
+
+The ordinary `catdesk-dev-lane.ps1 verify` operation now disables incremental object generation only for its existing synchronous command sequence and restores the caller's environment in `finally`. The exact reviewed patch was integrated at base f71a17b with clean ownership; build/status, fixed arguments, target paths and protected reviewed-build policy are unchanged. Focused PowerShell mocks passed 20 cases across Desktop 5.1 and Core 7.6.5, with exact proposal/source equivalence and baseline round-trip verification. No Cargo workload was invoked for this integration. This is source acceptance only, not installed, performance, storage-saving or multi-project acceptance. Existing executables retain their qualified source identities; goal stays paused. Evidence: `docs/verification/VERIFY_INCREMENTAL_POLICY_SOURCE_2026_11_03.json`.
+
 ## 2026-11-03T16:35:17.988364+00:00 — shared composer-structure diagnostics implemented,341 cases pass and exact held-event observation qualified
 
 ## 2026-11-03T19:31:34.880166+00:00 — finite ordinary Web work delivery source qualified; native assignment preparation complete

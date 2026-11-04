@@ -29,6 +29,27 @@ function Invoke-FixedCommand([string]$Program, [string[]]$Arguments) {
     }
 }
 
+function Invoke-VerificationCommands {
+    # Verification explicitly disables incremental object generation.
+    # Override only this process for the synchronous verification commands,
+    # then restore the caller's prior value on both success and failure.
+    $priorIncremental = Get-Item -LiteralPath 'Env:CARGO_INCREMENTAL' -ErrorAction SilentlyContinue
+    $hadIncremental = $null -ne $priorIncremental
+    $priorIncrementalValue = if ($hadIncremental) { [string]$priorIncremental.Value } else { $null }
+    try {
+        $env:CARGO_INCREMENTAL = '0'
+        Invoke-FixedCommand 'cargo' @('fmt', '--all', '--', '--check')
+        Invoke-FixedCommand 'cargo' @('clippy', '--locked', '--offline', '--workspace', '--all-targets', '--all-features', '--', '-D', 'warnings')
+        Invoke-FixedCommand 'cargo' @('test', '--locked', '--offline', '--bin', 'catdesk')
+    } finally {
+        if ($hadIncremental) {
+            Set-Item -LiteralPath 'Env:CARGO_INCREMENTAL' -Value $priorIncrementalValue
+        } else {
+            $env:CARGO_INCREMENTAL = $null
+        }
+    }
+}
+
 $root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $rootItem = Get-Item -LiteralPath $root -Force -ErrorAction Stop
 if (-not ($rootItem -is [System.IO.DirectoryInfo]) -or
@@ -68,9 +89,7 @@ try {
         $digest = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()
     }
     elseif ($Command -eq 'verify') {
-        Invoke-FixedCommand 'cargo' @('fmt', '--all', '--', '--check')
-        Invoke-FixedCommand 'cargo' @('clippy', '--locked', '--offline', '--workspace', '--all-targets', '--all-features', '--', '-D', 'warnings')
-        Invoke-FixedCommand 'cargo' @('test', '--locked', '--offline', '--bin', 'catdesk')
+        Invoke-VerificationCommands
     }
 
     $dirty = & git status --porcelain

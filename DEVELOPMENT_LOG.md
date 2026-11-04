@@ -1,3 +1,9 @@
+## 2026-11-04T04:17:52Z (November 3 EST) — disable incremental objects during source verification
+
+Integrated the reviewed resource-recovery fix into the ordinary source-only development facade. Only `verify` sets process-local `CARGO_INCREMENTAL=0` around the existing synchronous fmt/Clippy/test commands and restores the caller's prior value or absence in `finally`. Build/status, arguments, target paths and the closed reviewed-build worker policy are preserved.
+
+The integrated script is byte-equivalent after LF normalization to the reviewed proposal. Focused helper mocks passed 9 cases on Windows PowerShell 5.1 and 11 on Core 7.6.5, including failure restoration and representable empty values. Full-source round-trip checks passed; no actual Cargo command, production upgrade or runtime operation was performed for this patch. Earlier Cargo-check and installed recovery evidence retain their original source revisions. Goal remains paused; independent resource-recovery authorization supplies this narrow change. Evidence: `docs/verification/VERIFY_INCREMENTAL_POLICY_SOURCE_2026_11_03.json`.
+
 ## 2026-11-03T16:35:17.988364+00:00 — shared composer-structure diagnostics implemented,341 cases pass and exact held-event observation qualified
 
 ## 2026-11-03T19:31:34.880166+00:00 — finite ordinary Web work delivery source qualified; native assignment preparation complete
