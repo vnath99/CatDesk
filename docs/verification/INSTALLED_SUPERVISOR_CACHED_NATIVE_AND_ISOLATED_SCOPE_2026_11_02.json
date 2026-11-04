@@ -1,0 +1,89 @@
+{
+  "observedUtc": "2026-11-02T03:43:57.713464+00:00",
+  "sourceCheckpoint": "60829af4d63f776efd17a3ce93ef7afcd6055027",
+  "classification": "TESTED_INSTALLED_FINITE_SUPERVISOR_AND_PREPARED_NATIVE_SCOPE_NOT_WEB_CODING",
+  "installedBackendSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+  "finiteSupervisor": {
+    "reviewedInstalledScriptSha256": "ec98614183ecd97d7ac51bec2de9b535f767c955d1623fe57eaa92e7fe7a5b4a",
+    "healthyStates": [
+      "READY",
+      "MONITORING_COMPLETE"
+    ],
+    "controlledLossStates": [
+      "RECOVERED",
+      "READY",
+      "MONITORING_COMPLETE"
+    ],
+    "elapsedSeconds": 32.468,
+    "maximumSeconds": 180,
+    "authStatuses": [
+      401,
+      200
+    ],
+    "catalogTools": 102,
+    "temporaryMonitorExited": true,
+    "recordedPinChanges": 0,
+    "recurringRegistrationChanges": 0,
+    "browserStarts": 0,
+    "wakeStarts": 0,
+    "tunnelRestartCommands": 0,
+    "originalTunnelOwnerAndProfilePreserved": true,
+    "rebootAndUnattendedAcceptance": "OPEN"
+  },
+  "cachedClientRoute": {
+    "tool": "run_command",
+    "reservedPrefix": "CATDESK_WEB_TASK=",
+    "sameCentralDispatcher": true,
+    "sameBearerPlanTaskKeyAndNativeGrantGuards": true,
+    "shellExecution": false,
+    "newMalformedStatusProbeRefusal": "WEB_TASK_ARGUMENTS_INVALID",
+    "taskOrGrantSupplied": false,
+    "nativeTaskExecuted": false,
+    "heldRequestReplayed": false,
+    "catalogRefreshIsNotRequiredToUseThisExistingRouteForNewAuthorizedTasks": true
+  },
+  "ownerCoordination": {
+    "existingNativeProjectChatsContacted": 2,
+    "originalGoalsPaused": false,
+    "oneUsefulOfflineSourceAndRegressionTaskExplicitlyReserved": true,
+    "secondNomination": "AWAITING_EXISTING_OWNER_CHECKPOINT",
+    "oldProbeWorktreesReusedAsCodingAcceptance": false
+  },
+  "isolatedNativeScope": {
+    "reviewedPrivateProjectSourcePublishedHere": false,
+    "newCleanGitWorktreeCreated": true,
+    "model": "gpt-6.1-sol",
+    "reasoningEffort": "medium",
+    "initialAvailabilityOnly": true,
+    "initializationTools": 0,
+    "initializationSourceChanges": 0,
+    "nativeTurnCompleted": true,
+    "containedOwnerExited": true,
+    "supportedRegistrationPreflightAndConfirm": true,
+    "actualConfirmCalls": 1,
+    "originalCanonicalProjectRowsPreserved": 4,
+    "onlyNewProjectRowAdded": true,
+    "verificationProfileInputsValidAndTracked": true,
+    "queuePreflightStatus": "CANDIDATE_ONLY",
+    "queuePreflightBlockers": [],
+    "queuePreflightGrantsExecution": false,
+    "chatgptConversationBound": false,
+    "codingTaskSubmitted": false,
+    "webCodingAccepted": false
+  },
+  "failedAttemptsAndReconciliation": [
+    "Remote registration preflight transport failed without HTTP status; no durable matching preflight or registry change was found. The supported local metadata-only CLI produced a genuinely verified preflight; initialization and execution were not replayed.",
+    "A private optional-property postcheck failed after successful preflight; the exact process result and durable evidence reconciled success without repeating it.",
+    "Private admission/readback comparisons initially differed on the Windows verbatim path prefix; exact normalized paths were verified before the single confirmation.",
+    "A private tunnel-identity check used automatic JSON date coercion; literal timestamp comparison independently proved the original owner. No tunnel action was taken."
+  ],
+  "nextImplementation": "Extend the existing guarded browser transaction for first-conversation initialization of an unbound registered project; preserve rollover predecessor requirements and do not fabricate source history.",
+  "remainingAcceptance": [
+    "Two real Web callers performing scoped source edits and native verification.",
+    "First-conversation binding, independent Wake and existing pressure/rollover/continuation qualified in the installed scope.",
+    "Persistent supervisor policy/reboot and unattended operation.",
+    "Full T-0484 calibration and later CD-P7 clients."
+  ],
+  "operatorActionRequiredForNextSourceWork": false,
+  "goal": "ACTIVE"
+}

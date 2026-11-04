@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T20:54:15.618325+00:00",
+  "classification": "NEW_OPERATOR_REPORTED_ROOT_IDENTITY_REFUSAL_CURRENT_CODEX_CONTEXT_PASS_EXTERNAL_CONTEXT_PENDING",
+  "sourceBaseCommit": "5bde4e61513159018c01efe0c8ef45ab9a8d0d2f",
+  "operatorResult": {
+    "error": "DEV_PRODUCTION_ROOT_MISMATCH",
+    "status": "attention"
+  },
+  "sourceTrace": {
+    "guards": [
+      "wake/src/development_runtime.rs:validated_authority",
+      "wake/src/development_runtime.rs:validate_against_production"
+    ],
+    "failureCondition": "RECORDED_EXISTING_PRODUCTION_DIRECTORY_OBJECT_IDENTITY_CHANGED_OR_COLLIDES_WITH_DEVELOPMENT_RUNTIME",
+    "loginMarkerAndBrowserSpawnOccurAfterBothPreflightChecks": true
+  },
+  "currentCodexContext": {
+    "qualifiedControllerHashVerified": true,
+    "existingStatusExitCode": 0,
+    "host": "STOPPED",
+    "nativeWindowsDirectoryHandleQueriesSucceeded": 2,
+    "recordedRootsSameObject": true,
+    "observedRootsSameObject": true,
+    "bothMatchRecorded": true,
+    "authorityBytesUnchanged": true,
+    "loginMarkerPresent": false
+  },
+  "hypothesis": "PACKAGED_APP_FILESYSTEM_VIEW_DIFFERS_FROM_ORDINARY_TERMINAL_NOT_YET_CONFIRMED",
+  "nextDiagnostic": {
+    "sameFailingPowerShellWindow": true,
+    "fixedPathReadOnlyWindowsFileIdComparison": true,
+    "scriptSha256": "48ccfc0b0952c63bc7d4f32fcf514a1dc8b8129b6785982b417098f5aa885956",
+    "catdeskCommands": 0,
+    "browserStarts": 0,
+    "catdeskPersistentWrites": 0,
+    "queryReportedWithoutPublishingRawDirectoryIds": true
+  },
+  "preservation": {
+    "protectedPinsUnchangedInCurrentCodexView": 131,
+    "externalTerminalViewPreservationClaimed": false,
+    "authorityRewritten": false,
+    "productionOrDevelopmentRootRecreated": false,
+    "profileRecreated": false,
+    "unknownSendsReplayed": false,
+    "guardWeakened": false
+  },
+  "oldLoginCommandDisposition": "HOLD_DO_NOT_RETRY_UNTIL_ROOT_IDENTITY_DISCREPANCY_RECONCILED"
+}

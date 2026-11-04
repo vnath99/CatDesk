@@ -30,6 +30,9 @@ foreach ($path in @($launcherPath, $workerPath, $promotionPath)) {
 $tokens = $null
 $errors = $null
 $launcherAst = [System.Management.Automation.Language.Parser]::ParseFile($launcherPath, [ref]$tokens, [ref]$errors)
+$hashFunction = $launcherAst.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Get-RestartSha256' }, $true)
+Require ($null -ne $hashFunction) 'restart hashing helper is missing'
+Invoke-Expression $hashFunction.Extent.Text
 $promotionIdentityFunction = $launcherAst.Find({
     param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
@@ -67,6 +70,32 @@ $identityFunction = $workerAst.Find({
 }, $true)
 Require ($null -ne $identityFunction) 'restart worker is missing the exact-process identity helper'
 Invoke-Expression $identityFunction.Extent.Text
+$launchArgumentsFunction = $workerAst.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Get-RestartLaunchArguments' }, $true)
+Require ($null -ne $launchArgumentsFunction) 'backend profile launch argument selector is missing'
+Invoke-Expression $launchArgumentsFunction.Extent.Text
+Require ((@(Get-RestartLaunchArguments $true) -join '|') -ceq '--catdesk-daemon|--backend-only') 'local profile launches only the closed native backend tuple'
+Require ((@(Get-RestartLaunchArguments $false) -join '|') -ceq '--auto-start-computer') 'legacy default launch tuple changed'
+$contextFunction=$workerAst.Find({param($node)$node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Get-RestartBackendOnlyContext'},$true)
+Invoke-Expression $contextFunction.Extent.Text
+$portRefused=$false;try{[void](Get-RestartBackendOnlyContext 3201)}catch{$portRefused=$_.Exception.Message -ceq 'Backend-only handoff requires the fixed local port 3200.'}
+Require $portRefused 'a noncanonical native port must refuse before configuration or process changes'
+$mcpFunction=$workerAst.Find({param($node)$node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Test-RestartBackendOnlyMcp'},$true)
+Invoke-Expression $mcpFunction.Extent.Text
+$McpPort=3200;$script:backendRequests=[Collections.Generic.List[object]]::new()
+function Invoke-WebRequest {
+    param([switch]$UseBasicParsing,[string]$Uri,[string]$Method,[string]$ContentType,[string]$Body,[int]$MaximumRedirection,[int]$TimeoutSec,[hashtable]$Headers)
+    $script:backendRequests.Add(@{uri=$Uri;headers=$Headers;body=$Body;redirects=$MaximumRedirection})
+    if(!$Headers){return [pscustomobject]@{StatusCode=401;Content=''}}
+    $request=$Body|ConvertFrom-Json
+    return [pscustomobject]@{StatusCode=200;Content=$(if($request.method -eq 'initialize'){'{"jsonrpc":"2.0","id":2,"result":{"serverInfo":{"name":"fixture"}}}'}else{'{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"fixture"}]}}'})}
+}
+try {
+    $context=@{Uri=('http://127.0.0.1:3200/'+('a'*24)+'/mcp');Token=('t'*24)}
+    Require (Test-RestartBackendOnlyMcp $context) 'local backend readiness requires both authorized MCP exchanges'
+    Require ($script:backendRequests.Count -eq 3 -and !$script:backendRequests[0].headers -and $script:backendRequests[1].headers.Authorization -ceq ('Bearer '+$context.Token) -and $script:backendRequests[2].redirects -eq 0) 'MCP readiness lost its unauthorized/authenticated/no-redirect checks'
+    $script:backendRequests.Clear();$context.Uri='http://example.test/mcp'
+    Require (-not (Test-RestartBackendOnlyMcp $context) -and $script:backendRequests.Count -eq 0) 'backend token must never be sent outside the exact loopback scope'
+} finally { Remove-Item Function:\Invoke-WebRequest }
 
 $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("catdesk-restart-identity-{0}" -f [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
@@ -119,6 +148,27 @@ try {
         Require (($trustedItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) 'trusted PowerShell resolver accepted a reparse point'
     } finally {
         $env:PATH = $priorPath
+    }
+
+    # Exercise the actual refusal path with only harmless PowerShell children.
+    # PowerShell cannot satisfy CatDesk's closed capability tuple. The selected
+    # old process must therefore remain alive, without a stop or replacement.
+    $shell = (Get-Process -Id $PID -ErrorAction Stop).Path
+    $old = $null; $worker = $null
+    try {
+        $oldInfo=[Diagnostics.ProcessStartInfo]::new();$oldInfo.FileName=$shell;$oldInfo.Arguments='-NoProfile -NonInteractive -Command "Start-Sleep -Seconds 60"';$oldInfo.UseShellExecute=$false;$oldInfo.CreateNoWindow=$true
+        $old=[Diagnostics.Process]::Start($oldInfo);$null=$old.Handle
+        $start=$old.StartTime.ToUniversalTime().ToString('o');$shellHash=(Get-FileHash -LiteralPath $shell -Algorithm SHA256).Hash.ToLowerInvariant()
+        $workerInfo=[Diagnostics.ProcessStartInfo]::new();$workerInfo.FileName=$shell;$workerInfo.UseShellExecute=$false;$workerInfo.CreateNoWindow=$true;$workerInfo.RedirectStandardOutput=$true;$workerInfo.RedirectStandardError=$true
+        $workerInfo.Arguments='-NoProfile -NonInteractive -File "'+$workerPath+'" -OldPid '+$old.Id+' -ExpectedOldProcessStartedAtUtc "'+$start+'" -ExpectedOldProcessPath "'+$shell+'" -BuildPath "'+$shell+'" -Workspace "'+$tempRoot+'" -McpPort 3200 -StartupDelaySeconds 0 -BackendOnly -ExpectedBuildSha256 '+$shellHash
+        $worker=[Diagnostics.Process]::Start($workerInfo);$stdout=$worker.StandardOutput.ReadToEndAsync();$stderr=$worker.StandardError.ReadToEndAsync()
+        Require ($worker.WaitForExit(15000) -and $stdout.Wait(1000) -and $stderr.Wait(1000) -and $worker.ExitCode -ne 0) 'unsupported replacement must refuse within the bounded preflight'
+        Require (-not $old.HasExited) 'unsupported backend target stopped the old process'
+        Require (Test-Path -LiteralPath (Join-Path $tempRoot '.catdesk/restart-handoff/latest.json')) ("unsupported-target worker did not reach the recorded gate: " + $stderr.Result)
+        $state=Get-Content -LiteralPath (Join-Path $tempRoot '.catdesk/restart-handoff/latest.json') -Raw|ConvertFrom-Json
+        Require ($state.status -ceq 'FAILED_OPERATOR_ATTENTION' -and $state.stage -ceq 'backend-only-preflight') 'unsupported target did not stop at the capability gate'
+    } finally {
+        foreach($owned in @($worker,$old)){if($null -ne $owned){if(-not $owned.HasExited){$owned.Kill();[void]$owned.WaitForExit(5000)};$owned.Dispose()}}
     }
 } finally {
     Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue

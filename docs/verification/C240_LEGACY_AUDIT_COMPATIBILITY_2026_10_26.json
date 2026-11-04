@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C240",
+  "classification": "SOURCE_AND_REAL_WINDOWS_FILESYSTEM_FIXTURES",
+  "sourceCommit": "47922f3a6ad5af85a85e1bbd619cb758b24966f2",
+  "branch": "codex/web-rollover-oct17",
+  "startedUtc": "2026-10-26T10:36:04.7733550+00:00",
+  "finishedUtc": "2026-10-26T10:38:02.7855711+00:00",
+  "problem": "C239 read-only live compatibility check refused authentic old producer history: current serialization inserted failureDiagnostic:null where early schema1 audits omitted the field.",
+  "implementation": "Keep exact raw audit SHA bound to the immutable plan; permit only the legacy failure-audit missing/null diagnostic equivalence after complete typed and JSON comparisons. Preserve historical bytes; keep schema2 success byte checks strict.",
+  "tests": {
+    "format": "PASS",
+    "newMixedLineageTest": 1,
+    "negativeControls": [
+      "changed field",
+      "extra field",
+      "duplicate known field",
+      "non-null diagnostic",
+      "raw digest mismatch",
+      "schema2 success omission"
+    ],
+    "reviewedBuildPassed": 123,
+    "releasePairPassed": 6,
+    "strictClippy": "PASS",
+    "reviewedBuildIgnored": 8,
+    "reviewAuthorityPassed": 4,
+    "failed": 0
+  },
+  "evidence": {
+    "priorFailedResultSha256": "0afdfa254169dc17d2dda10b8f9aeb5731a4addc3fd07ffa43f35cd6e3359ae4",
+    "cleanupSha256": "e337d84d4d76086bf295a8ddf91e71505fe31e1cef20e9e549c98a642acae350",
+    "manifestSha256": "980c36fed914df93e2b0422a3e4dd55a99c789a7493ae66bbfd3c35622c6b8e5",
+    "resultSha256": "4c85288ab58850b5815d94966169b47094270c4227a4c1bd99bb114c1707ed7f",
+    "outerSha256": "5894e0e3ea735971fe64a63951021e7035f1e8c834439c40eec66fb2d233d7bc"
+  },
+  "ci": {
+    "accepted": false,
+    "dispatchAttempts": 0,
+    "visibleRuns": 0
+  },
+  "productionActions": 0,
+  "installedAcceptance": false,
+  "milestoneComplete": false
+}

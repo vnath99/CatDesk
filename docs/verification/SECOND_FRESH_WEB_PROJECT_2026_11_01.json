@@ -1,0 +1,75 @@
+{
+  "date": "2026-11-01",
+  "observedUtc": "2026-11-01T06:20:04.604100+00:00",
+  "timezone": "America/New_York",
+  "classification": "SECOND_REAL_FRESH_CONTROLLED_PROJECT_CHAT_INITIALIZED_NO_EXECUTION_GRANT",
+  "controllerSourceCommit": "549817859c94f56a7696f998848d8ace429b1663",
+  "sourceImplementationAlreadyQualified": true,
+  "operatorRequestedFreshInitialization": true,
+  "automaticNearCapacityAcceptanceClaimed": false,
+  "newChat": {
+    "actualIssuedUrlVerified": true,
+    "currentRegistryAndWakeMatch": true,
+    "generation": 2,
+    "predecessorHistoryPreserved": true,
+    "sourceReceipt": "RESPONSE_COMPLETED",
+    "originalAdvisoryPolicyRestored": true,
+    "frozenBootstrapChangedOrReplayed": false,
+    "createElapsedSeconds": 152.906
+  },
+  "continuation": {
+    "singleExistingQueuedEventSent": true,
+    "receipt": "EXACT_USER_MESSAGE_APPENDED",
+    "responseState": "COMPLETE",
+    "eventVerified": true,
+    "responseBytes": 996,
+    "responseSha256": "5b67763c8433f973a28259a68f22b82062b3a70b9da6e5a2df7e1b0a5bba09d0",
+    "markerVerified": true,
+    "reportsPluginAvailable": true,
+    "capabilityCallExecutionIndependentlyProvedByThisResponse": false,
+    "sendSeconds": 52.657,
+    "observationSeconds": 72.64,
+    "readSeconds": 46.797
+  },
+  "initialization": {
+    "status": "ACCEPTED_NEW_TASKS_ONLY",
+    "proofStatus": "VERIFIED",
+    "receiptSha256": "69795a4eafaff90bd1d1bf7bdb852e32f000ae02e79cc473dbfb3d454323c824",
+    "elapsedSeconds": 21.984,
+    "newTasksOnly": true,
+    "executionGranted": false,
+    "predecessorNativeResumptionAuthorized": false
+  },
+  "recovery": {
+    "initialPolicyEnvelopeRefusedBeforeBrowser": true,
+    "cause": "CLI_EXPECTS_POLICY_ONLY_MCP_EXPECTS_ENVELOPE",
+    "confirmedNoPolicyOrBindingMutationBeforeCorrection": true,
+    "usedExistingCorrectedInputProcedure": true,
+    "sameFrozenHandoffRetained": true,
+    "reparseOrSecurityGuardChanged": false
+  },
+  "independence": {
+    "siblingRegistryRowsUnchanged": true,
+    "existingWorkLedgerUnchangedDuringCreation": true,
+    "nativeSessionsInterrupted": false,
+    "separateOtherProjectOpenWebWorkHoldsPreserved": 2,
+    "allFiveProjectRegistrationsPreserved": false
+  },
+  "cleanup": {
+    "testOwnedBrowserPythonWakeProcesses": 0,
+    "wakeHostDesired": "STOPPED",
+    "recurringAutomationStarted": false,
+    "intentionalBackendAndExistingTunnelRetained": true,
+    "expectedBackendOwnsPort3200": true,
+    "installedExecutableFingerprintMatches": true,
+    "productionPromotion": false
+  },
+  "remaining": [
+    "New conversations are ready for independently granted tasks; actual two-project source edits and native verification remain unproved.",
+    "Broader source review/acknowledgment/producer authority and protected later-source promotion remain required.",
+    "Canonical authority transfer and installed persistent/reboot recovery remain separate.",
+    "Existing open Web work must be reconciled through supported evidence before replacing other held conversations."
+  ],
+  "fullMultiProjectAcceptance": false,
+  "operatorActionRequiredForNextEligibleWork": false
+}

@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-29T21:06:26.3226738+00:00",
+  "classification": "TESTED_SOURCE_ONLY",
+  "implementationCommit": "3243faeed93dbbb75a57aee287087ca84322c638",
+  "testedBaseline": "8df6fd26643a16e583290f886f9c0cd2c4d040d8",
+  "sourceBranch": "codex/web-rollover-oct17",
+  "sourceFiles": [
+    {
+      "path": "wake/src/protocol.rs",
+      "sha256": "6e18d6952fe28bcdd6ee595ca8326f945613f382ef5b94085bb86ff7dce725f2",
+      "length": 15435
+    },
+    {
+      "path": "wake/src/runtime_scheduler.rs",
+      "sha256": "b64a2ff6accc8b5f860f5e7c9de8f4e48aef6434a3341ad5f610a89f9049032e",
+      "length": 15361
+    },
+    {
+      "path": "wake/src/store.rs",
+      "sha256": "4f77ec41fb110c0e438c61c54eec796695fe3b15112b59ef3ed2d652d764f4f6",
+      "length": 150108
+    }
+  ],
+  "distinctPassingTests": 77,
+  "suites": [
+    {
+      "label": "metadata-tests",
+      "passed": 11,
+      "failed": 0,
+      "logSha256": "38baac614f9e93122bdbfb13768372c3753a0e8f4e4dbc22dab29a9f2d52fb3e"
+    },
+    {
+      "label": "store-tests",
+      "passed": 35,
+      "failed": 0,
+      "logSha256": "578db814dabd928523afff3161d5e9a02cc529d09a68ffe1995f0cc39cd38776"
+    },
+    {
+      "label": "scheduler-tests",
+      "passed": 8,
+      "failed": 0,
+      "logSha256": "dce38badcfb2385f327c06f749c1933b46cf5205f747ae5a1db446fb1c84bde9"
+    },
+    {
+      "label": "protocol-store-tests",
+      "passed": 29,
+      "failed": 0,
+      "logSha256": "71e886625d481db8bc94aa894cb3f8b1a31758482395e495bbd22d431a58eb7b"
+    }
+  ],
+  "strictWakeClippy": {
+    "passed": true,
+    "scope": "all-targets all-features -D warnings",
+    "logSha256": "16d5ab00a42f609fda23920908c3d4691d1b5d90f361dd1a6811c8895e862569"
+  },
+  "rootCompatibility": {
+    "testExecutablesCompiled": 25,
+    "testsExecuted": 0,
+    "logSha256": "317b73d1989e736ad05e2cbfcb1613b13ae5c461082011b33ade9962633046fd"
+  },
+  "behavior": [
+    "Typed purpose/source-event/source-turn/priority/absolute expiry in existing auditReferences; legacy wire fixture unchanged",
+    "TTL 1..86400 seconds; all-or-none canonical metadata validated",
+    "Expired unclaimed events skipped; CLAIMED/ATTENTION block only their project",
+    "Expiry rechecked before CLAIMED to SUBMITTING; SUBMITTING and SENT still reconciled",
+    "Existing project fair FIFO remains; priority is preserved metadata, not a new priority policy"
+  ],
+  "remaining": [
+    "Project-scoped MCP manual-wake ingress requires explicit existing task-grant capability",
+    "Semantic project/turn dedupe producer is the next source slice",
+    "Installed/live manual wake contention unverified"
+  ],
+  "newRuntimeOrBrowserStarts": 0,
+  "nativeProjectTasksStarted": 0,
+  "installedAcceptance": "UNVERIFIED"
+}

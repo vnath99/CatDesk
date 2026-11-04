@@ -1,0 +1,266 @@
+{
+  "schemaVersion": 1,
+  "dateUtc": "2026-11-04",
+  "baseCommit": "e00fe6ce8dae0f9e68a32bbb04a54f7e28b83f7f",
+  "classification": "TESTED_MANAGED_FAKE_AND_BOUNDED_NATIVE_COMPONENT_ONLY",
+  "currentSourceSha256": {
+    "scripts/catdesk-dev-local-target-output.ps1": "dac7e81ad115b9b6b1b8025672901dabdb99b9e605f8a35edba2179008339176",
+    "scripts/test-catdesk-dev-local-target-output.ps1": "8c5087bec5ff3839b9bbba9ffd879e0c715f48cc6e96b0377ad99ef163c8ea6e"
+  },
+  "unrunIntermediate": {
+    "helperSha256": "5ddb4e8e87c7efa5e4c04326a3739208cdc9dd243fafc53ed79300200d48f75d",
+    "scope": "Cancellation/query fixes only; never recompiled or run before the close/capture bundle."
+  },
+  "initialManagedFakeVariant": {
+    "helperSha256": "709b6a35c53df59b94062624f05d183ab1471ffaa34ad046b258d6cee537fe40",
+    "preflightUtc": "2026-11-04T08:36:32.5852849+00:00",
+    "finishedUtc": "2026-11-04T08:36:33.1804165+00:00",
+    "host": "PowerShell Core 7.6.5",
+    "managedInProcessCompilations": 1,
+    "fakeChecksPassed": 20,
+    "nativeSetupEntries": 0,
+    "nativeCreatePairEntries": 0,
+    "protectedPinsMatchedBeforeAndAfter": 6,
+    "scope": "Earlier variant only; peer subsequently found cancellation-race and pending-query transitions. Not final-source or native-API qualification."
+  },
+  "currentFixes": [
+    "per-channel stopped state precedes cancellation and prevents new read after normal pending completion",
+    "shared engine preserves already-issued data while suppressing later backend read calls",
+    "pending-query failure begins cancellation grace and eventual no-free quarantine",
+    "close uncertainty latches before API/delegate and never retries uncertain raw handles",
+    "bounded frozen capture access after settlement/quarantine; active access refused",
+    "native proposal checks distinct channel payloads and exact retained prefixes",
+    "same fixture acceptance guard refuses native errors even when I/O lifetime has settled"
+  ],
+  "v4ManagedFakeRetest": {
+    "preflightUtc": "2026-11-04T09:01:31.7802525+00:00",
+    "finishedUtc": "2026-11-04T09:01:32.2598174+00:00",
+    "host": "PowerShell Core 7.6.5",
+    "managedInProcessCompilations": 1,
+    "fakeChecksPassed": 34,
+    "nativeSetupEntries": 0,
+    "nativeCreatePairEntries": 0,
+    "nativeSmokeExecuted": false,
+    "protectedPinsMatchedBeforeAndAfter": 6,
+    "helperSha256": "dac7e81ad115b9b6b1b8025672901dabdb99b9e605f8a35edba2179008339176",
+    "testSha256": "79a6faef71264469fb61f872f669f347a2fbad8d6f8fa1c221fa5718ea7fe24d",
+    "scope": "Final helper with earlier test variant before shared fixture-acceptance guard. No native backend construction or API call."
+  },
+  "managedAndAcceptanceBeforeReadRaceFix": {
+    "preflightUtc": "2026-11-04T09:07:49.6257979+00:00",
+    "finishedUtc": "2026-11-04T09:07:50.1110444+00:00",
+    "host": "PowerShell Core 7.6.5",
+    "managedInProcessCompilations": 1,
+    "managedStateChecksPassed": 34,
+    "fixturePolicyChecksPassed": 14,
+    "totalPassed": 48,
+    "policyInputsSynthetic": true,
+    "nativeSetupEntries": 0,
+    "nativeCreatePairEntries": 0,
+    "nativeSmokeExecuted": false,
+    "protectedPinsMatchedBeforeAndAfter": 6,
+    "helperSha256": "dac7e81ad115b9b6b1b8025672901dabdb99b9e605f8a35edba2179008339176",
+    "testSha256": "85e02fea522bae317eb6445c66892f47acb66f693b8ef9fc03ffd0e33f0fd328",
+    "scope": "Unchanged current helper and acceptance guard; earlier test before asynchronous payload-count wait fix. Synthetic acceptance inputs are policy data, not native kernel witnesses."
+  },
+  "currentReadProgressPredicate": {
+    "startedUtc": "2026-11-04T09:39:41.5079286+00:00",
+    "finishedUtc": "2026-11-04T09:39:41.5674162+00:00",
+    "pureCasesPassed": 6,
+    "managedCompilations": 0,
+    "nativeCalls": 0,
+    "nativeSmokeExecuted": false,
+    "protectedPinsMatched": 6,
+    "scope": "Exact current test's Bounded-Poll predicate extracted from AST: neither/one/both counts, and excess on either channel. Waits for both exact expected counts; excess fails immediately."
+  },
+  "nativeControllerPreflightHistory": {
+    "refusedUtc": "2026-11-04T09:23:41Z",
+    "nativeStarted": false,
+    "fixtureCalled": false,
+    "classCompiledInThatHost": false,
+    "hostExitConfirmed": true,
+    "reason": "Controller DateTime/UTC comparison; separate resource-age gate also required a fresh window. Not a component native result."
+  },
+  "nativeBackend": {
+    "sourcePresent": true,
+    "qualified": false,
+    "actualApiCallsTested": null,
+    "nativeSmokeExecuted": true,
+    "channelCount": 2,
+    "pendingOperationsPerChannel": 1,
+    "readBufferBytesPerChannel": 16384,
+    "maximumRetainedBytesPerChannel": 16384,
+    "nominalDataBufferBytesBeforePrefixAccess": 65536,
+    "maximumCachedPrefixCopiesPerChannel": 1,
+    "maximumDataBufferBytesIncludingCachedPrefixes": 98304,
+    "processRssBoundClaimed": false,
+    "globalActiveOrHeldOwners": 1,
+    "unconfirmedCompletion": "UNKNOWN_QUARANTINED_DENY_NEW_PAIRS",
+    "disposeFinalizerOrBackgroundCleanup": false,
+    "qualificationLimit": "Three bounded same-process cases only; complete native failure, process-lifecycle and execution qualification remain open. Individual native API calls were not counted."
+  },
+  "nativeFixtureProposal": {
+    "admitted": false,
+    "sameProcessOnly": true,
+    "cases": [
+      "connect-read-close",
+      "cancel",
+      "capture"
+    ],
+    "commandPattern": "pwsh -NoProfile -File scripts/test-catdesk-dev-local-target-output.ps1 -Mode NativeSmoke -Case <fixed-case>",
+    "callerLoopMilliseconds": 10000,
+    "cleanupLoopMilliseconds": 1500,
+    "maximumWriteBytes": 256,
+    "pendingReadRequiredBeforeWrite": true,
+    "deliberatelyBlockedWriters": false,
+    "actualStuckIoFaults": false,
+    "outerHostIdentityAndContainment": "Three one-shot qualified Core tool hosts completed; no active admission remains. Any further test requires fresh admission.",
+    "absoluteNativeOrKernelDeadlineClaimed": false,
+    "unknownOuterExit": "HOLD_NO_REPLACEMENT"
+  },
+  "childProcessesCreatedByComponent": 0,
+  "jobOrLeaseProtocolImplemented": false,
+  "realCargoRuns": 0,
+  "targetOrCacheAdoption": false,
+  "productionOrWakeActions": 0,
+  "executionQualified": false,
+  "targetReuseAuthorized": false,
+  "generalGoalResumed": false,
+  "boundedNativeQualification": {
+    "scope": "TESTED_CONTROLLED_NATIVE_COMPONENT_ONLY",
+    "host": "PowerShell Core 7.6.5; fresh direct tool PTY host per case; no child executor",
+    "hostSha256": "362a356ce7f0940ec74f73a8fc2c990a2cc24a38a11c90bbd8eca947110ad139",
+    "helperSha256": "dac7e81ad115b9b6b1b8025672901dabdb99b9e605f8a35edba2179008339176",
+    "testSha256": "8c5087bec5ff3839b9bbba9ffd879e0c715f48cc6e96b0377ad99ef163c8ea6e",
+    "controllerReview": "First v4 controller used DateTimeOffset UTC and fresh post-compilation resource/time gates. Cancel/capture controllers differed only in three fixed case tokens.",
+    "controllerSha256": {
+      "connect-read-close": "b1df4661716450fa900740796f92787d6aff79e510c23671cd95b0876b40b6ae",
+      "cancel": "4f2d6f857dde47955a1b248f75fadd8aef24eb9a224f1962f2982e265bfb58d6",
+      "capture": "20d0c66482cd378ba0028d3e4e7f4a28c7146755e865f6c82576092f801d64a1"
+    },
+    "cases": [
+      {
+        "case": "connect-read-close",
+        "startedUtc": "2026-11-04T09:42:27.0644134+00:00",
+        "finishedUtc": "2026-11-04T09:42:27.7821776+00:00",
+        "privateReceiptSha256": "d139670a9ac5b3c67a5911203b3c2bfc9dcd7574a445ca90e4c53ffc7891e9c5",
+        "nativeSetupEntries": 1,
+        "nativeCreatePairEntries": 1,
+        "result": {
+          "schemaVersion": 1,
+          "classification": "NATIVE_SAME_PROCESS_FIXTURE_ONLY",
+          "case": "connect-read-close",
+          "state": "DRAINED",
+          "ioLifetimeSettled": true,
+          "eof": [
+            true,
+            true
+          ],
+          "observedBytes": [
+            17,
+            17
+          ],
+          "retainedBytes": [
+            17,
+            17
+          ],
+          "exactPayloadsVerified": true,
+          "elapsedMilliseconds": 58,
+          "childProcessesCreated": 0,
+          "executionQualified": false,
+          "targetReuseAuthorized": false
+        },
+        "outerHostExitCode": 0,
+        "outerHostExitEvidence": "Coordinator tool completion reported known terminal exit; not inferred from the inner receipt.",
+        "outerToolElapsedSeconds": 0.914
+      },
+      {
+        "case": "cancel",
+        "startedUtc": "2026-11-04T09:47:14.0495247+00:00",
+        "finishedUtc": "2026-11-04T09:47:14.5997504+00:00",
+        "privateReceiptSha256": "9970af15c23405975f9a51c46cac1de7a8b6312ca4722db25ed2f30a76e90bdd",
+        "nativeSetupEntries": 1,
+        "nativeCreatePairEntries": 1,
+        "result": {
+          "schemaVersion": 1,
+          "classification": "NATIVE_SAME_PROCESS_FIXTURE_ONLY",
+          "case": "cancel",
+          "state": "CANCELLED_AFTER_EOF",
+          "ioLifetimeSettled": true,
+          "eof": [
+            true,
+            true
+          ],
+          "observedBytes": [
+            0,
+            0
+          ],
+          "retainedBytes": [
+            0,
+            0
+          ],
+          "exactPayloadsVerified": false,
+          "elapsedMilliseconds": 40,
+          "childProcessesCreated": 0,
+          "executionQualified": false,
+          "targetReuseAuthorized": false
+        },
+        "outerHostExitCode": 0,
+        "outerHostExitEvidence": "Coordinator tool completion reported known terminal exit; not inferred from the inner receipt.",
+        "outerToolElapsedSeconds": 0.755
+      },
+      {
+        "case": "capture",
+        "startedUtc": "2026-11-04T09:47:24.6229370+00:00",
+        "finishedUtc": "2026-11-04T09:47:25.0431281+00:00",
+        "privateReceiptSha256": "35cc77bfd47bbb64bd7af36b5210777d49c913be3147d561283d886b0eac1c87",
+        "nativeSetupEntries": 1,
+        "nativeCreatePairEntries": 1,
+        "result": {
+          "schemaVersion": 1,
+          "classification": "NATIVE_SAME_PROCESS_FIXTURE_ONLY",
+          "case": "capture",
+          "state": "DRAINED",
+          "ioLifetimeSettled": true,
+          "eof": [
+            true,
+            true
+          ],
+          "observedBytes": [
+            128,
+            128
+          ],
+          "retainedBytes": [
+            64,
+            64
+          ],
+          "exactPayloadsVerified": true,
+          "elapsedMilliseconds": 48,
+          "childProcessesCreated": 0,
+          "executionQualified": false,
+          "targetReuseAuthorized": false
+        },
+        "outerHostExitCode": 0,
+        "outerHostExitEvidence": "Coordinator tool completion reported known terminal exit; not inferred from the inner receipt.",
+        "outerToolElapsedSeconds": 0.612
+      }
+    ],
+    "admissionsConsumed": true,
+    "reservationReleased": true,
+    "retries": 0,
+    "unproven": [
+      "native ERROR_OPERATION_ABORTED (995)",
+      "native cancellation without EOF",
+      "simultaneous pipe saturation",
+      "actual stuck or uncertain kernel I/O and close faults",
+      "descendant and restricted-handle inheritance",
+      "whole-Job completion",
+      "target lease and crash-safe START/OUTCOME",
+      "real Cargo execution and cache reuse",
+      "installed backend, Web routing or Wake acceptance"
+    ],
+    "cancellationLimit": "Observed CANCELLED_AFTER_EOF with both EOF true and zero bytes. A cancellation request is not proof that a pending operation returned ERROR_OPERATION_ABORTED; no cancellation-without-EOF witness exists.",
+    "deadlineLimit": "Caller loops are cooperative; no absolute native/kernel deadline or cleanup guarantee.",
+    "statePreservation": "Six protected state hashes matched during the source-owner preflight; tests had no production, Wake, project, Job or cache authority."
+  }
+}

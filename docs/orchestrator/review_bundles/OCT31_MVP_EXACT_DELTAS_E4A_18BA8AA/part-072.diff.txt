@@ -1,0 +1,187 @@
++        assert!(!native_proof(&f).exists());
++        fs::write(&path, &original).unwrap();
++        crate::web_work::execution_permission(&f.control, f.pins.clone(), true).unwrap();
++        let denied = call(&f, native_request(&f, "revoked")).await;
++        assert_eq!(denied["error"]["message"], "WEB_TASK_GRANT_REVOKED");
++        let denied = call(
++            &f,
++            request(&f, "revoked-status", "native.codex.status", json!({})),
++        )
++        .await;
++        assert_eq!(denied["error"]["message"], "WEB_TASK_GRANT_REVOKED");
++        assert!(!native_proof(&f).exists());
++    }
++
++    #[tokio::test]
++    async fn native_preflight_refusal_is_not_an_unknown_task_effect() {
++        let f = native_fixture("alpha");
++        let image = f._native_queue.as_ref().unwrap().image();
++        let retained = image.with_extension("retained-exe");
++        fs::rename(&image, &retained).unwrap();
++        let refused = call(&f, native_request(&f, "unavailable-cli")).await;
++        fs::rename(retained, &image).unwrap();
++        assert_eq!(
++            refused["result"]["structuredContent"]["status"], "prelaunch_refused",
++            "{refused}"
++        );
++        assert_eq!(
++            refused["result"]["structuredContent"]["nativeTurnStarted"],
++            false
++        );
++        assert_eq!(refused["result"]["isError"], true);
++        assert!(!native_proof(&f).exists());
++        let restored = call(&f, native_request(&f, "restored-cli")).await;
++        assert_eq!(
++            restored["result"]["structuredContent"]["job"]["state"], "NATIVE_EXITED_ZERO",
++            "{restored}"
++        );
++        let journal = crate::delegated::journal::DelegatedJournal::open(
++            f.control
++                .join(".catdesk/project-mcp-tasks/alpha/task-fixture/journal"),
+         )
+         .unwrap();
+-        let again = crate::web_work::execution_permission(&control, pins.clone(), false).unwrap();
+-        assert_eq!(granted, again);
+-        assert!(!granted.to_string().contains(&key));
+-        Fixture {
+-            control,
+-            pins,
+-            key,
+-            task,
+-            native,
+-        }
++        let calls = journal
++            .load_tool_calls(&crate::delegated::contracts::RunId::new("task-fixture").unwrap())
++            .unwrap();
++        assert_eq!(
++            calls["unavailable-cli"].status,
++            crate::delegated::journal::ToolCallStatus::Failed
++        );
++        assert_eq!(
++            calls["restored-cli"].status,
++            crate::delegated::journal::ToolCallStatus::Completed
++        );
+     }
+-    fn request(f: &Fixture, id: &str, tool: &str, args: Value) -> Value {
+-        let mut pins = f.pins.clone();
+-        let o = pins.as_object_mut().unwrap();
+-        o.insert("executionKey".into(), json!(f.key));
+-        o.insert("taskId".into(), json!("task-fixture"));
+-        o.insert("callId".into(), json!(id));
+-        o.insert("tool".into(), json!(tool));
+-        o.insert("arguments".into(), args);
+-        json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":TOOL,"arguments":pins}})
++
++    #[tokio::test]
++    async fn ambiguous_native_admission_keeps_existing_journal_fence() {
++        let (alpha, beta) = paired_fixtures(true);
++        let admission = crate::web_work::prepare_native_dispatch(
++            &alpha.control,
++            alpha.pins.clone(),
++            &alpha.key,
++            "task-fixture",
++            "interrupted-native",
++        )
++        .unwrap();
++        admission
++            .finish(&Err("CONTROLLED_UNKNOWN_NATIVE_OUTCOME".into()))
++            .unwrap();
++        let replay = call(&alpha, native_request(&alpha, "interrupted-native")).await;
++        assert_eq!(
++            replay["error"]["message"],
++            "PROJECT_TASK_CALL_RECORDED_NO_REPLAY"
++        );
++        let changed_id = call(&alpha, native_request(&alpha, "new-native-id")).await;
++        assert_eq!(
++            changed_id["error"]["message"],
++            "PROJECT_TASK_RECOVERY_REQUIRED"
++        );
++        let peer = call(&beta, native_request(&beta, "peer-native")).await;
++        assert_eq!(
++            peer["result"]["structuredContent"]["job"]["state"], "NATIVE_EXITED_ZERO",
++            "{peer}"
++        );
++        assert!(!native_proof(&alpha).exists());
+     }
+-    async fn call(f: &Fixture, body: Value) -> Value {
+-        let req = serde_json::from_value(body).unwrap();
+-        serde_json::to_value(handle(f.control.to_str().unwrap(), &req).await).unwrap()
++
++    fn native_rollover(f: &mut Fixture) {
++        let event = f.pins["sourceEventId"].as_str().unwrap();
++        let root = crate::wake_protocol_client::wake_root_for_workspace(&f.control).unwrap();
++        let wake = catdesk_wake::store::Store::open(&root).unwrap();
++        let (_, current) = crate::operator_facade::native_continuation_fixture(
++            &f.control,
++            &wake,
++            f.pins["projectId"].as_str().unwrap(),
++            event,
++        );
++        f.pins["expectedTargetGeneration"] = json!(current.generation);
++        f.pins["expectedTargetSha256"] = json!(current.digest);
+     }
+ 
+-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+-    async fn exact_grant_survives_cold_calls_refuses_wrong_identity_and_revokes() {
+-        let f = fixture("alpha");
+-        let fresh = request(&f, "first-read", "read", json!({"path":"src/lib.rs"}));
+-        let task_dir = f
++    #[tokio::test]
++    async fn native_rollover_keeps_grant_receipts_and_completed_call_fence() {
++        let (mut alpha, beta) = paired_fixtures(true);
++        let path = alpha
+             .control
+-            .join(".catdesk/project-mcp-tasks/alpha/task-fixture");
+-        for (field, value) in [
+-            ("executionKey", json!("b".repeat(64))),
+-            ("taskId", json!("other-task")),
+-            ("sourceEventId", json!("wrong-event")),
+-            ("assignmentSha256", json!("b".repeat(64))),
+-            ("expectedTargetGeneration", json!(999)),
+-            ("workspace", json!(f.native)),
+-        ] {
+-            let mut invalid = fresh.clone();
+-            invalid["params"]["arguments"][field] = value;
+-            assert!(call(&f, invalid).await.get("error").is_some());
+-            assert!(
+-                !task_dir.join("journal").exists(),
+-                "wrong identity opened task writer"
+-            );
+-        }
+-        let result = call(&f, fresh.clone()).await;
+-        assert!(result.get("error").is_none(), "{result}");
++            .join(".catdesk/project-mcp-tasks/alpha/task-fixture/execution-grant.json");
++        let original = fs::read(&path).unwrap();
++        native_rollover(&mut alpha);
++        crate::web_work::execution_permission_with_capabilities(
++            &alpha.control,
++            alpha.pins.clone(),
++            false,
++            false,
++            Some("native-fixture"),
++        )
++        .unwrap();
++        assert_eq!(fs::read(&path).unwrap(), original);
++        let scope = resolve_registered_project_from_control_root(&alpha.control, "alpha").unwrap();
++        let record = crate::web_work_state::WorkLedger::open(&alpha.control, "alpha")
++            .unwrap()
++            .record("request-a")
++            .unwrap()
++            .unwrap();
++        let current = catdesk_wake::protocol::Target::new(
++            alpha.pins["expectedTargetGeneration"].as_u64().unwrap(),
++            scope.project.chatgpt_target_url.clone().unwrap(),
++        )
++        .unwrap();
++        let handed = crate::project_mcp_task::granted_handoff_context(&scope, &record, &current)
++            .unwrap()
++            .unwrap();
+         assert_eq!(
+-            result["result"]["_meta"]["catdeskTaskLifecycle"]["status"],
+-            "CLOSED"
++            handed["nativeQueue"]["snapshot"]["job"]["taskId"],
++            "native-fixture"
+         );
++        let result = call(&alpha, native_request(&alpha, "rollover-native-once")).await;
++        let result = &result["result"]["structuredContent"];
++        assert_eq!(result["job"]["state"], "NATIVE_EXITED_ZERO", "{result}");

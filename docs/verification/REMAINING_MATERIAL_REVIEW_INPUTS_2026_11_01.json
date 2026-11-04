@@ -1,0 +1,192 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-01T17:11:46.913628+00:00",
+  "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+  "fullDeclaredCodePaths": 84,
+  "scopeNarrowed": false,
+  "priorScopeAndLimits": "docs/verification/FULL_SOURCE_REVIEW_PACKET_2026_11_01.json",
+  "sourceSuitabilitySeparateFromInstalledAcceptance": true,
+  "priorPartialReferencesAreNotInheritedApproval": true,
+  "notAnExhaustiveUnreadLineInventory": true,
+  "dependencyCheckpoint1": [
+    {
+      "path": "src/operator_web_rollover.rs",
+      "firstLine": 385,
+      "lastLine": 397,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 385,397 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/operator_web_rollover.rs",
+      "outputBytes": 647,
+      "outputSha256": "a405377e05dce3ed8066f55a1a1b7757bf43699f27808e3320f23f290d5ac590"
+    },
+    {
+      "path": "src/operator_web_rollover.rs",
+      "firstLine": 467,
+      "lastLine": 542,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 467,542 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/operator_web_rollover.rs",
+      "outputBytes": 3940,
+      "outputSha256": "be5ab8d2fedb062ecdf0873f67e6f0241a4b4c458c413a48e09318f99aa3bd39"
+    },
+    {
+      "path": "src/operator_web_rollover.rs",
+      "firstLine": 579,
+      "lastLine": 662,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 579,662 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/operator_web_rollover.rs",
+      "outputBytes": 4653,
+      "outputSha256": "a7036750f41f515ea592b5d43c2d0ff5f65970360d367d36cdb896f62c53b4a3"
+    }
+  ],
+  "dependencyCheckpoint2": [
+    {
+      "path": "src/operator_web_rollover.rs",
+      "firstLine": 705,
+      "lastLine": 755,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 705,755 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/operator_web_rollover.rs",
+      "outputBytes": 2432,
+      "outputSha256": "059537e679a4708bbaef32056aa9b81da17fe069e3488c2a7f25535582faed57"
+    },
+    {
+      "path": "wake/src/store.rs",
+      "firstLine": 2403,
+      "lastLine": 2476,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 2403,2476 6e97db1fdaaf91f9d6393997e930023a387f0403 -- wake/src/store.rs",
+      "outputBytes": 3732,
+      "outputSha256": "324421ef2920ec81153f80a5cc374e94ecf4229e1f00770ce26418a41436127e"
+    },
+    {
+      "path": "src/mcp.rs",
+      "firstLine": 4142,
+      "lastLine": 4200,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 4142,4200 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/mcp.rs",
+      "outputBytes": 3582,
+      "outputSha256": "1d184cbecb98ac0b38efc022adba6822ce5a95d7186fa2261b3d4c0c29ff6425"
+    }
+  ],
+  "olderChangedPathDeltas": [
+    {
+      "path": "scripts/catdesk-doctor.ps1",
+      "referenceSource": "18ba8aa207f8977a772484f66e639e2603b938a6",
+      "referenceReview": "oct31-broad-inconclusive",
+      "newDeltaBytes": 11450,
+      "priorScope": "Partial/inconclusive reference only; no inherited full-file acceptance"
+    },
+    {
+      "path": "scripts/setup-secure-mcp.ps1",
+      "referenceSource": "18ba8aa207f8977a772484f66e639e2603b938a6",
+      "referenceReview": "oct31-broad-inconclusive",
+      "newDeltaBytes": 2160,
+      "priorScope": "Partial/inconclusive reference only; no inherited full-file acceptance"
+    },
+    {
+      "path": "scripts/start-catdesk-stack.ps1",
+      "referenceSource": "18ba8aa207f8977a772484f66e639e2603b938a6",
+      "referenceReview": "oct31-broad-inconclusive",
+      "newDeltaBytes": 5831,
+      "priorScope": "Partial/inconclusive reference only; no inherited full-file acceptance"
+    },
+    {
+      "path": "scripts/test-catdesk-doctor.ps1",
+      "referenceSource": "18ba8aa207f8977a772484f66e639e2603b938a6",
+      "referenceReview": "oct31-broad-inconclusive",
+      "newDeltaBytes": 10311,
+      "priorScope": "Partial/inconclusive reference only; no inherited full-file acceptance"
+    },
+    {
+      "path": "scripts/test-secure-mcp-bearer-forwarding.ps1",
+      "referenceSource": "18ba8aa207f8977a772484f66e639e2603b938a6",
+      "referenceReview": "oct31-broad-inconclusive",
+      "newDeltaBytes": 1356,
+      "priorScope": "Partial/inconclusive reference only; no inherited full-file acceptance"
+    },
+    {
+      "path": "scripts/test-start-catdesk-stack.ps1",
+      "referenceSource": "18ba8aa207f8977a772484f66e639e2603b938a6",
+      "referenceReview": "oct31-broad-inconclusive",
+      "newDeltaBytes": 11365,
+      "priorScope": "Partial/inconclusive reference only; no inherited full-file acceptance"
+    },
+    {
+      "path": "src/operator_facade.rs",
+      "referenceSource": "18ba8aa207f8977a772484f66e639e2603b938a6",
+      "referenceReview": "oct31-broad-inconclusive",
+      "newDeltaBytes": 5613,
+      "priorScope": "Partial/inconclusive reference only; no inherited full-file acceptance"
+    },
+    {
+      "path": "src/operator_installed_backend.rs",
+      "referenceSource": "18ba8aa207f8977a772484f66e639e2603b938a6",
+      "referenceReview": "oct31-broad-inconclusive",
+      "newDeltaBytes": 41054,
+      "priorScope": "Partial/inconclusive reference only; no inherited full-file acceptance"
+    },
+    {
+      "path": "src/operator_installed_project.rs",
+      "referenceSource": "18ba8aa207f8977a772484f66e639e2603b938a6",
+      "referenceReview": "oct31-broad-inconclusive",
+      "newDeltaBytes": 799,
+      "priorScope": "Partial/inconclusive reference only; no inherited full-file acceptance"
+    },
+    {
+      "path": "tests/test_wake_bridge.py",
+      "referenceSource": "18ba8aa207f8977a772484f66e639e2603b938a6",
+      "referenceReview": "oct31-broad-inconclusive",
+      "newDeltaBytes": 3064,
+      "priorScope": "Partial/inconclusive reference only; no inherited full-file acceptance"
+    },
+    {
+      "path": "wake/adapter.py",
+      "referenceSource": "18ba8aa207f8977a772484f66e639e2603b938a6",
+      "referenceReview": "oct31-broad-inconclusive",
+      "newDeltaBytes": 6082,
+      "priorScope": "Partial/inconclusive reference only; no inherited full-file acceptance"
+    },
+    {
+      "path": "wake/src/development_runtime.rs",
+      "referenceSource": "18ba8aa207f8977a772484f66e639e2603b938a6",
+      "referenceReview": "oct31-broad-inconclusive",
+      "newDeltaBytes": 7531,
+      "priorScope": "Partial/inconclusive reference only; no inherited full-file acceptance"
+    },
+    {
+      "path": "wake/src/runtime_snapshot.rs",
+      "referenceSource": "18ba8aa207f8977a772484f66e639e2603b938a6",
+      "referenceReview": "oct31-broad-inconclusive",
+      "newDeltaBytes": 8142,
+      "priorScope": "Partial/inconclusive reference only; no inherited full-file acceptance"
+    },
+    {
+      "path": "wake/src/store.rs",
+      "referenceSource": "18ba8aa207f8977a772484f66e639e2603b938a6",
+      "referenceReview": "oct31-broad-inconclusive",
+      "newDeltaBytes": 581,
+      "priorScope": "Partial/inconclusive reference only; no inherited full-file acceptance"
+    },
+    {
+      "path": "wake/tests/test_adapter.py",
+      "referenceSource": "18ba8aa207f8977a772484f66e639e2603b938a6",
+      "referenceReview": "oct31-broad-inconclusive",
+      "newDeltaBytes": 14822,
+      "priorScope": "Partial/inconclusive reference only; no inherited full-file acceptance"
+    },
+    {
+      "path": "wake/tests/test_new_conversation.py",
+      "referenceSource": "18ba8aa207f8977a772484f66e639e2603b938a6",
+      "referenceReview": "oct31-broad-inconclusive",
+      "newDeltaBytes": 5396,
+      "priorScope": "Partial/inconclusive reference only; no inherited full-file acceptance"
+    }
+  ],
+  "olderChangedDeltaBytes": 135557,
+  "existingUnchangedInitialContextQualification": {
+    "document": "docs/verification/KNOWN_USER_CONTEXT_ACCOUNTING_SOURCE_2026_10_31.json",
+    "currentContentMatchesQualifiedWorkingSource": true,
+    "passingDeliveryCases": 14,
+    "newExecutionClaimed": false
+  },
+  "boundedReadProtocol": {
+    "maximumIndividualSourceOutputBytes": 8000,
+    "sequence": "One tool call at a time; report per-call truncation and first/last nonblank code witnesses",
+    "globalGuarantees": "Do not invent formal all-interleavings proof or claim unread content",
+    "reviewGoal": "Assess material identity, authority, task/process ownership, CAS, unknown-outcome/no-replay and recoverable lifecycle behavior before source-only release suitability judgment"
+  },
+  "sourceAccepted": false,
+  "producerAuthority": false
+}

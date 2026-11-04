@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C209_NATIVE_AUTH_AND_COMPILER_HELPER",
+  "recordedUtc": "2026-10-25T17:20:15.9487087+00:00",
+  "source": {
+    "files": [
+      {
+        "path": "src/main.rs",
+        "sha256": "a485e177dccdcef607ab7489b16b73efa9b8c58c302fd768abd8aa07851f25f3"
+      },
+      {
+        "path": "src/server.rs",
+        "sha256": "d8fb5fd712f28e2c7db89d5b88a195a4d44aeadfdd2445f43d3431cb4b753816"
+      },
+      {
+        "path": "src/state.rs",
+        "sha256": "b360425bfdcb944b038939fa507e9e6b0560f074af8ccb3836ae4f795723f466"
+      },
+      {
+        "path": "src/ngrok.rs",
+        "sha256": "217d734c80e39a3cbec3869fa6f728f514899601bdc47fe2b8ad91e4d6c0dbc4"
+      },
+      {
+        "path": "src/web_task_dispatch.rs",
+        "sha256": "812691d9a8adfce97b0e998891096f04351e03199655cc504158ed45f64c1692"
+      },
+      {
+        "path": "src/reviewed_build.rs",
+        "sha256": "efccbf5182d9727a74ba9311bb497cfc7f1eb373f0199ee386f24f6b41b19580"
+      }
+    ],
+    "branch": "codex/web-rollover-oct17",
+    "parentCommit": "176c4a2abf74f0eece1fe27cdac449c9a2e518ef"
+  },
+  "changes": {
+    "helperCleanup": "SUCCESSFUL_CARGO_EXACT_JOB_PINNED_IMAGE_RETAINED_HANDLES",
+    "helperExitRace": "FAILED_TERMINATION_ACCEPTED_ONLY_IF_RETAINED_HANDLE_IS_SIGNALED",
+    "headlessParsing": "UNCHANGED",
+    "absentToken": "LEGACY_ORDINARY_MCP_CENTRAL_DISPATCH_HIDDEN_AND_REFUSED",
+    "nativeAuth": "OPTIONAL_PROCESS_ONLY_VISIBLE_ASCII_BEARER_LOCAL_PROBES_REDACTED_STATUS",
+    "authorityAndQuiescenceGates": "UNCHANGED",
+    "invalidToken": "SERVICE_START_REFUSED_NO_FALLBACK"
+  },
+  "sourceQualification": {
+    "maximumSeconds": 600,
+    "manualIgnored": 8,
+    "containmentSha256": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "ancestorRefusalFixedBy": "UNCHANGED_TESTS_WITH_REQUIRED_METADATA_ACCESS_NO_GUARD_RELAXATION",
+    "startedUtc": "2026-10-25T17:16:34.8811068+00:00",
+    "totalPassed": 144,
+    "jobExitCode": 0,
+    "resultSha256": "5bcfd06da5cc1520682167f47b6ae90915be31cc14236ce6b5f4d7a453741b5f",
+    "counts": {
+      "native-auth": 5,
+      "central-dispatch": 6,
+      "bearer": 1,
+      "headless": 16,
+      "reviewed-build": 116
+    },
+    "strictClippy": "PASS",
+    "finishedUtc": "2026-10-25T17:19:39.0439122+00:00",
+    "timedOut": false,
+    "state": "PASS",
+    "terminationFailed": false,
+    "scope": "SOURCE_UNIT_AND_DISPOSABLE_LOOPBACK_FIXTURES_NOT_INSTALLED_ACCEPTANCE",
+    "independentReview": "PASS",
+    "priorFailuresPreserved": [
+      "TEST_IMPORT_COMPILE_ERROR",
+      "INVALID_PORT_IN_PERSISTENCE_FIXTURE",
+      "SANDBOX_ANCESTOR_METADATA_REFUSAL"
+    ]
+  },
+  "preservation": {
+    "recordedFingerprint": "A264C8DC85FA55311E74114158F4F4CD598F6E9E9D0A6CA535E14D18AA649939",
+    "authorityFilesExact": 5,
+    "canonicalSha256": "9a8f4ebf6ea57cbb61efaa12e8afa54d18b8db7374b9884067325bc84565568c",
+    "nativeSessionActions": 0,
+    "candidateSha256": "91eea19e6e030e80900d43114f800c3642f5cc063ef2c969b83eb20d2c28d14b",
+    "projectBindingMutations": 0,
+    "scopedCandidateAndControllerOwners": 0,
+    "port3200Listeners": 0,
+    "browserWakeStarts": 0,
+    "candidateUnchanged": true,
+    "atUtc": "2026-10-25T17:20:12.8533112+00:00",
+    "existingStateFilesExact": 461
+  },
+  "promotion": {
+    "nodeJobApiSucceeded": true,
+    "performed": false,
+    "workaroundUsed": false,
+    "permissionMissing": false,
+    "authorized": true,
+    "candidateReviewedSource": "409513a1c1f81f74f873bd4b3dca825458ef29a8",
+    "requiredExecutionContext": "EXISTING_RELEASE_OWNER_OUTSIDE_WINDOWS_JOB",
+    "newSourceInCandidate": false,
+    "availableLocalLaunches": "OUTSIDE_JOB_GUARD_REFUSED_NORMAL_PTY_NODE_REPL_AND_ELEVATED_ACCESS_CONTEXTS",
+    "nodeInsideWindowsJob": true
+  },
+  "connector": {
+    "unchangedDependencyRetried": false,
+    "fresh429Claimed": false,
+    "readOnlyCalls": 1,
+    "result": "TRANSPORT_SEND_ERROR_BEFORE_BACKEND_RESPONSE",
+    "httpStatusReturned": false,
+    "promotionRequestsSent": 0
+  },
+  "installedClientHelp": {
+    "clientNetworkOperations": 0,
+    "staticMcpHeaders": "SUPPORTED",
+    "namedRuntimeForwarding": "UNVERIFIED",
+    "secretReferences": [
+      "env:VAR",
+      "file:/path"
+    ],
+    "ownerOrConfigurationChanges": 0,
+    "staticDiscoveryHeaders": "SUPPORTED"
+  },
+  "acceptance": {
+    "completedCanaryReplay": false,
+    "originalQuarantine": "DURABLE_UNKNOWN_DISPOSITION_PRESERVED_LEGACY_CANDIDATE_DOES_NOT_READ_NEW_ADMISSION",
+    "actualTwoConversationWebCoding": "OPEN",
+    "newSourceGenuineWebReleaseReview": "REQUIRED",
+    "productionPromoted": false,
+    "installedStartup": "OPEN",
+    "installedRollback": "OPEN",
+    "goal": "ACTIVE"
+  }
+}

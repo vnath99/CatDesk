@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "dateUtc": "2026-11-04",
+  "baseCommit": "68ffb7962c2f7aece0e89a330767ddff4ee9ddad",
+  "scope": "Separately authorized ordinary developer resource-prevention source work; general MVP goal remains paused.",
+  "classification": "TESTED_SOURCE_AND_NATIVE_READONLY_FIXTURES",
+  "sourceSha256": {
+    "scripts/catdesk-dev-local-target.ps1": "7c33fdc4b736c9ead5307d8f8c3adc6cd3375d1e88c4a6429a268ae1ca7efdd7",
+    "scripts/catdesk-dev-local-target-native.ps1": "c645c347a0458097e8daff036e971a3a7168f4dffcebbc7223fe267db1f6ffb6",
+    "scripts/test-catdesk-dev-local-target.ps1": "58613b13ef2aad634a5e7af235e70e406e8635dc24a9ce5189803a0663bc88a4"
+  },
+  "firstFocusedInvocation": {
+    "preflightUtc": "2026-11-04T06:41:32.8181726+00:00",
+    "host": "PowerShell Core",
+    "command": "pwsh -NoProfile -File scripts/test-catdesk-dev-local-target.ps1 -NativeFixtures",
+    "protectedPinsMatchedBeforeRun": 6,
+    "trackedSourceUnchangedBeforeRun": true,
+    "focusedPassed": 33,
+    "nativeFixturePassed": 10,
+    "exitCode": 0
+  },
+  "intermediateMetadataFirstInvocation": {
+    "preflightUtc": "2026-11-04T06:46:26.6809966+00:00",
+    "finishedUtc": "2026-11-04T06:46:27.6482954+00:00",
+    "host": "PowerShell Core",
+    "focusedPassed": 34,
+    "nativeFixturePassed": 12,
+    "exitCode": 0,
+    "protectedPinsMatchedBeforeAndAfter": 6,
+    "nativeRefinement": "Attribute-only opens precede data access, and data-handle physical identity is rechecked before hashing.",
+    "nativeHelperSha256": "e53435b918457966a5a3a692cca72fad5666a082401f816a9b0cc2a3d5a3881c",
+    "scope": "Superseded source qualification: peer subsequently identified missing explicit OPEN_NO_RECALL. Not relabeled as final-source proof."
+  },
+  "priorDesktopFocusedInvocation": {
+    "windowUtc": "2026-11-04T06:44:25.3249544Z/2026-11-04T06:44:26.8720552Z",
+    "host": "Windows PowerShell Desktop",
+    "focusedPassed": 34,
+    "nativeFixturePassed": 0,
+    "exitCode": 0,
+    "testSha256": "11351162ee79cef91b9ad1b0119fa6897ef839a69996d36aa3f81b9e4e32c9d4",
+    "scope": "Earlier test variant; no native Desktop fixture qualification."
+  },
+  "finalFocusedInvocation": {
+    "preflightUtc": "2026-11-04T06:49:03.4680635+00:00",
+    "finishedUtc": "2026-11-04T06:49:04.9453585+00:00",
+    "coreFocusedPassed": 34,
+    "coreNativeFixturePassed": 14,
+    "desktopFocusedPassed": 34,
+    "desktopNativeFixturePassed": 0,
+    "exitCodeCore": 0,
+    "exitCodeDesktop": 0,
+    "protectedPinsMatchedBeforeAndAfter": 6,
+    "scope": "Exact sourceSha256 above; explicit OPEN_NO_RECALL and OPEN_REPARSE_POINT on every native open, no fallback."
+  },
+  "actualReadOnlyPlan": {
+    "state": "PROPOSED_UNINITIALIZED",
+    "reason": "NO_TARGET_CREATED_OR_REUSE_AUTHORIZED",
+    "privatePhysicalIdentitiesAndKeysPublished": false,
+    "targetCreated": false,
+    "cargoStarted": false,
+    "executionQualified": false,
+    "scope": "Actual observation before the final native metadata-first and NO_RECALL refinements; not relabeled as final-adapter live proof."
+  },
+  "legacyCompatibility": {
+    "facadeChanged": false,
+    "storageTestsChanged": false,
+    "ordinaryReceiptKeys": 9,
+    "completeLfNormalizedSourcePinsChecked": true
+  },
+  "nativeFixtureCoverage": [
+    "file and directory no-recall/no-follow open flag policy",
+    "same native template can be reused",
+    "different already-loaded native template refused",
+    "stable physical file identity",
+    "actual owner SID comparison",
+    "bounded file hash",
+    "retained file refuses concurrent writer open",
+    "retained ancestry refuses rename",
+    "oversized file refused",
+    "absent target remains absent",
+    "configuration presence checked without reading contents",
+    "junction refused",
+    "only own newly created fixture cleaned up"
+  ],
+  "candidateRecipeLimit": "Only cargo.exe/rustc.exe/Cargo.lock and intended fixed policy are bound. Compiler DLLs, linker, complete toolchain closure and effective build parity remain unqualified.",
+  "executionBlocker": "WHOLE_JOB_AND_OUTPUT_DRAIN_OWNER_UNQUALIFIED",
+  "buildAndVerify": "HARD_REFUSED_BEFORE_ADAPTER_OR_TARGET_ACCESS",
+  "writerLeaseImplemented": false,
+  "targetLifecycleRecordsImplemented": false,
+  "crashSafeReuseQualified": false,
+  "realCargoRuns": 0,
+  "externalTargetsCreatedOrAdopted": 0,
+  "existingTargetMutations": 0,
+  "productionOrWakeActions": 0,
+  "globalSettingsChanged": false,
+  "installedRuntimeAcceptance": "UNVERIFIED",
+  "goalResumed": false
+}

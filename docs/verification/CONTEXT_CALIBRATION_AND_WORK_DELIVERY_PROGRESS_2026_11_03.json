@@ -1,0 +1,203 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-03T18:55:17.607682+00:00",
+  "classification": "PARTIAL_SOURCE_QUALIFICATION_AND_OFFLINE_REFERENCE_CALIBRATION",
+  "sourceBaseCommit": "b06f02d518c2e0eed294b1ff8353bd588074f517",
+  "boundedOrdinaryWorkDelivery": {
+    "implementationState": "UNCOMMITTED_NOT_INSTALLED_OR_PUBLISHED",
+    "codePaths": [
+      "src/operator_web_cli.rs",
+      "src/web_work.rs",
+      "src/web_work_delivery.rs",
+      "wake/src/runtime.rs",
+      "wake/src/runtime_scoped_review.rs"
+    ],
+    "newCodePaths": 1,
+    "existingSenderReused": true,
+    "messageOrDestinationOverride": false,
+    "hostOrSchedulerStarted": false,
+    "nativeAuthorityGranted": false,
+    "wakeModuleTestsPassed": 22,
+    "newWakeCases": 3,
+    "coordinatorAndCliTests": "DEFERRED_BELOW_4_GIB_ADMISSION_NO_COMPILER_STARTED",
+    "strictClippy": "PENDING",
+    "formattersRanSuccessfully": true,
+    "futureSyntax": "operator web work deliver --project-id REGISTERED_ID --request-id EXISTING_REQUEST",
+    "commandAvailableInSelectedOrProductionRuntime": false
+  },
+  "crossProjectContextRefusal": {
+    "actualReason": "WEB_CONTEXT_INPUT_SCOPE_INVALID",
+    "statePinsUnchanged": 404,
+    "initialHarnessFailed": true,
+    "harnessReason": "Expected error; actual structured field is errorCode",
+    "reconciledReadOnlyWithoutCommandReplay": true
+  },
+  "calibration": {
+    "scope": "OFFLINE_SYNTHETIC_REFERENCE_CALIBRATION_NOT_INSTALLED_RUST_EXECUTION",
+    "reference": "EXISTING_CACHED_OFFICIAL_TIKTOKEN_0_14_0_WITH_HASH_VERIFIED_O200K_ASSET",
+    "sampleCount": 12,
+    "observations": [
+      {
+        "sample": "plain",
+        "sha256": "806bb1f3ced6f625a4893c064113ca7f9bf400e2d629c6d206fdc0c3e0f72309",
+        "visibleUtf8Bytes": 46,
+        "ordinaryWholeReferenceTokens": 10,
+        "specialAllowedWholeReferenceTokens": 10,
+        "currentChunkedSpecialMethodReplicaTokens": 10,
+        "ordinaryChunkedReferenceTokens": 10,
+        "currentMethodReplicaUnderCount": 0,
+        "tokenizationIsProviderUsage": false
+      },
+      {
+        "sample": "code",
+        "sha256": "983a70208fc8d8434fff2e7939af514571b9fa1664d0b01bf1bd3e8ccf6252da",
+        "visibleUtf8Bytes": 2460,
+        "ordinaryWholeReferenceTokens": 540,
+        "specialAllowedWholeReferenceTokens": 540,
+        "currentChunkedSpecialMethodReplicaTokens": 547,
+        "ordinaryChunkedReferenceTokens": 547,
+        "currentMethodReplicaUnderCount": 0,
+        "tokenizationIsProviderUsage": false
+      },
+      {
+        "sample": "json",
+        "sha256": "67153add9510e9a56b049d4e5fb8390de80fcdefc92987bdcef947fe3c3971a6",
+        "visibleUtf8Bytes": 5682,
+        "ordinaryWholeReferenceTokens": 1690,
+        "specialAllowedWholeReferenceTokens": 1690,
+        "currentChunkedSpecialMethodReplicaTokens": 1712,
+        "ordinaryChunkedReferenceTokens": 1712,
+        "currentMethodReplicaUnderCount": 0,
+        "tokenizationIsProviderUsage": false
+      },
+      {
+        "sample": "unicode",
+        "sha256": "d97f5927e65cd5fd8abbdb12a6b0f6af9d4ca07d2fdc8b0f9507f95ffeba4751",
+        "visibleUtf8Bytes": 5600,
+        "ordinaryWholeReferenceTokens": 1150,
+        "specialAllowedWholeReferenceTokens": 1150,
+        "currentChunkedSpecialMethodReplicaTokens": 1167,
+        "ordinaryChunkedReferenceTokens": 1167,
+        "currentMethodReplicaUnderCount": 0,
+        "tokenizationIsProviderUsage": false
+      },
+      {
+        "sample": "literal_endoftext",
+        "sha256": "3d0c1cf596181258a003e9f95c836c765d44353532e67c70d7dff48b05f64840",
+        "visibleUtf8Bytes": 13,
+        "ordinaryWholeReferenceTokens": 7,
+        "specialAllowedWholeReferenceTokens": 1,
+        "currentChunkedSpecialMethodReplicaTokens": 1,
+        "ordinaryChunkedReferenceTokens": 7,
+        "currentMethodReplicaUnderCount": 6,
+        "tokenizationIsProviderUsage": false
+      },
+      {
+        "sample": "literal_endofprompt",
+        "sha256": "e7bcaa0c385148b29715b047339897aa0e82a619e5c18d5a256a955f2ec62da6",
+        "visibleUtf8Bytes": 15,
+        "ordinaryWholeReferenceTokens": 7,
+        "specialAllowedWholeReferenceTokens": 1,
+        "currentChunkedSpecialMethodReplicaTokens": 1,
+        "ordinaryChunkedReferenceTokens": 7,
+        "currentMethodReplicaUnderCount": 6,
+        "tokenizationIsProviderUsage": false
+      },
+      {
+        "sample": "literal_special_code",
+        "sha256": "9b335f302336efabda1cbc3b4308cb73827a769e0f91d0f3e992aa8f0f9bdb73",
+        "visibleUtf8Bytes": 8960,
+        "ordinaryWholeReferenceTokens": 2400,
+        "specialAllowedWholeReferenceTokens": 1760,
+        "currentChunkedSpecialMethodReplicaTokens": 1805,
+        "ordinaryChunkedReferenceTokens": 2430,
+        "currentMethodReplicaUnderCount": 595,
+        "tokenizationIsProviderUsage": false
+      },
+      {
+        "sample": "literal_special_json",
+        "sha256": "f8cfbd0b0b136a7339e9f0d28546131b98eb11963a576d9280f0285dec5e4126",
+        "visibleUtf8Bytes": 58,
+        "ordinaryWholeReferenceTokens": 21,
+        "specialAllowedWholeReferenceTokens": 12,
+        "currentChunkedSpecialMethodReplicaTokens": 12,
+        "ordinaryChunkedReferenceTokens": 21,
+        "currentMethodReplicaUnderCount": 9,
+        "tokenizationIsProviderUsage": false
+      },
+      {
+        "sample": "large_plain",
+        "sha256": "504e2b4868ce760c1f4e98420c86e1d9ab79fd55f81dbc45e2389a404d51ffb1",
+        "visibleUtf8Bytes": 59400,
+        "ordinaryWholeReferenceTokens": 9000,
+        "specialAllowedWholeReferenceTokens": 9000,
+        "currentChunkedSpecialMethodReplicaTokens": 9308,
+        "ordinaryChunkedReferenceTokens": 9308,
+        "currentMethodReplicaUnderCount": 0,
+        "tokenizationIsProviderUsage": false
+      },
+      {
+        "sample": "large_literal_special",
+        "sha256": "af75aba433d463d79bad03ed421d2064ff326d96a61f9f5601da591bb0528c63",
+        "visibleUtf8Bytes": 42000,
+        "ordinaryWholeReferenceTokens": 21001,
+        "specialAllowedWholeReferenceTokens": 6000,
+        "currentChunkedSpecialMethodReplicaTokens": 6752,
+        "ordinaryChunkedReferenceTokens": 21071,
+        "currentMethodReplicaUnderCount": 14249,
+        "tokenizationIsProviderUsage": false
+      },
+      {
+        "sample": "boundary_literal",
+        "sha256": "da494f6605adae2badff71d2b7ef6ad54277c0dc494ba1abcb6ef42f5bff214e",
+        "visibleUtf8Bytes": 665,
+        "ordinaryWholeReferenceTokens": 239,
+        "specialAllowedWholeReferenceTokens": 233,
+        "currentChunkedSpecialMethodReplicaTokens": 240,
+        "ordinaryChunkedReferenceTokens": 240,
+        "currentMethodReplicaUnderCount": 0,
+        "tokenizationIsProviderUsage": false
+      },
+      {
+        "sample": "punctuation",
+        "sha256": "a456df46889e439b5e731ca9af565e49a4fca09f8ac1e99cb52052e52c0f0f54",
+        "visibleUtf8Bytes": 3100,
+        "ordinaryWholeReferenceTokens": 1999,
+        "specialAllowedWholeReferenceTokens": 1999,
+        "currentChunkedSpecialMethodReplicaTokens": 2002,
+        "ordinaryChunkedReferenceTokens": 2002,
+        "currentMethodReplicaUnderCount": 0,
+        "tokenizationIsProviderUsage": false
+      }
+    ],
+    "finding": "Literal special-token spellings in ordinary visible source/message text are compressed into special tokens by the current method; ordinary encoding treats them as literal text.",
+    "rustFunctionsExecutedByThisTest": false,
+    "currentRustApiSelectionInspected": true,
+    "methodReplicaUsed": true,
+    "providerModelTokenizerVerified": false,
+    "exactProviderContextClaimed": false,
+    "rawProjectContentUsed": false,
+    "networkUsed": false,
+    "newDependencyInstalled": false,
+    "sourceChangeMade": false,
+    "elapsedSeconds": 0.25
+  },
+  "nativeTaskPreparation": {
+    "textsFrozen": 2,
+    "ownerReservationHashesVerified": true,
+    "registeredWorktreesClean": true,
+    "tasksQueuedOrExecuted": false,
+    "initialPathSpellingHarnessRefusalPreserved": true,
+    "correctedIdentityCheck": "ACTUAL_FILESYSTEM_SAMEFILE_NOT_LEXICAL_PREFIX_STRIPPING"
+  },
+  "cleanup": {
+    "observedUtc": "2026-11-03T18:54:23.0452581Z",
+    "testOwnedCount": 0,
+    "sameVerifiedBackendAndExistingTunnelPreserved": true,
+    "wakeHostStopped": true,
+    "profileOrBindingsChangedByTests": false
+  },
+  "protectedReleaseAuthority": false,
+  "twoWebNativeCodingAcceptance": "OPEN",
+  "operatorActionRequired": false
+}

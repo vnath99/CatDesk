@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C68_SELECTED_NORMAL_MCP_RESTART_WITH_REAL_PENDING_PROJECT_STATE",
+  "observedUtc": "2026-10-24T04:30:28.2269817+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "parentCommit": "f537c9d555bf46e4b593e92717dfd316a2735965",
+  "sourceCommit": "36b743aeaa9592bced1892caf06cfed0482cc803",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "ACTUAL_SELECTED_NORMAL_MCP_PROCESS_RESTART_SAME_ENDPOINT_READ_ONLY_REAL_DURABLE_STATE",
+  "imageSha256": "950b87051a43bbc96728e8477ad8bd4d7fea1826b55576378f6c2df16652c995",
+  "startedUtc": "2026-10-24T04:27:39.5273045+00:00",
+  "finishedUtc": "2026-10-24T04:28:40.9939341+00:00",
+  "elapsedSeconds": 61.4666373,
+  "processLifetimes": [
+    {
+      "cycle": 1,
+      "elapsedSeconds": 30.0953998,
+      "exactSavedRegistryAndArchive": true,
+      "exitCode": 0,
+      "finishedUtc": "2026-10-24T04:28:10.3501134+00:00",
+      "maximumRuntimeSeconds": 30,
+      "naturalExit": true,
+      "ownerExited": true,
+      "pairedProjects": 9,
+      "startedUtc": "2026-10-24T04:27:40.2547244+00:00",
+      "webAutoStarted": false
+    },
+    {
+      "cycle": 2,
+      "elapsedSeconds": 30.0677164,
+      "exactSavedRegistryAndArchive": true,
+      "exitCode": 0,
+      "finishedUtc": "2026-10-24T04:28:40.4227180+00:00",
+      "maximumRuntimeSeconds": 30,
+      "naturalExit": true,
+      "ownerExited": true,
+      "pairedProjects": 9,
+      "startedUtc": "2026-10-24T04:28:10.3550051+00:00",
+      "webAutoStarted": false
+    }
+  ],
+  "distinctProcessesVerified": true,
+  "sameEndpointVerified": true,
+  "httpRequests": 4,
+  "coordinatorStateEqualAcrossRestart": true,
+  "verifiedFields": [
+    "active registrations and workspaces",
+    "retired registration metadata",
+    "current URLs and digests",
+    "predecessor history",
+    "paired Wake generations",
+    "conversation context status/history",
+    "queue progress",
+    "work intent reports",
+    "active rollover/admission projections"
+  ],
+  "retainedJournalPhases": {
+    "CONTINUATION_QUEUED": 8,
+    "QUARANTINED": 2,
+    "SUBMITTING": 2
+  },
+  "retainedNonterminalRollovers": 2,
+  "preservation": {
+    "productionChanged": false,
+    "officialRuntimeActions": 0,
+    "changedRecords": 0,
+    "retiredProjects": 1,
+    "activeProjects": 9,
+    "originalFivePreserved": true,
+    "runtimeRecords": 282,
+    "connectorCalls": 0,
+    "messagesSent": 0,
+    "nativeActions": 0,
+    "scopedOwners": 0,
+    "packageSelectionChanged": false,
+    "browserWakeRecurringStarts": 0,
+    "pendingOrAmbiguousSubmissionsResent": 0,
+    "bothControls": "STOPPED"
+  },
+  "outerContainment": {
+    "timedOut": false,
+    "terminationFailed": false,
+    "exitCode": 0,
+    "maximumSeconds": 180
+  },
+  "harnessNote": "After the new child emitted its correct C68 result, a copied wrapper reporting tail also printed the historical C66 selection result. C68 success is established by its dedicated result and containment files, not that stale summary. No action was repeated; reporting tail corrected without rerunning the test.",
+  "sourceChange": false,
+  "acceptance": {
+    "fullOctoberMilestone": "OPEN",
+    "actualWebToolExecutionBC": "OPEN_CONNECTOR_AND_CATALOG_DEPENDENCY",
+    "ISelectedNormalMcpRestart": "PASS_TWO_REAL_PROCESSES_SAME_ENDPOINT_REAL_SAVED_STATE",
+    "protectedInstalled": "NOT_QUALIFIED",
+    "unattended": "NOT_ACTIVATED",
+    "crashOrInterruptedWrite": "NOT_TESTED_BY_NATURAL_EXIT",
+    "fullStackRestart": "OPEN_NOT_TESTED"
+  },
+  "nextTask": "Actual Web tool B/C and full-stack restart require the supported serving-backend owner path and connector/scoped-tool catalog access. Preserve completed persistence proof; do not repeat the rollover or restart merely to wait for that dependency.",
+  "postTestInventory": {
+    "sourceResultSha256": "05e3adb2b35c5b526e7137e57020fe522dfcdd55a706729799695e070af493ad",
+    "classification": "READ_ONLY_POST_C68_COMPLETE_METADATA_SET_COMPARISON",
+    "baselineRecords": 282,
+    "newStateRecords": 0,
+    "missingStateRecords": 0,
+    "bothControls": [
+      "STOPPED",
+      "STOPPED"
+    ],
+    "currentRecords": 282,
+    "runtimeLifecycleActions": 0,
+    "observedUtc": "2026-10-24T04:31:46.6277553+00:00"
+  }
+}

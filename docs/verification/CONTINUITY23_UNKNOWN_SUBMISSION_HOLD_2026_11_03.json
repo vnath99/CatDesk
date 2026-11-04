@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-03T15:21:47.706262+00:00",
+  "classification": "UNKNOWN_SUBMISSION_PRESERVED_NOT_CONFIRMED_FAILED_OR_DELIVERED",
+  "sourceReviewRequestNumber": 23,
+  "frozenReviewSourceCommit": "a23a52a5fc5cb9bc2d2a5ff64bbd037f92f0a176",
+  "targetGeneration": 5,
+  "send": {
+    "attempts": 1,
+    "elapsedSeconds": 170.406,
+    "outcome": "SUBMITTING",
+    "reason": "SUBMIT_CLEARED_NO_APPEND",
+    "positiveReceipt": false,
+    "blindRetryAllowed": false
+  },
+  "diagnosis": {
+    "attempts": 1,
+    "reason": "SCOPED_DIAGNOSE_TIMEOUT",
+    "elapsedSeconds": 104.719,
+    "preservationPinsChecked": 533,
+    "preservationMismatches": 0,
+    "profileQuiescentAfterwards": true
+  },
+  "receiptReconciliation": {
+    "attempts": 1,
+    "reason": "SCOPED_RECONCILE_TIMEOUT",
+    "elapsedSeconds": 103.422,
+    "preservationPinsChecked": 531,
+    "preservationMismatches": 0,
+    "receiptCreated": false,
+    "profileQuiescentAfterwards": true
+  },
+  "knownGitExecutionWitnesses": 8,
+  "executionWitnessesAloneProveConversationDelivery": false,
+  "responseAccepted": false,
+  "fullResultVisibilityEstablished": false,
+  "newUserMessagesAfterOriginalAttempt": 0,
+  "dispatchReset": false,
+  "grantsRefunded": false,
+  "workResolved": false,
+  "bindingsChanged": false,
+  "nativeProjectSessionsPausedOrReplaced": false,
+  "unchangedRetriesScheduled": false,
+  "testOwnedProcessesAfterSourceTests": 0,
+  "intentionalServingOwnersPreserved": true,
+  "wakeHostStopped": true,
+  "independentWorkCompleted": "Three-file source improvement with16 behavior cases, formatting and both strict Clippy checks; no source/producer acceptance fabricated.",
+  "nextEligibleTask": "Qualify immutable diagnostic development package and inspect the held event with new phase metadata. Requests15-22 remain untouched; covered14 must not replay.",
+  "operatorActionRequired": false,
+  "sourceAccepted": false,
+  "producerAuthority": false
+}

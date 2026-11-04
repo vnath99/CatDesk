@@ -1,0 +1,73 @@
+{
+  "installedSha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf",
+  "rollback": {
+    "immutableReleaseArtifactsAndPointerPreserved": true,
+    "previousAuthenticatedMcpStatus": 200,
+    "previousSha256": "91eea19e6e030e80900d43114f800c3642f5cc063ef2c969b83eb20d2c28d14b",
+    "outerSha256": "fdf2ad2c63833329f4dd6b7c2255717b5abb1dfbe84292cd65bf67ad140816f7",
+    "actualCanonicalPairRestored": true,
+    "artifactBytesOrAclEdited": false,
+    "restoredCurrentAuthenticatedToolCount": 102,
+    "resultSha256": "12273c0e6024495a5cb3472e3052eab2c8fee0fcce2b6ef31c1db3b441d24f8a",
+    "forwardPublicRecoveryPassed": true,
+    "previousReadOnlyToolCount": 10,
+    "previousNaturalExit": true,
+    "fault": "CURRENT_RECOVERY_SLOT_TEMPORARILY_UNREADABLE_USING_RETAINED_HANDLE",
+    "previousSupportedMode": "BOUNDED_READ_ONLY_HEADLESS_MCP",
+    "previousPublicBackendOnlySupported": false
+  },
+  "cleanup": {
+    "remainingCatdeskImages": 0,
+    "browserStarts": 0,
+    "remainingPort3200Owners": 0,
+    "recurringAutomationStarts": 0,
+    "remainingTestBrowserProfileOwners": 0,
+    "officialRuntimeStarts": 0,
+    "wakeStarts": 0
+  },
+  "connector": {
+    "authChanges": 0,
+    "officialRuntimeProcessRunning": false,
+    "officialRuntimeReady": false,
+    "classification": "EXTERNAL_CONNECTOR_DEPENDENCY",
+    "message": "MCP SSE probe returned 429 from openai.org",
+    "httpStatus": 429,
+    "attempts": 1,
+    "tunnelChanges": 0
+  },
+  "installedCandidateSourceCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "observedDate": "2026-10-28",
+  "launcherCorrectionSourceCommit": "741e4aaa3407680006901fe7d3b982a92a260d30",
+  "schemaVersion": 1,
+  "startup": {
+    "publicStartStopCycles": 2,
+    "outerSha256": "f967a10a1b3aee5f7f263065acf166480dfdc731a6f3e87de149a18dd9b8c99f",
+    "authenticatedInitializeAndToolsStatus": 200,
+    "resultSha256": "fed05c1676ceccf4978a33169ed0a18c709ffb09238d83aae7a5141f37382f5b",
+    "installedPathAndShaVerified": true,
+    "missingAndWrongAuthStatus": 401,
+    "toolCount": 102
+  },
+  "classification": "INSTALLED_LOCAL_BACKEND_AND_ROLLBACK_VERIFIED_WEB_ACCEPTANCE_OPEN",
+  "acceptance": {
+    "currentServingState": "STOPPED_AFTER_BOUNDED_TESTS",
+    "twoChatGPTWebCodingConversations": "UNVERIFIED_CONNECTOR_429",
+    "sourceTests": "PASS_CORE_AND_WINDOWS_BOOTSTRAP_AND_REAL_NATIVE_CAPABILITY",
+    "unattendedOperation": "UNVERIFIED",
+    "installedLocalBackend": "PASS_BOUNDED",
+    "remoteSourceShaVerified": true,
+    "installedRollback": "PASS_ACTUAL_PAIR_AND_RUNTIME",
+    "ci": "UNVERIFIED_ZERO_EXACT_COMMIT_RUNS",
+    "unknownWebSubmissions": "PRESERVED_NO_REPLAY"
+  },
+  "preservation": {
+    "verificationSha256": "ef04c7bf102f62748e460b99d2d692a3c2a2cd832448b2aa97ef7f4cf9f48f27",
+    "projectBindingChanges": 0,
+    "nativeSessionActions": 0,
+    "registryWakeExactAgreement": true,
+    "metadataPinsVerified": 2,
+    "registeredProjectPairsVerified": 5,
+    "hashedPinsVerified": 8502,
+    "failures": 0
+  }
+}

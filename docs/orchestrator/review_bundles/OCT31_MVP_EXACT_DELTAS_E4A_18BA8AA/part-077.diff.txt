@@ -1,0 +1,172 @@
++                            &record,
++                            &current,
++                            revoke,
++                            allow_manual_wake,
++                            native_queue_task_id,
++                        )
++                    } else if allow_manual_wake {
++                        crate::project_mcp_task::grant_web_execution_with_manual_wake(
++                            scope, &record, &current, revoke, true,
++                        )
++                    } else {
++                        crate::project_mcp_task::grant_web_execution(
++                            scope, &record, &current, revoke,
++                        )
++                    }
+                 }
+                 AssignmentAction::Authorize(key) => {
+                     let archive =
+-                        crate::project_mcp_task::authorized_web_assignment(&scope, &record, key)?;
++                        crate::project_mcp_task::authorized_web_assignment(scope, &record, key)?;
+                     // Do not acquire the task writer during authorization: stale or
+                     // mismatched caller identity must refuse before task startup.
+                     Ok(
+diff --git a/src/windows_protected_fs.rs b/src/windows_protected_fs.rs
+index 855b4dd14a502463792a7aa2c2cd7983e08eb4e9..8685c3f0f25b73a74a62fd9717a311368ea404f8 100644
+--- a/src/windows_protected_fs.rs
++++ b/src/windows_protected_fs.rs
+@@ -752,7 +752,9 @@ impl ProtectedDirectoryGuard {
+     /// can only make this fail closed.
+     #[cfg(windows)]
+     pub(crate) fn reopen_direct_child_for_delete(mut self, label: &str) -> Result<Self, String> {
+-        if self.directories.len() != 2 {
++        // The final object is a direct child of the preceding pinned handle,
++        // including when that parent has its own retained ancestor chain.
++        if self.directories.len() < 2 {
+             return Err(format!("{label} is not a direct child"));
+         }
+         self.assert_stable(label)?;
+diff --git a/src/windows_supervisor_startup.rs b/src/windows_supervisor_startup.rs
+index 1665a9f45e9c3306b0a33c44f32eae4ea25f3d9f..5db1048720e83635dd7cdf7b199838d3452b525a 100644
+--- a/src/windows_supervisor_startup.rs
++++ b/src/windows_supervisor_startup.rs
+@@ -577,6 +577,15 @@ fn native_hresult_reason(
+     }
+ }
+ 
++/// GetTask reports HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) for an absent
++/// task. 0x8004130F is SCHED_E_ACCOUNT_INFORMATION_NOT_SET, not absence.
++/// A failed lookup must also return no object before absence can authorize
++/// the existing create-only registration path.
++fn native_task_lookup_is_absent(status: i32, object_is_null: bool) -> bool {
++    const HRESULT_FILE_NOT_FOUND: i32 = 0x8007_0002_u32 as i32;
++    status == HRESULT_FILE_NOT_FOUND && object_is_null
++}
++
+ #[cfg(windows)]
+ mod native {
+     use std::ffi::c_void;
+@@ -587,7 +596,6 @@ mod native {
+         SupervisorStartupDefinitionStateV1, SupervisorStartupErrorV1, xml_is_exact_owned,
+     };
+ 
+-    const SCHED_E_TASK_NOT_FOUND: i32 = 0x8004_130F_u32 as i32;
+     const TASK_CREATE: i32 = 0x2;
+     const TASK_UPDATE: i32 = 0x4;
+     const TASK_LOGON_INTERACTIVE_TOKEN: i32 = 3;
+@@ -841,7 +849,7 @@ mod native {
+         let mut task_raw = std::ptr::null_mut();
+         let get_task: ITaskFolderGetTask = unsafe { method(folder.0, I_TASK_FOLDER_GET_TASK_SLOT) };
+         let hr = unsafe { get_task(folder.0, name.as_ptr(), &mut task_raw) };
+-        if hr == SCHED_E_TASK_NOT_FOUND {
++        if super::native_task_lookup_is_absent(hr, task_raw.is_null()) {
+             return Ok(None);
+         }
+         if hr < 0 || task_raw.is_null() {
+@@ -967,6 +975,19 @@ mod native {
+     mod abi_tests {
+         use super::*;
+ 
++        #[test]
++        #[ignore = "read-only Windows host qualification; requires the fixed task to be absent"]
++        fn fixed_task_absence_is_observed_through_actual_com() {
++            let (_apartment, service) = connect_service().expect("Task Scheduler connection");
++            let folder = root_folder(&service).expect("Task Scheduler root");
++            assert!(
++                existing_task_xml(&folder)
++                    .expect("fixed task lookup must distinguish absence from lookup failure")
++                    .is_none(),
++                "qualification requires the fixed task to remain absent; no task is mutated"
++            );
++        }
++
+         #[derive(Default)]
+         struct FakeComVtable {
+             calls: Vec<usize>,
+@@ -1061,6 +1082,24 @@ mod native {
+ mod tests {
+     use super::*;
+ 
++    #[test]
++    fn only_file_not_found_without_an_object_is_task_absence() {
++        assert!(native_task_lookup_is_absent(0x8007_0002_u32 as i32, true));
++        assert!(!native_task_lookup_is_absent(0x8007_0002_u32 as i32, false));
++        for status in [
++            0,
++            1,
++            0x8004_130F_u32 as i32, // account information is missing
++            0x8007_0005_u32 as i32, // access denied
++            0x8007_0003_u32 as i32, // folder/path unavailable
++            0x8007_06BA_u32 as i32, // scheduler RPC unavailable
++            -1,
++        ] {
++            assert!(!native_task_lookup_is_absent(status, true));
++            assert!(!native_task_lookup_is_absent(status, false));
++        }
++    }
++
+     #[test]
+     fn authority_accepts_only_non_system_interactive_sid_shape() {
+         assert!(
+diff --git a/tests/test_wake_bridge.py b/tests/test_wake_bridge.py
+index ac9bb2736979c7f5970844c72595323abd03b813..ff0b1fc3e3303b4c6a238d4327ea62be47fef282 100644
+--- a/tests/test_wake_bridge.py
++++ b/tests/test_wake_bridge.py
+@@ -1878,6 +1878,7 @@ class WakeBridgeTests(unittest.TestCase):
+         self.assertIn("inWakeExchange", response.script)
+ 
+         class RetryCdp:
++            def get_current_url(self): return "https://chatgpt.com/c/review-one"
+             def evaluate(self, script):
+                 self.script = script
+                 return "clicked"
+@@ -2530,6 +2531,10 @@ class WakeBridgeTests(unittest.TestCase):
+                 "RESPONSE_NETWORK_ERROR",
+                 "RESPONSE_GENERATION_TIMEOUT",
+                 "RESPONSE_COMPLETION_UNPROVEN",
++                "RESPONSE_LOAD_ERROR",
++                "RESPONSE_RETRY_BLOCKED_DRAFT",
++                "RESPONSE_RETRY_BLOCKED_GENERATION",
++                "RESPONSE_RETRY_EDITOR_UNAVAILABLE",
+                 "RESPONSE_TIMEOUT_RETRY_AMBIGUOUS",
+                 "RESPONSE_RETRY_EXHAUSTED",
+                 "RESPONSE_TIMEOUT_STATE_LOST",
+diff --git a/tests/test_wake_bridge_current_dom.py b/tests/test_wake_bridge_current_dom.py
+index 9d477ae0a23b3b11c7e95ea23b0db54a56fa3dfe..51eacfbb1693e619ac3472c1a9c5c851895c27dc 100644
+--- a/tests/test_wake_bridge_current_dom.py
++++ b/tests/test_wake_bridge_current_dom.py
+@@ -76,8 +76,10 @@ class Element {
+   }
+   cloneNode() { return new Element(this.tagName, {...this.attrs}, this.text, this.children.map(c => c.cloneNode())); }
+   remove() { this.parentElement.children = this.parentElement.children.filter(c => c !== this); }
++  click() { mutations++; }
+ }
+ const el = (tag, attrs = {}, text = '', children = []) => new Element(tag, attrs, text, children);
++const append = (parent, child) => { child.parentElement = parent; parent.children.push(child); };
+ const button = label => el('button', {'aria-label':label}, label);
+ const user = el('div', {'data-content-search-unit-key':'fallback-turn-0:0:user'}, '', [
+   el('div', options.userClassOnly ? {class:'group/user-message'} : {'data-user-message-bubble':'true'}, '', [
+@@ -112,16 +114,46 @@ if (options.nestedUserMarkers) {
+   }
+ }
+ if (options.userShowMore) user.children[0].children.push(el('span', {}, '…'), button('Show more'));
++if (options.userControlsInsideBody)
++  append(user.children[0].children[0], button('PRIVATE_CONTROL_LABEL'));
++if (options.userParagraphs) {
++  const body = user.children[0].children[0];
++  body.text = ''; body.children = [el('p', {}, 'first paragraph'), el('p', {}, 'second paragraph')];
++}
++if (options.userBodyIsUnit) {
++  user.text = user.children[0].children[0].text;
++  user.attrs['data-markdown-text-tone'] = 'user-message';
++  user.attrs['data-user-message-bubble'] = 'true';

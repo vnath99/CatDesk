@@ -1,0 +1,89 @@
+{
+  "recordedUtc": "2026-10-22T20:40:24.8164692Z",
+  "task": "C2-WEB-CONSOLE",
+  "evidenceType": [
+    "SOURCE",
+    "TESTED_LOCAL"
+  ],
+  "baseHead": "5f1bb58900581453c1ffc427746794ac55b6f7f3",
+  "branch": "codex/web-rollover-oct17",
+  "sourceFiles": [
+    {
+      "path": "src/binagotchy_cli.rs",
+      "sha256": "8c67173e261fad9438ab0805de45d650a082a90bf5b18f212fc7f63230cf203e"
+    },
+    {
+      "path": "src/operator_facade.rs",
+      "sha256": "a44bf9fe0a12593d147c2840e9a4631f830e184433eaf04757944e6bfd2e42a8"
+    },
+    {
+      "path": "src/operator_web_cli.rs",
+      "sha256": "b6415085bf924952fd053013b70773db10b7dcd6ce799a9e6f03bf856c92821b"
+    },
+    {
+      "path": "src/web_development_tests.rs",
+      "sha256": "44168a178dd482ad5de4fe0341bb91d1462b453a8ebd7f2e1a3492c661ed2619"
+    }
+  ],
+  "checks": [
+    {
+      "command": "cargo test binagotchy_cli::tests -- --test-threads=1",
+      "passed": 19,
+      "failed": 0,
+      "exitCode": 0
+    },
+    {
+      "command": "cargo test web_development_tests:: -- --test-threads=1",
+      "passed": 3,
+      "failed": 0,
+      "exitCode": 0
+    },
+    {
+      "command": "cargo clippy --all-targets -- -D warnings",
+      "exitCode": 0
+    },
+    {
+      "command": "cargo fmt --all -- --check",
+      "exitCode": 0
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0
+    }
+  ],
+  "privateLogDigests": [
+    {
+      "artifact": "binagotchy-tests.txt",
+      "sha256": "47be54c9cb16307665d05d48b99fbf6b38717840c8f05c9b980e3309c5c0c3a6",
+      "exitCode": 0
+    },
+    {
+      "artifact": "web-development-tests.txt",
+      "sha256": "6243e2bea9a43d393d89efc273cc9f21cbfe1d25227594ab65050e64334eeb40",
+      "exitCode": 0
+    },
+    {
+      "artifact": "clippy.txt",
+      "sha256": "2cc7b537039b975c4e577e50ec7d1152c73a07c7bd5f11c0b7e8d702c53dd8cb",
+      "exitCode": 0
+    }
+  ],
+  "installedAcceptance": "UNVERIFIED",
+  "completedCanaryReplayed": false,
+  "browserStarted": false,
+  "wakeHostStarted": false,
+  "productionModified": false,
+  "remote": "https://github.com/vnath99/CatDesk",
+  "publication": {
+    "observedUtc": "2026-10-22T20:42:29.8841254Z",
+    "status": "PUSHED_EXACT_REMOTE_MATCH",
+    "sourceCommit": "d719658abe4f0d628c66b2a0543f38d16e5496d4",
+    "remoteSha": "d719658abe4f0d628c66b2a0543f38d16e5496d4",
+    "branch": "codex/web-rollover-oct17",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ciAcceptance": "UNVERIFIED",
+    "force": false,
+    "visibilityChange": false
+  }
+}

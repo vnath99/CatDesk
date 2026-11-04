@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "c52e9ef75490381becabaaf027f98f2845f1a183",
+  "acceptedBaselineCommit": "313f6a31f13c04c90d6098fad57f1e6a6c99cfd7",
+  "scopeCounts": {
+    "UNCHANGED_ACCEPTED": 78,
+    "CHANGED_REQUIRES_REVIEW": 6,
+    "NEW": 2
+  },
+  "fullDeclaredCodePaths": 86,
+  "scopeDigest": "a327e9405ec439ad43ccc983e90f1962bcde3cf7ce0197d4378be417d5c6558e",
+  "group": 6,
+  "status": "PREPARED_SOURCE_INPUTS_NOT_REVIEW_ACCEPTANCE",
+  "inputs": [
+    {
+      "number": 41,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 2301,
+      "lastLine": 2360,
+      "command": "git --no-optional-locks --no-pager blame -L 2301,2360 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 4972,
+      "sha256": "e507a8451c52f0980d0453403c7dc879b45039ace8aeefae4b10ea785a2b5913"
+    },
+    {
+      "number": 42,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 2361,
+      "lastLine": 2420,
+      "command": "git --no-optional-locks --no-pager blame -L 2361,2420 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 5238,
+      "sha256": "6539d9c919e21f46a36abd77c3cd321eb45c0011c92addc0bc033a7ac6692de4"
+    },
+    {
+      "number": 43,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 2421,
+      "lastLine": 2480,
+      "command": "git --no-optional-locks --no-pager blame -L 2421,2480 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 5376,
+      "sha256": "cf7c67696bec0e44fb33bccc304354a6c6f62ed85feb5ba78de77edd081351ed"
+    },
+    {
+      "number": 44,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 2481,
+      "lastLine": 2484,
+      "command": "git --no-optional-locks --no-pager blame -L 2481,2484 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 452,
+      "sha256": "a36bd3f010279d8e004579c8c11ef58861e28c0eecee6a7f30ae489d4ed8fe78"
+    },
+    {
+      "number": 45,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 2813,
+      "lastLine": 2872,
+      "command": "git --no-optional-locks --no-pager blame -L 2813,2872 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 4594,
+      "sha256": "416299220a360f6654f3e0b031cb8d38cb0414e4f753a3fdbf77c86bb17578d3"
+    },
+    {
+      "number": 46,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 2873,
+      "lastLine": 2904,
+      "command": "git --no-optional-locks --no-pager blame -L 2873,2904 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 2887,
+      "sha256": "b3657991408b1eeb3cc4d8b70d513cc3f3efbaf6ee909fa236008accdb15eec3"
+    },
+    {
+      "number": 47,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 2925,
+      "lastLine": 2957,
+      "command": "git --no-optional-locks --no-pager blame -L 2925,2957 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 3291,
+      "sha256": "65c7253b9ffe6aaae5ceeade2bf2756876b9da0ec5e93e43f116dddf806a25ac"
+    },
+    {
+      "number": 48,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 2967,
+      "lastLine": 2995,
+      "command": "git --no-optional-locks --no-pager blame -L 2967,2995 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 2703,
+      "sha256": "cd546f775289faa680c690789d77294cd7a7d1ebd7b7f8157daf9943942861c1"
+    }
+  ],
+  "limitations": [
+    "Prior baseline acceptance covers only unchanged Git blobs.",
+    "All 86 paths remain declared; inspect six changed and two new paths before cumulative current-source acceptance.",
+    "Package health and a source coordinator review do not establish independent review, producer or protected publication authority.",
+    "Retain expanded regression deadline failure and source/installed/live distinctions."
+  ]
+}

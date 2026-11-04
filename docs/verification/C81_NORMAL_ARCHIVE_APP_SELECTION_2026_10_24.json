@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C81_NORMAL_V2_ARCHIVE_APP_SELECTED_STOPPED",
+  "observedUtc": "2026-10-24T06:55:48.2507893+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "parentCommit": "bce0e1d9aea836948e7d791141bef0214def2cd0",
+  "sourceCommit": "bce0e1d9aea836948e7d791141bef0214def2cd0",
+  "sourceTree": "8b9ecd2bcabb4c01eeda8d231298b4be2cbe753c",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "NORMAL_RELEASE_BUILD_AND_SELECTED_STOPPED_UNPROTECTED_DEVELOPMENT",
+  "normalBuild": {
+    "finishedUtc": "2026-10-24T06:52:50.4298165+00:00",
+    "exitCode": 0,
+    "sourceFrozen": true,
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+    "startedUtc": "2026-10-24T06:46:27.7585559+00:00",
+    "imageSha256": "27440357a6bac62457319f673032206d369eab4a107fa98705cf0744a79ab41b",
+    "imageBytes": 34875904,
+    "elapsedSeconds": 382.6725723,
+    "maximumSeconds": 600,
+    "sourceFiles": [
+      {
+        "path": "src/operator_web_rollover.rs",
+        "sha256": "b370ce9c4746b81f88db414cba9d747e351dae45fecdaaa268526b7eda07af28"
+      },
+      {
+        "sha256": "0f162cd0a49f5166a95a88aba3be08afe04c3ec2010ce51a66504d44d3c77bdb",
+        "path": "scripts/wake_bridge.py"
+      },
+      {
+        "sha256": "137f8f9b490f46ed73422ab1293b8226f315a48314c3ce7560954795a2786734",
+        "path": "tests/test_wake_bridge.py"
+      },
+      {
+        "sha256": "0686ae77d3f4ed7ff6fc1dcfcffe07c212f8e4aea515ed069c73e11993782b97",
+        "path": "wake/adapter.py"
+      }
+    ]
+  },
+  "selected": {
+    "reusedBridgeQualificationVerified": true,
+    "scopedProcessCount": 0,
+    "previousPackagePreserved": true,
+    "selectedViewPassed": true,
+    "v2ArchiveLiveAcceptance": false,
+    "allowedPackagePointerChanges": 2,
+    "nativeSessionsChanged": false,
+    "classification": "SELECTED_STOPPED_DEVELOPMENT_MATCHED_RELEASE_UPDATE",
+    "atUtc": "2026-10-24T06:53:55.6837792Z",
+    "recurringStarted": false,
+    "stateRecordsChecked": 297,
+    "failure": null,
+    "messagesSent": 0,
+    "sourceCommit": "bce0e1d9aea836948e7d791141bef0214def2cd0",
+    "elapsedSeconds": 7.2149563,
+    "unchangedProtectedRecords": 295,
+    "appSourceCommit": "bce0e1d9aea836948e7d791141bef0214def2cd0",
+    "selectedPackage": "1.0.0-dev.85-8a2257ddfb5f8cf70607854981a0f700ea4b063176d293e174d6daa5a6819d5b",
+    "bridgeSourceCommit": "5e71ef8ef62b6306610a49fee26bd5de28206976",
+    "exactPairedReads": 10,
+    "protectedInstalledAcceptance": false,
+    "controls": [
+      "STOPPED",
+      "STOPPED"
+    ],
+    "unexpectedChanges": 0,
+    "newStateRecords": 0,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "hostSourceCommit": "5e71ef8ef62b6306610a49fee26bd5de28206976",
+    "browserProfileAction": "NONE",
+    "previousPackage": "1.0.0-dev.85-53205c45b5e939db37b678324c9c2c1adb1eb06850893b694f9018285ec4ca49",
+    "productionModified": false
+  },
+  "packageFiles": [
+    {
+      "name": "adapter.py",
+      "bytes": 51207,
+      "sha256": "0686ae77d3f4ed7ff6fc1dcfcffe07c212f8e4aea515ed069c73e11993782b97"
+    },
+    {
+      "name": "CatDeskBinagotchy.exe",
+      "bytes": 34875904,
+      "sha256": "27440357a6bac62457319f673032206d369eab4a107fa98705cf0744a79ab41b"
+    },
+    {
+      "name": "CatDeskWakeHost.exe",
+      "bytes": 2083328,
+      "sha256": "bd8ef10570d79e5e4090b210a005ba8f4e0616a1a437309f5bfc847d4e4ea2cd"
+    },
+    {
+      "name": "wake_bridge.py",
+      "bytes": 180478,
+      "sha256": "0f162cd0a49f5166a95a88aba3be08afe04c3ec2010ce51a66504d44d3c77bdb"
+    }
+  ],
+  "componentProvenance": {
+    "existingOwnerEofProofRetained": true,
+    "bridgeSource": "5e71ef8ef62b6306610a49fee26bd5de28206976",
+    "existingC70BrowserAndC72BridgeProofRetainedNotReplayed": true,
+    "appSource": "bce0e1d9aea836948e7d791141bef0214def2cd0",
+    "hostRebuilt": false,
+    "wakeSubtreeAndEmbeddedScriptsUnchanged": true,
+    "hostQualification": "REUSED_EXACT_C72_NORMAL_IMAGE_SOURCE_ASSETS_AND_OWNER_EOF_PROOF",
+    "hostSource": "5e71ef8ef62b6306610a49fee26bd5de28206976"
+  },
+  "preservation": {
+    "bothControls": "STOPPED",
+    "runtimeRecords": 297,
+    "nativeActions": 0,
+    "activeProjects": 10,
+    "previousPackagePreserved": true,
+    "browserWakeRecurringStarts": 0,
+    "scopedOwners": 0,
+    "otherRecordsByteExact": 295,
+    "retiredProjects": 1,
+    "changedRecords": 2,
+    "onlyChanges": "DEVELOPMENT_PACKAGE_AUTHORITY_AND_CURRENT_POINTER",
+    "productionChanged": false,
+    "allBindingsAndHistoryPreserved": true,
+    "messagesSent": 0
+  },
+  "containment": {
+    "buildExit": 0,
+    "selectionExit": 0,
+    "selectionTimedOut": false,
+    "buildTimedOut": false,
+    "selectionSeconds": 180,
+    "buildSeconds": 600
+  },
+  "acceptance": {
+    "selectedStopped": "PASS_10_PAIRED_READBACKS",
+    "protectedInstalled": "NOT_QUALIFIED",
+    "actualUnknownPostSendKill": "NOT_RUN",
+    "v2LiveArchive": "NOT_RUN",
+    "source": "C80_PASS_54_ROLLOVER_CLIPPY_FMT",
+    "fullOctoberMilestone": "OPEN",
+    "normalRelease": "PASS",
+    "actualParallelWebCodingBC": "OPEN_CONNECTOR_BACKEND_AND_CATALOG",
+    "unattended": "NOT_ACTIVATED"
+  },
+  "nextTask": "Reuse only the completed controlled project current generation-two source in a new stable task/intent. Prepare a new bounded SEND_ATTEMPTED interruption, cold no-resend check and exact-owned archival or read-only empty-home classification. Preserve all previous messages, journals and bindings; no recurring or production activation."
+}

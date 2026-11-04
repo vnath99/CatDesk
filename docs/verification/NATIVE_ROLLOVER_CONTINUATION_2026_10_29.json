@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T01:18:07.032869+00:00",
+  "activityDateLocal": "2026-10-29",
+  "timezone": "America/New_York",
+  "classification": "TESTED_SOURCE_WITH_SYNTHETIC_CONTINUATION_PROOF_AND_DISPOSABLE_WINDOWS_PROVIDER",
+  "sourceCommit": "da2f5ac9ff41ce8ea1fe22783fbb7e3f892da445",
+  "sourceBranch": "codex/web-rollover-oct17",
+  "sourceBlobSha256": {
+    "src/operator_codex_cli.rs": "04649a9a85e2823670f6b905aac9256fcd3833b97ee004eb1cffe3c89cb6cb7b",
+    "src/operator_codex_cli/queue.rs": "480d9106c40c0987265372e8937bed5893641a0b0f8880eae4d8736527f29ce5",
+    "src/operator_codex_cli/queue/native_continuation.rs": "fbd13ecbb35c40b97ce4cca24f8046831abddc42f510e1b32e99611a4b094443",
+    "src/operator_codex_cli/queue/native_dispatch.rs": "5b3ee8a8fb2c3530b22bda525c7eb2e4669c86ba0a16f0516a383687282d8f9d",
+    "src/operator_facade.rs": "e3ffdb93d744a8ca2c50847465c630cd7428fdca2c78aae82bb6430d00884592",
+    "src/operator_web_cli.rs": "efefb2dcb21474153bde2fa5c4b61f8135bb85429b277cf97a4913714d774810",
+    "src/operator_web_rollover.rs": "4f9ee4ea2a85ea4104c4ee34cf393fc0d9b9fa23304b161525d36304eaa009e2",
+    "src/project_mcp_task.rs": "ed9d1497760039d1299c632d5788b1a2b17b90da3817a939b83d1ea43400ad4c",
+    "src/web_task_dispatch.rs": "ee78f65d790a6cd7da0fed9c9324625473a4af40cbcc4d616181e2623c29f5a3",
+    "src/web_work.rs": "206211204393c2c97a4b883bc3543f7e4e2e21cc9a0abd6207c1834b2c1b455e"
+  },
+  "tests": {
+    "queue": {
+      "passed": 107,
+      "failed": 0,
+      "ignored": 2
+    },
+    "assignment": {
+      "passed": 11,
+      "failed": 0,
+      "ignored": 2
+    },
+    "c46": {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    "dispatcher": {
+      "passed": 18,
+      "failed": 1,
+      "ignored": 0,
+      "failedCode": "WEB_CONTEXT_REGISTRATION_BUSY",
+      "focusedTwoClientRecheckPassed": 1,
+      "distinctCasesPassedAcrossRuns": 19,
+      "fullOuterParallelRunQualified": false,
+      "failureStage": "SIMULTANEOUS_MANUAL_WAKE_ADMISSION_AFTER_SUCCESSFUL_PREVIEWS_AND_PATCHES"
+    }
+  },
+  "distinctPassedAcrossRuns": 138,
+  "fullMatrixPass": false,
+  "outerTestThreads": 2,
+  "rustfmt": "PASS",
+  "strictAllTargetClippy": "PASS",
+  "verified": [
+    "Existing completed-continuation lease gates exact project/source task/current paired target; a manual URL change grants no native continuation",
+    "Original immutable grant, native request hash, job binding, attempt and receipt remain preserved",
+    "Prepare deterministic dormant child; atomically pause/link parent; then activate child under existing queue lock",
+    "Cold metadata recovery at all three write boundaries yields one linked continuation; a missing committed child refuses replay",
+    "Source/model/effort/sandbox/native workspace/thread/Git identity/profile remain pinned; only child identity and target digest change",
+    "Only unattempted work or an exact CHILD_ABSENT_BEFORE_SPAWN receipt may migrate; active, completed, failed, unknown and operator-paused jobs do not clone",
+    "Changed native owner/corrupt dormant child/foreign source event refused without rewriting original evidence",
+    "Multiple proved rollovers preserve linked lineage; a dormant intermediate child never becomes runnable at its obsolete target",
+    "Existing journal checks completed/unknown/budget fences before migration; argument identity remains the original grant",
+    "MCP fixture dispatch executes the linked child once; status and handoff follow its receipt; regrant preserves exact bytes",
+    "Completed calls remain fenced after a second rollover; ambiguous source call creates no continuation and does not block peer fixture work",
+    "Existing direct/cached HTTP, ownership, authentication, manual Wake and native descendant cleanup regressions retained"
+  ],
+  "faultModel": "Injected return after persisted metadata phases followed by fresh queue reads; not an actual browser or production crash",
+  "actualChatGPTWebCalls": 0,
+  "realModelCalls": 0,
+  "newInstalledRelease": false,
+  "cleanup": {
+    "testOwnedFixtureProcessesRemaining": 0,
+    "pinnedCriticalFilesUnchanged": 6,
+    "scope": "Six selected existing baseline files; existing user browsers and native sessions preserved",
+    "browserWakeTunnelOrRecurringProcessesStarted": 0
+  },
+  "initialFailuresPreserved": [
+    "Compilation used two non-existent test state names; corrected to existing Unknown/Attention variants",
+    "Initial queue suite:106 passed/1 failed/2 ignored. A Git-remote edit was refused earlier by the existing registry admission; corrected fixture to change native thread identity",
+    "Initial dispatcher suite:18 passed/1 failed. Changed-request refusal was correct; old text assertion replaced with exact WEB_TASK_NATIVE_REQUEST_CHANGED",
+    "Final outer-parallel dispatcher suite:18 passed/1 failed with WEB_CONTEXT_REGISTRATION_BUSY during simultaneous manual-Wake admission. Same two-client case passed alone; the contention defect remains OPEN"
+  ],
+  "logSha256": {
+    "oct29-native-continuation-dispatcher-suite.log": "ed7bd1ccd560c27d3c340c99794443cfd24365ff80114e868d35044e3e11756d",
+    "oct29-native-continuation-final-assignment.log": "1f243af8b06fa59506ea27546815a8fc3a52524c8e7f6def97af3f956615e268",
+    "oct29-native-continuation-final-c46.log": "8dcb484d31ecf5ef9d9c543af20a2343eb241e92c11af7790cd3966abd133692",
+    "oct29-native-continuation-final-clippy.log": "400d6e89d9c2295dff344b3ad6225a4f0c4d8c504db600a54d95bfa1ed816676",
+    "oct29-native-continuation-final-dispatcher.log": "37b03b4692dacd27d50d61e82378d957fc2aeaaa76c70cd5e701f1d69f5f09b6",
+    "oct29-native-continuation-final-queue.log": "9c0a20a710ba878ae912fc145667cf6f7043c18f43c13c8ced71de7193d651d8",
+    "oct29-native-continuation-fixed-tests.log": "4280eb4c3048201de307dd0f4d99f1fb9dd9c18ebd5268923f79804e4d54982c",
+    "oct29-native-continuation-http-contention-diagnostic.log": "21f1fbba5304fe7e25b3873c26e43d54d6bf5a81b6a326ee4f95e1a251a5e335",
+    "oct29-native-continuation-initial-tests.log": "fca96d7e7df55424c771eb3ebce7c156a2f893e6fc1f43e704d4e0b6d66f8432",
+    "oct29-native-continuation-queue-suite.log": "1f229125f5c404f0c2deca0988d65ed85db4761dbdfcd285e7ca8d319ec14275"
+  },
+  "limits": [
+    "No installed candidate, selected development package, production migration, browser rollover or genuine Web caller qualified by this slice",
+    "Synthetic C46 receipts are test-only and provide no live review, delivery or release authority",
+    "Existing unlinked jobs serialize without the optional metadata; pending linked jobs require a qualified writer, so do not downgrade an active queue writer to a controller that ignores these fields",
+    "Lineage is bounded to64 records and existing queue capacity512; evidence loss, corruption or capacity require inspection, never blind resend or metadata deletion",
+    "Connector/profile prerequisites unchanged; no completed/unknown canary replayed",
+    "Shared registration admission can refuse a simultaneous manual-Wake request before tool execution; focused recheck passes, but full outer-parallel acceptance remains OPEN",
+    "Hosted exact-commit CI remains UNVERIFIED pending independent readback"
+  ],
+  "diagnosticStageCorrection": {
+    "observedUtc": "2026-10-30T01:40:04.982289+00:00",
+    "previousDescription": "parallel preview",
+    "actualStage": "SIMULTANEOUS_MANUAL_WAKE_ADMISSION_AFTER_SUCCESSFUL_PREVIEWS_AND_PATCHES",
+    "sourceCommit": "da2f5ac9ff41ce8ea1fe22783fbb7e3f892da445",
+    "sourceFile": "src/web_task_dispatch.rs",
+    "assertionLine": 2138,
+    "code": "WEB_CONTEXT_REGISTRATION_BUSY",
+    "failureLogSha256": "37b03b4692dacd27d50d61e82378d957fc2aeaaa76c70cd5e701f1d69f5f09b6"
+  }
+}

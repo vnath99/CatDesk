@@ -1,0 +1,233 @@
++        // Keep call identity tied to the immutable grant, even after a proved
++        // continuation selects a linked native job. Check replay/unknown fences
++        // before changing queue metadata; record execution only after migration.
++        let hash = stable_text_hash(
++            &serde_json::to_string(&selection).map_err(|_| "WEB_TASK_NATIVE_SELECTION_INVALID")?,
++        );
++        prepare_journaled_task_call_checked(
++            project,
++            &inspected,
++            call_id,
++            "native.codex.dispatch",
++            hash.clone(),
++            false,
++        )?;
++        let selection = crate::operator_codex_cli::continue_native_queue_selection_prepared(
++            prepared,
++            &selection,
++            lease,
++            &record.target,
++            current,
++            &record.event_id,
++        )?;
++        crate::operator_codex_cli::check_native_queue_selection_prepared(prepared, &selection)?;
++        let journal = prepare_journaled_task_call(
++            project,
++            &inspected,
++            call_id,
++            "native.codex.dispatch",
++            hash,
++        )?;
++        Ok(NativeTaskCall { selection, journal })
++    }
++}
++
++impl NativeTaskCall {
++    pub(crate) fn finish(self, result: &Result<Value, String>) -> Result<(), String> {
++        let (phase, hash, summary) = match result {
++            Ok(value) if value["status"] == "prelaunch_refused" => (
++                ToolCallStatus::Failed, Some(catdesk_wake::protocol::digest(&value.to_string())),
++                "Native preflight refused before task claim/launch; retry only after prerequisite changes".into()),
++            Ok(value)
++                if value["status"] == "no_ready_tasks"
++                    || matches!(
++                        value["job"]["state"].as_str(),
++                        Some("NATIVE_EXITED_ZERO" | "FAILED" | "READY")
++                    ) =>
++            {
++                (
++                    ToolCallStatus::Completed,
++                    Some(catdesk_wake::protocol::digest(&value.to_string())),
++                    "Native dispatch receipt recorded; task verification remains separate".into(),
++                )
++            }
++            Ok(_) => (
++                ToolCallStatus::OutcomeUnknown,
++                None,
++                "Native dispatch needs recovery; no replay".into(),
++            ),
++            Err(reason) => (ToolCallStatus::OutcomeUnknown, None, reason.clone()),
++        };
++        self.journal
++            .journal
++            .transition_tool_call(
++                &self.journal.run,
++                &self.journal.tool_call_id,
++                phase,
++                hash,
++                Some(summary),
++            )
++            .map(|_| ())
++            .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED".to_owned())
++    }
+ }
+ 
+ fn check_linked_assignment(
+diff --git a/src/promotion_retirement.rs b/src/promotion_retirement.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..8d3825761dc1f283ede4664ab77f6404c05f67fe
+--- /dev/null
++++ b/src/promotion_retirement.rs
+@@ -0,0 +1,1479 @@
++//! Explicit stopped-only retirement of an audited failed promotion.
++//! Original authority and handoff bytes are moved, never erased or rewritten.
++use super::*;
++use std::collections::BTreeMap;
++
++const LABEL: &str = "stopped promotion retirement";
++const JOURNAL: &str = "promotion-retirement.json";
++const RECORDS: [&str; 6] = [
++    "authorization.json",
++    "claim.json",
++    "preflight.json",
++    "result.json",
++    "reviewed-build-attestation.json",
++    "worker-owner",
++];
++
++pub(crate) struct MutationLease {
++    _namespace: Guard,
++    _lock: crate::windows_protected_fs::DeleteOnCloseRegularLock,
++}
++
++pub(crate) fn mutation_lease(workspace: &Path) -> Result<MutationLease, String> {
++    let parent = metadata(workspace)?;
++    let lock = create_delete_on_close_regular_lock(&parent, "promotion-operation.lock", LABEL)?;
++    Ok(MutationLease {
++        _namespace: parent,
++        _lock: lock,
++    })
++}
++
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
++#[serde(rename_all = "camelCase", deny_unknown_fields)]
++struct Plan {
++    schema_version: u8,
++    transaction_id: String,
++    prior_sha256: String,
++    candidate_sha256: String,
++    records: BTreeMap<String, String>,
++    historical_handoff_sha256: Option<String>,
++    trusted_release_evidence_sha256: String,
++}
++
++#[derive(Clone, Debug, Serialize, Deserialize)]
++#[serde(rename_all = "camelCase", deny_unknown_fields)]
++struct Journal {
++    schema_version: u8,
++    phase: String,
++    evidence_sha256: String,
++    plan: Plan,
++}
++
++#[derive(Clone, Debug, Serialize, Deserialize)]
++#[serde(rename_all = "camelCase", deny_unknown_fields)]
++struct BackendOnlyIntent {
++    schema_version: u8,
++    status: String,
++    created_at_utc: String,
++    old_pid: u32,
++    old_listener_ports: Vec<u16>,
++    mcp_port: u16,
++    old_owns_configured_port: bool,
++    workspace_path: String,
++    build_path: String,
++    build_sha256: String,
++    startup_delay_seconds: u64,
++    recovery: String,
++    profile: String,
++    mcp_authenticated: bool,
++}
++
++fn digest(bytes: &[u8]) -> String {
++    format!("{:x}", Sha256::digest(bytes))
++}
++fn bytes<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
++    serde_json::to_vec(value).map_err(|_| format!("{LABEL} serialization failed"))
++}
++fn valid_id(id: &str) -> bool {
++    id.len() == 32
++        && id
++            .bytes()
++            .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase())
++}
++fn valid_digest(value: &str) -> bool {
++    value.len() == 64
++        && value
++            .bytes()
++            .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase())
++}
++fn receipt_json(raw: &[u8]) -> Result<serde_json::Value, String> {
++    // Windows PowerShell 5 writes UTF-8 BOM by default. Decode that one
++    // known marker; hashes and native archive renames retain the original bytes.
++    serde_json::from_slice(raw.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(raw))
++        .map_err(|_| "retirement receipt invalid".into())
++}
++fn archive_name(id: &str) -> Result<String, String> {
++    if !valid_id(id) {
++        return Err(format!("{LABEL} transaction is invalid"));
++    }
++    Ok(format!("promotion-retired-{id}"))
++}
++
++#[cfg(windows)]
++use crate::windows_protected_fs::{
++    ProtectedDirectoryGuard as Guard, create_delete_on_close_regular_lock,
++    read_optional_relative_regular, read_relative_regular, rename_exact_regular_child,
++    write_new_regular_in, write_unique_regular_for_atomic_replace,
++};
++
++#[cfg(windows)]
++fn read_json<T: serde::de::DeserializeOwned>(parent: &Guard, name: &str) -> Result<T, String> {
++    serde_json::from_slice(&read_relative_regular(parent, name, 65536, LABEL)?)
++        .map_err(|_| format!("{LABEL} record is invalid"))
++}
++
++#[cfg(windows)]
++fn metadata(workspace: &Path) -> Result<Guard, String> {
++    let root = crate::command::normalize_windows_verbatim_path(
++        workspace
++            .canonicalize()
++            .map_err(|_| format!("{LABEL} workspace unavailable"))?,
++    );
++    let mut guard = Guard::acquire(&root, LABEL)?;
++    guard.descend_existing(".catdesk", LABEL)?;
++    Ok(guard)
++}
++
++#[cfg(windows)]
++fn child(parent: &Guard, name: &str) -> Result<Guard, String> {
++    let mut guard = parent.try_clone(LABEL)?;
++    guard.descend_existing(name, LABEL)?;
++    Ok(guard)
++}
++
++#[cfg(windows)]
++fn optional_child(parent: &Guard, name: &str) -> Result<Option<Guard>, String> {
++    let mut guard = parent.try_clone(LABEL)?;
++    if guard.descend_optional_existing(name, LABEL)? {
++        Ok(Some(guard))
++    } else {
++        Ok(None)
++    }
++}
++
++#[cfg(windows)]
++fn journal(parent: &Guard) -> Result<Option<Journal>, String> {
++    let Some(raw) = read_optional_relative_regular(parent, JOURNAL, 65536, LABEL)? else {
++        return Ok(None);
++    };
++    let value: Journal =
++        serde_json::from_slice(&raw).map_err(|_| format!("{LABEL} journal invalid"))?;
++    if value.schema_version != 1
++        || value.plan.schema_version != 1

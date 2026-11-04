@@ -1,0 +1,205 @@
++                .unwrap()
++                .json::<Value>()
++                .await
++                .unwrap()
++        });
++        tokio::time::timeout(Duration::from_secs(15), entered.notified())
++            .await
++            .unwrap();
++        assert!(crate::operator_facade::acquire_web_work_lease(&alpha.control, "alpha").is_err());
++        let status: Value = send(request(
++            &alpha,
++            "status-during-dispatch",
++            "native.codex.status",
++            json!({}),
++        ))
++        .await
++        .unwrap()
++        .json()
++        .await
++        .unwrap();
++        assert_eq!(
++            status["result"]["structuredContent"]["job"]["state"], "READY",
++            "{status}"
++        );
++        assert_eq!(
++            status["result"]["structuredContent"]["journalChanged"],
++            false
++        );
++        // Alpha's project lease/journal is held, but shared registry/Wake locks
++        // and beta's normal native queue remain available through this server.
++        let beta_result: Value = send(native_request(&beta, "native-once"))
++            .await
++            .unwrap()
++            .json()
++            .await
++            .unwrap();
++        assert!(beta_result.get("error").is_none(), "{beta_result}");
++        assert_eq!(
++            beta_result["result"]["structuredContent"]["job"]["state"],
++            "NATIVE_EXITED_ZERO"
++        );
++        assert_eq!(
++            beta_result["result"]["structuredContent"]["receipt"]["treeExitProven"],
++            true
++        );
++        assert!(beta_result["result"]["structuredContent"]["receipt"]["actualProfile"].is_null());
++        let grant_path = beta
++            .control
++            .join(".catdesk/project-mcp-tasks/beta/task-fixture/execution-grant.json");
++        let frozen = fs::read(&grant_path).unwrap();
++        crate::web_work::execution_permission_with_capabilities(
++            &beta.control,
++            beta.pins.clone(),
++            false,
++            false,
++            Some("native-fixture"),
++        )
++        .unwrap();
++        assert_eq!(fs::read(grant_path).unwrap(), frozen);
++        let scope = resolve_registered_project_from_control_root(&beta.control, "beta").unwrap();
++        let record = crate::web_work_state::WorkLedger::open(&beta.control, "beta")
++            .unwrap()
++            .record("request-a")
++            .unwrap()
++            .unwrap();
++        let handoff =
++            crate::project_mcp_task::granted_handoff_context(&scope, &record, &record.target)
++                .unwrap()
++                .unwrap();
++        assert_eq!(
++            handoff["nativeQueue"]["snapshot"]["job"]["state"],
++            "NATIVE_EXITED_ZERO"
++        );
++        assert_eq!(handoff["nativeQueue"]["tool"], "native.codex.dispatch");
++        assert_eq!(handoff["nativeQueue"]["selection"]["maximumSeconds"], 60);
++        assert!(!beta_result.to_string().contains(&beta.key));
++        assert_eq!(
++            fs::read_to_string(native_proof(&beta)).unwrap(),
++            "native fixture task"
++        );
++        assert!(!native_proof(&alpha).exists());
++        awaiter.abort();
++        assert!(awaiter.await.unwrap_err().is_cancelled());
++        release.notify_one();
++        let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
++        loop {
++            if let Ok(lease) =
++                crate::operator_facade::acquire_web_work_lease(&alpha.control, "alpha")
++            {
++                drop(lease);
++                break;
++            }
++            assert!(
++                tokio::time::Instant::now() < deadline,
++                "owned native turn did not drain"
++            );
++            tokio::time::sleep(Duration::from_millis(20)).await;
++        }
++        TEST_GATES.get().unwrap().lock().unwrap().remove(&gate_key);
++        assert_eq!(
++            fs::read_to_string(native_proof(&alpha)).unwrap(),
++            "native fixture task"
++        );
++        let recovered: Value = send(request(
++            &alpha,
++            "status-after-lost-reply",
++            "native.codex.status",
++            json!({}),
++        ))
++        .await
++        .unwrap()
++        .json()
++        .await
++        .unwrap();
++        assert_eq!(
++            recovered["result"]["structuredContent"]["job"]["state"], "NATIVE_EXITED_ZERO",
++            "{recovered}"
++        );
++        assert_eq!(
++            recovered["result"]["structuredContent"]["receipt"]["treeExitProven"],
++            true
++        );
++        assert_eq!(
++            recovered["result"]["structuredContent"]["taskCompletionVerified"],
++            false
++        );
++        let duplicate: Value = send(native_request(&alpha, "native-once"))
++            .await
++            .unwrap()
++            .json()
++            .await
++            .unwrap();
++        assert_eq!(
++            duplicate["error"]["message"],
++            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
++        );
++        for f in [&alpha, &beta] {
++            assert!(
++                fs::read_to_string(f.task.join("src/lib.rs"))
++                    .unwrap()
++                    .contains("{ 1 }")
++            );
++            let journal = crate::delegated::journal::DelegatedJournal::open(
++                f.control
++                    .join(".catdesk/project-mcp-tasks")
++                    .join(f.pins["projectId"].as_str().unwrap())
++                    .join("task-fixture/journal"),
++            )
++            .unwrap();
++            let calls = journal
++                .load_tool_calls(&crate::delegated::contracts::RunId::new("task-fixture").unwrap())
++                .unwrap();
++            assert_eq!(calls.len(), 1);
++            assert_eq!(
++                calls["native-once"].status,
++                crate::delegated::journal::ToolCallStatus::Completed
++            );
++        }
++        stop.send(()).unwrap();
++        tokio::time::timeout(Duration::from_secs(10), server)
++            .await
++            .unwrap()
++            .unwrap();
++        let closed_by = tokio::time::Instant::now() + Duration::from_secs(5);
++        loop {
++            if tokio::net::TcpStream::connect(address).await.is_err() {
++                break;
++            }
++            assert!(
++                tokio::time::Instant::now() < closed_by,
++                "test endpoint still accepts connections after bounded shutdown"
++            );
++            tokio::time::sleep(Duration::from_millis(20)).await;
++        }
++    }
++
++    #[tokio::test]
++    async fn native_capability_is_explicit_immutable_and_revocable() {
++        let legacy = fixture("alpha");
++        let denied = call(&legacy, native_request(&legacy, "not-granted")).await;
++        assert_eq!(denied["error"]["message"], "WEB_TASK_NATIVE_NOT_GRANTED");
++        let f = native_fixture("alpha");
++        let path = f
++            .control
++            .join(".catdesk/project-mcp-tasks/alpha/task-fixture/execution-grant.json");
++        let original = fs::read(&path).unwrap();
+         assert!(
+-            crate::web_work::authorized_assignment(&control, pins.clone(), &"a".repeat(64))
+-                .is_err()
++            crate::web_work::execution_permission(&f.control, f.pins.clone(), false).is_err(),
++            "immutable grant cannot silently lose capabilities"
+         );
+-        sent(&wake, &event);
+-        let granted = crate::web_work::execution_permission(&control, pins.clone(), false).unwrap();
+-        assert!(!Path::new(granted["executionKeyFile"].as_str().unwrap()).starts_with(&control));
+-        let key: String = serde_json::from_slice(
+-            &fs::read(granted["executionKeyFile"].as_str().unwrap()).unwrap(),
++        let mut altered: Value = serde_json::from_slice(&original).unwrap();
++        altered["nativeQueue"]["requestSha256"] = json!("0".repeat(64));
++        fs::write(&path, serde_json::to_vec(&altered).unwrap()).unwrap();
++        let denied = call(&f, native_request(&f, "changed-payload")).await;
++        assert_eq!(
++            denied["error"]["message"], "WEB_TASK_NATIVE_REQUEST_CHANGED",
++            "{denied}"
++        );

@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T09:35:45.405681+00:00",
+  "classification": "ACTUAL_SELECTED_DEVELOPMENT_HEALTH_AND_EXACT_RESPONSE_PASS_TOOL_METADATA_ACCEPTANCE_FAILED",
+  "sourceCommit": "0e220535f609c0da6f9d40608244af4ce6cf00c7",
+  "applicationSha256": "6f7da692bd40c15c365eff0ba06f7cc8b8cd9511b783eb11ca9b177be99604b0",
+  "previousHealthVerifiedApplicationSha256": "d9cce8ded6b3f419a3db69ec4057c633dafa0fef73970779fec64e78f681d1e0",
+  "packageId": "1.0.0-dev.85-a4aa4539bae9eaacd07fb7e0ce919b60ac6016c3a5d0fac567f5bcc176ee16ef",
+  "maximumSeconds": 180,
+  "elapsedSeconds": 95.422,
+  "owner": {
+    "exitCode": 1,
+    "timedOut": false,
+    "terminationFailed": false
+  },
+  "health": {
+    "maximumRuntimeSeconds": 15,
+    "actualSha256": "6f7da692bd40c15c365eff0ba06f7cc8b8cd9511b783eb11ca9b177be99604b0",
+    "unauthorizedStatus": 401,
+    "initializeStatus": 200,
+    "catalogStatus": 200,
+    "toolCount": 79,
+    "registeredProjectsRead": true,
+    "ownerExitCode": 0,
+    "readersClosed": true,
+    "ownedTreeExitProved": true,
+    "endpointClosed": true
+  },
+  "read": {
+    "eventVerified": true,
+    "samePreviouslyVerifiedResponse": true,
+    "responseBytes": 1071,
+    "responseSha256": "76e2740e5e7a4d7a599cb14fd8a8611dd2e5bd8d718e81c4ce01c5a078d089d9",
+    "toolDiagnostics": "MISSING",
+    "acceptance": "FAIL_MISSING_TOOL_DIAGNOSTICS",
+    "sourceSnapshotReadPhase": "COMPLETE"
+  },
+  "cause": {
+    "sourceBranch": "ORDINARY_EVENT_RECEIPT_WITNESS_NOT_FORWARDED_IN_NATIVE_SNAPSHOT_REQUEST",
+    "inferredFromVerifiedSourceAndActualEventKind": true,
+    "correctedLiveRetest": "NOT_YET_PERFORMED"
+  },
+  "preservation": {
+    "originalCriticalPinsChecked": 5107,
+    "unchangedOriginalPins": 5105,
+    "onlySupportedAuthorityAndSelectionPointersChanged": true,
+    "previousPackageFilesChecked": 7,
+    "previousPackageFilesChanged": 0,
+    "bindingsHistoriesGrantsDeliveriesQueuesAndNativeSessionsUnchanged": true,
+    "newSelectedPackageFilesPinned": 7,
+    "profileIdentityAndNonUsageConfigPreserved": true,
+    "profileState": "PROFILE_QUIESCENT",
+    "hostStopped": true,
+    "newProviderMessages": 0,
+    "heldTaskRetries": 0,
+    "officialWakeOrRecurringStarts": 0,
+    "protectedInstallationChanged": false,
+    "newProductionAuthority": false
+  },
+  "terminalReconciliation": {
+    "originalFailurePreserved": true,
+    "currentDevelopmentHealthVerification": "OPERATOR_RECORDED_NOT_PRODUCTION_AUTHORITY",
+    "previousVerifiedRetained": true,
+    "metadataOnlyAfterOwnerExit": true,
+    "statusProjectionHarnessAssumptionCorrectedWithoutProductChange": true
+  },
+  "fullNativeTwoWebCoding": "OPEN",
+  "goal": "ACTIVE"
+}

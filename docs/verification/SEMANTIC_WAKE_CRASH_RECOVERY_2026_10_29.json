@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-29T21:41:47.0940912+00:00",
+  "classification": "OFFLINE_SOURCE_AND_OWNED_PROCESS_FIXTURES_NOT_INSTALLED_OR_WEB_ACCEPTANCE",
+  "sourceCommit": "9f4c0f99faf2fc7ee71163bfbe91ced28c69bcd9",
+  "sourceBranch": "codex/web-rollover-oct17",
+  "sourceFiles": [
+    {
+      "path": "wake/src/store.rs",
+      "sha256": "42b04530b103ffe2e5cc8171790b34bca9f848b97746afa844e445d05cfc55be",
+      "bytes": 182631
+    },
+    {
+      "path": "wake/src/runtime_scheduler.rs",
+      "sha256": "e991c3ad0b910947b7680a48b1a9f0ad55f4ad735e7eb55824e970a949efb1fd",
+      "bytes": 18930
+    }
+  ],
+  "fileHashBasis": "TESTED_CHECKOUT_BYTES",
+  "gitBlobSha256": {
+    "wake/src/store.rs": "42b04530b103ffe2e5cc8171790b34bca9f848b97746afa844e445d05cfc55be",
+    "wake/src/runtime_scheduler.rs": "e991c3ad0b910947b7680a48b1a9f0ad55f4ad735e7eb55824e970a949efb1fd"
+  },
+  "fullWakeDefaultAllTargets": {
+    "command": "cargo test --manifest-path wake/Cargo.toml --locked --offline --all-targets -- --test-threads=1",
+    "exitCode": 0,
+    "passed": 473,
+    "failed": 0,
+    "ignored": 3,
+    "storeTestsPassed": 47,
+    "runtimeTestsPassed": 116,
+    "sha256": "4f58cc040c3a58a346ffe6ebf39767c6e2255081bfc1fd0dbb1fa97c835100d0"
+  },
+  "focusedChecks": [
+    {
+      "label": "semantic-tests",
+      "passed": 12,
+      "failed": 0,
+      "sha256": "4b9b3c9d4a3ce1145b2b44a2c7a6859d4d1e54d8d1689cdb180d7530e096cad6"
+    },
+    {
+      "label": "scheduler-tests",
+      "passed": 9,
+      "failed": 0,
+      "sha256": "2ab0ad903fc3e0f2fbae43a0eec8896041f6939217f68c9455d7765754cef0c9"
+    },
+    {
+      "label": "protocol-store-tests",
+      "passed": 29,
+      "failed": 0,
+      "sha256": "ed7c565bf34eb595d5157ed9bde7db7fea4175842337bf36ca480e19ccfd55d1"
+    }
+  ],
+  "strictWakeClippy": {
+    "command": "cargo clippy --manifest-path wake/Cargo.toml --locked --offline --all-targets --all-features -- -D warnings",
+    "exitCode": 0,
+    "sha256": "f8fd18854ba28abc9bcf537631a8a9ed1e8e7e03a02e488211e009538157e46e"
+  },
+  "distinctPassingRustTests": 502,
+  "distinctCountBasis": "Full default all-target Rust tests plus 29 separately enabled protocol_store integration tests; focused semantic and scheduler tests overlap full suite",
+  "rustfmt": "PASS",
+  "independentReview": "Prior material crash/reclaim/direct-transition defects resolved; no new authority flags",
+  "behavior": [
+    "Stable identity from project, source event, source turn and purpose; creation and expiry frozen inside existing Store transaction",
+    "Exact queue/archive/delivery readback unchanged; message/priority/TTL conflict refuses",
+    "Sidecar-backed replay requires bound SUBMITTING/SENT delivery; missing/CLAIMED/ATTENTION/STALE remain held",
+    "Reclaim and direct submission transition cannot overwrite surviving submission/timer witness",
+    "Affected project held while independent siblings remain eligible; crossed submissions retain read-only recovery"
+  ],
+  "failureHistory": [
+    "Pre-review9 semantic-test receipt retained; later independent review exposed crash gap",
+    "One guarded integration run changed stale-generation error precedence; check order corrected and all29 cases passed without weakening assertions"
+  ],
+  "knownLimitation": "Attributable malformed timer content still encounters existing global strict timer reader; arbitrary corrupted-store nonstall acceptance is not claimed",
+  "newBrowserWakeConnectorActions": 0,
+  "installedAcceptance": "UNVERIFIED",
+  "webAcceptance": "UNVERIFIED",
+  "nextTask": "Explicit existing-task-grant MANUAL_END_TURN MCP ingress; source implementation under test"
+}

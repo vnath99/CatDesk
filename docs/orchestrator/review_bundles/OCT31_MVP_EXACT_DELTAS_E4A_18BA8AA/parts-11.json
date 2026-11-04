@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "targetCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+  "kind": "parts",
+  "offset": 80,
+  "entries": [
+    {
+      "file": "part-081.diff.txt",
+      "bytes": 8130,
+      "sha256": "daf62f8f3f1bb59a06cbd26a21b707ff812a85419610bfacd66a9a8726045b4a",
+      "startByte": 652562,
+      "endByte": 660692,
+      "paths": [
+        "tests/test_wake_bridge_current_dom.py",
+        "tests/test_wake_profile_quiescence.py",
+        "tests/test_wake_readiness_probe.py"
+      ]
+    },
+    {
+      "file": "part-082.diff.txt",
+      "bytes": 8163,
+      "sha256": "3738c1c0aa925939f89f3f2e99f5da5051e87f8590ae067e912f13f9d6ac485f",
+      "startByte": 660692,
+      "endByte": 668855,
+      "paths": [
+        "tests/test_wake_readiness_probe.py"
+      ]
+    },
+    {
+      "file": "part-083.diff.txt",
+      "bytes": 8145,
+      "sha256": "10753229495e762af3ca71caadaee1a9beecc2f4345210cc5468edc883831e7e",
+      "startByte": 668855,
+      "endByte": 677000,
+      "paths": [
+        "tests/test_wake_readiness_probe.py"
+      ]
+    },
+    {
+      "file": "part-084.diff.txt",
+      "bytes": 8101,
+      "sha256": "52c77cf0d67be2bd702db85072f9c4e83ead594ce511a13be59220514ccd66b1",
+      "startByte": 677000,
+      "endByte": 685101,
+      "paths": [
+        "tests/test_wake_readiness_probe.py"
+      ]
+    },
+    {
+      "file": "part-085.diff.txt",
+      "bytes": 8169,
+      "sha256": "0503e4f555d5dc4038165a883e2d186cc9fae05abf54aecc3c6d466e5d84e158",
+      "startByte": 685101,
+      "endByte": 693270,
+      "paths": [
+        "tests/test_wake_readiness_probe.py",
+        "wake/adapter.py"
+      ]
+    },
+    {
+      "file": "part-086.diff.txt",
+      "bytes": 8183,
+      "sha256": "084dcbe4e1a6ce898a971594c1f9f54537225f358c6869d5007401acc169f4f4",
+      "startByte": 693270,
+      "endByte": 701453,
+      "paths": [
+        "wake/adapter.py",
+        "wake/src/bin/CatDeskWakeProfileProbe.rs"
+      ]
+    },
+    {
+      "file": "part-087.diff.txt",
+      "bytes": 8117,
+      "sha256": "48ed4c18347ce305cbfe9b9b4633e15bf186dd66e639ff03ec1131f62b711d1b",
+      "startByte": 701453,
+      "endByte": 709570,
+      "paths": [
+        "wake/src/bin/CatDeskWakeProfileProbe.rs",
+        "wake/src/development_login_recovery.rs"
+      ]
+    },
+    {
+      "file": "part-088.diff.txt",
+      "bytes": 8187,
+      "sha256": "d792443f59742e105e47596f56ca7a2b737f79d79abeb2671464d8a6ababc83f",
+      "startByte": 709570,
+      "endByte": 717757,
+      "paths": [
+        "wake/src/development_login_recovery.rs",
+        "wake/src/development_runtime.rs"
+      ]
+    }
+  ]
+}

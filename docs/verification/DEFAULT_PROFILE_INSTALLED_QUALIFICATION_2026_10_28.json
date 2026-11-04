@@ -1,0 +1,172 @@
+{
+  "remaining": {
+    "connector": "UNCHANGED_LAST_HTTP_429_NOT_REPROBED",
+    "canonicalAndControlledRegistries": "SEPARATE_SCOPES_PRESERVED_SUPPORTED_SCOPE_SELECTION_REQUIRED",
+    "normalPersistentServing": "UNVERIFIED_STOPPED_AFTER_BOUNDED_TEST",
+    "centralDispatchOnNormalProfile": "AUTHENTICATED_CONNECTION_REQUIRED_NO_AUTH_CHANGE_PERFORMED",
+    "officialRuntime": "LAST_SUPPORTED_READONLY_STATUS_STOPPED_NOT_READY_NO_ACTION",
+    "twoIndependentChatGPTWebCodingConversations": "OPEN",
+    "remoteCI": "UNVERIFIED_NO_NEW_DISPATCH"
+  },
+  "goal": "ACTIVE",
+  "sourceCommit": "56b7093a44bc2a8052e3e33dc6fb64ff186dceb8",
+  "localDate": "2026-10-28",
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-29T00:24:12.3710036+00:00",
+  "installedDefaultProfile": {
+    "publicStartStopCycles": 1,
+    "wakeActions": 0,
+    "browserActions": 0,
+    "rpcChecks": [
+      {
+        "toolCount": 101,
+        "status": 200,
+        "method": "tools/list",
+        "authentication": "none"
+      },
+      {
+        "status": 200,
+        "method": "tools/list",
+        "authentication": "wrong"
+      },
+      {
+        "status": 200,
+        "method": "initialize",
+        "authentication": "none",
+        "originalHarnessLabel": "valid",
+        "bearerHeaderAttached": false
+      },
+      {
+        "toolCount": 101,
+        "status": 200,
+        "method": "tools/list",
+        "authentication": "none",
+        "originalHarnessLabel": "valid",
+        "bearerHeaderAttached": false
+      },
+      {
+        "status": 404,
+        "method": "tools/list",
+        "authentication": "wrong-route"
+      }
+    ],
+    "authenticationMode": "EXISTING_OPAQUE_ROUTE_CAPABILITY_NO_BEARER",
+    "containmentSha256": "64d903d3909d663d621232d5f5fa23c31ecf2daa2c08d76267ece01af09d81d0",
+    "resultSha256": "7052e56ce1c9e614869eff9dd2348bf4fb0135c158d6c2a26d096328b97e1c05",
+    "publicStopVerified": true,
+    "bearerAuthenticationAcceptanceClaimed": false,
+    "installedPathVerified": true,
+    "timedOut": false,
+    "maximumSeconds": 180,
+    "childNaturalExit": true,
+    "externalRuntimeActions": 0
+  },
+  "sourceStatusImprovement": {
+    "gates": [
+      "WEB_TASK_CENTRAL_AUTH_REQUIRED",
+      "WEB_TASK_CENTRAL_MODE_REQUIRED"
+    ],
+    "serverRegressionTestsIgnored": 1,
+    "sameBearerAndModeChecksAsDispatch": true,
+    "providerConversationVerified": false,
+    "taskGrantStillRequired": true,
+    "evidenceDigests": [
+      {
+        "name": "central-dispatch-readiness-server-regressions.private.log",
+        "sha256": "5710b42ae84b3b86582510bf5f99571acfc3f3bc8239408c13345ad2a66f1061"
+      },
+      {
+        "name": "central-dispatch-readiness-format.private.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "central-dispatch-readiness-clippy.private.log",
+        "sha256": "c484d1aaeb47db53e64837ec451d8067ef5565bb4a1521ad9cc5cf9fbb84716d"
+      },
+      {
+        "name": "central-dispatch-readiness-source-review.private.json",
+        "sha256": "285ac556f39361075d46c3752b2975af601018bcc89c620617000169292432e8"
+      }
+    ],
+    "format": "PASS",
+    "tests": "PASS_HTTP_STATUS_AND_CATALOG_MATRIX_PLUS_EXISTING_AUTH_GATES",
+    "executionAuthorized": false,
+    "field": "centralProjectExecution",
+    "serverRegressionTestsPassed": 45,
+    "strictAllTargetClippy": "PASS",
+    "installed": false,
+    "remoteSourceShaVerified": true,
+    "exactCommitCheckRuns": 0,
+    "exactCommitWorkflowRuns": 0,
+    "ci": "UNVERIFIED"
+  },
+  "preservation": {
+    "changedFileCategory": "APP_CONFIG_USAGE_ACCOUNTING",
+    "accountingUpdateRetained": true,
+    "exactPriorBytesHashReconstructedInMemory": true,
+    "analysisSha256": "addaf317a7914b51b7fc77780a1e859c5fcc0b8cd9489e4b2a0dce7929968122",
+    "projectBindingMutations": 0,
+    "newOrRemovedFiles": 0,
+    "priorConfigSha256": "3d21c093c11408e62edb795ad7b089f3b67155add2e2c97cdfa8d17342c45139",
+    "nativeSessionActions": 0,
+    "unchangedFiles": 10277,
+    "currentConfigSha256": "e29effbbdf836ed04fb21eb2dc88cfccddd0952473fc39757be2f89e75cd0c03",
+    "protectedFiles": 10278,
+    "initialHarnessResult": "PROTECTED_STATE_CHANGED",
+    "authenticationRouteAndOtherConfigFieldsUnchanged": true,
+    "configRestorationPerformed": false,
+    "usageDelta": {
+      "inputTokens": 13,
+      "outputTokens": 2001,
+      "totalTokens": 2014,
+      "toolCallCount": 1
+    }
+  },
+  "cleanup": {
+    "registryMutations": 0,
+    "fingerprintMatches": true,
+    "wakeStarts": 0,
+    "port3200Owners": [],
+    "atUtc": "2026-10-29T00:22:03.6533700+00:00",
+    "nativeSessionActions": 0,
+    "observedTestOwners": 0,
+    "processes": [],
+    "browserStarts": 0,
+    "installedSha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf",
+    "officialRuntimeActions": 0
+  },
+  "canonicalRegistry": {
+    "projects": [
+      {
+        "nativeBound": true,
+        "projectId": "BUG_BOUNTY_RECON_PLATFORM",
+        "webBound": true
+      },
+      {
+        "nativeBound": true,
+        "projectId": "BYOVD_DRIVER_PIPELINE",
+        "webBound": true
+      },
+      {
+        "nativeBound": true,
+        "projectId": "WAKE2_BROWSER_ENGINE",
+        "webBound": false
+      },
+      {
+        "nativeBound": true,
+        "projectId": "catdesk",
+        "webBound": true
+      }
+    ],
+    "responseSha256": "b970126a3ca300971e629a86db7d8588001adefa6d39418cd1cb028044e96079",
+    "mergedWithControlledRegistry": false,
+    "projectCount": 4,
+    "nativeBoundProjects": 4,
+    "webBoundProjects": 3,
+    "classification": "ACTUAL_INSTALLED_CANONICAL_SCOPE_NOT_CONTROLLED_WEB_SCOPE"
+  },
+  "branch": "codex/web-rollover-oct17",
+  "installedCandidateSourceCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "installedSha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf",
+  "evidenceType": "ACTUAL_INSTALLED_DEFAULT_PROFILE_PLUS_SEPARATE_TESTED_SOURCE_STATUS"
+}

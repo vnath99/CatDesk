@@ -1,0 +1,190 @@
++    fn public_lifecycle_lease_is_exclusive_and_preserves_existing_bytes() {
++        let temp = std::env::temp_dir().canonicalize().unwrap();
++        let root = temp.join(format!("CatDesk-SourceBridge-Fixture-{}", Uuid::new_v4()));
++        fs::create_dir_all(root.join(".catdesk/release-pair-control")).unwrap();
++        let path = root.join(".catdesk/release-pair-control/stopped-owner.lock");
++        fs::write(&path, b"existing lifecycle lock").unwrap();
++        let lease = lifecycle_lease(&root).unwrap();
++        assert!(lifecycle_lease(&root).is_err());
++        drop(lease);
++        drop(lifecycle_lease(&root).unwrap());
++        assert_eq!(fs::read(&path).unwrap(), b"existing lifecycle lock");
++        assert_eq!(root.canonicalize().unwrap().parent(), Some(temp.as_path()));
++        fs::remove_dir_all(root).unwrap();
++    }
++
++    #[test]
++    fn bridge_launch_is_fixed_bounded_local_and_keeps_token_off_command_line() {
++        let workspace = Path::new(r"C:\fixture");
++        let config = workspace.join("qualified.toml");
++        let cmd = command(
++            &workspace.join("catdesk.exe"),
++            workspace,
++            &config,
++            "fixture-only-token",
++        );
++        let args: Vec<_> = cmd
++            .get_args()
++            .map(|v| v.to_string_lossy().to_string())
++            .collect();
++        assert_eq!(
++            args,
++            vec![
++                "--headless-mcp",
++                "--host",
++                "127.0.0.1",
++                "--port",
++                "3200",
++                "--workspace",
++                r"C:\fixture",
++                "--config-path",
++                r"C:\fixture\qualified.toml",
++                "--mcp-path",
++                "/catdesk-qualified-stopped-v2/mcp",
++                "--mode",
++                "computer",
++                "--tool-mode",
++                "read-only",
++                "--no-ngrok",
++                "--no-web-auto",
++                "--max-runtime-seconds",
++                "120"
++            ]
++        );
++        assert!(!args.iter().any(|v| v.contains("fixture-only-token")));
++        let env: std::collections::BTreeMap<_, _> = cmd.get_envs().collect();
++        assert_eq!(
++            env.get(std::ffi::OsStr::new("CATDESK_MCP_AUTH_TOKEN")),
++            Some(&Some(std::ffi::OsStr::new("fixture-only-token")))
++        );
++        for name in ["CONTROL_PLANE_API_KEY", "CATDESK_OPENAI_TUNNEL_ID"] {
++            assert_eq!(env.get(std::ffi::OsStr::new(name)), Some(&None));
++        }
++    }
++}
+diff --git a/src/reviewed_build.rs b/src/reviewed_build.rs
+index 96672fb13d84df9bcd4e778bd0dcb1aa51a5ceed..879f72dc7346ba3bd57f8d1bfd120d9717def3da 100644
+--- a/src/reviewed_build.rs
++++ b/src/reviewed_build.rs
+@@ -7207,6 +7207,9 @@ impl BuildJob {
+             return Ok(()); // Incomplete membership never authorizes termination.
+         }
+         let expected = crate::command::normalize_windows_verbatim_path(helper.path.clone());
++        // The pinned compiler directory may contain a `bin/Hostx64/x64`
++        // suffix; Windows reports the same image using backslashes.
++        let expected = expected.to_string_lossy().replace('/', "\\");
+         let mut verified = Vec::new();
+         for &pid in &members.ids[..members.listed as usize] {
+             let Ok(pid) = u32::try_from(pid) else {
+@@ -7235,7 +7238,8 @@ impl BuildJob {
+             ));
+             if !actual
+                 .to_string_lossy()
+-                .eq_ignore_ascii_case(&expected.to_string_lossy())
++                .replace('/', "\\")
++                .eq_ignore_ascii_case(&expected)
+             {
+                 return Ok(()); // Mixed or unknown writers: stop none of them.
+             }
+@@ -10660,6 +10664,47 @@ mod tests {
+         fs::remove_dir_all(root).unwrap();
+     }
+ 
++    #[cfg(windows)]
++    #[test]
++    fn native_helper_cleanup_accepts_mixed_separator_pin_without_widening_ownership() {
++        let root = std::env::temp_dir().join(format!("catdesk-msvc-mixed-{}", Uuid::new_v4()));
++        let directory = root.join("tool/bin");
++        fs::create_dir_all(&directory).unwrap();
++        fs::copy(
++            std::env::current_exe().unwrap(),
++            directory.join("VCTIP.EXE"),
++        )
++        .unwrap();
++        let helper = pin_msvc_helper_directory(&directory).unwrap().unwrap();
++        assert!(helper.path.to_string_lossy().contains("tool/bin"));
++        let job = BuildJob::new().unwrap();
++        let outside_job = BuildJob::new().unwrap();
++        let mut known = start_waiting_helper_fixture(&helper.path, &job);
++        let mut outside = start_waiting_helper_fixture(&helper.path, &outside_job);
++        let mut evidence = Vec::new();
++        let outcome = job.stop_only_pinned_helper(&helper, &mut evidence);
++        let known_exited = known.try_wait().unwrap().is_some();
++        let outside_preserved = outside.try_wait().unwrap().is_none();
++        // Cleanup precedes assertions, including on the expected RED result.
++        job.terminate().unwrap();
++        outside_job.terminate().unwrap();
++        known.wait().unwrap();
++        outside.wait().unwrap();
++        drop(helper);
++        drop(job);
++        drop(outside_job);
++        fs::remove_dir_all(root).unwrap();
++        outcome.unwrap();
++        assert!(outside_preserved);
++        assert_eq!(
++            evidence.len(),
++            1,
++            "equivalent Windows separators must match"
++        );
++        assert!(known_exited && evidence[0].exit_confirmed);
++        assert_eq!(evidence[0].process_id, known.id());
++    }
++
+     #[cfg(windows)]
+     #[test]
+     fn native_helper_cleanup_refuses_mixed_wrong_path_and_outside_job_processes() {
+@@ -16526,3 +16571,157 @@ mod tests {
+         assert!(!script.contains("Move-Item -LiteralPath $temporary -Destination $manifest"));
+     }
+ }
++
++#[cfg(all(test, windows))]
++mod owned_msvc_probe_tests {
++    use super::*;
++    use std::os::windows::io::OwnedHandle;
++
++    fn observed_members(job: &BuildJob) -> serde_json::Value {
++        #[repr(C)]
++        struct ProcessIds {
++            assigned: u32,
++            listed: u32,
++            ids: [usize; 128],
++        }
++        unsafe extern "system" {
++            fn QueryInformationJobObject(
++                job: *mut c_void,
++                class: i32,
++                information: *mut c_void,
++                length: u32,
++                returned: *mut u32,
++            ) -> i32;
++            fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut c_void;
++            fn IsProcessInJob(process: *mut c_void, job: *mut c_void, result: *mut i32) -> i32;
++            fn QueryFullProcessImageNameW(
++                process: *mut c_void,
++                flags: u32,
++                name: *mut u16,
++                size: *mut u32,
++            ) -> i32;
++        }
++        let mut members: ProcessIds = unsafe { std::mem::zeroed() };
++        let queried = unsafe {
++            QueryInformationJobObject(
++                job.0,
++                3,
++                (&mut members as *mut ProcessIds).cast(),
++                std::mem::size_of::<ProcessIds>() as u32,
++                std::ptr::null_mut(),
++            )
++        } != 0;
++        assert!(queried && members.listed <= 128 && members.assigned == members.listed);
++        let rows: Vec<_> = members.ids[..members.listed as usize].iter().map(|pid| {
++            let pid = u32::try_from(*pid).unwrap();
++            let raw = unsafe { OpenProcess(0x0010_0000 | 0x1000, 0, pid) };
++            if raw.is_null() { return serde_json::json!({"pid":pid,"querySucceeded":false}); }
++            let handle = unsafe { OwnedHandle::from_raw_handle(raw) };
++            let mut member = 0;
++            let mut name = [0u16; 2048];
++            let mut size = name.len() as u32;
++            let valid = unsafe { IsProcessInJob(handle.as_raw_handle().cast(), job.0, &mut member) } != 0 && member != 0 && unsafe { QueryFullProcessImageNameW(handle.as_raw_handle().cast(), 0, name.as_mut_ptr(), &mut size) } != 0;

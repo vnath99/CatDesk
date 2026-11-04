@@ -1,0 +1,186 @@
++            serde_json::json!({"pid":pid,"querySucceeded":valid,"imagePath":valid.then(||String::from_utf16_lossy(&name[..size as usize]))})
++        }).collect();
++        serde_json::json!({"activeProcesses":job.active_processes().unwrap(),"members":rows})
++    }
++
++    #[test]
++    #[ignore = "manual bounded benign MSVC Job-member probe; no release/control authority"]
++    fn current_host_benign_compile_and_link_job_members() {
++        let (cargo, rustc) = trusted_toolchain().unwrap();
++        let environment =
++            reviewed_windows_toolchain_environment(Path::new(&cargo.absolute_path)).unwrap();
++        let compiler = PathBuf::from(&environment.cc);
++        require_reviewed_toolchain_file(&compiler).unwrap();
++        let helper = pin_msvc_helper_directory(compiler.parent().unwrap()).unwrap();
++        let root =
++            std::env::temp_dir().join(format!("catdesk-msvc-members-{}", Uuid::new_v4().simple()));
++        fs::create_dir(&root).unwrap();
++        fs::write(root.join("probe.c"), b"int main(void) { return 0; }\n").unwrap();
++        fs::write(root.join("probe.rs"), b"fn main() {}\n").unwrap();
++        for probe in ["CL_COMPILE", "CL_LINK", "RUST_LINK"] {
++            let mut command = Command::new(if probe == "RUST_LINK" {
++                Path::new(&rustc.absolute_path)
++            } else {
++                &compiler
++            });
++            command
++                .current_dir(&root)
++                .env_clear()
++                .env("PATH", &environment.path)
++                .env("INCLUDE", &environment.include)
++                .env("LIB", &environment.lib)
++                .env("LIBPATH", &environment.libpath)
++                .env("SystemRoot", os_system_root().unwrap())
++                .env("SystemDrive", os_system_drive().unwrap())
++                .env("TEMP", &root)
++                .env("TMP", &root)
++                .stdin(Stdio::null())
++                .stdout(Stdio::null())
++                .stderr(Stdio::piped())
++                .creation_flags(CREATE_SUSPENDED);
++            if probe == "RUST_LINK" {
++                command.args([
++                    "--edition=2024",
++                    "-C",
++                    "opt-level=2",
++                    "probe.rs",
++                    "-o",
++                    "probe-rust.exe",
++                ]);
++            } else {
++                command
++                    .args(["/nologo", "probe.c"])
++                    .arg(if probe == "CL_LINK" {
++                        "/Feprobe.exe"
++                    } else {
++                        "/c"
++                    });
++            }
++            let job = BuildJob::new().unwrap();
++            let mut child = command.spawn().unwrap();
++            let stderr = child.stderr.take().unwrap();
++            let reader = std::thread::spawn(move || read_bounded_cargo_stderr(stderr));
++            job.assign(&child).unwrap();
++            job.resume(&child).unwrap();
++            let deadline = std::time::Instant::now() + Duration::from_secs(20);
++            let status = loop {
++                if let Some(status) = child.try_wait().unwrap() {
++                    break Some(status);
++                }
++                if std::time::Instant::now() >= deadline {
++                    break None;
++                }
++                std::thread::sleep(Duration::from_millis(25));
++            };
++            std::thread::sleep(Duration::from_millis(1100));
++            let before = observed_members(&job);
++            let mut evidence = Vec::new();
++            let helper_result = if status.is_some_and(|s| s.success()) {
++                helper
++                    .as_ref()
++                    .map(|pinned| job.stop_only_pinned_helper(pinned, &mut evidence))
++            } else {
++                None
++            };
++            let after = observed_members(&job);
++            job.terminate().unwrap();
++            let cleanup = std::time::Instant::now() + Duration::from_secs(5);
++            while job.active_processes().unwrap() != 0 && std::time::Instant::now() < cleanup {
++                std::thread::sleep(Duration::from_millis(10));
++            }
++            assert_eq!(job.active_processes().unwrap(), 0);
++            child.wait().unwrap();
++            while !reader.is_finished() && std::time::Instant::now() < cleanup {
++                std::thread::sleep(Duration::from_millis(10));
++            }
++            assert!(reader.is_finished());
++            let stderr = reader.join().unwrap().unwrap();
++            println!(
++                "{}",
++                serde_json::json!({"probe":probe,"rootExit":status.and_then(|s|s.code()),"before":before,"afterHelper":after,"pinnedHelper":helper.as_ref().map(|p|p.path.to_string_lossy()),"helperResult":format!("{helper_result:?}"),"helperCleanupRecords":evidence,"capturedStderrBytes":stderr.captured.len(),"ownedTreeExited":true,"artifactExecuted":false,"productionActions":0})
++            );
++        }
++    }
++}
+diff --git a/src/server.rs b/src/server.rs
+index e484555e4f32b0a97c5cdbc041641da3da30337c..67e817d309b3a7d150ceb2f72c237989ed9bfe91 100644
+--- a/src/server.rs
++++ b/src/server.rs
+@@ -287,6 +287,36 @@ fn central_dispatch_authenticated(token: Option<&str>) -> bool {
+     token.is_some_and(valid_mcp_auth_token)
+ }
+ 
++/// Connection readiness is not a project task grant or proof of a Web caller.
++/// Report the same prerequisites as dispatch without exposing credentials or
++/// treating the legacy opaque route as central execution authorization.
++fn central_dispatch_readiness(
++    token: Option<&str>,
++    mode: crate::state::Mode,
++    tool_mode: crate::state::ToolMode,
++) -> Value {
++    let authenticated = central_dispatch_authenticated(token);
++    let mode_ready = mode.computer_enabled() && tool_mode.supervisor_tools_enabled();
++    let blocker = if !authenticated {
++        Some("WEB_TASK_CENTRAL_AUTH_REQUIRED")
++    } else if !mode_ready {
++        Some("WEB_TASK_CENTRAL_MODE_REQUIRED")
++    } else {
++        None
++    };
++    json!({
++        "tool":crate::web_task_dispatch::TOOL,
++        "connectionReady":blocker.is_none(),
++        "blocker":blocker,
++        "bearerConfigured":authenticated,
++        "modeReady":mode_ready,
++        "taskGrantRequired":true,
++        "executionAuthorized":false,
++        "providerConversationVerified":false,
++        "installedWebAcceptance":"UNVERIFIED",
++    })
++}
++
+ fn request_id(req: &Value) -> String {
+     req.get("id").map_or("-".into(), |v| match v {
+         Value::String(s) => s.clone(),
+@@ -925,6 +955,104 @@ mod tests {
+     use std::time::{SystemTime, UNIX_EPOCH};
+     use tokio::sync::{Mutex, mpsc::unbounded_channel};
+ 
++    #[tokio::test]
++    async fn transport_status_reports_central_dispatch_prerequisites_without_granting_execution() {
++        let token = "transport-status-test-bearer-1234567890";
++        for (auth, mode, tool_mode, expected_blocker) in [
++            (
++                None,
++                Mode::Computer,
++                ToolMode::SupervisorOnly,
++                Some("WEB_TASK_CENTRAL_AUTH_REQUIRED"),
++            ),
++            (
++                Some(token),
++                Mode::Browser,
++                ToolMode::MultiTools,
++                Some("WEB_TASK_CENTRAL_MODE_REQUIRED"),
++            ),
++            (
++                Some(token),
++                Mode::Computer,
++                ToolMode::ReadOnly,
++                Some("WEB_TASK_CENTRAL_MODE_REQUIRED"),
++            ),
++            (Some(token), Mode::Computer, ToolMode::SupervisorOnly, None),
++            (Some(token), Mode::Both, ToolMode::MultiTools, None),
++        ] {
++            let root = unique_temp_path("transport-central-readiness");
++            std::fs::create_dir_all(&root).unwrap();
++            let mut app = AppState::new_isolated_fixture(
++                0,
++                root.to_string_lossy().into(),
++                root.join("never-written.toml"),
++            )
++            .unwrap();
++            app.mode = mode;
++            app.tool_mode = tool_mode;
++            let (tx, _rx) = unbounded_channel();
++            let state = ServerState {

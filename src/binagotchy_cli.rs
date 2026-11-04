@@ -27,7 +27,28 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 pub const BINAGOTCHY_CLI_MODE_FLAG: &str = "--catdesk-binagotchy-cli";
+pub const BINAGOTCHY_WEB_STATUS_FLAG: &str = "--catdesk-binagotchy-web-status";
 static MANUAL_EVENT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+/// A single read-only view avoids the interactive console's legacy startup
+/// status/initialization and production controls in a development workspace.
+pub fn parse_binagotchy_web_status_mode(args: &[String]) -> Result<bool, String> {
+    if !args.iter().any(|arg| arg == BINAGOTCHY_WEB_STATUS_FLAG) {
+        return Ok(false);
+    }
+    if args.len() != 1 {
+        return Err(format!(
+            "{BINAGOTCHY_WEB_STATUS_FLAG} accepts no additional arguments"
+        ));
+    }
+    Ok(true)
+}
+
+pub fn run_web_status(workspace: &Path) -> Result<(), String> {
+    let mut stdout = io::stdout().lock();
+    print_web_projects(workspace, &mut stdout)?;
+    stdout.flush().map_err(|_| "CLI_OUTPUT_FAILED".into())
+}
 
 pub fn parse_binagotchy_cli_mode(args: &[String]) -> Result<bool, String> {
     let count = args
@@ -925,6 +946,175 @@ fn safe_report_token(value: &Value) -> &str {
         .unwrap_or("[redacted]")
 }
 
+fn print_web_projects(workspace: &Path, out: &mut impl Write) -> Result<(), String> {
+    let report = crate::operator_facade::read_web_summary(workspace)?;
+    render_web_projects(&report, out)
+}
+
+/// Display only bounded metadata from the shared paired Web reader. Saved
+/// scheduler/rollover observations never establish that a worker is running.
+pub(crate) fn render_web_projects(report: &Value, out: &mut impl Write) -> Result<(), String> {
+    let now_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|duration| duration.as_secs());
+    render_web_projects_at(report, out, now_unix)
+}
+
+fn render_web_projects_at(
+    report: &Value,
+    out: &mut impl Write,
+    now_unix: Option<u64>,
+) -> Result<(), String> {
+    let central = &report["webProjects"];
+    if report["action"] != "web_status"
+        || report["readOnly"] != true
+        || central["status"] != "SOURCE_STATUS_ONLY"
+        || central["readOnly"] != true
+    {
+        return Err("WEB_STATUS_UNAVAILABLE".into());
+    }
+    let projects = central["projects"]
+        .as_array()
+        .ok_or("WEB_STATUS_UNAVAILABLE")?;
+    writeln!(
+        out,
+        "Web projects: {} | {} | read-only saved state",
+        projects.len(),
+        safe_report_token(&report["runtimeMode"])
+    )
+    .map_err(|_| "CLI_OUTPUT_FAILED")?;
+    writeln!(out, "Context is advisory; UNKNOWN coverage has no reliable capacity percentage. Live workers, delivery and installed acceptance require separate proof.")
+        .map_err(|_| "CLI_OUTPUT_FAILED")?;
+    for project in projects.iter().take(24) {
+        let wake = &project["wake"];
+        let target = &wake["target"];
+        let generation = target["generation"].as_u64().filter(|n| *n > 0);
+        let paired = wake["status"] == "PAIRED" && generation.is_some();
+        let generation_label = generation
+            .filter(|_| paired)
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "UNKNOWN".into());
+        let digest = target["sha256"].as_str().filter(|value| {
+            value.len() == 64
+                && value
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        });
+        let digest_label = digest
+            .filter(|_| paired)
+            .map(|value| &value[..12])
+            .unwrap_or("UNKNOWN");
+        let history = project["conversationHistory"]
+            .as_array()
+            .map(Vec::len)
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "UNKNOWN".into());
+        writeln!(
+            out,
+            "  {} | Wake {} | generation {} | digest {} | history {}",
+            safe_report_token(&project["projectId"]),
+            safe_report_token(&wake["status"]),
+            generation_label,
+            digest_label,
+            history
+        )
+        .map_err(|_| "CLI_OUTPUT_FAILED")?;
+        let context = &project["context"];
+        let pressure = &context["currentPressure"];
+        let current = paired
+            && digest.is_some()
+            && context["status"] == "CURRENT_ADVISORY"
+            && context["advisory"] == true
+            && pressure["advisory"] == true
+            && pressure["isCurrent"] == true
+            && pressure["key"]["projectId"] == project["projectId"]
+            && pressure["key"]["projectId"] == target["projectId"]
+            && pressure["key"]["conversationUrl"] == target["url"]
+            && target["url"].is_string()
+            && pressure["key"]["targetGeneration"].as_u64() == generation
+            && pressure["targetSha256"].as_str() == digest;
+        if let Some(tokens) = pressure["observedEstimateTokens"]
+            .as_u64()
+            .filter(|_| current)
+        {
+            let coverage = if pressure["coverageKnown"] == true {
+                "KNOWN"
+            } else {
+                "UNKNOWN"
+            };
+            let trigger = pressure["triggerTokens"]
+                .as_u64()
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| "UNKNOWN".into());
+            writeln!(out, "    context: observed {tokens} tokens (advisory), coverage {coverage}, configured trigger {trigger}")
+                .map_err(|_| "CLI_OUTPUT_FAILED")?;
+            if let (Some(warning), Some(reached)) = (
+                pressure["warningTokens"]
+                    .as_u64()
+                    .filter(|tokens| *tokens > 0),
+                pressure["warningReached"].as_bool(),
+            ) {
+                let level = if reached { "REACHED" } else { "NOT_REACHED" };
+                writeln!(
+                    out,
+                    "    context warning: {level} at {warning} observed tokens (advisory)"
+                )
+                .map_err(|_| "CLI_OUTPUT_FAILED")?;
+            }
+            let capture = &pressure["browserCoverage"];
+            let age = capture["lastObservedAtUnix"]
+                .as_u64()
+                .filter(|timestamp| *timestamp > 0 && capture["observed"] == true)
+                .and_then(|timestamp| now_unix?.checked_sub(timestamp))
+                .map(|seconds| format!("{seconds}s ago"))
+                .unwrap_or_else(|| "UNKNOWN".into());
+            writeln!(
+                out,
+                "    browser observation: {age} | saved snapshot; monitoring not verified"
+            )
+            .map_err(|_| "CLI_OUTPUT_FAILED")?;
+        } else {
+            writeln!(
+                out,
+                "    context: unavailable for current paired conversation"
+            )
+            .map_err(|_| "CLI_OUTPUT_FAILED")?;
+        }
+        let rollover = &project["rollover"];
+        let automation = &rollover["automation"];
+        let scope = if paired && automation["targetGeneration"].as_u64() == generation {
+            "SAME_GENERATION_SNAPSHOT"
+        } else {
+            "STALE_OR_UNVERIFIED_SNAPSHOT"
+        };
+        let tick = automation["tickUtc"]
+            .as_u64()
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "UNKNOWN".into());
+        let queued = project["queue"]["queuedCount"]
+            .as_u64()
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "UNKNOWN".into());
+        writeln!(
+            out,
+            "    saved rollover: {} | scheduler: {} ({scope}, tick {tick}) | queued {queued}",
+            safe_report_token(&rollover["phase"]),
+            safe_report_token(&automation["stage"])
+        )
+        .map_err(|_| "CLI_OUTPUT_FAILED")?;
+    }
+    if projects.len() > 24 {
+        writeln!(
+            out,
+            "  {} additional Web project(s) omitted",
+            projects.len() - 24
+        )
+        .map_err(|_| "CLI_OUTPUT_FAILED")?;
+    }
+    Ok(())
+}
+
 fn print_codex_recovery(
     workspace: &Path,
     project_id: &str,
@@ -1068,6 +1258,7 @@ fn print_help(out: &mut impl Write) -> Result<(), String> {
         "Commands:",
         "  status                         CatDesk + independent WakeHost status",
         "  projects                       Show registered project paths and binding presence",
+        "  web projects | web status      Show paired Web targets, context and saved progress",
         "  queue                          Show fair selector, leases and scoped task IDs",
         "  resume <project-id>            Resume that project's bound native Codex thread",
         "  recovery <project-id>          Read scoped Codex blocker report",
@@ -1094,6 +1285,7 @@ fn print_help(out: &mut impl Write) -> Result<(), String> {
 enum ParsedCommand<'a> {
     Status,
     Projects,
+    WebProjects,
     ProjectQueue,
     ResumeUsage,
     Resume(&'a str),
@@ -1125,6 +1317,7 @@ fn parse_command(input: &str) -> ParsedCommand<'_> {
     match trimmed {
         "status" => return ParsedCommand::Status,
         "projects" => return ParsedCommand::Projects,
+        "web projects" | "web status" => return ParsedCommand::WebProjects,
         "queue" => return ParsedCommand::ProjectQueue,
         "resume" => return ParsedCommand::ResumeUsage,
         "recovery" => return ParsedCommand::RecoveryUsage,
@@ -1203,6 +1396,7 @@ fn execute_command(
     match command {
         ParsedCommand::Status => print_status(workspace, out)?,
         ParsedCommand::Projects => print_projects(workspace, out)?,
+        ParsedCommand::WebProjects => print_web_projects(workspace, out)?,
         ParsedCommand::ProjectQueue => print_project_queue(workspace, out)?,
         ParsedCommand::ResumeUsage => {
             writeln!(
@@ -1394,6 +1588,251 @@ mod tests {
     use std::path::Path;
     use std::process::Command;
     use uuid::Uuid;
+
+    fn web_report() -> serde_json::Value {
+        let digest = "a".repeat(64);
+        let projects = ["alpha", "beta", "gamma"].map(|id| serde_json::json!({
+            "projectId":id, "conversationHistory":["private-predecessor"],
+            "wake":{"status":"PAIRED","target":{"projectId":id,"generation":2,
+                "sha256":digest,"url":"https://chatgpt.com/c/private-current"}},
+            "context":{"status":"CURRENT_ADVISORY","advisory":true,"currentPressure":{
+                "key":{"projectId":id,"conversationUrl":"https://chatgpt.com/c/private-current","targetGeneration":2},
+                "targetSha256":digest,"isCurrent":true,"advisory":true,
+                "observedEstimateTokens":1234,"coverageKnown":false,"triggerTokens":50000}},
+            "queue":{"queuedCount":1},
+            "rollover":{"phase":if id == "beta" {"QUARANTINED"} else {"NONE"},
+                "automation":{"stage":"WAKE_STOPPED","targetGeneration":2,"tickUtc":123}}
+        }));
+        serde_json::json!({"action":"web_status","readOnly":true,
+            "runtimeMode":"DEVELOPMENT_UNPROTECTED",
+            "nativeThreadId":"private-native-thread","workspace":"private-workspace",
+            "webProjects":{"status":"SOURCE_STATUS_ONLY","readOnly":true,"projects":projects}})
+    }
+
+    #[test]
+    fn web_commands_are_read_only_exact_matches() {
+        for command in ["web projects", "web status", "  web status  "] {
+            assert_eq!(parse_command(command), ParsedCommand::WebProjects);
+        }
+        for command in [
+            "web",
+            "web start",
+            "web status alpha",
+            "web projects; wake start",
+        ] {
+            assert_eq!(parse_command(command), ParsedCommand::Unknown);
+        }
+    }
+
+    #[test]
+    fn standalone_web_status_cannot_be_combined_with_runtime_controls() {
+        let flag = super::BINAGOTCHY_WEB_STATUS_FLAG.to_string();
+        assert_eq!(
+            super::parse_binagotchy_web_status_mode(std::slice::from_ref(&flag)),
+            Ok(true)
+        );
+        assert_eq!(super::parse_binagotchy_web_status_mode(&[]), Ok(false));
+        assert_eq!(
+            super::parse_binagotchy_web_status_mode(&[BINAGOTCHY_CLI_MODE_FLAG.into()]),
+            Ok(false)
+        );
+        for extra in [
+            flag.clone(),
+            "wake".into(),
+            "--headless-mcp".into(),
+            BINAGOTCHY_CLI_MODE_FLAG.into(),
+        ] {
+            assert!(super::parse_binagotchy_web_status_mode(&[flag.clone(), extra]).is_err());
+        }
+    }
+
+    #[test]
+    fn web_view_keeps_waiting_projects_visible_and_hides_private_content() {
+        let mut report = web_report();
+        report["webProjects"]["projects"][2]["projectId"] = serde_json::json!("bad\u{001b}[31m");
+        let mut out = Vec::new();
+        super::render_web_projects(&report, &mut out).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        for expected in [
+            "Web projects: 3",
+            "alpha | Wake PAIRED",
+            "beta | Wake PAIRED",
+            "saved rollover: QUARANTINED",
+            "coverage UNKNOWN",
+            "observed 1234 tokens (advisory)",
+            "SAME_GENERATION_SNAPSHOT",
+            "tick 123",
+            "[redacted]",
+        ] {
+            assert!(text.contains(expected), "{expected}: {text}");
+        }
+        for private in ["https://", "private-", "\u{001b}", "%"] {
+            assert!(!text.contains(private), "{text}");
+        }
+    }
+
+    #[test]
+    fn web_view_never_attributes_stale_context_or_scheduler_to_current_chat() {
+        let baseline = web_report();
+        for (pointer, replacement) in [
+            ("/wake/status", serde_json::json!("ATTENTION")),
+            ("/wake/target/generation", serde_json::json!(3)),
+            ("/wake/target/sha256", serde_json::json!("b".repeat(64))),
+            (
+                "/context/currentPressure/key/projectId",
+                serde_json::json!("other"),
+            ),
+            (
+                "/context/currentPressure/key/conversationUrl",
+                serde_json::json!("other"),
+            ),
+            (
+                "/context/currentPressure/isCurrent",
+                serde_json::json!(false),
+            ),
+            (
+                "/context/currentPressure/advisory",
+                serde_json::json!(false),
+            ),
+        ] {
+            let mut report = baseline.clone();
+            *report["webProjects"]["projects"][0]
+                .pointer_mut(pointer)
+                .unwrap() = replacement;
+            report["webProjects"]["projects"]
+                .as_array_mut()
+                .unwrap()
+                .truncate(1);
+            let mut out = Vec::new();
+            super::render_web_projects(&report, &mut out).unwrap();
+            let text = String::from_utf8(out).unwrap();
+            assert!(text.contains("context: unavailable"), "{pointer}: {text}");
+            assert!(!text.contains("observed 1234"));
+        }
+        let mut report = baseline;
+        report["webProjects"]["projects"][0]["rollover"]["automation"]["targetGeneration"] =
+            serde_json::json!(1);
+        let mut out = Vec::new();
+        super::render_web_projects(&report, &mut out).unwrap();
+        assert!(
+            String::from_utf8(out)
+                .unwrap()
+                .contains("STALE_OR_UNVERIFIED_SNAPSHOT")
+        );
+    }
+
+    #[test]
+    fn web_warning_view_requires_current_pair_and_keeps_unknown_coverage() {
+        let mut report = web_report();
+        let pressure = &mut report["webProjects"]["projects"][0]["context"]["currentPressure"];
+        pressure["warningTokens"] = serde_json::json!(1200);
+        pressure["warningReached"] = serde_json::json!(true);
+        let mut output = Vec::new();
+        super::render_web_projects(&report, &mut output).unwrap();
+        let text = String::from_utf8(output).unwrap();
+        assert_eq!(
+            text.matches("context warning: REACHED at 1200 observed tokens (advisory)")
+                .count(),
+            1
+        );
+        assert!(text.contains("coverage UNKNOWN"));
+        report["webProjects"]["projects"][0]["context"]["currentPressure"]["key"]["targetGeneration"] =
+            serde_json::json!(1);
+        let mut output = Vec::new();
+        super::render_web_projects(&report, &mut output).unwrap();
+        assert!(
+            !String::from_utf8(output)
+                .unwrap()
+                .contains("context warning:")
+        );
+    }
+
+    #[test]
+    fn web_view_shows_independent_saved_browser_observation_ages() {
+        let mut report = web_report();
+        for (project, timestamp) in report["webProjects"]["projects"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .zip([100, 950, 1000])
+        {
+            project["context"]["currentPressure"]["browserCoverage"] =
+                serde_json::json!({"observed":true,"lastObservedAtUnix":timestamp});
+        }
+        let mut out = Vec::new();
+        super::render_web_projects_at(&report, &mut out, Some(1000)).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        for age in ["900s ago", "50s ago", "0s ago"] {
+            assert!(text.contains(&format!("browser observation: {age} | saved snapshot")));
+        }
+        assert_eq!(text.matches("monitoring not verified").count(), 3);
+        assert_eq!(text.matches("coverage UNKNOWN").count(), 3);
+        assert!(!text.contains('%'));
+
+        report["webProjects"]["projects"][0]["wake"]["target"]["generation"] = serde_json::json!(3);
+        let mut out = Vec::new();
+        super::render_web_projects_at(&report, &mut out, Some(1000)).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert!(!text.contains("900s ago"));
+        assert_eq!(text.matches("browser observation:").count(), 2);
+    }
+
+    #[test]
+    fn web_view_does_not_invent_browser_freshness_from_invalid_or_legacy_snapshots() {
+        for coverage in [
+            serde_json::Value::Null,
+            serde_json::json!({"observed":true}),
+            serde_json::json!({"observed":false,"lastObservedAtUnix":900}),
+            serde_json::json!({"observed":true,"lastObservedAtUnix":0}),
+            serde_json::json!({"observed":true,"lastObservedAtUnix":1001}),
+            serde_json::json!({"observed":true,"lastObservedAtUnix":-1}),
+            serde_json::json!({"observed":true,"lastObservedAtUnix":"private-value"}),
+        ] {
+            let mut report = web_report();
+            report["webProjects"]["projects"]
+                .as_array_mut()
+                .unwrap()
+                .truncate(1);
+            report["webProjects"]["projects"][0]["context"]["currentPressure"]["browserCoverage"] =
+                coverage;
+            let mut out = Vec::new();
+            super::render_web_projects_at(&report, &mut out, Some(1000)).unwrap();
+            let text = String::from_utf8(out).unwrap();
+            assert!(text.contains("browser observation: UNKNOWN | saved snapshot"));
+            assert!(!text.contains("private-value"));
+        }
+        let mut report = web_report();
+        report["webProjects"]["projects"][0]["context"]["currentPressure"]["browserCoverage"] =
+            serde_json::json!({"observed":true,"lastObservedAtUnix":900});
+        let mut out = Vec::new();
+        super::render_web_projects_at(&report, &mut out, None).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert_eq!(text.matches("browser observation: UNKNOWN").count(), 3);
+    }
+
+    #[test]
+    fn web_view_bounds_output_and_refuses_invalid_reports_before_output() {
+        let mut report = web_report();
+        let project = report["webProjects"]["projects"][0].clone();
+        report["webProjects"]["projects"] = serde_json::json!(vec![project; 30]);
+        let mut out = Vec::new();
+        super::render_web_projects(&report, &mut out).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert!(text.contains("6 additional Web project(s) omitted"));
+        assert_eq!(text.matches("observed 1234").count(), 24);
+        for pointer in [
+            "/action",
+            "/readOnly",
+            "/webProjects/status",
+            "/webProjects/projects",
+        ] {
+            let mut invalid = report.clone();
+            *invalid.pointer_mut(pointer).unwrap() = serde_json::Value::Null;
+            let mut out = Vec::new();
+            assert!(super::render_web_projects(&invalid, &mut out).is_err());
+            assert!(out.is_empty());
+        }
+    }
 
     fn remove_fixture_tree(path: &Path) {
         let target = path
@@ -1600,6 +2039,7 @@ mod tests {
             schema_version: PROJECT_REGISTRY_SCHEMA_VERSION,
             maximum_codex_workers: 1,
             maximum_qwen_workers: 1,
+            retired_projects: Vec::new(),
             projects: Vec::new(),
         };
         let jobs = (0..30)
@@ -1670,6 +2110,7 @@ mod tests {
             schema_version: PROJECT_REGISTRY_SCHEMA_VERSION,
             maximum_codex_workers: 1,
             maximum_qwen_workers: 1,
+            retired_projects: Vec::new(),
             projects: vec![
                 AutonomousProjectV1 {
                     project_id: "catdesk".into(),
@@ -1788,6 +2229,7 @@ mod tests {
             schema_version: PROJECT_REGISTRY_SCHEMA_VERSION,
             maximum_codex_workers: 1,
             maximum_qwen_workers: 1,
+            retired_projects: Vec::new(),
             projects: vec![project],
         };
         fs::write(
@@ -1812,6 +2254,7 @@ mod tests {
             schema_version: PROJECT_REGISTRY_SCHEMA_VERSION,
             maximum_codex_workers: 1,
             maximum_qwen_workers: 1,
+            retired_projects: Vec::new(),
             projects: vec![AutonomousProjectV1 {
                 project_id: "catdesk".into(),
                 workspace: root.clone(),
@@ -1960,6 +2403,7 @@ mod tests {
             schema_version: PROJECT_REGISTRY_SCHEMA_VERSION,
             maximum_codex_workers: 1,
             maximum_qwen_workers: 1,
+            retired_projects: Vec::new(),
             projects: vec![AutonomousProjectV1 {
                 project_id: "catdesk".into(),
                 workspace: root.clone(),

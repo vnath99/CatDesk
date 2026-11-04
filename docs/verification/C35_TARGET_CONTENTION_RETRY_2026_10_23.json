@@ -1,0 +1,53 @@
+{
+  "recordedUtc": "2026-10-23T15:13:01.5160128Z",
+  "localDate": "2026-10-23",
+  "task": "C35-TARGET-CONTENTION-RETRY",
+  "classification": "SOURCE_TESTED_PUBLISHED",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "cdb39ba7d478841f54c271a3552dc1d9c1a6c1eb",
+  "publication": {
+    "atUtc": "2026-10-23T14:16:34.6591825Z",
+    "exactRemoteSha": "cdb39ba7d478841f54c271a3552dc1d9c1a6c1eb",
+    "forcePush": false,
+    "visibilityChanged": false
+  },
+  "changes": [
+    "Distinguish live Wake transaction contention from unavailable config",
+    "Record AWAITING_TARGET without writer-capable recovery for a busy read",
+    "Use two bounded local retries while preserving independent project slots",
+    "Do not retry invalid or unavailable authority as local contention"
+  ],
+  "verification": {
+    "recordedUtc": "2026-10-23T14:14:36.4136787Z",
+    "distinctSourceTests": 85,
+    "newTestCases": 1,
+    "extendedRealHeldLockFixture": true,
+    "strictClippy": "PASS",
+    "format": "PASS",
+    "browserActions": 0,
+    "runtimeStateChanged": false,
+    "wakeHostStarted": false
+  },
+  "sourceFiles": [
+    {
+      "path": "src/mcp.rs",
+      "sha256": "01b14f115be255d5779980988c8f56686ce74295ea5fa46162bf844a421b2f7b"
+    },
+    {
+      "path": "src/operator_web_auto.rs",
+      "sha256": "a0c3a9e205cc5b4eb1a67f43411c199e3f92089fb80227fdbc28c16126739735"
+    },
+    {
+      "path": "src/web_development_tests.rs",
+      "sha256": "2e77509a5297c3d6b28b93d77fa87d8f231780a6b95b37f9885f4d55f2b28aa9"
+    }
+  ],
+  "historicalCause": "C29_AND_C34_UNPROVEN",
+  "ci": {
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "acceptance": "UNVERIFIED"
+  },
+  "liveAutomaticDriverAccepted": false,
+  "protectedInstalledAcceptance": false
+}

@@ -1,0 +1,116 @@
+             const turnsAfterWake = turnContainers.filter(turn => followsLatestUser(turn));
+             if (turnsAfterWake.length > 1)
+                 return ['invalid', 0, 0, false, false];
++            {RESPONSE_ASSISTANT_SCOPE}
+             const rawTimeouts = Array.from(document.querySelectorAll('div, span, p'))
+-                .filter(element => visible(element) && inWakeExchange(element) &&
++                .filter(element => visible(element) && assistantResponseNode(element) &&
+                     normalize(element.innerText || element.textContent) === timeoutText);
+             const timeouts = rawTimeouts.filter(element =>
+                 !Array.from(element.children).some(child =>
+@@ -1148,9 +1295,9 @@ class CdpSink:
+             const retryButtons = [];
+             for (const timeout of timeouts) {{
+                 let scope = timeout;
+-                for (let depth = 0; depth < 7 && scope; depth += 1, scope = scope.parentElement) {{
++                for (let depth = 0; depth < 7 && scope && responseBoundary && responseBoundary.contains(scope); depth += 1, scope = scope.parentElement) {{
+                     const candidates = Array.from(scope.querySelectorAll('button')).filter(button =>
+-                        visible(button) &&
++                        visible(button) && assistantResponseNode(button) &&
+                         (normalize(button.innerText || button.textContent) === retryLabel ||
+                          normalize(button.getAttribute('aria-label')) === retryLabel));
+                     if (candidates.length) {{
+@@ -1166,6 +1313,7 @@ class CdpSink:
+             )).filter(element => inWakeExchange(element));
+             const pairedAssistantUnits = pairedTurn
+                 ? Array.from(latestUser.querySelectorAll("[data-content-search-unit-key]")).filter(unit =>
++                    Boolean(unit.querySelector('h4[data-conversation-role="assistant"]')) &&
+                     !unit.matches("[data-user-message-bubble], [class~='group/user-message']") &&
+                     !unit.querySelector("[data-user-message-bubble], [class~='group/user-message']"))
+                 : [];
+@@ -1203,7 +1351,8 @@ class CdpSink:
+             // ChatGPT can render an old assistant as a load-error placeholder
+             // while retaining Copy/Regenerate controls. Those controls alone
+             // are not evidence of a usable completed response.
+-            if (assistantRawText.toLowerCase().includes("this response couldn't load"))
++            {RESPONSE_LOAD_ERROR_DETECTOR}
++            if (assistantLoadError(latestAssistant))
+                 return ['load-error', 0, 0, true, false];
+             const latestAssistantTurn = latestAssistant
+                 ? (latestAssistant.closest("[data-content-search-turn-key]") ||
+@@ -1222,14 +1371,13 @@ class CdpSink:
+             // cooperative completion, climb only inside an assistant-only
+             // subtree; never treat a whole-turn control or a mounted message
+             // selection id as proof that the assistant finished.
+-            const userNodeSelector = "[data-message-author-role='user'], article[data-turn='user'], " +
+-                "[data-user-message-bubble], [class~='group/user-message']";
+             let assistantCompletionAction = null;
+             for (let scope = latestAssistant; scope && scope !== latestUser; scope = scope.parentElement) {{
+                 if (scope.querySelector(userNodeSelector)) break;
+                 const actions = Array.from(new Set([
+                     ...scope.querySelectorAll("button[data-testid='copy-turn-action-button']"),
+                     ...scope.querySelectorAll(".turn-action-controls button[aria-label='Copy']"),
++                    ...scope.querySelectorAll(".turn-action-controls button[aria-label='Copy message']"),
+                 ])).filter(button => !bodyNode || !bodyNode.contains(button));
+                 if (actions.length > 1) break;
+                 if (actions.length === 1) {{
+@@ -1238,18 +1386,23 @@ class CdpSink:
+                 }}
+             }}
+             // The current paired-turn UI puts its ASSISTANT toolbar beside
+-            // both message units. Qualify that toolbar by its distinct Copy
+-            // label, position after the sole ASSISTANT unit and exclusion from
+-            // every USER subtree. A USER Copy message or code-block Copy is
+-            // not a completed-answer control.
++            // both message units. Copy labels alone do not identify a role:
++            // qualify the shared toolbar by position after the sole ASSISTANT
++            // unit and exclusion from every USER/message subtree. A USER or
++            // code-block Copy message is not a completed-answer control.
+             if (!assistantCompletionAction && pairedTurn && latestAssistant &&
+                     pairedAssistantUnits.length === 1 &&
+                     (pairedAssistantUnits[0] === latestAssistant ||
+                      pairedAssistantUnits[0].contains(latestAssistant)) &&
+                     pairedAssistantUnits[0].querySelector('h4[data-conversation-role="assistant"]')) {{
+                 const actions = Array.from(latestUser.querySelectorAll(
+-                    ".turn-action-controls button[aria-label='Copy']"
++                    ".turn-action-controls button[aria-label='Copy'], " +
++                    ".turn-action-controls button[aria-label='Copy message']"
+                 )).filter(button => !button.closest(userNodeSelector) &&
++                    // Auxiliary tool/search units can have their own Copy.
++                    // Only the shared assistant toolbar outside every message
++                    // unit qualifies here; in-unit actions use the path above.
++                    !button.closest('[data-content-search-unit-key]') &&
+                     !pairedAssistantUnits[0].contains(button) &&
+                     Boolean(pairedAssistantUnits[0].compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING));
+                 if (actions.length === 1) assistantCompletionAction = actions[0];
+@@ -1263,19 +1416,63 @@ class CdpSink:
+                 : (Boolean(completionAction) || pairedAssistantComplete);
+             if (timeouts.length > 8 || retryButtons.length > 8 || assistants.length > 64)
+                 return ['invalid', 0, 0, false, false];
+-            return [
++            const result = [
+                 'ready',
+                 timeouts.length,
+                 retryButtons.length,
+                 assistants.length > 0,
+                 completionActionReady,
+             ];
++            if (includeDiagnostic) result.push(
++                !latestAssistant ? 'ASSISTANT_NOT_MOUNTED' :
++                !assistantBodyText.length ? 'ASSISTANT_BODY_UNPROVEN' :
++                !assistantCompletionAction ? 'ASSISTANT_COMPLETION_ACTION_UNPROVEN' : 'COMPLETE');
++            if (includeDiagnostic) {{
++                // Fixed categories only: no labels, attributes, DOM ids or text
++                // leave this read. Parent counts are advisory and can include
++                // historical controls; they never qualify an assistant action.
++                const count = (scope, selector) => Math.min(scope ? scope.querySelectorAll(selector).length : 0, 64);
++                const knownCopySelector = "button[data-testid='copy-turn-action-button'], .turn-action-controls button[aria-label='Copy'], .turn-action-controls button[aria-label='Copy message']";
++                const turn = pairedTurn ? latestUser : latestAssistantTurn;
++                const parent = turn && turn.parentElement;
++                const shared = turn && latestAssistant ? Array.from(turn.querySelectorAll(
++                    ".turn-action-controls button[aria-label='Copy'], " +
++                    ".turn-action-controls button[aria-label='Copy message']"
++                )).filter(button => !button.closest(userNodeSelector) &&
++                    !button.closest('[data-content-search-unit-key]') &&
++                    Boolean(latestAssistant.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING)) : [];
++                result.push({{

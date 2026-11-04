@@ -20,8 +20,8 @@ class WakeBrowserCleanupTests(unittest.TestCase):
         self.profile = tempfile.TemporaryDirectory()
         self.addCleanup(self.profile.cleanup)
 
-    def _run(self, *, receipt_error=None):
-        timeline = []
+    def _run(self, *, receipt_error=None, timeline=None, drift_at_boundary=False):
+        timeline = [] if timeline is None else timeline
         message = wake_bridge.MESSAGE.format(record_id="cleanup-record")
         receipt = wake_bridge.receipt_for(
             "cleanup-record",
@@ -35,6 +35,11 @@ class WakeBrowserCleanupTests(unittest.TestCase):
                 raise AssertionError("Wake must not quit the shared browser process")
 
         class Cdp:
+            url = "https://chatgpt.com/c/review-one"
+            def get_current_url(self):
+                return self.url
+            def send_keys(self, *_args, **_kwargs):
+                timeline.append("type")
             def press_keys(self, *_args, **_kwargs):
                 return None
             def close_active_tab(self):
@@ -71,6 +76,11 @@ class WakeBrowserCleanupTests(unittest.TestCase):
                 raise receipt_error
             return receipt
 
+        def before_submit():
+            timeline.append("boundary")
+            if drift_at_boundary:
+                cdp.url = "https://chatgpt.com/c/other"
+
         patches = (
             patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=SB)}),
             patch.object(sink, "wait_for_page_readiness", side_effect=lambda _sb, current: current),
@@ -92,18 +102,26 @@ class WakeBrowserCleanupTests(unittest.TestCase):
                     "cleanup-record",
                     message,
                     lambda: True,
-                    lambda: None,
+                    before_submit,
                 )
         return result, receipt, timeline
 
     def test_proven_success_closes_only_owned_tab_before_context_exit(self):
         result, receipt, timeline = self._run()
         self.assertEqual(receipt, result)
-        self.assertEqual(["open", "complete", "receipt", "close_owned_tab", "exit"], timeline)
+        self.assertEqual(["open", "boundary", "type", "complete", "receipt", "close_owned_tab", "exit"], timeline)
 
-    def test_unproven_post_submit_failure_does_not_use_success_cleanup_path(self):
+    def test_unproven_post_submit_failure_still_closes_only_owned_tab(self):
+        timeline = []
         with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "UNPROVEN"):
-            self._run(receipt_error=wake_bridge.PostSubmitUnknown("UNPROVEN"))
+            self._run(receipt_error=wake_bridge.PostSubmitUnknown("UNPROVEN"), timeline=timeline)
+        self.assertEqual(["open", "boundary", "type", "complete", "receipt", "close_owned_tab", "exit"], timeline)
+
+    def test_boundary_target_drift_closes_owned_tab_without_typing_or_receipt(self):
+        timeline = []
+        with self.assertRaisesRegex(wake_bridge.Attention, "TARGET_IDENTITY_MISMATCH"):
+            self._run(timeline=timeline, drift_at_boundary=True)
+        self.assertEqual(["open", "boundary", "close_owned_tab", "exit"], timeline)
 
 
 if __name__ == "__main__":

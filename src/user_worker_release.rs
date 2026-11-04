@@ -725,6 +725,24 @@ impl UserWorkerReleaseStoreV1 {
         generation: u64,
         manifest_sha256: &str,
     ) -> Result<UserWorkerReleaseReadbackV1, String> {
+        let release = self.read_prepared_manifest(generation, manifest_sha256)?;
+        let dir = self
+            .versions()
+            .join(format!("{generation}-{manifest_sha256}"));
+        let image = require_plain_file(&dir.join("worker.exe"), MAX_IMAGE, "prepared image")?;
+        if digest(&image) != release.manifest.image_sha256
+            || image.len() as u64 != release.manifest.image_length
+        {
+            return Err("prepared image tampered".into());
+        }
+        Ok(release)
+    }
+
+    fn read_prepared_manifest(
+        &self,
+        generation: u64,
+        manifest_sha256: &str,
+    ) -> Result<UserWorkerReleaseReadbackV1, String> {
         if generation == 0 || !valid_hex(manifest_sha256) {
             return Err("prepared release identity invalid".into());
         }
@@ -743,10 +761,6 @@ impl UserWorkerReleaseStoreV1 {
         manifest.validate()?;
         if manifest.generation != generation {
             return Err("prepared generation mismatched".into());
-        }
-        let image = require_plain_file(&dir.join("worker.exe"), MAX_IMAGE, "prepared image")?;
-        if digest(&image) != manifest.image_sha256 || image.len() as u64 != manifest.image_length {
-            return Err("prepared image tampered".into());
         }
         Ok(UserWorkerReleaseReadbackV1 {
             generation,
@@ -854,10 +868,13 @@ impl UserWorkerReleaseStoreV1 {
         let state = self
             .read_active_state()?
             .ok_or_else(|| "release rollback has no current version".to_string())?;
-        self.validate_committed_state(&state)?;
         if state.current.generation != expected_current {
             return Err("release rollback CAS refused".into());
         }
+        // Preserve the committed manifest/review identity of the release being
+        // retired. Its executable may be damaged or missing: requiring healthy
+        // current bytes would prevent recovery from exactly that failure.
+        self.read_prepared_manifest(state.current.generation, &state.current.manifest_sha256)?;
         let previous = state
             .previous
             .ok_or_else(|| "release rollback has no previous version".to_string())?;
@@ -990,6 +1007,82 @@ mod tests {
         assert!(s.rollback(1).is_err());
         assert_eq!(s.rollback(2).unwrap(), 1);
         assert_eq!(s.reconcile().unwrap().unwrap().manifest_sha256, d1);
+    }
+
+    #[test]
+    fn rollback_retires_damaged_or_missing_current_image_using_intact_predecessor() {
+        for missing in [false, true] {
+            let (s, _root) = store();
+            let d1 = s.prepare(&m(1, b"one"), b"one").unwrap();
+            s.activate(0, 1, &d1, true).unwrap();
+            let d2 = s.prepare(&m(2, b"two"), b"two").unwrap();
+            s.activate(1, 2, &d2, true).unwrap();
+            let current_image = s.versions().join(format!("2-{d2}")).join("worker.exe");
+            if missing {
+                fs::remove_file(&current_image).unwrap();
+            } else {
+                fs::write(&current_image, b"damaged current executable").unwrap();
+            }
+            assert!(s.reconcile().is_err());
+            assert!(s.rollback(99).is_err());
+            assert_eq!(
+                s.rollback(2).expect(
+                    "rollback must use the retained predecessor even if current executable is unusable"
+                ),
+                1
+            );
+            let cold = UserWorkerReleaseStoreV1 {
+                root: s.root.clone(),
+            };
+            let selected = cold.reconcile().unwrap().unwrap();
+            assert_eq!(selected.manifest_sha256, d1);
+            assert_eq!(selected.manifest, m(1, b"one"));
+            assert!(
+                cold.read_active_state()
+                    .unwrap()
+                    .unwrap()
+                    .previous
+                    .is_none()
+            );
+            assert!(cold.rollback(2).is_err());
+            assert!(cold.rollback(1).is_err());
+            if missing {
+                assert!(!current_image.exists());
+            } else {
+                assert_eq!(
+                    fs::read(current_image).unwrap(),
+                    b"damaged current executable"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rollback_keeps_selector_when_predecessor_or_current_manifest_is_untrusted() {
+        for fault in 0..5 {
+            let (s, _root) = store();
+            let d1 = s.prepare(&m(1, b"one"), b"one").unwrap();
+            s.activate(0, 1, &d1, true).unwrap();
+            let d2 = s.prepare(&m(2, b"two"), b"two").unwrap();
+            s.activate(1, 2, &d2, true).unwrap();
+            let previous_image = s.versions().join(format!("1-{d1}")).join("worker.exe");
+            let current_manifest = s.versions().join(format!("2-{d2}")).join("manifest.json");
+            match fault {
+                0 => fs::write(previous_image, b"damaged predecessor").unwrap(),
+                1 => fs::remove_file(previous_image).unwrap(),
+                2 => fs::write(current_manifest, b"untrusted current manifest").unwrap(),
+                3 => fs::remove_file(current_manifest).unwrap(),
+                4 => {
+                    let mut state = s.read_active_state().unwrap().unwrap();
+                    state.previous = None;
+                    fs::write(s.state_path(), canonical(&state).unwrap()).unwrap();
+                }
+                _ => unreachable!(),
+            }
+            let before = fs::read(s.state_path()).unwrap();
+            assert!(s.rollback(2).is_err());
+            assert_eq!(fs::read(s.state_path()).unwrap(), before);
+        }
     }
 
     #[test]

@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C233",
+  "status": "INSTALLED_LOCAL_INDEPENDENT_PROJECT_CONTROLLERS_PASS",
+  "sourceCommit": "cf902361718ec36304c06b1d92aabdeb979dec3f",
+  "branch": "codex/web-rollover-oct17",
+  "controllerSha256": "0226b6e04cc996c35ed8082832bf38420ff03566b98f720fe58a691b1f09ace0",
+  "controllerBuildRecordSha256": "28a810f3d6b69f520ba1e8500497869d4b15e12b4e5a27983ebc4a2dbf498927",
+  "installedSha256": "91eea19e6e030e80900d43114f800c3642f5cc063ef2c969b83eb20d2c28d14b",
+  "startedUtc": "2026-10-26T02:39:42.4309115+00:00",
+  "finishedUtc": "2026-10-26T02:41:46.1109945+00:00",
+  "outerMaximumSeconds": 180,
+  "eachControllerMaximumSeconds": 120,
+  "results": {
+    "newPromotions": 0,
+    "newAttributedRuntimeFiles": 6,
+    "peerReadAfterRefusal": true,
+    "wrongWitnessRefused": true,
+    "ownedJobsAbsent": true,
+    "distinctOwnedProcessesAndPorts": true,
+    "wrongTokensRejected401": true,
+    "independentRegisteredProjects": 2,
+    "exactProjectScopesAndTargetWitnesses": true,
+    "siblingWorkspaceReadRefused": true,
+    "realOwnWorkspaceReads": true,
+    "firstContinuedDuringSecondStartup": true,
+    "contextLedgersAppendOnly": 2,
+    "externalRequests": 7,
+    "priorContextEvents": [
+      14,
+      20
+    ],
+    "browserWakeRecurringStarts": 0,
+    "naturalControllerExitCodes": [
+      0,
+      0
+    ],
+    "previousRuntimeFilesPreserved": 15,
+    "preservedExistingPins": 1936,
+    "resultingContextEvents": [
+      24,
+      32
+    ],
+    "listenersAndInstalledProcessesAfter": 0,
+    "globalLeaseFreeBeforePeerStart": true,
+    "nativeWriterClaims": 0
+  },
+  "evidence": {
+    "manifestSha256": "5d5282851ede61b6d45f61be7dbbd27d9ced9423e8606c3f25f3d0c4ac15648f",
+    "resultSha256": "db751e3ec00c585d3acd5581bf11751250f78c28ad2e053eda17857da866df44",
+    "contextSha256": "d5759ef5e52982889193b965b6afd4d3e261279cddeb02ddc2932a3b0aa4b217",
+    "postBaselineSha256": "81192b8aed8d4706496c288a63dbeaf200967d5d2abb6d1a32c4d2a15773dbbd",
+    "postBaselinePins": 1946,
+    "outerSha256": "090cd720b381b9e7727ee553712b370dc5c38ad302db16f626b862416d57330d"
+  },
+  "ci": {
+    "workflowDispatches": 0,
+    "exactSourceQueryRuns": 0
+  },
+  "limits": [
+    "Actual installed local read-only project operation; does not authenticate a caller as ChatGPT Web.",
+    "No project writes/native task claims, unattended-service qualification, external Secure MCP repair or different-version rollback qualification.",
+    "Two simultaneous startup admissions were not exercised: the second starts after the first is ready, while the first remains active.",
+    "C231 failed history and C232 failing fixture remain preserved; no completed Web send or rollover was replayed.",
+    "Connector HTTP 429 remains a separate unverified dependency; no repeated probe."
+  ],
+  "milestoneComplete": false
+}

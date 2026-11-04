@@ -1,0 +1,345 @@
+{
+  "recordedUtc": "2026-10-23T04:04:02.6815435Z",
+  "localDate": "2026-10-23",
+  "task": "C10-DURABLE-FAIR-ROLLOVER-ADMISSION",
+  "classification": "SOURCE_TESTED_LOCAL",
+  "branch": "codex/web-rollover-oct17",
+  "baseHead": "991655bd9bf1d4f8289376b9d6d7bd9a3b0a3ee1",
+  "sourceFiles": [
+    {
+      "path": "src/web_rollover_admission.rs",
+      "sha256": "9fda2d7ac60c8cdcae628bec1c8c29fd920726bb10d343c89a0431337cc674d6"
+    },
+    {
+      "path": "src/operator_web_rollover.rs",
+      "sha256": "ee76250efafab4c39c23be67c92cf78cdcb5f8f85d7fdb604c20d5c0fdfcb99d"
+    },
+    {
+      "path": "src/operator_web_auto.rs",
+      "sha256": "f23d372abfd2c182433df492aa2219a0bf1499c5ea27d34203d978e212324f88"
+    },
+    {
+      "path": "src/operator_web_cli.rs",
+      "sha256": "1ee60798a914a06a8791a5b48dd6d3d6ba5c2dd3597816bb3993813328086c04"
+    }
+  ],
+  "implementation": {
+    "scope": "NEW_CHAT_CREATION_ONLY_IN_EXISTING_SHARED_WAKE_BROWSER_ROOT",
+    "registryOrSchedulerReplaced": false,
+    "durableFifo": true,
+    "identityFields": [
+      "projectId",
+      "intentId",
+      "sourceGeneration",
+      "sourceDigest",
+      "messageDigest"
+    ],
+    "journalPhases": [
+      "WAITING",
+      "ACTIVE",
+      "CREATION_RECORDED",
+      "QUARANTINED"
+    ],
+    "ordering": "MONOTONIC_SEQUENCE_AMONG_ELIGIBLE_WAITERS",
+    "utcJournalTimes": true,
+    "maximumJournalEntries": 512,
+    "maximumJournalBytes": 262144,
+    "overflow": "REFUSE_NO_EVICTION",
+    "retainedAdmissionOwner": "OS_FILE_LEASE",
+    "browserOwnership": "EXISTING_HOST_PROFILE_AND_BROWSER_SESSION_GUARDS_UNCHANGED",
+    "abandonedAdmission": "QUARANTINE_NOT_SUCCESS_OR_RESEND_AUTHORITY",
+    "ineligibleHead": "QUARANTINE_ADMISSION_ONLY_KEEP_PROJECT_JOURNAL_DRAFT_AND_BINDING",
+    "reentry": "ONLY_AFTER_EXISTING_PROJECT_PHASE_POLICY_AND_TARGET_CHECKS",
+    "releasePoint": "EXACT_USER_ISSUED_URL_RECEIPT_VALIDATED_AND_SAVED_IN_PROJECT_JOURNAL",
+    "completionAndBinding": "SEPARATE_EXISTING_CHECKPOINTS_NOT_HELD_BEHIND_CREATION_QUEUE",
+    "unknownSubmission": "EXISTING_NO_RESEND_GUARD_PRESERVED",
+    "queuedSchedulerStage": "AWAITING_BROWSER",
+    "status": "DURABLE_METADATA_ONLY_NO_OWNER_OR_CREATION_PROOF",
+    "independentMcpOrNativeGlobalLockAdded": false
+  },
+  "tests": {
+    "distinctTestsPassed": 72,
+    "testExecutionsPassed": 73,
+    "admission": 6,
+    "projection": 1,
+    "existingRolloverRecovery": 37,
+    "existingSchedulerOwnership": 16,
+    "existingWebCli": 13,
+    "projectionIncludedInWebCli": true,
+    "checks": [
+      {
+        "label": "durable-browser-admission",
+        "startedUtc": "2026-10-23T03:59:27.1586341Z",
+        "finishedUtc": "2026-10-23T04:00:05.1650832Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "rollover_admission",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "b285abd436e004cacd84f4ddecbd79fec60b9cb78bed435052b242f70de6cfd1"
+      },
+      {
+        "label": "creation-admission-status",
+        "startedUtc": "2026-10-23T04:00:05.2014754Z",
+        "finishedUtc": "2026-10-23T04:00:05.9116866Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "creation_admission_projection",
+          "--",
+          "--nocapture"
+        ],
+        "exitCode": 0,
+        "logSha256": "60096c399369a84a3a12bb1927b2e36252685817a39aa4e86012a63e82ff0dc1"
+      },
+      {
+        "label": "existing-rollover-recovery",
+        "startedUtc": "2026-10-23T04:00:05.9219719Z",
+        "finishedUtc": "2026-10-23T04:00:09.8710754Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "operator_facade::web::rollover::tests",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "82d9de3098613a5f2d9c770901d237a46dde2baa3d2f3cd757811db67f7ed291"
+      },
+      {
+        "label": "existing-scheduler-ownership",
+        "startedUtc": "2026-10-23T04:00:09.8813551Z",
+        "finishedUtc": "2026-10-23T04:00:11.641483Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "operator_facade::web::auto::tests",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "9b3c33e6c8e74fadf1552b580ef7ec290dd40012aa0d47522f919c33f1316c96"
+      },
+      {
+        "label": "existing-web-status-cli",
+        "startedUtc": "2026-10-23T04:00:11.6600795Z",
+        "finishedUtc": "2026-10-23T04:00:12.251371Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "operator_facade::web::tests",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "b182ef928d211f538dc11aa759761f97fb78f0a5e539f93a87dfbdcaefd53c8e"
+      },
+      {
+        "label": "strict-root-clippy",
+        "startedUtc": "2026-10-23T04:00:12.2605666Z",
+        "finishedUtc": "2026-10-23T04:00:26.6561766Z",
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exitCode": 0,
+        "logSha256": "00918bf140b1f4b77ab94122e9ad157ff277ac03512ab9c445c79a7452af4984"
+      },
+      {
+        "label": "root-format",
+        "startedUtc": "2026-10-23T04:00:26.6651466Z",
+        "finishedUtc": "2026-10-23T04:00:29.496899Z",
+        "arguments": [
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "strictClippy": "PASS_ALL_TARGETS_ALL_FEATURES",
+    "format": "PASS",
+    "containment": {
+      "ExitCode": 0,
+      "TimedOut": false,
+      "TerminationFailed": false
+    },
+    "maximumSeconds": 600,
+    "concurrentThreadOwners": "PASS_JOINED_BEFORE_ASSERTIONS",
+    "ownerExitSimulation": "DROP_RETAINED_ADMISSION_LEASE_NOT_A_BROWSER_CRASH",
+    "browserTest": "NOT_PERFORMED",
+    "firstValidation": "PASS_THEN_JOURNAL_UTC_FIELDS_ADDED_AND_FINAL_GATES_RERUN"
+  },
+  "external": {
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "messagesSent": 0,
+    "bindingsChanged": false,
+    "nativeSessionsChanged": false,
+    "selectedPackageChanged": false,
+    "recurringStarted": false,
+    "protectedProductionChanged": false,
+    "completedCanaryReplayed": false,
+    "connectorCalled": false
+  },
+  "acceptance": {
+    "source": "PASS",
+    "normalExecutable": "PASS_NORMAL_BUILD_AND_BOUNDED_READ_ONLY_CENTRAL_FRONTEND",
+    "selectedPackage": "PRIOR_C8_V49_UNCHANGED",
+    "liveSimultaneousRolloverG": "OPEN",
+    "liveInterruptionH": "OPEN",
+    "liveRestartI": "OPEN",
+    "projectMcpIdentityB": "OPEN",
+    "protectedProduction": "OPEN",
+    "unattended": "NOT_ACTIVATED",
+    "fullMilestone": "PARTIAL"
+  },
+  "nextTask": "Qualify the matched development release and prepare two fresh controlled rollout sources before actual simultaneous browser acceptance G. Do not repeat completed canaries. Independently implement immutable project MCP execution context using the existing registry resolver/authentication and native writer boundaries. Full normal CLI 15s probe remains unqualified.",
+  "sourcePublication": {
+    "atUtc": "2026-10-23T04:06:20.4971346Z",
+    "action": "rollover-admission-published-exact-match",
+    "sourceBase": "991655bd9bf1d4f8289376b9d6d7bd9a3b0a3ee1",
+    "sourceFiles": [
+      {
+        "path": "src/web_rollover_admission.rs",
+        "sha256": "9fda2d7ac60c8cdcae628bec1c8c29fd920726bb10d343c89a0431337cc674d6"
+      },
+      {
+        "path": "src/operator_web_rollover.rs",
+        "sha256": "ee76250efafab4c39c23be67c92cf78cdcb5f8f85d7fdb604c20d5c0fdfcb99d"
+      },
+      {
+        "path": "src/operator_web_auto.rs",
+        "sha256": "f23d372abfd2c182433df492aa2219a0bf1499c5ea27d34203d978e212324f88"
+      },
+      {
+        "path": "src/operator_web_cli.rs",
+        "sha256": "1ee60798a914a06a8791a5b48dd6d3d6ba5c2dd3597816bb3993813328086c04"
+      }
+    ],
+    "head": "2cba039f89f1bbe779567756871220a5edc5ed1c",
+    "remoteSha": "2cba039f89f1bbe779567756871220a5edc5ed1c",
+    "branch": "codex/web-rollover-oct17",
+    "remote": "https://github.com/vnath99/CatDesk",
+    "tree": "CLEAN",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED",
+    "force": false,
+    "visibilityChange": false,
+    "protectedProductionAccepted": false
+  },
+  "normalBuild": {
+    "startedUtc": "2026-10-23T04:06:36.9658973Z",
+    "finishedUtc": "2026-10-23T04:07:23.5559019Z",
+    "sourceCommit": "2cba039f89f1bbe779567756871220a5edc5ed1c",
+    "baseCommitTree": "245bb3d4a5bac267dc0f8b92d1f68ed1fb4f4363",
+    "sourceState": "CLEAN_COMMITTED_SOURCE",
+    "sourceFiles": [
+      {
+        "path": "src/web_rollover_admission.rs",
+        "sha256": "9fda2d7ac60c8cdcae628bec1c8c29fd920726bb10d343c89a0431337cc674d6"
+      },
+      {
+        "path": "src/operator_web_rollover.rs",
+        "sha256": "ee76250efafab4c39c23be67c92cf78cdcb5f8f85d7fdb604c20d5c0fdfcb99d"
+      },
+      {
+        "path": "src/operator_web_auto.rs",
+        "sha256": "f23d372abfd2c182433df492aa2219a0bf1499c5ea27d34203d978e212324f88"
+      },
+      {
+        "path": "src/operator_web_cli.rs",
+        "sha256": "1ee60798a914a06a8791a5b48dd6d3d6ba5c2dd3597816bb3993813328086c04"
+      }
+    ],
+    "profile": "NORMAL_DEBUG_APP_NO_DEV_DEPENDENCIES",
+    "exitCode": 0,
+    "maximumSeconds": 240,
+    "packageSelectionChanged": false,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "imageSha256": "c2ee2dc03acfda2b9b9b28287598a45139153ce594cf675c7df17e9a368e9d49",
+    "imageBytes": 67276288,
+    "buildLogSha256": "b015041a6892b788b9ccb767fd04051fec7a1d69a9227c04b0ca00b9d4065ac6"
+  },
+  "normalReadOnlyFrontend": {
+    "startedUtc": "2026-10-23T04:12:22.2777513Z",
+    "finishedUtc": "2026-10-23T04:12:36.6031412Z",
+    "classification": "NORMAL_C10_READ_ONLY_EXISTING_CONTROL_FRONTEND",
+    "sourceCommit": "2cba039f89f1bbe779567756871220a5edc5ed1c",
+    "imageSha256": "c2ee2dc03acfda2b9b9b28287598a45139153ce594cf675c7df17e9a368e9d49",
+    "maximumSeconds": 30,
+    "exitCode": 0,
+    "timedOut": false,
+    "failure": null,
+    "originalPairedProjects": 5,
+    "protectedRecordsChecked": 139,
+    "changedRecords": 0,
+    "newRecords": 0,
+    "admissionArtifactsCreated": 0,
+    "ownedProcesses": 0,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "messagesSent": 0,
+    "selectedPackageChanged": false,
+    "recurringStarted": false,
+    "protectedProductionChanged": false,
+    "nativeSessionsChanged": false,
+    "completedCanaryReplayed": false
+  },
+  "fullNormalCliProbe": {
+    "startedUtc": "2026-10-23T04:09:39.8654853Z",
+    "finishedUtc": "2026-10-23T04:09:56.0433769Z",
+    "maximumSeconds": 15,
+    "exitCode": -1,
+    "timedOut": true,
+    "result": "NO_OUTPUT_UNVERIFIED",
+    "rootExited": true,
+    "checkedRecords": 139,
+    "changedRecords": 0,
+    "newRecords": 0,
+    "admissionArtifactsCreated": 0,
+    "ownedBrowserWakeProcesses": 0,
+    "followup": "SEPARATE_NARROWER_CENTRAL_FRONTEND_PASS_NOT_FULL_CLI_ACCEPTANCE",
+    "cause": "NOT_PROVEN_NO_SOURCE_PERFORMANCE_FIX_CLAIMED"
+  },
+  "connectorObservation": {
+    "observedUtc": "2026-10-23T04:16:16Z",
+    "operation": "ONE_READ_ONLY_TRANSPORT_STATUS",
+    "httpStatus": 429,
+    "error": "MCP_SSE_PROBE_RATE_LIMITED",
+    "calls": 1,
+    "retries": 0,
+    "settingsChanged": false,
+    "alternateConnectorUsed": false,
+    "browserStarted": false,
+    "meaning": "EXTERNAL_CONNECTOR_VERIFICATION_DEPENDENCY_ONLY_NOT_SOURCE_FAILURE"
+  }
+}

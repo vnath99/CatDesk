@@ -1,0 +1,52 @@
+{
+  "observedUtc": "2026-11-01T20:06:47.213298+00:00",
+  "classification": "ACTUAL_WEB_SOURCE_REVIEW_CHECKPOINTS_NOT_INSTALLED_ACCEPTANCE",
+  "sourceCommit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+  "frozenInputPublication": "3e6f1147396fc79e05f5997e13a69cb1ad31369e",
+  "checkpoints": [
+    {
+      "scope": "RECEIPT_COLLECTION_AND_PREPARATION_GUARDS_WITH_TEST_AND_LIVE_RECOVERY_RECORDS",
+      "verdict": "REVIEWED_PARTIAL",
+      "actionableFindings": [],
+      "responseSha256": "6d96d8d0af178b1b38900ee701e26dbeff990b36b110c899ac5066146f465365",
+      "exactReceiptAndCompletedBodyVerified": true,
+      "declaredSourceReadsCorroborated": 8,
+      "coordinatorClosed": true
+    },
+    {
+      "scope": "CURRENT_BACKEND_TEST_CHANGES_AND_HISTORICAL_REPLACED_LINES",
+      "verdict": "REVIEWED_PARTIAL",
+      "actionableFindings": [],
+      "responseSha256": "280fdbaaecc3cc720f2f8541f9e147812a4ae16636db2b6d2e8e5f05b05d4daa",
+      "exactReceiptAndCompletedBodyVerified": true,
+      "declaredSourceReadsCorroborated": 17,
+      "coordinatorClosed": true
+    }
+  ],
+  "context": {
+    "generation": 5,
+    "observedTokenProxy": 36377,
+    "knownSourceCallsImported": 25,
+    "duplicateImportChangedLedger": false,
+    "rawTextPersisted": false,
+    "coverageKnown": false,
+    "originAuthenticated": false,
+    "providerExact": false
+  },
+  "nativePeerSnapshot": {
+    "inProgressWithNewRevisions": 3,
+    "idleAfterCompletedTurn": 1,
+    "messagesOrOwnershipActions": 0
+  },
+  "remaining": [
+    "Two separately frozen messages cover adapter tests and the installed-project production owner.",
+    "A bounded task-context visibility packet is prepared, not sent.",
+    "Cumulative current-source acceptance and existing ACK/snapshot/producer/promotion checks remain open.",
+    "Retained production lacks the later native dispatcher operations and still serves a distinct canonical registry scope.",
+    "Actual two-Web workspace coding/native execution and qualified persistent recovery remain unproved."
+  ],
+  "sourceAccepted": false,
+  "producerAuthority": false,
+  "productionChanges": 0,
+  "sharedWakeHostStarted": false
+}

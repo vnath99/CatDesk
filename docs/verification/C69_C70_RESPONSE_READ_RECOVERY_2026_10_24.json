@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C69_C70_FRESH_SOURCE_RECONCILIATION_AND_BOUNDED_RESPONSE_QUERY_RECOVERY",
+  "observedUtc": "2026-10-24T05:22:09.5278215+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "parentCommit": "b29e4482ff748300ece79ae07bcde7e3f47aa6bd",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "sourceHashes": [
+    {
+      "sha256": "0f162cd0a49f5166a95a88aba3be08afe04c3ec2010ce51a66504d44d3c77bdb",
+      "path": "scripts/wake_bridge.py"
+    },
+    {
+      "sha256": "137f8f9b490f46ed73422ab1293b8226f315a48314c3ce7560954795a2786734",
+      "path": "tests/test_wake_bridge.py"
+    }
+  ],
+  "sourceChange": "Response wait permits up to three failed pure state reads across its existing deadline, restarting target/turn validation and idle stabilization. It performs no new UI action, source submission, refresh or Retry click. Target/sequence/network and other semantic failures retain their fences.",
+  "newTests": [
+    "transient URL/visibility/editor/snapshot read recovery",
+    "bounded failure budget and non-query error preservation",
+    "original generation/total deadlines",
+    "target drift after a failed read"
+  ],
+  "fixtureCorrection": "Existing optimistic-receipt negative fixture now isolates unrelated page readiness and asserts the real fresh-document receipt guard runs exactly once. Production readiness is unchanged.",
+  "sourceVerification": {
+    "subtests": 187,
+    "fullSuiteSeconds": 182.7150668,
+    "ruff": "UNAVAILABLE_IN_SELECTED_PYTHON_NO_DEPENDENCY_INSTALLED",
+    "rustMainOrHostBuild": "NOT_RERUN_PYTHON_COMPONENT_CHANGE",
+    "diffWhitespace": "PASS",
+    "fullPythonTests": 225,
+    "sourceFrozen": true,
+    "timeoutInterpretation": "First 180s run stopped at unrelated readiness in the receipt fixture. Its corrected isolated 20s run passes and proves the real guard. Second full run reached158 tests but needed longer than180s; final complete run passes in182.72s. Logs/stack diagnostics retained, no failure relabeled.",
+    "outerExitCode": 0,
+    "focusedInitialGreen": "Three initial methods pass; fourth deadline method and corrected receipt fixture are included in the complete final suite.",
+    "originalTimeoutsAndDiagnosticResults": [
+      {
+        "task": "C70_ISOLATED_STALLED_RECEIPT_REGRESSION",
+        "elapsedSeconds": 20.0911395,
+        "exitCode": -1,
+        "sourceFrozen": true,
+        "timedOut": true,
+        "startedUtc": "2026-10-24T05:01:23.6881307+00:00"
+      },
+      {
+        "task": "C70_ISOLATED_STALLED_RECEIPT_REGRESSION",
+        "elapsedSeconds": 12.0926056,
+        "exitCode": 0,
+        "sourceFrozen": true,
+        "timedOut": false,
+        "startedUtc": "2026-10-24T05:03:48.8081582+00:00"
+      },
+      {
+        "task": "C70_BRIDGE_AND_WAKE_PYTHON_REGRESSION",
+        "elapsedSeconds": 180.0951119,
+        "exitCode": -1,
+        "sourceFrozen": true,
+        "timedOut": true,
+        "startedUtc": "2026-10-24T04:53:06.1837055+00:00"
+      },
+      {
+        "task": "C70_BRIDGE_AND_WAKE_PYTHON_REGRESSION",
+        "elapsedSeconds": 180.1103015,
+        "exitCode": -1,
+        "sourceFrozen": true,
+        "timedOut": true,
+        "startedUtc": "2026-10-24T05:04:59.3210424+00:00"
+      }
+    ],
+    "maximumJobSeconds": 600,
+    "maximumChildSeconds": 540,
+    "causalRed": "Three new methods failed before production fix (exit1: two failures/four subtest errors).",
+    "exitCode": 0
+  },
+  "freshSource": {
+    "sourceFailure": "RESPONSE_STATE_QUERY_FAILED_AFTER_ACCEPTED_SUBMISSION",
+    "sourceMessagesSent": 1,
+    "qualification": "ACTUAL_NEW_CONTROLLED_SOURCE_ONLY_NOT_A_REPLAYED_ROLLOVER",
+    "expectedReplyVerified": true,
+    "sourceNotRegistered": true,
+    "originalFailedJournalPreserved": true,
+    "processInterruption": "NOT_STARTED_PENDING_OBSERVER_PACKAGE_QUALIFICATION",
+    "sourceCleanupOwners": 0,
+    "exactAssistantCount": 1,
+    "readOnlyReconciliationExitCode": 0,
+    "readOnlyReconciliationSeconds": 15.3493042,
+    "readOnlyMessagesSent": 0,
+    "independentFreshDocument": true,
+    "exactUserCount": 1,
+    "sourceAttemptBounded": true,
+    "sourceAttemptExitCode": 1
+  },
+  "liveCandidate": {
+    "messagesSent": 0,
+    "elapsedSeconds": 14.5297317,
+    "scopedOwners": 0,
+    "typing": 0,
+    "newProfile": false,
+    "finishedUtc": "2026-10-24T05:15:25.7144444Z",
+    "installedComponent": "NOT_UPDATED_OR_QUALIFIED_YET",
+    "startedUtc": "2026-10-24T05:15:11.1847127Z",
+    "exactAssistants": 1,
+    "qualification": "WORKING_TREE_PYTHON_COMPONENT_REAL_BROWSER_READ_ONLY_WITH_SINGLE_INJECTED_CDP_READ_FAILURE",
+    "outerExitCode": 0,
+    "draftWrites": 0,
+    "exactFinalBodyVerified": true,
+    "nativeResponseSnapshot": "READY_ASSISTANT_AND_USABLE_BODY_COMPLETE",
+    "exactUsers": 1,
+    "responseObserved": true,
+    "injectedReadFailures": 1,
+    "retryClicks": 0,
+    "candidateSourcePin": "0f162cd0a49f5166a95a88aba3be08afe04c3ec2010ce51a66504d44d3c77bdb",
+    "maximumJobSeconds": 180
+  },
+  "preservation": {
+    "retiredProjects": 1,
+    "completedCanariesReplayed": false,
+    "activeProjects": 9,
+    "recurringStarts": 0,
+    "productionChanged": false,
+    "changedRuntimeRecords": 0,
+    "runtimeRecordsChecked": 282,
+    "selectedPackage": "V69_STOPPED_UNCHANGED",
+    "wakeStarts": 0,
+    "nativeActions": 0,
+    "normalAppSource": "36b743aeaa9592bced1892caf06cfed0482cc803",
+    "originalFivePreserved": true,
+    "connectorCalls": 0
+  },
+  "acceptance": {
+    "protectedAndUnattended": "OPEN",
+    "actualWebToolExecutionBC": "OPEN",
+    "sourceReadRecovery": "PASS",
+    "fullOctoberMilestone": "OPEN",
+    "selectedFixedPythonComponent": "PENDING",
+    "candidateLiveReadRecovery": "PASS_CONTROLLED_FAULT_PURE_READS_NO_SEND",
+    "actualProcessKill": "NOT_RUN"
+  },
+  "nextTask": "Qualify the fixed Python bridge through the existing guarded stopped development package update, preserving unchanged normal app/host/adapter and explicit component provenance. Then continue the fresh owned-process interruption operation; source is verified but not registered. Do not resend its seed or any completed canary."
+}

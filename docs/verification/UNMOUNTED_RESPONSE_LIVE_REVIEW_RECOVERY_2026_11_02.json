@@ -1,0 +1,85 @@
+{
+  "observedUtc": "2026-11-02T20:25:02.145298+00:00",
+  "classification": "TESTED_CONTROLLED_LIVE_WITH_DISTINCT_CURRENT_SERVING_DEPENDENCY",
+  "sourceCommit": "3148f44721566493e4adad7a91372450db857a38",
+  "artifacts": {
+    "CatDeskBinagotchy.exe": {
+      "sha256": "583acbc4fbd526280571dc2e8cc658659aa627fbc6a7dec3d09d7f3356fdea15",
+      "bytes": 75173376
+    },
+    "CatDeskWakeHost.exe": {
+      "sha256": "b9a65998109f5e816501af1df4f3ffd0027dd1ac81474069cce1901a77a767af",
+      "bytes": 3700736
+    },
+    "adapter.py": {
+      "sha256": "a784256e1950742462ad74f58f7b1b4ff982f3df12e65469088020a85cf53e75",
+      "bytes": 67009
+    },
+    "wake_bridge.py": {
+      "sha256": "4d2b9ab49f58726d40f0ba2545cd4e1af8e2be9d43aa5e86801421351dc61744",
+      "bytes": 213759
+    }
+  },
+  "historicalDevelopmentQualification": {
+    "observedUtc": "2026-11-02T11:27:38.370620+00:00",
+    "buildSeconds": 44.734,
+    "qualificationSeconds": 45.75,
+    "currentController": "583acbc4fbd526280571dc2e8cc658659aa627fbc6a7dec3d09d7f3356fdea15",
+    "previousController": "54c5ea4eb471abe690e64f96b47ca0bc40a161438c51ebfca485cac9b2ec20e5",
+    "unauthorizedStatus": 401,
+    "initializeStatus": 200,
+    "catalogStatus": 200,
+    "toolCount": 79,
+    "oldPackageAndJournalMismatches": 0,
+    "profileIdentityPreserved": true,
+    "ownedEndpointAndTreeExited": true
+  },
+  "liveSnapshot": {
+    "observedUtc": "2026-11-02T11:29:51.465608+00:00",
+    "seconds": 65.438,
+    "snapshotVerified": true,
+    "scope": "CONFIRMED_SENT_RESPONSE",
+    "preservationPins": 4893,
+    "preservationMismatches": 0,
+    "responseBodyExportedByDiagnosis": false
+  },
+  "actualExistingReviewBody": {
+    "verdict": "REVIEWED_PARTIAL",
+    "responseSha256": "336d8babf362fa6d8091f8752bf5353a2151e54b875571d2ea3716feaca61e3d",
+    "findingsCount": 0,
+    "allFrozenCommandsCorroborated": true,
+    "commandCount": 15,
+    "coordinatorClosed": false,
+    "cumulativeSourceAccepted": false,
+    "causeOfEarlierMissingBody": "NOT_ESTABLISHED",
+    "offlineBareErrorCardFixProvenToCauseLiveRecovery": false
+  },
+  "closureRefusal": "WEB_WORK_COMPLETED_RESPONSE_REQUIRED",
+  "completionWitnessRefusal": "RESPONSE_TARGET_DRIFT",
+  "newUserMessages": 0,
+  "retryOrRegenerateClicks": 0,
+  "nativeFinalization": false,
+  "leaseRenewal": false,
+  "checkpointCSubmitted": false,
+  "currentServingInventory": {
+    "observedUtc": "2026-11-02T20:23:05.9369316+00:00",
+    "backendListenerPresent": false,
+    "tunnelClientPresent": false,
+    "canonicalMatchesRecordedRelease": true,
+    "publicLifecycleDiagnosis": "ACTION_REQUIRED",
+    "recentRebootProven": false,
+    "stopCause": "UNKNOWN",
+    "servicesRestarted": false
+  },
+  "cleanup": {
+    "testOwnedProcesses": 0,
+    "recurringWakeHost": "STOPPED",
+    "loginMarkerPresent": false,
+    "processActions": 0,
+    "observerAndDirectInvokerExcludedExplicitly": true
+  },
+  "productionOrBindingChanges": 0,
+  "independentReleaseAuthorityCreated": false,
+  "operatorActionRequired": "NOT_ESTABLISHED_USE_EXISTING_SUPPORTED_OWNER_PREFLIGHT_FIRST",
+  "nextTask": "Prioritize supported recovery of the existing trusted serving pipeline after fresh ownership/trust checks. Preserve the verified partial review, open coordinator, completion drift and expired grant; no resend or forced completion. Investigate completion target preparation separately only after a concrete source/evidence change."
+}

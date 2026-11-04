@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-29T02:08:45.832301+00:00",
+  "localDate": "2026-10-28",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommits": [
+    "83c50b11c7765971e1ac384bd65785942b572a4d",
+    "242fffa4e997ceac8c6a17cc6407dd8bd1ee7361"
+  ],
+  "remoteSourceShasVerified": true,
+  "sourceChanges": {
+    "fixedNetworkErrorLabelsOnly": true,
+    "errorPageProtocolCheckedBeforeAndDuringEvaluation": true,
+    "noNormalPageTextExport": true,
+    "nativeOutputAllowlistRetained": true,
+    "initialLoadingTabRaceReproducedByRegression": true,
+    "existingTargetTabChecksAtMost": 4,
+    "targetMetadataAndDocumentMustAgreeUniquely": true,
+    "originalObservationDeadlinePreserved": true,
+    "unknownDraftGuardRetained": true,
+    "newBrowserProfileCreated": false,
+    "newBrowserNavigationAdded": false
+  },
+  "tests": {
+    "pythonFinalPassed": 15,
+    "actualWindowsProcessTestsPassed": 4,
+    "wakeFormat": "PASS",
+    "strictWakeAllTargetClippy": "PASS",
+    "logs": {
+      "network-readiness-python.private.log": "c8b29bebc23c5bd36a318fc91145a697d3ca88f42d4f53fe7558c5371071dc29",
+      "network-readiness-native.private.log": "671d6305f57327b780a038797bb83cf3b9117db5227a49e2b81f8fb95edd4f60",
+      "network-readiness-format.private.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "network-readiness-clippy.private.log": "8aaf9b2144ec11e91f74778c7b8c464fcb8e83d7fe3bd998ef1b75e3d74a9ad7",
+      "network-readiness-tab-reselection.private.log": "d1a43ac657be265ec0436e82f21af8405354088ce77f8472bef05a6be82626a8",
+      "network-readiness-app-build.private.log": "a8c8dbf60e899e27fe414c28ff5c48cbd65708886f81dcdfc9c86a6f9185573b",
+      "tab-reselection-app-build.private.log": "3a667ab99a97aebe0d4ebe77395a587247fa97b4e71ba3298c6bef76126ddc73"
+    }
+  },
+  "liveRuns": [
+    {
+      "sourceCommit": "83c50b11c7765971e1ac384bd65785942b572a4d",
+      "controllerSha256": "43c403373a63a16a79f89778c3b139143dd1e18bf1d03992a2ca0b4937ddea9d",
+      "startedUtc": "2026-10-29T02:00:57.3380484+00:00",
+      "finishedUtc": "2026-10-29T02:01:45.9470688+00:00",
+      "classification": "CONTROLLED_REGISTERED_BROWSER_READONLY_NOT_WEB_CODING_ACCEPTANCE",
+      "finalState": "HOME",
+      "observations": [
+        "PROBE:TARGET_TAB_DRIFT",
+        "PROBE:HOME",
+        "PROBE:FINAL:HOME"
+      ],
+      "authenticationVerified": false,
+      "protectedFilesUnchanged": 313,
+      "remainingOwners": 0,
+      "boundedOwnerExitCode": 0,
+      "evidenceDigests": {
+        "result.private.json": "4315651fb1e022849f791988a9af89678545da742b7d29a6bf4b71761bfabb99",
+        "outer-result.private.json": "10671f3c688d9448bb830b0cb9cf907d5145e3e363b22911c0caab1533d2dca2",
+        "containment.private.json": "64d903d3909d663d621232d5f5fa23c31ecf2daa2c08d76267ece01af09d81d0",
+        "command.private.json": "dfa9d7d5c1dd7500702dd9e21a51c44a7add0a9dd51e5bc512712bd2bac6ebf9"
+      }
+    },
+    {
+      "sourceCommit": "242fffa4e997ceac8c6a17cc6407dd8bd1ee7361",
+      "controllerSha256": "555bd4ca9d7d96f422136ae36547c657dfb88965481fe78d1cd7b9ed4969ef0f",
+      "startedUtc": "2026-10-29T02:06:43.6922841+00:00",
+      "finishedUtc": "2026-10-29T02:07:30.0429774+00:00",
+      "classification": "CONTROLLED_REGISTERED_BROWSER_READONLY_NOT_WEB_CODING_ACCEPTANCE",
+      "finalState": "HOME",
+      "observations": [
+        "PROBE:TARGET_TAB_MISSING",
+        "PROBE:HOME",
+        "PROBE:TARGET_TAB_MISSING",
+        "PROBE:TARGET_TAB_MISSING",
+        "PROBE:TARGET_TAB_MISSING",
+        "PROBE:FINAL:HOME"
+      ],
+      "authenticationVerified": false,
+      "protectedFilesUnchanged": 313,
+      "remainingOwners": 0,
+      "boundedOwnerExitCode": 0,
+      "evidenceDigests": {
+        "result.private.json": "d958a0f2fcb554b53f2cea140a520b93ff99ede0821f9cb0613c763cd0748638",
+        "outer-result.private.json": "52812dfd70f4420d4913185ddbe024e94e81ceeff73ef4201409b9d120285f50",
+        "containment.private.json": "64d903d3909d663d621232d5f5fa23c31ecf2daa2c08d76267ece01af09d81d0",
+        "command.private.json": "0fffacb4a4370f1b4198609a3e7c385c4378f226b48d23093efdb5602207afd0"
+      }
+    }
+  ],
+  "currentFinding": {
+    "registeredTargetTab": "MISSING_AT_ALL_FOUR_BOUNDED_SAMPLES",
+    "observedDocument": "HOME",
+    "chromeErrorObserved": false,
+    "networkRootCause": "NOT_ESTABLISHED",
+    "homeRecoveryRefusalReason": "NOT_EXPORTED_BY_CURRENT_PROBE",
+    "registeredConversationReady": false,
+    "providerToolsVerified": false,
+    "providerToolCalls": 0
+  },
+  "computerUse": {
+    "requestedSnapshots": 1,
+    "returnedSnapshots": 0,
+    "uiInputActions": 0,
+    "ended": "BROWSER_URL_CONFIDENCE_INSUFFICIENT_FOR_POLICY_ENFORCEMENT",
+    "alternateUiAccessAttempted": false
+  },
+  "preservation": {
+    "bothLiveRunsCleanedUp": true,
+    "protectedFilesPerRun": 313,
+    "changedProtectedFiles": 0,
+    "providerMessages": 0,
+    "bindingChanges": 0,
+    "nativeSessionActions": 0,
+    "wakeStarts": 0,
+    "officialOwnerStarts": 0,
+    "recurringStarts": 0,
+    "installedExecutableChanged": false,
+    "developmentPackageSelectionChanged": false,
+    "previousDevelopmentControllerPreserved": true
+  },
+  "buildLimitations": {
+    "initialWrongBinTarget": "REJECTED_BEFORE_BUILD_NO_RUNTIME_START",
+    "correctRootCatdeskBuilds": "PASS_SEPARATE_DEVELOPMENT_ARTIFACTS"
+  },
+  "remaining": {
+    "twoConversationWebCoding": "OPEN",
+    "connector": "PRIOR_TRANSPORT_FAILURE_NO_HTTP_STATUS_NOT_RETRIED",
+    "browserHome": "REGISTERED_CONVERSATION_NOT_ESTABLISHED_DO_NOT_ASSUMPTIVELY_REAUTHENTICATE"
+  },
+  "goal": "ACTIVE"
+}

@@ -1,0 +1,182 @@
++            1
++        );
++    }
++
++    #[test]
++    fn active_web_work_progress_refuses_identity_conflicts() {
++        let (work, target, original) = active_delivery_fixture("alpha");
++        for change in 0..7 {
++            let mut delivery = original.clone();
++            match change {
++                0 => delivery.event.project_id = "beta".into(),
++                1 => delivery.event.target_generation += 1,
++                2 => delivery.event.event_type = "unrelated".into(),
++                3 => delivery.message_digest = "a".repeat(64),
++                4 => delivery.target.digest = "b".repeat(64),
++                5 => delivery.event.message.push_str(" changed"),
++                _ => delivery.target.generation += 1,
++            }
++            let status =
++                web_work_delivery_progress("alpha", &work, Some(&target), &[], &[delivery]);
++            assert_eq!(status["reason"], "WORK_DELIVERY_IDENTITY_CONFLICT");
++            assert_eq!(status["requestReplayAllowed"], false);
++        }
++        let duplicate = web_work_delivery_progress(
++            "alpha",
++            &work,
++            Some(&target),
++            &[],
++            &[original.clone(), original.clone()],
++        );
++        assert_eq!(duplicate["status"], "ATTENTION");
++        let mut queued = original.event.clone();
++        queued.audit_references.push("different-snapshot".into());
++        assert_eq!(
++            web_work_delivery_progress("alpha", &work, Some(&target), &[queued], &[original])["status"],
++            "ATTENTION"
++        );
++    }
++
++    #[test]
++    fn active_web_work_progress_keeps_missing_and_historical_state_unproved() {
++        let (work, mut target, delivery) = active_delivery_fixture("alpha");
++        target.generation += 1;
++        let queued = web_work_delivery_progress(
++            "alpha",
++            &work,
++            Some(&target),
++            std::slice::from_ref(&delivery.event),
++            &[],
++        );
++        assert_eq!(queued["phase"], "QUEUED");
++        assert_eq!(queued["matchesPairedTarget"], false);
++        assert_eq!(queued["executionAuthorized"], false);
++        let absent = web_work_delivery_progress("alpha", &work, None, &[], &[]);
++        assert_eq!(absent["status"], "UNOBSERVED");
++        assert_eq!(absent["requestReplayAllowed"], false);
++        assert!(absent["matchesPairedTarget"].is_null());
++        let empty = web_work_delivery_progress(
++            "alpha",
++            &json!({"status":"UNOBSERVED","active":null}),
++            None,
++            &[],
++            &[delivery],
++        );
++        assert_eq!(empty["status"], "NO_ACTIVE_REQUEST");
++        assert_eq!(
++            web_work_delivery_progress("alpha", &json!({"status":"ATTENTION"}), None, &[], &[])["status"],
++            "ATTENTION"
++        );
++    }
++
++    #[test]
++    fn active_web_work_progress_receipt_does_not_claim_task_completion() {
++        use catdesk_wake::store::{Phase, Receipt};
++        let (work, target, mut delivery) = active_delivery_fixture("alpha");
++        delivery.phase = Phase::Sent;
++        delivery.receipt = Some(Receipt {
++            schema_version: catdesk_wake::PROTOCOL_VERSION,
++            event_id: delivery.event.event_id.clone(),
++            target_generation: 3,
++            target_digest: delivery.target.digest.clone(),
++            message_digest: delivery.message_digest.clone(),
++            sent_utc: 11,
++            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
++        });
++        let status = web_work_delivery_progress("alpha", &work, Some(&target), &[], &[delivery]);
++        assert_eq!(status["receiptObserved"], true);
++        assert_eq!(status["phase"], "SENT");
++        assert_eq!(status["taskCompletionVerified"], false);
++        assert_eq!(status["requestReplayAllowed"], false);
++    }
++
++    #[test]
++    #[ignore = "read-only qualification against the operator's existing five-project control metadata"]
++    fn registry_status_current_control_metadata_read_only() {
++        eprintln!("READONLY_STATUS_PHASE=REGISTRY_START");
++        let root = PathBuf::from(
++            std::env::var_os("CATDESK_READONLY_STATUS_CONTROL")
++                .expect("explicit existing control root"),
++        );
++        let registry =
++            crate::delegated::autonomy_projects::AutonomousProjectRegistryStoreV1::open_read_only(
++                root.join(".catdesk/projects"),
++            )
++            .unwrap()
++            .load_registry()
++            .unwrap();
++        eprintln!("READONLY_STATUS_PHASE=REGISTRY_READ");
++        let report = web_project_registry_status_with(
++            &root,
++            &json!({"projects":registry.projects}),
++            |control, project| {
++                eprintln!("READONLY_STATUS_PHASE=ROLLOVER_ENTER");
++                let value = crate::operator_facade::registry_rollover_status(control, project);
++                eprintln!("READONLY_STATUS_PHASE=ROLLOVER_RETURN");
++                value
++            },
++        );
++        eprintln!("READONLY_STATUS_PHASE=STATUS_READ");
++        assert_eq!(report["readOnly"], true);
++        assert_eq!(report["installedAcceptance"], "UNVERIFIED");
++        let mut facts = Vec::new();
++        for id in ["catdesk", "wake2", "byovd", "bug-bounty", "portfoliodesk"] {
++            let project = report["projects"]
++                .as_array()
++                .unwrap()
++                .iter()
++                .find(|project| project["projectId"] == id)
++                .expect("registered project");
++            let delivery = &project["workIntent"]["delivery"];
++            if matches!(id, "catdesk" | "wake2") {
++                assert_eq!(delivery["phase"], "SUBMITTING");
++                assert_eq!(delivery["requiresReconciliation"], true);
++                assert_eq!(delivery["matchesPairedTarget"], true);
++            } else {
++                assert_eq!(delivery["status"], "NO_ACTIVE_REQUEST");
++            }
++            assert_eq!(delivery["executionAuthorized"], false);
++            assert_eq!(delivery["requestReplayAllowed"], false);
++            assert_eq!(delivery["taskCompletionVerified"], false);
++            facts.push(json!({"projectId":id,"activeDeliveryStatus":delivery["status"],
++                "activeDeliveryPhase":delivery["phase"],"requiresReconciliation":delivery["requiresReconciliation"],
++                "workRequestCount":project["queue"]["workRequests"]["recordCount"],
++                "originalDispositionComplete":project["rollover"]["operatorDisposition"]["complete"]}));
++        }
++        println!("READONLY_CURRENT_PROJECT_FACTS={}", json!(facts));
++    }
++
+     #[test]
+     fn web_project_status_keeps_queue_progress_and_messages_project_scoped() {
+         use catdesk_wake::protocol::{Event, digest};
+@@ -10832,18 +11212,21 @@ mod tests {
+             target_generation: 1,
+             audit_references: vec![],
+         };
++        let mut review = event("alpha", "web-work-alpha-review", "private review", 13);
++        review.event_type = "source_review".into();
+         let events = [
+             event("alpha", "web-work-alpha", "private alpha request", 10),
+             event("alpha", "ordinary-alpha", "private ordinary event", 11),
+             event("beta", "web-work-beta", "private beta request", 12),
++            review,
+         ];
+         let status = wake_project_progress("alpha", &events, &[]);
+-        assert_eq!(status["queuedCount"], 2);
+-        assert_eq!(status["workRequests"]["recordCount"], 1);
++        assert_eq!(status["queuedCount"], 3);
++        assert_eq!(status["workRequests"]["recordCount"], 2);
+         assert_eq!(status["workRequests"]["status"], "TRANSPORT_ONLY");
+         assert_eq!(
+             status["workRequests"]["recent"][0]["eventId"],
+-            "web-work-alpha"
++            "web-work-alpha-review"
+         );
+         assert_eq!(status["workRequests"]["recent"][0]["phase"], "QUEUED");
+         assert_eq!(
+@@ -12102,6 +12485,57 @@ mod tests {
+         (root, wake)
+     }
+ 
++    #[test]
++    fn login_recovery_target_uses_validated_store_while_normal_selection_stays_fenced() {

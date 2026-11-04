@@ -1,0 +1,193 @@
++        fs::remove_file(store.archive_path(&event.event_id)).unwrap();
++        let historical = Delivery {
++            schema_version: PROTOCOL_VERSION,
++            event: conflicting.clone(),
++            target: target.clone(),
++            phase: Phase::Submitting,
++            owner: "historical-owner".into(),
++            updated_utc: event.created_utc,
++            message_digest: digest(&conflicting.message),
++            receipt: None,
++            reason: None,
++        };
++        historical.validate().unwrap();
++        atomic(&store.delivery_path(&event.event_id), &historical).unwrap();
++        let delivery_bytes = fs::read(store.delivery_path(&event.event_id)).unwrap();
++        assert_eq!(
++            store
++                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
++                .unwrap_err(),
++            "QUEUE_EVENT_ID_CONFLICT"
++        );
++        assert_eq!(
++            fs::read(store.event_path(&event.event_id)).unwrap(),
++            queue_bytes
++        );
++        assert_eq!(
++            fs::read(store.delivery_path(&event.event_id)).unwrap(),
++            delivery_bytes
++        );
++        assert!(!store.archive_path(&event.event_id).exists());
++        fs::remove_dir_all(base).unwrap();
++    }
++
++    #[test]
++    fn semantic_wake_orphaned_submission_or_timer_witness_refuses_new_queue_entry() {
++        let (base, store, target) = fixture();
++        let event_id = intent().event_id("alpha").unwrap();
++        let submission = SubmissionStart {
++            schema_version: PROTOCOL_VERSION,
++            event_id: event_id.clone(),
++            target_generation: target.generation,
++            target_digest: target.digest.clone(),
++            started_utc: now(),
++        };
++        let path = store.submission_start_path(&event_id);
++        atomic(&path, &submission).unwrap();
++        let saved = fs::read(&path).unwrap();
++        assert_eq!(
++            store
++                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
++                .unwrap_err(),
++            "SUBMISSION_RECONCILIATION_REQUIRED"
++        );
++        assert!(store.events().unwrap().is_empty());
++        assert_eq!(fs::read(&path).unwrap(), saved);
++        fs::remove_file(path).unwrap();
++        let timer = TurnTimer {
++            schema_version: PROTOCOL_VERSION,
++            event_id: event_id.clone(),
++            project_id: "alpha".into(),
++            target_generation: target.generation,
++            target_digest: target.digest,
++            started_utc: now(),
++            completed_utc: None,
++            response_state: ResponseState::Observing,
++        };
++        let path = store.timer_path(&event_id);
++        atomic(&path, &timer).unwrap();
++        let saved = fs::read(&path).unwrap();
++        let expected = store.config().unwrap().targets["alpha"].clone();
++        assert_eq!(
++            store
++                .produce_expected_wake("alpha", "Continue alpha", &expected, intent())
++                .unwrap_err(),
++            "SUBMISSION_RECONCILIATION_REQUIRED"
++        );
++        assert!(store.events().unwrap().is_empty());
++        assert_eq!(fs::read(path).unwrap(), saved);
++        assert!(store.delivery(&event_id).unwrap().is_none());
++        fs::remove_dir_all(base).unwrap();
++    }
++
++    fn witness_bytes(store: &Store, id: &str) -> Vec<(PathBuf, Option<Vec<u8>>)> {
++        [
++            store.root().join("config.json"),
++            store.event_path(id),
++            store.archive_path(id),
++            store.delivery_path(id),
++            store.submission_start_path(id),
++            store.timer_path(id),
++        ]
++        .into_iter()
++        .map(|path| {
++            let bytes = path.try_exists().unwrap().then(|| fs::read(&path).unwrap());
++            (path, bytes)
++        })
++        .collect()
++    }
++
++    #[test]
++    fn semantic_wake_queue_sidecars_refuse_producer_claim_and_same_owner_submit_without_writes() {
++        for phase in [
++            None,
++            Some(Phase::Claimed),
++            Some(Phase::Attention),
++            Some(Phase::Stale),
++        ] {
++            for kind in ["submission", "timer"] {
++                let (base, store, target) = fixture();
++                let event = store
++                    .produce_expected_wake("alpha", "Continue alpha", &target, intent())
++                    .unwrap();
++                let lease = store.host_lock().unwrap();
++                if let Some(phase) = phase.as_ref() {
++                    let mut delivery = store.claim(&event, &lease).unwrap();
++                    delivery.phase = phase.clone();
++                    delivery.validate().unwrap();
++                    atomic(&store.delivery_path(&event.event_id), &delivery).unwrap();
++                }
++                if kind == "submission" {
++                    let start = SubmissionStart {
++                        schema_version: PROTOCOL_VERSION,
++                        event_id: event.event_id.clone(),
++                        target_generation: target.generation,
++                        target_digest: target.digest.clone(),
++                        started_utc: event.created_utc,
++                    };
++                    atomic(&store.submission_start_path(&event.event_id), &start).unwrap();
++                } else {
++                    let timer = TurnTimer {
++                        schema_version: PROTOCOL_VERSION,
++                        event_id: event.event_id.clone(),
++                        project_id: event.project_id.clone(),
++                        target_generation: target.generation,
++                        target_digest: target.digest.clone(),
++                        started_utc: event.created_utc,
++                        completed_utc: None,
++                        response_state: ResponseState::Observing,
++                    };
++                    atomic(&store.timer_path(&event.event_id), &timer).unwrap();
++                }
++                let saved = witness_bytes(&store, &event.event_id);
++                assert_eq!(
++                    store
++                        .produce_expected_wake("alpha", "Continue alpha", &target, intent())
++                        .unwrap_err(),
++                    "SUBMISSION_RECONCILIATION_REQUIRED"
++                );
++                assert_eq!(
++                    store.claim(&event, &lease).unwrap_err(),
++                    "SUBMISSION_RECONCILIATION_REQUIRED"
++                );
++                if phase == Some(Phase::Claimed) {
++                    assert_eq!(
++                        store
++                            .transition(
++                                &event.event_id,
++                                lease.owner(),
++                                Phase::Submitting,
++                                None,
++                                None
++                            )
++                            .unwrap_err(),
++                        "SUBMISSION_RECONCILIATION_REQUIRED"
++                    );
++                }
++                let reopened =
++                    Store::open_scoped_for_test(store.root(), store.root().parent().unwrap())
++                        .unwrap();
++                assert_eq!(
++                    reopened
++                        .produce_expected_wake("alpha", "Continue alpha", &target, intent())
++                        .unwrap_err(),
++                    "SUBMISSION_RECONCILIATION_REQUIRED"
++                );
++                assert_eq!(witness_bytes(&store, &event.event_id), saved);
++                drop(lease);
++                fs::remove_dir_all(base).unwrap();
++            }
++        }
++    }
++
++    #[test]
++    fn semantic_wake_crossed_boundary_refuses_mismatched_submission_start_without_writes() {
++        let (base, store, target) = fixture();
++        let event = store
++            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
++            .unwrap();
++        let lease = store.host_lock().unwrap();
++        store.claim(&event, &lease).unwrap();
++        store
++            .transition(
++                &event.event_id,

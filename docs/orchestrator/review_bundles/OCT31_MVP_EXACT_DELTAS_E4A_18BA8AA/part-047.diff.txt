@@ -1,0 +1,205 @@
++        if prior.tool_name != tool_name || prior.arguments_hash != arguments_hash {
++            return Err("PROJECT_TASK_CALL_ID_CONFLICT".into());
++        }
++        return Err(if prior.status == ToolCallStatus::Completed {
++            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
++        } else {
++            "PROJECT_TASK_CALL_RECORDED_NO_REPLAY"
++        }
++        .into());
++    }
++    // A new call/turn identity cannot route around an ambiguous earlier effect.
++    if calls.values().any(|call| {
++        !matches!(
++            call.status,
++            ToolCallStatus::Completed | ToolCallStatus::Failed
++        )
++    }) {
++        return Err("PROJECT_TASK_RECOVERY_REQUIRED".into());
++    }
++    if calls.len() >= inspected.contract.max_tool_calls as usize {
++        return Err("PROJECT_TASK_TOOL_BUDGET_EXCEEDED".into());
++    }
++    if !record {
++        return Ok(JournaledTaskCall {
++            journal,
++            run,
++            tool_call_id,
++        });
++    }
++    journal
++        .record_tool_call_requested(ToolCallRecordV1 {
++            schema_version: 1,
++            run_id: run.clone(),
++            tool_call_id: tool_call_id.clone(),
++            tool_name: tool_name.into(),
++            request_hash: arguments_hash.clone(),
++            arguments_hash,
++            mutation_kind: ToolMutationKind::Mutating,
++            status: ToolCallStatus::Requested,
++            result_hash: None,
++            outcome_summary: None,
++        })
++        .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
++    for phase in [ToolCallStatus::PolicyAllowed, ToolCallStatus::Executing] {
++        journal
++            .transition_tool_call(&run, &tool_call_id, phase, None, None)
++            .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
++    }
++    Ok(JournaledTaskCall {
++        journal,
++        run,
++        tool_call_id,
++    })
++}
++
++pub(crate) fn journal_manual_wake(
++    project: &ResolvedProjectScopeV1,
++    record: &crate::web_work_state::WorkRecord,
++    key: &str,
++    call_id: &str,
++    request: &ManualWakeRequest,
++    expected: &catdesk_wake::protocol::Target,
++    publish: impl FnOnce() -> Result<catdesk_wake::protocol::Event, String>,
++) -> Result<Value, String> {
++    let archive = authorized_manual_wake_assignment(project, record, key)?;
++    let inspected = inspect_assignment(project, &archive, 180)?;
++    check_record_assignment(project, &inspected, record)?;
++    let arguments_hash =
++        stable_text_hash(&serde_json::to_string(request).map_err(|_| "PROJECT_TASK_CALL_INVALID")?);
++    let JournaledTaskCall {
++        journal,
++        run,
++        tool_call_id,
++    } = prepare_journaled_task_call(
++        project,
++        &inspected,
++        call_id,
++        "wake.manual_end_turn",
++        arguments_hash,
++    )?;
++    let event = match publish() {
++        Ok(event) => event,
++        Err(reason) => {
++            // These failures are proved before a queue write. Any unclassified
++            // I/O/atomic-write outcome keeps the task's existing unknown fence.
++            let phase = if matches!(
++                reason.as_str(),
++                "TARGET_EXPECTATION_MISMATCH"
++                    | "CONFIG_PROJECT_RETIRED"
++                    | "QUEUE_WAKE_METADATA_INVALID"
++                    | "QUEUE_EVENT_INVALID"
++                    | "QUEUE_EVENT_ID_CONFLICT"
++                    | "QUEUE_CAPACITY_EXCEEDED"
++                    | "WAKE_PROJECT_TARGET_CHANGED"
++                    | "WAKE_PROJECT_TARGET_MISMATCH"
++                    | "WAKE_HISTORICAL_EVENT_RETAINED"
++                    | "WAKE_ACTIVATION_INVALID"
++            ) {
++                ToolCallStatus::Failed
++            } else {
++                ToolCallStatus::OutcomeUnknown
++            };
++            journal
++                .transition_tool_call(&run, &tool_call_id, phase, None, Some(reason.clone()))
++                .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
++            return Err(reason);
++        }
++    };
++    event.validate()?;
++    let metadata = event
++        .wake_metadata()?
++        .ok_or("QUEUE_WAKE_METADATA_INVALID")?;
++    if event.project_id != project.project.project_id
++        || event.target_generation != expected.generation
++        || metadata.purpose != catdesk_wake::protocol::WakePurpose::ManualEndTurn
++        || metadata.source_event_id != record.event_id
++        || metadata.source_turn_id != request.source_turn_id
++        || metadata.priority != request.priority
++        || metadata.expires_utc - event.created_utc != request.ttl_seconds
++    {
++        return Err("WEB_TASK_MANUAL_WAKE_EVENT_MISMATCH".into());
++    }
++    let result = json!({"status":"WAKE_INTENT_RECORDED", "projectId":event.project_id,
++        "eventId":event.event_id, "createdUtc":event.created_utc,
++        "targetGeneration":event.target_generation, "sourceTurnId":request.source_turn_id,
++        "expiresUtc":metadata.expires_utc,
++        "deliveryProved":false, "taskCompletionVerified":false,
++        "nativeSessionAction":"NONE", "browserStarted":false, "wakeHostStarted":false});
++    let result_hash = catdesk_wake::protocol::digest(&result.to_string());
++    journal
++        .transition_tool_call(
++            &run,
++            &tool_call_id,
++            ToolCallStatus::Completed,
++            Some(result_hash),
++            Some(format!(
++                "manual Wake intent {} recorded; delivery unverified",
++                event.event_id
++            )),
++        )
++        .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
++    Ok(result)
++}
++
++pub(crate) fn native_status_selection(
++    project: &ResolvedProjectScopeV1,
++    record: &crate::web_work_state::WorkRecord,
++    key: &str,
++) -> Result<crate::operator_codex_cli::NativeQueueSelection, String> {
++    let (_, _, selection) = authorized_web_grant(project, record, key)?;
++    selection.ok_or_else(|| "WEB_TASK_NATIVE_NOT_GRANTED".into())
++}
++
++pub(crate) struct NativeTaskCall {
++    pub(crate) selection: crate::operator_codex_cli::NativeQueueSelection,
++    journal: JournaledTaskCall,
++}
++
++pub(crate) struct PreparedNativeTaskCall {
++    inspected: AssignmentInspection,
++    selection: crate::operator_codex_cli::NativeQueueSelection,
++}
++
++/// Read-only Git/worktree inspection. The caller holds only its project Web
++/// lease here, never shared registry/Wake admission. No queue/journal effect.
++pub(crate) fn inspect_native_task_call(
++    project: &ResolvedProjectScopeV1,
++    record: &crate::web_work_state::WorkRecord,
++    key: &str,
++    task_id: &str,
++) -> Result<PreparedNativeTaskCall, String> {
++    let (archive, _, selection) = authorized_web_grant(project, record, key)?;
++    let selection = selection.ok_or("WEB_TASK_NATIVE_NOT_GRANTED")?;
++    let inspected = inspect_assignment(project, &archive, 180)?;
++    check_record_assignment(project, &inspected, record)?;
++    if inspected.contract.task_id != task_id {
++        return Err("WEB_TASK_GRANT_SCOPE_MISMATCH".into());
++    }
++    Ok(PreparedNativeTaskCall {
++        inspected,
++        selection,
++    })
++}
++
++impl PreparedNativeTaskCall {
++    /// Commit metadata only while the caller retains the exact paired target,
++    /// current registration and project lease. Preserve replay-before-migration
++    /// and migration-before-execution journal ordering.
++    pub(crate) fn commit(
++        self,
++        prepared: &crate::delegated::autonomy_projects::PreparedProjectScopeV1,
++        record: &crate::web_work_state::WorkRecord,
++        key: &str,
++        call_id: &str,
++        lease: &crate::operator_facade::WebWorkLease,
++        current: &catdesk_wake::protocol::Target,
++    ) -> Result<NativeTaskCall, String> {
++        let project = prepared.scope();
++        let (_, _, selection) = authorized_web_grant(project, record, key)?;
++        if selection.as_ref() != Some(&self.selection) {
++            return Err("WEB_TASK_NATIVE_REQUEST_CHANGED".into());
++        }
++        check_record_assignment(project, &self.inspected, record)?;
++        let inspected = self.inspected;
++        let selection = self.selection;

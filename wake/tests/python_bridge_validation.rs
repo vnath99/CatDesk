@@ -108,7 +108,7 @@ fn adapter_and_response_python_regression_suite() {
             "WakeBridgeTests.test_outer_network_retry_reopens_only_before_first_browser_write",
             "WakeBridgeTests.test_outer_network_retry_stops_after_three_pre_write_sessions",
             "WakeBridgeTests.test_outer_retry_never_relaunches_for_non_network_attention",
-            "WakeBridgeTests.test_outer_retry_never_relaunches_after_browser_write_starts",
+            "WakeBridgeTests.test_outer_retry_never_relaunches_after_submission_boundary_starts",
             "WakeBridgeTests.test_missing_response_editor_obeys_generation_deadline",
             "WakeBridgeTests.test_missing_receipt_after_stop_hold_keeps_polling_without_busy_loop",
             "WakeBridgeTests.test_production_post_submit_rejects_unstable_final_digest_target_or_composer",

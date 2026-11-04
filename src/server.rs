@@ -264,7 +264,7 @@ fn unauthorized_mcp_response() -> Response<Body> {
     )
 }
 
-fn mcp_authorized(headers: &HeaderMap, expected_token: Option<&str>) -> bool {
+pub(crate) fn mcp_authorized(headers: &HeaderMap, expected_token: Option<&str>) -> bool {
     let Some(expected_token) = expected_token.filter(|token| !token.trim().is_empty()) else {
         return true;
     };
@@ -277,6 +277,55 @@ fn mcp_authorized(headers: &HeaderMap, expected_token: Option<&str>) -> bool {
     value
         .strip_prefix("Bearer ")
         .is_some_and(|actual| actual == expected_token)
+}
+
+pub(crate) fn valid_mcp_auth_token(token: &str) -> bool {
+    token.len() >= 24 && token.bytes().all(|value| value.is_ascii_graphic())
+}
+
+fn central_dispatch_authenticated(token: Option<&str>) -> bool {
+    token.is_some_and(valid_mcp_auth_token)
+}
+
+/// Connection readiness is not a project task grant or proof of a Web caller.
+/// Report the same prerequisites as dispatch without exposing credentials or
+/// treating the legacy opaque route as central execution authorization.
+fn central_dispatch_readiness(
+    token: Option<&str>,
+    mode: crate::state::Mode,
+    tool_mode: crate::state::ToolMode,
+) -> Value {
+    let authenticated = central_dispatch_authenticated(token);
+    let mode_ready = mode.computer_enabled() && tool_mode.supervisor_tools_enabled();
+    let blocker = if !authenticated {
+        Some("WEB_TASK_CENTRAL_AUTH_REQUIRED")
+    } else if !mode_ready {
+        Some("WEB_TASK_CENTRAL_MODE_REQUIRED")
+    } else {
+        None
+    };
+    let mut cached = crate::web_task_dispatch::cached_transport_metadata();
+    cached["serverConnectionReady"] = json!(blocker.is_none());
+    cached["toolNameListedByMode"] =
+        json!(mode.computer_enabled() && tool_mode.run_command_enabled());
+    cached["unknownOutcomeReplayAllowed"] = json!(false);
+    json!({
+        "tool":crate::web_task_dispatch::TOOL,
+        "connectionReady":blocker.is_none(),
+        "blocker":blocker,
+        "bearerConfigured":authenticated,
+        "modeReady":mode_ready,
+        "taskGrantRequired":true,
+        "executionAuthorized":false,
+        "providerConversationVerified":false,
+        "installedWebAcceptance":"UNVERIFIED",
+        "publication":{
+            "basis":"CURRENT_CENTRAL_SERVER_CONFIGURATION",
+            "namedToolListed":blocker.is_none(),
+            "clientCatalogVerified":false,
+        },
+        "cachedSchemaTransport":cached,
+    })
 }
 
 fn request_id(req: &Value) -> String {
@@ -916,6 +965,219 @@ mod tests {
     use std::sync::Arc;
     use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::sync::{Mutex, mpsc::unbounded_channel};
+
+    #[tokio::test]
+    async fn transport_status_reports_central_dispatch_prerequisites_without_granting_execution() {
+        let token = "transport-status-test-bearer-1234567890";
+        for (auth, mode, tool_mode, expected_blocker) in [
+            (
+                None,
+                Mode::Computer,
+                ToolMode::SupervisorOnly,
+                Some("WEB_TASK_CENTRAL_AUTH_REQUIRED"),
+            ),
+            (
+                Some(token),
+                Mode::Browser,
+                ToolMode::MultiTools,
+                Some("WEB_TASK_CENTRAL_MODE_REQUIRED"),
+            ),
+            (
+                Some(token),
+                Mode::Computer,
+                ToolMode::ReadOnly,
+                Some("WEB_TASK_CENTRAL_MODE_REQUIRED"),
+            ),
+            (Some(token), Mode::Computer, ToolMode::SupervisorOnly, None),
+            (Some(token), Mode::Both, ToolMode::MultiTools, None),
+        ] {
+            let root = unique_temp_path("transport-central-readiness");
+            std::fs::create_dir_all(&root).unwrap();
+            let mut app = AppState::new_isolated_fixture(
+                0,
+                root.to_string_lossy().into(),
+                root.join("never-written.toml"),
+            )
+            .unwrap();
+            app.mode = mode;
+            app.tool_mode = tool_mode;
+            let (tx, _rx) = unbounded_channel();
+            let state = ServerState {
+                app: Arc::new(Mutex::new(app)),
+                devtools: None,
+                ui_events: tx,
+                mcp_auth_token: auth.map(str::to_owned),
+                fixture_snapshot: None,
+            };
+            let mut headers = HeaderMap::new();
+            if let Some(token) = auth {
+                headers.insert(
+                    header::AUTHORIZATION,
+                    format!("Bearer {token}").parse().unwrap(),
+                );
+            }
+            let response = post_mcp(
+                State(state.clone()),
+                headers.clone(),
+                tool_call_body(TRANSPORT_STATUS_TOOL, json!({})),
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            assert!(!String::from_utf8_lossy(&body).contains(token));
+            let value: Value = serde_json::from_slice(&body).unwrap();
+            let readiness = &value["result"]["structuredContent"]["centralProjectExecution"];
+            assert_eq!(readiness["blocker"], json!(expected_blocker));
+            assert_eq!(readiness["connectionReady"], expected_blocker.is_none());
+            assert_eq!(readiness["bearerConfigured"], auth.is_some());
+            assert_eq!(readiness["taskGrantRequired"], true);
+            assert_eq!(readiness["executionAuthorized"], false);
+            assert_eq!(readiness["providerConversationVerified"], false);
+            assert_eq!(readiness["installedWebAcceptance"], "UNVERIFIED");
+            let list = post_mcp(
+                State(state),
+                headers,
+                Bytes::from(
+                    serde_json::to_vec(
+                        &json!({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}),
+                    )
+                    .unwrap(),
+                ),
+            )
+            .await;
+            let list: Value =
+                serde_json::from_slice(&to_bytes(list.into_body(), usize::MAX).await.unwrap())
+                    .unwrap();
+            let advertised = list["result"]["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|tool| tool["name"] == crate::web_task_dispatch::TOOL);
+            assert_eq!(advertised, readiness["connectionReady"].as_bool().unwrap());
+            assert_eq!(readiness["publication"]["namedToolListed"], advertised);
+            assert_eq!(readiness["publication"]["clientCatalogVerified"], false);
+            assert_eq!(
+                readiness["cachedSchemaTransport"]["serverConnectionReady"],
+                advertised
+            );
+            assert_eq!(readiness["cachedSchemaTransport"]["shellExecuted"], false);
+            assert!(!root.join("never-written.toml").exists());
+            assert!(!root.join(".catdesk/project-mcp-tasks").exists());
+            std::fs::remove_dir_all(root).unwrap();
+        }
+        let invalid =
+            central_dispatch_readiness(Some("invalid"), Mode::Computer, ToolMode::MultiTools);
+        assert_eq!(invalid["blocker"], "WEB_TASK_CENTRAL_AUTH_REQUIRED");
+        assert_eq!(invalid["connectionReady"], false);
+    }
+
+    #[test]
+    fn central_readiness_distinguishes_publication_cached_adapter_and_client_visibility() {
+        let token = "readiness-publication-fixture-token-123456";
+        for (auth, mode, tools, ready, listed) in [
+            (None, Mode::Computer, ToolMode::MultiTools, false, true),
+            (
+                Some(token),
+                Mode::Browser,
+                ToolMode::MultiTools,
+                false,
+                false,
+            ),
+            (
+                Some(token),
+                Mode::Computer,
+                ToolMode::ReadOnly,
+                false,
+                false,
+            ),
+            (
+                Some(token),
+                Mode::Computer,
+                ToolMode::SupervisorOnly,
+                true,
+                false,
+            ),
+            (Some(token), Mode::Both, ToolMode::MultiTools, true, true),
+        ] {
+            let value = central_dispatch_readiness(auth, mode, tools);
+            assert_eq!(value["publication"]["namedToolListed"], ready);
+            assert_eq!(
+                value["publication"]["basis"],
+                "CURRENT_CENTRAL_SERVER_CONFIGURATION"
+            );
+            assert_eq!(value["publication"]["clientCatalogVerified"], false);
+            let cached = &value["cachedSchemaTransport"];
+            assert_eq!(cached["mcpTool"], "run_command");
+            assert_eq!(cached["commandPrefix"], "CATDESK_WEB_TASK=");
+            assert_eq!(cached["serverConnectionReady"], ready);
+            assert_eq!(cached["toolNameListedByMode"], listed);
+            assert_eq!(cached["shellExecuted"], false);
+            assert_eq!(cached["sameCallIdAndJournal"], true);
+            assert_eq!(cached["unknownOutcomeReplayAllowed"], false);
+            assert_eq!(value["executionAuthorized"], false);
+            assert!(!value.to_string().contains(token));
+        }
+    }
+
+    #[tokio::test]
+    async fn native_mcp_auth_absent_hides_central_tools_and_refuses_direct_and_cached_calls() {
+        let root = unique_temp_path("native-auth-absent");
+        std::fs::create_dir_all(&root).unwrap();
+        let mut app = AppState::new_isolated_fixture(
+            0,
+            root.to_string_lossy().into(),
+            root.join("inert.toml"),
+        )
+        .unwrap();
+        app.mode = Mode::Computer;
+        app.tool_mode = ToolMode::SupervisorOnly;
+        let (tx, _rx) = unbounded_channel();
+        let state = ServerState {
+            app: Arc::new(Mutex::new(app)),
+            devtools: None,
+            ui_events: tx,
+            mcp_auth_token: None,
+            fixture_snapshot: None,
+        };
+        let list = post_mcp(
+            State(state.clone()),
+            HeaderMap::new(),
+            Bytes::from(
+                serde_json::to_vec(
+                    &json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}),
+                )
+                .unwrap(),
+            ),
+        )
+        .await;
+        assert_eq!(list.status(), StatusCode::OK);
+        let list: Value =
+            serde_json::from_slice(&to_bytes(list.into_body(), usize::MAX).await.unwrap()).unwrap();
+        assert!(
+            !list["result"]["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|tool| tool["name"] == crate::web_task_dispatch::TOOL)
+        );
+        for (name, arguments) in [
+            (crate::web_task_dispatch::TOOL, json!({})),
+            ("run_command", json!({"command":"CATDESK_WEB_TASK={}"})),
+        ] {
+            let response = post_mcp(
+                State(state.clone()),
+                HeaderMap::new(),
+                tool_call_body(name, arguments),
+            )
+            .await;
+            let value: Value =
+                serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                    .unwrap();
+            assert_eq!(value["error"]["message"], "WEB_TASK_CENTRAL_AUTH_REQUIRED");
+        }
+        assert!(!root.join(".catdesk/project-mcp-tasks").exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[cfg(windows)]
     #[tokio::test]
@@ -2146,7 +2408,10 @@ async fn post_mcp(
     let mut response_json: Option<Value> = if is_transport_status_tool_call(&req) {
         let payload = {
             let app = s.app.lock().await;
-            app.transport_status_payload()
+            let mut payload = app.transport_status_payload();
+            payload["centralProjectExecution"] =
+                central_dispatch_readiness(s.mcp_auth_token.as_deref(), mode, tool_mode);
+            payload
         };
         Some(
             serde_json::to_value(mcp::JsonRpcResponse::success(
@@ -2155,6 +2420,30 @@ async fn post_mcp(
             ))
             .unwrap(),
         )
+    } else if req.method == "tools/call"
+        && (req.params.get("name").and_then(Value::as_str) == Some(crate::web_task_dispatch::TOOL)
+            || crate::web_task_dispatch::is_cached_call(&req))
+    {
+        let response = if central_dispatch_authenticated(s.mcp_auth_token.as_deref()) {
+            if !mode.computer_enabled() || !tool_mode.supervisor_tools_enabled() {
+                mcp::JsonRpcResponse::error(
+                    req.id.clone(),
+                    -32002,
+                    "WEB_TASK_CENTRAL_MODE_REQUIRED".into(),
+                )
+            } else if crate::web_task_dispatch::is_cached_call(&req) {
+                crate::web_task_dispatch::handle_cached(&workspace_root, &req).await
+            } else {
+                crate::web_task_dispatch::handle(&workspace_root, &req).await
+            }
+        } else {
+            mcp::JsonRpcResponse::error(
+                req.id.clone(),
+                -32002,
+                "WEB_TASK_CENTRAL_AUTH_REQUIRED".into(),
+            )
+        };
+        Some(serde_json::to_value(response).unwrap())
     } else {
         None
     };
@@ -2172,6 +2461,18 @@ async fn post_mcp(
         .await
     {
         let mut resp = resp;
+        if req.method == "tools/list"
+            && mode.computer_enabled()
+            && tool_mode.supervisor_tools_enabled()
+            && central_dispatch_authenticated(s.mcp_auth_token.as_deref())
+            && let Some(tools) = resp
+                .result
+                .as_mut()
+                .and_then(|result| result.get_mut("tools"))
+                .and_then(Value::as_array_mut)
+        {
+            tools.push(crate::web_task_dispatch::schema());
+        }
         if req.method == "tools/call" {
             let turn_token_usage = extract_turn_token_usage(resp.result.as_ref());
             let usage_totals = {

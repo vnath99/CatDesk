@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C54_NORMAL_PRIVATE_PAYLOAD_COMPATIBILITY_AND_STOPPED_SELECTION",
+  "localDate": "2026-10-23_America_New_York",
+  "observedUtc": "2026-10-24T01:33:08.7978502+00:00",
+  "sourceCommit": "b08e68cf9e4e108137eae6baa8ad0b69403d2084",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "sourceGate": "REUSED_EXACT_C53_TWELVE_PASSED_TWO_IGNORED_AND_STRICT_CHECKS",
+  "normalBuild": {
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+    "imageBytes": 34871296,
+    "elapsedSeconds": 345.595635,
+    "maximumSeconds": 600,
+    "ownedTreeExited": true,
+    "startedUtc": "2026-10-24T01:18:51.9654343+00:00",
+    "exitCode": 0,
+    "finishedUtc": "2026-10-24T01:24:37.5598238+00:00",
+    "sourceTree": "a6cdcc969de2c232aebd1e4b72831052fb4c338f",
+    "imageSha256": "1086d4dffa3640ee432ae492182281463d6b6cf5b688f309817f7ae36de6b595"
+  },
+  "normalCompatibility": {
+    "commandCount": 7,
+    "privateSyntheticPayloadRemoved": true,
+    "observedUtc": "2026-10-24T01:26:23.3268138+00:00",
+    "realC50PayloadUnchanged": true,
+    "changedRuntimeRecords": 0,
+    "actualMessages": 0,
+    "allCommandOwnersExited": true,
+    "startedUtc": "2026-10-24T01:26:20.9686991+00:00",
+    "checks": [
+      "normal-reader-preserves-real-c50-frozen-payload-after-new-reported-status",
+      "normal-cold-original-task-admission-remains-inert",
+      "normal-reader-accepts-explicit-synthetic-report-payload-without-key-disclosure",
+      "changed-payload-refused-without-rewriting-reference",
+      "missing-payload-refused-without-regeneration",
+      "cold-reader-keeps-exact-synthetic-record-and-payload"
+    ],
+    "collectorCreationProved": false,
+    "runtimeRecords": 266,
+    "maximumSeconds": 180,
+    "newGrantOrTask": false,
+    "elapsedSeconds": 2.3590587,
+    "classification": "NORMAL_CLI_PRESERVED_REAL_PAYLOAD_PLUS_SYNTHETIC_READER_NOT_COLLECTOR"
+  },
+  "selectedDevelopment": {
+    "hostAdapterBridge": "EXACT_PREVIOUSLY_QUALIFIED_COMPONENTS_REUSED_NO_NEW_HOST_START",
+    "unchangedProtectedRecords": 264,
+    "observedUtc": "2026-10-24T01:27:54.0426071Z",
+    "unexpectedChanges": 0,
+    "selectedPackage": "1.0.0-dev.85-3b7008dfd5652cd36f57cbe01c33856223825316aadd00c9b9131183f74d146a",
+    "previousPackage": "1.0.0-dev.85-00e4eff9d9aa810bda9e4fc1d70782896ec46a4b848be3602ee4332521b71a74",
+    "selectedStatusPassed": true,
+    "newRecords": 0,
+    "allowedPointerChanges": 2,
+    "controls": [
+      "STOPPED",
+      "STOPPED"
+    ],
+    "runtimeRecords": 266,
+    "maximumSeconds": 180,
+    "exactPairedReads": 9,
+    "elapsedSeconds": 6.4030527,
+    "previousPackagePreserved": true
+  },
+  "preservation": {
+    "browserWakeStarts": 0,
+    "production": "STOPPED_UNCHANGED",
+    "nativeActions": 0,
+    "unexpectedChanges": 0,
+    "recurringStarts": 0,
+    "controlledBlockerReport": "PRESERVED",
+    "expectedChangesSinceC52": 2,
+    "syntheticFixtureProcesses": 0,
+    "currentRuntimeRecords": 266,
+    "completedCanaryReplayed": false,
+    "nineBindingsAndPredecessors": "PRESERVED",
+    "scopedProcesses": 0,
+    "C50TaskAndGrant": "PRESERVED_OPEN",
+    "normalBuildAndTestJobsExited": 3,
+    "messagesSent": 0
+  },
+  "acceptance": {
+    "selectedDevelopment": "PASS_STOPPED_PACKAGE_AND_TARGET_READS",
+    "actualParallelWebMcp": "OPEN",
+    "normalLegacyPayloadReader": "PASS_REAL_PRESERVED_C50_PAYLOAD",
+    "protectedProduction": "NOT_QUALIFIED",
+    "normalReportedPayloadReader": "PASS_EXPLICIT_SYNTHETIC_INJECTED_METADATA",
+    "actualC53BrowserTransfer": "NOT_DEMONSTRATED",
+    "unattended": "NOT_ACTIVATED",
+    "fullOctoberMilestone": "OPEN",
+    "actualWebCoding": "BLOCKED_SCOPED_TOOL_UNAVAILABLE",
+    "normalNewReportCollector": "NOT_DEMONSTRATED"
+  },
+  "dependency": "Existing MCP/official-runtime startup owner information is pending. Last runtime status was stopped; final C53 configured ports had no listeners. No connector retry, tunnel/auth change or startup attempt in C54.",
+  "nextTask": "Audit the remaining mandatory multi-project acceptance gaps against source and existing live records, then execute the next independently eligible gap. Resume backend/catalog qualification when the supported startup-owner path is known.",
+  "sourceCi": {
+    "observedUtc": "2026-10-24 01:35:37 UTC",
+    "sourceCommit": "b08e68cf9e4e108137eae6baa8ad0b69403d2084",
+    "repository": {
+      "archived": false,
+      "visibility": "public"
+    },
+    "actions": {
+      "count": 0,
+      "runs": []
+    },
+    "checks": {
+      "checks": [],
+      "count": 0
+    },
+    "dispatches": 0,
+    "settingsChanges": 0,
+    "acceptance": "UNVERIFIED_NO_EXACT_SOURCE_RUNS_OR_CHECKS"
+  }
+}

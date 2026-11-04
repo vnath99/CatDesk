@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "purpose": "PARTIAL_SOURCE_REVIEW_ONLY_NOT_RELEASE_AUTHORITY",
+  "batchId": "b021",
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "sourceCommit": "549817859c94f56a7696f998848d8ace429b1663",
+  "patchBytes": 56442,
+  "sourcePaths": [
+    "wake/src/readiness_probe.rs",
+    "wake/src/runtime.rs",
+    "wake/src/runtime_reobserve.rs",
+    "wake/src/runtime_response.rs",
+    "wake/src/runtime_scheduler.rs"
+  ],
+  "units": [
+    {
+      "unitId": "u101",
+      "path": "wake/src/readiness_probe.rs",
+      "skipLines": 0,
+      "takeLines": 380,
+      "bytes": 16009,
+      "sha256": "2c9adace7b96ead5db4194d73524fb3544d6580c523db856d424fe21dbf68578",
+      "baseBlob": null,
+      "targetBlob": "fb83b1d5a795a34b759d1b5819dae8207c876d9a"
+    },
+    {
+      "unitId": "u102",
+      "path": "wake/src/runtime.rs",
+      "skipLines": 0,
+      "takeLines": 190,
+      "bytes": 8630,
+      "sha256": "adcc954b131737a9224f463bb52ea84a9b1a585b67416ca7b4b461926791f01c",
+      "baseBlob": "f3a4e8abf6e799e5e84d5f1b4f56747f25877e8e",
+      "targetBlob": "bf908c6908ca75ce1cde5f629512f3e2c34d3805"
+    },
+    {
+      "unitId": "u103",
+      "path": "wake/src/runtime_reobserve.rs",
+      "skipLines": 0,
+      "takeLines": 132,
+      "bytes": 5739,
+      "sha256": "06245db1be45c456e73eee325d2ed8a09c8887e04fc3d3a07ccdb962520d2f6a",
+      "baseBlob": "c6e65b2a42c52f6e76b78f5de1082958a6c2a711",
+      "targetBlob": "e6018abf836d0b11cc2eb1ac8ec3e169200f69cd"
+    },
+    {
+      "unitId": "u104",
+      "path": "wake/src/runtime_response.rs",
+      "skipLines": 0,
+      "takeLines": 207,
+      "bytes": 8541,
+      "sha256": "77d044559047695837b8e34b384733e4c6a4182eac178d8e5875c8bf09f34a04",
+      "baseBlob": "11c944ac79b2c3cd8057a29b7106ebf85511c80c",
+      "targetBlob": "b722756e940a9db077fca9f5d9e8919d0a1f875e"
+    },
+    {
+      "unitId": "u105",
+      "path": "wake/src/runtime_scheduler.rs",
+      "skipLines": 0,
+      "takeLines": 415,
+      "bytes": 17523,
+      "sha256": "107d246190043e61c357330f12302bd0fc0957e34277a4a48cb65f01f0d33635",
+      "baseBlob": "3f09b3ee0036a8119f26e1aca115bee6bc1694f4",
+      "targetBlob": "00b4750977eb336b9b62cfcbec91386f596692a0"
+    }
+  ],
+  "cumulativeSourceAccepted": false,
+  "requiredReplyMarker": "NOV01_GIT_SOURCE_BATCH_ONLY",
+  "requiredReplyFields": [
+    "marker",
+    "sourceCommit",
+    "batchId",
+    "verdict",
+    "findings",
+    "inspectedUnitIds",
+    "inspectedPaths",
+    "limitations",
+    "cumulativeSourceAccepted"
+  ],
+  "permittedVerdicts": [
+    "REVIEWED_BATCH",
+    "FAIL",
+    "INCONCLUSIVE"
+  ]
+}

@@ -1,0 +1,172 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C105_EXISTING_DEV_SELECTION_RESTORES_RECORDED_PREDECESSOR",
+  "observedUtc": "2026-10-24T15:05:18.2369988+00:00",
+  "recordedUtc": "2026-10-24T15:06:41.4190419+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "parentCommit": "c6943953e9f86c227e186a4d6ada94198b4a07df",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "SOURCE_AND_DISPOSABLE_FIXTURES_NOT_NORMAL_BINARY_OR_INSTALLED_STARTUP",
+  "implementation": {
+    "command": "operator web-dev-runtime recover-package",
+    "sourcePins": [
+      {
+        "path": "src/operator_facade.rs",
+        "sha256": "0a18ba0b36c718ec06d2bf55e0f6bc28586f4c37b27d63db0c6ce8556797f08e"
+      },
+      {
+        "path": "wake/src/development_runtime.rs",
+        "sha256": "47cd458195d4d64212a700f9c566d2c6bc05742b7350b365b197be884cfceb2f"
+      }
+    ],
+    "existingJournal": "package-update-attempt.json",
+    "newJournalOrRegistry": false,
+    "authorityAndManifestSchemasChanged": false,
+    "trigger": "CURRENT_PACKAGE_FILES_FAIL_VALIDATION",
+    "restoreCandidate": "EXACT_RECORDED_PREDECESSOR_ONLY",
+    "predecessorEvidence": "LOCAL_OPERATOR_RECORDED_SOURCE_BUILD_REVIEW_WORKING_HEALTH_REFERENCES",
+    "predecessorManifestIdentityHashAndAllArtifactBytesRevalidated": true,
+    "currentMetadataPythonWorkspaceAndRootChecksRemainStrict": true,
+    "failedCurrentFilesPreserved": true,
+    "failedCurrentNotRetainedForOscillation": true,
+    "legacyAndFullArtifactPackageIdsSupported": true,
+    "hostBrowserExclusiveStoppedRequired": true,
+    "normalUpdateAdmissionRemainsStrict": true,
+    "noEligiblePredecessor": "BOUNDED_RECONSTRUCTION_REQUIRED_REFUSAL",
+    "hostOrBrowserStarted": false,
+    "protectedAuthorityCreated": false,
+    "backendStartupIntegration": false
+  },
+  "causalRed": {
+    "test": "recover_package_restores_recorded_predecessor_after_current_image_failure",
+    "cargoExitCode": 101,
+    "outerExitCode": 1,
+    "expectedOldFailure": "DEV_RUNTIME_PACKAGE_MISMATCH",
+    "exactOldFailureVerified": true,
+    "sourcePins": [
+      {
+        "sha256": "0a18ba0b36c718ec06d2bf55e0f6bc28586f4c37b27d63db0c6ce8556797f08e",
+        "path": "src/operator_facade.rs"
+      },
+      {
+        "sha256": "af06decc40cbf4ca3f45cf6680ffd25685ec17a8c7cddeb31e21d5cc06d7ce5c",
+        "path": "wake/src/development_runtime.rs"
+      }
+    ],
+    "logSha256": "e3c7b19af44547aa35a32ee4df599516e6bf8a3ec52626c629c5762fa7c70efc"
+  },
+  "tests": {
+    "runtimeModulePassed": 28,
+    "operatorModulePassed": 13,
+    "newRuntimeTests": 5,
+    "failed": 0,
+    "ignored": 0,
+    "steps": [
+      {
+        "name": "wake-development-recovery",
+        "logSha256": "fbb1a54b428e9d879d7b9460acedd0d8b28feebf1fc3f997803d44fe8a59063d",
+        "summaries": [
+          "test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 361 filtered out; finished in 15.15s"
+        ],
+        "seconds": 20.6398941,
+        "exitCode": 0
+      },
+      {
+        "name": "operator-contract",
+        "logSha256": "0c6fc717d06033f72d4b36a8011fce861630cb23fc25d0540f8071c4876b2af4",
+        "summaries": [
+          "test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 1679 filtered out; finished in 0.09s"
+        ],
+        "seconds": 58.0771557,
+        "exitCode": 0
+      },
+      {
+        "name": "strict-root-clippy",
+        "logSha256": "57ce8739b04e95f5a3a6257f539d739d700bdcd98c1ba5d97f2455c8930c50d2",
+        "summaries": [],
+        "seconds": 17.9856606,
+        "exitCode": 0
+      },
+      {
+        "name": "strict-wake-clippy",
+        "logSha256": "8349090bba509928297604eabb01370bd42dfb077e2bf0768e860b6ae7a0274c",
+        "summaries": [],
+        "seconds": 4.73936,
+        "exitCode": 0
+      },
+      {
+        "name": "root-format",
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "summaries": [],
+        "seconds": 2.7483399,
+        "exitCode": 0
+      },
+      {
+        "name": "wake-format",
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "summaries": [],
+        "seconds": 0.7447705,
+        "exitCode": 0
+      }
+    ],
+    "sourceFrozen": true,
+    "strictRootAndWakeClippy": "PASS",
+    "rootAndWakeFormats": "PASS",
+    "outerBudgetSeconds": 600,
+    "outerExitCode": 0,
+    "outerTimedOut": false,
+    "outerTerminationFailed": false,
+    "coverage": [
+      "DAMAGED_AND_MISSING_EACH_OF_FOUR_CURRENT_ARTIFACTS",
+      "EXACT_LEGACY_PREDECESSOR_RESTORED_WITHOUT_REPACKAGING",
+      "THREE_INTERRUPTED_SELECTION_BOUNDARIES",
+      "HEALTHY_REPLAY_BYTE_STABLE",
+      "FAILED_VERSION_NEVER_BECOMES_ROLLBACK_TARGET",
+      "PROFILE_TARGET_QUEUE_PROOF_AND_FAILED_BYTES_PRESERVED",
+      "ABSENT_OR_DAMAGED_PREDECESSOR_REQUIRES_RECONSTRUCTION",
+      "CURRENT_MANIFEST_POINTER_AND_PYTHON_CHANGE_REFUSED",
+      "BUSY_HOST_BROWSER_AND_RUNNING_CONTROL_REFUSED",
+      "CHANGED_PENDING_RESTORATION_EVIDENCE_SOURCE_POINTER_OR_ASSETS_REFUSED"
+    ],
+    "actualProcessCrash": "NOT_TESTED_BY_PHASE_FIXTURES",
+    "independentLiveReleaseQualificationCreated": false
+  },
+  "preservation": {
+    "runtimeRecords": 306,
+    "runtimeRecordsChanged": 0,
+    "historicalFiles": 55,
+    "historicalFilesChanged": 0,
+    "scopedOwners": 0,
+    "controls": "BOTH_STOPPED",
+    "queueCount": 0,
+    "selectedPackage": "V76_UNCHANGED",
+    "browserWakeRecurringStarts": 0,
+    "officialRuntimeActions": 0,
+    "connectorCalls": 0,
+    "nativeActions": 0,
+    "productionInstallationChanges": 0,
+    "projectBindingChanges": 0,
+    "completedCanariesReplayed": 0,
+    "legacyMechanismsRetired": 0
+  },
+  "acceptance": {
+    "sourceFallback": "PASS_ON_EXPLICIT_RECOVER_PACKAGE_INVOCATION",
+    "normalBinaryFallback": "NEXT_QUALIFICATION",
+    "automaticNormalBackendStartup": "NOT_INTEGRATED_OR_QUALIFIED",
+    "protectedRecovery": "NOT_EXECUTED",
+    "actualWebCodingBC": "OPEN",
+    "unattended": "NOT_ACTIVATED",
+    "fullOctoberMilestone": "OPEN",
+    "remoteSourceCi": "PENDING_EXACT_SHA_READBACK_AFTER_PUBLICATION"
+  },
+  "priorPublication": {
+    "head": "c6943953e9f86c227e186a4d6ada94198b4a07df",
+    "remoteSha": "c6943953e9f86c227e186a4d6ada94198b4a07df",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "remoteCi": "UNVERIFIED",
+    "branch": "codex/web-rollover-oct17"
+  },
+  "nextTask": "Build the exact reviewed source as normal release images and qualify bounded real CLI predecessor restoration and backend startup using a disposable isolated workspace. Keep operator-provided fixture evidence separate from independently observed release health. Wire automatic bounded startup selection only after its resource and recovery behavior is verified. Protected recovery remains on the existing authorized October27 path; actual two-conversation Web coding remains the next live priority."
+}

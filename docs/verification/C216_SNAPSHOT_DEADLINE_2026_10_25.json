@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C216",
+  "recordedUtc": "2026-10-25T18:46:13.1999962+00:00",
+  "sourceParent": "ef092cf29d844050c0b70e5e142260990d19622c",
+  "branch": "codex/web-rollover-oct17",
+  "implementation": [
+    "Single total deadline for snapshot ownership, browser startup, frame read and cleanup.",
+    "Raw APIs preserve signature/error semantics with 180-second total budget; diagnosed local review reads use 90 seconds.",
+    "Fixed phase/elapsed/budget and finite error allowlist; no text forwarded on failures, no new state writer or sender.",
+    "Exact receipt/target/message verification and MCP unverified-content refusal preserved."
+  ],
+  "qualification": {
+    "finishedUtc": "2026-10-25T14:30:24.060934-04:00",
+    "maximumSeconds": 600,
+    "startedUtc": "2026-10-25T14:27:08.4441787-04:00",
+    "formatAndDiff": "PASS",
+    "counts": {
+      "web-context": {
+        "ignored": 0,
+        "passed": 5
+      },
+      "wake-all": {
+        "ignored": 1,
+        "passed": 427
+      },
+      "snapshot-focused": {
+        "ignored": 0,
+        "passed": 8
+      },
+      "operator-web": {
+        "ignored": 0,
+        "passed": 22
+      }
+    },
+    "strictClippy": "ROOT_AND_WAKE_PASS",
+    "type": "SOURCE_FIXTURES_ONLY",
+    "independentStaticReview": "PASS_TWO_REVIEWERS",
+    "ownerExit": 0,
+    "sourcePins": [
+      {
+        "path": "src/operator_web_cli.rs",
+        "sha256": "f34ae0eb292b526ccf24aeff7dfb3c47d677093039831164b66560b64d873e0e"
+      },
+      {
+        "path": "wake/src/runtime.rs",
+        "sha256": "6974f07b70614561e556b4ea1ac5841de64336bc19deed228097ab72ab2c620c"
+      },
+      {
+        "path": "wake/src/runtime_snapshot.rs",
+        "sha256": "df4f87bba2d3ec50d1aded623a0def4873cb2b50808bf61449bec1d7c9ce42c9"
+      }
+    ],
+    "timeout": false,
+    "focusedSubsetIncludedInWakeAll": true
+  },
+  "live": {
+    "messagesSent": 0,
+    "sourceCommit": "b21b89d496ceead70a657fb8ff098741b28bddc8",
+    "evidenceSha256": {
+      "transition": "cd8c7f784381e44b2a610fbddb0b47b03e2b14a43359d106e907c6963077768d",
+      "response": "902ae1d30b41111f707e733ebbdefd8ac0d3999888a891e981138730d784ee42",
+      "outerVerification": "92513e8079d0197670d1a398409fb77e3f6827c0eac842a2767f1e6d1ce4da62",
+      "derivedBaseline": "965a9ccb08cfa6d830dce1262a88118c0bd865d866e466b7c67a46b00b2f261c",
+      "closureResult": "0412dc6fb8250335575df198644176b691d70b81f4967ac31792a70ce0cd8056"
+    },
+    "request": "EXISTING_C212_SENT_DELIVERY",
+    "status": "PASS",
+    "newGrantLiveAcceptance": false,
+    "sourcePathsVerified": 15,
+    "bodyVerified": true,
+    "reviewedSourceCommit": "a999b01fa88782ecc4e7a47494385b95a4f7e1f3",
+    "productionPromoted": false,
+    "controllerSha256": "b9bdb0529635f8b51fb1ec4e8de3a4afb2332d1f95a08ceb995869c953ba2124",
+    "installedAcceptance": false,
+    "reviewVerdict": "PASS",
+    "type": "BOUNDED_DEVELOPMENT_BROWSER_EXISTING_RESPONSE_READ_AND_REOBSERVATION",
+    "closure": {
+      "acknowledgments": 0,
+      "finishedUtc": "2026-10-25T14:45:36.0061338-04:00",
+      "newImmutableLogs": 2,
+      "preservedUnchangedFiles": 475,
+      "deliveryAndBindingsPreserved": true,
+      "producerStarts": 0,
+      "productionActions": 0,
+      "derivedBaselineFiles": 477,
+      "taskCompletionVerified": false,
+      "adapterLogAppendedBytes": 0,
+      "profileIdentityPreserved": true,
+      "authorizedChangedFiles": 2,
+      "coordinatorResolved": true,
+      "testOwnersRemaining": 0,
+      "timerComplete": true,
+      "maximumSeconds": 180,
+      "startedUtc": "2026-10-25T14:44:58.638065-04:00"
+    },
+    "read": {
+      "finishedUtc": "2026-10-25T18:37:08.329782Z",
+      "startedUtc": "2026-10-25T18:36:27.342671Z",
+      "elapsedMillis": 35132,
+      "budgetMillis": 90000,
+      "testOwnersRemaining": 0,
+      "phase": "COMPLETE",
+      "preservedStateFiles": 477
+    }
+  },
+  "limitations": [
+    "No installed/runtime acceptance follows from source fixtures.",
+    "Last observed CDP phase does not prove a particular UI stall cause.",
+    "Existing 8192-byte snapshot frame and selected legacy text truncation limits remain unchanged.",
+    "Existing production outside-Job owner requirement remains.",
+    "Successful retrieval does not establish the original timeout cause or automatic-observer reliability.",
+    "Review PASS covers a999b01 only; no newer-source or native review/build authority is implied.",
+    "Production requires an existing supported owner outside the enclosing Windows Job; no such launcher was found."
+  ],
+  "publication": {
+    "exactRemoteShaVerified": true,
+    "sourceCommit": "b21b89d496ceead70a657fb8ff098741b28bddc8",
+    "ci": "UNVERIFIED_NO_VISIBLE_EXACT_COMMIT_RUN",
+    "receipt": "PENDING"
+  }
+}

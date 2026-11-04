@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T00:15:43.220806+00:00",
+  "classification": "TESTED_SOURCE_NEW_TAB_DIAGNOSTICS_LIVE_PENDING",
+  "sourceBaseCommit": "17591e20af5a738b4bb53f52213baf87fc27e203",
+  "implementation": {
+    "existingReadinessProbeAndNativeOwnerReused": true,
+    "newBrowserOwnerSchedulerOrRegistry": false,
+    "sameConversationPlainProjectAndApprovedHostAliasesMatchBridgeContract": true,
+    "targetAndDocumentMustEachIndependentlyMatchBeforeSelection": true,
+    "postSelectionCheckRequired": true,
+    "unknownMetadataSiblingAndDuplicateAliasesRefuseSelection": true,
+    "wrappedValuesRemainUnproven": true,
+    "inputProjectRouteAcceptedBeforeBrowser": true,
+    "strictCredentialsPortsQueriesFragmentsPathSyntaxRetained": true,
+    "metadataFields": [
+      "schemaVersion",
+      "tabCount",
+      "metadataMatches",
+      "unreadableMetadata",
+      "candidateShape",
+      "candidateRoute",
+      "candidateFrame",
+      "controlledShape",
+      "controlledRoute",
+      "alternateRoute",
+      "stage",
+      "state"
+    ],
+    "nativeBoundaryClosedVocabularyCountLimitAndCanonicalization": true,
+    "tabObservationMeaning": "LAST_BOUNDED_SELECTION_OBSERVATION_NOT_AUTH_OR_DELIVERY_AUTHORITY",
+    "rawUrlsTabIdsPageDraftCredentialOrExceptionTextExported": false,
+    "newNavigationReloadRetryRegenerateOrMessageSubmission": false
+  },
+  "tests": {
+    "python-final": {
+      "passed": 29,
+      "logSha256": "b9e9a8bc2d192bacb39cab70df9312f8dbbf8f89fd09ddecf8f7f754b2196b79"
+    },
+    "native": {
+      "passed": 3,
+      "logSha256": "2121ae8df8125f97f3c7edff8aac852f1fdb6d184d7cb3cd716551a6a1952cf6"
+    },
+    "rootClippy": {
+      "allTargets": true,
+      "warningsDenied": true,
+      "passed": true,
+      "logSha256": "c6908af4485bced0e4028ded48948e67d62ab9fc1c7db4e7048e66ad8c724812"
+    },
+    "wakeClippy": {
+      "allTargets": true,
+      "warningsDenied": true,
+      "passed": true,
+      "logSha256": "ef2795cf21333b8177d16cc7eab00b2be0b67d936fae1cb884473c01a5a77ebe"
+    }
+  },
+  "distinctScopedTests": 32,
+  "newDistinctTests": 9,
+  "coverage": [
+    "bridge route-contract parity",
+    "registered project-route input",
+    "negative origin/port/query/fragment/path cases",
+    "metadata exact but document Home",
+    "wrapped document and unreadable metadata",
+    "post-switch document drift",
+    "duplicate alias targets and unknown siblings",
+    "subframe observation",
+    "privacy and fixed exception states",
+    "native limits/unknown fields/types",
+    "real Windows bounded protocol child strips duplicate-key private values"
+  ],
+  "failuresRetained": [
+    "Initial new privacy assertions lacked json import",
+    "Project-route input test initially changed wrong argv index"
+  ],
+  "preservation": {
+    "oldCriticalPinsUnchanged": 128,
+    "currentOptimized487StillSelected": true,
+    "verifiedPreviousAndOriginalLoginArchivePreserved": true,
+    "newInstalledChanges": false,
+    "browserStarts": 0
+  },
+  "currentLiveEvidence": "THREE_PREVIOUS_INSTALLED_OBSERVATIONS_HOME_WITH_DRIFT_OR_MISSING_CAUSE_UNPROVEN",
+  "navigationCauseProvenByThisSourceChange": false,
+  "nextExecutableTask": "EXACT_COMMIT_PINNED_DEBUG_DEVELOPMENT_BUILD_THEN_BOUNDED_SELECTED_PROFILE_TAB_OBSERVATION_KEEP_OPTIMIZED487_AS_PREVIOUS",
+  "debugQualificationPolicy": "EXISTING_ISOLATED_DEVELOPMENT_SELECTION_AND_LOCAL_VERIFICATION_ONLY_NOT_PRODUCTION_AUTHORITY",
+  "operatorActionRequired": false,
+  "goal": "ACTIVE"
+}

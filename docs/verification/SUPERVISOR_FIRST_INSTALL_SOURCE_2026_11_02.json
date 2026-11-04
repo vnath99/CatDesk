@@ -1,0 +1,49 @@
+{
+  "observedUtc": "2026-11-02T20:45:27.500639+00:00",
+  "classification": "TESTED_SOURCE_NOT_INSTALLED",
+  "baseSourceCommit": "c37bb66096ef2dcb8ddef86d99a41ec76069375c",
+  "sourceInput": {
+    "path": "src/supervisor_lifecycle.rs",
+    "gitBlob": "b09f34b5b74061ad3818c68491d46a11057a166b",
+    "sha256": "8f4871a29c1127f9480b1cdcbcd95ae14621cdbe680f5de335b88bc96370f8b1"
+  },
+  "reproduction": {
+    "firstInstallCaseFailed": 1,
+    "reason": "RootUnavailable before installer could initialize the fixed root"
+  },
+  "verification": {
+    "lifecyclePassed": 14,
+    "lifecycleSeconds": 1.48,
+    "protectedStorePassed": 29,
+    "protectedStoreSeconds": 0.27,
+    "distinctCases": 43,
+    "strictAllTargetClippy": "PASS",
+    "fmt": "PASS",
+    "diffCheck": "PASS"
+  },
+  "behavior": [
+    "Read-only preflight distinguishes protected initialization required from runtime ready.",
+    "Activation validates image/principal/runtime/startup policy and exact startup ownership before initializing the fixed protected store.",
+    "Existing pinned-parent/no-follow protected-store constructor is reused; no caller-selected path or initialization authority.",
+    "Payload bytes must match their digest before root creation.",
+    "Existing invalid state is refused without reset; denied initialization remains refused.",
+    "Current/LKG receipt and Task Scheduler compensation mechanisms are retained."
+  ],
+  "compatibility": {
+    "newPreflightCode": "SUPERVISOR_PROTECTED_INITIALIZATION_REQUIRED",
+    "runtimeReadinessStillRequiresInstalledReceipt": true,
+    "operatorGrammarUnchanged": true,
+    "oldMissingRootRefusalTestUpdatedOnlyForFullyAuthorizedFirstInstall": true
+  },
+  "protectedInstallationChanges": 0,
+  "productionSupervisorActivated": false,
+  "productionRootRemainsAbsent": true,
+  "browserOrConnectorCalls": 0,
+  "reviewOrReleaseAuthorityCreated": false,
+  "remainingAcceptance": [
+    "Independent source review and approved release promotion",
+    "Actual first-install under fixed Windows principal and startup authority",
+    "Installed interruption/compensation and controlled recovery",
+    "Genuine two independent ChatGPT Web coding callers"
+  ]
+}

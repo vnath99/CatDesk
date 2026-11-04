@@ -1,0 +1,90 @@
++            if($id -isnot [string] -or $id -cnotmatch '\A[A-Za-z0-9_-]{1,200}\z' -or $seen.ContainsKey($id)){throw 'REGISTRY_INVALID'}
++            $projectPath=Get-DoctorProperty $project 'workspace'
++            if(-not (Test-DoctorWorkspaceSpelling $projectPath)){throw 'REGISTRY_INVALID'}
++            $seen[$id]=$true
++            if(Get-DoctorProperty $project 'codexThreadId'){$native++}
++            $url=Get-DoctorProperty $project 'chatgptTargetUrl'
++            if(-not $url){continue};$web++
++            $digest=Get-DoctorProperty $project 'chatgptTargetSha256'
++            $target=Get-DoctorProperty (Get-DoctorProperty $wake 'targets') $id
++            $generation=Get-DoctorProperty $target 'generation' 0
++            if($url -is [string] -and $url.Length -le 512 -and $url -cmatch '\Ahttps://(?:chatgpt\.com|chat\.openai\.com)/(?:c/(?:WEB:)?[A-Za-z0-9_-]{1,200}|g/[A-Za-z0-9_-]{1,200}/c/(?:WEB:)?[A-Za-z0-9_-]{1,200})\z' -and
++                $digest -is [string] -and $digest -cmatch '\A[a-f0-9]{64}\z' -and $digest -ceq (Get-LifecycleSha256Hex $url) -and
++                (Get-DoctorProperty $target 'url') -ceq $url -and (Get-DoctorProperty $target 'digest') -ceq $digest -and ($generation -is [int] -or $generation -is [long]) -and $generation -gt 0){$paired++}
++        }
++        $facts=@{registeredProjects=$projects.Count;webBindings=$web;pairedWakeTargets=$paired;nativeOwnerRegistrations=$native;metadataOnly=$true;nativeOwnerLivenessVerified=$false}
++        if($invalidWake -and $web -gt 0){Set-DoctorLayer 'PROJECT_REGISTRY' 'FAIL' 'WAKE_CONFIG_INVALID' $facts}
++        elseif($paired -eq $web){Set-DoctorLayer 'PROJECT_REGISTRY' 'PASS' 'REGISTRY_METADATA_PAIRED' $facts}
++        else{Set-DoctorLayer 'PROJECT_REGISTRY' 'FAIL' 'PROJECT_WAKE_TARGET_MISMATCH' $facts}
++    }catch{
++        if($_.Exception.Message -ceq 'REGISTRY_INVALID'){Set-DoctorLayer 'PROJECT_REGISTRY' 'FAIL' 'REGISTRY_INVALID'}
++        else{Set-DoctorLayer 'PROJECT_REGISTRY' 'UNVERIFIED' 'REGISTRY_UNAVAILABLE'}
++    }
++    try{
++        $control=Read-DoctorJson (Join-Path $WakeRoot 'control.json') 4096
++        $desired=Get-DoctorProperty $control 'desired';if($desired -cnotin @('RUNNING','STOPPED','PAUSED')){throw 'WAKE_INVALID'}
++        $queued=0;$unknown=0;$sampled=0
++        $queue=Join-Path $WakeRoot 'queue';if(Test-Path -LiteralPath $queue){foreach($file in [IO.Directory]::EnumerateFiles($queue,'*.json')){$queued++;if($queued -ge 4096){break}}}
++        $deliveries=Join-Path $WakeRoot 'deliveries';if(Test-Path -LiteralPath $deliveries){foreach($file in [IO.Directory]::EnumerateFiles($deliveries,'*.json')){
++            if($sampled -ge 64){break};$sampled++;$delivery=Read-DoctorJson $file 65536
++            if((Get-DoctorProperty $delivery 'phase') -ceq 'SUBMITTING'){$unknown++}
++        }}
++        $facts=@{desired=$desired;queuedObserved=$queued;queueCountCapped=($queued -ge 4096);deliverySamples=$sampled;submittingSamples=$unknown;recordedOwnerIsNotLivenessProof=$true}
++        $code=if($unknown){'WAKE_UNKNOWN_OUTCOME'}elseif($sampled -ge 64 -or $queued -ge 4096){'WAKE_METADATA_PARTIAL'}else{'WAKE_METADATA_OBSERVED'}
++        Set-DoctorLayer 'WAKE_QUEUE' 'UNVERIFIED' $code $facts
++    }catch{Set-DoctorLayer 'WAKE_QUEUE' 'UNVERIFIED' 'WAKE_METADATA_UNAVAILABLE'}
++    try{
++        $codex=Invoke-LifecycleSeam -Name 'DoctorCodexCommand' -Arguments @() -Default {Resolve-TrustedCurrentUserCodexCommand}
++        if($codex){Set-DoctorLayer 'CODEX_CLI' 'UNVERIFIED' 'CODEX_PRESENT_AUTH_UNVERIFIED'}else{Set-DoctorLayer 'CODEX_CLI' 'FAIL' 'CODEX_CLI_UNAVAILABLE'}
++    }catch{Set-DoctorLayer 'CODEX_CLI' 'FAIL' 'CODEX_CLI_UNAVAILABLE'}
++    $ollama=Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs/Ollama/ollama.exe'
++    if(Test-Path -LiteralPath $ollama -PathType Leaf){Set-DoctorLayer 'LOCAL_PROVIDER' 'UNVERIFIED' 'LOCAL_PROVIDER_NOT_PROBED'}else{Set-DoctorLayer 'LOCAL_PROVIDER' 'UNVERIFIED' 'LOCAL_PROVIDER_UNAVAILABLE'}
++    if($ObservationFile){
++        try{
++            $document=Read-DoctorJson $ObservationFile 16384
++            $names=@($document.PSObject.Properties.Name|Sort-Object)
++            if(($names -join ',') -cne 'observations,observedUtc,schemaVersion,source' -or ($document.schemaVersion -isnot [int] -and $document.schemaVersion -isnot [long]) -or $document.schemaVersion -ne 1 -or $document.source -cnotin @('OPERATOR_REPORTED','RETAINED_REPORT')){throw 'INVALID_OBSERVATION'}
++            $stamp=$document.observedUtc;$instant=[DateTimeOffset]::MinValue
++            if($stamp -isnot [string] -or $stamp.Length -gt 40 -or $stamp -cnotmatch '\A\d{4}-\d{2}-\d{2}(?:T[0-9:.]+(?:Z|[+-][0-9:]+))?\z' -or
++                -not [DateTimeOffset]::TryParse($stamp,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::AssumeUniversal,[ref]$instant) -or $instant -gt [DateTimeOffset]::UtcNow.AddMinutes(5)){throw 'INVALID_OBSERVATION'}
++            if($document.observations -isnot [array]){throw 'INVALID_OBSERVATION'}
++            $observations=$document.observations;if($observations.Count -gt 32){throw 'INVALID_OBSERVATION'};$imported=@{};$pending=@()
++            foreach($observation in $observations){
++                if((@($observation.PSObject.Properties.Name|Sort-Object) -join ',') -cne 'code,layer'){throw 'INVALID_OBSERVATION'}
++                $id=$observation.layer;$code=$observation.code
++                if($id -isnot [string] -or $code -isnot [string] -or -not $layers.Contains($id) -or $id -ceq 'OBSERVATIONS' -or $imported.ContainsKey($id)){throw 'INVALID_OBSERVATION'}
++                $definition=@($definitions|Where-Object{$_[0] -ceq $id})[0];if($code -cnotin $definition[4]){throw 'INVALID_OBSERVATION'}
++                $imported[$id]=$true;$pending+=@{layer=$id;code=$code}
++            }
++            # Validate the whole document before importing any item. Retained
++            # evidence can explain an unprobed layer, never supersede live facts.
++            foreach($observation in $pending){
++                $layer=$layers[$observation.layer];$layer.retained=@([pscustomobject]@{code=$observation.code;observedUtc=$stamp;source=$document.source})
++                if($layer.provenance -ceq 'NOT_RUN'){$layer.status='UNVERIFIED';$layer.code=$observation.code;$layer.observedUtc=$stamp;$layer.provenance='IMPORTED_ADVISORY'}
++            }
++            Set-DoctorLayer 'OBSERVATIONS' 'UNVERIFIED' 'OBSERVATIONS_IMPORTED_ADVISORY'
++        }catch{Set-DoctorLayer 'OBSERVATIONS' 'FAIL' 'OBSERVATIONS_INVALID'}
++    }else{Set-DoctorLayer 'OBSERVATIONS' 'NOT_RUN' 'OBSERVATIONS_NOT_SUPPLIED'}
++    # Coarse historical refusals cannot prove authentication or justify asking
++    # for a screenshot/login. Reconcile the owner and qualify the content-free
++    # observer before any new bounded inspection; this advice performs no action.
++    if($layers['BROWSER'].code -cin @('HOME_EDITOR_MISSING','BROWSER_TARGET_MISSING','BROWSER_DRAFT_UNKNOWN')){
++        $layers['BROWSER'].nextDiagnostic='QUALIFIED_READONLY_PROFILE_OBSERVATION_AFTER_OWNER_RECONCILIATION'
++    }
++    if($layers['BROWSER'].code -ceq 'BROWSER_AUTH_REQUIRED'){
++        $layers['BROWSER'].nextDiagnostic='operator web-dev-runtime login --project-id <registered-project>'
++    }
++    if($layers['BROWSER'].code -ceq 'BROWSER_OWNER_CLEANUP_UNVERIFIED'){
++        $layers['BROWSER'].nextDiagnostic='RECONCILE_EXISTING_BROWSER_OWNER_WITHOUT_MARKER_CLEAR_OR_RELAUNCH'
++    }
++    if($layers['BROWSER'].code -ceq 'BROWSER_RESPONSE_LOAD_ERROR'){
++        $layers['BROWSER'].nextDiagnostic='ATTRIBUTE_EXACT_WAKE_RESPONSE_WITHOUT_USER_RESEND'
++        $layers['BROWSER'].facts=[ordered]@{
++            conversationReadiness='SEPARATE_FROM_RESPONSE_FAILURE'; exchange='UNATTRIBUTED';
++            userResendAllowed=$false; genericLoadErrorRetryQualified=$false;
++            independentProjectsMayContinue=$true
++        }
++    }
++    if($layers['CONNECTOR'].code -ceq 'CONNECTOR_RESPONSE_VERIFIED'){
++        # A retained transport response is neither current availability nor an
++        # authenticated project grant. Do not suggest more connector polling

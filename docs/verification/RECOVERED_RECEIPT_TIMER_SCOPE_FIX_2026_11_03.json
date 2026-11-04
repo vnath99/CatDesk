@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-03T15:46:04.028502+00:00",
+  "classification": "TESTED_SOURCE_AND_CONTROLLED_DEVELOPMENT_NOT_PRODUCTION",
+  "sourceCommit": "dade085c7feffb1464baf807c6cfc3812a647cf9",
+  "fault": "Reobservation required timer start to equal receipt time while exact receipt reconciliation intentionally preserves the earlier acceptance timer.",
+  "change": "Earlier timers are accepted only with the existing exact event/target submission-start witness and valid creation/submission/receipt chronology. Equal-time legacy receipts retain compatibility. No timer or receipt timestamps are rewritten.",
+  "verification": {
+    "redRegressionReproduced": true,
+    "reobserveCasesPassed": 15,
+    "receiptClockCasesPassed": 9,
+    "newCases": 3,
+    "rootAndWakeStrictClippyPassed": true,
+    "rootAndWakeFmtPassed": true
+  },
+  "developmentExecutableSha256": "8c4fdde9037826b348f59b02ae5d5be7a28378daf6b5d1b7be4d57f5222f1ab7",
+  "previousVerifiedExecutableSha256": "9143b0ab9c358c6e0f52b21281d41d7c6b3e6f7127ed5a42aabfeacac22a4c4b",
+  "developmentHealth": {
+    "actualSha256": "8c4fdde9037826b348f59b02ae5d5be7a28378daf6b5d1b7be4d57f5222f1ab7",
+    "unauthorizedStatus": 401,
+    "initializeStatus": 200,
+    "catalogStatus": 200,
+    "toolCount": 79,
+    "registeredProjectsRead": true,
+    "ownerExitCode": 0,
+    "readersClosed": true,
+    "ownedTreeExitProved": true,
+    "endpointClosed": true
+  },
+  "runtimeQualificationPreservationMismatches": 0,
+  "liveReobservation": {
+    "responseState": "COMPLETE",
+    "sendCommandsStarted": 0,
+    "preservationMismatches": 0
+  },
+  "protectedProductionChanged": false,
+  "sourceAccepted": false,
+  "producerAuthority": false
+}

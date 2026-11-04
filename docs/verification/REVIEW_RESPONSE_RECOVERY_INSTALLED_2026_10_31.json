@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T01:54:58.334761+00:00",
+  "classification": "ACTUAL_RECEIPT_BOUND_FULL_RESPONSE_RECOVERED_DEVELOPMENT_WITH_SEPARATE_PASSIVE_CLOSURE_GAP",
+  "actualSelectedDevelopment": {
+    "sourceCommit": "412295544761dc2f957a6c761d354630a90a3b93",
+    "candidateSha256": "1a27e9df9f72127fa5cf779fad9082ea643b8ddeb53fbfad166e30972976d10c",
+    "previousSha256": "6e741010733bfbc284f633b36bbf04a7ef2192ebc46fc0fc0e433015620ed4b2",
+    "selectedPackageId": "1.0.0-dev.85-d3aa4fbf51733fa1f38031c8e527c7040688edcbf0889c1bf8f1f6b9d5dbaa7f",
+    "elapsedSeconds": 101.25,
+    "profileIdentityPreserved": true,
+    "nonUsageConfigurationPreserved": true,
+    "previousVerifiedRetained": true,
+    "hostStopped": true
+  },
+  "build": {
+    "sourceCommit": "412295544761dc2f957a6c761d354630a90a3b93",
+    "elapsedSeconds": 53.329,
+    "pinnedFilesUnchanged": 5081
+  },
+  "health": [
+    {
+      "actualSha256": "1a27e9df9f72127fa5cf779fad9082ea643b8ddeb53fbfad166e30972976d10c",
+      "unauthorizedStatus": 401,
+      "initializeStatus": 200,
+      "catalogStatus": 200,
+      "registeredProjectsRead": true,
+      "ownerExitCode": 0,
+      "readersClosed": true,
+      "ownedTreeExitProved": true,
+      "endpointClosed": true
+    }
+  ],
+  "response": {
+    "eventVerified": true,
+    "fullBytes": 8241,
+    "sha256": "583e47155b30bcc8f956aa5f84aba790c813c0903dbe06bbb9a4e2f59059f2a3",
+    "schemaValid": true,
+    "reviewedSourceCommit": "b25119e8c47cfe261aae06b461c3697e3841cdb6",
+    "verdict": "INCONCLUSIVE",
+    "reportedInspectedPaths": 61,
+    "missingRequestedPaths": 0,
+    "findings": 0,
+    "limitations": 23,
+    "sourceAccepted": false,
+    "nativeFinalized": false,
+    "producerStarted": false,
+    "messagesResent": 0
+  },
+  "reviewLimitation": {
+    "providerReturnedPatchesReported": 40,
+    "missingDeltasReported": 21,
+    "originalScopeOmittedRootAdapter": true,
+    "completeLocalGitDeltasReconstructedPaths": 62,
+    "rootAdapterIncluded": true,
+    "boundedPatchParts": 9,
+    "totalPatchBytes": 794241,
+    "maximumPartBytes": 111582,
+    "publicReviewInputDirectory": "docs/orchestrator/review_bundles/OCT31_MVP_EXACT_DELTAS_E4A_B251",
+    "inputIsIndependentAcceptance": false
+  },
+  "passiveTransportClosure": {
+    "status": "REFUSED",
+    "reason": "RESPONSE_TARGET_DRIFT",
+    "elapsedSeconds": 86.203,
+    "userMessagesSent": 0,
+    "timerAndLedgerBytesUnchanged": true,
+    "sourceReviewNativeClaim": "OWNED_WAITING_FOR_CHATGPT_NOT_ACKNOWLEDGED",
+    "actualDriftRouteNotRecorded": true
+  },
+  "newHydrationSource": {
+    "classification": "TESTED_SOURCE_LIVE_PENDING",
+    "readOnlyWaitForPlainHomeOrBlankWithinExistingBudget": true,
+    "foreignAuthNetworkOrWrappedRoutesStillImmediatelyRefused": true,
+    "homeAloneCannotBecomeResponseComplete": true,
+    "noNavigationReloadRetryRegenerateOrSendAdded": true,
+    "newAdapterTests": 2,
+    "adapterSuitePassed": 36,
+    "combinedDistinctScopedTestsWithPriorSlice": 220,
+    "strictRootAndWakeAllTargetClippy": "PASS",
+    "liveCauseOrRecoveryProven": false
+  },
+  "preservation": {
+    "qualificationCriticalPinsUnchanged": 5071,
+    "previousPackageFilesUnchanged": 7,
+    "failedClosureUnrelatedPinsUnchanged": 5072,
+    "bindingsAndHistoriesPreserved": true,
+    "priorUncertainSubmissionsReplayed": false,
+    "nativeModelWorkerStarts": 0,
+    "protectedProductionOrTunnelOrRecurringStarts": 0,
+    "latestNativeProfileState": "PROFILE_QUIESCENT",
+    "nativeInventoryObservedUtc": "2026-10-31T01:41:21.690770+00:00"
+  },
+  "acceptance": {
+    "fullTaskBoundSourceReviewResponseRecovery": "PASS_REAL_SELECTED_DEVELOPMENT",
+    "positiveCumulativeSourceAcceptance": "OPEN_INCONCLUSIVE",
+    "passiveResponseTimerAndCoordinatorClosure": "OPEN_TARGET_DRIFT_NEW_SOURCE_PENDING_QUALIFICATION",
+    "newSourceProtectedPromotion": "OPEN_NO_NEW_ACK_OR_PRODUCER_AUTHORITY",
+    "twoChatWebCoding": "OPEN"
+  },
+  "nextExecutableTask": "QUALIFY_NEW_PASSIVE_OBSERVER_THEN_REOBSERVE_AND_RESOLVE_ONLY_EXISTING_SENT_EVENT_NO_NEW_SEND; USE_COMPLETE_EXACT_DELTA_INPUTS_FOR_MATERIAL_FOLLOWUP_REVIEW",
+  "operatorActionRequired": false,
+  "goal": "ACTIVE",
+  "privateEvidenceSha256": {
+    "oct31-review-pair-debug-build-result.private.json": "9b3e74a8650d172a494164ec063ca2ac8ce499d6f55e8d5482546a292a9f2d96",
+    "oct31-review-pair-debug-live-result.private.json": "0a3409753b27e68502c24ed3e01d50f2ec96b65523da3ec518d489717c074b28",
+    "oct31-review-pair-debug-live-owner.private.json": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "oct31-mvp-transport-close-result.private.json": "750a3a56447c3e4a37907663745f3fe392b7c9b1eaeb1c5e301e42035583102a",
+    "oct31-mvp-transport-close-owner.private.json": "f1a2f9395f4be4e5261b9d7ac05a45d8a2bd11199d6f579f9acde4a6e468356a",
+    "oct31-profile-quiescence-transport-close-cleanup-result.private.json": "80103812331e93468e1edc181cf45b6467279c1406d6f33508ae0941ab811e9c",
+    "oct31-passive-response-hydration-adapter.private.log": "9fbbdb16a882c98c645767d0d11d434d54005e00d1c6e538ec3815443d37045f",
+    "oct31-response-hydration-wake-clippy.private.log": "d2982f4cbb7eeb517d6d61a7d59680e20b7e3ca149b930a7afdb7784d2502dae",
+    "oct31-response-hydration-root-clippy.private.log": "31c504c5256d99e6f6cbdd3db2871099441de55063a6e18d3830e3fe848bbc59"
+  }
+}

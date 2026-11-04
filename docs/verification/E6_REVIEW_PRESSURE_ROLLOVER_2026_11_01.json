@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-01T23:07:47.596421+00:00",
+  "classification": "TESTED_CONTROLLED_LIVE",
+  "sourceCommit": "e6a3e5e86843a41c74261a821dbb9cd0748477b7",
+  "developmentControllerSource": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+  "developmentControllerSha256": "846b90b2150288b2e240e1443bfe794d8a9752a6f3743f6eda492a0ee2344bcf",
+  "currentReview": {
+    "fullDeclaredPaths": 84,
+    "unchangedAcceptedBlobs": 81,
+    "changedPaths": [
+      "src/main.rs",
+      "src/operator_facade.rs",
+      "src/promotion_retirement.rs"
+    ],
+    "diagnosticVerdict": "REVIEWED_PARTIAL",
+    "findings": 0,
+    "sourceReadsCorroborated": 1,
+    "responseSha256": "dddd94ea4021d43c8f5b525c8cf73b3b9e059a93a1a8b9d2cea2504cbf847749",
+    "cumulativeSourceAccepted": false
+  },
+  "context": {
+    "generation": 5,
+    "observedTokenProxy": 73009,
+    "configuredBudgetTokens": 96000,
+    "safetyHeadroomTokens": 24000,
+    "triggerTokens": 72000,
+    "coverageKnown": false,
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "duplicateImportChangedLedger": false,
+    "rawTextPersisted": false
+  },
+  "rollover": {
+    "triggerReason": "OBSERVED_PRESSURE",
+    "thresholdsChanged": false,
+    "sourceHandoffDeliveredOnce": true,
+    "sourceResponseComplete": true,
+    "handoffSha256": "64b542ba0be073fe1862a361c5c8414aca34995ae232c26634eb52684e79730c",
+    "actualIssuedUrlVerified": true,
+    "bootstrapUserReceiptVerified": true,
+    "bootstrapResponseCompleted": true,
+    "sourceRechecked": true,
+    "pairedGeneration": 6,
+    "predecessorPreserved": true,
+    "siblingsPreserved": true,
+    "continuationDeliveredOnce": true,
+    "continuationCompleted": true,
+    "continuationResponseSha256": "635fb85ba6908b21c47bc1bd1f032071c607265a1557bcd3ed46bac7c57338e5",
+    "originalPolicyRestored": true,
+    "creationElapsedSeconds": 145.14
+  },
+  "bounds": {
+    "outerMaximumSecondsPerBrowserStage": 180,
+    "testOwnedProcessesAfter": 0,
+    "recurringWakeHostStarted": false,
+    "nativeSessionActions": 0,
+    "productionChanges": 0,
+    "controllerChanged": false
+  },
+  "continuationMeaning": "The exact completed response correctly stops normal review resumption on canonical generation1 versus controlled generation6 and unproven native task authority. Delivery and response verification do not establish resumed project execution.",
+  "limitations": [
+    "Known context is a proxy with incomplete coverage, not exact provider capacity.",
+    "Advisory public-source imports do not establish authenticated originating project identity.",
+    "The diagnostic review remains partial; current-source cumulative review is pending.",
+    "Controlled registry and connector-visible canonical native registry remain distinct scopes.",
+    "Actual installed two-Web workspace edits/native verification, installed restart/rollback and unattended recovery remain OPEN.",
+    "Detailed context calibration and later CD-P7 MCP client acceptance remain OPEN."
+  ]
+}

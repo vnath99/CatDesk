@@ -1,0 +1,203 @@
++        atomic(&store.root.join("active.json"), &record.intent_id).unwrap();
++        drop(store);
++        assert!(
++            acquire_web_work_lease(root, project).is_err(),
++            "pending continuation must fence work"
++        );
++        let message = continuation_message(&record, &current);
++        let event = wake
++            .produce_expected(
++                &record.continuation_event_id,
++                project,
++                "engineering_attention",
++                &message,
++                &current,
++            )
++            .unwrap();
++        let host = wake.host_lock().unwrap();
++        let claimed = wake.claim(&event, &host).unwrap();
++        wake.transition(
++            &event.event_id,
++            &claimed.owner,
++            DeliveryPhase::Submitting,
++            None,
++            None,
++        )
++        .unwrap();
++        let receipt = Receipt {
++            schema_version: 1,
++            event_id: event.event_id.clone(),
++            target_generation: current.generation,
++            target_digest: current.digest.clone(),
++            message_digest: digest(&message),
++            sent_utc: now(),
++            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
++        };
++        wake.record_exact_receipt_timer(&event.event_id, &receipt)
++            .unwrap();
++        wake.transition(
++            &event.event_id,
++            &claimed.owner,
++            DeliveryPhase::Sent,
++            Some(receipt),
++            None,
++        )
++        .unwrap();
++        wake.complete_timer(&event.event_id).unwrap();
++        drop(acquire_web_work_lease(root, project).unwrap());
++        (source, current)
++    }
++
+     #[test]
+     fn cancelled_scheduler_cannot_prepare_collect_or_execute_a_project() {
+         let root =
+diff --git a/src/project_mcp.rs b/src/project_mcp.rs
+index a21c0f6e939ab048e7445120750017788916a3e2..1da2ff9348f67a26e74e9ff32cbd0d6b34514515 100644
+--- a/src/project_mcp.rs
++++ b/src/project_mcp.rs
+@@ -36,7 +36,7 @@ const TRAFFIC_CHUNK_BYTES: usize = 8 * 1024;
+ /// transport retry may be a second provider-visible exchange; it is never
+ /// silently merged with a legitimate equal call. Re-recording a part of this
+ /// same invocation is idempotent in the existing context ledger.
+-struct TrafficObservation {
++pub(crate) struct TrafficObservation {
+     control: PathBuf,
+     key: Option<ConversationKey>,
+     invocation: String,
+@@ -189,7 +189,17 @@ fn response_traffic(response: &JsonRpcResponse) -> TrafficText {
+ 
+ impl TrafficObservation {
+     async fn start(context: &ProjectContext, current: &Selection, params: Value) -> Self {
+-        let control = context.registered.control_workspace.clone();
++        Self::start_scoped(
++            context.registered.control_workspace.clone(),
++            current,
++            params,
++        )
++        .await
++    }
++
++    /// Called only after exact project/task-key admission. This observes traffic;
++    /// it does not bind a worker, grant execution or attest provider identity.
++    pub(crate) async fn start_scoped(control: PathBuf, current: &Selection, params: Value) -> Self {
+         let mut observation = Self {
+             control: control.clone(),
+             key: None,
+@@ -250,7 +260,7 @@ impl TrafficObservation {
+         observation
+     }
+ 
+-    async fn finish(self, response: &mut JsonRpcResponse) {
++    pub(crate) async fn finish(self, response: &mut JsonRpcResponse) {
+         let mut result_status = "UNAVAILABLE";
+         if let Some(key) = self.key {
+             let text = response_traffic(response);
+diff --git a/src/project_mcp_task.rs b/src/project_mcp_task.rs
+index b6055a364d1cd8eaca3fada2e155cce957b9033d..9f6689d512bc91eff891c75e34c646b9c438f709 100644
+--- a/src/project_mcp_task.rs
++++ b/src/project_mcp_task.rs
+@@ -1,6 +1,7 @@
+ //! Operator-assigned isolated worktree editing for a fixed project connection.
+ //! Reuses delegated contracts, patch preimages/journal and project writer locks.
+-//! There is no provider launch, arbitrary command or ownership of the native root.
++//! Native queue launch requires an additional exact local capability; ordinary
++//! contract tools retain their isolated worktree and command restrictions.
+ 
+ use crate::delegated::{
+     autonomy_projects::{AutonomousProjectRegistryStoreV1, ResolvedProjectScopeV1},
+@@ -435,6 +436,14 @@ struct WebExecutionGrant {
+     source_event_id: String,
+     assignment: crate::web_work_state::WorkTaskAssignment,
+     key_sha256: String,
++    #[serde(default, skip_serializing_if = "manual_wake_disabled")]
++    allow_manual_wake: bool,
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    native_queue: Option<crate::operator_codex_cli::NativeQueueSelection>,
++}
++
++fn manual_wake_disabled(value: &bool) -> bool {
++    !value
+ }
+ 
+ /// Explicit local opt-in. This permission follows only C46-proved source
+@@ -445,6 +454,30 @@ pub(crate) fn grant_web_execution(
+     current: &catdesk_wake::protocol::Target,
+     revoke: bool,
+ ) -> Result<Value, String> {
++    grant_web_execution_with_manual_wake(project, record, current, revoke, false)
++}
++
++pub(crate) fn grant_web_execution_with_manual_wake(
++    project: &ResolvedProjectScopeV1,
++    record: &crate::web_work_state::WorkRecord,
++    current: &catdesk_wake::protocol::Target,
++    revoke: bool,
++    allow_manual_wake: bool,
++) -> Result<Value, String> {
++    grant_web_execution_with_capabilities(project, record, current, revoke, allow_manual_wake, None)
++}
++
++pub(crate) fn grant_web_execution_with_capabilities(
++    project: &ResolvedProjectScopeV1,
++    record: &crate::web_work_state::WorkRecord,
++    current: &catdesk_wake::protocol::Target,
++    revoke: bool,
++    allow_manual_wake: bool,
++    native_queue_task_id: Option<&str>,
++) -> Result<Value, String> {
++    if revoke && (allow_manual_wake || native_queue_task_id.is_some()) {
++        return Err("WEB_TASK_GRANT_ARGUMENTS_INVALID".into());
++    }
+     let prepared = prepare_work_resume(project, record, current)?;
+     let link = record
+         .task_assignment
+@@ -465,6 +498,35 @@ pub(crate) fn grant_web_execution(
+     {
+         return Err("WEB_TASK_GRANT_REVOKED".into());
+     }
++    let native_queue = native_queue_task_id
++        .map(|id| {
++            let grant_path = directory.join("execution-grant.json");
++            if grant_path
++                .try_exists()
++                .map_err(|_| "WEB_TASK_GRANT_UNAVAILABLE")?
++            {
++                let retained: WebExecutionGrant =
++                    serde_json::from_slice(&read_assignment_bytes(&grant_path)?)
++                        .map_err(|_| "WEB_TASK_GRANT_INVALID")?;
++                if let Some(selection) = retained
++                    .native_queue
++                    .filter(|selection| selection.task_id == id)
++                {
++                    crate::operator_codex_cli::native_queue_selection_status(
++                        &project.control_workspace,
++                        &project.project.project_id,
++                        &selection,
++                    )?;
++                    return Ok(selection);
++                }
++            }
++            crate::operator_codex_cli::freeze_native_queue_selection(
++                &project.control_workspace,
++                &project.project.project_id,
++                id,
++            )
++        })
++        .transpose()?;
+     let key_path = execution_key_path(project, link, true)?;
+     let key = if key_path
+         .try_exists()
+@@ -495,19 +557,27 @@ pub(crate) fn grant_web_execution(
+         source_event_id: record.event_id.clone(),
+         assignment: link.clone(),
+         key_sha256: catdesk_wake::protocol::digest(&key),
++        allow_manual_wake,
++        native_queue: native_queue.clone(),
+     };
+     exact_file(
+         &directory.join("execution-grant.json"),
+         &serde_json::to_vec(&grant).map_err(|_| "WEB_TASK_GRANT_INVALID")?,
+     )?;
+-    Ok(
+-        json!({"status":"EXECUTION_GRANTED","projectId":project.project.project_id,
++    let mut result = json!({"status":"EXECUTION_GRANTED","projectId":project.project.project_id,

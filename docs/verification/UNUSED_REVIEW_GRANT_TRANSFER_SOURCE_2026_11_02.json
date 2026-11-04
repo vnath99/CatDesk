@@ -1,0 +1,60 @@
+{
+  "observedUtc": "2026-11-02T06:10:17.699624+00:00",
+  "classification": "TESTED_SOURCE_NOT_DEPLOYED",
+  "sourceBaseCommit": "3266bce5a66b46036749723a552b5a9cdf088d0f",
+  "sourceFiles": {
+    "src/web_review_authorization.rs": "6dc404b9ab73e8cfcd8ca3f19038005d220c3e8a3204be8e36e9748a543883f4",
+    "src/web_review_work.rs": "830da971aaaec89354261017522c0af6012f19e4e18277604e684b4a5f3973ce"
+  },
+  "reproducedLivePrerequisite": {
+    "existingControllerRefusal": "WEB_REVIEW_GRANTS_INVALID",
+    "messagesSent": 0,
+    "successorGrantPersisted": false,
+    "historicalGrantRevocationPreserved": true
+  },
+  "implementation": {
+    "existingLedgerAndAuthorizeCommandReused": true,
+    "optionalField": "unusedMessagesFromGrant",
+    "newSchedulerOrRegistry": false,
+    "predecessorMustBeRevokedAndUnexpired": true,
+    "onlyExactNeverReservedIdentities": true,
+    "messageHashRequestIdEventIdReviewKeyUnchanged": true,
+    "currentPairedTargetAndProjectLeaseStillRequired": true,
+    "targetGenerationMustAdvance": true,
+    "predecessorHistoryImmutable": true,
+    "expiryAndExecutionLimitsNeverExtended": true,
+    "forwardedMessagesConsumeOriginalQuota": true,
+    "transferForksRefused": true,
+    "reservedDispatchedAndUnknownNeverTransferred": true,
+    "noBrowserOrSendInAuthorization": true
+  },
+  "compatibility": {
+    "legacyRequestsAndLedgerBytesUnchangedWhenFieldAbsent": true,
+    "olderStrictReadersFailClosedAfterTransferFieldUsed": true,
+    "matchingQualifiedControllerRequiredBeforeLiveTransfer": true,
+    "installedBackendUnchanged": true
+  },
+  "verification": {
+    "commands": [
+      "cargo test --locked --offline --bin catdesk web_work_state::review_authorization::tests -- --test-threads=2",
+      "cargo test --locked --offline --bin catdesk web_work::review::tests -- --test-threads=2",
+      "cargo clippy --locked --offline --all-targets -- -D warnings",
+      "cargo fmt --all -- --check",
+      "git diff --check"
+    ],
+    "authorizationTestsPassed": 18,
+    "newTransferTests": 6,
+    "existingResponseRecoveryWorkflowTestsPassed": 2,
+    "separateExistingMcpScopeModeGatePassed": 1,
+    "strictClippyPassed": true,
+    "formattingPassed": true,
+    "diffCheckPassed": true,
+    "initialFilterNote": "The first web_review filter exercised only one existing MCP scope test. The corrected explicit authorization and workflow module filters then exercised the intended 18 plus 2 cases.",
+    "boundedOwnersExitedWithoutTimeout": true
+  },
+  "liveTransferAccepted": false,
+  "cumulativeSourceAcceptance": false,
+  "producerAuthority": false,
+  "nextTask": "Build and qualify a matching isolated development controller from the published source. Freeze an explicit transfer request for only seven never-submitted original identities, then authorize/preflight through the existing paired-target route. Preserve the rejected batch and original C52 claim.",
+  "operatorActionRequiredForNextDevelopmentQualification": false
+}

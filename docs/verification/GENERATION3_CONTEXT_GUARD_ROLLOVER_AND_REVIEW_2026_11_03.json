@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-03T01:27:26.554841+00:00",
+  "evidenceScope": "TESTED_CONTROLLED_LIVE",
+  "sourceCommit": "38be1c8a221dc6ef37ea8e977cd6ed956439947d",
+  "documentationParentCommit": "2c2e3d6848b84e19a4bff52eb9b896ac2c3380a0",
+  "frozenReviewSourceCommit": "6d737c9a0f6f34496fc88b9fec02433bd1599117",
+  "selectedDevelopmentExecutableSha256": "d2bfe7796865152f530ca5c43495d9530625712ef5180e447584542de3c0e713",
+  "productionExecutableSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+  "trigger": {
+    "reason": "INCOMPLETE_HISTORY_GUARD",
+    "observedProxyBeforeRequest": 68534,
+    "observedProxyAtIntent": 69836,
+    "configuredObservedTrigger": 72000,
+    "thresholdCrossingClaimed": false,
+    "thresholdsChanged": false,
+    "temporaryGuardPolicyRestored": true
+  },
+  "rollover": {
+    "sourceGeneration": 2,
+    "newGeneration": 3,
+    "sourceAuthoredHandoffSha256": "d39be232c658408e6cd34e80363cbfb3a0e815ecd9baa63837dd665ffc386227",
+    "bootstrapSubmissions": 1,
+    "bootstrapUserReceipt": "EXACT_USER_MESSAGE_APPENDED",
+    "issuedUrlIndependentlyVerified": true,
+    "bootstrapResponseCompleted": true,
+    "sourceRecheckedLiveBeforeBinding": true,
+    "registryAndWakePaired": true,
+    "predecessorPreserved": true,
+    "siblingProjectsPreserved": true,
+    "nativeOwnersPreserved": true,
+    "continuationSubmissions": 1,
+    "continuationState": "COMPLETE",
+    "continuationEventVerified": true,
+    "continuationResponseSha256": "d71561428624908e8fef6e73f2f530bb621bb9320174d41e13aa6e40a6e99bf4",
+    "createSeconds": 131.89,
+    "createDeadlineSeconds": 180,
+    "receiptOnlyResumeNeeded": false,
+    "unknownOrCompletedRequestsReplayed": false
+  },
+  "appSelection": {
+    "explicitQualifiedPredecessorMarkerPresent": false,
+    "frozenHandoffModified": false,
+    "postRolloverToolAvailabilityEstablishedByCorroboratedSourceCalls": true,
+    "newAppSelectionAuthorityInferred": false
+  },
+  "context": {
+    "predecessorObservedProxyAfterHandoff": 71753,
+    "successorInitialObservedHandoffProxy": 1332,
+    "predecessorLedgerPreserved": true,
+    "lifetimeTrafficCopiedIntoSuccessor": false,
+    "coverageKnown": false,
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "rawTextPersisted": false
+  },
+  "unusedTransfer": {
+    "requests": [
+      11,
+      12,
+      13
+    ],
+    "exactFrozenPayloadsPreserved": true,
+    "originalExpirationPreserved": true,
+    "completedAndRetiredRequestsExcluded": true,
+    "existingAuthorizationRegistryUsed": true,
+    "newNativeClaimCreated": false
+  },
+  "resumedSourceReview": {
+    "checkpoint": 11,
+    "verdict": "REVIEWED_PARTIAL",
+    "gitCallsIndependentlyCorroborated": 8,
+    "matchingCommandLogCounts": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "responseSha256": "8dd882cc253bcb190d22326077a12c578be67f802ed8b334a783ad5e2a3aa590",
+    "exactUserReceipt": true,
+    "completedResponseVerified": true,
+    "cumulativeSourceAccepted": false
+  },
+  "cleanup": {
+    "observedUtc": "2026-11-03T01:27:23.1396307Z",
+    "testOwnedProcesses": 0,
+    "existingBackendAndTunnelPreserved": true,
+    "sharedWakeHostStopped": true,
+    "loginMarkerPresent": false,
+    "processActions": 0
+  },
+  "remainingGates": [
+    "Current exact-source cumulative review, ACK, snapshot and producer authority",
+    "Canonical versus controlled registry scope and reviewed Wake publication",
+    "Two authenticated Web conversations performing independent native source edits and verification",
+    "Independent installed Wake routing and qualified persistent restart/reboot recovery",
+    "Full context coverage, attribution, deduplication and calibration acceptance",
+    "Later CD-P7 provider-client integration"
+  ],
+  "productionPromotionPerformed": false,
+  "installedTwoProjectCodingAccepted": false,
+  "unattendedAcceptanceClaimed": false,
+  "operatorActionRequired": false
+}

@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-01T21:45:43.379260+00:00",
+  "sourceEvidenceBaseCommit": "cb27820cd89fa5428a00898bbc88dc94d8d9380c",
+  "branch": "codex/web-rollover-oct17",
+  "qualifiedCandidate": {
+    "sourceCommit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+    "sha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "bytes": 38482432,
+    "producerState": "BUILD_ATTESTED",
+    "applicationResultValidated": true,
+    "singleConfirm": true,
+    "workerMaximumSeconds": 900,
+    "monitorMaximumSeconds": 1020,
+    "ownedBuildProcessesRemaining": 0,
+    "priorAttestedGenerationPreserved": true,
+    "protectedPinsVerified": 5229,
+    "capabilityProbePassed": true,
+    "missingBearerStatus": 401,
+    "wrongBearerStatus": 401,
+    "authenticatedInitializeStatus": 200,
+    "authenticatedReadOnlyCatalogStatus": 200,
+    "readOnlyToolCount": 10,
+    "naturalExit": true,
+    "listenerClosed": true,
+    "installed": false,
+    "containsCompletedRetirementCorrection": false
+  },
+  "observedPromotionGap": {
+    "completedSuccessfulClaimRetained": true,
+    "newPreflightRefusesExistingClaim": true,
+    "previousRetirementAcceptsOnlyFailedTransactions": true,
+    "blindPreflightOrClaimClearAttempted": false
+  },
+  "sourceCorrection": {
+    "status": "TESTED_SOURCE_NOT_INSTALLED_OR_INDEPENDENTLY_ACCEPTED",
+    "files": [
+      {
+        "path": "src/operator_facade.rs",
+        "previousGitBlob": "205add5ae4742bc6e68da0e0138d402a8f98666b",
+        "currentGitBlob": "cfc9bc7706b3174c496e58cc1972397943a203e2"
+      },
+      {
+        "path": "src/promotion_retirement.rs",
+        "previousGitBlob": "8d3825761dc1f283ede4664ab77f6404c05f67fe",
+        "currentGitBlob": "ae9efd7cb5a548f85ea20ede1f5c18557dca3b27"
+      }
+    ],
+    "fullPreviousDeclaredScopeRetained": 84,
+    "unchangedPreviousCodeBlobs": 82,
+    "scopeReference": "docs/verification/CURRENT_SOURCE_CUMULATIVE_SCOPE_9EA9E7B_2026_11_01.json",
+    "mechanism": "Existing stopped-only promotion retirement extended with explicit completed-success mode; existing archive, locks, journal and retained pair handles reused.",
+    "requiredEvidence": [
+      "Expired exact local-backend authorization/preflight/claim/owner/result binding.",
+      "PROMOTION_COMPLETED plus STOPPED_AFTER_BOUNDED_OWNER.",
+      "Independent producer attestation and accepted snapshot.",
+      "Matching CANONICAL_HANDOFF_PROVEN transaction and installed-pair receipt.",
+      "Existing trusted-release verifier matches actual canonical candidate; no listener/image/release helper owner.",
+      "Exact fresh evidence digest and exclusive public lifecycle lease before archival."
+    ],
+    "compatibility": [
+      "Legacy failed-plan serialization and digests remain byte-compatible.",
+      "Completed mode uses plan schema2 with completedPromotion=true; legacy schema cannot borrow completed authority.",
+      "Prior completed journals and all original promotion records remain immutable history.",
+      "Unrelated restart handoff remains untouched; binaries, fingerprints and selection pointer are never rewritten by retirement.",
+      "Older controllers may fail closed on schema2; retain and use the qualified current controller for this metadata transition."
+    ],
+    "independentReviewRequired": true,
+    "productionRetirementExecuted": false
+  },
+  "tests": {
+    "retirementEntriesPassed": 18,
+    "retirementHelperEntriesIncluded": 2,
+    "cliCasesPassed": 1,
+    "names": [
+      "daemon_reload::retirement::tests::actual_owned_image_blocks_readonly_inspection_until_its_job_exits",
+      "daemon_reload::retirement::tests::actual_windows_owner_kill_preserves_journal_and_fresh_owner_recovers",
+      "daemon_reload::retirement::tests::archive_preserves_bytes_and_completed_history_is_idempotent",
+      "daemon_reload::retirement::tests::changed_records_archive_collision_and_unknown_receipts_remain_quarantined",
+      "daemon_reload::retirement::tests::completed_archive_preserves_unrelated_handoff_and_recovers_interruption",
+      "daemon_reload::retirement::tests::completed_receipt_must_bind_the_actual_canonical_promotion",
+      "daemon_reload::retirement::tests::completed_retirement_requires_exact_verified_stopped_success",
+      "daemon_reload::retirement::tests::every_interruption_boundary_resumes_without_repeating_a_move",
+      "daemon_reload::retirement::tests::five_core_records_are_valid_but_a_missing_authority_is_not",
+      "daemon_reload::retirement::tests::hard_kill_fixture",
+      "daemon_reload::retirement::tests::image_owner_fixture",
+      "daemon_reload::retirement::tests::journal_tampering_never_enables_a_new_preflight",
+      "daemon_reload::retirement::tests::legacy_retirement_plan_bytes_and_terminal_domains_remain_distinct",
+      "daemon_reload::retirement::tests::only_exact_expired_local_terminal_binding_is_eligible_for_further_checks",
+      "daemon_reload::retirement::tests::only_exact_local_intent_for_the_failed_attempt_can_be_reconciled",
+      "daemon_reload::retirement::tests::promotion_source_requires_completed_matching_retirement_and_no_new_handoff",
+      "daemon_reload::retirement::tests::receipt_decoder_accepts_one_utf8_bom_and_refuses_unknown_encoding",
+      "daemon_reload::retirement::tests::release_operation_lock_is_exclusive_and_does_not_block_another_workspace"
+    ],
+    "cliNames": [
+      "operator_facade::tests::completed_promotion_cli_requires_exact_transaction_and_evidence"
+    ],
+    "strictAllTargetClippy": true,
+    "format": true,
+    "diffCheck": true,
+    "actualWindowsOwnerAndInterruptionFixtures": true,
+    "installedRecoveryOrPromotionAcceptance": false,
+    "initialZeroMatchTestFilterPreserved": true,
+    "postcheckMissingOutputPropertyPreserved": true,
+    "actualPassingTestResultReconciledWithoutRepeatingCases": true,
+    "rawCapturedTestStdoutFileClaimed": false
+  },
+  "cleanup": {
+    "testOwnedProcessesRemaining": 0,
+    "intendedBackendAndTunnelIdentityPreserved": true,
+    "installedFingerprintParity": true,
+    "initialCimPrecisionComparisonRefusalPreserved": true,
+    "nativeCreationTimeReconciliationPassed": true
+  },
+  "productionActions": 0,
+  "browserStarts": 0,
+  "userMessagesSent": 0,
+  "nativeProjectTurnsStarted": 0,
+  "recurringAutomationEnabled": false,
+  "next": "Publish tested correction, obtain genuine exact-source independent review, qualify the current controller, then use existing release gates without replaying completed operations.",
+  "operatorActionRequiredNow": false,
+  "mvpComplete": false
+}

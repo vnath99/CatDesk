@@ -1,0 +1,517 @@
+{
+  "schemaVersion": 1,
+  "preparedUtc": "2026-11-02T04:39:10.017235+00:00",
+  "sourceCommit": "c52e9ef75490381becabaaf027f98f2845f1a183",
+  "acceptedBaselineCommit": "313f6a31f13c04c90d6098fad57f1e6a6c99cfd7",
+  "scopeCounts": {
+    "UNCHANGED_ACCEPTED": 78,
+    "CHANGED_REQUIRES_REVIEW": 6,
+    "NEW": 2
+  },
+  "fullDeclaredCodePaths": 86,
+  "scopeDigest": "a327e9405ec439ad43ccc983e90f1962bcde3cf7ce0197d4378be417d5c6558e",
+  "status": "INPUTS_PREPARED_NO_NEW_CLAIM_AUTHORIZATION_REQUEST_OR_REVIEW_RESPONSE",
+  "limitations": [
+    "Prior baseline acceptance covers only unchanged Git blobs.",
+    "All 86 paths remain declared; inspect six changed and two new paths before cumulative current-source acceptance.",
+    "Package health and a source coordinator review do not establish independent review, producer or protected publication authority.",
+    "Retain expanded regression deadline failure and source/installed/live distinctions."
+  ],
+  "inputs": [
+    {
+      "number": 1,
+      "path": "scripts/wake_bridge.py",
+      "firstLine": 299,
+      "lastLine": 355,
+      "command": "git --no-optional-locks --no-pager blame -L 299,355 c52e9ef75490381becabaaf027f98f2845f1a183 -- scripts/wake_bridge.py",
+      "utf8Bytes": 6069,
+      "sha256": "76487f7cc5ec353dd88b22201bd4be7a84dc1ae5593f061abbc0dce8cdeb693c"
+    },
+    {
+      "number": 2,
+      "path": "scripts/wake_bridge.py",
+      "firstLine": 2881,
+      "lastLine": 2925,
+      "command": "git --no-optional-locks --no-pager blame -L 2881,2925 c52e9ef75490381becabaaf027f98f2845f1a183 -- scripts/wake_bridge.py",
+      "utf8Bytes": 4706,
+      "sha256": "8cfb37bcd7a92bfaf95ed94cc2efba573a1e23c8a36d67982c04fc0a72eb10b5"
+    },
+    {
+      "number": 3,
+      "path": "scripts/wake_bridge.py",
+      "firstLine": 3636,
+      "lastLine": 3656,
+      "command": "git --no-optional-locks --no-pager blame -L 3636,3656 c52e9ef75490381becabaaf027f98f2845f1a183 -- scripts/wake_bridge.py",
+      "utf8Bytes": 2158,
+      "sha256": "9058dbdffdf9feb435635898b2c8e790aa8d82a5d388711d19b6c8d641a6d8a6"
+    },
+    {
+      "number": 4,
+      "path": "src/operator_web_cli.rs",
+      "firstLine": 51,
+      "lastLine": 81,
+      "command": "git --no-optional-locks --no-pager blame -L 51,81 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_cli.rs",
+      "utf8Bytes": 2214,
+      "sha256": "0bcfbb1af0c027394d201c89a11f3a9a638535e0134848c58f36536b8ed8d641"
+    },
+    {
+      "number": 5,
+      "path": "src/operator_web_cli.rs",
+      "firstLine": 538,
+      "lastLine": 583,
+      "command": "git --no-optional-locks --no-pager blame -L 538,583 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_cli.rs",
+      "utf8Bytes": 4097,
+      "sha256": "2820f8bed07b56269931bba8a74b59b178b2dc650eb9280661129559678e470f"
+    },
+    {
+      "number": 6,
+      "path": "src/operator_web_cli.rs",
+      "firstLine": 1446,
+      "lastLine": 1467,
+      "command": "git --no-optional-locks --no-pager blame -L 1446,1467 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_cli.rs",
+      "utf8Bytes": 2172,
+      "sha256": "a1dc90948f054026ef0e47bf74c26ff4b8e6fbd5d5975e087cc7724b3116216d"
+    },
+    {
+      "number": 7,
+      "path": "src/operator_web_cli.rs",
+      "firstLine": 1683,
+      "lastLine": 1718,
+      "command": "git --no-optional-locks --no-pager blame -L 1683,1718 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_cli.rs",
+      "utf8Bytes": 3240,
+      "sha256": "52c34aaa640c07ac9a185989a7cd7f390c6587bd894d20d5dc69dbcc319f3fcd"
+    },
+    {
+      "number": 8,
+      "path": "src/operator_web_cli.rs",
+      "firstLine": 1794,
+      "lastLine": 1853,
+      "command": "git --no-optional-locks --no-pager blame -L 1794,1853 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_cli.rs",
+      "utf8Bytes": 4831,
+      "sha256": "2b33f7978b79b074582466a289b88224d700d0a8cd3f4237584abeeaa40a55fb"
+    },
+    {
+      "number": 9,
+      "path": "src/operator_web_cli.rs",
+      "firstLine": 1854,
+      "lastLine": 1860,
+      "command": "git --no-optional-locks --no-pager blame -L 1854,1860 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_cli.rs",
+      "utf8Bytes": 777,
+      "sha256": "7212a47779c5bab54f7264067fa784ee28b7467ed979ffe755beb42ede723c2b"
+    },
+    {
+      "number": 10,
+      "path": "src/operator_web_onboarding.rs",
+      "firstLine": 1,
+      "lastLine": 60,
+      "command": "git --no-optional-locks --no-pager blame -L 1,60 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_onboarding.rs",
+      "utf8Bytes": 5011,
+      "sha256": "b957324111e037bc7e6b503b31fe3a359d49f85bdc7a578cd94d65bef79b47b0"
+    },
+    {
+      "number": 11,
+      "path": "src/operator_web_onboarding.rs",
+      "firstLine": 61,
+      "lastLine": 120,
+      "command": "git --no-optional-locks --no-pager blame -L 61,120 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_onboarding.rs",
+      "utf8Bytes": 5044,
+      "sha256": "7489697f927c9ec1d29480f873c944d5e0c74b22e1dafcc79442a754450880f9"
+    },
+    {
+      "number": 12,
+      "path": "src/operator_web_onboarding.rs",
+      "firstLine": 121,
+      "lastLine": 180,
+      "command": "git --no-optional-locks --no-pager blame -L 121,180 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_onboarding.rs",
+      "utf8Bytes": 5182,
+      "sha256": "0c968d26df1cb83f493962a95907573e4aa21f789b8fdcece1131ad8625973eb"
+    },
+    {
+      "number": 13,
+      "path": "src/operator_web_onboarding.rs",
+      "firstLine": 181,
+      "lastLine": 240,
+      "command": "git --no-optional-locks --no-pager blame -L 181,240 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_onboarding.rs",
+      "utf8Bytes": 5223,
+      "sha256": "81278297c1e69f6e26c94da8251b23e9cd81a0a5d2891b35ea229e8e7fd23ae0"
+    },
+    {
+      "number": 14,
+      "path": "src/operator_web_onboarding.rs",
+      "firstLine": 241,
+      "lastLine": 300,
+      "command": "git --no-optional-locks --no-pager blame -L 241,300 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_onboarding.rs",
+      "utf8Bytes": 4925,
+      "sha256": "59bd492ed587ea9b48726c47ebf50e75e0cd5ea9cd8e4a5c043719a90852defd"
+    },
+    {
+      "number": 15,
+      "path": "src/operator_web_onboarding.rs",
+      "firstLine": 301,
+      "lastLine": 360,
+      "command": "git --no-optional-locks --no-pager blame -L 301,360 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_onboarding.rs",
+      "utf8Bytes": 5139,
+      "sha256": "2283b73f89a557cc5c4bb7248e49760bfa61ec3526fe68e740fc9ba5b6df169f"
+    },
+    {
+      "number": 16,
+      "path": "src/operator_web_onboarding.rs",
+      "firstLine": 361,
+      "lastLine": 420,
+      "command": "git --no-optional-locks --no-pager blame -L 361,420 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_onboarding.rs",
+      "utf8Bytes": 5176,
+      "sha256": "62dbcd1ec8e71bd1c6c333b75159992295fbfe00bf7e6b014ef19a61045d7160"
+    },
+    {
+      "number": 17,
+      "path": "src/operator_web_onboarding.rs",
+      "firstLine": 421,
+      "lastLine": 480,
+      "command": "git --no-optional-locks --no-pager blame -L 421,480 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_onboarding.rs",
+      "utf8Bytes": 4961,
+      "sha256": "ef10404d07d26ed573191bb2840b09ecbcdcb7898818ac8b3f814a3d381a9c95"
+    },
+    {
+      "number": 18,
+      "path": "src/operator_web_onboarding.rs",
+      "firstLine": 481,
+      "lastLine": 540,
+      "command": "git --no-optional-locks --no-pager blame -L 481,540 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_onboarding.rs",
+      "utf8Bytes": 5092,
+      "sha256": "e971977f46596bfaf5e885096964eb158bed5ecacfaa95d452f79ced8c887ca6"
+    },
+    {
+      "number": 19,
+      "path": "src/operator_web_onboarding.rs",
+      "firstLine": 541,
+      "lastLine": 600,
+      "command": "git --no-optional-locks --no-pager blame -L 541,600 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_onboarding.rs",
+      "utf8Bytes": 5614,
+      "sha256": "ca115434d260c4fb864124d86e2eafd7864aa011657e9f9574fd4382847d03ae"
+    },
+    {
+      "number": 20,
+      "path": "src/operator_web_onboarding.rs",
+      "firstLine": 601,
+      "lastLine": 660,
+      "command": "git --no-optional-locks --no-pager blame -L 601,660 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_onboarding.rs",
+      "utf8Bytes": 5855,
+      "sha256": "676466cd47dbba303377f6a4098528615a588d5e42e5c09e6b731b0096b3206e"
+    },
+    {
+      "number": 21,
+      "path": "src/operator_web_onboarding.rs",
+      "firstLine": 661,
+      "lastLine": 720,
+      "command": "git --no-optional-locks --no-pager blame -L 661,720 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_onboarding.rs",
+      "utf8Bytes": 5763,
+      "sha256": "cab5a8da82abfb3ec6ef8792c5dd24cf2909845d624b01b7ecb4ea61a8c17a36"
+    },
+    {
+      "number": 22,
+      "path": "src/operator_web_onboarding.rs",
+      "firstLine": 721,
+      "lastLine": 723,
+      "command": "git --no-optional-locks --no-pager blame -L 721,723 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_onboarding.rs",
+      "utf8Bytes": 165,
+      "sha256": "7a05cc1fc07d8a10822dc4cc00594af8d630e72259ae275f1e504c966c534726"
+    },
+    {
+      "number": 23,
+      "path": "src/operator_web_rollover.rs",
+      "firstLine": 27,
+      "lastLine": 48,
+      "command": "git --no-optional-locks --no-pager blame -L 27,48 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_rollover.rs",
+      "utf8Bytes": 1721,
+      "sha256": "c3c4e151edd8e91550a453ec159e5f9c17a1b8231fb2821684b34a485e6481ea"
+    },
+    {
+      "number": 24,
+      "path": "src/operator_web_rollover.rs",
+      "firstLine": 577,
+      "lastLine": 597,
+      "command": "git --no-optional-locks --no-pager blame -L 577,597 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_rollover.rs",
+      "utf8Bytes": 1782,
+      "sha256": "b15f7b1730724d02f61894e423b7fb0930346047a9b3080b2fb7a4956960d8bf"
+    },
+    {
+      "number": 25,
+      "path": "src/operator_web_rollover.rs",
+      "firstLine": 2696,
+      "lastLine": 2716,
+      "command": "git --no-optional-locks --no-pager blame -L 2696,2716 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_rollover.rs",
+      "utf8Bytes": 2018,
+      "sha256": "a675df9d0ef20bbae0438229c0c277a965e4155eb98d2e2f32a7736cfdf69bc4"
+    },
+    {
+      "number": 26,
+      "path": "src/operator_web_rollover.rs",
+      "firstLine": 3962,
+      "lastLine": 3994,
+      "command": "git --no-optional-locks --no-pager blame -L 3962,3994 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_rollover.rs",
+      "utf8Bytes": 2938,
+      "sha256": "88fc5a67475789a3204bd1fd94d4ac614ee2ac6e371491c968e10c767bf51da3"
+    },
+    {
+      "number": 27,
+      "path": "src/web_rollover_admission.rs",
+      "firstLine": 10,
+      "lastLine": 69,
+      "command": "git --no-optional-locks --no-pager blame -L 10,69 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/web_rollover_admission.rs",
+      "utf8Bytes": 4595,
+      "sha256": "e7cc4c8f09ecd66e4b215acfd31489feb90d57844132dc945a6e9051567315cb"
+    },
+    {
+      "number": 28,
+      "path": "src/web_rollover_admission.rs",
+      "firstLine": 358,
+      "lastLine": 417,
+      "command": "git --no-optional-locks --no-pager blame -L 358,417 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/web_rollover_admission.rs",
+      "utf8Bytes": 5252,
+      "sha256": "fc44196dc6fbe73a4b1cacbd2be4e38a7b8414fecd9d157dabde71d7b150c6a3"
+    },
+    {
+      "number": 29,
+      "path": "src/web_rollover_admission.rs",
+      "firstLine": 418,
+      "lastLine": 421,
+      "command": "git --no-optional-locks --no-pager blame -L 418,421 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/web_rollover_admission.rs",
+      "utf8Bytes": 317,
+      "sha256": "d8546cbfebbabbca4e77d74acaf6389e12df1fb5a589df33331b333e4c081bb2"
+    },
+    {
+      "number": 30,
+      "path": "wake/adapter.py",
+      "firstLine": 32,
+      "lastLine": 52,
+      "command": "git --no-optional-locks --no-pager blame -L 32,52 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/adapter.py",
+      "utf8Bytes": 1960,
+      "sha256": "1900f8436b65099931edf1c2c440ab75112edef1f11794a4169c4bd042cf8091"
+    },
+    {
+      "number": 31,
+      "path": "wake/adapter.py",
+      "firstLine": 162,
+      "lastLine": 221,
+      "command": "git --no-optional-locks --no-pager blame -L 162,221 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/adapter.py",
+      "utf8Bytes": 6581,
+      "sha256": "1bb32ad647865bfe08083159b05b5f797ee86a21e7b909cf498b592768d79a18"
+    },
+    {
+      "number": 32,
+      "path": "wake/adapter.py",
+      "firstLine": 222,
+      "lastLine": 249,
+      "command": "git --no-optional-locks --no-pager blame -L 222,249 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/adapter.py",
+      "utf8Bytes": 2837,
+      "sha256": "e1a69cc90b6b33a2954909698ced5c3bf37a317ad61aebe4e52c91b508039c82"
+    },
+    {
+      "number": 33,
+      "path": "wake/adapter.py",
+      "firstLine": 338,
+      "lastLine": 358,
+      "command": "git --no-optional-locks --no-pager blame -L 338,358 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/adapter.py",
+      "utf8Bytes": 2147,
+      "sha256": "6aab8d270b180e625503a834519599002d1ef3aeb9a00e46c8899424bf5fc268"
+    },
+    {
+      "number": 34,
+      "path": "wake/adapter.py",
+      "firstLine": 582,
+      "lastLine": 641,
+      "command": "git --no-optional-locks --no-pager blame -L 582,641 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/adapter.py",
+      "utf8Bytes": 6348,
+      "sha256": "79e42b9def268f1b9b4c50a8fadb69b5eba61eeaa55b03eb624b10522d39d92d"
+    },
+    {
+      "number": 35,
+      "path": "wake/adapter.py",
+      "firstLine": 642,
+      "lastLine": 644,
+      "command": "git --no-optional-locks --no-pager blame -L 642,644 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/adapter.py",
+      "utf8Bytes": 373,
+      "sha256": "a176000c7c82a70f00fb45b0cc2217e79a55aed01a89f507261eaa1c0ed8960f"
+    },
+    {
+      "number": 36,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 1913,
+      "lastLine": 1958,
+      "command": "git --no-optional-locks --no-pager blame -L 1913,1958 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 3762,
+      "sha256": "078255a9febb20b73c74971c67f185dbef32f0f8523d4429265c284771f39e12"
+    },
+    {
+      "number": 37,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 2061,
+      "lastLine": 2120,
+      "command": "git --no-optional-locks --no-pager blame -L 2061,2120 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 5400,
+      "sha256": "ef53b3a31ad8f38c8a03e933d9edb3851d33b7210b86f946f9dd227bc3c046a7"
+    },
+    {
+      "number": 38,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 2121,
+      "lastLine": 2180,
+      "command": "git --no-optional-locks --no-pager blame -L 2121,2180 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 5044,
+      "sha256": "1ca74915549ddfb24a8b59d4adce0e58d40720b352b1c6df562f3840288f31ae"
+    },
+    {
+      "number": 39,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 2181,
+      "lastLine": 2240,
+      "command": "git --no-optional-locks --no-pager blame -L 2181,2240 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 5151,
+      "sha256": "8cd562bc3e70a2e46af588afafbebe45f4e2b347f9165cc6cd2678b355c0a245"
+    },
+    {
+      "number": 40,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 2241,
+      "lastLine": 2300,
+      "command": "git --no-optional-locks --no-pager blame -L 2241,2300 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 5268,
+      "sha256": "f1e983bf9d8a1b6ea6d8831943afdac467710a069b3ea08f9bbc22ceaabb6ff8"
+    },
+    {
+      "number": 41,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 2301,
+      "lastLine": 2360,
+      "command": "git --no-optional-locks --no-pager blame -L 2301,2360 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 4972,
+      "sha256": "e507a8451c52f0980d0453403c7dc879b45039ace8aeefae4b10ea785a2b5913"
+    },
+    {
+      "number": 42,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 2361,
+      "lastLine": 2420,
+      "command": "git --no-optional-locks --no-pager blame -L 2361,2420 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 5238,
+      "sha256": "6539d9c919e21f46a36abd77c3cd321eb45c0011c92addc0bc033a7ac6692de4"
+    },
+    {
+      "number": 43,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 2421,
+      "lastLine": 2480,
+      "command": "git --no-optional-locks --no-pager blame -L 2421,2480 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 5376,
+      "sha256": "cf7c67696bec0e44fb33bccc304354a6c6f62ed85feb5ba78de77edd081351ed"
+    },
+    {
+      "number": 44,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 2481,
+      "lastLine": 2484,
+      "command": "git --no-optional-locks --no-pager blame -L 2481,2484 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 452,
+      "sha256": "a36bd3f010279d8e004579c8c11ef58861e28c0eecee6a7f30ae489d4ed8fe78"
+    },
+    {
+      "number": 45,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 2813,
+      "lastLine": 2872,
+      "command": "git --no-optional-locks --no-pager blame -L 2813,2872 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 4594,
+      "sha256": "416299220a360f6654f3e0b031cb8d38cb0414e4f753a3fdbf77c86bb17578d3"
+    },
+    {
+      "number": 46,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 2873,
+      "lastLine": 2904,
+      "command": "git --no-optional-locks --no-pager blame -L 2873,2904 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 2887,
+      "sha256": "b3657991408b1eeb3cc4d8b70d513cc3f3efbaf6ee909fa236008accdb15eec3"
+    },
+    {
+      "number": 47,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 2925,
+      "lastLine": 2957,
+      "command": "git --no-optional-locks --no-pager blame -L 2925,2957 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 3291,
+      "sha256": "65c7253b9ffe6aaae5ceeade2bf2756876b9da0ec5e93e43f116dddf806a25ac"
+    },
+    {
+      "number": 48,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 2967,
+      "lastLine": 2995,
+      "command": "git --no-optional-locks --no-pager blame -L 2967,2995 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 2703,
+      "sha256": "cd546f775289faa680c690789d77294cd7a7d1ebd7b7f8157daf9943942861c1"
+    },
+    {
+      "number": 49,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 3595,
+      "lastLine": 3654,
+      "command": "git --no-optional-locks --no-pager blame -L 3595,3654 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 4827,
+      "sha256": "264e02d618a5297164b7b5722caa5a5f8816df9b1eb6c8b79c3798e3021edfb0"
+    },
+    {
+      "number": 50,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 3655,
+      "lastLine": 3676,
+      "command": "git --no-optional-locks --no-pager blame -L 3655,3676 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 2009,
+      "sha256": "67f0befc357de416964e21a6da25a701f1f575f56b9b1c1770aba3dac0650913"
+    },
+    {
+      "number": 51,
+      "path": "wake/src/runtime.rs",
+      "firstLine": 3682,
+      "lastLine": 3707,
+      "command": "git --no-optional-locks --no-pager blame -L 3682,3707 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/src/runtime.rs",
+      "utf8Bytes": 2471,
+      "sha256": "d60f29174fd8afbd328144b5c86adcfba9ceb058009e58d3fb6ff9b5b2166d1c"
+    },
+    {
+      "number": 52,
+      "path": "wake/tests/test_project_initialization.py",
+      "firstLine": 1,
+      "lastLine": 60,
+      "command": "git --no-optional-locks --no-pager blame -L 1,60 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/tests/test_project_initialization.py",
+      "utf8Bytes": 5829,
+      "sha256": "ab077bc221235fa1c5e1705406ab7e8bb7b2e9ebf9135d0da974adaf696e7985"
+    },
+    {
+      "number": 53,
+      "path": "wake/tests/test_project_initialization.py",
+      "firstLine": 61,
+      "lastLine": 120,
+      "command": "git --no-optional-locks --no-pager blame -L 61,120 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/tests/test_project_initialization.py",
+      "utf8Bytes": 6153,
+      "sha256": "6c80c9a62b58dfaca17319e1686e37c409f2423d1baa72879a31f886160de752"
+    },
+    {
+      "number": 54,
+      "path": "wake/tests/test_project_initialization.py",
+      "firstLine": 121,
+      "lastLine": 180,
+      "command": "git --no-optional-locks --no-pager blame -L 121,180 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/tests/test_project_initialization.py",
+      "utf8Bytes": 6187,
+      "sha256": "019afd52167bf1c57f098e605e2a502ac084e97118bc11de77d3acc5cc9c2fb4"
+    },
+    {
+      "number": 55,
+      "path": "wake/tests/test_project_initialization.py",
+      "firstLine": 181,
+      "lastLine": 228,
+      "command": "git --no-optional-locks --no-pager blame -L 181,228 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/tests/test_project_initialization.py",
+      "utf8Bytes": 5937,
+      "sha256": "298abb8990019598e65b3e8369b669b6671ecc404655e759c287742089c43197"
+    }
+  ]
+}

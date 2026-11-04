@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "targetCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+  "kind": "sources",
+  "offset": 48,
+  "entries": [
+    {
+      "path": "tests/test_wake_readiness_probe.py",
+      "baseBlob": null,
+      "targetBlob": "4be25881565108803062140f2f909fa57ca436fc",
+      "patchSha256": "738fdd0cc9337c9c7e5c1fb76cdf9bcd62ac2431f632e833e87c11b7ef462d41",
+      "startByte": 659532,
+      "endByte": 688405
+    },
+    {
+      "path": "wake/adapter.py",
+      "baseBlob": "348d5085292eae2bcd0104edd292e32c487f63e6",
+      "targetBlob": "786771bc11a2e5e74566fba45af1437e148fd081",
+      "patchSha256": "248b951da56173f69f202e91c0ee50b3a07f4234951e9f74533920f8b10c6c4f",
+      "startByte": 688405,
+      "endByte": 697864
+    },
+    {
+      "path": "wake/src/bin/CatDeskWakeProfileProbe.rs",
+      "baseBlob": "1388796b803ff241e37ba6cad078c21d046fda08",
+      "targetBlob": "e66c442a4735017c4960cad8d4658105d779acb4",
+      "patchSha256": "e2e563f1aa6beea755e2d89ecefbb6887221df548aaedfd7bcf2b965ef32d121",
+      "startByte": 697864,
+      "endByte": 704825
+    },
+    {
+      "path": "wake/src/development_login_recovery.rs",
+      "baseBlob": null,
+      "targetBlob": "e159f49fc232e7ab1f2c04e9c897052a07121e0b",
+      "patchSha256": "bb29c52fe58f60ddf69866f89ec8e0d5c90cc5c96b8e271adb1276a9fe45187e",
+      "startByte": 704825,
+      "endByte": 711877
+    },
+    {
+      "path": "wake/src/development_runtime.rs",
+      "baseBlob": "b404980202cca4e46dba12ef0d4bc757601abe7a",
+      "targetBlob": "54620c83a82d7206dc1fcf7825bc95e65a8f9ed9",
+      "patchSha256": "d50307d708bb04b48e0ea26dbdc0211539d601a480bc5e07469dbfc0a49dd3dd",
+      "startByte": 711877,
+      "endByte": 742736
+    },
+    {
+      "path": "wake/src/lib.rs",
+      "baseBlob": "af82b661e837c2e9cdaf4e16c76806dba3718933",
+      "targetBlob": "4271a26a0211e0921f0d9ca806fc045c453225ca",
+      "patchSha256": "f589e33b350e124c90fade7ffa1b55df74529355d5527c4860d708c1e73d299c",
+      "startByte": 742736,
+      "endByte": 743159
+    },
+    {
+      "path": "wake/src/protocol.rs",
+      "baseBlob": "99a61e31906b2b4af88d1f674226eb8639bd0465",
+      "targetBlob": "c3bef73368370044513e704f12f8c985d528a116",
+      "patchSha256": "64d8429cb5a39eaae0a7c0d98d45ba3fb8fb7b77fa52e0e17d107df7a0264840",
+      "startByte": 743159,
+      "endByte": 755055
+    },
+    {
+      "path": "wake/src/readiness_probe.rs",
+      "baseBlob": null,
+      "targetBlob": "fb83b1d5a795a34b759d1b5819dae8207c876d9a",
+      "patchSha256": "2c9adace7b96ead5db4194d73524fb3544d6580c523db856d424fe21dbf68578",
+      "startByte": 755055,
+      "endByte": 771064
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C219",
+  "sourceParent": "4935c8ac46e95baf2d9324e3067e6525183ad9ee",
+  "branch": "codex/web-rollover-oct17",
+  "status": "REVIEWED_RECOVERY_WRAPPER_READY_REQUIRES_SUPPORTED_EXECUTION_OWNER",
+  "promotion": {
+    "mechanism": "EXISTING_OPERATOR_RELEASE_PAIR_PREPARE_CONFIRM_RESULT",
+    "candidateSource": "409513a1c1f81f74f873bd4b3dca825458ef29a8",
+    "candidateSha256": "91eea19e6e030e80900d43114f800c3642f5cc063ef2c969b83eb20d2c28d14b",
+    "authority": "EXISTING_C196_REVIEW_AND_C208_BUILD_ATTESTATION",
+    "developmentEvidenceCreatesReleaseAuthority": false,
+    "privateWrapperSha256": "75ea14fba91bf0e7e3004d15f416159c03b2d83472affbbdd003bac8a561da1a",
+    "independentStaticReview": "PASS",
+    "outsideJobCheckUnchanged": true,
+    "releaseAuthorityAndPromotionFlowUnchanged": true,
+    "productPreflightPerformed": false,
+    "wrapperExecuted": false,
+    "productionActions": 0,
+    "installedAcceptance": "NOT_ESTABLISHED"
+  },
+  "preservationQualification": {
+    "scope": "READ_ONLY_PRESERVATION_PREDICATES_NOT_PRODUCT_PREFLIGHT",
+    "startedUtc": "2026-10-25T19:49:17.5199440+00:00",
+    "finishedUtc": "2026-10-25T19:49:19.3380901+00:00",
+    "status": "PASS",
+    "existingStatePins": 480,
+    "additionalSelectedDevelopmentPackagePins": 6,
+    "totalPins": 486,
+    "nativeCommandsStarted": 0,
+    "browserWakeActions": 0,
+    "resultSha256": "6b23d12cef2b2a7e1fd87f90f7a27cf3cb162bcca55a8bacbbc2159ef633d70a",
+    "priorFailedReaderRetained": true,
+    "priorReaderFailure": "Extracted evaluation lost the automatic script directory; corrected reader captures an explicit evidence root. No product command or promotion ran."
+  },
+  "ownerRequirement": {
+    "reason": "Closing the private candidate Job cannot release an unrelated outer Job's lifetime ownership of the serving daemon.",
+    "source": "src/reviewed_candidate_owner.rs:350",
+    "requirement": "SUPPORTED_PROCESS_OWNER_OUTSIDE_WINDOWS_JOBS",
+    "newDiscretionaryApprovalRequired": false,
+    "bypassAttempted": false,
+    "ordinaryMcpPromotionRepairsDivergentPair": false,
+    "ordinaryMcpPromotionFailureGate": "EXISTING_CANONICAL_EXECUTABLE_FINGERPRINT_VALIDATION"
+  },
+  "connectorObservation": {
+    "observedUtc": "2026-10-25T19:42:35.5230471+00:00",
+    "operation": "ONE_SUPPORTED_TRANSPORT_STATUS_READ",
+    "result": "TRANSPORT_SEND_FAILURE_BEFORE_CATDESK_RESPONSE",
+    "httpStatus": null,
+    "confirmsHttp429": false,
+    "retryPerformed": false,
+    "externalRuntimeRestarted": false
+  },
+  "independentNativeWork": {
+    "observedUtc": "2026-10-25T19:43:43Z",
+    "activeProjectChats": 4,
+    "reportedErrors": 0,
+    "attentionFlags": 0,
+    "threadsMessagedOrInterrupted": 0,
+    "scope": "APP_IN_PROGRESS_TURNS_NOT_SEPARATE_CLI_WRITER_OR_WEB_ACCEPTANCE"
+  },
+  "remaining": [
+    "Run the reviewed wrapper from the supported outside-Job owner; stop and inspect any error or ambiguous outcome.",
+    "Verify installed executable/fingerprint, durable release result, startup, authentication, restart and rollback.",
+    "Recheck independently owned Secure MCP connectivity after recovery; do not conflate transport failure with local recovery.",
+    "Qualify subsequent reviewed source through existing release gates and demonstrate two actual independent Web coding conversations.",
+    "Preserve C217A as an unknown submission without resend or duplicate second review."
+  ],
+  "sourceTestsRepeated": false,
+  "fullMultiProjectAcceptance": false
+}

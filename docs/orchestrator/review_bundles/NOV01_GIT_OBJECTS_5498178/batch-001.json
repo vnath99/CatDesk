@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "purpose": "PARTIAL_SOURCE_REVIEW_ONLY_NOT_RELEASE_AUTHORITY",
+  "batchId": "b001",
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "sourceCommit": "549817859c94f56a7696f998848d8ace429b1663",
+  "patchBytes": 50633,
+  "sourcePaths": [
+    "src/operator_web_initialization.rs",
+    "src/operator_web_rollover.rs"
+  ],
+  "units": [
+    {
+      "unitId": "u052",
+      "path": "src/operator_web_initialization.rs",
+      "skipLines": 0,
+      "takeLines": 260,
+      "bytes": 10369,
+      "sha256": "2d0debb3514f4a91a562894e9cba6e04141609602a51ef579fae64af2d611d2a",
+      "baseBlob": null,
+      "targetBlob": "af226dfef8549abd67c496698f33cb967243aeed"
+    },
+    {
+      "unitId": "u055",
+      "path": "src/operator_web_rollover.rs",
+      "skipLines": 0,
+      "takeLines": 493,
+      "bytes": 19944,
+      "sha256": "82d62e0c0bd83e5fc39c7db919010121218314f0109f9a3fe8d8176b01933ced",
+      "baseBlob": "e4bc2e1434c699a0d5b77e022a46782c89fc72a4",
+      "targetBlob": "ae47e7bac4529b98ce7c9ccfe89536daa2812df2"
+    },
+    {
+      "unitId": "u056",
+      "path": "src/operator_web_rollover.rs",
+      "skipLines": 493,
+      "takeLines": 505,
+      "bytes": 19983,
+      "sha256": "689c9c20c793aed4b54bd6c56207d21704d08296ab5ec1ad8676ce4047813c96",
+      "baseBlob": "e4bc2e1434c699a0d5b77e022a46782c89fc72a4",
+      "targetBlob": "ae47e7bac4529b98ce7c9ccfe89536daa2812df2"
+    },
+    {
+      "unitId": "u057",
+      "path": "src/operator_web_rollover.rs",
+      "skipLines": 998,
+      "takeLines": 10,
+      "bytes": 337,
+      "sha256": "09aac8981367854cd3983ebdcb3c13e31860e926b713af20beef719f529487f4",
+      "baseBlob": "e4bc2e1434c699a0d5b77e022a46782c89fc72a4",
+      "targetBlob": "ae47e7bac4529b98ce7c9ccfe89536daa2812df2"
+    }
+  ],
+  "cumulativeSourceAccepted": false,
+  "requiredReplyMarker": "NOV01_GIT_SOURCE_BATCH_ONLY",
+  "requiredReplyFields": [
+    "marker",
+    "sourceCommit",
+    "batchId",
+    "verdict",
+    "findings",
+    "inspectedUnitIds",
+    "inspectedPaths",
+    "limitations",
+    "cumulativeSourceAccepted"
+  ],
+  "permittedVerdicts": [
+    "REVIEWED_BATCH",
+    "FAIL",
+    "INCONCLUSIVE"
+  ]
+}

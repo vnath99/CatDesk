@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C104_DEVELOPMENT_VERIFICATION_AND_ONE_RETAINED_PREDECESSOR",
+  "observedUtc": "2026-10-24T14:57:00.4856501+00:00",
+  "recordedUtc": "2026-10-24T14:57:42.3348363+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "parentCommit": "c810d9a40c8c81a32fb066029a20280f0429ac92",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "SOURCE_AND_DISPOSABLE_FIXTURES_NOT_NORMAL_RELEASE_OR_INSTALLED_ACCEPTANCE",
+  "implementation": {
+    "command": "operator web-dev-runtime record-verification --input-file <workspace-local-file>",
+    "evidenceAuthority": "LOCAL_OPERATOR_PROVIDED",
+    "sourcePins": [
+      {
+        "path": "src/operator_facade.rs",
+        "sha256": "0a18ba0b36c718ec06d2bf55e0f6bc28586f4c37b27d63db0c6ce8556797f08e"
+      },
+      {
+        "path": "wake/src/development_runtime.rs",
+        "sha256": "402b1b09893dfead954344d8d2c36d65e372ce45b7b59435b2c68950bf05536b"
+      }
+    ],
+    "qualificationRecord": "versions/<packageId>/verification.json",
+    "recordWriteOnce": true,
+    "equalReplayIdempotent": true,
+    "exactPackageManifestAndArtifactBinding": true,
+    "sourceCommitAndBuildReviewWorkingHealthEvidenceDigestsRequired": true,
+    "observedHealthTimeRequired": true,
+    "healthChecksPerformedByRecording": false,
+    "independentReviewOrHealthEvidenceInvented": false,
+    "protectedProductionAuthorityCreated": false,
+    "predecessorSelection": "OPTIONAL_previousVerifiedRelease_IN_EXISTING_current.json",
+    "authoritySchemaChanged": false,
+    "manifestSchemaChanged": false,
+    "newSelectionRegistry": false,
+    "existingSelectionJournal": "package-update-attempt.json",
+    "unqualifiedUpdatesRetainLastQualifiedPredecessor": true,
+    "invalidPredecessorDoesNotBlockHealthyCurrent": true,
+    "hostBrowserExclusiveStoppedRequired": true,
+    "hostOrBrowserStarted": false,
+    "automaticFallbackImplemented": false
+  },
+  "compatibility": {
+    "oldAuthorityAndManifestUnchanged": true,
+    "wakePointerReadersUseJsonValue": "INSPECTED_SOURCE",
+    "existingJournalWithoutNewFields": "PASS_SOURCE_RECOVERY",
+    "completedSelectionLegacyReader": "SOURCE_INSPECTED_NOT_OLD_BINARY_QUALIFIED",
+    "pendingNewJournal": "USE_CURRENT_CONTROLLER_TO_COMPLETE_OLD_CONTROLLER_MAY_REFUSE",
+    "oldUpdateController": "DO_NOT_USE_FOR_NEW_UPDATES_IT_MAY_DROP_OPTIONAL_PREDECESSOR_METADATA",
+    "noLegacyMechanismRetired": true
+  },
+  "tests": {
+    "runtimeModulePassed": 23,
+    "operatorModulePassed": 13,
+    "failed": 0,
+    "ignored": 0,
+    "newRuntimeTests": 6,
+    "newOperatorTests": 1,
+    "steps": [
+      {
+        "seconds": 17.2986909,
+        "logSha256": "c361de8315e33c2ab0c0afd57da7ee0e4e053b70294d98cbbdbe275d6ff4aaf1",
+        "name": "wake-development-recovery",
+        "exitCode": 0,
+        "summaries": [
+          "test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 361 filtered out; finished in 6.55s"
+        ]
+      },
+      {
+        "seconds": 83.0983388,
+        "logSha256": "ea2d36db0371fc63b9ec49b3b7bd0e03d7ad883f26cfa505814b5904a33044b1",
+        "name": "operator-contract",
+        "exitCode": 0,
+        "summaries": [
+          "test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 1679 filtered out; finished in 0.10s"
+        ]
+      },
+      {
+        "seconds": 38.7139893,
+        "logSha256": "d5e2f636aa968f9525924f211247b5e8b6cee15b617b2ec403f2835e0ad0f95e",
+        "name": "strict-root-clippy",
+        "exitCode": 0,
+        "summaries": []
+      },
+      {
+        "seconds": 8.6014493,
+        "logSha256": "54802e9b3d1ab5119d8e1c9a748c35f94d903e62eba51f8a841889449df1b964",
+        "name": "strict-wake-clippy",
+        "exitCode": 0,
+        "summaries": []
+      },
+      {
+        "seconds": 2.8844657,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "name": "root-format",
+        "exitCode": 0,
+        "summaries": []
+      },
+      {
+        "seconds": 0.8096849,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "name": "wake-format",
+        "exitCode": 0,
+        "summaries": []
+      }
+    ],
+    "rootStrictClippy": "PASS",
+    "wakeStrictClippy": "PASS",
+    "rootAndWakeFormat": "PASS",
+    "sourceFrozen": true,
+    "outerBudgetSeconds": 600,
+    "outerExitCode": 0,
+    "outerTimedOut": false,
+    "outerTerminationFailed": false,
+    "coverage": [
+      "LOCAL_WRITE_ONCE_EVIDENCE_AND_IDENTICAL_REPLAY",
+      "CONFLICT_AND_MISMATCHED_PACKAGE_MANIFEST_SOURCE_TIME_REFUSALS",
+      "WORKSPACE_LOCAL_INPUT_REQUIRED",
+      "ORIGINAL_AUTHORITY_POINTER_MANIFEST_BYTES_PRESERVED_WHEN_RECORDING",
+      "QUALIFIED_PREDECESSOR_RETAINED_ACROSS_UNQUALIFIED_UPDATES",
+      "DAMAGED_PREDECESSOR_CANNOT_BLOCK_HEALTHY_CURRENT",
+      "HOST_BROWSER_STOPPED_AND_PENDING_UPDATE_EXCLUSION",
+      "QUALIFICATION_SURVIVES_JOURNALED_RECOVERY",
+      "LEGACY_JOURNAL_DEFAULT_COMPATIBILITY",
+      "FIXED_OPERATOR_ARGUMENT_CONTRACT"
+    ],
+    "actualProcessCrash": "NOT_TESTED_BY_THIS_INCREMENT",
+    "liveIndependentHealth": "NOT_ESTABLISHED_BY_SYNTHETIC_FIXTURE_RECEIPTS"
+  },
+  "preservation": {
+    "runtimeRecords": 306,
+    "runtimeRecordsChanged": 0,
+    "historicalFiles": 55,
+    "historicalFilesChanged": 0,
+    "scopedOwners": 0,
+    "controls": "BOTH_STOPPED",
+    "queueCount": 0,
+    "selectedPackage": "V76_UNCHANGED",
+    "browserWakeRecurringStarts": 0,
+    "officialRuntimeActions": 0,
+    "connectorCalls": 0,
+    "nativeActions": 0,
+    "productionInstallationChanges": 0,
+    "projectBindingChanges": 0,
+    "completedCanariesReplayed": 0
+  },
+  "remaining": {
+    "normalReleaseBuild": "NOT_YET_BUILT_FROM_THIS_INCREMENT",
+    "normalCommandQualification": "NOT_YET_QUALIFIED",
+    "automaticVerifiedPredecessorFallback": "NEXT_INTEGRATION",
+    "composedBackendStartup": "NOT_QUALIFIED_BY_THIS_INCREMENT",
+    "protectedRecovery": "AWAITING_APPROVED_AUTHORITY_OCT27",
+    "actualWebCodingBC": "OPEN_SERVING_AND_CONNECTOR_DEPENDENCIES",
+    "unattended": "NOT_ACTIVATED",
+    "fullMilestone": "OPEN",
+    "exactSourceRemoteCi": "PENDING_PUBLICATION_READBACK"
+  },
+  "nextTask": "Integrate explicit verified-predecessor restoration into the existing development selection journal, then qualify normal bounded developer backend startup and recovery. Use genuine source/build/review/observed-health evidence for real package admission; fixture receipts do not count. Do not retire legacy writers or run protected recovery before the composed migration passes. Prioritize actual two-conversation Web coding when serving dependencies are available."
+}

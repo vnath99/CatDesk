@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "preparedUtc": "2026-11-01T18:09:40.844997+00:00",
+  "classification": "IMMUTABLE_PUBLIC_SOURCE_REVIEW_INPUTS_NOT_COMPLETED_INSPECTION_OR_RELEASE_AUTHORITY",
+  "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+  "fullDeclaredCodePaths": 84,
+  "scopeReduced": false,
+  "group": "ADAPTER_CHANGED_TESTS_AND_PRIOR",
+  "reads": [
+    {
+      "path": "wake/tests/test_adapter.py",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "firstLine": 99,
+      "lastLine": 109,
+      "purpose": "CURRENT_ADDED_OR_MODIFIED_TEST_LINES_WITH_NEARBY_HUNKS_MERGED",
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 99,109 6e97db1fdaaf91f9d6393997e930023a387f0403 -- wake/tests/test_adapter.py",
+      "bytes": 852,
+      "sha256": "ac8c49deec35add5700edd9998444a36a35e14d45c00af63b205f666736f7d85"
+    },
+    {
+      "path": "wake/tests/test_adapter.py",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "firstLine": 254,
+      "lastLine": 257,
+      "purpose": "CURRENT_ADDED_OR_MODIFIED_TEST_LINES_WITH_NEARBY_HUNKS_MERGED",
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 254,257 6e97db1fdaaf91f9d6393997e930023a387f0403 -- wake/tests/test_adapter.py",
+      "bytes": 413,
+      "sha256": "d6aaea4899e17e5c765f2c74cb5f6939698f34cc2fecf9a050a04cd9a7c04300"
+    },
+    {
+      "path": "wake/tests/test_adapter.py",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "firstLine": 281,
+      "lastLine": 281,
+      "purpose": "CURRENT_ADDED_OR_MODIFIED_TEST_LINES_WITH_NEARBY_HUNKS_MERGED",
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 281,281 6e97db1fdaaf91f9d6393997e930023a387f0403 -- wake/tests/test_adapter.py",
+      "bytes": 101,
+      "sha256": "e4e10c6ec9c7d9876b6432ea871224604cfb49de6e1bdaa8fda6871093b3e0d3"
+    },
+    {
+      "path": "wake/tests/test_adapter.py",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "firstLine": 297,
+      "lastLine": 378,
+      "purpose": "CURRENT_ADDED_OR_MODIFIED_TEST_LINES_WITH_NEARBY_HUNKS_MERGED",
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 297,378 6e97db1fdaaf91f9d6393997e930023a387f0403 -- wake/tests/test_adapter.py",
+      "bytes": 7728,
+      "sha256": "0269ca9a84dc87f76e10b19aeb8039a1e09dec0b971af5ea71692309bebcb63f"
+    },
+    {
+      "path": "wake/tests/test_adapter.py",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "firstLine": 379,
+      "lastLine": 398,
+      "purpose": "CURRENT_ADDED_OR_MODIFIED_TEST_LINES_WITH_NEARBY_HUNKS_MERGED",
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 379,398 6e97db1fdaaf91f9d6393997e930023a387f0403 -- wake/tests/test_adapter.py",
+      "bytes": 1894,
+      "sha256": "55fed616bd150af4fcb5baf4aabea58ee9765eb2135da5f0e1d247cbef16d586"
+    },
+    {
+      "path": "wake/tests/test_adapter.py",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "firstLine": 720,
+      "lastLine": 736,
+      "purpose": "CURRENT_ADDED_OR_MODIFIED_TEST_LINES_WITH_NEARBY_HUNKS_MERGED",
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 720,736 6e97db1fdaaf91f9d6393997e930023a387f0403 -- wake/tests/test_adapter.py",
+      "bytes": 1307,
+      "sha256": "e208dc4097af88c669fc358f9c0febfd01e493b62e16a80838bf861eea88063e"
+    },
+    {
+      "path": "wake/tests/test_adapter.py",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "firstLine": 1047,
+      "lastLine": 1060,
+      "purpose": "CURRENT_ADDED_OR_MODIFIED_TEST_LINES_WITH_NEARBY_HUNKS_MERGED",
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 1047,1060 6e97db1fdaaf91f9d6393997e930023a387f0403 -- wake/tests/test_adapter.py",
+      "bytes": 941,
+      "sha256": "a4214e076b0d87652d0477270d54cdc9e968e5a736e8ca0cfc29e21020c4b89f"
+    },
+    {
+      "path": "wake/tests/test_adapter.py",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "firstLine": 1092,
+      "lastLine": 1093,
+      "purpose": "CURRENT_ADDED_OR_MODIFIED_TEST_LINES_WITH_NEARBY_HUNKS_MERGED",
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 1092,1093 6e97db1fdaaf91f9d6393997e930023a387f0403 -- wake/tests/test_adapter.py",
+      "bytes": 226,
+      "sha256": "35ba76cf237f62f5e00ce6bf165332b243d585a1017d69e958d8b0fa5fb5885b"
+    },
+    {
+      "path": "wake/tests/test_adapter.py",
+      "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+      "firstLine": 243,
+      "lastLine": 243,
+      "purpose": "PRIOR_DELETED_OR_REPLACED_LINES_FOR_COMPATIBILITY_REVIEW",
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 243,243 18ba8aa207f8977a772484f66e639e2603b938a6 -- wake/tests/test_adapter.py",
+      "bytes": 133,
+      "sha256": "10ceab54a9ccbcca39b25d5c5feec0c623069fa4712fbc5a97905e39190951ac"
+    },
+    {
+      "path": "wake/tests/test_adapter.py",
+      "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+      "firstLine": 267,
+      "lastLine": 267,
+      "purpose": "PRIOR_DELETED_OR_REPLACED_LINES_FOR_COMPATIBILITY_REVIEW",
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 267,267 18ba8aa207f8977a772484f66e639e2603b938a6 -- wake/tests/test_adapter.py",
+      "bytes": 119,
+      "sha256": "97b393cbecfa35a470ef3a9d828851438f3b96965983da074c8e556f2dc6cce4"
+    },
+    {
+      "path": "wake/tests/test_adapter.py",
+      "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+      "firstLine": 945,
+      "lastLine": 945,
+      "purpose": "PRIOR_DELETED_OR_REPLACED_LINES_FOR_COMPATIBILITY_REVIEW",
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 945,945 18ba8aa207f8977a772484f66e639e2603b938a6 -- wake/tests/test_adapter.py",
+      "bytes": 126,
+      "sha256": "e396a33e0b00f3494b8ae14202f9a0cb8e8f03d87ac066f9d2a309c7a8646404"
+    }
+  ],
+  "totalCodeOutputBytes": 13840,
+  "maximumCodeReadBytes": 7800,
+  "protocol": {
+    "tools": "v5 run_command timeout10000/include_full_output=true; execute code commands sequentially",
+    "review": "Assess source suitability; retain earlier partial evidence and remaining scope; report truncation, confirmed defects and concrete neededReads",
+    "response": "JSON at most4000 UTF-8 bytes so the existing durable source-handoff reader can retain the task",
+    "safeguards": "No native execution, writes, authentication, bindings, production operations, C49 or uncertain-message replay"
+  },
+  "coverageLimits": "Complete current backend production is split contiguously across A/B. Other groups show changed test lines and their prior replaced/deleted ranges. Earlier partial references remain limited; no full-file acceptance or test execution is inferred.",
+  "sourceAccepted": false,
+  "producerAuthority": false
+}

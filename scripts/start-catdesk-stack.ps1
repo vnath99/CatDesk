@@ -7,6 +7,7 @@ param(
     [string]$ExpectedBuildSha256 = "",
     [string]$BuildFingerprintPath = "",
     [string]$TunnelClientPath = "",
+    [switch]$BackendOnly,
     [switch]$Execute
 )
 
@@ -307,14 +308,14 @@ function Invoke-BoundedTunnelClient {
 }
 
 function Invoke-SilentLoopbackHttp {
-    param([string]$Uri, [string]$Method = "Get", [string]$ContentType = "", [string]$Body = "", [int]$TimeoutSeconds = 5)
+    param([string]$Uri, [string]$Method = "Get", [string]$ContentType = "", [string]$Body = "", [int]$TimeoutSeconds = 5, [hashtable]$Headers = @{})
     $priorProgressPreference = $ProgressPreference
     try {
         $ProgressPreference = "SilentlyContinue"
         if ($Method -eq "Post") {
-            return Invoke-WebRequest -Uri $Uri -Method Post -ContentType $ContentType -Body $Body -UseBasicParsing -MaximumRedirection 0 -TimeoutSec $TimeoutSeconds
+            return Invoke-WebRequest -Uri $Uri -Method Post -ContentType $ContentType -Body $Body -Headers $Headers -UseBasicParsing -MaximumRedirection 0 -TimeoutSec $TimeoutSeconds
         }
-        return Invoke-WebRequest -Uri $Uri -UseBasicParsing -MaximumRedirection 0 -TimeoutSec $TimeoutSeconds
+        return Invoke-WebRequest -Uri $Uri -Headers $Headers -UseBasicParsing -MaximumRedirection 0 -TimeoutSec $TimeoutSeconds
     } finally {
         $ProgressPreference = $priorProgressPreference
     }
@@ -815,15 +816,55 @@ function New-LocalMcpReadinessResult {
         'LOCAL_MCP_RESPONSE_TIMEOUT',
         'LOCAL_MCP_RESPONSE_UNAVAILABLE',
         'LOCAL_MCP_RESPONSE_INVALID',
-        'LOCAL_MCP_PROTOCOL_UNREADY'
+        'LOCAL_MCP_PROTOCOL_UNREADY',
+        'LOCAL_MCP_BACKEND_ONLY_UNSUPPORTED', 'LOCAL_MCP_AUTH_TOKEN_INVALID', 'LOCAL_MCP_AUTH_SCOPE_INVALID'
     )){throw 'local MCP readiness gate is invalid'}
     return [pscustomobject]@{Ready=$Ready;Gate=$Gate}
+}
+
+function Get-ConfiguredLocalMcpAuthToken {
+    $environment = [Environment]::GetEnvironmentVariables([EnvironmentVariableTarget]::Process)
+    if ($environment.Contains('CATDESK_MCP_AUTH_TOKEN')) {
+        # An explicit per-process setting belongs to this owner, including an
+        # isolated development owner. Never replace an invalid explicit value
+        # with another credential or an unauthenticated launch.
+        $token = [string]$environment['CATDESK_MCP_AUTH_TOKEN']
+    } else {
+        try {
+            $token = Invoke-BootstrapSeam -Name 'LocalMcpUserAuthToken' -Arguments @() -Default {
+                [Environment]::GetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN', 'User')
+            }
+        } catch { throw 'LOCAL_MCP_AUTH_TOKEN_INVALID' }
+        if ($null -eq $token -or $token -ceq '') { return $null }
+        if ($token -isnot [string]) { throw 'LOCAL_MCP_AUTH_TOKEN_INVALID' }
+    }
+    # Match server::valid_mcp_auth_token: >=24 ASCII graphic bytes, no trim.
+    if ($token -cnotmatch '\A[\x21-\x7E]{24,}\z') { throw 'LOCAL_MCP_AUTH_TOKEN_INVALID' }
+    return $token
+}
+
+function Get-LocalMcpProbeHeaders {
+    param($LocalMcp)
+    $token = Get-ConfiguredLocalMcpAuthToken
+    if ($null -eq $token) { return @{} }
+    $uri = $null
+    if (-not [Uri]::TryCreate([string]$LocalMcp.Uri, [UriKind]::Absolute, [ref]$uri) -or
+        $uri.Scheme -cne 'http' -or $uri.Host -cne '127.0.0.1' -or
+        $uri.Port -ne [int]$LocalMcp.Port -or $uri.UserInfo -or $uri.Query -or $uri.Fragment -or
+        $uri.AbsolutePath -cnotmatch '\A/[A-Za-z0-9_-]{24,96}/mcp\z') {
+        throw 'LOCAL_MCP_AUTH_SCOPE_INVALID'
+    }
+    return @{ Authorization = 'Bearer ' + $token }
 }
 
 function Get-LocalMcpReadiness {
     param($LocalMcp,$Canonical,$ExpectedDaemonProcess=$null)
     $observed=Invoke-BootstrapSeam -Name "LocalMcp" -Arguments @($LocalMcp,$Canonical,$ExpectedDaemonProcess) -Default {
         param($endpoint,$identity,$expectedProcess)
+        try { $headers = Get-LocalMcpProbeHeaders -LocalMcp $endpoint } catch {
+            $gate = if ($_.Exception.Message -eq 'LOCAL_MCP_AUTH_SCOPE_INVALID') { 'LOCAL_MCP_AUTH_SCOPE_INVALID' } else { 'LOCAL_MCP_AUTH_TOKEN_INVALID' }
+            return New-LocalMcpReadinessResult -Ready $false -Gate $gate
+        }
         $listener=Get-LoopbackCatDeskListener -Port $endpoint.Port -Canonical $identity
         if($null -eq $listener){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_LISTENER_MISSING'}
         if(-not $listener.MatchesCanonical){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH'}
@@ -840,7 +881,7 @@ function Get-LocalMcpReadiness {
             @{jsonrpc="2.0";id="catdesk-bootstrap-tools";method="tools/list";params=@{}}
         )) {
             try {
-                $response=Invoke-BootstrapSeam -Name "LocalMcpHttp" -Arguments @($endpoint.Uri,($request|ConvertTo-Json -Compress -Depth 5)) -Default { param($uri,$body) Invoke-SilentLoopbackHttp -Uri $uri -Method Post -ContentType "application/json" -Body $body -TimeoutSeconds 5 }
+                $response=Invoke-BootstrapSeam -Name "LocalMcpHttp" -Arguments @($endpoint.Uri,($request|ConvertTo-Json -Compress -Depth 5)) -Default { param($uri,$body) Invoke-SilentLoopbackHttp -Uri $uri -Method Post -ContentType "application/json" -Body $body -TimeoutSeconds 5 -Headers $headers }
             } catch {
                 $exception=$_.Exception
                 $timedOut=($exception -is [System.Net.WebException] -and $exception.Status -eq [System.Net.WebExceptionStatus]::Timeout) -or ([string]$exception.Message -match '(?i)timed out|timeout')
@@ -850,9 +891,23 @@ function Get-LocalMcpReadiness {
             $content=[string]$response.Content
             if($content.Length -gt $script:MaxMcpReplyBytes){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_RESPONSE_INVALID'}
             try{$parsed=$content|ConvertFrom-Json -ErrorAction Stop}catch{return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_RESPONSE_INVALID'}
-            if($parsed.error){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
-            if($request.method -eq "initialize" -and $null -eq $parsed.result.serverInfo){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
-            if($request.method -eq "tools/list"){$names=@($parsed.result.tools|ForEach-Object{$_.name});if($names -notcontains "catdesk_instruction" -or $names -notcontains "delegated_run_list"){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}}
+            # Successful JSON-RPC responses normally omit error. Inspect the
+            # member before reading it so caller strict mode cannot turn a
+            # healthy installed backend into a redacted ACTION_REQUIRED.
+            if($parsed -isnot [System.Management.Automation.PSCustomObject]){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_RESPONSE_INVALID'}
+            if($parsed.PSObject.Properties['error'] -and $parsed.error){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
+            if(-not $parsed.PSObject.Properties['result'] -or $parsed.result -isnot [System.Management.Automation.PSCustomObject]){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
+            $rpcResult=$parsed.result
+            if($request.method -eq "initialize" -and (-not $rpcResult.PSObject.Properties['serverInfo'] -or $rpcResult.serverInfo -isnot [System.Management.Automation.PSCustomObject])){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
+            if($request.method -eq "tools/list"){
+                if(-not $rpcResult.PSObject.Properties['tools']){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
+                $names=@()
+                foreach($tool in @($rpcResult.tools)){
+                    if($tool -isnot [System.Management.Automation.PSCustomObject] -or -not $tool.PSObject.Properties['name'] -or $tool.name -isnot [string]){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
+                    $names+=$tool.name
+                }
+                if($names -notcontains "catdesk_instruction" -or $names -notcontains "delegated_run_list"){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
+            }
         }
         return New-LocalMcpReadinessResult -Ready $true -Gate 'READY'
     }
@@ -900,8 +955,16 @@ function Get-OfficialRuntimeVerification {
         $gate = 'RUNTIME_STATUS_TRANSIENT'
         $status=Invoke-BootstrapSeam -Name "RuntimeStatus" -Arguments @($Root,$TimeoutSeconds,$Alias,$ClientPath,$Deadline) -Default {param($workspace,$timeout,$runtimeAlias,$clientPath,$commandDeadline)if(-not $clientPath){throw "official runtime client unavailable"};$timeoutMilliseconds=Get-RemainingReadinessMilliseconds -Deadline $commandDeadline -RequestedMilliseconds ([Math]::Min($timeout * 1000,$script:MaxTunnelClientCommandMilliseconds));$result=Invoke-BoundedTunnelClient -ClientPath $clientPath -Arguments @("runtimes","status",$runtimeAlias,"--json") -TimeoutMilliseconds $timeoutMilliseconds;$json=$result.Stdout;if($json.Length -gt $script:MaxTunnelClientOutputBytes){throw "runtime status unavailable"};$json|ConvertFrom-Json -ErrorAction Stop}
         if($null -eq $status){return New-OfficialRuntimeVerificationResult -Verified $false -Gate 'RUNTIME_STATUS_UNAVAILABLE'}
-        $state=if($status.status){[string]$status.status}elseif($status.state){[string]$status.state}else{""}
-        $running=[bool]($status.running -or $status.process_running -or $status.processRunning -or $state -in @("running","ready","connected"));$healthy=[bool]($status.healthy -or $status.health_ok -or $status.healthOk -or $state -in @("healthy","ready","connected"));$ready=[bool]($status.ready -or $status.isReady -or $state -in @("ready","connected"))
+        # Runtime versions publish different optional aliases. Read only
+        # present properties so a strict-mode caller does not turn a healthy
+        # process_running/healthy/ready response into RUNTIME_STATUS_TRANSIENT.
+        $fields=@{}
+        foreach($name in @('status','state','running','process_running','processRunning','healthy','health_ok','healthOk','ready','isReady')){
+            $property=$status.PSObject.Properties[$name]
+            if($null -ne $property){$fields[$name]=$property.Value}
+        }
+        $state=if($fields['status']){[string]$fields['status']}elseif($fields['state']){[string]$fields['state']}else{""}
+        $running=[bool]($fields['running'] -or $fields['process_running'] -or $fields['processRunning'] -or $state -in @("running","ready","connected"));$healthy=[bool]($fields['healthy'] -or $fields['health_ok'] -or $fields['healthOk'] -or $state -in @("healthy","ready","connected"));$ready=[bool]($fields['ready'] -or $fields['isReady'] -or $state -in @("ready","connected"))
         if(-not($running -and $healthy -and $ready)){return New-OfficialRuntimeVerificationResult -Verified $false -Gate 'RUNTIME_STATUS_NOT_READY'}
         $gate = 'RUNTIME_HEALTH_REFERENCE_INVALID'
         $base=Get-AuthoritativeRuntimeBase -Status $status -Alias $Alias
@@ -1078,8 +1141,131 @@ function Repair-CanonicalReleaseForRecovery([string]$Root, [string]$Config, [str
     return [pscustomobject]@{ Source = 'LAST_KNOWN_GOOD'; RestoredBinary = $restored.RestoredBinary; RestoredManifest = $restored.RestoredManifest; Hash = $restored.Hash }
 }
 
+function Test-BackendOnlySupport {
+    param($Canonical, [int]$TimeoutMilliseconds = 5000)
+    $raw = Invoke-BootstrapSeam -Name 'BackendOnlySupport' -Arguments @($Canonical, $TimeoutMilliseconds) -Default {
+        param($identity, $timeout)
+        (Invoke-BoundedRecoveryHelper -FileName $identity.Path -Arguments @('--catdesk-daemon', '--backend-only', '--check-support') -TimeoutMilliseconds $timeout -FailureMessage 'backend-only support is unavailable').Stdout
+    }
+    $text = [string]$raw
+    if ($text.Length -gt 1024) { return $false }
+    try {
+        $support = $text | ConvertFrom-Json -ErrorAction Stop
+        return ($support -isnot [array] -and @($support.PSObject.Properties).Count -eq 5 -and
+            $support.schemaVersion -eq 1 -and $support.mode -ceq 'LOCAL_BACKEND_ONLY' -and
+            $support.supported -is [bool] -and $support.supported -and
+            $support.stateCreated -is [bool] -and -not $support.stateCreated -and
+            $support.servicesStarted -is [bool] -and -not $support.servicesStarted)
+    } catch { return $false }
+}
+
+function New-CanonicalDaemonStartInfo {
+    param($Canonical, [string]$Root, [string]$Config, [switch]$BackendOnly)
+    $token = Get-ConfiguredLocalMcpAuthToken
+    $info = [Diagnostics.ProcessStartInfo]::new()
+    $info.FileName = $Canonical.Path
+    $info.Arguments = if ($BackendOnly) { '--catdesk-daemon --backend-only' } else { '--catdesk-daemon' }
+    $info.WorkingDirectory = $Root
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
+    $info.EnvironmentVariables['WORKSPACE_ROOT'] = $Root
+    $info.EnvironmentVariables['CATDESK_BACKEND_CONFIG_PATH'] = $Config
+    if ($null -ne $token) { $info.EnvironmentVariables['CATDESK_MCP_AUTH_TOKEN'] = $token }
+    return $info
+}
+
+function Start-CanonicalDaemon {
+    param($Canonical, [string]$Root, [string]$Config, [switch]$BackendOnly)
+    Invoke-BootstrapSeam -Name 'DaemonStart' -Arguments @($Canonical, $Root, $Config, [bool]$BackendOnly) -Default {
+        param($identity, $workspaceRoot, $configPath, $localOnly)
+        $info = New-CanonicalDaemonStartInfo -Canonical $identity -Root $workspaceRoot -Config $configPath -BackendOnly:$localOnly
+        $process = [Diagnostics.Process]::Start($info)
+        $null = $process.Handle
+        return $process
+    }
+}
+
+function Start-BackendOnlyDaemon {
+    param($Canonical, [string]$Root, [string]$Config)
+    Invoke-BootstrapSeam -Name 'BackendOnlyStart' -Arguments @($Canonical, $Root, $Config) -Default {
+        param($identity, $workspaceRoot, $configPath)
+        Start-CanonicalDaemon -Canonical $identity -Root $workspaceRoot -Config $configPath -BackendOnly
+    }
+}
+
+function Get-BackendOnlyUtcNow {
+    [datetime](Invoke-BootstrapSeam -Name 'BackendOnlyUtcNow' -Arguments @() -Default { [DateTime]::UtcNow })
+}
+
+function Invoke-BackendOnlyBootstrap {
+    param([string]$Root, $Canonical)
+    # Release repair before this function retains its existing integrity/owner
+    # gates and helper timeouts. Only local convergence is capped here; a probe
+    # already in flight retains its existing finite per-call timeout.
+    $deadline = (Get-BackendOnlyUtcNow).AddSeconds([Math]::Min(60, $ReadyTimeoutSeconds))
+    $local = Get-ConfiguredLocalMcp -Path $ConfigPath
+    try { [void](Get-LocalMcpProbeHeaders -LocalMcp $local) } catch {
+        $gate = if ($_.Exception.Message -eq 'LOCAL_MCP_AUTH_SCOPE_INVALID') { 'LOCAL_MCP_AUTH_SCOPE_INVALID' } else { 'LOCAL_MCP_AUTH_TOKEN_INVALID' }
+        Write-RedactedStatus 'TRANSPORT_VERIFICATION_FAILED' 'local MCP authentication scope refused' '' $gate; return
+    }
+    $existing = Get-LoopbackCatDeskListener -Port $local.Port -Canonical $Canonical
+    if ($existing -and -not $existing.MatchesCanonical) {
+        Write-RedactedStatus 'TRANSPORT_VERIFICATION_FAILED' 'local backend owner refused' '' 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH'; return
+    }
+    if ($Mode -eq 'plan' -or -not $Execute) {
+        $ready = Get-LocalMcpReadiness -LocalMcp $local -Canonical $Canonical
+        if ($ready.Ready) { Write-RedactedStatus 'LOCAL_BACKEND_READY' 'local backend only; other layers not examined' }
+        else { Write-RedactedStatus 'TRANSPORT_VERIFICATION_FAILED' 'local backend is not ready' '' ([string]$ready.Gate) }
+        return
+    }
+    $started = $null
+    if (-not $existing) {
+        $remaining = [Math]::Min(5000, [Math]::Max(1, [int]($deadline - (Get-BackendOnlyUtcNow)).TotalMilliseconds))
+        try { $supported = Test-BackendOnlySupport -Canonical $Canonical -TimeoutMilliseconds $remaining } catch { $supported = $false }
+        if (-not $supported) { Write-RedactedStatus 'TRANSPORT_VERIFICATION_FAILED' 'verified image does not support backend-only startup' '' 'LOCAL_MCP_BACKEND_ONLY_UNSUPPORTED'; return }
+        # Do not retire any stale process until its verified replacement has
+        # proved this closed mode. No foreign listener or same-path racer wins.
+        [void](Stop-StaleCanonicalCatDeskDaemonForRecovery -Canonical $Canonical -LocalMcp $local)
+        if (Get-LoopbackCatDeskListener -Port $local.Port -Canonical $Canonical) { throw 'local backend listener changed before launch' }
+        $rechecked = Get-CanonicalCatDeskIdentity -Root $Root -ExpectedHash $ExpectedBuildSha256 -FingerprintPath $BuildFingerprintPath
+        if ($rechecked.Path -cne $Canonical.Path -or $rechecked.Sha256 -cne $Canonical.Sha256) { throw 'local backend release changed before launch' }
+        if ((Get-BackendOnlyUtcNow) -lt $deadline) { $started = Start-BackendOnlyDaemon -Canonical $Canonical -Root $Root -Config $ConfigPath }
+    }
+    $lastGate = 'LOCAL_MCP_RESPONSE_UNAVAILABLE'
+    while ((Get-BackendOnlyUtcNow) -lt $deadline) {
+        $ready = Get-LocalMcpReadiness -LocalMcp $local -Canonical $Canonical -ExpectedDaemonProcess $started
+        if ($ready.Ready) { Write-RedactedStatus 'LOCAL_BACKEND_READY' 'local backend only; Wake, GUI and official runtime not examined or started'; return }
+        $lastGate = [string]$ready.Gate
+        # Existing canonical listeners are not recycled on a timeout: the full
+        # path's external-readiness proof is deliberately not weakened here.
+        if ($existing -or $lastGate -in @('LOCAL_MCP_AUTH_TOKEN_INVALID','LOCAL_MCP_AUTH_SCOPE_INVALID','LOCAL_MCP_LISTENER_IDENTITY_MISMATCH','LOCAL_MCP_LAUNCHED_PROCESS_MISMATCH')) { break }
+        Start-Sleep -Milliseconds 250
+    }
+    Write-RedactedStatus 'TRANSPORT_VERIFICATION_FAILED' 'bounded local backend readiness did not converge' '' $lastGate
+}
+
 function Invoke-CanonicalStackBootstrap {
+    $root=(Resolve-Path -LiteralPath $Workspace -ErrorAction Stop).Path
+    if($ReadyTimeoutSeconds -lt 5 -or $ReadyTimeoutSeconds -gt 180){throw 'readiness timeout is invalid'}
+    if($Mode -eq 'plan' -or -not $Execute){Invoke-CanonicalStackBootstrapCore;return}
+    $lease=$null
+    try{
+        try{$lease=Enter-CatDeskStoppedLifecycleLease -Root $root}catch{
+            Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'canonical lifecycle owner lease is unavailable'
+            return
+        }
+        Invoke-CanonicalStackBootstrapCore -StoppedLifecycleLease $lease
+    }finally{if($null -ne $lease){$lease.Dispose()}}
+}
+
+function Invoke-CanonicalStackBootstrapCore {
+    param([System.IO.FileStream]$StoppedLifecycleLease=$null)
     $root=(Resolve-Path -LiteralPath $Workspace -ErrorAction Stop).Path;if($ReadyTimeoutSeconds -lt 5 -or $ReadyTimeoutSeconds -gt 180){throw "readiness timeout is invalid"}
+    if(-not(Test-CatDeskStoppedReconciliationStartupReady -Root $root -HeldLifecycleLease $StoppedLifecycleLease)){
+        Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'same-transaction stopped reconciliation recovery is required before startup'
+        return
+    }
     $releaseRestored=$false;$releaseRecoverySource=''
     try {
         $canonical=Get-CanonicalCatDeskIdentity -Root $root -ExpectedHash $ExpectedBuildSha256 -FingerprintPath $BuildFingerprintPath
@@ -1100,7 +1286,9 @@ function Invoke-CanonicalStackBootstrap {
             return
         }
     }
+    if ($BackendOnly) { Invoke-BackendOnlyBootstrap -Root $root -Canonical $canonical; return }
     $localMcp=Get-ConfiguredLocalMcp -Path $ConfigPath;$runtimeAlias=Get-ConfiguredRuntimeAlias -Path $ConfigPath;$client=Find-TunnelClient -ExplicitPath $TunnelClientPath;if(-not $client){throw "official runtime client unavailable"};$setup=Join-Path $root "scripts\setup-secure-mcp.ps1";$diskMode=Read-OfficialRuntimeProcessMode -Path $ConfigPath;$existing=Get-LoopbackCatDeskListener -Port $localMcp.Port -Canonical $canonical;$launched=$false
+    [void](Get-LocalMcpProbeHeaders -LocalMcp $localMcp)
     Test-CodexOnDemandPrerequisites
     $wakeReady=Test-WakeBridgeRuntime -Root $root
     if($Mode -eq "plan"){
@@ -1147,7 +1335,7 @@ function Invoke-CanonicalStackBootstrap {
     $readinessDeadline=[DateTime]::UtcNow.AddSeconds($ReadyTimeoutSeconds)
     $launchedDaemonProcess=$null
     if(-not $existing){
-        $launchedDaemonProcess=Start-Process -FilePath $canonical.Path -ArgumentList "--catdesk-daemon" -WorkingDirectory $root -WindowStyle Hidden -PassThru
+        $launchedDaemonProcess=Start-CanonicalDaemon -Canonical $canonical -Root $root -Config $ConfigPath
         # Pin the exact child immediately. Readiness below must bind to this
         # process instance rather than accepting a canonical same-path racer.
         $null=$launchedDaemonProcess.Handle

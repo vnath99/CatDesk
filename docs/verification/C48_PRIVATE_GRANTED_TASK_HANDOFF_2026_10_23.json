@@ -1,0 +1,386 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-10-23T22:40:25.1021766Z",
+  "task": "C48-PRIVATE-GRANTED-TASK-HANDOFF",
+  "classification": "SOURCE_SYNTHETIC_CONTINUATION_NORMAL_BINARY_AND_STOPPED_DEVELOPMENT_QUALIFIED",
+  "sourceBaseCommit": "dd855a6961fda2ebcc04bd95927171737cad1dfa",
+  "branch": "codex/web-rollover-oct17",
+  "sourceFiles": [
+    {
+      "sha256": "bcae5c0a752ae3624b930c77020525fe987b91c422768157d92e5a4cca19c5f2",
+      "path": "src/project_mcp_task.rs"
+    },
+    {
+      "sha256": "90719c25cdbec9e6d97798e770fe0ac6509aecea55e234dbafbc10a13b5fd460",
+      "path": "src/operator_web_rollover.rs"
+    },
+    {
+      "sha256": "56aba550d34376ca64964587c0be98fd3d6a2d80abcd0adde5fd5cb1bfced30f",
+      "path": "src/web_task_handoff.rs"
+    },
+    {
+      "sha256": "37daeacb226a08e5f368eea9555a5507018fcfffad7d579bf75e299e40abb64d",
+      "path": "src/operator_web_auto.rs"
+    }
+  ],
+  "implementation": {
+    "existingLocalGrantRequired": true,
+    "newExecutionAuthorityCreated": false,
+    "automaticSourceHandoffWitnessRequired": true,
+    "existingRegistryAndBrowserTransactionReused": true,
+    "competingRegistry": false,
+    "newBrowserProfile": false,
+    "rawKeyInWorkspaceJournal": false,
+    "rawKeyInWakeResumeEvent": false,
+    "rawKeyInStatus": false,
+    "credentialPayloadLocation": "EXISTING_FIXED_USER_STATE_OUTSIDE_CONTROL_AND_ASSIGNED_WORKSPACES",
+    "encryptedAtRest": false,
+    "privateDraftRecoveryArtifacts": true,
+    "controlProjectIntentSourceAndBaseDigestPinned": true,
+    "exactPrivatePayloadReadback": true,
+    "missingOrTamperedPayloadRegenerated": false,
+    "wireMaximumBytes": 16384,
+    "sourceHandoffContainingOwnActiveKeyRefused": true,
+    "pendingProposalIdsAndApplicationOutcomesRetained": true,
+    "unknownMutationOutcomeRefused": true,
+    "completedCallIdsRetained": true,
+    "revokeRecheckedBeforeBrowserAdmission": true,
+    "providerConversationOriginAuthenticated": false
+  },
+  "continuation": {
+    "newTargetGenerationAndDigestIncluded": true,
+    "acknowledgementCompletionRequired": true,
+    "pendingAcknowledgementBrowserAction": "NONE",
+    "separateStableTaskResumeEvent": true,
+    "eventPublishedBeforeLocalMarker": true,
+    "queueTargetCasAndRegistrationGuardReused": true,
+    "repeatAndPublishBeforeMarkerRecoveryIdempotent": true,
+    "originalTaskAndAssignmentReused": true,
+    "nativeSessionTakeover": false,
+    "legacyContinuationBytesPreserved": true
+  },
+  "sourceGate": {
+    "startedUtc": "2026-10-23T22:04:19.7378428Z",
+    "finishedUtc": "2026-10-23T22:06:59.668707Z",
+    "distinctPassedTests": 86,
+    "newTests": 4,
+    "ignoredExistingNativeCommandTests": 2,
+    "maximumSecondsPerProcess": 600,
+    "allOwnersExited": true,
+    "allOutputDrained": true,
+    "suites": [
+      {
+        "timedOut": false,
+        "exitCode": 0,
+        "ownerExited": true,
+        "summary": "test result: ok. 53 passed; 0 failed; 0 ignored; 0 measured; 1621 filtered out; finished in 32.00s",
+        "filter": "operator_facade::web::rollover::tests",
+        "elapsedSeconds": 72.486376
+      },
+      {
+        "timedOut": false,
+        "exitCode": 0,
+        "ownerExited": true,
+        "summary": "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 1671 filtered out; finished in 56.20s",
+        "filter": "web_task_dispatch::tests",
+        "elapsedSeconds": 56.878159
+      },
+      {
+        "timedOut": false,
+        "exitCode": 0,
+        "ownerExited": true,
+        "summary": "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 1670 filtered out; finished in 10.42s",
+        "filter": "web_work::tests",
+        "elapsedSeconds": 11.1021188
+      },
+      {
+        "timedOut": false,
+        "exitCode": 0,
+        "ownerExited": true,
+        "summary": "test result: ok. 9 passed; 0 failed; 2 ignored; 0 measured; 1663 filtered out; finished in 17.16s",
+        "filter": "project_mcp_task::tests",
+        "elapsedSeconds": 17.7316877
+      },
+      {
+        "timedOut": false,
+        "exitCode": 0,
+        "ownerExited": true,
+        "summary": "test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 1657 filtered out; finished in 1.11s",
+        "filter": "operator_facade::web::auto::tests",
+        "elapsedSeconds": 1.7099813
+      }
+    ]
+  },
+  "strictChecks": {
+    "status": "PASS",
+    "startedUtc": "2026-10-23T22:04:02.204385Z",
+    "finishedUtc": "2026-10-23T22:04:19.7221933Z",
+    "sourceFrozen": true,
+    "checks": [
+      {
+        "name": "strict-workspace-clippy",
+        "exitCode": 0,
+        "timedOut": false,
+        "ownerExited": true,
+        "elapsedSeconds": 14.3274619
+      },
+      {
+        "name": "workspace-format",
+        "exitCode": 0,
+        "timedOut": false,
+        "ownerExited": true,
+        "elapsedSeconds": 3.0603903
+      },
+      {
+        "name": "diff-whitespace",
+        "exitCode": 0,
+        "timedOut": false,
+        "ownerExited": true,
+        "elapsedSeconds": 0.0834846
+      }
+    ]
+  },
+  "syntheticContinuation": {
+    "actualPairedBinderAndTaskDispatcher": true,
+    "browserReceiptAndTurnCompletion": "SYNTHETIC_FIXTURE_ONLY",
+    "generationChange": "1_TO_2",
+    "privatePayloadRestartReadback": true,
+    "workspaceAndStatusDoNotContainKey": true,
+    "wrongControlProjectIntentTamperAndMissingPayloadRefused": true,
+    "manualGrantedRolloverWithoutSourceWitnessRefused": true,
+    "preRolloverProposalIdentityLoadedFromPrivateHandoff": true,
+    "pendingPatchAppliedOnceAfterContinuation": true,
+    "appliedValueReadBack": true,
+    "nativeOriginalUnchanged": true,
+    "completedMutationReplayRefused": true,
+    "unknownApplicationMetadataRefused": true,
+    "taskResumeEventAfterAckOnly": true,
+    "publishBeforeMarkerCrashWindowExercised": true,
+    "supportedGrantRevocationRefusedFutureTransfer": true,
+    "actualWebToolCalls": 0,
+    "actualMessagesSent": 0,
+    "actualBrowserStarts": 0
+  },
+  "metadataContention": {
+    "cause": "Transient shared context read was classified as rollover pending",
+    "retryKind": "READ_ONLY_METADATA_BEFORE_TASK_START",
+    "maximumSeconds": 2,
+    "taskActionRetry": false,
+    "contextBytesUnchanged": true,
+    "projectTaskInitializedDuringNegativeHold": false,
+    "parallelCentralHttpRegression": "PASS"
+  },
+  "retainedFailedGates": [
+    {
+      "finishedUtc": "2026-10-23T21:31:16.0265635Z",
+      "status": "FAIL_RETAINED",
+      "resultSha256": "c2c184e0ad0d012cc1162926a7810c7854682dc4479a622e00c1e5c546c6665f",
+      "allOwnersExited": true,
+      "startedUtc": "2026-10-23T21:30:41.7298937Z"
+    },
+    {
+      "finishedUtc": "2026-10-23T21:41:31.5628555Z",
+      "status": "FAIL_RETAINED",
+      "resultSha256": "0b90eb6dc1b9f156323dc1494c6eb100298be1cce601ad2b464ad2fcf1c6a022",
+      "allOwnersExited": true,
+      "startedUtc": "2026-10-23T21:40:48.252063Z"
+    },
+    {
+      "finishedUtc": "2026-10-23T21:46:02.4804512Z",
+      "status": "FAIL_RETAINED",
+      "resultSha256": "34401fdfd0ce44e72dbcb519b51eefb6f52e6deb85bf5edb6acebae6bd60d57e",
+      "allOwnersExited": true,
+      "startedUtc": "2026-10-23T21:44:38.8795739Z"
+    },
+    {
+      "finishedUtc": "2026-10-23T21:50:38.3564756Z",
+      "status": "FAIL_RETAINED",
+      "resultSha256": "224563fb0e8b3114eeec4296b58d850a30fdc3b8ea71b255e640616647d586f0",
+      "allOwnersExited": true,
+      "startedUtc": "2026-10-23T21:49:30.7890598Z"
+    }
+  ],
+  "corrections": [
+    "Two compile-time API arguments",
+    "Wake continuation must be one normalized line",
+    "Bounded pre-task metadata contention read",
+    "Hashed project metadata fixture filename",
+    "Four needless borrows caught by strict Clippy"
+  ],
+  "preservation": {
+    "completedCanaryReplayed": false,
+    "realOwners": 0,
+    "controls": [
+      "STOPPED",
+      "STOPPED"
+    ],
+    "atUtc": "2026-10-23T22:10:20.596729Z",
+    "pairedRegistrations": 9,
+    "nativeActions": 0,
+    "browserStarts": 0,
+    "protectedRecords": 243,
+    "wakeHostStarts": 0,
+    "changedRecords": 0,
+    "recurringStarts": 0,
+    "selectedRuntime": "V61_C45_STOPPED_UNCHANGED",
+    "newRecords": 0,
+    "testOwners": 0,
+    "recheckedUtc": "2026-10-23T22:11:45.0899213Z"
+  },
+  "externalDependency": {
+    "requests": 1,
+    "nativeErrors": 0,
+    "nativeChatsIdle": 1,
+    "nativeSnapshotApproxUtc": "2026-10-23T21:42Z",
+    "observedUtc": "2026-10-23T22:10:12Z",
+    "nativeChatsActive": 3,
+    "immediateRetry": false,
+    "connectorHttpStatus": 429,
+    "nativeActions": 0
+  },
+  "privateFixtureRetention": "Passed new private payload fixtures cleaned up; failed source fixtures and unrelated prior unit credential artifacts retained privately. No real grant issued.",
+  "review": "ROOT_SELF_REVIEW_OF_FROZEN_SOURCE_AND_EVIDENCE_NO_SUBAGENT_REVIEW_CLAIM",
+  "privateProofHashes": {
+    "sourceGate": "6bd996dff42d95aa06d318cb659030e8614c44debe10c32f1fb7de2a5d37a7d5",
+    "preservation": "21b2741b740cb47e2b0bb2b4d1be9f4b37ae443ede352bad1f730385519ea37d",
+    "dependencies": "a656ee8fa3fa5f99f3167a11aeb7e0e755f0799a4857f41a395f393848fdea67",
+    "strictChecks": "82dbe5e215e6571df045e85eafdc4c17499a890f20bc12c978d05a73bd234aee"
+  },
+  "acceptance": {
+    "normalRelease": "PASS_NORMAL_HTTP_AND_INJECTED_PRIVATE_READER",
+    "syntheticLocalContinuation": "PASS",
+    "actualWebCoding": "OPEN_CONNECTOR_429",
+    "source": "PASS",
+    "protectedInstalled": "NOT_QUALIFIED",
+    "fullMilestone": "OPEN",
+    "actualBrowserCredentialHandoff": "NOT_RUN",
+    "selectedDevelopment": "QUALIFIED_STOPPED_V64_C48_ONLY",
+    "unattended": "NOT_ACTIVATED"
+  },
+  "publication": {
+    "force": false,
+    "workflow": "REVIEWED_NORMAL_PUSH_WITH_EXACT_REMOTE_READBACK_RECORDED_SEPARATELY",
+    "visibilityChanged": false,
+    "sourceCommit": "c16cab92faa1440404cf0593338241bda9024cae",
+    "sourceRemoteShaVerified": "c16cab92faa1440404cf0593338241bda9024cae"
+  },
+  "next": "Prepare a fresh bounded granted-task Web integration using the selected stopped C48 package. Actual normal collector/browser key transfer and Web MCP coding remain open; connector HTTP 429 is a separate dependency. Preserve completed canaries and all native owners.",
+  "sourceCommit": "c16cab92faa1440404cf0593338241bda9024cae",
+  "normalRelease": {
+    "status": "PASS",
+    "sourceCommit": "c16cab92faa1440404cf0593338241bda9024cae",
+    "sourceTree": "43674a9d1f8f0f5286cb89233d8e614ab9a24c9c",
+    "startedUtc": "2026-10-23T22:16:57.6617178Z",
+    "finishedUtc": "2026-10-23T22:23:04.1605654Z",
+    "elapsedSeconds": 366.5000795,
+    "maximumSeconds": 600,
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+    "imageSha256": "d2a89eb04cb4c87ebe5ddd55f77ba33a2f9874e25e9d3760369d64d5a35f0708",
+    "imageBytes": 34825216,
+    "buildLogSha256": "8fd77631aa1ab328da9503d735b0c02351b774e44bb27d6267478d858b1abd0c",
+    "allOwnedBuildProcessesExited": true
+  },
+  "normalQualification": {
+    "status": "PASS_DISPOSABLE_ONLY",
+    "startedUtc": "2026-10-23T22:26:24.6554208Z",
+    "finishedUtc": "2026-10-23T22:27:36.6094900Z",
+    "elapsedSeconds": 71.9540692,
+    "maximumSeconds": 180,
+    "listenerSeconds": [
+      45,
+      15
+    ],
+    "checks": [
+      "two-exact-disposable-assignment-grants-with-synthetic-source-receipts",
+      "central-catalog-and-wrong-bearer-project-key-refusal-before-journal",
+      "parallel-central-http-previews-and-patches-with-isolated-results-and-native-originals",
+      "blocked-alpha-writer-does-not-stall-beta-useful-read",
+      "completed-apply-stable-call-id-refused",
+      "cold-process-grant-journal-retention-and-independent-continuation",
+      "normal-private-handoff-cold-read-missing-payload-refusal-and-redacted-status",
+      "exact-fixture-grants-revoked-keys-cleaned-and-writer-leases-released"
+    ],
+    "cliGitCommands": 35,
+    "expectedMissingPayloadRefusals": 1,
+    "normalHttpProcesses": 2,
+    "naturalListenerExits": 2,
+    "privateReaderFixture": "EXPLICIT_SYNTHETIC_ON_DISK_INJECTION",
+    "coldPrivateReadback": true,
+    "missingPayloadRefusedWithoutRegeneration": true,
+    "workspaceRecordAndStatusExcludeKey": true,
+    "normalCollectorCreationProved": false,
+    "browserCredentialTransferProved": false,
+    "parallelScopedPatchesAndSiblingProgress": true,
+    "completedReplayRefusedAcrossRestart": true,
+    "fixtureGrantsRevoked": 2,
+    "exactOwnedKeysRemoved": 2,
+    "injectedPrivatePayloadRemoved": true,
+    "protectedRecordsBeforeSelection": 243,
+    "changesBeforeSelection": 0,
+    "newRecords": 0,
+    "ownersAfterCleanup": 0,
+    "actualWebCalls": 0,
+    "messages": 0,
+    "browserStarts": 0,
+    "wakeHostStarts": 0,
+    "recurringStarts": 0,
+    "resultSha256": "ecf19756c618d481927f5852d27bea2dfb4ff699008dda73c77ad20f282af609",
+    "cleanupSha256": "514e512fa4f8db466b3e57744954fcfab8ba9fdf22b6c27e4e5a1607db90f85d",
+    "controllerSha256": "9da0bfc91b713683fe372a895e921ba1aadc60566a83b9e5aed46509c27c627e"
+  },
+  "stoppedDevelopmentSelection": {
+    "status": "QUALIFIED_STOPPED_UNPROTECTED_ONLY",
+    "observedUtc": "2026-10-23T22:35:20.3909795Z",
+    "elapsedSeconds": 5.9125294,
+    "sourceCommit": "c16cab92faa1440404cf0593338241bda9024cae",
+    "selectedPackage": "1.0.0-dev.85-3ad868cec0879691ef31aa3fef0e10f831c46a691f9b7d978046ab529120d3d7",
+    "previousPackagePreserved": true,
+    "normalFiles": [
+      {
+        "name": "CatDeskBinagotchy.exe",
+        "sha256": "d2a89eb04cb4c87ebe5ddd55f77ba33a2f9874e25e9d3760369d64d5a35f0708",
+        "bytes": 34825216
+      },
+      {
+        "name": "CatDeskWakeHost.exe",
+        "sha256": "2c7367ebc9687037f6f0d813ec5e09018fcfbae3b1ff9aff60761f1bd13a6c83",
+        "bytes": 2081792
+      },
+      {
+        "name": "adapter.py",
+        "sha256": "0686ae77d3f4ed7ff6fc1dcfcffe07c212f8e4aea515ed069c73e11993782b97",
+        "bytes": 51207
+      },
+      {
+        "name": "wake_bridge.py",
+        "sha256": "a3d6bd20fd017c32dd8917a5f06e0c30c2e7aba547fe09ae9877066fa1d84498",
+        "bytes": 179201
+      }
+    ],
+    "exactPairedReadbacks": 9,
+    "statusViewPassed": true,
+    "existingStateRecords": 243,
+    "unchangedProtectedRecords": 241,
+    "permittedPackagePointersChanged": 2,
+    "unexpectedChanges": 0,
+    "newStateRecords": 0,
+    "owners": 0,
+    "controls": [
+      "STOPPED",
+      "STOPPED"
+    ],
+    "browserProfileTouched": false,
+    "wakeTargetsChanged": false,
+    "nativeSessionActions": 0,
+    "browserStarts": 0,
+    "wakeHostStarts": 0,
+    "recurringStarts": 0,
+    "productionChanged": false,
+    "protectedInstalledAcceptance": false,
+    "resultSha256": "d30ea89f4b8258afd7d26d540f44da67d130dc411511d08a05797250812195b0",
+    "hostBuildSha256": "276d8a73a45a65c3e82e258572c283f59023d68a8dec1f89ed6b9c34d760cbc1",
+    "hostImageSha256": "2c7367ebc9687037f6f0d813ec5e09018fcfbae3b1ff9aff60761f1bd13a6c83",
+    "hostOwnerEofProofReused": true,
+    "newHostProcessForGate": false
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C80_PROTOCOL_V2_UNKNOWN_SUBMIT_DRAFT_ARCHIVE_SOURCE",
+  "observedUtc": "2026-10-24T06:41:46.9902845+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "parentCommit": "41de864fcacd5b63cb8b9ae122e13b9e719b7c23",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "SOURCE_AND_NATIVE_ISOLATED_FIXTURES_NOT_SELECTED_RUNTIME_OR_LIVE_BROWSER",
+  "sourceHashes": [
+    {
+      "path": "src/operator_web_rollover.rs",
+      "sha256": "b370ce9c4746b81f88db414cba9d747e351dae45fecdaaa268526b7eda07af28"
+    }
+  ],
+  "change": {
+    "privateTaskHandoffRulesRetained": true,
+    "newEligibleStage": "SUBMITTING_SEND_ATTEMPTED_WITHOUT_RECEIPT_BOUND_TARGET_OR_QUARANTINE",
+    "preSendRecoveryRetained": true,
+    "currentSourceAndTargetValidationRetained": true,
+    "durableActualDraftArchiveRequired": true,
+    "existingCommand": "operator web rollover archive-draft --project-id PROJECT --expected-intent-id INTENT",
+    "noNewBrowserProtocol": true,
+    "submissionVerified": false,
+    "legacyUnknownStillSupported": true,
+    "existingExactComposerCasReused": true,
+    "wireErrorCodeCompatibilityRetained": true,
+    "originalBindingPreserved": true,
+    "resendAuthorized": false,
+    "originalJournalPreserved": true
+  },
+  "regression": {
+    "fixtureScope": "SIMULATED_ARCHIVE_RECEIPT_COMMITTED_BEFORE_JOURNAL_REASON_NOT_AN_ACTUAL_BROWSER_RECEIPT",
+    "name": "unknown_v2_archive_receipt_recovers_cold_without_browser_or_resend",
+    "causalRedElapsedSeconds": 45.6230513,
+    "byteStableArchiveRetry": true,
+    "negativeCasesCover": [
+      "TEXT_ENTRY_AUTHORIZED",
+      "DRAFT_READY",
+      "PREPARED phase",
+      "existing USER receipt",
+      "existing bound target",
+      "quarantine state"
+    ],
+    "alphaAndBetaBindingsExact": true,
+    "queuesDeliveriesAndTurnsEmpty": true,
+    "newTestMethods": 1,
+    "executeStillRefusesUnknownOutcome": true,
+    "existingEarlierStateValidationRetained": true,
+    "negativeCases": 6,
+    "coldReopenWithBrowserExclusivelyLocked": true,
+    "cachedReceiptDoesNotClaimCurrentComposerObservation": true,
+    "causalRed": "PASS_EXPECTED_OLD_GUARD_REJECTION_EXIT101"
+  },
+  "green": {
+    "exitCode": 0,
+    "ignored": 0,
+    "testRuntimeSeconds": 33.88,
+    "ownedGateSeconds": 50.9664898,
+    "failed": 0,
+    "tests": 54,
+    "sourceFrozen": true
+  },
+  "finalGates": {
+    "elapsedSeconds": 24.7606204,
+    "strictClippy": "PASS_LOCKED_OFFLINE_WORKSPACE_ALL_TARGETS_ALL_FEATURES_DENY_WARNINGS",
+    "format": "PASS_CARGO_FMT_ALL_CHECK",
+    "sourceFrozen": true,
+    "exitCodes": [
+      0,
+      0
+    ]
+  },
+  "retainedUnqualifiedAttempts": [
+    "Initial test compile referred to a crate-private helper; fixture switched to the existing OS file lock without production API changes.",
+    "First green filter selected zero tests. It is NOT qualification; corrected module path and a nonzero-test gate were used.",
+    "Next module run had53 pass and one test assertion failure: malformed combinations hit the earlier STATE_INVALID guard. Both existing refusal codes are now asserted without relaxing either.",
+    "Next module run reached archive/no-resend assertions but cleanup containment compared a canonical Windows extended path to an uncanonicalized target. Both sides are now canonicalized; containment remains enforced."
+  ],
+  "preservation": {
+    "messagesSent": 0,
+    "browserWakeRecurringStarts": 0,
+    "nativeActions": 0,
+    "selectedPackageChanged": false,
+    "runtimeRecords": 297,
+    "changedRecords": 0,
+    "productionChanged": false,
+    "existingPendingOrAmbiguousOperationsTouched": false
+  },
+  "acceptance": {
+    "freshV2LiveArchive": "NOT_RUN",
+    "protectedInstalled": "NOT_QUALIFIED",
+    "fullOctoberMilestone": "OPEN",
+    "actualUnknownPostSendKill": "NOT_RUN",
+    "unattended": "NOT_ACTIVATED",
+    "actualParallelWebCodingBC": "OPEN_CONNECTOR_BACKEND_AND_CATALOG",
+    "source": "PASS_54_ROLLOVER_TESTS_STRICT_CLIPPY_FMT",
+    "selectedRuntime": "NOT_UPDATED_EXISTING_C72_NORMAL_PACKAGE_RETAINED"
+  },
+  "nextTask": "Build the normal app from the reviewed published C80 source. Reuse the exact C72 host only after verifying unchanged Wake subtree/scripts and its retained owner-EOF proof. Apply the existing guarded stopped development package update with explicit component provenance, then prepare a bounded new SEND_ATTEMPTED interruption/archival canary without replaying completed messages or touching production targets."
+}

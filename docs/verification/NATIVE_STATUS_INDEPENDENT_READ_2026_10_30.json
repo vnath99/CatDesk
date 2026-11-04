@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T12:07:32.167605+00:00",
+  "classification": "SOURCE_AND_WINDOWS_LOOPBACK_FIXTURES_NOT_INSTALLED_OR_CHATGPT_WEB",
+  "branch": "codex/web-rollover-oct17",
+  "implementationCommit": "9de76069f070ca94dfa2d4d4238903e5efafa8f5",
+  "sourceBase": "6a982d37710b7139f5c6e0b3543d3d63ce1cc645",
+  "behavior": [
+    "Prepare Git-validated project/controller scope outside shared registry/Wake admission",
+    "Verify exact project/task/source/key/native grant under existing target and registry checks; defer queue/Git snapshot inspection until shared locks end",
+    "Revalidate current target, project/controller records, source, key/revocation and frozen selection before releasing a snapshot",
+    "Keep status lease-free while native dispatch owns its project lease; no native writer, queue claim, task journal or replay",
+    "Count authorized failed status lookups against that conversation using the existing observer; foreign/revoked admission cannot alter either estimate",
+    "Keep private keys out of observed argument envelopes; retain counts/hashes and uncertainty, not raw traffic"
+  ],
+  "tests": {
+    "dispatcher": 25,
+    "observer": 7,
+    "webWork": 6,
+    "distinctPassed": 38,
+    "newStatusCases": 4,
+    "strictAllTargetClippy": "PASS",
+    "formatting": "PASS"
+  },
+  "newCaseEvidence": [
+    "Paused Alpha status lookup leaves shared registry/Wake locks available while Beta previews/applies its own patch; Alpha and both native roots remain unchanged",
+    "Missing native queue job returns a read error and counts only authorized Alpha traffic; foreign and revoked keys change neither project estimate",
+    "Changed project or controller registry history refuses prepared admission without task journal/native process changes",
+    "Revocation or target rollover during unlocked lookup prevents snapshot release; a fresh current-target status read succeeds without executing the native task"
+  ],
+  "failureHistory": "Initial drift fixture changed Git identity and correctly triggered earlier WEB_CONTEXT_PROJECT_UNAVAILABLE; fixture changed to valid Git plus registry-history drift to exercise the later prepared-record check. Original 2-pass/1-failure log retained.",
+  "logSha256": {
+    "dispatcher": "eda98a672208d3dcaf8e95d29622d3c73ab96e45ff3a3d88fdbe406ffcb1549c",
+    "observer": "4cd236902d88b011843d25b8ae801e38759947089ca484711f7fd8c944617779",
+    "webWork": "9d61a5d263cc8f01dc982003918c3e1c60b58cf312398e589775b70f0eb76ba4",
+    "strictClippy": "4bd909b811b8a36e353ee5858a13725be300263594efb851c6541330032fd2e6",
+    "initialFocusedFailure": "664008ad4b27e971f091081d114dd02760f88d4d9d0ecd74b3638d8cd81e4e38",
+    "correctedFocused": "5d08857927299a8559c41ad71a6d0c4eb2361f18d547989364d45190ac8525b1"
+  },
+  "preservation": {
+    "selectedCriticalFilesUnchanged": 6,
+    "remainingTestOwnedProcesses": 0,
+    "cleanupScope": "EXACT_TEST_EXECUTABLE_AND_NATIVE_QUEUE_FIXTURE_COMMAND_IDENTITIES",
+    "existingNativeSessionsResumed": 0,
+    "actualChatGPTWebCalls": 0,
+    "browserWakeTunnelOrRecurringStarts": 0,
+    "installedOrSelectedPackageChanged": false
+  },
+  "limitations": [
+    "Conversation origin and exact hidden token usage remain unverified; pressure is advisory and key-denied/unattributable traffic is excluded",
+    "Retained normal candidate0b4240d1 and protected production do not include this source change",
+    "Genuine two-Web-conversation coding, installed feature qualification and unattended acceptance remain open",
+    "Existing connector429/profile prerequisites were not retried; hosted exact-source CI remains unverified"
+  ],
+  "nextTask": "Review native dispatch preparation for remaining Git/assignment/queue work under shared admission; reuse per-project lease/CAS/journal safeguards. Batch eligible source improvements before another package build."
+}

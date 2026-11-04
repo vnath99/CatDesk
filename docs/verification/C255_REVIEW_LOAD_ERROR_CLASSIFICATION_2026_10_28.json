@@ -1,0 +1,43 @@
+{
+  "installedQualification": "NOT_PERFORMED",
+  "independentReview": "PENDING",
+  "checkpoint": "C255",
+  "sourceParent": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "installedRuntime": "C253_SELECTED_SOURCE_UNCHANGED_BY_C255",
+  "sourceReview": "ROOT_MANUAL_SOURCE_DIFF_AND_LIVE_FAILURE_REVIEW",
+  "milestoneComplete": false,
+  "newReleaseAuthority": false,
+  "productionActions": 0,
+  "reviewMessagesCreated": 0,
+  "productionAcceptance": false,
+  "sourceWorkingPins": [
+    {
+      "sha256": "e420e488ffed4686526ba7aeb724ac754b5f85b4b753f26c601c58daadba61cb",
+      "path": "src/operator_web_cli.rs"
+    }
+  ],
+  "browserActions": 0,
+  "regression": {
+    "zeroMatchInitialProbeRefused": true,
+    "wrappedPlaceholderAcceptanceReproduced": true,
+    "redResultSha256": "d08274c30057c7837ca719cab5ac0e44261dd8a54acfef300490c8c1b34bbd17",
+    "failed": 2,
+    "exitCode": 101,
+    "passed": 1,
+    "tests": 3
+  },
+  "atUtc": "2026-10-28T10:45:46.8990409+00:00",
+  "liveFailure": "C254_DELIVERED_ASSISTANT_LOAD_ERROR_NO_SOURCE_ACCEPTANCE",
+  "qualification": {
+    "terminationFailed": false,
+    "unitResultSha256": "04305dee59d6f7e9d3b7c1cc55a5086146a85fc7099b3c35f474c4a10b372c9e",
+    "exactFinalSourceTested": true,
+    "clippy": "PASS_DENY_WARNINGS",
+    "ignored": 0,
+    "testsPassed": 26,
+    "ownerTimedOut": false,
+    "format": "PASS",
+    "failed": 0,
+    "checksResultSha256": "ceb34797457a977d9ff9d7c408d756c5e6455c9657038abc95af698d43ee4340"
+  }
+}

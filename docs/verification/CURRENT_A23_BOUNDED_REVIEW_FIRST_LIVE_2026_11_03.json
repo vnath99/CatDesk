@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-03T13:28:09.556077+00:00",
+  "classification": "TESTED_CONTROLLED_LIVE_SOURCE_REVIEW_NOT_INSTALLED_CODING_OR_RELEASE_AUTHORITY",
+  "sourceCommit": "a23a52a5fc5cb9bc2d2a5ff64bbd037f92f0a176",
+  "frozenInputPublication": "6ad0ebf7ade78284b6d8a9bd8e19b133f03f88b3",
+  "scope": {
+    "codePaths": 90,
+    "acceptedUnchangedBlobs": 72,
+    "changedExisting": 16,
+    "new": 2,
+    "priorCandidateIdenticalCodeBlobs": 89,
+    "same85RemainingCoreReadBlobs": true
+  },
+  "administrativeClaim": {
+    "existingContractApprovalAndClaimApis": true,
+    "explicitSupersessionRecorded": true,
+    "oldClaimRetainedCancelled": true,
+    "oldNativeFilesChecked": 4754,
+    "oldAccountingRowsPreserved": 582,
+    "newReportOnlyAccountingRows": 1,
+    "originalAbsoluteExpiryPreserved": true,
+    "spentQuotaRefunded": false,
+    "providerThreadStarted": false,
+    "reportAbsent": true,
+    "boundedOwnerSeconds": 25.485,
+    "ownedServerNaturalExit": true
+  },
+  "reviews": [
+    {
+      "reviewNumber": 10,
+      "verdict": "REVIEWED_PARTIAL",
+      "frozenSourceCommit": "a23a52a5fc5cb9bc2d2a5ff64bbd037f92f0a176",
+      "responseSha256": "a5a367e6edcc919b06338a3245329bb3af14f2846ea59a6bc21ce53adbd26909",
+      "exactUserReceipt": true,
+      "completedResponseVerified": true,
+      "coordinatorClosed": true,
+      "matchingCommandLogCounts": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "sourceLogMatchesExistingPrivacyRedactionOfFrozenInputs": true,
+      "rawUnredactedLogClaimed": false,
+      "observedCommandIndexes": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "supportingArtifactReadIndexesStillPending": [
+        4,
+        5
+      ],
+      "allManifestCommandsRead": false
+    },
+    {
+      "reviewNumber": 11,
+      "verdict": "REVIEWED_PARTIAL",
+      "frozenSourceCommit": "a23a52a5fc5cb9bc2d2a5ff64bbd037f92f0a176",
+      "responseSha256": "66884c22f8dd6283ec568bd3d08024945f7497e4e1d71bf533d6a063f87bee6e",
+      "exactUserReceipt": true,
+      "completedResponseVerified": true,
+      "coordinatorClosed": true,
+      "matchingCommandLogCounts": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "sourceLogMatchesExistingPrivacyRedactionOfFrozenInputs": true,
+      "rawUnredactedLogClaimed": false,
+      "observedCommandIndexes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "supportingArtifactReadIndexesStillPending": [],
+      "allManifestCommandsRead": true
+    }
+  ],
+  "firstSmallerDependencyBatch": {
+    "sourceReads": 10,
+    "manifestReads": 1,
+    "allFrozenReadsCorroborated": true,
+    "untruncatedReviewerReportRequired": true
+  },
+  "localPreparationLimit": {
+    "taskTextSizeAssertionBeforeAnySend": true,
+    "correctedLocally": true,
+    "guidanceTaskOmittedTwoSupportingArtifactInstructions": true,
+    "frozenPayloadRegeneratedAfterSend": false,
+    "supportArtifactsCarriedForwardAsPending": true
+  },
+  "context": {
+    "generation": 4,
+    "observedTokenProxy": 52529,
+    "observedToolArgumentTokens": 4039,
+    "observedToolResultTokens": 44507,
+    "pressureAssessment": "UNKNOWN_OR_INCOMPLETE",
+    "coverageKnown": false,
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "duplicateImportChangedLedger": false,
+    "separateCliProcessesReopenedDurableLedger": true,
+    "rawTextPersisted": false
+  },
+  "preservation": {
+    "projectBindingsChanged": false,
+    "originalNativeSessionsChanged": false,
+    "browserAuthenticationChanged": false,
+    "productionExecutableChanged": false,
+    "wakeHostStarted": false,
+    "recurringAutomationEnabled": false,
+    "completedOrUnknownMessagesReplayed": false
+  },
+  "sourceAccepted": false,
+  "producerAuthority": false,
+  "installedTwoWebCodingAccepted": false,
+  "remaining": [
+    "Two omitted supporting artifacts must be genuinely read before cumulative judgment.",
+    "Nine further bounded core batches, two global-scope packets and necessary invariant dependencies remain.",
+    "Freeze final cumulative SOURCE request only after actual coverage; exact report/ACK/snapshot/producer/promotion remain required.",
+    "Canonical/control/Wake authority, actual two-Web edits/native verification, independent Wake and installed persistent recovery remain open.",
+    "Full T-0484 uncertainty/visibility/calibration and later mandatory CD-P7 remain open."
+  ]
+}

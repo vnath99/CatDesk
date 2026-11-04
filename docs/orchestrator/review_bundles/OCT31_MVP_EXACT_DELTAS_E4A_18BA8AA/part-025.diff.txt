@@ -1,0 +1,186 @@
++        let (root, wake) = project_web_target_fixture("login-recovery-selected-lock");
++        let target = bind_project_web_target_locked(
++            &root,
++            &wake,
++            "alpha",
++            "https://chatgpt.com/c/recovery-alpha",
++            None,
++            0,
++        )
++        .unwrap();
++        let dev = root.join(".catdesk/web-development");
++        fs::create_dir(&dev).unwrap();
++        let marker = dev.join("login-active.json");
++        fs::write(&marker, b"preserved interrupted login").unwrap();
++        let selector = root.join(".catdesk/wake-bridge");
++        fs::create_dir(&selector).unwrap();
++        fs::write(
++            selector.join("owner.json"),
++            br#"{"schemaVersion":1,"owner":"independent_v1"}"#,
++        )
++        .unwrap();
++        let registry_path = root.join(".catdesk/projects/projects.json");
++        let config_path = wake.root().join("config.json");
++        let registry = fs::read(&registry_path).unwrap();
++        let config = fs::read(&config_path).unwrap();
++        assert_eq!(
++            crate::wake_protocol_client::wake_root_for_workspace(&root).unwrap_err(),
++            "DEV_LOGIN_CLEANUP_UNVERIFIED"
++        );
++        assert_eq!(
++            operator_read_login_recovery_target(&root, "alpha", &wake).unwrap(),
++            Some(target)
++        );
++        assert_eq!(fs::read(&registry_path).unwrap(), registry);
++        assert_eq!(fs::read(&config_path).unwrap(), config);
++        assert_eq!(fs::read(&marker).unwrap(), b"preserved interrupted login");
++        assert_eq!(
++            crate::wake_protocol_client::wake_root_for_workspace(&root).unwrap_err(),
++            "DEV_LOGIN_CLEANUP_UNVERIFIED"
++        );
++        wake.set_target("alpha", 1, "https://chatgpt.com/c/changed-recovery-alpha")
++            .unwrap();
++        assert_eq!(
++            operator_read_login_recovery_target(&root, "alpha", &wake),
++            Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch)
++        );
++        fs::remove_dir_all(root).unwrap();
++    }
++
+     #[test]
+     fn project_web_target_diagnostics_distinguish_unavailable_and_mismatched_authority() {
+         let (root, wake) = project_web_target_fixture("read-diagnostics");
+diff --git a/src/operator_codex_cli.rs b/src/operator_codex_cli.rs
+index e315f6cc97e845f59ca8e85037cf734cd6352ed1..e809e394918e9675ac21d4af0a5c348d9fd7e2f2 100644
+--- a/src/operator_codex_cli.rs
++++ b/src/operator_codex_cli.rs
+@@ -7,8 +7,15 @@
+ mod queue;
+ mod recovery;
+ 
++pub(crate) use queue::continue_native_queue_selection_prepared;
+ pub(crate) use queue::publish_review_invitation_for_mcp;
+ pub(crate) use queue::read_review_package_for_mcp;
++#[cfg(all(test, windows))]
++pub(crate) use queue::{NativeQueueFixture, native_queue_fixture};
++pub(crate) use queue::{
++    NativeQueueSelection, check_native_queue_selection_prepared, dispatch_native_queue_selection,
++    freeze_native_queue_selection, native_queue_selection_status,
++};
+ 
+ use std::fs;
+ use std::path::{Path, PathBuf};
+diff --git a/src/operator_codex_cli/queue.rs b/src/operator_codex_cli/queue.rs
+index f3efed106db371e6752b18416858d72aafb0e077..e17c6af767f85f11598997d8797d33c7b9790744 100644
+--- a/src/operator_codex_cli/queue.rs
++++ b/src/operator_codex_cli/queue.rs
+@@ -45,10 +45,21 @@ use super::{
+ };
+ 
+ mod advisory;
++mod native_continuation;
++mod native_dispatch;
+ mod operator_review;
++#[cfg(windows)]
++mod owned_native;
+ mod review_invite;
+ mod review_reader;
+ 
++pub(crate) use native_continuation::continue_native_queue_selection_prepared;
++#[cfg(all(test, windows))]
++pub(crate) use native_dispatch::{NativeQueueFixture, native_queue_fixture};
++pub(crate) use native_dispatch::{
++    NativeQueueSelection, check_native_queue_selection_prepared, dispatch_native_queue_selection,
++    freeze_native_queue_selection, native_queue_selection_status,
++};
+ pub(crate) use review_invite::publish_for_mcp as publish_review_invitation_for_mcp;
+ pub(crate) use review_reader::read_for_mcp as read_review_package_for_mcp;
+ 
+@@ -169,6 +180,12 @@ pub(crate) enum QueueAction {
+         expected_thread_id: String,
+     },
+     Dispatch,
++    DispatchTask {
++        scope: CodexScope,
++        task_id: String,
++        expected_binding_sha256: String,
++        expected_request_sha256: Option<String>,
++    },
+     Pause {
+         scope: CodexScope,
+         task_id: String,
+@@ -181,7 +198,7 @@ pub(crate) enum QueueAction {
+ 
+ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
+     let verb = args.get(3).map(String::as_str).ok_or_else(|| {
+-        "CODEX_QUEUE_USAGE: expected preflight, add, status, receipt, review, verify, review-package, review-invite-prepare, advisory-review, operator-review, operator-review-receipt, review-disclosure-grant, review-disclosure-renew, review-disclosure-revoke, profile-bind, workspace-bind-preflight, dispatch, pause, or resume"
++        "CODEX_QUEUE_USAGE: expected preflight, add, status, receipt, review, verify, review-package, review-invite-prepare, advisory-review, operator-review, operator-review-receipt, review-disclosure-grant, review-disclosure-renew, review-disclosure-revoke, profile-bind, workspace-bind-preflight, dispatch, dispatch-task, pause, or resume"
+             .to_string()
+     })?;
+     if !matches!(
+@@ -203,6 +220,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
+             | "profile-bind"
+             | "workspace-bind-preflight"
+             | "dispatch"
++            | "dispatch-task"
+             | "pause"
+             | "resume"
+     ) {
+@@ -228,6 +246,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
+                 | "--expected-profile"
+                 | "--new-profile"
+                 | "--expected-binding-sha256"
++                | "--expected-request-sha256"
+                 | "--confirm-chat-quiescent"
+                 | "--new-workspace"
+                 | "--expected-old-head"
+@@ -247,6 +266,44 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
+         }
+         index += 2;
+     }
++    if verb == "dispatch-task" {
++        let project_id = values
++            .remove("--project-id")
++            .ok_or("CODEX_QUEUE_USAGE: --project-id is required")?;
++        let workspace = PathBuf::from(
++            values
++                .remove("--workspace")
++                .ok_or("CODEX_QUEUE_USAGE: --workspace is required")?,
++        );
++        let task_id = values
++            .remove("--task-id")
++            .ok_or("CODEX_QUEUE_USAGE: --task-id is required")?;
++        let expected_binding_sha256 = values
++            .remove("--expected-binding-sha256")
++            .ok_or("CODEX_QUEUE_USAGE: --expected-binding-sha256 is required")?;
++        let expected_request_sha256 = values.remove("--expected-request-sha256");
++        valid_slug(&project_id)?;
++        valid_slug(&task_id)?;
++        if !workspace.is_absolute()
++            || !valid_sha256_hex(&expected_binding_sha256)
++            || expected_binding_sha256 != expected_binding_sha256.to_ascii_lowercase()
++            || expected_request_sha256
++                .as_ref()
++                .is_some_and(|hash| !valid_sha256_hex(hash) || hash != &hash.to_ascii_lowercase())
++            || !values.is_empty()
++        {
++            return Err("CODEX_QUEUE_USAGE: exact dispatch requires absolute workspace and lowercase binding/request SHA-256".into());
++        }
++        return Ok(QueueAction::DispatchTask {
++            scope: CodexScope {
++                project_id,
++                workspace,
++            },
++            task_id,
++            expected_binding_sha256,
++            expected_request_sha256,
++        });
++    }
+     if matches!(verb, "status" | "dispatch") {
+         if !values.is_empty() {
+             return Err("CODEX_QUEUE_USAGE: status and dispatch take no options".into());
+@@ -638,6 +695,10 @@ struct QueueJob {
+     review_package_sha256: Option<String>,
+     #[serde(default, skip_serializing_if = "Option::is_none")]
+     advisory_outcome_sha256: Option<String>,
++    #[serde(default, skip_serializing_if = "Option::is_none")]

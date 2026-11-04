@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T09:55:00.985522+00:00",
+  "classification": "ACTUAL_SELECTED_DEVELOPMENT_ORDINARY_SENT_WITNESS_AND_UI_DIAGNOSTIC_CHANNEL_QUALIFIED_NOT_TASK_EXECUTION",
+  "sourceCommit": "4237624501681394df824d65d4a936ad8d4d2ca4",
+  "applicationSha256": "cba49d5f2bd2233c7b142fa8b8dda9be5455cd493db4c24faf2f35d567ff2084",
+  "previousHealthVerifiedApplicationSha256": "6f7da692bd40c15c365eff0ba06f7cc8b8cd9511b783eb11ca9b177be99604b0",
+  "packageId": "1.0.0-dev.85-ea24464bfd9bf1caff9f061ef7ff43bc4f4612b0f0ded34e1036afffb1a1bea9",
+  "maximumSeconds": 180,
+  "elapsedSeconds": 101.234,
+  "owner": {
+    "exitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false
+  },
+  "health": {
+    "maximumRuntimeSeconds": 15,
+    "actualSha256": "cba49d5f2bd2233c7b142fa8b8dda9be5455cd493db4c24faf2f35d567ff2084",
+    "unauthorizedStatus": 401,
+    "initializeStatus": 200,
+    "catalogStatus": 200,
+    "toolCount": 79,
+    "registeredProjectsRead": true,
+    "ownerExitCode": 0,
+    "readersClosed": true,
+    "ownedTreeExitProved": true,
+    "endpointClosed": true
+  },
+  "read": {
+    "eventVerified": true,
+    "samePreviouslyVerifiedResponse": true,
+    "responseBytes": 1071,
+    "responseSha256": "76e2740e5e7a4d7a599cb14fd8a8611dd2e5bd8d718e81c4ce01c5a078d089d9",
+    "sourceSnapshotReadPhase": "COMPLETE",
+    "toolDiagnostics": {
+      "basis": "VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT",
+      "busyMarkers": 0,
+      "callMarkers": 0,
+      "countOverflow": false,
+      "errorMarkers": 0,
+      "resultMarkers": 0,
+      "schemaVersion": 1,
+      "scope": "EXACT_USER_EXCHANGE",
+      "selectorCoverage": "KNOWN_MARKERS_ONLY"
+    },
+    "olderTaskContextsOrKeysExported": false
+  },
+  "interpretation": {
+    "newDiagnosticChannelOnActualInstalledBrowser": "PASS",
+    "ordinarySentReceiptWitnessForwarding": "PASS",
+    "knownVisibleMarkersObserved": 0,
+    "zeroMarkersProvesNoToolAttempt": false,
+    "currentUiSelectorCoverageBeyondKnownMarkers": "UNESTABLISHED",
+    "platformRejectionCause": "UNESTABLISHED",
+    "taskCallOutcome": "UNESTABLISHED_NO_REPLAY",
+    "executionReceiptCreated": false,
+    "uiObservationGrantsRetryAuthority": false
+  },
+  "preservation": {
+    "originalCriticalPinsChecked": 5114,
+    "unchangedOriginalPins": 5112,
+    "onlySupportedAuthorityAndSelectionPointersChanged": true,
+    "previousPackageFilesChecked": 7,
+    "previousPackageFilesChanged": 0,
+    "oldAndIntermediateVersionsRetained": true,
+    "newSelectedPackageFilesPinned": 7,
+    "currentForensicPreservationPins": 5121,
+    "priorBaselinesRetained": true,
+    "forensicBaselineIsReleaseAuthority": false,
+    "bindingsHistoriesGrantsDeliveriesQueuesAndNativeSessionsUnchanged": true,
+    "nonUsageConfigurationAndProfileIdentityPreserved": true,
+    "profileState": "PROFILE_QUIESCENT",
+    "hostStopped": true,
+    "newMessagesOrHeldTaskRetries": 0,
+    "officialWakeOrRecurringStarts": 0,
+    "protectedInstallationChanged": false,
+    "newProductionAuthority": false
+  },
+  "initialFailurePreserved": "RECEIPT_TOOL_MARKER_INSTALLED_2026_10_31.json",
+  "sourceFixEvidence": "ORDINARY_SENT_WITNESS_SOURCE_2026_10_31.json",
+  "acceptance": {
+    "installedDevelopmentMetadataChannel": "PASS",
+    "newGenericErrorRetry": "NOT_PERFORMED",
+    "actualTwoWebFullNativeCoding": "OPEN",
+    "currentSourceIndependentProductionAuthority": "OPEN",
+    "normalUnattendedOperation": "NOT_ENABLED"
+  },
+  "nextExecutableTask": "INSPECT_CENTRAL_CATDESK_PENDING_DELIVERY_AND_EXISTING_READONLY_RECONCILIATION_ELIGIBILITY_WITHOUT_REPLAY",
+  "operatorActionRequiredNow": false,
+  "goal": "ACTIVE"
+}

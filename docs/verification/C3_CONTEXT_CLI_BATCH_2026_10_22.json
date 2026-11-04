@@ -1,0 +1,333 @@
+{
+  "recordedUtc": "2026-10-23T00:38:52.1700958Z",
+  "task": "C3-CONTEXT-CLI-INDEPENDENCE-AND-ATOMIC-IMPORT",
+  "branch": "codex/web-rollover-oct17",
+  "baseHead": "388b84b3ad20735f2b45da38ee408e33bf87a504",
+  "sourceFiles": [
+    {
+      "path": "src/operator_web_cli.rs",
+      "sha256": "7a3e798119fba54a663d48e75fa632c976ecc8a1f55e53b1fa6bed3be00dec21"
+    },
+    {
+      "path": "src/web_development_tests.rs",
+      "sha256": "0fdc777720f8145d6e5cd439d7f3e8a3cdad146460331838665e656bb8b2d72b"
+    },
+    {
+      "path": "src/web_conversation_context.rs",
+      "sha256": "0e48c64cf68459352be434c1091a8747c2f6ac31e058659bb67d1f37b76b061d"
+    }
+  ],
+  "classification": "SOURCE_TESTED_NORMAL_RELEASE_SELECTED_REFUSALS_AND_SINGLE_LIVE_CONTEXT_READ",
+  "defect": "A rejected multi-event context import could count earlier events; older CLI configure/observe could wait on a shared ledger lock",
+  "reproduced": {
+    "beforeFix": "FAIL rejected context import changed state",
+    "fixtureOnly": true,
+    "logSha256": "06dd73ba976f45689d501e8e062447cf04e7b069f682f1e39558c5894860c5ad",
+    "initialSandboxAttempt": "Fixture initialization refused CONFIG_ROOT_UNAVAILABLE before reaching regression; retained separately",
+    "normalAccessRerun": "Reached and failed the actual rejected-import state assertion",
+    "productionMutation": false
+  },
+  "implementation": {
+    "configure": "Reuse existing exact-target context control",
+    "observe": "Existing paired target/registry guard and nonblocking context store",
+    "batch": "Validate metadata, apply revisions in memory, replace one ledger once on success",
+    "maximumEvents": 512,
+    "invalidAndConflictingBatchesWriteNoEvents": true,
+    "singleEventRulesSharedAndPreserved": true,
+    "idempotentReplayWritesNothing": true,
+    "storedSchemaChanged": false,
+    "browserOrHostStartRequired": false,
+    "callerOriginAuthenticated": false
+  },
+  "tests": {
+    "contextStorePassed": 18,
+    "operatorWebCliPassed": 12,
+    "webIntegrationPassed": 1,
+    "checks": [
+      {
+        "label": "context-store-tests",
+        "startedUtc": "2026-10-23T00:14:51.9316705Z",
+        "finishedUtc": "2026-10-23T00:15:33.5216634Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "web_conversation_context::tests::",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "8c77e99d5ed770e4baef14eb634ac2696c913dffb1524d0bda6879f3200475ca"
+      },
+      {
+        "label": "operator-web-cli-tests",
+        "startedUtc": "2026-10-23T00:15:33.5515529Z",
+        "finishedUtc": "2026-10-23T00:15:34.0680803Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "operator_facade::web::tests",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "76d0d6cd68ab03fa04f32e404e7c2f62d2722425b5db88b805732b175b4e4344"
+      },
+      {
+        "label": "context-cli-batch-regression",
+        "startedUtc": "2026-10-23T00:15:34.0799343Z",
+        "finishedUtc": "2026-10-23T00:15:56.3259132Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "web_development_tests::central_web_work_requests_are_independent_durable_and_generation_bound",
+          "--",
+          "--exact",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "2b820dba498a788c8454d649990cf1b91583782230f813b575a3527cecf57940"
+      },
+      {
+        "label": "strict-clippy",
+        "startedUtc": "2026-10-23T00:15:56.3348804Z",
+        "finishedUtc": "2026-10-23T00:16:19.3209595Z",
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exitCode": 0,
+        "logSha256": "7ec046478ae46736679d322d85a36c2c2d56df6fe2357eebc752d8a88b84b1f2"
+      },
+      {
+        "label": "format-check",
+        "startedUtc": "2026-10-23T00:16:19.3292498Z",
+        "finishedUtc": "2026-10-23T00:16:21.87997Z",
+        "arguments": [
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "maximumSeconds": 600,
+    "coverage": [
+      "Late invalid event and late conflicting revision preserve complete control-tree hashes",
+      "Empty, oversized and internally conflicting batches preserve ledger bytes",
+      "Read-only store refuses batch mutation",
+      "CLI configure and observe promptly refuse held metadata lock",
+      "Sibling registry status remains available during contention",
+      "Successful two-event CLI import, hash-only output and exact replay",
+      "Sibling context unchanged; existing three-project queue/target/rollover checks retained"
+    ]
+  },
+  "normalApp": {
+    "baseHead": "388b84b3ad20735f2b45da38ee408e33bf87a504",
+    "sourceState": "TESTED_WORKING_TREE_CANDIDATE_NOT_COMMIT",
+    "profile": "NORMAL_DEBUG_APP_NO_DEV_DEPENDENCIES",
+    "finishedUtc": "2026-10-23T00:17:03.429476Z",
+    "buildExitCode": 0,
+    "buildMaximumSeconds": 240,
+    "imageSha256": "5b0fde0e6dce70ab2fc88f12ebdab414f105f562137fa541585ac919a7349fc4",
+    "imageBytes": 67003392,
+    "buildLogSha256": "564d794317952f50e4c8760835353f9c0a2d957995c77aca8700c4617c3cad3d",
+    "negativeObservedUtc": "2026-10-23T00:17:41.0476904Z",
+    "negativeMaximumSeconds": 45,
+    "negativeSeconds": 10.5987681,
+    "cases": [
+      {
+        "case": "configure-ledger-busy",
+        "errorCode": "WEB_CONTEXT_BUSY",
+        "exitCode": 2,
+        "retainedRootExited": true,
+        "inputNotEchoed": true
+      },
+      {
+        "case": "observe-ledger-busy",
+        "errorCode": "WEB_CONTEXT_BUSY",
+        "exitCode": 2,
+        "retainedRootExited": true,
+        "inputNotEchoed": true
+      },
+      {
+        "case": "invalid-late-event-before-lock",
+        "errorCode": "WEB_CONTEXT_EVENT_INVALID",
+        "exitCode": 2,
+        "retainedRootExited": true,
+        "inputNotEchoed": true
+      }
+    ],
+    "stateRecordsExact": 134,
+    "stateChanges": 0,
+    "newState": 0,
+    "ownedProcesses": 0,
+    "eventsQueued": 0,
+    "browserStarted": false,
+    "wakeHostStarted": false
+  },
+  "acceptance": {
+    "source": "PASS",
+    "normalDebugNegativeRealRoot": "PASS",
+    "positiveBatchImport": "DISPOSABLE_THREE_PROJECT_FIXTURE_ONLY",
+    "normalRelease": "PASS",
+    "selectedDevelopment": "PASS_CONTEXT_REFUSALS_AND_ONE_READ_ONLY_BROWSER_CAPTURE",
+    "protectedProduction": "OPEN",
+    "fullMultiProjectMvp": "PARTIAL"
+  },
+  "preserved": {
+    "originalBindingsAndHistory": 5,
+    "selectedPackageChanged": true,
+    "nativeSessionAction": "NONE",
+    "wakeControls": "BOTH_STOPPED",
+    "completedCanaryReplayed": false,
+    "connectorCalls": 0,
+    "messagesSent": 0,
+    "recurringStarts": 0,
+    "protectedProductionChanged": false,
+    "browserActions": "ONE_READ_ONLY_CONTEXT_CAPTURE_NO_SEND"
+  },
+  "blockers": [
+    "Modified historical-checkpoint review held: automatic approval review requires exact revised-payload approval; broad bounded-test exception granted",
+    "Connector last attempt failed backend transport without HTTP status; prior explicit status429, recovery unproved",
+    "Legacy primary quarantine retains missing source USER proof",
+    "Current source CI unverified"
+  ],
+  "nextTask": "After exact revised-payload approval, run prepared historical native checkpoint review once under 180s foreground and 400s outer bounds; preserve active native owner and unsent candidate history",
+  "publication": {
+    "observedUtc": "2026-10-23T00:19:37.3539423Z",
+    "status": "PUSHED_EXACT_REMOTE_MATCH",
+    "sourceCommit": "c46680002ab9aa81d78dff694652340ee832e051",
+    "remoteSha": "c46680002ab9aa81d78dff694652340ee832e051",
+    "branch": "codex/web-rollover-oct17",
+    "remote": "https://github.com/vnath99/CatDesk",
+    "sourceFileHashesMatch": true,
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED",
+    "force": false,
+    "visibilityChange": false
+  },
+  "normalReleaseSelected": {
+    "sourceCommit": "10a874bb48a39f7f8b81b76f1f238aeb6055f7c0",
+    "sourceTree": "61df1a45ef38a8b1b69a2983c704045414439a9f",
+    "startedUtc": "2026-10-23T00:20:18.2326078Z",
+    "finishedUtc": "2026-10-23T00:26:59.8898329Z",
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+    "maximumSeconds": 600,
+    "exitCode": 0,
+    "imageSha256": "a35b6af645f00a57e8a36729f4070b2677ea825359420627541f8fb7e8f26c45",
+    "imageBytes": 33374208,
+    "hostProfile": "NORMAL_RELEASE_WAKE_DEFAULT_FEATURES_NO_TEST_SUPPORT",
+    "selectedUtc": "2026-10-23T00:27:27.0674471Z",
+    "selectedPackage": "1.0.0-dev.85-2833f16d9978b23eb0f5fae24f000f7d4bc3289b1c2128c15a4e5d55ce70a5a4",
+    "previousPackagePreserved": true,
+    "selectionSeconds": 3.6855521,
+    "metadataRecordsChecked": 134,
+    "unrelatedMetadataExact": 132,
+    "allowedPointerChanges": 2,
+    "unexpectedChanges": 0,
+    "newState": 0,
+    "selectedFiveProjectViewPassed": true,
+    "scopedProcesses": 0,
+    "negativeObservedUtc": "2026-10-23T00:27:35.9332193Z",
+    "negativeSeconds": 2.064481,
+    "negativeMaximumSeconds": 45,
+    "negativeCases": [
+      {
+        "case": "configure-ledger-busy",
+        "errorCode": "WEB_CONTEXT_BUSY",
+        "exitCode": 2,
+        "retainedRootExited": true,
+        "inputNotEchoed": true
+      },
+      {
+        "case": "observe-ledger-busy",
+        "errorCode": "WEB_CONTEXT_BUSY",
+        "exitCode": 2,
+        "retainedRootExited": true,
+        "inputNotEchoed": true
+      },
+      {
+        "case": "invalid-late-event-before-lock",
+        "errorCode": "WEB_CONTEXT_EVENT_INVALID",
+        "exitCode": 2,
+        "retainedRootExited": true,
+        "inputNotEchoed": true
+      }
+    ],
+    "negativeRecordsExact": 134,
+    "negativeStateChanges": 0,
+    "negativeNewState": 0
+  },
+  "singleLiveContextCapture": {
+    "observedUtc": "2026-10-23T00:30:16.1630709Z",
+    "projects": 1,
+    "captured": true,
+    "durationSeconds": 52.9,
+    "readerMaximumSeconds": 240,
+    "outerMaximumSeconds": 300,
+    "outerExitCode": 0,
+    "targetBindingVerified": true,
+    "existingAuthenticatedProfileReused": true,
+    "advisoryEstimateRecorded": true,
+    "fullHistoryCoverage": "UNKNOWN",
+    "rawTextPersisted": false,
+    "userMessageSent": false,
+    "protectedFilesChecked": 86,
+    "protectedChanges": 0,
+    "contextHistoryChanges": 0,
+    "scopedProcesses": 0,
+    "postJobScopedProcesses": 0,
+    "bothControls": "STOPPED",
+    "wakeHostStarted": false,
+    "recurringStarted": false,
+    "canaryReplayed": false,
+    "protectedProductionAccepted": false,
+    "fullMultiProjectAcceptance": false,
+    "retainedPreparationFailure": "Copied private helper referenced earlier manifest; stopped before browser. Corrected preflight, then one actual capture"
+  },
+  "naturalReviewHold": {
+    "boundedTestAuthorization": "HUMAN_GRANTED_LIMITED_ACTIVELY_MONITORED_TESTS",
+    "currentNativeOwner": "ACTIVE_UNINTERRUPTED",
+    "originalCandidate": "PRESERVED_UNSENT_SOURCE_ADVANCED",
+    "replacementCandidate": "HISTORICAL_COMPLETED_CHECKPOINT_WITH_IMMUTABLE_OWNER_AND_TEST_EVIDENCE",
+    "replacementPreflight": "PASS_READ_ONLY",
+    "externalExecution": "REJECTED_BY_AUTOMATIC_APPROVAL_REVIEW_BEFORE_PROCESS_START",
+    "rejectionReason": "Revised payload requires exact approval",
+    "operatorAction": "Approve revised review payload in corrected pending card",
+    "attemptMarker": false,
+    "queued": 0,
+    "hostStarts": 0,
+    "messagesSent": 0,
+    "naturalReviewProved": false
+  },
+  "qualificationPublication": {
+    "observedUtc": "2026-10-23T00:39:38.1113061Z",
+    "status": "PUSHED_EXACT_REMOTE_MATCH",
+    "documentationCommit": "43a58ed42f0e0be963224236a34996e2aa11982b",
+    "remoteSha": "43a58ed42f0e0be963224236a34996e2aa11982b",
+    "branch": "codex/web-rollover-oct17",
+    "remote": "https://github.com/vnath99/CatDesk",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED",
+    "force": false,
+    "visibilityChange": false
+  }
+}

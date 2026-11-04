@@ -14,7 +14,7 @@ use crate::{
         CiJsonPage, MAX_PAGE_BYTES, MAX_RUNS, PER_PAGE, compare_ci_claim_to_independent_json,
         validate_claim,
     },
-    install_broker_policy::PolicyVerifiedApprovalV1,
+    install_broker_policy::{PolicyCheckedOfflinePairV2, PolicyVerifiedApprovalV1},
 };
 use serde::Deserialize;
 use std::{
@@ -446,7 +446,20 @@ fn fetch_with<T: CiTransport>(ci: &ExactCiV1, transport: &mut T, deadline: Insta
 /// exits after its refused submission; this function does not assume a stalled
 /// native call can be canceled or joined safely.
 pub(crate) fn require_broker_owned_exact_ci(approved: &PolicyVerifiedApprovalV1<'_>) -> Result<()> {
-    let ci = approved.verified().payload().ci.clone();
+    require_exact_claim(approved.verified().payload().ci.clone())
+}
+
+/// Reuses the same fixed origin, deadline and independent comparison for V2.
+/// A supplied JSON CI tuple cannot call this protected-policy entry point.
+pub(crate) fn require_broker_owned_offline_exact_ci(
+    checked: &PolicyCheckedOfflinePairV2<'_>,
+) -> Result<()> {
+    checked.revalidate()?;
+    require_exact_claim(checked.checked().approval().ci.clone())?;
+    checked.revalidate()
+}
+
+fn require_exact_claim(ci: ExactCiV1) -> Result<()> {
     validate_claim(&ci).map_err(str::to_owned)?;
     let permit = NetworkWorkerPermit::acquire()?;
     let deadline = Instant::now() + TOTAL_DEADLINE;

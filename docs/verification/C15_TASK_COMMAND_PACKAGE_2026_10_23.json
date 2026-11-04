@@ -1,0 +1,210 @@
+{
+  "recordedUtc": "2026-10-23T06:57:21.8152312Z",
+  "localDate": "2026-10-23",
+  "task": "C15-SELECTED-TASK-COMMAND-PACKAGE",
+  "classification": "SELECTED_STOPPED_DEVELOPMENT_IMAGE_LOCAL_MCP_AND_NATIVE_COMMAND_FIXTURES",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "4beddb28919e704bdbbc3bfc8ef96570ac6de1c8",
+  "sourceTree": "4db0d8928a7fd4f275448c25638a7ab709462874",
+  "sourceFiles": [
+    {
+      "path": "src/project_mcp.rs",
+      "sha256": "e663b71f3fa3efd1d31ae2a11474f7de0a97a0096682220c5df1cfb1e4069f63"
+    },
+    {
+      "path": "src/main.rs",
+      "sha256": "eecf0517779b50a01ce806cce06441f26dab0ea1cdf91ac9cac1311be2caa6c2"
+    },
+    {
+      "path": "src/project_mcp_task.rs",
+      "sha256": "5f6146e7f134d2eedf723f3c4423f29571166be7e7af2d7a4ecbeab57f8a04fe"
+    },
+    {
+      "path": "src/project_task_command.rs",
+      "sha256": "5a82b4eddf495098ef85d94cc8c2a192f33a3423e8200a21aaf1c37de1d16c2b"
+    }
+  ],
+  "newRuntimeSourceChanges": [],
+  "includedStages": [
+    "C9_HISTORY_NO_EVICTION",
+    "C10_FAIR_CREATION_ADMISSION",
+    "C11_IMMUTABLE_PROJECT_MCP",
+    "C12_ASSIGNED_LINKED_WORKTREE_PATCH_TOOLS",
+    "C14_FIXED_NATIVE_SANDBOX_COMMAND_PROFILES"
+  ],
+  "releaseBuild": {
+    "startedUtc": "2026-10-23T06:48:37.1522315Z",
+    "finishedUtc": "2026-10-23T06:54:23.0718256Z",
+    "sourceCommit": "4beddb28919e704bdbbc3bfc8ef96570ac6de1c8",
+    "sourceTree": "4db0d8928a7fd4f275448c25638a7ab709462874",
+    "sourceFiles": [
+      {
+        "path": "src/project_mcp.rs",
+        "sha256": "e663b71f3fa3efd1d31ae2a11474f7de0a97a0096682220c5df1cfb1e4069f63"
+      },
+      {
+        "path": "src/main.rs",
+        "sha256": "eecf0517779b50a01ce806cce06441f26dab0ea1cdf91ac9cac1311be2caa6c2"
+      },
+      {
+        "path": "src/project_mcp_task.rs",
+        "sha256": "5f6146e7f134d2eedf723f3c4423f29571166be7e7af2d7a4ecbeab57f8a04fe"
+      },
+      {
+        "path": "src/project_task_command.rs",
+        "sha256": "5a82b4eddf495098ef85d94cc8c2a192f33a3423e8200a21aaf1c37de1d16c2b"
+      }
+    ],
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+    "exitCode": 0,
+    "maximumSeconds": 600,
+    "packageSelectionChanged": false,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "imageSha256": "7476b26e6ec52cd90ef95bc263774f4cc8cbc1bf46df1eab3b3294c020594e8f",
+    "imageBytes": 33949696,
+    "buildLogSha256": "0bebacd5cde8d54cf2f0785e4c3814e3aa59f50a047363dec1b5c65bd55633fc"
+  },
+  "hostBuild": {
+    "startedUtc": "2026-10-23T06:54:30.8500649Z",
+    "finishedUtc": "2026-10-23T06:54:32.0011156Z",
+    "sourceCommit": "4beddb28919e704bdbbc3bfc8ef96570ac6de1c8",
+    "profile": "NORMAL_RELEASE_WAKE_DEFAULT_FEATURES_NO_TEST_SUPPORT",
+    "exitCode": 0,
+    "imageSha256": "75c49dc855baf5aeb272fbffc4a25ada5e91786e1dd3888bbd41388d4a33fa84",
+    "imageBytes": 2034176
+  },
+  "artifacts": [
+    {
+      "name": "CatDeskBinagotchy.exe",
+      "sha256": "7476b26e6ec52cd90ef95bc263774f4cc8cbc1bf46df1eab3b3294c020594e8f",
+      "bytes": 33949696
+    },
+    {
+      "name": "CatDeskWakeHost.exe",
+      "sha256": "75c49dc855baf5aeb272fbffc4a25ada5e91786e1dd3888bbd41388d4a33fa84",
+      "bytes": 2034176
+    },
+    {
+      "name": "adapter.py",
+      "sha256": "f742b36270dc10f34c47982d3f9fe811386f29d92b3eeb20ffb4d21cc551bdfb",
+      "bytes": 46664
+    },
+    {
+      "name": "wake_bridge.py",
+      "sha256": "7c519de51c29b1a530fb5541f7d2367edb23c8e864271115384d6e3d50dfed7e",
+      "bytes": 157819
+    }
+  ],
+  "foregroundGate": {
+    "classification": "REUSED_EXACT_IMAGE_FOREGROUND_GATE",
+    "imageSha256": "75c49dc855baf5aeb272fbffc4a25ada5e91786e1dd3888bbd41388d4a33fa84",
+    "priorExactImageGateReused": true,
+    "newHostProcessStarted": false
+  },
+  "selection": {
+    "finishedUtc": "2026-10-23T06:54:43.4197225Z",
+    "profile": "GUARDED_UNPROTECTED_DEVELOPMENT_UPDATE_PACKAGE",
+    "previousPackage": "1.0.0-dev.85-38e15902a52caa75ef1f276da1fe69b7dd473326fd712221d31dad3f3936dd72",
+    "selectedPackage": "1.0.0-dev.85-e6471182556f20d49604edfe7dec99f24b34c8e324ccac58437666c730402d3d",
+    "elapsedSeconds": 3.7081104,
+    "fiveOriginalRowsPaired": true,
+    "recordsChecked": 139,
+    "allowedPackagePointerChanges": 2,
+    "unchangedOtherRecords": 137,
+    "unexpectedChanges": 0,
+    "newStateRecords": 0,
+    "priorPackagePreserved": true,
+    "browserProfileTouched": false,
+    "wakeTargetsChanged": false,
+    "productionModified": false,
+    "ownedProcesses": 0,
+    "desired": "STOPPED"
+  },
+  "selectedImageHttp": {
+    "startedUtc": "2026-10-23T06:54:49.0838214Z",
+    "finishedUtc": "2026-10-23T06:56:05.3296825Z",
+    "classification": "SELECTED_LOCAL_MCP_ASSIGNED_LINKED_WORKTREE_COMMAND_VERIFICATION",
+    "sourceCommit": "4beddb28919e704bdbbc3bfc8ef96570ac6de1c8",
+    "imageSha256": "7476b26e6ec52cd90ef95bc263774f4cc8cbc1bf46df1eab3b3294c020594e8f",
+    "maximumSeconds": 180,
+    "listenerMaximumSeconds": 60,
+    "checks": [
+      "two-normal-process-parallel-own-root-reads",
+      "two-normal-process-parallel-contract-patches-original-roots-unchanged",
+      "two-normal-process-parallel-native-sandbox-verification-with-outside-writes-refused",
+      "recorded-patch-call-refused-without-replay",
+      "wrong-bearer-401",
+      "wrong-project-witness-refused",
+      "sibling-path-write-and-command-refused",
+      "simulated-independent-writer-progress",
+      "both-listeners-natural-deadline-exit-zero",
+      "normal-process-restart-exact-contract-recorded-call-refused-exit-zero"
+    ],
+    "failure": null,
+    "cleanupProved": true,
+    "ownedProcesses": 0,
+    "liveControlProcesses": 0,
+    "protectedRecords": 139,
+    "changedRecords": 0,
+    "newRecords": 0,
+    "actualWebCalls": false,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "messagesSent": 0,
+    "packageSelectionChanged": false,
+    "recurringStarted": false,
+    "nativeSessionsChanged": false,
+    "completedCanaryReplayed": false,
+    "elapsedSeconds": 76.25,
+    "naturalLifetimesSeconds": [
+      60,
+      60,
+      10
+    ],
+    "exitCodes": [
+      0,
+      0,
+      0
+    ],
+    "containment": {
+      "ExitCode": 0,
+      "TimedOut": false,
+      "TerminationFailed": false
+    }
+  },
+  "reusedSourceVerification": {
+    "evidence": "C14_TASK_COMMAND_VERIFICATION_2026_10_23.json",
+    "distinctTests": 28,
+    "executions": 29,
+    "strictClippy": "PASS",
+    "format": "PASS",
+    "rerunThisStage": false
+  },
+  "external": {
+    "connectorLatestObservationUtc": "2026-10-23T06:42:18Z",
+    "connectorLatestHttpStatus": 429,
+    "connectorCallsThisStage": 0,
+    "retry": false,
+    "tunnelChanged": false,
+    "settingsChanged": false,
+    "browserStarted": false,
+    "wakeHostWorkerStarted": false,
+    "recurringStarted": false,
+    "messagesSent": 0,
+    "nativeSessionsChanged": false,
+    "completedCanaryReplayed": false,
+    "protectedProductionChanged": false
+  },
+  "acceptance": {
+    "matchedDevelopmentPackage": "SELECTED_STOPPED_V51",
+    "selectedImageParallelPatchCommandAndRestart": "PASS_LOCAL_DISPOSABLE_TASKS",
+    "actualWebB": "OPEN",
+    "actualBrowserGHI": "OPEN",
+    "protectedProduction": "OPEN",
+    "unattended": "NOT_ACTIVATED",
+    "fullMilestone": "PARTIAL"
+  },
+  "commandScope": "Operator fixed profiles retain existing native broad read posture; writes limited to assigned worktree except control metadata. File tools remain project scoped. Exit0 is not task completion.",
+  "nextTask": "Add explicit structured Git state and important decisions to new handoffs while preserving old serialized messages/digests; pursue actual Web B and fresh browser G/H/I without replaying completed canaries."
+}

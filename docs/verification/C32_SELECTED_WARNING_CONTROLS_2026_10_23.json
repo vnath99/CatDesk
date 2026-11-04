@@ -1,0 +1,190 @@
+{
+  "recordedUtc": "2026-10-23T13:36:49.4306498Z",
+  "localDate": "2026-10-23",
+  "task": "C32-NORMAL-WARNING-AND-TARGET-READ-QUALIFICATION",
+  "classification": "SELECTED_STOPPED_UNPROTECTED_DEVELOPMENT_SAVED_CONTEXT_CONTROLS",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "5973f1437953ed57a591bc70927631e96c5f6016",
+  "sourceTree": "70ff61689cbf5c62f42e16cb3edab42a0df4bee9",
+  "sourceFiles": [
+    {
+      "path": "scripts/wake_bridge.py",
+      "sha256": "bd3331a475096efa392eabc14eb35a49301790c735cb16d39238ae66f552ad00"
+    },
+    {
+      "path": "src/binagotchy_cli.rs",
+      "sha256": "50e3312989fa6aac3a6e698795bb42c8255ae8c2e5289a9a4ccfee0aa726196f"
+    },
+    {
+      "path": "src/main.rs",
+      "sha256": "eecf0517779b50a01ce806cce06441f26dab0ea1cdf91ac9cac1311be2caa6c2"
+    },
+    {
+      "path": "src/mcp.rs",
+      "sha256": "351c4ccdf2c6862ecd62604968e2cbebf4c2da645673af05a7fea62d1c396d88"
+    },
+    {
+      "path": "src/operator_web_auto.rs",
+      "sha256": "84f9918642d768050243232d0828b0a3b54809bd31891818165f2ac80e4d2736"
+    },
+    {
+      "path": "src/operator_web_cli.rs",
+      "sha256": "3300045ae4366682638810f54c05c0a8e2015447189e37871e0a9c46fd231798"
+    },
+    {
+      "path": "src/operator_web_rollover.rs",
+      "sha256": "6192fb00021a83b603b4fab88883f8cabffdec114f48ba201eaa1fc927618550"
+    },
+    {
+      "path": "src/project_mcp_task.rs",
+      "sha256": "5f6146e7f134d2eedf723f3c4423f29571166be7e7af2d7a4ecbeab57f8a04fe"
+    },
+    {
+      "path": "src/project_mcp.rs",
+      "sha256": "e663b71f3fa3efd1d31ae2a11474f7de0a97a0096682220c5df1cfb1e4069f63"
+    },
+    {
+      "path": "src/project_task_command.rs",
+      "sha256": "5a82b4eddf495098ef85d94cc8c2a192f33a3423e8200a21aaf1c37de1d16c2b"
+    },
+    {
+      "path": "src/web_context_control.rs",
+      "sha256": "dadce083e8fd2ac5d2e8d391faa5c287d04a41e1c7582ed94ab7bf86f9688870"
+    },
+    {
+      "path": "src/web_conversation_context.rs",
+      "sha256": "b460fad74a528629a511b0616d4d62648eb775cbe71d9ac7b35226319989665c"
+    },
+    {
+      "path": "src/web_development_tests.rs",
+      "sha256": "0fa8498a4612cebf7889d616ea280f5a65cea7b73ec5baedb6dcfe610a8190e1"
+    },
+    {
+      "path": "tests/test_wake_bridge_current_dom.py",
+      "sha256": "34c2b623f54c6ea3cb76ac677b391f19d9b302884c25c84301975a46d9ded411"
+    },
+    {
+      "path": "tests/test_wake_bridge.py",
+      "sha256": "bebd6d8fb4b6a6e3ea2a17944c82e6dfdc967dfa6c5b0d8683375abb4cc8b02c"
+    },
+    {
+      "path": "wake/adapter.py",
+      "sha256": "854dde9301d98466f1c6fd7b34d46348d0a44e7ae0b2903a31033b8552adc809"
+    },
+    {
+      "path": "wake/src/runtime.rs",
+      "sha256": "7f117ae02fa1519017f9fd24b85d073f898ee2283e96561cc6fa35fd309523bd"
+    },
+    {
+      "path": "wake/tests/test_new_conversation.py",
+      "sha256": "7e3688b46ce78aaf568624b06ea8be889c79465936d1d70f3f21ad8c0d0b6cb4"
+    }
+  ],
+  "normalApplication": {
+    "startedUtc": "2026-10-23T13:25:57.5402731Z",
+    "finishedUtc": "2026-10-23T13:31:22.9834081Z",
+    "exitCode": 0,
+    "imageBytes": 34043904,
+    "elapsedSeconds": 325.443135,
+    "imageSha256": "3cf82b4a8f0c577f68f833f1cd4ebaa96ccbcc618410f33174b1d938a44ab67c",
+    "maximumSeconds": 600,
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES"
+  },
+  "normalHost": {
+    "startedUtc": "2026-10-23T13:32:17.8428053Z",
+    "finishedUtc": "2026-10-23T13:32:18.8685284Z",
+    "deliveryProved": false,
+    "ownerEofGate": "REUSED_EXACT_C27_IMAGE_PROOF",
+    "exitCode": 0,
+    "newGateHostProcessStarted": false,
+    "imageSha256": "c5a9279f7f0a23fd6b84d0d44ed5fabc45b4045861cf0b6b300841835de369c9",
+    "profile": "NORMAL_RELEASE_WAKE_DEFAULT_FEATURES_NO_TEST_SUPPORT"
+  },
+  "files": [
+    {
+      "name": "CatDeskBinagotchy.exe",
+      "sha256": "3cf82b4a8f0c577f68f833f1cd4ebaa96ccbcc618410f33174b1d938a44ab67c",
+      "bytes": 34043904
+    },
+    {
+      "name": "CatDeskWakeHost.exe",
+      "sha256": "c5a9279f7f0a23fd6b84d0d44ed5fabc45b4045861cf0b6b300841835de369c9",
+      "bytes": 2041344
+    },
+    {
+      "name": "adapter.py",
+      "sha256": "854dde9301d98466f1c6fd7b34d46348d0a44e7ae0b2903a31033b8552adc809",
+      "bytes": 47073
+    },
+    {
+      "name": "wake_bridge.py",
+      "sha256": "bd3331a475096efa392eabc14eb35a49301790c735cb16d39238ae66f552ad00",
+      "bytes": 169407
+    }
+  ],
+  "selection": {
+    "atUtc": "2026-10-23T13:32:51.4588144Z",
+    "unexpectedChanges": 0,
+    "protectedRecordsExact": 197,
+    "packagePointerChanges": 2,
+    "productionChanged": false,
+    "servicesStarted": 0,
+    "recordsChecked": 199,
+    "recurringStarts": 0,
+    "elapsedSeconds": 3.8025443,
+    "previousPackage": "1.0.0-dev.85-f6688c48555f403f479c85cd9f97d0fd1663fc71dd086b52754cee91afc115de",
+    "newRecords": 0,
+    "profilePreserved": true,
+    "previousPackagePreserved": true,
+    "ownedProcesses": 0,
+    "selectedPackage": "1.0.0-dev.85-48869f7b22627d5e385451d5005f728388ab45810a0348eea8e644f335c33257",
+    "originalFiveBindingsAndHistoryPreserved": true
+  },
+  "controlledQualification": {
+    "browserStarted": false,
+    "completedCanaryReplayed": false,
+    "coverage": "UNKNOWN_OR_INCOMPLETE",
+    "automaticObservationEnabled": false,
+    "warningReached": true,
+    "allTargetsPaired": true,
+    "finishedUtc": "2026-10-23T13:33:03.1682763Z",
+    "oldAttentionStatusByteExact": true,
+    "wakeWorkerStarted": false,
+    "nativeSessionActions": 0,
+    "productionChanged": false,
+    "exactProjectTargetReads": 9,
+    "originalPolicyRestoredByteExact": true,
+    "messagesSent": 0,
+    "newRecords": 0,
+    "temporaryWarningTokens": 1000,
+    "maximumSeconds": 180,
+    "startedUtc": "2026-10-23T13:32:57.2760868Z",
+    "recordsChecked": 199,
+    "ownedProcesses": 0,
+    "rolloverTriggerTokens": 72000,
+    "changedRecords": 0,
+    "currentBrowserSnapshotRequested": false,
+    "automaticRolloverEnabled": false,
+    "nearCapacity": false,
+    "bindingChanges": 0,
+    "savedObservedEstimateTokens": 1741,
+    "elapsedSeconds": 5.8905965,
+    "centralWarningRenderedOnce": true,
+    "warningGeneration": 3
+  },
+  "acceptance": {
+    "ci": "UNVERIFIED",
+    "selectedStoppedDevelopment": "PASS",
+    "actualConcurrentWebMcpCoding": "OPEN_CONNECTOR_DEPENDENCY",
+    "selectedDiagnosedReads": "PASS",
+    "unattended": "NOT_ACTIVATED",
+    "monitoringThroughRollover": "OPEN",
+    "normalArtifacts": "PASS",
+    "savedContextWarningControls": "PASS",
+    "currentAutomaticBrowserMonitor": "OPEN_C29_PARTIAL_NO_NEW_CYCLE",
+    "milestone": "PARTIAL",
+    "protectedInstalledProduction": "NOT_ACCEPTED"
+  },
+  "nextExecutableTask": "Qualify one fresh bounded scoped monitor cycle on the new selected image with sufficient time for existing shared-browser retry, while preserving prior completed observations and unknown journals; additional paired-commit crash phases and actual Web MCP coding remain separate.",
+  "operatorAction": "NONE_FOR_INDEPENDENTLY_ELIGIBLE_TESTS"
+}

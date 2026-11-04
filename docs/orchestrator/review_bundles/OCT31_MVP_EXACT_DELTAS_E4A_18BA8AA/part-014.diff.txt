@@ -1,0 +1,120 @@
+                 "[data-testid^='conversation-turn-'], article[id^='conversation-turn-'], " +
+@@ -1383,9 +1617,11 @@ class CdpSink:
+                 Boolean(latestUser.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING);
+             const inWakeExchange = element =>
+                 Boolean(element && (latestUser.contains(element) || followsLatestUser(element)));
+-            if (turnContainers.filter(turn => followsLatestUser(turn)).length > 1) return 'ambiguous-user';
++            const turnsAfterWake = turnContainers.filter(turn => followsLatestUser(turn));
++            if (turnsAfterWake.length > 1) return 'ambiguous-user';
++            {RESPONSE_ASSISTANT_SCOPE}
+             const rawTimeouts = Array.from(document.querySelectorAll('div, span, p'))
+-                .filter(element => visible(element) && inWakeExchange(element) &&
++                .filter(element => visible(element) && assistantResponseNode(element) &&
+                     normalize(element.innerText || element.textContent) === timeoutText);
+             const timeouts = rawTimeouts.filter(element =>
+                 !Array.from(element.children).some(child =>
+@@ -1393,9 +1629,9 @@ class CdpSink:
+             if (timeouts.length !== 1) return timeouts.length ? 'ambiguous-timeout' : 'missing-timeout';
+             const retryButtons = [];
+             let scope = timeouts[0];
+-            for (let depth = 0; depth < 7 && scope; depth += 1, scope = scope.parentElement) {{
++            for (let depth = 0; depth < 7 && scope && responseBoundary && responseBoundary.contains(scope); depth += 1, scope = scope.parentElement) {{
+                 const candidates = Array.from(scope.querySelectorAll('button')).filter(button =>
+-                    visible(button) &&
++                    visible(button) && assistantResponseNode(button) &&
+                     (normalize(button.innerText || button.textContent) === retryLabel ||
+                      normalize(button.getAttribute('aria-label')) === retryLabel));
+                 if (candidates.length) {{
+@@ -1415,7 +1651,12 @@ class CdpSink:
+         except Exception as error:
+             raise PostSubmitUnknown("RESPONSE_RETRY_CLICK_FAILED") from error
+         if value != "clicked":
+-            raise PostSubmitUnknown("RESPONSE_RETRY_CONTROL_AMBIGUOUS")
++            raise PostSubmitUnknown({
++                "target-drift": "RESPONSE_TARGET_DRIFT",
++                "generation-active": "RESPONSE_RETRY_BLOCKED_GENERATION",
++                "editor-unavailable": "RESPONSE_RETRY_EDITOR_UNAVAILABLE",
++                "draft-present": "RESPONSE_RETRY_BLOCKED_DRAFT",
++            }.get(value if isinstance(value, str) else "", "RESPONSE_RETRY_CONTROL_AMBIGUOUS"))
+ 
+     def reopen_submit_receipt_target(
+         self,
+@@ -2656,7 +2897,8 @@ class NewConversationSink(CdpSink):
+             raise Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
+         return {"status": "OBSERVED", **value}
+ 
+-    def visible_message_snapshot(self, cdp: Any, *, max_message_bytes: int = 4096) -> dict[str, Any]:
++    def visible_message_snapshot(self, cdp: Any, *, max_message_bytes: int = 4096,
++                                 review_pair: bool = False) -> dict[str, Any]:
+         """Return bounded private text and qualified identities for visible role units.
+ 
+         DOM keys stay inside this process. A hash is an observation aid, not a
+@@ -2665,10 +2907,14 @@ class NewConversationSink(CdpSink):
+         # Context observation keeps its existing small excerpts. An explicit
+         # private source read may retain the same 8 KiB total window in one
+         # message, matching the review reader's existing body limit.
+-        if type(max_message_bytes) is not int or max_message_bytes not in {4096, 8192}:
++        # Receipt-bound review pairs have their own explicitly selected profile.
++        if (type(review_pair) is not bool or type(max_message_bytes) is not int or
++                max_message_bytes not in ({32768} if review_pair else {4096, 8192})):
+             raise ValueError("unsupported private snapshot message budget")
+         script = """(() => {
+             const messageLimit = __CATDESK_SNAPSHOT_MESSAGE_BYTES__;
++            __CATDESK_USER_BODY_READER__
++            const reviewPair = __CATDESK_REVIEW_PAIR__;
+             const visible = element => {
+                 const style = window.getComputedStyle(element);
+                 return element.getClientRects().length > 0 &&
+@@ -2699,9 +2945,16 @@ class NewConversationSink(CdpSink):
+             )).filter(visible);
+             const units = Array.from(document.querySelectorAll('[data-content-search-unit-key]'))
+                 .filter(node => visible(node) && role(node));
+-            const tier = roles.length ? 'AUTHOR_ROLE' : articles.length ? 'ARTICLE_ROLE' :
++            const tier = reviewPair && units.length ? 'SEMANTIC_UNIT' : roles.length ? 'AUTHOR_ROLE' : articles.length ? 'ARTICLE_ROLE' :
+                 units.length ? 'SEMANTIC_UNIT' : 'NONE';
+-            const candidates = roles.length ? roles : articles.length ? articles : units;
++            // A historical legacy-role card must not hide the latest semantic
++            // USER/ASSISTANT pair. Preserve DOM order and existing nested/key
++            // collapse, without exporting the older messages in review mode.
++            const candidates = reviewPair ? Array.from(document.querySelectorAll(
++                "[data-message-author-role='user'], [data-message-author-role='assistant'], " +
++                "article[data-turn='user'], article[data-turn='assistant'], [data-content-search-unit-key]"
++            )).filter(node => visible(node) && ['user','assistant'].includes(role(node))) :
++                roles.length ? roles : articles.length ? articles : units;
+             const candidateSet = new Set(candidates);
+             const nested = new Set();
+             for (const node of candidates) {
+@@ -2729,10 +2982,14 @@ class NewConversationSink(CdpSink):
+                 const completeBody = Boolean(content && visible(content));
+                 let text = '';
+                 if (completeBody) {
+-                    const bodyCopy = content.cloneNode(true);
+-                    bodyCopy.querySelectorAll('button, [role="button"], [role="toolbar"], [aria-hidden="true"]')
+-                        .forEach(control => control.remove());
+-                    text = String(bodyCopy.textContent || '');
++                    if (role(node) === 'user') {
++                        text = userBodyText(content);
++                    } else {
++                        const bodyCopy = content.cloneNode(true);
++                        bodyCopy.querySelectorAll('button, [role="button"], [role="toolbar"], [aria-hidden="true"]')
++                            .forEach(control => control.remove());
++                        text = String(bodyCopy.textContent || '');
++                    }
+                 } else {
+                     // Retain only a bounded diagnostic excerpt for a missing
+                     // body. It must never be counted as complete answer text.
+@@ -2758,8 +3015,11 @@ class NewConversationSink(CdpSink):
+             }
+             const unique = rows.filter(row => row !== null);
+             return [tier, Math.min(unique.length, 1024), unique.length > 1024,
+-                Math.min(nested.size, 1024), Math.min(keyedCollapsed, 1024), unique.slice(-16)];
+-        })()""".replace("__CATDESK_SNAPSHOT_MESSAGE_BYTES__", str(max_message_bytes))
++                Math.min(nested.size, 1024), Math.min(keyedCollapsed, 1024), unique.slice(-__CATDESK_SNAPSHOT_ROWS__)];
++        })()""".replace("__CATDESK_USER_BODY_READER__", USER_BODY_TEXT_READER).replace(
++            "__CATDESK_SNAPSHOT_MESSAGE_BYTES__", str(max_message_bytes)).replace(
++            "__CATDESK_SNAPSHOT_ROWS__", "2" if review_pair else "16").replace(
++            "__CATDESK_REVIEW_PAIR__", "true" if review_pair else "false")
+         try:
+             value = CdpSink.cdp_value(cdp.evaluate(script))
+         except Exception as error:
+@@ -2772,7 +3032,9 @@ class NewConversationSink(CdpSink):

@@ -67,6 +67,18 @@ const ARTIFACTS: [&str; 4] = [
     "wake_bridge.py",
 ];
 
+#[path = "install_broker_stage_writer_v2.rs"]
+mod offline_v2;
+pub use offline_v2::{
+    BrokerPublishedReceiptV2, BrokerStageReceiptV2, materialize_fixed_candidate_stage_v2,
+    publish_fixed_candidate_stage_v2,
+};
+#[cfg(test)]
+pub(crate) use offline_v2::{prepare_offline_recovery_fixture, publish_offline_recovery_fixture};
+pub(crate) use offline_v2::{
+    reopen_published_after_verified_history, reopen_stage_after_verified_history,
+};
+
 #[derive(Clone)]
 enum StageSecurityMode {
     Protected(String),
@@ -253,11 +265,14 @@ fn descriptor(service_sid: &str, directory: bool) -> Result<LocalDescriptor> {
 
 fn open_child(
     parent: &OwnedHandle,
-    component: &'static str,
+    component: &str,
     directory: bool,
     create: bool,
     service_sid: Option<&str>,
 ) -> Result<OwnedHandle> {
+    if !valid_publication_component(component) {
+        return Err("WAKE_BROKER_STAGE_COMPONENT_INVALID".into());
+    }
     let mut units = component.encode_utf16().collect::<Vec<_>>();
     let length =
         u16::try_from(units.len() * 2).map_err(|_| "WAKE_BROKER_STAGE_COMPONENT_INVALID")?;
@@ -1187,7 +1202,7 @@ pub(crate) mod tests {
     }
 
     impl TransactionFixture {
-        fn new() -> Self {
+        pub(crate) fn new() -> Self {
             Self::new_inner(false)
         }
 

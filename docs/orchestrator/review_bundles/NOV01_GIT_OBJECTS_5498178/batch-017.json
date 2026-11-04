@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "purpose": "PARTIAL_SOURCE_REVIEW_ONLY_NOT_RELEASE_AUTHORITY",
+  "batchId": "b017",
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "sourceCommit": "549817859c94f56a7696f998848d8ace429b1663",
+  "patchBytes": 61390,
+  "sourcePaths": [
+    "src/reviewed_candidate_owner.rs",
+    "src/server.rs",
+    "src/wake_protocol_client.rs",
+    "src/web_context_user_receipts.rs",
+    "src/web_conversation_context.rs",
+    "src/web_review_work.rs"
+  ],
+  "units": [
+    {
+      "unitId": "u070",
+      "path": "src/reviewed_candidate_owner.rs",
+      "skipLines": 0,
+      "takeLines": 68,
+      "bytes": 2727,
+      "sha256": "6a1fb63437dc96d2ab3e24cda14661ddec3018a1e2b79660c30ae422f2f8aaaa",
+      "baseBlob": "3f4b2a2784507b4475c597d725c90c8f6326c252",
+      "targetBlob": "35f6f277156bfeea8c9fcd3fcc69bdf9496994b2"
+    },
+    {
+      "unitId": "u071",
+      "path": "src/server.rs",
+      "skipLines": 0,
+      "takeLines": 224,
+      "bytes": 9680,
+      "sha256": "4fbbbe1d765e584bb8f91f6d8ca64ee0de3358f9908a1ba490cca92c358752a2",
+      "baseBlob": "e484555e4f32b0a97c5cdbc041641da3da30337c",
+      "targetBlob": "33ce3507b6441f47273bcaeb58afc9cf10f211fb"
+    },
+    {
+      "unitId": "u072",
+      "path": "src/wake_protocol_client.rs",
+      "skipLines": 0,
+      "takeLines": 96,
+      "bytes": 3838,
+      "sha256": "06f0c4962c46f81d7d2922abd3111e655d7b2d38b1d444ddfd8be33631943316",
+      "baseBlob": "710035a778d8e0c0b091db4c6e5dfe19b8404cb6",
+      "targetBlob": "093e4767e4180d686a8144e1bef500c69faf34e4"
+    },
+    {
+      "unitId": "u073",
+      "path": "src/web_context_user_receipts.rs",
+      "skipLines": 0,
+      "takeLines": 516,
+      "bytes": 19954,
+      "sha256": "55a357b65b83f285ac9a23892c644f01c6308c8e7bf9b68bab5926e0b69d43ad",
+      "baseBlob": null,
+      "targetBlob": "9f2f6899b0d8f1452e9227d6e39952d70660ba59"
+    },
+    {
+      "unitId": "u074",
+      "path": "src/web_context_user_receipts.rs",
+      "skipLines": 516,
+      "takeLines": 11,
+      "bytes": 363,
+      "sha256": "32ca64d9f70561bf7d5ec7b5685e04e7a74c1e9e09dfc74f3b05b474270174e0",
+      "baseBlob": null,
+      "targetBlob": "9f2f6899b0d8f1452e9227d6e39952d70660ba59"
+    },
+    {
+      "unitId": "u075",
+      "path": "src/web_conversation_context.rs",
+      "skipLines": 0,
+      "takeLines": 168,
+      "bytes": 7725,
+      "sha256": "6a7330397a0b8aa67ceb9ce00d29b3bd79769e4a95ddfbcdb3dc78197b2ef869",
+      "baseBlob": "8f2958c6e798dfabd1506bcd9f502ab9a4c43534",
+      "targetBlob": "4298bc0ace317b41e54e19046b427f5bbb27c5b5"
+    },
+    {
+      "unitId": "u076",
+      "path": "src/web_review_work.rs",
+      "skipLines": 0,
+      "takeLines": 443,
+      "bytes": 17103,
+      "sha256": "0dd9a3a0dcc02f7e570ec74f5e849b998df93b31cccba903d07579e8e9602dbf",
+      "baseBlob": "fa34a0cd560835de3424f3fc1cbef064db4424a6",
+      "targetBlob": "c3b6e1c02dc0e5ec0cb8f204d2bc7de6e51208ad"
+    }
+  ],
+  "cumulativeSourceAccepted": false,
+  "requiredReplyMarker": "NOV01_GIT_SOURCE_BATCH_ONLY",
+  "requiredReplyFields": [
+    "marker",
+    "sourceCommit",
+    "batchId",
+    "verdict",
+    "findings",
+    "inspectedUnitIds",
+    "inspectedPaths",
+    "limitations",
+    "cumulativeSourceAccepted"
+  ],
+  "permittedVerdicts": [
+    "REVIEWED_BATCH",
+    "FAIL",
+    "INCONCLUSIVE"
+  ]
+}

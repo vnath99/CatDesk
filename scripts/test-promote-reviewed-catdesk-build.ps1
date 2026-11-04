@@ -139,6 +139,25 @@ try {
     Require ((Hash $fixture.Canonical) -eq $before -and -not (Test-Path -LiteralPath (Join-Path $workspace '.catdesk\promotion-recovery'))) 'plan mode makes no binary or backup mutation'
     Require (($plan | ConvertTo-Json -Compress) -notmatch '(?i)secret|token|https?://|route|tunnel-client|catdesk-reviewed\.exe') 'plan output remains compact and redacted'
 
+    # A resumed Phase 1 must supply the same complete, freshly verified process
+    # identity consumed by the real restart helper, not a PID-only projection.
+    $fixture = Reset-Fixture $workspace
+    $completed = [DateTimeOffset]::UtcNow
+    Write-NativePhase1Evidence $fixture @{ completedAtUnix = $completed.ToUnixTimeSeconds() }
+    $fresh = New-CandidateListener $fixture $completed.AddSeconds(-10)
+    $calls = [Collections.Generic.List[string]]::new()
+    $seams = New-ResumeSeams $calls @($fresh)
+    $expectedStart = $fresh.ProcessStartedAtUtc
+    $expectedPath = $fresh.BuildPath
+    $expectedHash = $fresh.BuildHash
+    $seams.RestartHandoff = {
+        param($root, $from, $target, $hash, $port, $timeout)
+        [void]$calls.Add('resumed-owner-handoff')
+        return $from.Pid -eq 42 -and [string]$from.ProcessStartedAtUtc -ceq $expectedStart -and [string]$from.BuildPath -ceq $expectedPath -and [string]$from.BuildHash -ceq $expectedHash
+    }.GetNewClosure()
+    $resumedComplete = & $promoter -BuildPath $fixture.Candidate -Workspace $workspace -Execute -TestSeams $seams | ConvertFrom-Json
+    Require ($resumedComplete.state -eq 'PROMOTED_CANONICAL_READY' -and $calls.Count -eq 1 -and (Hash $fixture.Canonical) -eq $expectedHash) 'resumed promotion retains complete fresh listener identity and performs one handback'
+
     # T-0132: validation is a read-only view of the existing T-0127 Phase-1
     # proof. All validation outcomes must leave both the listener and release
     # mutation paths untouched.
@@ -667,6 +686,26 @@ try {
     $rollback = & $promoter -BuildPath $fixture.Candidate -Workspace $workspace -Execute -TestSeams (New-Seams $calls @($true, $false, $true)) | ConvertFrom-Json
     Require ($rollback.state -eq 'ROLLED_BACK_OPERATOR_ATTENTION' -and (Hash $fixture.Canonical) -eq $oldHash) 'second handoff failure restores prior canonical binary once'
     Require (($calls -join ',') -eq 'handoff:catdesk-reviewed.exe,handoff:catdesk.exe,handoff:catdesk.exe') 'rollback makes at most one recovery handoff attempt'
+
+    $fixture = Reset-Fixture $workspace
+    $calls = [Collections.Generic.List[string]]::new()
+    $localSeams = New-Seams $calls
+    Write-Phase1Evidence $fixture
+    $legacyForLocal = & $promoter -BuildPath $fixture.Candidate -Workspace $workspace -ValidatePhase1 -BackendOnly -TestSeams $localSeams | ConvertFrom-Json
+    Require ($legacyForLocal.state -eq 'OPERATOR_ATTENTION_PHASE1' -and $calls.Count -eq 0) 'local backend profile refuses a legacy receipt without starting another handoff'
+    $completed=[DateTimeOffset]::UtcNow
+    Write-Phase1Evidence $fixture @{schemaVersion=4;profile='LOCAL_BACKEND_ONLY';mcpAuthenticated=$true;completedAtUtc=$completed.ToString('o');newProcessStartedAtUtc=$completed.AddSeconds(-10).ToString('o')}
+    $localSeams.Phase1ListenerRecords = { @([pscustomobject]@{Pid=42;ProcessName='catdesk';BuildPath=$fixture.Candidate;BuildHash=(Hash $fixture.Candidate);ProcessStartedAtUtc=$completed.AddSeconds(-10).ToString('o')}) }.GetNewClosure()
+    $localReady = & $promoter -BuildPath $fixture.Candidate -Workspace $workspace -ValidatePhase1 -BackendOnly -TestSeams $localSeams | ConvertFrom-Json
+    Require ($localReady.state -eq 'PHASE1_PROVEN') 'exact authenticated local-backend receipt is accepted'
+    $wrongProfile = & $promoter -BuildPath $fixture.Candidate -Workspace $workspace -ValidatePhase1 -TestSeams $localSeams | ConvertFrom-Json
+    Require ($wrongProfile.state -eq 'OPERATOR_ATTENTION_PHASE1') 'legacy mode does not adopt a local-backend receipt'
+    Write-Phase1Evidence $fixture @{schemaVersion=4;profile='LOCAL_BACKEND_ONLY';mcpAuthenticated=$false}
+    $unauthenticated = & $promoter -BuildPath $fixture.Candidate -Workspace $workspace -ValidatePhase1 -BackendOnly -TestSeams $localSeams | ConvertFrom-Json
+    Require ($unauthenticated.state -eq 'OPERATOR_ATTENTION_PHASE1') 'local-backend receipt requires authenticated MCP proof'
+    $fixture = Reset-Fixture $workspace
+    $calls = [Collections.Generic.List[string]]::new();$noProfile = & $promoter -BuildPath $fixture.Candidate -Workspace $workspace -Execute -BackendOnly -TestSeams (New-Seams $calls) | ConvertFrom-Json
+    Require ($noProfile.state -eq 'REVIEWED_PROMOTION_AUTHORIZATION_REQUIRED' -and @($calls | Where-Object { $_ -like 'handoff:*' }).Count -eq 0) 'a local-backend switch cannot upgrade a legacy authorization'
 
     Require ($source -notmatch '(?im)^\s*(Stop-Process|Start-Process|Register-ScheduledTask|Unregister-ScheduledTask)\b|tunnel-client.*(connect|stop|remove)|runtimes\s+(connect|stop|rm)|^\s*(Invoke-WebRequest|Invoke-RestMethod)\b|chrome') 'promotion source contains no direct process, scheduler, tunnel, browser, or network operation'
 } finally {
