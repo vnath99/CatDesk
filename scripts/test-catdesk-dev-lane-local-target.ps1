@@ -544,18 +544,19 @@ foreach($variant in @('valid','missing_pair','missing_start','missing_outcome','
 $facade=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'catdesk-dev-lane.ps1')).Replace([string][char]13,'')
 $branch=@'
 # Opt-in cache placement; the default path below is preserved byte-for-byte.
+if ($LocalTargetBase -and -not $UseLocalTarget) { throw 'LOCAL_TARGET_BASE_REQUIRES_OPT_IN' }
 if ($UseLocalTarget) {
     if ($Command -cnotin @('build', 'verify')) { throw 'LOCAL_TARGET_OPERATION_REFUSED' }
     $localHelper = Join-Path $PSScriptRoot 'catdesk-dev-lane-local-target.ps1'
     $null = Assert-RegularFile $localHelper
     . $localHelper
-    Invoke-DevLaneLocalTarget -Command $Command -SourceRoot ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))) -WarningFreeBytes $StorageWarningFreeBytes
+    Invoke-DevLaneLocalTarget -Command $Command -SourceRoot ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))) -WarningFreeBytes $StorageWarningFreeBytes -LocalTargetBase $LocalTargetBase
     return
 }
 
 '@
 $branch=$branch.Replace([string][char]13,'')+[char]10
-$parameter='    [long]$StorageWarningFreeBytes = 64GB,'+[char]10+'    [switch]$UseLocalTarget'
+$parameter='    [long]$StorageWarningFreeBytes = 64GB,'+[char]10+'    [switch]$UseLocalTarget,'+[char]10+"    [string]`$LocalTargetBase = ''"
 Check ([regex]::Matches($facade,[regex]::Escape($branch)).Count -eq 1 -and [regex]::Matches($facade,[regex]::Escape($parameter)).Count -eq 1) 'exact_two_optin_addition_shapes'
 $legacy=$facade.Replace($branch,'').Replace($parameter,'    [long]$StorageWarningFreeBytes = 64GB')
 $h=[Security.Cryptography.SHA256]::Create()

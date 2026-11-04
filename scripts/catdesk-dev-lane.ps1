@@ -5,7 +5,8 @@ param(
     [string]$Command,
     [ValidateRange(0, [long]::MaxValue)]
     [long]$StorageWarningFreeBytes = 64GB,
-    [switch]$UseLocalTarget
+    [switch]$UseLocalTarget,
+    [string]$LocalTargetBase = ''
 )
 
 # T-0478 R1: source-only developer loop, deliberately NOT a runtime launcher.
@@ -134,12 +135,13 @@ function Get-DevLaneStorageStatus([string]$SourceRoot, [long]$WarningFreeBytes) 
 }
 
 # Opt-in cache placement; the default path below is preserved byte-for-byte.
+if ($LocalTargetBase -and -not $UseLocalTarget) { throw 'LOCAL_TARGET_BASE_REQUIRES_OPT_IN' }
 if ($UseLocalTarget) {
     if ($Command -cnotin @('build', 'verify')) { throw 'LOCAL_TARGET_OPERATION_REFUSED' }
     $localHelper = Join-Path $PSScriptRoot 'catdesk-dev-lane-local-target.ps1'
     $null = Assert-RegularFile $localHelper
     . $localHelper
-    Invoke-DevLaneLocalTarget -Command $Command -SourceRoot ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))) -WarningFreeBytes $StorageWarningFreeBytes
+    Invoke-DevLaneLocalTarget -Command $Command -SourceRoot ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))) -WarningFreeBytes $StorageWarningFreeBytes -LocalTargetBase $LocalTargetBase
     return
 }
 

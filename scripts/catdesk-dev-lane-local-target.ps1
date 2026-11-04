@@ -37,7 +37,7 @@ function Get-DevLaneLocalBinding([object]$State,[object]$Journal,[string]$Key,[s
     }
     return [pscustomobject]@{startVerified=$startVerified;terminalVerified=$terminalVerified}
 }
-function Invoke-DevLaneLocalEngine([string]$Command,[string]$SourceRoot,[long]$WarningFreeBytes,[object]$Backend) {
+function Invoke-DevLaneLocalEngine([string]$Command,[string]$SourceRoot,[long]$WarningFreeBytes,[object]$Backend,[string]$LocalTargetBase='') {
     if ($Command -cnotin @('build','verify')) {throw 'LOCAL_TARGET_OPERATION_REFUSED'}
     $session=$null;$facts=$null;$locationPushed=$false
     $prior=Get-Item Env:CARGO_INCREMENTAL -ErrorAction SilentlyContinue
@@ -45,7 +45,7 @@ function Invoke-DevLaneLocalEngine([string]$Command,[string]$SourceRoot,[long]$W
     $priorRustc=Get-Item Env:RUSTC -ErrorAction SilentlyContinue
     $hadRustc=$null -ne $priorRustc;$priorRustcValue=if($hadRustc){[string]$priorRustc.Value}else{$null}
     try {
-        $facts=& $Backend.Facts $SourceRoot
+        $facts=& $Backend.Facts $SourceRoot $LocalTargetBase
         $key=Get-DevLaneLocalKey $facts.owner $facts.workspaceIdentity
         $session=& $Backend.Begin $facts $key
         Assert-DevLaneLocalState $session.state $key $session.targetIdentity
@@ -214,7 +214,36 @@ function Assert-DevLaneLocalEnvironment([object[]]$Entries) {
         if($item.Name -imatch '\ACARGO_BUILD_' -or ($item.Name -match '^(CARGO_HOME|RUSTUP_HOME|RUSTUP_TOOLCHAIN|RUSTC|RUSTC_WRAPPER|RUSTC_WORKSPACE_WRAPPER|RUSTFLAGS|CARGO_ENCODED_RUSTFLAGS|CARGO_TARGET_DIR|CARGO_TARGET_.*|CARGO_PROFILE_.*)$' -and $item.Value)){throw 'LOCAL_TARGET_INHERITED_POLICY_REFUSED'}
     }
 }
-function Get-DevLaneLocalFacts([string]$SourceRoot) {
+function Assert-DevLaneLocalExplicitBasePath([string]$Base,[string]$Profile,[string]$SourceRoot) {
+    # Deliberately narrow: one existing dedicated direct child of the user profile.
+    # No AppData/OneDrive/project/toolchain path or automatic fallback is accepted.
+    $profileFull=[IO.Path]::GetFullPath($Profile).TrimEnd('\')
+    $full=[IO.Path]::GetFullPath($Base)
+    if($full -cne $Base -or $Base.Contains('/') -or $Base.EndsWith('\') -or
+       $Base.Length -gt 300 -or $Base -match '[\x00-\x1f*?]' -or
+       $profileFull -match '(?i)(^|[\\/])OneDrive(?:[^\\/]*)?([\\/]|$)' -or
+       ![string]::Equals([IO.Path]::GetDirectoryName($Base),$profileFull,[StringComparison]::OrdinalIgnoreCase) -or
+       [IO.Path]::GetFileName($Base) -cnotmatch '\ACatDeskBuildCache(?:-[A-Za-z0-9_-]{1,32})?\z') {
+        throw 'LOCAL_TARGET_EXPLICIT_BASE_REFUSED'
+    }
+    $source=[IO.Path]::GetFullPath($SourceRoot).TrimEnd('\')
+    if([string]::Equals($full,$source,[StringComparison]::OrdinalIgnoreCase) -or
+       $full.StartsWith($source+'\',[StringComparison]::OrdinalIgnoreCase) -or
+       $source.StartsWith($full+'\',[StringComparison]::OrdinalIgnoreCase)) {
+        throw 'LOCAL_TARGET_EXPLICIT_BASE_OVERLAP_REFUSED'
+    }
+}
+function Get-DevLaneLocalExplicitBase([string]$Base,[string]$Profile,[string]$SourceRoot,[object]$Scope,[string]$Owner,[object]$LocalIdentity) {
+    Assert-DevLaneLocalExplicitBasePath $Base $Profile $SourceRoot
+    # Required-existing lookup retains the adapter's exact final-path, owner,
+    # resident/reparse and volume checks. This function never creates the base.
+    $identity=$Scope.Directory($Base,$false)
+    if($null -eq $identity -or $identity.Owner -cne $Owner -or $identity.Volume -cne $LocalIdentity.Volume){
+        throw 'LOCAL_TARGET_EXPLICIT_BASE_IDENTITY_REFUSED'
+    }
+    return [pscustomobject]@{Path=$Base;Observation=$identity}
+}
+function Get-DevLaneLocalFacts([string]$SourceRoot,[string]$LocalTargetBase='') {
     if($env:OS -cne 'Windows_NT' -or $PSVersionTable.PSEdition -cne 'Core' -or ![Environment]::Is64BitProcess){throw 'LOCAL_TARGET_CORE_WINDOWS_REQUIRED'}
     Assert-DevLaneLocalEnvironment @(Get-ChildItem Env:)
     . (Join-Path $PSScriptRoot 'catdesk-dev-local-target-native.ps1')
@@ -228,6 +257,10 @@ function Get-DevLaneLocalFacts([string]$SourceRoot) {
         if(![string]::Equals($local.TrimEnd('\'),(Join-Path $profile 'AppData\Local'),[StringComparison]::OrdinalIgnoreCase) -or $local -match '(?i)(^|[\\/])OneDrive(?:[^\\/]*)?([\\/]|$)'){throw 'LOCAL_TARGET_BASE_REFUSED'}
         $localId=$scope.Directory($local,$false);$sourceId=$scope.Directory($SourceRoot,$false)
         if($localId.Owner -cne $owner -or $sourceId.Owner -cne $owner){throw 'LOCAL_TARGET_OWNER_REFUSED'}
+        if($LocalTargetBase){
+            $selection=Get-DevLaneLocalExplicitBase $LocalTargetBase $profile $SourceRoot $scope $owner $localId
+            $local=$selection.Path;$localId=$selection.Observation
+        }
         $managed=Join-Path $local 'CatDeskDev'
         if($SourceRoot.TrimEnd('\').StartsWith($managed+'\',[StringComparison]::OrdinalIgnoreCase) -or $managed.StartsWith($SourceRoot.TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase) -or [string]::Equals($managed,$SourceRoot.TrimEnd('\'),[StringComparison]::OrdinalIgnoreCase)){throw 'LOCAL_TARGET_OVERLAP_REFUSED'}
         $cursor=$SourceRoot
@@ -243,7 +276,7 @@ function Get-DevLaneLocalFacts([string]$SourceRoot) {
         if($LASTEXITCODE -ne 0 -or ![string]::Equals([IO.Path]::GetFullPath(([string]$gitRoot).Replace('/','\')),$SourceRoot,[StringComparison]::OrdinalIgnoreCase)){throw 'LOCAL_TARGET_GIT_ROOT_REFUSED'}
         $head=& git --no-optional-locks -c core.fsmonitor=false -C $SourceRoot rev-parse --verify HEAD
         if($LASTEXITCODE -ne 0 -or [string]$head -cnotmatch '\A[0-9a-f]{40}\z'){throw 'LOCAL_TARGET_COMMIT_REFUSED'}
-        return [pscustomobject]@{owner=$owner;workspaceIdentity=$sourceId.Identity;sourceCommit=[string]$head;local=$local;localIdentity=$localId.Identity;volume=$localId.Volume;cargoPath=$cargoPath;cargoSha256=$cargo.Sha256;rustcPath=$rustcPath;rustcSha256=$rustc.Sha256;lockSha256=$lock.Sha256;scope=$scope}
+        return [pscustomobject]@{owner=$owner;workspaceIdentity=$sourceId.Identity;sourceCommit=[string]$head;local=$local;localIdentity=$localId.Identity;explicitBase=[bool]$LocalTargetBase;volume=$localId.Volume;cargoPath=$cargoPath;cargoSha256=$cargo.Sha256;rustcPath=$rustcPath;rustcSha256=$rustc.Sha256;lockSha256=$lock.Sha256;scope=$scope}
     }catch{$scope.Dispose();throw 'LOCAL_TARGET_METADATA_REFUSED'}
 }
 function Get-DevLaneLocalJournal([object]$Session,[scriptblock]$Entries) {
@@ -285,56 +318,176 @@ function Assert-DevLaneLocalEntries([string]$Directory,[bool]$Namespace,[scriptb
         elseif($name -cnotin @('owner.json','lease','target','journal','current.json','active.json')){throw 'LOCAL_TARGET_UNREGISTERED_CONTENT_HOLD'}
     }}finally{if($iterator -is [IDisposable]){$iterator.Dispose()}}
 }
-function New-DevLaneLocalDirectory([string]$Path,[object]$Facts) {
+function Assert-DevLaneLocalDedicatedBaseEntries([string]$Directory,[scriptblock]$Entries) {
+    $iterator=$null;$count=0
+    if($null -ne $Entries){$iterator=@(& $Entries).GetEnumerator()}
+    else{$iterator=([IO.Directory]::EnumerateFileSystemEntries($Directory)).GetEnumerator()}
+    try{while($iterator.MoveNext()){
+        $count++
+        if($count -gt 1 -or [IO.Path]::GetFileName([string]$iterator.Current) -cne 'CatDeskDev'){
+            throw 'LOCAL_TARGET_EXPLICIT_BASE_CONTENT_HOLD'
+        }
+    }}finally{if($iterator -is [IDisposable]){$iterator.Dispose()}}
+}
+function Get-DevLaneLocalInitializationStages {
+    @('UNKNOWN','FILESYSTEM_INITIALIZE','EXPLICIT_BASE_ENTRIES','DIRECTORY_CREATE','DIRECTORY_REOPEN','DIRECTORY_IDENTITY',
+      'PARENT_LOOKUP','PARENT_CREATE','PARENT_IDENTITY','NAMESPACE_LOOKUP','NAMESPACE_CREATE',
+      'NAMESPACE_CONTROL_WRITE','NAMESPACE_IDENTITY','NAMESPACE_CONTROL_OPEN','NAMESPACE_CONTROL_READ',
+      'NAMESPACE_CONTROL_VALIDATE','NAMESPACE_ENTRIES','WORKSPACE_LOOKUP','WORKSPACE_CREATE',
+      'TARGET_CREATE','JOURNAL_CREATE','LEASE_CREATE','CURRENT_CREATE','OWNER_CREATE',
+      'WORKSPACE_IDENTITY','OWNER_OPEN','OWNER_READ','WORKSPACE_ENTRIES','LEASE_OPEN',
+      'TARGET_REOPEN','JOURNAL_REOPEN','REGISTRATION_VALIDATE','CURRENT_READ','ACTIVE_LOOKUP',
+      'JOURNAL_READ','BINDING_VALIDATE','STATE_RETURN')
+}
+function Get-DevLaneLocalInitializationCauses {
+    @('UNCLASSIFIED','PATH_OPEN_UNVERIFIED','ATTRIBUTES_UNAVAILABLE','PATH_REPARSE_CLOUD_OR_KIND_UNSAFE',
+      'PATH_ALIAS_UNVERIFIED','PHYSICAL_ID_UNAVAILABLE','OWNER_UNAVAILABLE',
+      'LOCAL_TARGET_DIRECTORY_NOT_CREATED','LOCAL_TARGET_CREATED_DIRECTORY_UNVERIFIED',
+      'LOCAL_TARGET_PARENT_REFUSED','LOCAL_TARGET_NAMESPACE_REFUSED','LOCAL_TARGET_FILE_OPEN_REFUSED',
+      'LOCAL_TARGET_FILE_KIND_UNSAFE','LOCAL_TARGET_FILE_ALIAS','LOCAL_TARGET_FILE_OWNER',
+      'LOCAL_TARGET_FILE_IDENTITY','LOCAL_TARGET_CONTROL_INFO_UNVERIFIED',
+      'LOCAL_TARGET_CONTROL_LINK_OR_STATE_UNSAFE','LOCAL_TARGET_MARKER_TOO_LARGE',
+      'LOCAL_TARGET_MARKER_INCOMPLETE','LOCAL_TARGET_REGISTRATION_MISMATCH',
+      'LOCAL_TARGET_UNREGISTERED_CONTENT_HOLD','LOCAL_TARGET_ENTRY_LIMIT_HOLD',
+      'LOCAL_TARGET_RECORD_LIMIT_HOLD','LOCAL_TARGET_ORPHAN_START_HOLD',
+      'LOCAL_TARGET_EXPLICIT_BASE_CONTENT_HOLD','LOCAL_TARGET_EXPLICIT_PARTIAL_BASE_HOLD')
+}
+function Get-DevLaneLocalInitializationDiagnostic([Exception]$Failure) {
+    # Export only fixed vocabulary. The private original ErrorRecord is deliberately
+    # not returned here: it can contain user paths and belongs only in private receipts.
+    $cursor=$Failure
+    for($depth=0;$null -ne $cursor -and $depth -lt 8;$depth++) {
+        $candidate=$cursor.Data['DevLaneLocalDiagnostic']
+        if($candidate -is [Collections.IDictionary] -and
+           $candidate.Contains('schemaVersion') -and $candidate.Contains('stage') -and
+           $candidate.Contains('context') -and $candidate.Contains('cause') -and
+           $candidate.Contains('handleDisposeFailed') -and
+           $candidate.schemaVersion -eq 1 -and $candidate.stage -is [string] -and
+           $candidate.context -is [string] -and $candidate.cause -is [string] -and
+           $candidate.handleDisposeFailed -is [bool] -and
+           $candidate.stage -cin @(Get-DevLaneLocalInitializationStages) -and
+           $candidate.context -cin @(Get-DevLaneLocalInitializationStages) -and
+           $candidate.cause -cin @(Get-DevLaneLocalInitializationCauses)) {
+            return [pscustomobject][ordered]@{schemaVersion=1;hold='LOCAL_TARGET_UNKNOWN_HOLD';
+                stage=[string]$candidate.stage;context=[string]$candidate.context;cause=[string]$candidate.cause;
+                handleDisposeFailed=[bool]$candidate.handleDisposeFailed;cleanupAuthorized=$false;retryAuthorized=$false}
+        }
+        $cursor=$cursor.InnerException
+    }
+    return $null
+}
+function New-DevLaneLocalInitializationHold([string]$Stage,[Management.Automation.ErrorRecord]$Failure) {
+    if($Stage -cnotin @(Get-DevLaneLocalInitializationStages)){$Stage='UNKNOWN'}
+    $prior=Get-DevLaneLocalInitializationDiagnostic $Failure.Exception
+    $cause='UNCLASSIFIED';$specificStage=$Stage;$private=$Failure
+    if($null -ne $prior){
+        $cause=$prior.cause;$specificStage=$prior.stage
+        $cursor=$Failure.Exception
+        for($depth=0;$null -ne $cursor -and $depth -lt 8;$depth++){
+            if($cursor.Data.Contains('DevLaneLocalPrivateErrorRecord')){$private=$cursor.Data['DevLaneLocalPrivateErrorRecord'];break}
+            $cursor=$cursor.InnerException
+        }
+    }else{
+        $cursor=$Failure.Exception
+        for($depth=0;$null -ne $cursor -and $depth -lt 8;$depth++){
+            if($cursor.Message -cin @(Get-DevLaneLocalInitializationCauses)){$cause=$cursor.Message;break}
+            $cursor=$cursor.InnerException
+        }
+    }
+    $hold=[InvalidOperationException]::new('LOCAL_TARGET_UNKNOWN_HOLD')
+    $hold.Data['DevLaneLocalDiagnostic']=[ordered]@{schemaVersion=1;stage=$specificStage;context=$Stage;
+        cause=$cause;handleDisposeFailed=$false}
+    $hold.Data['DevLaneLocalPrivateErrorRecord']=$private
+    return $hold
+}
+function New-DevLaneLocalDirectoryEntry([string]$Path) {
     [CatDesk.DevLaneCacheV2.HeldFile]::CreateEmptyDirectory($Path)
-    $id=$Facts.scope.Directory($Path,$false)
-    if($id.Owner -cne $Facts.owner -or $id.Volume -cne $Facts.volume){throw 'LOCAL_TARGET_CREATED_DIRECTORY_UNVERIFIED'}
-    return $id
+}
+function New-DevLaneLocalDirectory([string]$Path,[object]$Facts) {
+    $stage='DIRECTORY_CREATE'
+    try {
+        New-DevLaneLocalDirectoryEntry $Path
+        $stage='DIRECTORY_REOPEN';$id=$Facts.scope.Directory($Path,$false)
+        $stage='DIRECTORY_IDENTITY'
+        if($id.Owner -cne $Facts.owner -or $id.Volume -cne $Facts.volume){throw 'LOCAL_TARGET_CREATED_DIRECTORY_UNVERIFIED'}
+        return $id
+    }catch{throw (New-DevLaneLocalInitializationHold $stage $_)}
 }
 function Open-DevLaneLocalSession([object]$Facts,[string]$Key) {
-    Initialize-DevLaneLocalFilesystem
-    $scope=$Facts.scope;$lease=$null;$marker=$null;$namespaceFile=$null
+    $scope=$Facts.scope;$lease=$null;$marker=$null;$namespaceFile=$null;$stage='FILESYSTEM_INITIALIZE'
+    $explicit=$null -ne $Facts.PSObject.Properties['explicitBase'] -and [bool]$Facts.explicitBase
+    $createdParent=$false
     try {
-        $parent=Join-Path $Facts.local 'CatDeskDev';$id=$scope.Directory($parent,$true)
-        if($null -eq $id){$id=New-DevLaneLocalDirectory $parent $Facts}
+        Initialize-DevLaneLocalFilesystem
+        if($explicit){$stage='EXPLICIT_BASE_ENTRIES';Assert-DevLaneLocalDedicatedBaseEntries $Facts.local}
+        $stage='PARENT_LOOKUP';$parent=Join-Path $Facts.local 'CatDeskDev';$id=$scope.Directory($parent,$true)
+        if($null -eq $id){$stage='PARENT_CREATE';$id=New-DevLaneLocalDirectory $parent $Facts;$createdParent=$true}
+        $stage='PARENT_IDENTITY'
         if($id.Owner -cne $Facts.owner -or $id.Volume -cne $Facts.volume){throw 'LOCAL_TARGET_PARENT_REFUSED'}
-        $base=Join-Path $parent 'ordinary-targets-v2';$baseId=$scope.Directory($base,$true)
+        $stage='NAMESPACE_LOOKUP';$base=Join-Path $parent 'ordinary-targets-v2';$baseId=$scope.Directory($base,$true)
         if($null -eq $baseId){
-            $baseId=New-DevLaneLocalDirectory $base $Facts
+            if($explicit -and !$createdParent){throw 'LOCAL_TARGET_EXPLICIT_PARTIAL_BASE_HOLD'}
+            $stage='NAMESPACE_CREATE';$baseId=New-DevLaneLocalDirectory $base $Facts
+            $stage='NAMESPACE_CONTROL_WRITE'
             $null=Write-DevLaneLocalNewJson (Join-Path $base 'namespace.json') $Facts.owner @{schemaVersion=2;identity=$baseId.Identity;localIdentity=$Facts.localIdentity}
         }
+        $stage='NAMESPACE_IDENTITY'
         if($baseId.Owner -cne $Facts.owner -or $baseId.Volume -cne $Facts.volume){throw 'LOCAL_TARGET_NAMESPACE_REFUSED'}
+        $stage='NAMESPACE_CONTROL_OPEN'
         $namespaceFile=[CatDesk.DevLaneCacheV2.HeldFile]::new((Join-Path $base 'namespace.json'),$Facts.owner,$false,$false)
+        $stage='NAMESPACE_CONTROL_READ'
         $namespace=$namespaceFile.Read()|ConvertFrom-Json
+        $stage='NAMESPACE_CONTROL_VALIDATE'
         if($namespace.schemaVersion -ne 2 -or $namespace.identity -cne $baseId.Identity -or $namespace.localIdentity -cne $Facts.localIdentity){throw 'LOCAL_TARGET_NAMESPACE_REFUSED'}
+        $stage='NAMESPACE_ENTRIES'
         Assert-DevLaneLocalEntries $base $true
-        $directory=Join-Path $base $Key;$workspace=$scope.Directory($directory,$true)
+        $stage='WORKSPACE_LOOKUP';$directory=Join-Path $base $Key;$workspace=$scope.Directory($directory,$true)
         if($null -eq $workspace){
-            $workspace=New-DevLaneLocalDirectory $directory $Facts
-            $target=Join-Path $directory 'target';$targetId=New-DevLaneLocalDirectory $target $Facts
-            $null=New-DevLaneLocalDirectory (Join-Path $directory 'journal') $Facts
+            $stage='WORKSPACE_CREATE';$workspace=New-DevLaneLocalDirectory $directory $Facts
+            $stage='TARGET_CREATE';$target=Join-Path $directory 'target';$targetId=New-DevLaneLocalDirectory $target $Facts
+            $stage='JOURNAL_CREATE';$null=New-DevLaneLocalDirectory (Join-Path $directory 'journal') $Facts
+            $stage='LEASE_CREATE'
             $lease=[CatDesk.DevLaneCacheV2.HeldFile]::new((Join-Path $directory 'lease'),$Facts.owner,$true,$true)
+            $stage='CURRENT_CREATE'
             $null=Write-DevLaneLocalNewJson (Join-Path $directory 'current.json') $Facts.owner @{schemaVersion=2;workspaceKey=$Key;targetIdentity=$targetId.Identity;phase='READY';operationId=$null}
+            $stage='OWNER_CREATE'
             $null=Write-DevLaneLocalNewJson (Join-Path $directory 'owner.json') $Facts.owner @{schemaVersion=2;workspaceKey=$Key;workspaceIdentity=$Facts.workspaceIdentity;directoryIdentity=$workspace.Identity;targetIdentity=$targetId.Identity;leaseIdentity=$lease.Identity}
         }
+        $stage='WORKSPACE_IDENTITY'
         if($workspace.Owner -cne $Facts.owner -or $workspace.Volume -cne $Facts.volume){throw 'LOCAL_TARGET_REGISTRATION_MISMATCH'}
+        $stage='OWNER_OPEN'
         $marker=[CatDesk.DevLaneCacheV2.HeldFile]::new((Join-Path $directory 'owner.json'),$Facts.owner,$false,$false)
+        $stage='OWNER_READ'
         $registration=$marker.Read()|ConvertFrom-Json
+        $stage='WORKSPACE_ENTRIES'
         Assert-DevLaneLocalEntries $directory $false
         # Describe/verify the SAME exclusive lease handle, with no second metadata open.
+        $stage='LEASE_OPEN'
         if($null -eq $lease){$lease=[CatDesk.DevLaneCacheV2.HeldFile]::new((Join-Path $directory 'lease'),$Facts.owner,$false,$true)}
-        $target=Join-Path $directory 'target';$targetId=$scope.Directory($target,$false)
-        $journalId=$scope.Directory((Join-Path $directory 'journal'),$false)
+        $stage='TARGET_REOPEN';$target=Join-Path $directory 'target';$targetId=$scope.Directory($target,$false)
+        $stage='JOURNAL_REOPEN';$journalId=$scope.Directory((Join-Path $directory 'journal'),$false)
+        $stage='REGISTRATION_VALIDATE'
         if($registration.schemaVersion -ne 2 -or $registration.workspaceKey -cne $Key -or $registration.workspaceIdentity -cne $Facts.workspaceIdentity -or $registration.directoryIdentity -cne $workspace.Identity -or $registration.targetIdentity -cne $targetId.Identity -or $registration.leaseIdentity -cne $lease.Identity -or $targetId.Owner -cne $Facts.owner -or $journalId.Owner -cne $Facts.owner){throw 'LOCAL_TARGET_REGISTRATION_MISMATCH'}
         $session=[pscustomobject]@{state=$null;target=$target;targetIdentity=$targetId.Identity;directory=$directory;owner=$Facts.owner;key=$Key;lease=$lease;marker=$marker;namespaceFile=$namespaceFile;scope=$scope;guard=$null}
+        $stage='CURRENT_READ'
         $state=Read-DevLaneLocalJson (Join-Path $directory 'current.json') $Facts.owner
+        $stage='ACTIVE_LOOKUP'
         $active=$scope.FilePresent((Join-Path $directory 'active.json'))
+        $stage='JOURNAL_READ'
         $journal=Get-DevLaneLocalJournal $session
+        $stage='BINDING_VALIDATE'
         $binding=Get-DevLaneLocalBinding $state $journal $Key $targetId.Identity
+        $stage='STATE_RETURN'
         $state|Add-Member active $active;$state|Add-Member orphan $false;$state|Add-Member recordCount $journal.count
         $state|Add-Member terminalVerified $binding.terminalVerified;$state|Add-Member startVerified $binding.startVerified
         $session.state=$state;return $session
-    }catch{if($null -ne $marker){$marker.Dispose()};if($null -ne $namespaceFile){$namespaceFile.Dispose()};if($null -ne $lease){$lease.Dispose()};throw 'LOCAL_TARGET_UNKNOWN_HOLD'}
+    }catch{
+        $hold=New-DevLaneLocalInitializationHold $stage $_
+        foreach($handle in @($marker,$namespaceFile,$lease)){
+            if($null -ne $handle){try{$handle.Dispose()}catch{$hold.Data['DevLaneLocalDiagnostic'].handleDisposeFailed=$true}}
+        }
+        throw $hold
+    }
 }
 function Start-DevLaneLocalOperation([object]$Session,[string]$Id,[object]$Facts,[string]$Command) {
     $start=@{schemaVersion=2;operationId=$Id;workspaceKey=$Session.key;targetIdentity=$Session.targetIdentity;operation=$Command;sourceCommit=$Facts.sourceCommit;cargoSha256=$Facts.cargoSha256;rustcSha256=$Facts.rustcSha256;lockSha256=$Facts.lockSha256;observedUtc=[DateTimeOffset]::UtcNow.ToString('o')}
@@ -359,7 +512,7 @@ function Write-DevLaneLocalGuard([object]$Session,[object]$Value) {$Session.guar
 function Complete-DevLaneLocalGuard([object]$Session) {$Session.guard.FinalizeOwnedGuard()}
 function New-DevLaneLocalBackend {
     return @{
-        Facts={param($root) Get-DevLaneLocalFacts $root}
+        Facts={param($root,$base) Get-DevLaneLocalFacts $root $base}
         Begin={param($facts,$key) Open-DevLaneLocalSession $facts $key}
         Start={param($session,$id,$facts,$command) Start-DevLaneLocalOperation $session $id $facts $command}
         Run={param($program,$arguments,$result) $PSNativeCommandUseErrorActionPreference=$false;& $program @arguments;$result.exitCode=[int]$LASTEXITCODE;$result.returned=$true}
@@ -370,6 +523,6 @@ function New-DevLaneLocalBackend {
         Close={param($session) if($null -ne $session.guard){$session.guard.Dispose()};$session.marker.Dispose();$session.namespaceFile.Dispose();$session.lease.Dispose();$session.scope.Dispose()}
     }
 }
-function Invoke-DevLaneLocalTarget([string]$Command,[string]$SourceRoot,[long]$WarningFreeBytes) {
-    Invoke-DevLaneLocalEngine $Command $SourceRoot $WarningFreeBytes (New-DevLaneLocalBackend)
+function Invoke-DevLaneLocalTarget([string]$Command,[string]$SourceRoot,[long]$WarningFreeBytes,[string]$LocalTargetBase='') {
+    Invoke-DevLaneLocalEngine $Command $SourceRoot $WarningFreeBytes (New-DevLaneLocalBackend) $LocalTargetBase
 }
