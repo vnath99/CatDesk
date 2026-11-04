@@ -40,6 +40,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+#[cfg(all(test, windows))]
+#[path = "reviewed_build_diagnostic_storage.rs"]
+mod diagnostic_storage;
+
 #[cfg(test)]
 use crate::reviewed_source_snapshot::{
     ReviewedSourceBaselineObservationV1, ReviewedSourceCurrentOutputV1,
@@ -6405,19 +6409,28 @@ fn run_fixed_v5_cargo_cache_seed_diagnostic() -> Result<FixedV5CargoCacheSeedDia
     }
     let snapshot = validate_fixed_v5_host_linker_diagnostic(workspace, &control, &attempt)?;
     let mut diagnostic_root = fixed_v5_host_linker_diagnostic_root(workspace)?;
-    let mut source_guard = diagnostic_root.try_clone("cargo cache diagnostic source")?;
-    source_guard.create_child("source", "cargo cache diagnostic source")?;
-    materialize_snapshot_into(&snapshot, &mut source_guard)?;
-    let source = source_guard.path().to_path_buf();
+    diagnostic_storage::run(
+        workspace,
+        &mut diagnostic_root,
+        &attempt,
+        &snapshot,
+        diagnostic_storage::Runner::CacheSeed,
+        |diagnostic_root, _observation| {
+            let mut source_guard = diagnostic_root.try_clone("cargo cache diagnostic source")?;
+            source_guard.create_child("source", "cargo cache diagnostic source")?;
+            materialize_snapshot_into(&snapshot, &mut source_guard)?;
+            let source = source_guard.path().to_path_buf();
 
-    match diagnose_seed_isolated_cargo_home_into(&mut diagnostic_root, &source) {
-        Ok(_) => Ok(FixedV5CargoCacheSeedDiagnostic {
-            stage: "SEED_SUCCEEDED",
-            crate_name: None,
-            crate_version: None,
-        }),
-        Err(outcome) => Ok(outcome),
-    }
+            match diagnose_seed_isolated_cargo_home_into(diagnostic_root, &source) {
+                Ok(_) => Ok(FixedV5CargoCacheSeedDiagnostic {
+                    stage: "SEED_SUCCEEDED",
+                    crate_name: None,
+                    crate_version: None,
+                }),
+                Err(outcome) => Ok(outcome),
+            }
+        },
+    )
 }
 
 #[cfg(all(test, windows))]
@@ -6582,102 +6595,119 @@ fn run_active_unclassified_cargo_diagnostic(
         &attempt.snapshot_expected,
     )?;
     let mut diagnostic_root = fixed_worker_shaped_cargo_diagnostic_root(workspace)?;
-    let mut source_guard = diagnostic_root.try_clone("cargo reproduction source")?;
-    source_guard.create_child(
-        WORKER_DIAGNOSTIC_SOURCE_PADDING,
-        "cargo reproduction source",
-    )?;
-    source_guard.create_child("source", "cargo reproduction source")?;
-    materialize_snapshot_into(&snapshot, &mut source_guard)?;
-    let source = source_guard.path().to_path_buf();
-    let mut target_guard = diagnostic_root.try_clone("cargo reproduction target")?;
-    target_guard.create_child("target", "cargo reproduction target")?;
-    let target = target_guard.path().to_path_buf();
-    let mut temp_guard = target_guard.try_clone("cargo reproduction temp")?;
-    temp_guard.create_child("tmp", "cargo reproduction temp")?;
-    let temp = temp_guard.path().to_path_buf();
-    let cargo_home = seed_isolated_cargo_home_into(&mut diagnostic_root, &source)?;
-    let lengths = validate_worker_shaped_cargo_diagnostic_paths(
+    diagnostic_storage::run(
         workspace,
-        &attempt.build_attempt_id,
-        [&source, &target, &cargo_home, &temp],
-    )?;
-    println!(
-        "ACTIVE_CARGO_PATH_SHAPE sourceUnits={} targetUnits={} cargoHomeUnits={} tempUnits={}",
-        lengths[0], lengths[1], lengths[2], lengths[3]
-    );
-    let cargo_pin = open_attested_tool(&attempt.cargo, "cargo")?;
-    let rustc_pin = open_attested_tool(&attempt.rustc, "rustc")?;
-    let mut command = Command::new(&cargo_pin.evidence.absolute_path);
-    configure_exact_worker_cargo_command(
-        &mut command,
+        &mut diagnostic_root,
         &attempt,
-        &source,
-        &target,
-        &temp,
-        &cargo_home,
-        &rustc_pin.evidence.absolute_path,
-    )?;
-    ensure_exact_active_pointer(&control.base_guard, &active)
-        .map_err(|_| "REVIEWED_BUILD_CARGO_REPRODUCTION_GATE_REFUSED".to_string())?;
-    let job = BuildJob::new()?;
-    command.creation_flags(CREATE_SUSPENDED);
-    let mut child = command
-        .spawn()
-        .map_err(|_| "REVIEWED_BUILD_CARGO_REPRODUCTION_SPAWN_FAILED".to_string())?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or("REVIEWED_BUILD_CARGO_REPRODUCTION_UNAVAILABLE")?;
-    let reader = std::thread::spawn(move || read_bounded_cargo_stderr(stderr));
-    job.assign(&child)?;
-    job.resume(&child)?;
-    // The existing worker wait bounds the root, all Job descendants and pipe
-    // EOF together. Root exit alone must not leave a diagnostic reader hanging.
-    let exit = match wait_for_owned_build_exit(&mut child, &job, &reader, Duration::from_secs(95)) {
-        Ok(exit) => exit,
-        Err(error) => {
-            // Never block on an unproven reader. The worker wait has attempted
-            // cleanup; independently confirm both the Job and pipe are done.
-            if job.active_processes().is_ok_and(|count| count == 0)
-                && reader.is_finished()
-                && let Ok(Ok(captured)) = reader.join()
-            {
-                println!("{}", partial_cargo_diagnostic_summary(&error, captured));
-            }
-            return Err(error);
-        }
-    };
-    let captured = reader
-        .join()
-        .ok()
-        .and_then(Result::ok)
-        .ok_or("REVIEWED_BUILD_CARGO_REPRODUCTION_UNAVAILABLE")?;
-    if cargo_pin.evidence != attempt.cargo
-        || rustc_pin.evidence != attempt.rustc
-        || trusted_tool_from_absolute(Path::new(&attempt.cargo.absolute_path), "cargo")?
-            != attempt.cargo
-        || trusted_tool_from_absolute(Path::new(&attempt.rustc.absolute_path), "rustc")?
-            != attempt.rustc
-    {
-        return Err("REVIEWED_BUILD_EVIDENCE_DRIFTED".into());
-    }
-    // Only numeric path-length and fixed presence metadata. Never expose an
-    // absolute path, compiler command, registry identity, or compiler stderr.
-    if let Ok(registries) = fs::read_dir(cargo_home.join("registry/src")) {
-        for registry in registries.flatten().take(3) {
-            let header = registry
-                .path()
-                .join("ring-0.17.14/pregenerated/ring_core_generated/prefix_symbols.h");
-            let path_units = header.to_string_lossy().encode_utf16().count();
-            let parent_present = header.parent().is_some_and(Path::is_dir);
-            let header_present = header.is_file();
+        &snapshot,
+        diagnostic_storage::Runner::ActiveUnclassified,
+        |diagnostic_root, observation| {
+            let mut source_guard = diagnostic_root.try_clone("cargo reproduction source")?;
+            source_guard.create_child(
+                WORKER_DIAGNOSTIC_SOURCE_PADDING,
+                "cargo reproduction source",
+            )?;
+            source_guard.create_child("source", "cargo reproduction source")?;
+            materialize_snapshot_into(&snapshot, &mut source_guard)?;
+            let source = source_guard.path().to_path_buf();
+            let mut target_guard = diagnostic_root.try_clone("cargo reproduction target")?;
+            target_guard.create_child("target", "cargo reproduction target")?;
+            let target = target_guard.path().to_path_buf();
+            let mut temp_guard = target_guard.try_clone("cargo reproduction temp")?;
+            temp_guard.create_child("tmp", "cargo reproduction temp")?;
+            let temp = temp_guard.path().to_path_buf();
+            let cargo_home = seed_isolated_cargo_home_into(diagnostic_root, &source)?;
+            let lengths = validate_worker_shaped_cargo_diagnostic_paths(
+                workspace,
+                &attempt.build_attempt_id,
+                [&source, &target, &cargo_home, &temp],
+            )?;
             println!(
-                "ACTIVE_RING_HEADER_PROBE pathUtf16Units={path_units} parentPresent={parent_present} headerPresent={header_present}"
+                "ACTIVE_CARGO_PATH_SHAPE sourceUnits={} targetUnits={} cargoHomeUnits={} tempUnits={}",
+                lengths[0], lengths[1], lengths[2], lengths[3]
             );
-        }
-    }
-    fixed_v5_host_linker_diagnostic_outcome(exit.code(), captured)
+            let cargo_pin = open_attested_tool(&attempt.cargo, "cargo")?;
+            let rustc_pin = open_attested_tool(&attempt.rustc, "rustc")?;
+            let mut command = Command::new(&cargo_pin.evidence.absolute_path);
+            configure_exact_worker_cargo_command(
+                &mut command,
+                &attempt,
+                &source,
+                &target,
+                &temp,
+                &cargo_home,
+                &rustc_pin.evidence.absolute_path,
+            )?;
+            ensure_exact_active_pointer(&control.base_guard, &active)
+                .map_err(|_| "REVIEWED_BUILD_CARGO_REPRODUCTION_GATE_REFUSED".to_string())?;
+            let job = BuildJob::new()?;
+            command.creation_flags(CREATE_SUSPENDED);
+            let mut child = command
+                .spawn()
+                .map_err(|_| "REVIEWED_BUILD_CARGO_REPRODUCTION_SPAWN_FAILED".to_string())?;
+            observation.cargo_started = true;
+            let stderr = child
+                .stderr
+                .take()
+                .ok_or("REVIEWED_BUILD_CARGO_REPRODUCTION_UNAVAILABLE")?;
+            let reader = std::thread::spawn(move || read_bounded_cargo_stderr(stderr));
+            job.assign(&child)?;
+            job.resume(&child)?;
+            // The existing worker wait bounds the root, all Job descendants and pipe
+            // EOF together. Root exit alone must not leave a diagnostic reader hanging.
+            let exit =
+                match wait_for_owned_build_exit(&mut child, &job, &reader, Duration::from_secs(95))
+                {
+                    Ok(exit) => exit,
+                    Err(error) => {
+                        // Never block on an unproven reader. The worker wait has attempted
+                        // cleanup; independently confirm both the Job and pipe are done.
+                        if job.active_processes().is_ok_and(|count| count == 0)
+                            && reader.is_finished()
+                            && let Ok(Ok(captured)) = reader.join()
+                        {
+                            observation.stderr_eof_verified = true;
+                            observation.owned_job_quiescent = true;
+                            println!("{}", partial_cargo_diagnostic_summary(&error, captured));
+                        }
+                        return Err(error);
+                    }
+                };
+            observation.compiler_exit_code = exit.code();
+            let captured = reader
+                .join()
+                .ok()
+                .and_then(Result::ok)
+                .ok_or("REVIEWED_BUILD_CARGO_REPRODUCTION_UNAVAILABLE")?;
+            observation.stderr_eof_verified = true;
+            observation.owned_job_quiescent = true;
+            if cargo_pin.evidence != attempt.cargo
+                || rustc_pin.evidence != attempt.rustc
+                || trusted_tool_from_absolute(Path::new(&attempt.cargo.absolute_path), "cargo")?
+                    != attempt.cargo
+                || trusted_tool_from_absolute(Path::new(&attempt.rustc.absolute_path), "rustc")?
+                    != attempt.rustc
+            {
+                return Err("REVIEWED_BUILD_EVIDENCE_DRIFTED".into());
+            }
+            // Only numeric path-length and fixed presence metadata. Never expose an
+            // absolute path, compiler command, registry identity, or compiler stderr.
+            if let Ok(registries) = fs::read_dir(cargo_home.join("registry/src")) {
+                for registry in registries.flatten().take(3) {
+                    let header = registry
+                        .path()
+                        .join("ring-0.17.14/pregenerated/ring_core_generated/prefix_symbols.h");
+                    let path_units = header.to_string_lossy().encode_utf16().count();
+                    let parent_present = header.parent().is_some_and(Path::is_dir);
+                    let header_present = header.is_file();
+                    println!(
+                        "ACTIVE_RING_HEADER_PROBE pathUtf16Units={path_units} parentPresent={parent_present} headerPresent={header_present}"
+                    );
+                }
+            }
+            fixed_v5_host_linker_diagnostic_outcome(exit.code(), captured)
+        },
+    )
 }
 
 #[cfg(all(test, windows))]
@@ -6694,76 +6724,87 @@ fn run_fixed_v5_host_linker_diagnostic() -> Result<FixedV5HostLinkerDiagnosticOu
     let snapshot = validate_fixed_v5_host_linker_diagnostic(workspace, &control, &attempt)?;
 
     let mut diagnostic_root = fixed_v5_host_linker_diagnostic_root(workspace)?;
-    let mut source_guard = diagnostic_root.try_clone("host linker diagnostic source")?;
-    source_guard.create_child("source", "host linker diagnostic source")?;
-    materialize_snapshot_into(&snapshot, &mut source_guard)?;
-    let source = source_guard.path().to_path_buf();
-
-    let mut target_guard = diagnostic_root.try_clone("host linker diagnostic target")?;
-    target_guard.create_child("target", "host linker diagnostic target")?;
-    let target = target_guard.path().to_path_buf();
-    let mut temp_guard = diagnostic_root.try_clone("host linker diagnostic temp")?;
-    temp_guard.create_child("tmp", "host linker diagnostic temp")?;
-    let temp = temp_guard.path().to_path_buf();
-    let cargo_home = seed_isolated_cargo_home_into(&mut diagnostic_root, &source)?;
-    let cargo_pin = open_attested_tool(&attempt.cargo, "cargo")?;
-    let rustc_pin = open_attested_tool(&attempt.rustc, "rustc")?;
-
-    let mut command = Command::new(&cargo_pin.evidence.absolute_path);
-    configure_exact_worker_cargo_command(
-        &mut command,
+    diagnostic_storage::run(
+        workspace,
+        &mut diagnostic_root,
         &attempt,
-        &source,
-        &target,
-        &temp,
-        &cargo_home,
-        &rustc_pin.evidence.absolute_path,
-    )?;
-    ensure_exact_active_pointer(&control.base_guard, &active)
-        .map_err(|_| "REVIEWED_BUILD_HOST_LINKER_DIAGNOSTIC_GATE_REFUSED".to_string())?;
-    let job = BuildJob::new()?;
-    command.creation_flags(CREATE_SUSPENDED);
-    let mut child = command
-        .spawn()
-        .map_err(|_| "REVIEWED_BUILD_TOOLCHAIN_UNAVAILABLE".to_string())?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| "REVIEWED_BUILD_HOST_LINKER_DIAGNOSTIC_UNAVAILABLE".to_string())?;
-    let reader = std::thread::spawn(move || read_bounded_cargo_stderr(stderr));
-    job.assign(&child)?;
-    job.resume(&child)?;
-    let started = std::time::Instant::now();
-    let status = loop {
-        if let Some(status) = child
-            .try_wait()
-            .map_err(|_| "REVIEWED_BUILD_HOST_LINKER_DIAGNOSTIC_UNAVAILABLE".to_string())?
-        {
-            break status;
-        }
-        if started.elapsed() > BUILD_TIMEOUT {
-            let _ = child.kill();
-            let _ = job.terminate();
-            let _ = child.wait();
-            return Err("REVIEWED_BUILD_HOST_LINKER_DIAGNOSTIC_TIMEOUT".into());
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    };
-    let captured_stderr = reader
-        .join()
-        .ok()
-        .and_then(Result::ok)
-        .ok_or_else(|| "REVIEWED_BUILD_HOST_LINKER_DIAGNOSTIC_UNAVAILABLE".to_string())?;
-    if cargo_pin.evidence != attempt.cargo
-        || rustc_pin.evidence != attempt.rustc
-        || trusted_tool_from_absolute(Path::new(&attempt.cargo.absolute_path), "cargo")?
-            != attempt.cargo
-        || trusted_tool_from_absolute(Path::new(&attempt.rustc.absolute_path), "rustc")?
-            != attempt.rustc
-    {
-        return Err("REVIEWED_BUILD_EVIDENCE_DRIFTED".into());
-    }
-    fixed_v5_host_linker_diagnostic_outcome(status.code(), captured_stderr)
+        &snapshot,
+        diagnostic_storage::Runner::FixedLinker,
+        |diagnostic_root, observation| {
+            let mut source_guard = diagnostic_root.try_clone("host linker diagnostic source")?;
+            source_guard.create_child("source", "host linker diagnostic source")?;
+            materialize_snapshot_into(&snapshot, &mut source_guard)?;
+            let source = source_guard.path().to_path_buf();
+
+            let mut target_guard = diagnostic_root.try_clone("host linker diagnostic target")?;
+            target_guard.create_child("target", "host linker diagnostic target")?;
+            let target = target_guard.path().to_path_buf();
+            let mut temp_guard = diagnostic_root.try_clone("host linker diagnostic temp")?;
+            temp_guard.create_child("tmp", "host linker diagnostic temp")?;
+            let temp = temp_guard.path().to_path_buf();
+            let cargo_home = seed_isolated_cargo_home_into(diagnostic_root, &source)?;
+            let cargo_pin = open_attested_tool(&attempt.cargo, "cargo")?;
+            let rustc_pin = open_attested_tool(&attempt.rustc, "rustc")?;
+
+            let mut command = Command::new(&cargo_pin.evidence.absolute_path);
+            configure_exact_worker_cargo_command(
+                &mut command,
+                &attempt,
+                &source,
+                &target,
+                &temp,
+                &cargo_home,
+                &rustc_pin.evidence.absolute_path,
+            )?;
+            ensure_exact_active_pointer(&control.base_guard, &active)
+                .map_err(|_| "REVIEWED_BUILD_HOST_LINKER_DIAGNOSTIC_GATE_REFUSED".to_string())?;
+            let job = BuildJob::new()?;
+            command.creation_flags(CREATE_SUSPENDED);
+            let mut child = command
+                .spawn()
+                .map_err(|_| "REVIEWED_BUILD_TOOLCHAIN_UNAVAILABLE".to_string())?;
+            observation.cargo_started = true;
+            let stderr = child
+                .stderr
+                .take()
+                .ok_or_else(|| "REVIEWED_BUILD_HOST_LINKER_DIAGNOSTIC_UNAVAILABLE".to_string())?;
+            let reader = std::thread::spawn(move || read_bounded_cargo_stderr(stderr));
+            job.assign(&child)?;
+            job.resume(&child)?;
+            let started = std::time::Instant::now();
+            let status = loop {
+                if let Some(status) = child
+                    .try_wait()
+                    .map_err(|_| "REVIEWED_BUILD_HOST_LINKER_DIAGNOSTIC_UNAVAILABLE".to_string())?
+                {
+                    break status;
+                }
+                if started.elapsed() > BUILD_TIMEOUT {
+                    let _ = child.kill();
+                    let _ = job.terminate();
+                    let _ = child.wait();
+                    return Err("REVIEWED_BUILD_HOST_LINKER_DIAGNOSTIC_TIMEOUT".into());
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            };
+            observation.compiler_exit_code = status.code();
+            let captured_stderr =
+                reader.join().ok().and_then(Result::ok).ok_or_else(|| {
+                    "REVIEWED_BUILD_HOST_LINKER_DIAGNOSTIC_UNAVAILABLE".to_string()
+                })?;
+            observation.stderr_eof_verified = true;
+            if cargo_pin.evidence != attempt.cargo
+                || rustc_pin.evidence != attempt.rustc
+                || trusted_tool_from_absolute(Path::new(&attempt.cargo.absolute_path), "cargo")?
+                    != attempt.cargo
+                || trusted_tool_from_absolute(Path::new(&attempt.rustc.absolute_path), "rustc")?
+                    != attempt.rustc
+            {
+                return Err("REVIEWED_BUILD_EVIDENCE_DRIFTED".into());
+            }
+            fixed_v5_host_linker_diagnostic_outcome(status.code(), captured_stderr)
+        },
+    )
 }
 
 /// Explicit local-workstation reviewed-output policy boundary.
