@@ -35,8 +35,9 @@ foreach($t in @(
  @{name='invalid_identity';value=@([pscustomobject]@{FreeSpace=1;Capacity=2;DeviceID='unknown'})}
 )){$script:Volume=$t.value;$r=Get-DevLaneStorageStatus 'C:\synthetic-project' 64GB;Check ($r.state -ceq 'UNAVAILABLE' -and $null -eq $r.warning) $t.name}
 $roundTrip=$source
-$added=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -cin @('Read-DevLaneVolume','Get-DevLaneStorageStatus')},$true)|Sort-Object {$_.Extent.StartOffset} -Descending)
+$added=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -cin @('Read-DevLaneVolume','Get-DevLaneStorageStatus','Write-DevLaneStorageAdvisory')},$true)|Sort-Object {$_.Extent.StartOffset} -Descending)
 foreach($f in $added){$roundTrip=$roundTrip.Remove($f.Extent.StartOffset,$f.Extent.EndOffset-$f.Extent.StartOffset+2)}
+$roundTrip=$roundTrip.Replace('        Write-DevLaneStorageAdvisory -SourceRoot $root -WarningFreeBytes $StorageWarningFreeBytes' + [char]10,'')
 $branch=@'
 if ($Command -eq 'storage-status') {
     Get-DevLaneStorageStatus -SourceRoot $root -WarningFreeBytes $StorageWarningFreeBytes | ConvertTo-Json -Compress

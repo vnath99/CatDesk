@@ -72,7 +72,24 @@ foreach ($pin in @(
     @('catdesk-dev-lane.ps1','964cffd6d314b5edc33f286568150ddeef5a313070d4dae7d543964c5ca3c026'),
     @('test-catdesk-dev-lane-storage.ps1','b181b3e96977f88d0c1c588de3a96dd98e3ad880795b4c09f42929acb000e3ff')
 )) {
-    $actual = Get-DevLocalHash ([IO.File]::ReadAllText((Join-Path $PSScriptRoot $pin[0])).Replace([string][char]13, ''))
+    $legacy = [IO.File]::ReadAllText((Join-Path $PSScriptRoot $pin[0])).Replace([string][char]13, '')
+    if ($pin[0] -ceq 'catdesk-dev-lane.ps1') {
+        $t=$null; $e=$null
+        $tree=[Management.Automation.Language.Parser]::ParseInput($legacy,[ref]$t,[ref]$e)
+        $added=@($tree.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq 'Write-DevLaneStorageAdvisory'},$true))
+        Check (!$e.Count -and $added.Count -eq 1) 'only_one_authorized_warning_helper'
+        $hook='        Write-DevLaneStorageAdvisory -SourceRoot $root -WarningFreeBytes $StorageWarningFreeBytes' + [char]10
+        Check ([regex]::Matches($legacy,[regex]::Escape($hook)).Count -eq 2) 'exactly_two_authorized_warning_hooks'
+        $legacy=$legacy.Remove($added[0].Extent.StartOffset,$added[0].Extent.EndOffset-$added[0].Extent.StartOffset+2).Replace($hook,'')
+    } else {
+        $names="'Read-DevLaneVolume','Get-DevLaneStorageStatus','Write-DevLaneStorageAdvisory'"
+        $line=@'
+$roundTrip=$roundTrip.Replace('        Write-DevLaneStorageAdvisory -SourceRoot $root -WarningFreeBytes $StorageWarningFreeBytes' + [char]10,'')
+'@
+        Check ([regex]::Matches($legacy,[regex]::Escape($names)).Count -eq 1 -and [regex]::Matches($legacy,[regex]::Escape($line+[char]10)).Count -eq 1) 'storage_test_only_authorized_warning_normalization'
+        $legacy=$legacy.Replace($names,"'Read-DevLaneVolume','Get-DevLaneStorageStatus'").Replace($line+[char]10,'')
+    }
+    $actual = Get-DevLocalHash $legacy
     Check ($actual -ceq $pin[1]) ('legacy_full_lf_source_preserved_' + $pin[0])
 }
 

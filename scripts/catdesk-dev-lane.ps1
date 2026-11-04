@@ -52,6 +52,34 @@ function Invoke-VerificationCommands {
     }
 }
 
+function Write-DevLaneStorageAdvisory([string]$SourceRoot, [long]$WarningFreeBytes) {
+    # This is a nonfatal reference-volume warning, never build admission.
+    # Zero disables automatic observation, including its bounded query.
+    if ($WarningFreeBytes -eq 0) { return }
+    try {
+        $status = Get-DevLaneStorageStatus -SourceRoot $SourceRoot -WarningFreeBytes $WarningFreeBytes
+        if ($status.state -ceq 'AVAILABLE' -and !$status.warning) { return }
+        $notice = [ordered]@{
+            schemaVersion = 1
+            mode = 'DEVELOPMENT_STORAGE_ADVISORY'
+            reason = 'REFERENCE_VOLUME_COUNTER_UNAVAILABLE'
+            availableFreeBytes = $null
+            warningFreeBytes = $WarningFreeBytes
+            referenceOnly = $true
+            effectiveCargoTargetVerified = $false
+            admissionGate = $false
+        }
+        if ($status.state -ceq 'AVAILABLE' -and $status.warning) {
+            $notice.reason = 'REFERENCE_VOLUME_LOW_FREE_SPACE'
+            $notice.availableFreeBytes = $status.availableFreeBytes
+        }
+        [Console]::Error.WriteLine(($notice | ConvertTo-Json -Compress))
+    } catch {
+        # Query, serialization and stderr failures must not change Cargo's
+        # invocation, stdout receipt, exit status, exception or environment.
+    }
+}
+
 function Read-DevLaneVolume([string]$DriveLetter) {
     Get-CimInstance -ClassName Win32_Volume -Filter ("DriveLetter='{0}'" -f $DriveLetter) -OperationTimeoutSec 3 -ErrorAction Stop
 }
@@ -143,11 +171,13 @@ try {
         $digest = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()
     }
     if ($Command -eq 'build') {
+        Write-DevLaneStorageAdvisory -SourceRoot $root -WarningFreeBytes $StorageWarningFreeBytes
         Invoke-FixedCommand 'cargo' @('build', '--locked', '--offline', '--bin', 'catdesk')
         $null = Assert-RegularFile $binary
         $digest = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()
     }
     elseif ($Command -eq 'verify') {
+        Write-DevLaneStorageAdvisory -SourceRoot $root -WarningFreeBytes $StorageWarningFreeBytes
         Invoke-VerificationCommands
     }
 
