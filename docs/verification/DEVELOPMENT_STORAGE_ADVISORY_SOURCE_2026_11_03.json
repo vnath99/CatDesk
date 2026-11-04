@@ -9,7 +9,7 @@
   "legacyCompatibility": "Original status/build/verify source and receipt fields round-trip unchanged after removing the declared new interface.",
   "baselineRoundTripLfSha256": "dc95643829f2a11b5fe4fa3c337647f943015c83c783a065344f95cef7e99a18",
   "sourceRawSha256": "4aab592e85ba5dc75dcd491f9cf3625689c88cc2f3982df07a40dc91f5789f60",
-  "testRawSha256": "0483c2d6ed2433b5fa2a9fae2b3f58f01f0ae3999749ae4d337dfc03f7ea7bff",
+  "testRawSha256": "b181b3e96977f88d0c1c588de3a96dd98e3ad880795b4c09f42929acb000e3ff",
   "hosts": [
     {
       "edition": "Desktop",

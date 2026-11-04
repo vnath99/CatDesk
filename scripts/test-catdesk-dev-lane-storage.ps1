@@ -83,4 +83,3 @@ try{
  }}
 }finally{if($priorSet){Set-Item Env:CARGO_INCREMENTAL $priorValue}else{$env:CARGO_INCREMENTAL=$null}}
 [pscustomobject]@{edition=$PSVersionTable.PSEdition;version=$PSVersionTable.PSVersion.ToString();passedCases=$cases.Count;cases=$cases;emptyValueSupported=$emptySupported;realCargoInvocations=0;realVolumeQueries=0;baselineRoundTripSha256=$digest}|ConvertTo-Json -Depth 6
-
