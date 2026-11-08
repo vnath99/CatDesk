@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Build the source observer with corrected multi-block body coverage and perform one new bounded read-only observation of the same completed response. No send, native retry or manual relay. Original dispatch remains closed. Installed end-to-end qualification still requires the existing reviewed Wake broker/package authority.",
+  "next": "Keep the original frozen native call closed and preserve both read-only observations. No further unchanged browser check or manual response relay. Fine-code/wire recovery requires new authoritative evidence; source improvements are published. Continue the existing reviewed Wake package/broker admission path before installing and testing a new send-to-automatic-readback cycle. C1 and full installed acceptance remain incomplete.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -613,7 +613,7 @@
     "runtimeStarts": 0,
     "bodyCoverageCorrection": {
       "observedUtc": "2026-11-08T20:47:17.776256+00:00",
-      "status": "TESTED_SOURCE_AWAITING_MATCHED_LIVE_OBSERVATION",
+      "status": "SOURCE_TESTED_LIVE_GENERIC_CLASSIFICATION_ONLY",
       "defect": "ONLY_FIRST_DEDICATED_ASSISTANT_BODY_WAS_SCANNED",
       "correction": "ALL_VISIBLE_NON_NESTED_DEDICATED_BODIES_INSIDE_THE_EXACT_ASSISTANT_UNIT",
       "bodyNodeMaximum": 64,
@@ -625,7 +625,50 @@
         "probe": 36,
         "focusedTotal": 121
       },
-      "actualMissingCodeCauseNotYetEstablished": true
+      "actualMissingCodeCauseNotYetEstablished": true,
+      "liveFineCodeRecovered": false,
+      "interpretation": "MULTIBLOCK_CORRECTION_DID_NOT_RECOVER_THIS_FINE_CODE_CAUSE_NOT_ESTABLISHED"
+    },
+    "latestLiveReadOnlyObservation": {
+      "observedUtc": "2026-11-08T20:53:26.937128+00:00",
+      "status": "LIVE_PARTIAL_SEPARATE_CONTROLLER_NOT_INSTALLED",
+      "sourceCommit": "7158b962dbe2f139eabda50266927b8144970ca7",
+      "controllerSha256": "386a1587bdf0c14fda721b14c7d653985e26d65ca221921aafe4198b50c73afb",
+      "startedUtc": "2026-11-08T20:49:12.202084+00:00",
+      "finishedUtc": "2026-11-08T20:49:47.323682+00:00",
+      "elapsedSeconds": 35.078,
+      "automaticGenericRejectionCapture": "PASS",
+      "taskReceiptGenerationAssignmentAttribution": "PASS",
+      "fineCachedEnvelopeCode": "NOT_RECOVERED_FROM_QUALIFIED_REGIONS",
+      "preciseRejectedField": "UNRECORDED_IN_LEGACY_ERROR",
+      "knownCodes": [
+        "INVALID_ARGUMENT"
+      ],
+      "refusalCategories": [
+        "DISPATCH_REJECTED"
+      ],
+      "nativeDispatchMentioned": true,
+      "scanTruncated": false,
+      "toolMarkers": "NONE_WITH_KNOWN_SELECTOR_COVERAGE_NOT_PROOF_OF_NO_CALL",
+      "runtimeExitCode": 0,
+      "harnessExitCode": 1,
+      "harnessFailure": "EXPECTED_FINE_ERROR_CODE_NOT_OBSERVED",
+      "nativeCleanupProved": true,
+      "ownedProfileProcessesAfter": 0,
+      "wakeProcessesAfter": 0,
+      "preservationPins": 1069,
+      "preservationMismatches": 0,
+      "originalNativeWorktreeClean": true,
+      "originalNativeJournalAbsent": true,
+      "messagesSent": 0,
+      "nativeCalls": 0,
+      "bindingChanges": 0,
+      "backendStarts": 0,
+      "officialOwnerStarts": 0,
+      "wakeStarts": 0,
+      "operatorResponseRelayRequests": 0,
+      "installedEndToEndAcceptance": "BLOCKED_NOT_CLAIMED",
+      "newSenderLifecycleLiveAcceptance": "NOT_RUN_NOT_INSTALLED"
     }
   }
 }

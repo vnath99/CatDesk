@@ -8270,3 +8270,32 @@ checks pass (78 actual-DOM script, seven persistence, 36 probe). Whether this
 explains the missing live code requires the next matched read-only observation;
 no unchanged browser audit or resend is authorized by this correction. Installed
 dev.84/broker gates and the original native dispatch hold remain unchanged.
+
+
+## 2026-11-08T20:53:26.937128+00:00 — autonomous readback live result and exact remaining gates
+
+The source controller at `7158b962dbe2f139eabda50266927b8144970ca7`
+(SHA-256 `386a1587bdf0c14fda721b14c7d653985e26d65ca221921aafe4198b50c73afb`) performed one changed-parser
+read-only observation in 35.078 seconds. PASS: completed response, exact original
+project/task/assignment/receipt/message/generation attribution, automatic
+`INVALID_ARGUMENT` plus dispatch-refusal capture, no operator relay, and owned
+cleanup. All 1,069 preserved files still match; original native worktree remains
+clean and its journal absent. No USER send, native call, backend/tunnel/Wake start
+or binding change occurred. Profile and Wake process counts returned to zero.
+
+NOT RECOVERED: the more specific cached-envelope code in the qualified response
+regions. Runtime readback exited zero; the strict harness exited one because it
+required that finer code. The multi-block correction did not resolve this live
+detail, so it is not asserted as the original cause. Both receipts remain intact.
+No unchanged recheck, speculative UI click or manual message relay is queued.
+
+Installed dev.84 still lacks the response handlers. Existing installation refuses
+with `WAKE_INSTALL_BROKER_UNPROVISIONED`; the protected service transaction also
+still lacks its approved admission path. This is remaining source/deployment
+work under T-0485, not a reason to try another terminal, rewrite fingerprints or
+ask the operator to inspect ChatGPT. Signed independent package/migration
+authority and qualified existing broker admission are required before installation.
+The new sender's wait-until-idle, guarded refresh and two persisted-response reads
+are SOURCE TESTED, not installed live acceptance. The original native call
+remains CLOSED pending authoritative original-wire recovery; native execution,
+new installed send/readback acceptance and C1 are NOT COMPLETE.
