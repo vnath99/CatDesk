@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-08T04:39:41.9658026Z",
+  "localDate": "2026-11-07",
+  "timezone": "America/New_York",
+  "sourceBaseCommit": "e911c6dd9f37db28ca8446172bc32304bb6e8722",
+  "initialRemoteCommit": "4da5c89f423e2f9ea899e6cca478c39be7a73e6a",
+  "branch": "codex/web-rollover-oct17",
+  "inputHashes": {
+    "scripts/catdesk_acceptance_inventory.py": "8970b8c457d34b552e8b3380b682085920bde4ba6a2bcb3c6f36c6ea59142fd4",
+    "tests/test_catdesk_acceptance_inventory.py": "e3072ed663ce06b1c1fd128184415a0ab58b2044a6df5a394046741943ec50e7"
+  },
+  "c0": "PASS_TRUTH_RECONCILIATION_WITH_FAILED_OPERATIONAL_LAYERS",
+  "c1": "BLOCKED_NOT_LIVE_ACCEPTED",
+  "laterMilestones": "NOT_RUN",
+  "verification": {
+    "inventoryCasesPassed": 11,
+    "adapterCasesPassed": 46,
+    "focusedBridgeRecoveryCasesPassed": 10,
+    "doctorAssertionsPassed": 144,
+    "fullBridgeSuite": "INCOMPLETE_TIMEOUT_45_SECONDS",
+    "initialOwnerAdmission": "REFUSED_OLD_POWERSHELL_HASH_BEFORE_TESTS",
+    "requalifiedLocalTestHost": "MICROSOFT_SIGNED_CORE_7_6_9",
+    "actualPackageChecksumInventory": "PASS",
+    "wholeApplicationTests": "NOT_RUN",
+    "freshRustCompilation": "NOT_RUN",
+    "installedLiveCodingCycle": "NOT_RUN"
+  },
+  "observedLayers": {
+    "canonicalHashAndFingerprintMatch": true,
+    "canonicalReleaseGeneration": 4,
+    "localDaemon": "LOCAL_MCP_LISTENER_MISSING",
+    "persistentSupervisor": "SUPERVISOR_REGISTRATION_CONFLICT_METADATA_ONLY",
+    "selectedDevelopment": "DEV85_CHECKSUMS_AND_RETAINED_VERIFICATION_MATCH",
+    "installedWake": "DEV84_CHECKSUMS_MATCH_STOPPED",
+    "installedOrdinarySenderBootstrapProtocol": false,
+    "connector": "MCP SSE probe returned 429 from openai.org",
+    "connectorAttempts": 1,
+    "controlledProjectsPaired": 2,
+    "controlledTargetGeneration": 1,
+    "controlledRequestsOpenQueuedAssociated": 2,
+    "controlledRequestDeliveryRecords": 0,
+    "nativeThreads": "PRESERVED_COMPLETED_INITIALIZATION_NOT_WRITER_LIVENESS_PROOF"
+  },
+  "preservation": {
+    "pinsChecked": 1048,
+    "pinMismatches": 0,
+    "browserStarts": 0,
+    "messagesSent": 0,
+    "nativeTaskStarts": 0,
+    "wakeOrTunnelStarts": 0,
+    "recurringAutomationChanges": 0,
+    "recordedTestPidsRemaining": 0,
+    "ownedInvocationMatchesRemaining": 0,
+    "globalHostIdleClaimed": false
+  },
+  "next": "Existing Wake broker/migration and lifecycle-owner admission evidence; no install guard bypass, new request identity or repeated unchanged connector probe.",
+  "operatingRecord": "docs/orchestrator/C0_C1_ACCEPTANCE_2026_11_07.md"
+}

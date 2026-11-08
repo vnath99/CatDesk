@@ -1,3 +1,11 @@
+## 2026-11-08T04:42:12.777400+00:00 — architecture revision C0 reconciled; C1 blocked by serving/package prerequisites
+
+The operator activated only C0–C1 in the existing registered source worktree. Admission source e911c6dd9f37db28ca8446172bc32304bb6e8722 differs from the documented remote4da5c89 baseline; existing qualified f71a17b/CFE development selection and installed0c/dev84 artifacts were independently checksummed, not rebuilt or promoted. New read-only acceptance inventory joins existing records without a second registry or authority store. Current tests pass11 inventory,46 adapter,10 focused bridge recovery and144 doctor assertions. Full bridge run exceeded45seconds and remains incomplete; initial old-PowerShell-hash refusal is retained. Microsoft-signed7.6.9 was qualified for local tests only.
+
+Passive doctor identifies no3200 listener and a supervisor-registration conflict; one v5 connector read returned upstream429. Installed dev84 lacks the bootstrap protocol required by the canonical ordinary sender; its public installer still refuses unprovisioned protected broker use. No incompatible send/install was attempted. Both original controlled requests remain OPEN/queued/associated, exact test project/Wake pairs remain generation1, clean native roots/threads remain preserved. No republish, reassociation, source receipt, execution grant, native edit, browser, WakeHost, tunnel or scheduler start. All1048 preservation pins match; recorded test PIDs and owned invocations are absent. C0 is truth reconciliation, not operational success. C1 and all later live gates remain unaccepted; later milestones NOT_RUN.
+
+Next: existing Wake broker/migration and lifecycle-owner admission evidence needed for C1; preserve every UNKNOWN and no-replay fence. No new discretionary approval or alternate terminal is requested. Do not repeat unchanged connector checks. Detailed statuses, commands and limitations: docs/orchestrator/C0_C1_ACCEPTANCE_2026_11_07.md and docs/verification/C0_C1_RECONCILIATION_2026_11_07.json. Private receipts and payloads remain outside Git.
+
 ## 2026-11-03T16:35:17.988364+00:00 — shared composer-structure diagnostics implemented,341 cases pass and exact held-event observation qualified
 
 ## 2026-11-03T19:31:34.880166+00:00 — finite ordinary Web work delivery source qualified; native assignment preparation complete
