@@ -86,6 +86,35 @@ fn cached_request(request: &JsonRpcRequest) -> Result<JsonRpcRequest, CachedInva
     })
 }
 
+/// Pure representation check for a frozen call. No grant, journal, task or
+/// shell is accessed; only its canonical outer-envelope digest leaves here.
+pub(crate) fn canonical_cached_envelope_sha256(task: &Value) -> Result<String, String> {
+    let call: Call = serde_json::from_value(task.clone())
+        .map_err(|_| "WEB_TASK_CACHED_ENVELOPE_UNREPRESENTABLE")?;
+    if !call.arguments.is_object()
+        || call.execution_key.len() != 64
+        || !call
+            .execution_key
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+    {
+        return Err("WEB_TASK_CACHED_ENVELOPE_UNREPRESENTABLE".into());
+    }
+    let arguments = json!({"command":format!("{CACHED_COMMAND_PREFIX}{task}")});
+    let request = JsonRpcRequest {
+        jsonrpc: "2.0".into(),
+        id: Some(json!("representation-only")),
+        method: "tools/call".into(),
+        params: json!({"name":"run_command","arguments":arguments}),
+    };
+    let adapted =
+        cached_request(&request).map_err(|_| "WEB_TASK_CACHED_ENVELOPE_UNREPRESENTABLE")?;
+    if adapted.params["arguments"] != *task {
+        return Err("WEB_TASK_CACHED_ENVELOPE_UNREPRESENTABLE".into());
+    }
+    Ok(catdesk_wake::protocol::digest(&arguments.to_string()))
+}
+
 /// The central HTTP layer must apply the same bearer/capability checks as TOOL.
 /// Only this closed JSON adapter runs; the command text is never shell input.
 pub(crate) async fn handle_cached(control: &str, request: &JsonRpcRequest) -> JsonRpcResponse {
@@ -2326,6 +2355,36 @@ pub(crate) mod tests {
         assert_eq!(response["error"]["data"]["retryAuthorized"], false);
         assert!(!response.to_string().contains("PRIVATE_"));
         assert!(!response.to_string().contains("executionKey"));
+    }
+
+    #[test]
+    fn cached_canonical_envelope_checks_representation_without_native_admission() {
+        let call = json!({"projectId":"alpha","requestId":"fixture","sourceEventId":"source",
+            "assignmentSha256":"a".repeat(64),"expectedTargetGeneration":1,"expectedTargetSha256":"b".repeat(64),
+            "taskId":"task","callId":"fixed-call","tool":"read","executionKey":"c".repeat(64),
+            "arguments":{"text":"quotes \" and newline\n"}});
+        let hash = canonical_cached_envelope_sha256(&call).unwrap();
+        assert_eq!(hash.len(), 64);
+        assert_eq!(hash, canonical_cached_envelope_sha256(&call).unwrap());
+        assert!(!hash.contains("PRIVATE_"));
+        for invalid in [
+            Value::Null,
+            json!([]),
+            json!("shell"),
+            json!({}),
+            call.as_object()
+                .unwrap()
+                .iter()
+                .filter(|(key, _)| *key != "projectId")
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect::<serde_json::Map<_, _>>()
+                .into(),
+        ] {
+            assert!(canonical_cached_envelope_sha256(&invalid).is_err());
+        }
+        let mut changed = call;
+        changed["arguments"] = json!({"different":true});
+        assert_ne!(hash, canonical_cached_envelope_sha256(&changed).unwrap());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

@@ -8299,3 +8299,40 @@ The new sender's wait-until-idle, guarded refresh and two persisted-response rea
 are SOURCE TESTED, not installed live acceptance. The original native call
 remains CLOSED pending authoritative original-wire recovery; native execution,
 new installed send/readback acceptance and C1 are NOT COMPLETE.
+
+
+## 2026-11-08T21:27:19.817173+00:00 — original C1 cached-transport recovery — TESTED_SOURCE
+
+A single connected-v5 probe sent only `command: CATDESK_WEB_TASK={}`. It
+returned `WEB_TASK_ARGUMENTS_INVALID`, proving the reserved outer envelope
+passed validation and the deliberately absent inner task was refused before
+authorization/native admission. This was a Codex-side connector test, not a
+claim about the affected Web caller. No key, task, browser send or native
+dispatch was supplied. The unchanged trusted backend and existing official
+owner were ready, bearer checks returned 401/401/200, and both stopped after
+49.765 seconds within a 180-second limit. All 1,069 pins and the owner profile
+match; browser/Wake counts returned to zero. No 429 occurred.
+
+The original rejected outer field remains unrecorded. Current and installed
+reviewed-source Call schemas match. The pre-admission refusal, frozen capsule,
+unchanged grant, READY queue and absent journal can support one carefully
+constructed representation of the original call; they cannot authorize a new
+task or replay an uncertain native effect. Source now reuses the existing
+private-context clarification/semantic-Wake path for one immutable transport
+advisory. It preserves original bytes and instructs the Web caller to serialize
+the same nativeCall into the sole run_command command argument, omitting all
+optional outer fields. It rechecks the original state before ACK, releases only
+the positively fenced project lease and retains all existing native grants,
+plan policy and duplicate/unknown-outcome guards. No cached validator rule,
+project binding, task/grant/key, native thread or protected release changed.
+
+75 focused checks pass, with strict root all-target Clippy and formatting.
+Cases include original-byte preservation, incomplete prior exchange, altered
+proof, prior attempt/receipt/journal, unknown browser delivery, schema shape and
+all three continuation lease handoffs. The registered native chat was observed
+not loaded, with its latest turn completed; actual writer acquisition still
+belongs to the existing native runner. Next: matched separate controller and
+one guarded original-task Web delivery. No local-only code-dispatch fallback.
+The architecture explicitly permits C1 on the existing development lane; the
+unfinished protected Wake upgrade remains separate and is not a blanket C1
+prerequisite. C1 and installed automatic-readback acceptance remain incomplete.

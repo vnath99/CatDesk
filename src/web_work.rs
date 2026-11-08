@@ -125,6 +125,12 @@ fn context_action_using(
         "context-deliver-clarification" => {
             crate::project_mcp_task::InitialContextAction::DeliverClarification
         }
+        "context-clarify-transport" => {
+            crate::project_mcp_task::InitialContextAction::ClarifyTransport
+        }
+        "context-deliver-transport-clarification" => {
+            crate::project_mcp_task::InitialContextAction::DeliverTransportClarification
+        }
         _ => return Err("WEB_TASK_CONTEXT_OPERATION_INVALID".into()),
     };
     let request = AssignmentRequest::parse(args)?;
@@ -202,6 +208,7 @@ fn context_action_using(
             action,
             crate::project_mcp_task::InitialContextAction::DeliverContinuation
                 | crate::project_mcp_task::InitialContextAction::DeliverClarification
+                | crate::project_mcp_task::InitialContextAction::DeliverTransportClarification
         ) {
             return Err("WEB_TASK_CONTEXT_HANDOFF_INVALID".into());
         }
@@ -1547,6 +1554,17 @@ pub(crate) mod tests {
     #[cfg(windows)]
     #[test]
     fn continuation_releases_only_fenced_delivery_lease_and_keeps_native_route_guards() {
+        for operation in [
+            "context-deliver-continuation",
+            "context-deliver-clarification",
+            "context-deliver-transport-clarification",
+        ] {
+            verify_continuation_handoff(operation);
+        }
+    }
+
+    #[cfg(windows)]
+    fn verify_continuation_handoff(operation: &str) {
         use catdesk_wake::store::{Phase, Receipt};
         let (control, assignment, wake, args, source) = assignment_fixture();
         wake.publish(&source).unwrap();
@@ -1612,7 +1630,7 @@ pub(crate) mod tests {
         let result = context_action_using(
             &control,
             args,
-            "context-deliver-continuation",
+            operation,
             |_, _, expected, _, check, handoff| {
                 lease_is_busy();
                 check()?;

@@ -17,6 +17,8 @@ pub(crate) enum InitialContextAction {
     DeliverContinuation,
     ClarifyIdentity,
     DeliverClarification,
+    ClarifyTransport,
+    DeliverTransportClarification,
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -655,21 +657,31 @@ pub(crate) fn run_initial_context_handoff(
         action,
         InitialContextAction::ClarifyIdentity | InitialContextAction::DeliverClarification
     );
+    let transport = matches!(
+        action,
+        InitialContextAction::ClarifyTransport
+            | InitialContextAction::DeliverTransportClarification
+    );
     if clarification
+        || transport
         || matches!(
             action,
             InitialContextAction::Continue | InitialContextAction::DeliverContinuation
         )
     {
         keep_running()?;
-        let queued = if clarification {
+        let queued = if transport {
+            identity::queue_transport(scope, record, target, &store)?
+        } else if clarification {
             identity::queue(scope, record, target, &store)?
         } else {
             queue_continuation(scope, record, target, &store)?
         };
         if matches!(
             action,
-            InitialContextAction::Continue | InitialContextAction::ClarifyIdentity
+            InitialContextAction::Continue
+                | InitialContextAction::ClarifyIdentity
+                | InitialContextAction::ClarifyTransport
         ) {
             return Ok(queued);
         }
@@ -691,6 +703,9 @@ pub(crate) fn run_initial_context_handoff(
             if clarification {
                 identity::validate(scope, record, target, &store)?;
             }
+            if transport {
+                identity::validate_transport(scope, record, target, &store)?;
+            }
             if actual != &event || actual_target != target {
                 return Err("WEB_TASK_CONTEXT_CONTINUATION_CHANGED".into());
             }
@@ -707,6 +722,9 @@ pub(crate) fn run_initial_context_handoff(
             load(scope, record, target)?;
             if clarification {
                 identity::validate(scope, record, target, &store)?;
+            }
+            if transport {
+                identity::validate_transport(scope, record, target, &store)?;
             }
             after_fence(actual, actual_target)
         };

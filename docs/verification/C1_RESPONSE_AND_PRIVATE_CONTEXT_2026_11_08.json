@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Keep the original frozen native call closed and preserve both read-only observations. No further unchanged browser check or manual response relay. Fine-code/wire recovery requires new authoritative evidence; source improvements are published. Continue the existing reviewed Wake package/broker admission path before installing and testing a new send-to-automatic-readback cycle. C1 and full installed acceptance remain incomplete.",
+  "next": "Build the exact reviewed source controller, then freeze and deliver one same-task transport clarification through the existing authenticated owner. Original nativeCall fields, key, call ID, grant and task are unchanged. Only a fresh READY/no-attempt/no-journal proof permits this known pre-admission recovery; uncertain effects remain held. Native work must originate from the actual registered Web conversation, with no local dispatch fallback. Do not make the unfinished protected Wake upgrade a blanket prerequisite for C1.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -670,5 +670,79 @@
       "installedEndToEndAcceptance": "BLOCKED_NOT_CLAIMED",
       "newSenderLifecycleLiveAcceptance": "NOT_RUN_NOT_INSTALLED"
     }
+  },
+  "cachedTransportRecovery": {
+    "observedUtc": "2026-11-08T21:27:19.817173+00:00",
+    "baselineCommit": "cb96f623cec246258ba3e0acd789f869c47bba4f",
+    "status": "TESTED_SOURCE_PENDING_MATCHED_LIVE_DELIVERY",
+    "schemaCompatibility": {
+      "installedReviewedSource": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+      "callStructUnchanged": true
+    },
+    "probe": {
+      "caller": "CONNECTED_V5_FROM_CODEX_NOT_AFFECTED_WEB_CONVERSATION",
+      "command": "CATDESK_WEB_TASK={}",
+      "connectorCalls": 1,
+      "receivedCode": "WEB_TASK_ARGUMENTS_INVALID",
+      "outerEnvelopeAccepted": true,
+      "innerTaskDeliberatelyAbsent": true,
+      "taskKeySupplied": false,
+      "nativeWorkPossible": false,
+      "http429": false,
+      "authMatrix": [
+        401,
+        401,
+        200
+      ],
+      "canonicalSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+      "supervisorStates": [
+        "RECOVERED",
+        "MONITORING_COMPLETE"
+      ],
+      "existingOfficialReady": true,
+      "elapsedSeconds": 49.765,
+      "maximumSeconds": 180,
+      "backendStopped": true,
+      "officialStopped": true,
+      "profilePreserved": true,
+      "preservationPins": 1069,
+      "preservationMismatches": 0,
+      "ownedBrowserAndWakeProcessesAfter": 0
+    },
+    "preciseOriginalRejectedField": "NOT_RECORDED_DO_NOT_GUESS",
+    "recovery": "ONE_NEW_ADVISORY_TRANSPORT_TURN_FOR_THE_SAME_FROZEN_NATIVE_CALL",
+    "preconditions": [
+      "EXACT_ORIGINAL_CAPSULE_GRANT_ASSIGNMENT_SELECTION_AND_TARGET",
+      "COMPLETED_ORIGINAL_CONTINUATION_AND_IDENTITY_CLARIFICATION_RECEIPTS",
+      "READY_WITHOUT_NATIVE_ATTEMPT_RECEIPT_OR_ANY_TASK_JOURNAL",
+      "INNER_CALL_SCHEMA_AND_EXACT_CANONICAL_OUTER_ROUNDTRIP",
+      "IMMUTABLE_TRANSPORT_CLARIFICATION_FILE",
+      "RECHECK_ALL_BEFORE_ACK_AND_RELEASE_ONLY_FENCED_PROJECT_LEASE"
+    ],
+    "originalTaskOrGrantReplaced": false,
+    "executionKeyExported": false,
+    "cachedValidationRulesWeakened": false,
+    "unknownNativeEffectRecoveryAllowed": false,
+    "unknownBrowserSubmissionReplayAllowed": false,
+    "operatorCommands": [
+      "context-clarify-transport",
+      "context-deliver-transport-clarification"
+    ],
+    "existingStore": "PRIVATE_TASK_CONTEXT_AND_SEMANTIC_WAKE_QUEUE",
+    "newMcpTools": 0,
+    "tests": {
+      "identityAndTransport": 5,
+      "cachedAndCanonicalEnvelope": 5,
+      "projectContext": 16,
+      "webWork": 6,
+      "webCli": 43,
+      "total": 75,
+      "strictRootAllTargetClippy": "PASS",
+      "format": "PASS",
+      "threeContinuationKindsShareWitnessedLeaseHandoff": true
+    },
+    "nativeOwnerObservation": "NOT_LOADED_WITH_COMPLETED_LATEST_TURN_NOT_AN_EXCLUSIVE_WRITER_LEASE_PROOF",
+    "liveNativeExecution": "NOT_RUN_FOR_THIS_RECOVERY",
+    "installedWakeUpgrade": "UNCHANGED_BLOCKED_SEPARATE_FROM_C1"
   }
 }

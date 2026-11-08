@@ -6548,3 +6548,22 @@ inside the exact assistant unit, with a maximum of 64 body candidates and a
 32,768-character classification prefix. Later body controls cannot prove
 completion. Generic rejection capture is live-qualified through a separate
 controller; fine-code coverage and installed acceptance remain separate.
+
+
+## 2026-11-08T21:27:19.817173+00:00 — original-task transport clarification
+
+```text
+operator web work context-clarify-transport --project-id PROJECT --input-file ORIGINAL_ASSIGNMENT_PINS
+operator web work context-deliver-transport-clarification --project-id PROJECT --input-file ORIGINAL_ASSIGNMENT_PINS
+```
+
+The first command freezes/queues one fixed advisory in the existing private
+context store; expected status is TASK_TRANSPORT_CLARIFICATION_QUEUED. It creates
+no native task/grant and sends nothing. The second uses the existing bounded
+browser owner and native submit fence. Required: exact original capsule/grant/
+selection/target, completed identity clarification, READY with no attempt/receipt/
+task journal, and exact inner-schema/canonical-envelope roundtrip. Any drift,
+prior native effect, changed immutable proof or uncertain submission fails
+closed. Existing SENT/unknown messages are never recreated. These are local
+operator commands for an already-authorized task, not new MCP tools or release
+promotion authority. Current protected Wake installation gates remain unchanged.

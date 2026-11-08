@@ -225,6 +225,169 @@ pub(super) fn queue(
     )
 }
 
+/// A later advisory formatting turn, using the same private context and native
+/// call. It cannot retire an unknown native effect or replace any frozen bytes.
+#[derive(Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct TransportClarification {
+    schema_version: u32,
+    identity: Clarification,
+    prior_identity_receipt: Receipt,
+    canonical_cached_envelope_sha256: String,
+}
+
+fn transport_proof(
+    scope: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    target: &Target,
+    store: &catdesk_wake::store::Store,
+) -> Result<(TransportClarification, PathBuf), String> {
+    // Reuses exact original capsule/grant/selection/worktree checks, READY with
+    // no attempt/receipt, and the absence of any native task journal.
+    let (identity, root) = proof(scope, record, target, store)?;
+    let encoded = bytes(&identity)?;
+    if read_assignment_bytes(&root.join("identity-clarification.json"))? != encoded {
+        return Err("WEB_TASK_CONTEXT_IDENTITY_MISMATCH".into());
+    }
+    let turn = format!(
+        "initial-context-{}",
+        digest(std::str::from_utf8(&encoded).map_err(|_| "WEB_TASK_CONTEXT_INVALID")?)
+    );
+    let id = catdesk_wake::store::WakeIntent {
+        purpose: catdesk_wake::protocol::WakePurpose::NewTask,
+        source_event_id: &record.event_id,
+        source_turn_id: &turn,
+        priority: 0,
+        ttl_seconds: 600,
+    }
+    .event_id(&scope.project.project_id)?;
+    let prior = store
+        .delivery(&id)?
+        .ok_or("WEB_TASK_CONTEXT_TRANSPORT_PRIOR_REQUIRED")?;
+    let receipt = prior
+        .receipt
+        .clone()
+        .ok_or("WEB_TASK_CONTEXT_TRANSPORT_PRIOR_REQUIRED")?;
+    let metadata = prior
+        .event
+        .wake_metadata()?
+        .ok_or("WEB_TASK_CONTEXT_TRANSPORT_PRIOR_REQUIRED")?;
+    if prior.phase != catdesk_wake::store::Phase::Sent
+        || prior.target != *target
+        || prior.event.project_id != scope.project.project_id
+        || prior.event.event_id != id
+        || prior.event.target_generation != target.generation
+        || metadata.purpose != catdesk_wake::protocol::WakePurpose::NewTask
+        || metadata.source_event_id != record.event_id
+        || metadata.source_turn_id != turn
+        || prior.event.message != message(&identity)
+        || receipt.schema_version != 1
+        || receipt.event_id != id
+        || receipt.target_generation != target.generation
+        || receipt.target_digest != target.digest
+        || receipt.message_digest != digest(&prior.event.message)
+        || receipt.evidence != "EXACT_USER_MESSAGE_APPENDED"
+        || receipt.sent_utc == 0
+        || store.timer(&id)?.is_none_or(|timer| {
+            timer.response_state != catdesk_wake::store::ResponseState::Complete
+                || timer.event_id != id
+                || timer.project_id != scope.project.project_id
+                || timer.target_generation != target.generation
+                || timer.target_digest != target.digest
+        })
+    {
+        return Err("WEB_TASK_CONTEXT_TRANSPORT_PRIOR_REQUIRED".into());
+    }
+    let (_, payload, _) = load(scope, record, target)?;
+    let capsule: Value = serde_json::from_str(
+        payload
+            .message
+            .lines()
+            .nth(1)
+            .ok_or("WEB_TASK_CONTEXT_INVALID")?,
+    )
+    .map_err(|_| "WEB_TASK_CONTEXT_INVALID")?;
+    let envelope =
+        crate::web_task_dispatch::canonical_cached_envelope_sha256(&capsule["nativeCall"])?;
+    Ok((
+        TransportClarification {
+            schema_version: 1,
+            identity,
+            prior_identity_receipt: receipt,
+            canonical_cached_envelope_sha256: envelope,
+        },
+        root,
+    ))
+}
+
+fn transport_bytes(value: &TransportClarification) -> Result<Vec<u8>, String> {
+    serde_json::to_vec(value).map_err(|_| "WEB_TASK_CONTEXT_INVALID".into())
+}
+
+pub(super) fn validate_transport(
+    scope: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    target: &Target,
+    store: &catdesk_wake::store::Store,
+) -> Result<(), String> {
+    let (value, root) = transport_proof(scope, record, target, store)?;
+    if read_assignment_bytes(&root.join("transport-clarification.json"))?
+        != transport_bytes(&value)?
+    {
+        return Err("WEB_TASK_CONTEXT_TRANSPORT_CHANGED".into());
+    }
+    Ok(())
+}
+
+fn transport_message(value: &TransportClarification) -> String {
+    let r = &value.identity.reference;
+    format!(
+        "CatDesk same-task transport clarification for {}/{}. Original capsule fullPrivateContextSha256={} and assignmentSha256={} remain unchanged. Prior identity-clarification USER digest={}. Independent local pre-admission checks still show the original native task READY with no attempt, receipt or task journal. This changes only outer transport instructions, never the task, nativeCall, grant, key, workspace or ownership. Use the existing capsule's exact nativeCall (native-dispatch-1, native.codex.dispatch, arguments {{}}). Invoke CatDesk v5 run_command ONCE with ONLY its command argument: the literal prefix CATDESK_WEB_TASK= immediately followed by the JSON serialization of that unchanged nativeCall. Send the literal serialized string, not JavaScript, a shell command or a placeholder. Omit ALL optional outer arguments, including cwd, timeout, dry_run, include_full_output and allow_without_plan. Keep the key private. If any original identity is unavailable or mismatched, stop. Never replay a completed or uncertain native call. Report actual tool outcome, edits, tests and blockers; do not substitute a local-only execution path.",
+        r.project_id,
+        r.request_id,
+        value.identity.full_private_context_sha256,
+        r.assignment.assignment_sha256,
+        value.prior_identity_receipt.message_digest
+    )
+}
+
+pub(super) fn queue_transport(
+    scope: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    target: &Target,
+    store: &catdesk_wake::store::Store,
+) -> Result<Value, String> {
+    let (value, root) = transport_proof(scope, record, target, store)?;
+    let encoded = transport_bytes(&value)?;
+    exact_file(&root.join("transport-clarification.json"), &encoded)?;
+    let clarification_sha =
+        digest(std::str::from_utf8(&encoded).map_err(|_| "WEB_TASK_CONTEXT_INVALID")?);
+    let turn = format!("initial-context-{clarification_sha}");
+    let event = store.produce_expected_wake(
+        &scope.project.project_id,
+        &transport_message(&value),
+        target,
+        catdesk_wake::store::WakeIntent {
+            purpose: catdesk_wake::protocol::WakePurpose::NewTask,
+            source_event_id: &record.event_id,
+            source_turn_id: &turn,
+            priority: 0,
+            ttl_seconds: 600,
+        },
+    )?;
+    Ok(
+        json!({"status":"TASK_TRANSPORT_CLARIFICATION_QUEUED","projectId":scope.project.project_id,
+        "requestId":record.request_id,"taskId":value.identity.reference.assignment.task_id,"eventId":event.event_id,
+        "messageSha256":digest(&event.message),"clarificationSha256":clarification_sha,
+        "priorClarificationEventId":value.prior_identity_receipt.event_id,
+        "fullPrivateContextSha256":value.identity.full_private_context_sha256,
+        "assignmentSha256":value.identity.reference.assignment.assignment_sha256,
+        "targetGeneration":target.generation,"targetSha256":target.digest,
+        "queueOnly":true,"newGrantCreated":false,"nativeSessionAction":"NONE",
+        "taskCompleted":false,"executionKeyDisclosed":false}),
+    )
+}
+
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
@@ -429,6 +592,148 @@ mod tests {
             capsule_full_context_digest(&payload).unwrap_err(),
             "WEB_TASK_CONTEXT_IDENTITY_MISMATCH"
         );
+    }
+
+    #[test]
+    fn transport_clarification_reuses_original_task_and_cannot_recreate_sent_or_unknown_work() {
+        crate::web_task_dispatch::tests::with_native_context_fixture(|control, pins| {
+            let scope =
+                crate::delegated::autonomy_projects::resolve_registered_project_from_control_root(
+                    control, "alpha",
+                )
+                .unwrap();
+            let store = Store::open(
+                &crate::wake_protocol_client::wake_root_for_workspace(control).unwrap(),
+            )
+            .unwrap();
+            let record = crate::web_work_state::WorkLedger::open(control, "alpha")
+                .unwrap()
+                .record("request-a")
+                .unwrap()
+                .unwrap();
+            let (_, payload, root) = delivered(&scope, &record, &store);
+            let prior = queue(&scope, &record, &record.target, &store).unwrap();
+            let prior_id = prior["eventId"].as_str().unwrap();
+            let prior_event = catdesk_wake::store::read(
+                &store.root().join("queue").join(format!("{prior_id}.json")),
+            )
+            .unwrap();
+            sent_event(&store, &prior_event);
+            let grant = super::super::super::task_directory(
+                &scope,
+                &record.task_assignment.as_ref().unwrap().task_id,
+                false,
+            )
+            .unwrap()
+            .join("execution-grant.json");
+            let paths = [
+                root.join("initial-payload.json"),
+                root.join("initial-delivery.json"),
+                root.join("identity-clarification.json"),
+                grant,
+                store
+                    .root()
+                    .join("deliveries")
+                    .join(format!("{prior_id}.json")),
+            ];
+            let before: Vec<_> = paths.iter().map(|p| fs::read(p).unwrap()).collect();
+            let queued =
+                crate::web_work::context_action(control, pins.clone(), "context-clarify-transport")
+                    .unwrap();
+            assert_eq!(queued["status"], "TASK_TRANSPORT_CLARIFICATION_QUEUED");
+            assert_eq!(queued["requestId"], record.request_id);
+            assert_eq!(queued["newGrantCreated"], false);
+            assert_eq!(
+                queued,
+                crate::web_work::context_action(control, pins.clone(), "context-clarify-transport")
+                    .unwrap()
+            );
+            let id = queued["eventId"].as_str().unwrap();
+            assert_ne!(id, prior_id);
+            let event: catdesk_wake::protocol::Event =
+                catdesk_wake::store::read(&store.root().join("queue").join(format!("{id}.json")))
+                    .unwrap();
+            assert!(event.message.len() <= 2048);
+            assert!(event.message.contains("ONLY its command argument"));
+            assert!(
+                !event
+                    .message
+                    .contains(payload.context["executionKey"].as_str().unwrap())
+            );
+            validate_transport(&scope, &record, &record.target, &store).unwrap();
+            {
+                let host = store.host_lock().unwrap();
+                store.claim(&event, &host).unwrap();
+                store
+                    .transition(id, host.owner(), Phase::Submitting, None, None)
+                    .unwrap();
+            }
+            let unknown_path = store.root().join("deliveries").join(format!("{id}.json"));
+            let unknown_before = fs::read(&unknown_path).unwrap();
+            assert_eq!(
+                queued,
+                queue_transport(&scope, &record, &record.target, &store).unwrap()
+            );
+            assert_eq!(fs::read(&unknown_path).unwrap(), unknown_before);
+            for (path, bytes) in paths.iter().zip(before) {
+                assert_eq!(fs::read(path).unwrap(), bytes);
+            }
+            let directory = super::super::super::task_directory(
+                &scope,
+                &record.task_assignment.as_ref().unwrap().task_id,
+                false,
+            )
+            .unwrap();
+            fs::create_dir(directory.join("journal")).unwrap();
+            assert_eq!(
+                queue_transport(&scope, &record, &record.target, &store).unwrap_err(),
+                "WEB_TASK_CONTEXT_NATIVE_EFFECT_UNPROVEN"
+            );
+        });
+    }
+
+    #[test]
+    fn transport_requires_completed_identity_turn_and_rejects_frozen_proof_tampering() {
+        crate::web_task_dispatch::tests::with_native_context_fixture(|control, _| {
+            let scope =
+                crate::delegated::autonomy_projects::resolve_registered_project_from_control_root(
+                    control, "alpha",
+                )
+                .unwrap();
+            let store = Store::open(
+                &crate::wake_protocol_client::wake_root_for_workspace(control).unwrap(),
+            )
+            .unwrap();
+            let record = crate::web_work_state::WorkLedger::open(control, "alpha")
+                .unwrap()
+                .record("request-a")
+                .unwrap()
+                .unwrap();
+            let (_, _, root) = delivered(&scope, &record, &store);
+            assert!(queue_transport(&scope, &record, &record.target, &store).is_err());
+            assert!(!root.join("transport-clarification.json").exists());
+            let prior = queue(&scope, &record, &record.target, &store).unwrap();
+            assert_eq!(
+                queue_transport(&scope, &record, &record.target, &store).unwrap_err(),
+                "WEB_TASK_CONTEXT_TRANSPORT_PRIOR_REQUIRED"
+            );
+            let id = prior["eventId"].as_str().unwrap();
+            let event =
+                catdesk_wake::store::read(&store.root().join("queue").join(format!("{id}.json")))
+                    .unwrap();
+            sent_event(&store, &event);
+            queue_transport(&scope, &record, &record.target, &store).unwrap();
+            let path = root.join("transport-clarification.json");
+            let original = fs::read(&path).unwrap();
+            let mut value: Value = serde_json::from_slice(&original).unwrap();
+            value["canonicalCachedEnvelopeSha256"] = json!("f".repeat(64));
+            fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+            assert_eq!(
+                validate_transport(&scope, &record, &record.target, &store).unwrap_err(),
+                "WEB_TASK_CONTEXT_TRANSPORT_CHANGED"
+            );
+            assert!(queue_transport(&scope, &record, &record.target, &store).is_err());
+        });
     }
 
     #[test]
