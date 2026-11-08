@@ -34,11 +34,20 @@ fn validate_selection(
 }
 
 pub(crate) fn deliver(workspace: &Path, project: &str, request_id: &str) -> Result<Value, String> {
-    selected_work(workspace, project, request_id, false)
+    selected_work(workspace, project, request_id, false, None)
 }
 
 pub(crate) fn inspect(workspace: &Path, project: &str, request_id: &str) -> Result<Value, String> {
-    selected_work(workspace, project, request_id, true)
+    selected_work(workspace, project, request_id, true, None)
+}
+
+pub(crate) fn retry_pre_submit(
+    workspace: &Path,
+    project: &str,
+    request_id: &str,
+    expected_sha256: &str,
+) -> Result<Value, String> {
+    selected_work(workspace, project, request_id, false, Some(expected_sha256))
 }
 
 fn selected_work(
@@ -46,8 +55,9 @@ fn selected_work(
     project: &str,
     request_id: &str,
     inspect_only: bool,
+    retry_sha256: Option<&str>,
 ) -> Result<Value, String> {
-    if inspect_only
+    if (inspect_only || retry_sha256.is_some())
         && wake_protocol_client::wake_runtime_mode_for_workspace(workspace)? != "INSTALLED_STORE"
     {
         return Err("WEB_BROWSER_INSTALLED_SCOPE_REQUIRED".into());
@@ -69,7 +79,7 @@ fn selected_work(
     // SENT, SUBMITTING and other historical outcomes are refused by the
     // existing sender before opening an adapter; they never grant replay.
     let prior = wake.delivery(&record.event_id)?;
-    if inspect_only && prior.is_none() {
+    if (inspect_only || retry_sha256.is_some()) && prior.is_none() {
         return Err("WEB_WORK_DELIVERY_MISSING".into());
     }
     let event = match &prior {
@@ -113,6 +123,32 @@ fn selected_work(
         )
     };
     guard()?;
+    if let Some(hash) = retry_sha256 {
+        let _host = wake.host_lock()?;
+        let _browser = runtime::acquire_browser_quiescence(&wake)?;
+        guard()?;
+        let registry =
+            AutonomousProjectRegistryStoreV1::open_read_only(workspace.join(".catdesk/projects"))
+                .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
+        return registry.with_registration_lock(|| {
+            prepared
+                .revalidate_registration()
+                .map_err(|_| "WEB_WORK_PROJECT_REGISTRATION_CHANGED")?;
+            ledger.require_ordinary_request(request_id)?;
+            if ledger.record(request_id)?.as_ref() != Some(&record) {
+                return Err("WEB_WORK_DELIVERY_SELECTION_CHANGED".into());
+            }
+            lease.check_target(&target)?;
+            retry_selected(
+                &wake,
+                project,
+                &record,
+                &target,
+                prior.as_ref().ok_or("WEB_WORK_DELIVERY_MISSING")?,
+                hash,
+            )
+        });
+    }
     if inspect_only {
         let mut result = runtime::inspect_registered_delivery_readiness(
             &wake,
@@ -134,9 +170,94 @@ fn selected_work(
     runtime::run_scoped_work_request(&wake, &event, &target, 120, &mut before_submit, &guard)
 }
 
+// Caller retains the project, registration, stopped-host and browser leases.
+fn retry_selected(
+    wake: &Store,
+    project: &str,
+    record: &crate::web_work_state::WorkRecord,
+    target: &Target,
+    prior: &catdesk_wake::store::Delivery,
+    hash: &str,
+) -> Result<Value, String> {
+    validate_selection(project, record, target, &prior.event)?;
+    if prior.target != *target {
+        return Err("WEB_WORK_DELIVERY_SELECTION_CHANGED".into());
+    }
+    let control: runtime::Control = read(&wake.root().join("control.json"))?;
+    if control.schema_version != 1 || control.desired != "STOPPED" {
+        return Err("WEB_WORK_RECOVERY_HOST_NOT_STOPPED".into());
+    }
+    let recovered = wake.retry_ordinary_pre_submit_expected(&record.event_id, prior, hash)?;
+    Ok(
+        json!({"action":"web_work_retry_pre_submit","projectId":project,"requestId":record.request_id,
+        "eventId":record.event_id,"phase":recovered.phase,"priorDeliverySha256":hash,
+        "priorEvidencePreserved":true,"sendAttempted":false,"receiptCreated":false,
+        "browserStarted":false,"hostStarted":false,"nativeGrantCreated":false}),
+    )
+}
+
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
+    #[test]
+    fn central_metadata_recovery_preserves_work_contract_and_refuses_foreign_or_closed_requests() {
+        use sha2::{Digest, Sha256};
+        let (control, _, wake, _, event) = crate::web_work::tests::assignment_fixture_for("alpha");
+        wake.publish(&event).unwrap();
+        let target = wake.config().unwrap().targets["alpha"].clone();
+        let host = wake.host_lock().unwrap();
+        wake.claim(&event, &host).unwrap();
+        let prior = wake
+            .transition(
+                &event.event_id,
+                host.owner(),
+                catdesk_wake::store::Phase::Attention,
+                None,
+                Some("BROWSER_ATTEMPT_TIMEOUT".into()),
+            )
+            .unwrap();
+        drop(host);
+        let bytes = std::fs::read(
+            wake.root()
+                .join("deliveries")
+                .join(format!("{}.json", event.event_id)),
+        )
+        .unwrap();
+        let hash = format!("{:x}", Sha256::digest(bytes));
+        let record = WorkLedger::open(&control, "alpha")
+            .unwrap()
+            .record("request-a")
+            .unwrap()
+            .unwrap();
+        let ledger_path = control.join(".catdesk/web-work/alpha.json");
+        let ledger_before = std::fs::read(&ledger_path).unwrap();
+        assert!(retry_selected(&wake, "beta", &record, &target, &prior, &hash).is_err());
+        let mut closed = record.clone();
+        closed.phase = "CLOSED".into();
+        assert!(retry_selected(&wake, "alpha", &closed, &target, &prior, &hash).is_err());
+        let result = retry_selected(&wake, "alpha", &record, &target, &prior, &hash).unwrap();
+        assert_eq!(result["phase"], "CLAIMED");
+        assert_eq!(result["sendAttempted"], false);
+        assert_eq!(result["nativeGrantCreated"], false);
+        assert_eq!(std::fs::read(ledger_path).unwrap(), ledger_before);
+        assert!(retry_selected(&wake, "alpha", &record, &target, &prior, &hash).is_err());
+    }
+    #[test]
+    fn ordinary_retry_cannot_select_installed_resources_from_development_scope() {
+        let (control, _, wake, _, event) = crate::web_work::tests::assignment_fixture_for("alpha");
+        wake.publish(&event).unwrap();
+        let queue = wake
+            .root()
+            .join("queue")
+            .join(format!("{}.json", event.event_id));
+        let before = std::fs::read(&queue).unwrap();
+        assert_eq!(
+            retry_pre_submit(&control, "alpha", "request-a", &"a".repeat(64)).unwrap_err(),
+            "WEB_BROWSER_INSTALLED_SCOPE_REQUIRED"
+        );
+        assert_eq!(std::fs::read(queue).unwrap(), before);
+        assert!(wake.delivery(&event.event_id).unwrap().is_none());
+    }
 
     #[test]
     fn work_inspection_preserves_development_isolation_without_browser_or_queue_changes() {

@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-08T16:36:43.598064+00:00",
+  "scope": "C1_ORIGINAL_PRE_SUBMIT_RECOVERY",
+  "baselineCommit": "63c554dbf70912844e45ba4398a3c761f1bd47d1",
+  "command": "operator web work retry-pre-submit --project-id REGISTERED_PROJECT_ID --request-id ORIGINAL_REQUEST_ID --expected-delivery-sha256 EXACT_PRIOR_FILE_SHA256",
+  "prerequisite": "Independently qualify the original native acknowledgment protocol; this metadata command does not attest historical executables. Original controlled case evidence is C1_PROFILE_ACCESS_AND_PRE_SUBMIT_EVIDENCE_2026_11_08.json.",
+  "implementation": {
+    "existingStoreMethodReused": true,
+    "existingJournalAndLogsOnly": true,
+    "installedScopeOnly": true,
+    "projectAndRegistrationLease": true,
+    "stoppedHostAndBrowserLease": true,
+    "ordinaryOpenRequestExactEventMessageTargetChecks": true,
+    "deliveryHashAndValueCasUnderExistingStoreLock": true,
+    "queueMustMatchDelivery": true,
+    "allowedReason": "BROWSER_ATTEMPT_TIMEOUT",
+    "allowedTransition": "ATTENTION_TO_CLAIMED_ONLY",
+    "priorRecordPersistedBeforeRearm": true,
+    "conflictingPriorEvidenceRefused": true,
+    "submissionWitnessTimerArchiveOrReceiptRefused": true,
+    "sourceReviewRecoveryUnchanged": true,
+    "browserStarted": false,
+    "sendAttempted": false,
+    "receiptCreated": false,
+    "nativeGrantCreated": false,
+    "wakeBindingChanged": false
+  },
+  "qualification": {
+    "storeTestsPassed": 56,
+    "webCliTestsPassed": 41,
+    "deliveryTestsPassed": 6,
+    "strictRootAndWakeAllTargetClippy": "PASS",
+    "formatting": "PASS",
+    "concurrentCasSingleWinner": "PASS",
+    "interruptedPriorLogExactResume": "PASS",
+    "foreignScopeChangedHashQueueTargetWitnessRefusal": "PASS",
+    "centralWorkContractPreserved": "PASS",
+    "retainedCorrection": "The new concurrency test initially consumed a JoinHandle through filter borrow; corrected to join in map before the passing run. Failed compilation receipts are retained and excluded from passing counts."
+  },
+  "acceptance": {
+    "source": "TESTED_SOURCE",
+    "separateControllerBuild": "NOT_RUN_AT_THIS_CHECKPOINT",
+    "liveRecovery": "NOT_RUN",
+    "originalDelivery": "UNCHANGED_ATTENTION",
+    "messagesSent": 0,
+    "c1NativeEditVerificationWakeCycle": "NOT_RUN",
+    "c1": "NOT_COMPLETE",
+    "laterMilestones": "NOT_RUN"
+  },
+  "next": "Build separate exact-source controller; revalidate original protocol proof, target, request, prior delivery hash and absence of witnesses; then execute this metadata recovery once before any original invitation attempt."
+}

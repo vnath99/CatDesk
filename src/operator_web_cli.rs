@@ -134,6 +134,11 @@ pub(crate) enum WebAction {
         project_id: String,
         request_id: String,
     },
+    WorkRetryPreSubmit {
+        project_id: String,
+        request_id: String,
+        expected_delivery_sha256: String,
+    },
     WorkResolve {
         project_id: String,
         input_file: PathBuf,
@@ -297,11 +302,29 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         ("browser", "inspect") if options.is_empty() => Ok(WebAction::BrowserInspect {
             project_id: project_id.into(),
         }),
-        ("work", "deliver" | "inspect") => {
+        ("work", "deliver" | "inspect" | "retry-pre-submit") => {
             let request_id = options
                 .remove("--request-id")
                 .filter(|id| id.len() <= 128 && catdesk_wake::protocol::valid_id(id))
                 .ok_or("WEB_USAGE: --request-id is required")?;
+            if verb == "retry-pre-submit" {
+                let hash = options
+                    .remove("--expected-delivery-sha256")
+                    .filter(|h| {
+                        h.len() == 64
+                            && h.bytes()
+                                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                    })
+                    .ok_or("WEB_USAGE: --expected-delivery-sha256 is required")?;
+                if !options.is_empty() {
+                    return Err("WEB_USAGE: unexpected recovery option".into());
+                }
+                return Ok(WebAction::WorkRetryPreSubmit {
+                    project_id: project_id.into(),
+                    request_id: request_id.into(),
+                    expected_delivery_sha256: hash.into(),
+                });
+            }
             if !options.is_empty() {
                 return Err("WEB_USAGE: unexpected delivery option".into());
             }
@@ -1658,6 +1681,16 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             project_id,
             request_id,
         } => crate::web_work::inspect_delivery(&workspace, &project_id, &request_id),
+        WebAction::WorkRetryPreSubmit {
+            project_id,
+            request_id,
+            expected_delivery_sha256,
+        } => crate::web_work::retry_pre_submit(
+            &workspace,
+            &project_id,
+            &request_id,
+            &expected_delivery_sha256,
+        ),
         WebAction::WorkResolve {
             project_id,
             input_file,
@@ -1884,6 +1917,44 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn ordinary_retry_requires_exact_delivery_cas_and_has_no_force_or_send_options() {
+        let mut base = args(&[
+            "operator",
+            "web",
+            "work",
+            "retry-pre-submit",
+            "--project-id",
+            "alpha",
+            "--request-id",
+            "request-a",
+            "--expected-delivery-sha256",
+        ]);
+        base.push("a".repeat(64));
+        assert!(matches!(
+            parse(&base),
+            Ok(WebAction::WorkRetryPreSubmit { .. })
+        ));
+        assert!(parse(&base[..base.len() - 2]).is_err());
+        for option in [
+            "--force",
+            "--message",
+            "--event-id",
+            "--conversation-url",
+            "--workspace",
+            "--execution-key",
+            "--send",
+        ] {
+            let mut changed = base.clone();
+            changed.extend(args(&[option, "unapproved"]));
+            assert!(parse(&changed).is_err());
+        }
+        for hash in ["A".repeat(64), "a".repeat(63), "../foreign".into()] {
+            let mut changed = base.clone();
+            *changed.last_mut().unwrap() = hash;
+            assert!(parse(&changed).is_err());
+        }
+    }
 
     #[test]
     fn browser_inspection_accepts_only_registered_project_selector() {

@@ -2162,8 +2162,58 @@ impl Store {
     }
 
     pub fn retry_pre_submit(&self, id: &str) -> Result<()> {
+        self.retry_pre_submit_inner(id, None).map(|_| ())
+    }
+
+    /// Local operator recovery after qualifying the original acknowledgment
+    /// protocol. CAS and prior evidence are committed under the existing lock;
+    /// this method does not attest historical code or authorize a browser send.
+    pub fn retry_ordinary_pre_submit_expected(
+        &self,
+        id: &str,
+        expected: &Delivery,
+        expected_sha256: &str,
+    ) -> Result<Delivery> {
+        self.retry_pre_submit_inner(id, Some((expected, expected_sha256)))
+    }
+
+    fn retry_pre_submit_inner(
+        &self,
+        id: &str,
+        expected: Option<(&Delivery, &str)>,
+    ) -> Result<Delivery> {
         let _lock = self.lock()?;
         let mut delivery = self.read_delivery(id)?.ok_or("SUBMISSION_CLAIM_MISSING")?;
+        if let Some((prior, hash)) = expected {
+            use sha2::{Digest, Sha256};
+            if hash.len() != 64
+                || !hash
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                || &delivery != prior
+                || format!(
+                    "{:x}",
+                    Sha256::digest(
+                        fs::read(self.delivery_path(id))
+                            .map_err(|_| "SUBMISSION_RETRY_EVIDENCE_UNAVAILABLE")?
+                    )
+                ) != hash
+            {
+                return Err("SUBMISSION_RETRY_CAS_CHANGED".into());
+            }
+            if delivery.event.event_type != "engineering_attention"
+                || !delivery.event.audit_references.is_empty()
+                || delivery.reason.as_deref() != Some("BROWSER_ATTEMPT_TIMEOUT")
+                || !id.strip_prefix("web-work-").is_some_and(|v| {
+                    v.len() == 64
+                        && v.bytes()
+                            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                })
+                || read::<Event>(&self.event_path(id))? != delivery.event
+            {
+                return Err("SUBMISSION_RETRY_ORDINARY_SCOPE_INVALID".into());
+            }
+        }
         if delivery.phase != Phase::Attention || delivery.receipt.is_some() {
             return Err("SUBMISSION_RETRY_REFUSED".into());
         }
@@ -2184,10 +2234,29 @@ impl Store {
         if self.read_config()?.targets.get(&delivery.event.project_id) != Some(&delivery.target) {
             return Err("TARGET_GENERATION_STALE".into());
         }
+        if let Some((_, hash)) = expected {
+            let evidence = serde_json::json!({"schemaVersion":1,"purpose":"ORDINARY_PRE_SUBMIT_RECOVERY_PRIOR_DELIVERY",
+                "deliverySha256":hash,"delivery":delivery});
+            let path = self
+                .root
+                .join("logs")
+                .join(format!("pre-submit-retry-{id}-{hash}.json"));
+            if path
+                .try_exists()
+                .map_err(|_| "SUBMISSION_RETRY_EVIDENCE_UNAVAILABLE")?
+            {
+                if read::<serde_json::Value>(&path)? != evidence {
+                    return Err("SUBMISSION_RETRY_PRIOR_EVIDENCE_CONFLICT".into());
+                }
+            } else {
+                atomic(&path, &evidence)?;
+            }
+        }
         delivery.phase = Phase::Claimed;
         delivery.reason = None;
         delivery.updated_utc = now();
-        atomic(&self.delivery_path(id), &delivery)
+        atomic(&self.delivery_path(id), &delivery)?;
+        Ok(delivery)
     }
 
     fn pre_edit_refusal_path(&self, id: &str) -> PathBuf {
@@ -2564,6 +2633,186 @@ impl Store {
                 TEMP.fetch_add(1, Ordering::Relaxed)
             ),
         })
+    }
+}
+
+#[cfg(test)]
+mod ordinary_retry_cas_tests {
+    use super::*;
+    use sha2::{Digest, Sha256};
+    fn fixture() -> (Store, Delivery, String) {
+        let base = std::env::temp_dir().join(format!(
+            "ordinary-retry-cas-{}-{}",
+            std::process::id(),
+            TEMP.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir(&base).unwrap();
+        let store = Store::open_scoped_for_test(&base.join("wake"), &base).unwrap();
+        store.initialize().unwrap();
+        let target = store
+            .set_target("alpha", 0, "https://chatgpt.com/c/fixture")
+            .unwrap();
+        let event = store
+            .produce_expected_with_audit(
+                &format!("web-work-{}", "a".repeat(64)),
+                "alpha",
+                "engineering_attention",
+                "ordinary invitation",
+                &target,
+                &[],
+            )
+            .unwrap();
+        let host = store.host_lock().unwrap();
+        store.claim(&event, &host).unwrap();
+        let delivery = store
+            .transition(
+                &event.event_id,
+                host.owner(),
+                Phase::Attention,
+                None,
+                Some("BROWSER_ATTEMPT_TIMEOUT".into()),
+            )
+            .unwrap();
+        let hash = format!(
+            "{:x}",
+            Sha256::digest(fs::read(store.delivery_path(&event.event_id)).unwrap())
+        );
+        drop(host);
+        (store, delivery, hash)
+    }
+    fn evidence(store: &Store, d: &Delivery, hash: &str) -> PathBuf {
+        store
+            .root
+            .join("logs")
+            .join(format!("pre-submit-retry-{}-{hash}.json", d.event.event_id))
+    }
+    #[test]
+    fn concurrent_exact_cas_has_one_winner_and_one_preserved_failure() {
+        let (store, d, hash) = fixture();
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let jobs: Vec<_> = (0..2)
+            .map(|_| {
+                let root = store.root.clone();
+                let parent = root.parent().unwrap().to_path_buf();
+                let prior = d.clone();
+                let expected = hash.clone();
+                let gate = barrier.clone();
+                std::thread::spawn(move || {
+                    let other = Store::open_scoped_for_test(&root, &parent).unwrap();
+                    gate.wait();
+                    other
+                        .retry_ordinary_pre_submit_expected(
+                            &prior.event.event_id,
+                            &prior,
+                            &expected,
+                        )
+                        .is_ok()
+                })
+            })
+            .collect();
+        assert_eq!(
+            jobs.into_iter()
+                .map(|job| job.join().unwrap())
+                .filter(|won| *won)
+                .count(),
+            1
+        );
+        let saved: serde_json::Value = read(&evidence(&store, &d, &hash)).unwrap();
+        assert_eq!(saved["delivery"], serde_json::to_value(&d).unwrap());
+        assert_eq!(
+            store.delivery(&d.event.event_id).unwrap().unwrap().phase,
+            Phase::Claimed
+        );
+    }
+    #[test]
+    fn exact_cas_preserves_failure_then_rearms_once_without_receipt_or_queue_change() {
+        let (store, d, hash) = fixture();
+        let queued = fs::read(store.event_path(&d.event.event_id)).unwrap();
+        let next = store
+            .retry_ordinary_pre_submit_expected(&d.event.event_id, &d, &hash)
+            .unwrap();
+        assert_eq!(next.phase, Phase::Claimed);
+        assert!(next.receipt.is_none());
+        let saved: serde_json::Value = read(&evidence(&store, &d, &hash)).unwrap();
+        assert_eq!(saved["delivery"], serde_json::to_value(&d).unwrap());
+        assert_eq!(
+            fs::read(store.event_path(&d.event.event_id)).unwrap(),
+            queued
+        );
+        assert!(
+            store
+                .retry_ordinary_pre_submit_expected(&d.event.event_id, &d, &hash)
+                .is_err()
+        );
+    }
+    #[test]
+    fn changed_hash_identity_queue_target_or_witness_refuses_without_evidence_write() {
+        for kind in [
+            "hash",
+            "identity",
+            "queue",
+            "target",
+            "submission",
+            "timer",
+            "archive",
+        ] {
+            let (store, d, mut hash) = fixture();
+            let mut expected = d.clone();
+            let id = &d.event.event_id;
+            match kind {
+                "hash" => hash = "f".repeat(64),
+                "identity" => expected.owner = "foreign-owner".into(),
+                "queue" => {
+                    let mut e = d.event.clone();
+                    e.message = "changed message".into();
+                    atomic(&store.event_path(id), &e).unwrap();
+                }
+                "target" => {
+                    let mut c = store.config().unwrap();
+                    c.targets.insert(
+                        "alpha".into(),
+                        Target::new(2, "https://chatgpt.com/c/foreign".into()).unwrap(),
+                    );
+                    atomic(&store.root.join("config.json"), &c).unwrap();
+                }
+                "submission" => fs::write(store.submission_start_path(id), b"partial").unwrap(),
+                "timer" => fs::write(store.timer_path(id), b"partial").unwrap(),
+                _ => atomic(&store.archive_path(id), &d.event).unwrap(),
+            }
+            let before = fs::read(store.delivery_path(id)).unwrap();
+            assert!(
+                store
+                    .retry_ordinary_pre_submit_expected(id, &expected, &hash)
+                    .is_err(),
+                "{kind}"
+            );
+            assert_eq!(fs::read(store.delivery_path(id)).unwrap(), before);
+            assert!(!evidence(&store, &d, &hash).exists());
+        }
+    }
+    #[test]
+    fn interrupted_prior_evidence_resumes_only_exact_record_and_never_overwrites_conflict() {
+        for conflict in [false, true] {
+            let (store, d, hash) = fixture();
+            let path = evidence(&store, &d, &hash);
+            let value = if conflict {
+                serde_json::json!({"foreign":true})
+            } else {
+                serde_json::json!({"schemaVersion":1,"purpose":"ORDINARY_PRE_SUBMIT_RECOVERY_PRIOR_DELIVERY","deliverySha256":hash,"delivery":d})
+            };
+            atomic(&path, &value).unwrap();
+            let before = fs::read(&path).unwrap();
+            assert_eq!(
+                store
+                    .retry_ordinary_pre_submit_expected(&d.event.event_id, &d, &hash)
+                    .is_err(),
+                conflict
+            );
+            assert_eq!(fs::read(path).unwrap(), before);
+            if conflict {
+                assert_eq!(store.delivery(&d.event.event_id).unwrap(), Some(d));
+            }
+        }
     }
 }
 
