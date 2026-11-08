@@ -1919,7 +1919,7 @@ impl Store {
     /// durably present on the exact stored target. This path can only advance
     /// SUBMITTING -> SENT; it never permits replay, downgrade, or retargeting.
     pub(crate) fn reconcile_submitting_sent(&self, id: &str, receipt: Receipt) -> Result<Delivery> {
-        self.reconcile_submitting_sent_inner(id, receipt, None)
+        self.reconcile_submitting_sent_inner(id, receipt, None, false)
     }
 
     /// Commit only a fresh browser proof selected by the ordinary work owner.
@@ -1930,7 +1930,19 @@ impl Store {
         receipt: Receipt,
         expected: &Delivery,
     ) -> Result<Delivery> {
-        self.reconcile_submitting_sent_inner(id, receipt, Some(expected))
+        self.reconcile_submitting_sent_inner(id, receipt, Some(expected), false)
+    }
+
+    /// The same receipt CAS for an exact task-context continuation. The caller
+    /// retains the task/project lease and supplies fresh read-only browser proof.
+    /// This creates no task, producer authority, retry permission or USER input.
+    pub fn reconcile_task_continuation_sent_expected(
+        &self,
+        id: &str,
+        receipt: Receipt,
+        expected: &Delivery,
+    ) -> Result<Delivery> {
+        self.reconcile_submitting_sent_inner(id, receipt, Some(expected), true)
     }
 
     fn reconcile_submitting_sent_inner(
@@ -1938,18 +1950,47 @@ impl Store {
         id: &str,
         receipt: Receipt,
         expected: Option<&Delivery>,
+        task_continuation: bool,
     ) -> Result<Delivery> {
         let _lock = self.lock()?;
         let mut delivery = self.read_delivery(id)?.ok_or("SUBMISSION_CLAIM_MISSING")?;
+        let exact_hash = |value: &str| {
+            value.len() == 64
+                && value
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        };
+        let selected_kind = if task_continuation {
+            id.strip_prefix("wake-intent-").is_some_and(exact_hash)
+                && delivery.event.audit_references.len() == 5
+                && delivery.event.wake_metadata()?.is_some_and(|metadata| {
+                    metadata.purpose == crate::protocol::WakePurpose::NewTask
+                        && metadata
+                            .source_event_id
+                            .strip_prefix("web-work-")
+                            .is_some_and(exact_hash)
+                        && metadata
+                            .source_turn_id
+                            .strip_prefix("initial-context-")
+                            .is_some_and(exact_hash)
+                        && crate::store::WakeIntent {
+                            purpose: metadata.purpose,
+                            source_event_id: &metadata.source_event_id,
+                            source_turn_id: &metadata.source_turn_id,
+                            priority: metadata.priority,
+                            ttl_seconds: 1,
+                        }
+                        .event_id(&delivery.event.project_id)
+                        .is_ok_and(|expected_id| expected_id == id)
+                })
+        } else {
+            delivery.event.audit_references.is_empty()
+                && id.strip_prefix("web-work-").is_some_and(exact_hash)
+        };
         if let Some(expected) = expected
             && (&delivery != expected
                 || delivery.event.event_type != "engineering_attention"
-                || !delivery.event.audit_references.is_empty()
-                || !id.strip_prefix("web-work-").is_some_and(|v| {
-                    v.len() == 64
-                        && v.bytes()
-                            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-                })
+                || !selected_kind
                 || read::<Event>(&self.event_path(id))? != delivery.event
                 || !self.submission_start_path(id).is_file()
                 || receipt.sent_utc < self.submission_started_utc(&delivery)?
@@ -2686,6 +2727,158 @@ impl Store {
                 TEMP.fetch_add(1, Ordering::Relaxed)
             ),
         })
+    }
+}
+
+#[cfg(test)]
+mod task_continuation_receipt_tests {
+    use super::*;
+
+    fn fixture() -> (Store, Delivery, Receipt) {
+        let base = std::env::temp_dir().join(format!(
+            "task-continuation-receipt-{}-{}",
+            std::process::id(),
+            TEMP.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir(&base).unwrap();
+        let store = Store::open_scoped_for_test(&base.join("wake"), &base).unwrap();
+        store.initialize().unwrap();
+        let target = store
+            .set_target("alpha", 0, "https://chatgpt.com/c/fixture")
+            .unwrap();
+        let event = store
+            .produce_expected_wake(
+                "alpha",
+                "frozen task continuation",
+                &target,
+                WakeIntent {
+                    purpose: WakePurpose::NewTask,
+                    source_event_id: &format!("web-work-{}", "a".repeat(64)),
+                    source_turn_id: &format!("initial-context-{}", "b".repeat(64)),
+                    priority: 0,
+                    ttl_seconds: 600,
+                },
+            )
+            .unwrap();
+        let host = store.host_lock().unwrap();
+        let claimed = store.claim(&event, &host).unwrap();
+        let delivery = store
+            .transition(
+                &event.event_id,
+                &claimed.owner,
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: event.event_id,
+            target_generation: target.generation,
+            target_digest: target.digest,
+            message_digest: delivery.message_digest.clone(),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        drop(host);
+        (store, delivery, receipt)
+    }
+
+    #[test]
+    fn exact_task_continuation_receipt_reuses_cas_and_never_authorizes_replay() {
+        let (store, prior, receipt) = fixture();
+        let id = &prior.event.event_id;
+        let witness = fs::read(store.submission_start_path(id)).unwrap();
+        assert!(
+            store
+                .reconcile_ordinary_submitting_sent_expected(id, receipt.clone(), &prior)
+                .is_err()
+        );
+        let sent = store
+            .reconcile_task_continuation_sent_expected(id, receipt.clone(), &prior)
+            .unwrap();
+        assert_eq!(sent.phase, Phase::Sent);
+        assert_eq!(sent.receipt, Some(receipt.clone()));
+        assert_eq!(fs::read(store.submission_start_path(id)).unwrap(), witness);
+        assert_eq!(read::<Event>(&store.archive_path(id)).unwrap(), prior.event);
+        assert!(!store.event_path(id).exists());
+        store.record_exact_receipt_timer(id, &receipt).unwrap();
+        assert!(
+            store
+                .reconcile_task_continuation_sent_expected(id, receipt, &prior)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn changed_task_receipt_identity_or_authority_preserves_unknown_without_mutation() {
+        for case in [
+            "expected",
+            "queue",
+            "witness",
+            "target",
+            "message",
+            "evidence",
+            "future",
+            "past",
+            "event-id",
+            "purpose",
+            "source",
+            "turn",
+            "semantic-id",
+            "claimed",
+        ] {
+            let (store, prior, mut receipt) = fixture();
+            let id = &prior.event.event_id;
+            let mut expected = prior.clone();
+            match case {
+                "expected" => expected.reason = Some("changed".into()),
+                "queue" => {
+                    let mut event = prior.event.clone();
+                    event.message = "foreign".into();
+                    atomic(&store.event_path(id), &event).unwrap();
+                }
+                "witness" => fs::remove_file(store.submission_start_path(id)).unwrap(),
+                "target" => receipt.target_generation += 1,
+                "message" => receipt.message_digest = "c".repeat(64),
+                "evidence" => receipt.evidence = "SUBMISSION_ACCEPTED".into(),
+                "future" => receipt.sent_utc = now() + 1000,
+                "past" => receipt.sent_utc = 1,
+                "event-id" => receipt.event_id = format!("wake-intent-{}", "c".repeat(64)),
+                "claimed" => {
+                    expected.phase = Phase::Claimed;
+                    atomic(&store.delivery_path(id), &expected).unwrap();
+                }
+                _ => {
+                    for field in &mut expected.event.audit_references {
+                        if case == "purpose" {
+                            *field = field.replace("NEW_TASK", "ROLLOVER");
+                        }
+                        if case == "source" {
+                            *field = field.replace("web-work-", "foreign-");
+                        }
+                        if case == "turn" {
+                            *field = field.replace("initial-context-", "foreign-");
+                        }
+                        if case == "semantic-id" {
+                            *field = field.replace(&"a".repeat(64), &"d".repeat(64));
+                        }
+                    }
+                    atomic(&store.delivery_path(id), &expected).unwrap();
+                    atomic(&store.event_path(id), &expected.event).unwrap();
+                }
+            }
+            let before = fs::read(store.delivery_path(id)).unwrap();
+            assert!(
+                store
+                    .reconcile_task_continuation_sent_expected(id, receipt, &expected)
+                    .is_err(),
+                "{case}"
+            );
+            assert_eq!(fs::read(store.delivery_path(id)).unwrap(), before);
+            assert!(!store.archive_path(id).exists());
+            assert!(!store.timer_path(id).exists());
+        }
     }
 }
 

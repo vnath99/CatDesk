@@ -6583,3 +6583,21 @@ metadata, not a receipt, proof of failed input, native execution or retry grant.
 A missing or duplicate USER remains uncertain; preserve drafts. The separate
 inspect-response command still requires an exact SENT receipt. A source-qualified
 controller is not an installed Wake upgrade.
+
+
+## 2026-11-08T22:10:59.411621+00:00 — recover a positively observed task-continuation receipt
+
+```text
+operator web review reconcile-submission --project-id PROJECT --event-id EXISTING_EVENT
+```
+
+For an existing task-bound SUBMITTING semantic continuation only. Requires
+original queue and submit witness, current paired target/task lease and a fresh
+independent exact-USER receipt. The existing browser owner performs observation
+only; after it exits, the existing registry-locked exact-delivery CAS archives
+the event and records its timer. Unknown or duplicate USER, changed binding,
+missing witness or stale receipt fails closed. No receipt/text/URL override,
+force, send or native-dispatch option is accepted. This is not source-review
+producer authority. After successful reconciliation use inspect-response on
+the same event; do not rerun the send. Source qualification is distinct from
+protected installed Wake acceptance.

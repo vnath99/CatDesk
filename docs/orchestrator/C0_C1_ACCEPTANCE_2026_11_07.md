@@ -468,3 +468,36 @@ receipt, malformed semantic identity and forbidden input/send overrides.
 Next: matched read-only inspection of the pending event. No resend, new task,
 new grant or native call is authorized by this diagnostic. Installed dev.84
 remains unchanged; installed automatic response acceptance and C1 are incomplete.
+
+
+## 2026-11-08T22:10:59.411621+00:00 — autonomous pending-task observation and receipt recovery
+
+LIVE SOURCE CONTROLLER: the new read-only inspector observed one exact matching
+USER followed by one turn on the registered target. The final document was
+complete, history/editor ready, composer empty and generation idle. Task,
+assignment, source invitation, delivery digest and target generation were
+automatically associated without an operator relay. The 35.875-second bounded
+observation sent nothing, created no receipt and granted no retry. All 1,072
+pins match; owned browser exited, profile/Wake counts are zero and port 3200
+is closed. The sender's prior timeout remains recorded. Do not resend.
+
+The ordinary receipt CAS previously excluded semantic task continuations,
+leaving no supported local commit after their independent browser proof. The
+same implementation now has a narrow task-continuation entry point. It checks
+exact immutable delivery/queue, original submission witness, semantic NEW_TASK
+identity (including derived event ID), target and timestamp-bounded receipt.
+The local reconcile-submission command obtains two fresh exact USER samples
+through the existing read-only owner, waits for confirmed owner exit, rechecks
+project/task/lease under the registry lock, then commits SUBMITTING to SENT and
+records the passive timer. Missing/ambiguous proof or changed scope refuses
+without a state commit. It never sends, creates a grant, executes native work,
+permits replay or grants review/producer authority. Ordinary/source-review
+reconciliation boundaries remain separate.
+
+105 focused source tests pass (61 store and 44 CLI), with strict root/Wake
+all-target Clippy and formatting. New controls cover wrong semantic identity,
+queue, witness, message, receipt evidence, stale/future time, changed delivery,
+wrong phase and repeat commit. Next: matched-source fresh receipt proof and
+response classification for this same event. This is not installed Wake
+qualification; installed dev.84 and protected release authority are unchanged.
+C1 native editing and installed autonomous response acceptance remain incomplete.

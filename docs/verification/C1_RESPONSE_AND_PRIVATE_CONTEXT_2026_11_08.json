@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Build a matched separate controller and inspect the exact pending task continuation once, read-only. Do not resend or infer failure from the timeout or missing native attempt. Establish positive fresh receipt evidence before any guarded journal reconciliation. Installed dev.84 readback and C1 coding acceptance remain incomplete.",
+  "next": "Use one matched-source fresh-document receipt observation for the same pending task event. Commit only an exact independently verified receipt through the existing CAS, then observe its task-attributable assistant diagnostic. Do not resend any message or native call. Installed dev.84 response capability and C1 code execution are still incomplete.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -807,6 +807,64 @@
       "total": 99,
       "strictRootAllTargetClippy": "PASS",
       "strictWakeAllTargetClippy": "PASS",
+      "format": "PASS"
+    },
+    "live": {
+      "observedUtc": "2026-11-08T22:02:56.155858+00:00",
+      "sourceCommit": "5a11295ac33ee6f40fe52b3e3fa0ea523ab49d13",
+      "controllerSha256": "4e9ff77e476c19e80801bd18478f2814300751a502564b5f7dd6160de8604567",
+      "elapsedSeconds": 35.875,
+      "maximumOwnerSeconds": 150,
+      "maximumProbeSeconds": 90,
+      "status": "LIVE_SOURCE_CONTROLLER_OBSERVED",
+      "exactRegisteredTarget": true,
+      "editor": "READY",
+      "composer": "EMPTY",
+      "generation": "IDLE",
+      "expectedUserCount": 1,
+      "lastUserMatches": true,
+      "turnsAfter": 1,
+      "stable": true,
+      "taskAndAssignmentAttributed": true,
+      "rawTextExported": false,
+      "messagesSent": 0,
+      "nativeCalls": 0,
+      "servingStarts": 0,
+      "receiptCreated": false,
+      "retryAuthorized": false,
+      "preservationPins": 1072,
+      "preservationMismatches": 0,
+      "ownedTreeExited": true,
+      "ownedProfileAndWakeProcessesAfter": 0,
+      "port3200ListenerPresent": false
+    }
+  },
+  "taskReceiptRecovery": {
+    "observedUtc": "2026-11-08T22:10:59.411621+00:00",
+    "status": "TESTED_SOURCE_FRESH_RECEIPT_LIVE_PENDING",
+    "operatorCommand": "operator web review reconcile-submission --project-id PROJECT --event-id EXISTING_EVENT",
+    "existingMechanism": "READ_REGISTERED_DELIVERY_RECEIPT_AND_SUBMITTING_SENT_EXPECTED_CAS",
+    "requirements": [
+      "EXISTING_TASK_ASSIGNMENT_AND_IMMUTABLE_WORK_LEDGER",
+      "PAIRED_REGISTERED_TARGET",
+      "EXACT_FIVE_FIELD_NEW_TASK_SEMANTIC_IDENTITY",
+      "ORIGINAL_QUEUE_AND_SUBMISSION_WITNESS",
+      "TWO_FRESH_EXACT_USER_OBSERVATIONS",
+      "RECEIPT_EVENT_TARGET_MESSAGE_AND_TIME_MATCH",
+      "BROWSER_OWNER_EXIT",
+      "REGISTRY_LOCK_AND_EXACT_DELIVERY_CAS"
+    ],
+    "missingOrAmbiguousReceipt": "REFUSE_WITHOUT_COMMIT",
+    "expiredIntentReplayed": false,
+    "newGrantOrTask": false,
+    "sendOrAssistantRetry": false,
+    "producerAuthority": false,
+    "protectedInstallationChanged": false,
+    "sourceTests": {
+      "store": 61,
+      "cli": 44,
+      "total": 105,
+      "strictRootAndWakeAllTargetClippy": "PASS",
       "format": "PASS"
     }
   }

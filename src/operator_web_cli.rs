@@ -113,6 +113,10 @@ pub(crate) enum WebAction {
         project_id: String,
         event_id: String,
     },
+    ReviewReconcileSubmission {
+        project_id: String,
+        event_id: String,
+    },
     ReviewReobserve {
         project_id: String,
         event_id: String,
@@ -589,7 +593,12 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         }),
         (
             "review",
-            "read" | "inspect-response" | "inspect-submission" | "reobserve" | "reconcile"
+            "read"
+            | "inspect-response"
+            | "inspect-submission"
+            | "reconcile-submission"
+            | "reobserve"
+            | "reconcile"
             | "diagnose",
         ) => {
             let event_id = options
@@ -605,6 +614,11 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                 })
             } else if verb == "inspect-submission" {
                 Ok(WebAction::ReviewInspectSubmission {
+                    project_id: project_id.into(),
+                    event_id: event_id.into(),
+                })
+            } else if verb == "reconcile-submission" {
+                Ok(WebAction::ReviewReconcileSubmission {
                     project_id: project_id.into(),
                     event_id: event_id.into(),
                 })
@@ -1147,12 +1161,20 @@ fn read_review(workspace: &Path, project: &str, event_id: &str) -> Result<Value,
     read_review_guarded(workspace, project, event_id, None, &|| Ok(()))
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TaskObservation {
+    SentResponse,
+    PendingSubmission,
+    ReconcileSubmission,
+}
+
 fn inspect_review_response(
     workspace: &Path,
     project: &str,
     event_id: &str,
-    pending: bool,
+    mode: TaskObservation,
 ) -> Result<Value, String> {
+    let pending = mode != TaskObservation::SentResponse;
     let key = paired_key(workspace, project)?;
     let lease = crate::operator_facade::acquire_web_work_lease(workspace, project)?;
     let prepared =
@@ -1200,7 +1222,11 @@ fn inspect_review_response(
         lease.check_target(&target)
     };
     guard()?;
-    let mut value = if pending {
+    let mut value = if mode == TaskObservation::ReconcileSubmission {
+        catdesk_wake::runtime::read_registered_delivery_receipt(
+            &wake, project, &target, &delivery, &guard,
+        )?
+    } else if pending {
         catdesk_wake::runtime::inspect_registered_delivery_readiness(
             &wake, project, &target, &delivery, &guard,
         )?
@@ -1210,7 +1236,39 @@ fn inspect_review_response(
         )?
     };
     guard()?;
-    value["action"] = json!(if pending {
+    if mode == TaskObservation::ReconcileSubmission {
+        let receipt = value
+            .get("persistedReceipt")
+            .filter(|r| !r.is_null())
+            .ok_or("WEB_WORK_RECEIPT_UNPROVEN")?;
+        let receipt: catdesk_wake::store::Receipt =
+            serde_json::from_value(receipt.clone()).map_err(|_| "WEB_WORK_RECEIPT_UNPROVEN")?;
+        // Browser ownership has fully exited. Reuse the existing short registry
+        // lock and exact-delivery CAS; no shared lock spans browser observation.
+        let _host = wake.host_lock()?;
+        let _browser = catdesk_wake::runtime::acquire_browser_quiescence(&wake)?;
+        guard()?;
+        let registry =
+            AutonomousProjectRegistryStoreV1::open_read_only(workspace.join(".catdesk/projects"))
+                .map_err(|_| "WEB_REVIEW_PROJECT_CHANGED")?;
+        registry.with_registration_lock(|| {
+            guard()?;
+            let sent = wake.reconcile_task_continuation_sent_expected(
+                event_id,
+                receipt.clone(),
+                &delivery,
+            )?;
+            wake.record_exact_receipt_timer(event_id, &receipt)?;
+            value["deliveryPhase"] = json!(sent.phase);
+            value["receipt"] = json!(receipt);
+            value["receiptCreated"] = json!(true);
+            value["stateChanged"] = json!(true);
+            Ok(())
+        })?;
+    }
+    value["action"] = json!(if mode == TaskObservation::ReconcileSubmission {
+        "web_task_submission_reconcile"
+    } else if pending {
         "web_review_submission_inspect"
     } else {
         "web_review_response_inspect"
@@ -1785,11 +1843,30 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
         WebAction::ReviewInspectResponse {
             project_id,
             event_id,
-        } => inspect_review_response(&workspace, &project_id, &event_id, false),
+        } => inspect_review_response(
+            &workspace,
+            &project_id,
+            &event_id,
+            TaskObservation::SentResponse,
+        ),
         WebAction::ReviewInspectSubmission {
             project_id,
             event_id,
-        } => inspect_review_response(&workspace, &project_id, &event_id, true),
+        } => inspect_review_response(
+            &workspace,
+            &project_id,
+            &event_id,
+            TaskObservation::PendingSubmission,
+        ),
+        WebAction::ReviewReconcileSubmission {
+            project_id,
+            event_id,
+        } => inspect_review_response(
+            &workspace,
+            &project_id,
+            &event_id,
+            TaskObservation::ReconcileSubmission,
+        ),
         WebAction::ReviewReobserve {
             project_id,
             event_id,
@@ -2872,6 +2949,23 @@ mod tests {
             assert!(parse(&invalid).is_err());
         }
         assert!(parse(&valid[..6]).is_err());
+        let mut reconcile = valid.clone();
+        reconcile[3] = "reconcile-submission".into();
+        assert!(matches!(
+            parse(&reconcile),
+            Ok(WebAction::ReviewReconcileSubmission { .. })
+        ));
+        for option in [
+            "--submit",
+            "--force",
+            "--receipt",
+            "--conversation-url",
+            "--execution-key",
+        ] {
+            let mut changed = reconcile.clone();
+            changed.extend(args(&[option, "foreign"]));
+            assert!(parse(&changed).is_err());
+        }
     }
 
     #[test]
