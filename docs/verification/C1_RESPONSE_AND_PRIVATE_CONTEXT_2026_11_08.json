@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Build the qualified identity-correction controller, freeze one original-task clarification after native no-effect proof, then attempt it once in bounded existing authenticated serving owners. Never replay the prior SENT messages or create a replacement task/grant. Independently verify any actual native edits, tests and task-specific Wake before claiming C1.",
+  "next": "Await the single requested redacted explanation from the new post-clarification response. The original hash domains are reconciled, the same-task clarification is SENT/COMPLETE, and the original job remains READY without an attempt. Do not replay any completed message, invent a new grant/task, infer client tool availability or start later gates. The installed full-response snapshot limitation remains separate.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -384,10 +384,116 @@
     },
     "strictRootAllTargetClippy": "PASS",
     "formatting": "PASS",
-    "separateBuild": "NOT_RUN",
-    "liveClarification": "NOT_RUN",
-    "nativeCoding": "NOT_RUN",
-    "operatorActionRequired": false,
-    "installedFullSnapshotCapability": "STILL_UNAVAILABLE_UNCHANGED"
+    "separateBuild": {
+      "status": "BUILT_NOT_INSTALLED_NOT_SELECTED",
+      "sourceCommit": "b67ee0254e385c001e053ad34a328bfcd57df4d7",
+      "controllerSha256": "fe22fa3e6435763d51047e81b5134aa69e676932e2f3c02ba2b7cb06a6e5e405",
+      "elapsedSeconds": 46.453,
+      "preservationPins": 1064,
+      "preservationMismatches": 0
+    },
+    "liveClarification": {
+      "startedUtc": "2026-11-08T19:49:00.428649+00:00",
+      "finishedUtc": "2026-11-08T19:55:31.495226+00:00",
+      "elapsedSeconds": 391.063,
+      "maximumSeconds": 420,
+      "supervisorStates": [
+        "RECOVERED",
+        "MONITORING_COMPLETE"
+      ],
+      "authMatrix": [
+        401,
+        401,
+        200
+      ],
+      "toolCount": 102,
+      "centralTaskToolListed": true,
+      "originalInvitationResent": false,
+      "privateContextResent": false,
+      "priorContinuationResent": false,
+      "newTaskOrGrantCreated": false,
+      "localNativeDispatchFallback": false,
+      "newTunnels": 0,
+      "authChanges": 0,
+      "wakeStarts": 0,
+      "recurringRegistrationChanges": 0,
+      "continuationReturnedPhase": "SENT",
+      "continuationDurablePhase": "SENT",
+      "exactContinuationReceiptVerified": true,
+      "nativeFinalState": "READY",
+      "nativeReceiptId": null,
+      "nativeChangedTrackedFiles": [],
+      "actualNativeCompletionVerified": false,
+      "backendStopped": true,
+      "officialStopped": true,
+      "officialProfilePreserved": true,
+      "preservationPins": 1063,
+      "preservationMismatches": 0,
+      "installedProfileProcessMatches": 0,
+      "wakeHostProcessMatches": 0,
+      "port3200ListenerPresent": false,
+      "sameOriginalGrantAndNativeCallRetained": true
+    },
+    "nativeCoding": "NOT_RUN_NO_NATIVE_ATTEMPT_AFTER_DELIVERED_CLARIFICATION",
+    "operatorActionRequired": "SINGLE_REDACTED_EXPLANATION_FROM_NEW_POST_CLARIFICATION_ASSISTANT_RESPONSE",
+    "installedFullSnapshotCapability": "STILL_UNAVAILABLE_UNCHANGED",
+    "newResponseObservation": {
+      "startedUtc": "2026-11-08T19:56:51.403480+00:00",
+      "finishedUtc": "2026-11-08T19:57:25.873599+00:00",
+      "elapsedSeconds": 34.422,
+      "finalState": "EXACT_READY_IDLE",
+      "responseStage": "RESPONSE_COMPLETE",
+      "taskDiagnostics": {
+        "assistantHints": {
+          "approvalRequested": false,
+          "basis": "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION",
+          "contextUnavailable": false,
+          "knownCodes": [],
+          "nativeDispatchMentioned": true,
+          "schemaVersion": 1,
+          "toolUnavailable": false
+        },
+        "toolDiagnostics": {
+          "basis": "VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT",
+          "busyMarkers": 0,
+          "callMarkers": 0,
+          "countOverflow": false,
+          "errorMarkers": 0,
+          "resultMarkers": 0,
+          "schemaVersion": 1,
+          "scope": "EXACT_USER_EXCHANGE",
+          "selectorCoverage": "KNOWN_MARKERS_ONLY"
+        }
+      },
+      "ownedTreeExited": true,
+      "messagesSent": 0,
+      "assistantRetries": 0,
+      "nativeTasksExecuted": 0,
+      "backendStarts": 0,
+      "officialOwnerStarts": 0,
+      "wakeStarts": 0,
+      "bindingChanges": 0,
+      "reviewAuthorityGranted": false,
+      "rawAssistantTextExported": false,
+      "preservationPins": 1069,
+      "preservationMismatches": 0,
+      "installedProfileProcessMatches": 0,
+      "wakeHostProcessMatches": 0,
+      "port3200ListenerPresent": false
+    },
+    "testHarnessPreflightCorrections": [
+      {
+        "failure": "STALE_ADJACENT_OBSERVER_HASH_EXPECTATION",
+        "productActionsBeforeRefusal": 0,
+        "resolvedBy": "EXACT_REVIEWED_SOURCE_AND_BUILD_ARTIFACT_HASH_COMPARISON",
+        "protectedFingerprintChanged": false
+      },
+      {
+        "failure": "NEW_RECEIPT_NOT_IN_PREVIOUS_BASELINE",
+        "browserStartsBeforeRefusal": 0,
+        "resolvedBy": "VALIDATE_NEW_RECEIPT_ARCHIVE_TIMER_WITNESS_AND_IMMUTABLE_CLARIFICATION_THEN_EXTEND_BASELINE",
+        "protectedAuthorityChanged": false
+      }
+    ]
   }
 }
