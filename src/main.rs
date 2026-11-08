@@ -2719,6 +2719,16 @@ fn operator_web_error_code(error: &str) -> &str {
             | "SCOPED_DIAGNOSE_PACKAGE_UNSUPPORTED"
             | "SCOPED_DIAGNOSE_TIMEOUT"
             | "SCOPED_DIAGNOSE_UNAVAILABLE"
+            | "TASK_CONTEXT_REQUEST_TOO_LARGE"
+            | "TASK_CONTEXT_ARGUMENTS_INVALID"
+            | "TASK_CONTEXT_PROJECT_BUSY"
+            | "TASK_CONTEXT_OUTCOME_UNKNOWN"
+            | "TASK_CONTEXT_TIMEOUT"
+            | "TASK_CONTEXT_RECONCILE_PACKAGE_UNSUPPORTED"
+            | "TASK_CONTEXT_RECONCILIATION_UNPROVEN"
+            | "TASK_CONTEXT_FRAME_INVALID"
+            | "TASK_CONTEXT_RECEIPT_INVALID"
+            | "TASK_CONTEXT_PRE_SUBMIT_UNPROVEN"
     ) {
         return code;
     }
@@ -4041,6 +4051,16 @@ mod tests {
             "SCOPED_DIAGNOSE_PACKAGE_UNSUPPORTED",
             "SCOPED_DIAGNOSE_TIMEOUT",
             "SCOPED_DIAGNOSE_UNAVAILABLE",
+            "TASK_CONTEXT_REQUEST_TOO_LARGE",
+            "TASK_CONTEXT_ARGUMENTS_INVALID",
+            "TASK_CONTEXT_PROJECT_BUSY",
+            "TASK_CONTEXT_OUTCOME_UNKNOWN",
+            "TASK_CONTEXT_TIMEOUT",
+            "TASK_CONTEXT_RECONCILE_PACKAGE_UNSUPPORTED",
+            "TASK_CONTEXT_RECONCILIATION_UNPROVEN",
+            "TASK_CONTEXT_FRAME_INVALID",
+            "TASK_CONTEXT_RECEIPT_INVALID",
+            "TASK_CONTEXT_PRE_SUBMIT_UNPROVEN",
         ] {
             assert_eq!(operator_web_error_code(code), code);
             assert_eq!(
@@ -4061,6 +4081,8 @@ mod tests {
             "CAPTCHA_OR_SECURITY_CHECK_EXTRA",
             "TYPING_NOT_CONFIRMED_SECRET",
             "SCOPED_RECONCILE_PRIVATE_TOKEN",
+            "TASK_CONTEXT_PRIVATE_TOKEN",
+            "TASK_CONTEXT_REQUEST_TOO_LARGE\nprivate context",
             "SCOPED_RECONCILE_RECEIPT_UNPROVEN\nprivate message",
             "project registration is already in progress: C:\\private\\token",
             "registration confirmation is already in progress\nprivate owner",
