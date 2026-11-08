@@ -638,7 +638,7 @@ pub(crate) fn run_initial_context(
             &store,
             &event,
             target,
-            120,
+            180,
             &mut before,
             keep_running,
         );
@@ -656,13 +656,28 @@ pub(crate) fn run_initial_context(
         },
     )
 }
+fn continuation_message(message_sha: &str, selection: &Value, native_only: bool) -> String {
+    if native_only {
+        return format!(
+            "CatDesk assigned-task continuation for {}/{}. Use nativeCall from the private context USER SHA-256 {} already delivered here. Dispatch that frozen native task once now. Preserve its grant, stable call ID and other sessions; never replay completed/unknown calls. Report actual edits, tests and blockers.",
+            selection["projectId"].as_str().unwrap_or(""),
+            selection["requestId"].as_str().unwrap_or(""),
+            message_sha
+        );
+    }
+    format!(
+        "CatDesk assigned-task continuation. Use only the private assigned-task context with USER message SHA-256 {} already delivered in this conversation. Verified selection: {}. Keep executionKey private. Continue that existing unfinished task through its granted CatDesk tools. Use the native queue only if the private grant explicitly includes it; preserve all other native sessions. Keep stable call IDs; never replay a completed or unknown call. Acknowledge a definitive admission-busy refusal before trying that same call again; report uncertain outcomes instead of retrying them. Report actual artifacts, verification and blockers; browser completion alone is not task completion.",
+        message_sha, selection
+    )
+}
+
 fn queue_continuation(
     scope: &ResolvedProjectScopeV1,
     record: &crate::web_work_state::WorkRecord,
     target: &Target,
     store: &catdesk_wake::store::Store,
 ) -> Result<Value, String> {
-    let (reference, _, root) = load(scope, record, target)?;
+    let (reference, payload, root) = load(scope, record, target)?;
     if state(&root, &reference)?.phase != "SENT" {
         return Err("WEB_TASK_CONTEXT_RECEIPT_REQUIRED".into());
     }
@@ -670,9 +685,12 @@ fn queue_continuation(
         "sourceEventId":record.event_id,"assignmentSha256":reference.assignment.assignment_sha256,
         "taskId":reference.assignment.task_id,"expectedTargetGeneration":target.generation,
         "expectedTargetSha256":target.digest});
-    let message = format!(
-        "CatDesk assigned-task continuation. Use only the private assigned-task context with USER message SHA-256 {} already delivered in this conversation. Verified selection: {}. Keep executionKey private. Continue that existing unfinished task through its granted CatDesk tools. Use the native queue only if the private grant explicitly includes it; preserve all other native sessions. Keep stable call IDs; never replay a completed or unknown call. Acknowledge a definitive admission-busy refusal before trying that same call again; report uncertain outcomes instead of retrying them. Report actual artifacts, verification and blockers; browser completion alone is not task completion.",
-        reference.message_sha256, selection
+    let message = continuation_message(
+        &reference.message_sha256,
+        &selection,
+        payload
+            .message
+            .starts_with("CatDesk private assigned-task context (native-only)."),
     );
     let turn = format!("initial-context-{}", reference.storage_id);
     let event = store.produce_expected_wake(
@@ -811,6 +829,23 @@ fn run_with_sender(
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
+    #[test]
+    fn native_continuation_is_short_single_line_and_keeps_exact_private_context_reference() {
+        let selection =
+            json!({"projectId":"alpha","requestId":"original","assignmentSha256":"b".repeat(64)});
+        let sha = "a".repeat(64);
+        let short = continuation_message(&sha, &selection, true);
+        assert!(short.chars().count() < 450);
+        assert!(!short.contains('\n'));
+        assert!(short.contains(&sha));
+        assert!(short.contains("alpha/original"));
+        assert!(short.contains("nativeCall"));
+        assert!(short.contains("never replay completed/unknown"));
+        let ordinary = continuation_message(&sha, &selection, false);
+        assert!(ordinary.contains(&selection.to_string()));
+        assert!(ordinary.contains(&sha));
+    }
+
     #[test]
     fn fresh_native_capsule_preserves_full_private_task_and_exact_existing_call_scope() {
         let target = Target::new(1, "https://chatgpt.com/c/fixture".into()).unwrap();

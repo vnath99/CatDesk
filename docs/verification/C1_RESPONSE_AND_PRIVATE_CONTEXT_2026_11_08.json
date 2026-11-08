@@ -44,12 +44,12 @@
     "source": "TESTED_SOURCE",
     "separateController": "BUILT_NOT_SELECTED_NOT_INSTALLED",
     "liveAssistantCompletion": "LIVE_QUALIFIED_ORIGINAL_RECEIPT_BOUND_RESPONSE",
-    "livePrivateTaskContext": "NOT_SENT_PREPARATION_REFUSED",
+    "livePrivateTaskContext": "LIVE_QUALIFIED_ONE_ORIGINAL_FROZEN_CONTEXT_SENT",
     "nativeEditTestWakeCycle": "NOT_RUN",
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Build exact-source keystroke-safe controller, verify original frozen1075-character context/grant/pair and PREPARED state, then send that context once in a monitored180-second browser operation; preserve unknown outcomes and native-session ownership.",
+  "next": "Build the qualified short native-continuation source, then use a bounded existing-backend/existing-official-owner window for that one continuation and its exact native dispatch. Preserve the SENT invitation and SENT context; do not resend either. Independently verify actual code/test artifacts and task-specific Wake before claiming C1.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -99,7 +99,7 @@
     "maximumNativeSeconds": 180,
     "executionKeyDisclosed": false,
     "nativeTasksExecuted": 0,
-    "contextPreparation": "REFUSED_BEFORE_BROWSER",
+    "contextPreparation": "PREPARED_THEN_SENT_ONCE_AFTER_QUALIFIED_FIXES",
     "reportedError": "WEB_OPERATION_REFUSED",
     "preciseTaskContextReason": "TASK_CONTEXT_REQUEST_TOO_LARGE",
     "all1052PreservationPinsMatch": true,
@@ -132,7 +132,7 @@
       "formatting": "PASS"
     },
     "actualCapsulePreparation": "PASS_1075_CHARACTERS_PREPARED_NOT_SENT",
-    "actualSend": "NOT_RUN",
+    "actualSend": "PASS_ONE_CONTEXT_EXACT_RECEIPT",
     "preparedFullPrivateContextRetained": true,
     "preparationExistingPinsPreserved": 1057
   },
@@ -150,6 +150,51 @@
     "browserStarts": 0,
     "messagesSent": 0,
     "nativeTasksExecuted": 0,
-    "actualDelivery": "NOT_RUN"
+    "actualDelivery": "PASS_FROZEN_NORMALIZED_DIGEST_EXACT_RECEIPT"
+  },
+  "livePrivateTaskContext": {
+    "startedUtc": "2026-11-08T17:47:51.305785+00:00",
+    "finishedUtc": "2026-11-08T17:50:05.403788+00:00",
+    "elapsedSeconds": 134.047,
+    "sourceCommit": "850dcdd1f6097fecd5c92d67adc4fa36456eef68",
+    "controllerSha256": "f58ad87e801d081aec6a2de7b0ce87293ead9c5e8027994c06dafbda8c021b6f",
+    "maximumBrowserSeconds": 180,
+    "exactContextReceiptVerified": true,
+    "durablePhase": "SENT",
+    "attempts": 1,
+    "submissionFenced": true,
+    "originalInvitationResent": false,
+    "nativeTasksExecuted": 0,
+    "bindingChanges": 0,
+    "servingStarts": 0,
+    "recurringStarts": 0,
+    "contextAccounting": {
+      "browserStarted": false,
+      "continuation": "NOT_SENT",
+      "initial": "RECORDED",
+      "providerContextExact": false,
+      "rawTextPersisted": false
+    },
+    "unrelatedPreservationPins": 1059,
+    "preservationMismatches": 0,
+    "installedProfileProcessMatches": 0,
+    "wakeHostProcessMatches": 0,
+    "port3200ListenerPresent": false
+  },
+  "nativeContinuation": {
+    "scope": "NATIVE_CAPSULE_TASKS_ONLY",
+    "message": "SHORT_SINGLE_LINE_REFERENCE_TO_ALREADY_SENT_CONTEXT",
+    "exactContextDigestRetained": true,
+    "sameSemanticWakeIdentityAndTargetGuards": true,
+    "noKeyInWakeQueue": true,
+    "normalContractTaskContinuationUnchanged": true,
+    "maximumBrowserSeconds": 180,
+    "contextStateTestsPassed": 16,
+    "strictRootClippy": "PASS",
+    "formatting": "PASS",
+    "sourceOnly": true,
+    "queued": false,
+    "sent": false,
+    "nativeExecution": "NOT_RUN"
   }
 }
