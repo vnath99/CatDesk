@@ -21,10 +21,13 @@ mod reobserve;
 #[path = "runtime_response.rs"]
 mod response;
 pub use reobserve::reobserve_sent_response_guarded;
+#[path = "runtime_readiness.rs"]
+mod readiness;
 #[path = "runtime_review_reconcile.rs"]
 mod review_reconcile;
 #[path = "runtime_scoped_review.rs"]
 mod scoped_review;
+pub use readiness::inspect_registered_readiness;
 pub(crate) use response::validate_observation as validate_response_observation;
 pub(crate) use review_reconcile::validate_pre_edit_refusal_frame;
 pub use review_reconcile::{

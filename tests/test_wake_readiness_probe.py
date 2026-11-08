@@ -145,6 +145,10 @@ class ReadinessProbeTests(unittest.TestCase):
                 self.assertEqual(self.probe.main(), 0)
             self.assertEqual(calls, [{"uc": True, "user_data_dir": profile}, target, "closed"])
             rows = output.getvalue().splitlines()
+            self.assertEqual([r for r in rows if r.startswith("PROBE:PHASE:")], [
+                "PROBE:PHASE:IMPORT_BROWSER", "PROBE:PHASE:BROWSER_START",
+                "PROBE:PHASE:CDP_NAVIGATION", "PROBE:PHASE:OBSERVING", "PROBE:PHASE:BROWSER_CLOSED"])
+            rows = [r for r in rows if not r.startswith("PROBE:PHASE:")]
             self.assertTrue(rows[0].startswith("PROBE:TAB:"))
             self.assertEqual(rows[1:], ["PROBE:TARGET_TAB_UNAVAILABLE", "PROBE:FINAL:EXACT_READY_IDLE"])
         self.assertEqual(self.probe.PROFILE, default)

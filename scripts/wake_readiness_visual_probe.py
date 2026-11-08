@@ -324,12 +324,16 @@ def main():
             return surface_state(value), value
         except Exception:
             return "OBSERVATION_UNAVAILABLE", None
+    print("PROBE:PHASE:IMPORT_BROWSER", flush=True)
     from seleniumbase import SB
     def report_tab(facts):
         print("PROBE:TAB:" + json.dumps(facts, separators=(",", ":"), sort_keys=True), flush=True)
+    print("PROBE:PHASE:BROWSER_START", flush=True)
     with SB(uc=True, user_data_dir=str(profile)) as sb:
+        print("PROBE:PHASE:CDP_NAVIGATION", flush=True)
         sb.activate_cdp_mode(url)
         cdp = sb.cdp
+        print("PROBE:PHASE:OBSERVING", flush=True)
         if args.profile is not None:
             print("PROBE:" + select_registered_target_tab(cdp, url, report_tab), flush=True)
         last = None
@@ -367,6 +371,7 @@ def main():
             print("PROBE:SURFACE:" + json.dumps(surface, separators=(",", ":"), sort_keys=True), flush=True)
         if final == "CHROME_ERROR" and last != final:
             print("PROBE:NETWORK:" + chrome_error_detail(cdp), flush=True)
-        print("PROBE:FINAL:" + final, flush=True)
+    print("PROBE:PHASE:BROWSER_CLOSED", flush=True)
+    print("PROBE:FINAL:" + final, flush=True)
     return 0
 if __name__ == "__main__": raise SystemExit(main())

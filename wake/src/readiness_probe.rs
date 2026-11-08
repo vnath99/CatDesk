@@ -105,6 +105,20 @@ pub(crate) fn tab_observation(line: &str) -> Option<serde_json::Value> {
 }
 
 pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<String>, &'static str> {
+    let mut rows = Vec::new();
+    run_bounded_observed(command, timeout, &mut rows)?;
+    Ok(rows)
+}
+
+/// Retain only whitelisted partial observations after a failed bounded helper.
+/// Rows are exposed only after the exact owned Job and output reader exit.
+/// A timeout is never a final page state or proof about message submission.
+pub fn run_bounded_observed(
+    command: &mut Command,
+    timeout: Duration,
+    rows: &mut Vec<String>,
+) -> Result<(), &'static str> {
+    rows.clear();
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -131,6 +145,27 @@ pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<Strin
             }
         }
     };
+    // Drain while the helper runs: waiting before reading can fill the Windows
+    // pipe and turn a healthy observer into a misleading process timeout.
+    // Memory stays bounded even if library output exceeds the protocol budget.
+    let output = child.stdout.take().ok_or("PROBE_PIPE_FAILED")?;
+    let (tx, rx) = std::sync::mpsc::sync_channel(1);
+    std::thread::spawn(move || {
+        let mut output = output;
+        let mut bytes = Vec::new();
+        let mut buffer = [0u8; 4096];
+        let result = loop {
+            match output.read(&mut buffer) {
+                Ok(0) => break Ok(bytes),
+                Ok(n) => {
+                    let keep = n.min(16_385usize.saturating_sub(bytes.len()));
+                    bytes.extend_from_slice(&buffer[..keep]);
+                }
+                Err(_) => break Err("PROBE_OUTPUT_FAILED"),
+            }
+        };
+        let _ = tx.send(result);
+    });
     let result = (|| {
         child
             .stdin
@@ -158,21 +193,19 @@ pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<Strin
     job.terminate_and_wait_empty(Duration::from_secs(5))
         .map_err(|_| "PROBE_CLEANUP_UNVERIFIED")?;
     child.wait().map_err(|_| "PROBE_CLEANUP_UNVERIFIED")?;
-    result?;
-    let mut bytes = Vec::new();
-    child
-        .stdout
-        .take()
-        .ok_or("PROBE_PIPE_FAILED")?
-        .take(16_385)
-        .read_to_end(&mut bytes)
-        .map_err(|_| "PROBE_OUTPUT_FAILED")?;
+    let bytes = rx
+        .recv_timeout(Duration::from_secs(5))
+        .map_err(|_| "PROBE_CLEANUP_UNVERIFIED")??;
     if bytes.len() > 16_384 {
         return Err("PROBE_OUTPUT_TOO_LARGE");
     }
     let text = std::str::from_utf8(&bytes).map_err(|_| "PROBE_OUTPUT_INVALID")?;
-    Ok(text
-        .lines()
+    *rows = sanitized_rows(text);
+    result
+}
+
+fn sanitized_rows(text: &str) -> Vec<String> {
+    text.lines()
         .filter(|line| {
             let Some(state) = line.strip_prefix("PROBE:") else {
                 return false;
@@ -182,6 +215,16 @@ pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<Strin
             }
             if state.starts_with("TAB:") {
                 return tab_observation(line).is_some();
+            }
+            if let Some(phase) = state.strip_prefix("PHASE:") {
+                return matches!(
+                    phase,
+                    "IMPORT_BROWSER"
+                        | "BROWSER_START"
+                        | "CDP_NAVIGATION"
+                        | "OBSERVING"
+                        | "BROWSER_CLOSED"
+                );
             }
             if let Some(reason) = state.strip_prefix("HOME_CHECK:") {
                 return matches!(
@@ -275,12 +318,55 @@ pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<Strin
                 line.to_owned()
             }
         })
-        .collect())
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn partial_protocol_rejects_private_phases_and_unattributed_submission_claims() {
+        assert_eq!(
+            sanitized_rows(
+                "PROBE:PHASE:CDP_NAVIGATION\nPROBE:PHASE:private\nPROBE:SENT\nPRIVATE_BODY\n"
+            ),
+            ["PROBE:PHASE:CDP_NAVIGATION"]
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn timed_out_probe_preserves_only_fixed_partial_phase_after_cleanup() {
+        let shell = std::path::PathBuf::from(std::env::var_os("SystemRoot").unwrap())
+            .join("System32/WindowsPowerShell/v1.0/powershell.exe");
+        let mut command = Command::new(shell);
+        command.args(["-NoProfile", "-NonInteractive", "-Command",
+            "if([Console]::In.ReadLine() -cne 'START'){exit 2}; [Console]::Out.WriteLine('PROBE:PHASE:CDP_NAVIGATION'); [Console]::Out.WriteLine('PRIVATE_DRAFT'); Start-Sleep -Seconds 30"]);
+        let mut rows = Vec::new();
+        let start = Instant::now();
+        assert_eq!(
+            run_bounded_observed(&mut command, Duration::from_secs(2), &mut rows),
+            Err("PROBE_PROCESS_TIMEOUT")
+        );
+        assert_eq!(rows, ["PROBE:PHASE:CDP_NAVIGATION"]);
+        assert!(start.elapsed() < Duration::from_secs(10));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn over_limit_pipe_is_drained_but_never_exported() {
+        let shell = std::path::PathBuf::from(std::env::var_os("SystemRoot").unwrap())
+            .join("System32/WindowsPowerShell/v1.0/powershell.exe");
+        let mut command = Command::new(shell);
+        command.args(["-NoProfile", "-NonInteractive", "-Command",
+            "if([Console]::In.ReadLine() -cne 'START'){exit 2}; for($i=0;$i -lt 2000;$i++){[Console]::Out.WriteLine(('x'*150))}; [Console]::Out.WriteLine('PROBE:FINAL:EXACT_READY_IDLE')"]);
+        let mut rows = Vec::new();
+        assert_eq!(
+            run_bounded_observed(&mut command, Duration::from_secs(10), &mut rows),
+            Err("PROBE_OUTPUT_TOO_LARGE")
+        );
+        assert!(rows.is_empty());
+    }
     fn surface() -> serde_json::Value {
         serde_json::json!({"route":"EXACT","document":"COMPLETE","history":"PRESENT",
             "editor":"READY","composer":"EMPTY","generation":"IDLE","assistant":"LOAD_ERROR",

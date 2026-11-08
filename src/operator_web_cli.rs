@@ -58,6 +58,9 @@ pub(crate) async fn join_auto_schedulers(tasks: Vec<tokio::task::JoinHandle<()>>
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum WebAction {
     Status,
+    BrowserInspect {
+        project_id: String,
+    },
     InitializePrepare {
         project_id: String,
         intent_id: String,
@@ -287,6 +290,9 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         return Err("WEB_USAGE: invalid project ID".into());
     }
     match (group, verb) {
+        ("browser", "inspect") if options.is_empty() => Ok(WebAction::BrowserInspect {
+            project_id: project_id.into(),
+        }),
         ("work", "deliver") => {
             let request_id = options
                 .remove("--request-id")
@@ -1479,6 +1485,46 @@ fn read_status_projection(workspace: &Path, include_legacy_details: bool) -> Res
     Ok(report)
 }
 
+fn inspect_project_browser(workspace: &Path, project: &str) -> Result<Value, String> {
+    use crate::delegated::autonomy_projects::PreparedProjectScopeV1;
+    // The development inspector retains its separate production-isolation
+    // preflight. Never select the installed profile as its implicit fallback.
+    if crate::wake_protocol_client::wake_runtime_mode_for_workspace(workspace)? != "INSTALLED_STORE"
+    {
+        return Err("WEB_BROWSER_INSTALLED_SCOPE_REQUIRED".into());
+    }
+    let prepared = PreparedProjectScopeV1::resolve(workspace, project)
+        .map_err(|_| "WEB_BROWSER_PROJECT_UNAVAILABLE")?;
+    let lease = acquire_web_work_lease(workspace, project)?;
+    let paired = mcp::operator_read_project_web_target(workspace, project)
+        .map_err(|_| "WEB_BROWSER_PAIRED_TARGET_REQUIRED")?
+        .ok_or("WEB_BROWSER_PAIRED_TARGET_REQUIRED")?;
+    let target = catdesk_wake::protocol::Target::new(paired.generation, paired.url)?;
+    let guard = || {
+        lease.check_target(&target)?;
+        mcp::with_current_project_web_target(
+            workspace,
+            project,
+            target.generation,
+            &target.digest,
+            |_, current| {
+                prepared
+                    .revalidate_registration()
+                    .map_err(|_| "WEB_BROWSER_REGISTRATION_CHANGED")?;
+                if current.url != target.url {
+                    return Err("WEB_BROWSER_TARGET_CHANGED".into());
+                }
+                Ok(())
+            },
+        )
+    };
+    guard()?;
+    let wake = catdesk_wake::store::Store::open(
+        &crate::wake_protocol_client::wake_root_for_workspace(workspace)?,
+    )?;
+    catdesk_wake::runtime::inspect_registered_readiness(&wake, project, &target, &guard)
+}
+
 pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value, String> {
     let workspace = workspace
         .canonicalize()
@@ -1513,6 +1559,9 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             }))
         }
         WebAction::Status => read_status(&workspace),
+        WebAction::BrowserInspect { project_id } => {
+            inspect_project_browser(&workspace, &project_id)
+        }
         WebAction::RetireProject {
             project_id,
             retirement_id,
@@ -1821,6 +1870,38 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn browser_inspection_accepts_only_registered_project_selector() {
+        let base = args(&[
+            "operator",
+            "web",
+            "browser",
+            "inspect",
+            "--project-id",
+            "alpha",
+        ]);
+        assert!(
+            matches!(parse(&base), Ok(WebAction::BrowserInspect { project_id }) if project_id == "alpha")
+        );
+        for option in [
+            "--conversation-url",
+            "--profile",
+            "--request-id",
+            "--seconds",
+            "--input-file",
+            "--runtime",
+            "--workspace",
+        ] {
+            let mut changed = base.clone();
+            changed.extend(args(&[option, "unapproved"]));
+            assert!(parse(&changed).is_err(), "{option}");
+        }
+        let mut duplicate = base.clone();
+        duplicate.extend(args(&["--project-id", "beta"]));
+        assert!(parse(&duplicate).is_err());
+        assert!(parse(&base[..4]).is_err());
+    }
 
     #[test]
     fn first_conversation_commands_require_frozen_context_and_refuse_source_or_destination_override()

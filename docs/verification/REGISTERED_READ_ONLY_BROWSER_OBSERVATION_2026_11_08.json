@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-08T05:43:00Z",
+  "scope": "C1_DIAGNOSIS_ONLY",
+  "baselineCommit": "3db3a5541425fd2d4da2dfb8492b0e88d9ca405f",
+  "implementation": {
+    "command": "operator web browser inspect --project-id REGISTERED_PROJECT_ID",
+    "runtimeScope": "INSTALLED_STORE_ONLY",
+    "owner": "EXISTING_HOST_AND_BROWSER_LEASES_AND_NATIVE_PROBE_JOB",
+    "wakeRequiredState": "STOPPED",
+    "helper": "EXISTING_READINESS_PROBE_EMBEDDED_AT_BUILD",
+    "primitives": "EXISTING_WAKE_BRIDGE_FIXED_SOURCE_PATH_AND_COMPILED_SHA256",
+    "browserMaximumSeconds": 90,
+    "observationSeconds": 20,
+    "outputMaximumBytes": 16384,
+    "outputMaximumRows": 64,
+    "partialTimeoutMetadata": true,
+    "concurrentBoundedOutputDrain": true,
+    "projectRegistrationAndTargetRechecked": true,
+    "sharedMetadataLocksHeldAcrossBrowserWait": false,
+    "unknownSubmissionOutcomeInferred": false,
+    "messageSendOrAssistantRetry": false,
+    "bindingOrProductionChange": false
+  },
+  "qualification": {
+    "pythonReadinessTests": {"passed": 29, "command": "python -I -m unittest discover -s tests -p test_wake_readiness_probe.py -v"},
+    "wakeReadinessTests": {"passed": 9, "command": "cargo test --locked --offline --manifest-path wake/Cargo.toml --lib readiness -- --test-threads=2"},
+    "existingProfileProbeTests": {"passed": 4, "command": "cargo test --locked --offline --manifest-path wake/Cargo.toml --bin CatDeskWakeProfileProbe -- --test-threads=2"},
+    "webCliTests": {"passed": 39, "command": "cargo test --locked --offline --bin catdesk operator_facade::web::tests -- --test-threads=2"},
+    "strictRootAndWakeAllTargetClippy": "PASS",
+    "realWindowsProcessTimeoutAndInheritedPipeCleanup": "PASS",
+    "overLimitOutputRefused": "PASS",
+    "unknownPhaseAndPrivateContentFiltered": "PASS",
+    "wrongProjectChangedTargetAndBusyLeasesRefused": "PASS",
+    "callerUrlProfileRuntimeAndMessageOverridesRefused": "PASS"
+  },
+  "retainedQualificationCorrections": [
+    "One new test fixture omitted store initialization; corrected before its passing run.",
+    "Initial coordinator test filter selected zero tests; excluded from passing test counts and rerun with the actual module path.",
+    "Strict Clippy requested a collapsed conditional; corrected before its passing run."
+  ],
+  "acceptance": {
+    "source": "TESTED_SOURCE",
+    "separateControllerBuild": "NOT_RUN_AT_THIS_CHECKPOINT",
+    "actualInstalledProfileObservation": "NOT_RUN_AT_THIS_CHECKPOINT",
+    "originalTimedOutInvitation": "ATTENTION_UNVERIFIED_NO_REPLAY",
+    "nativeEditAndVerification": "NOT_RUN",
+    "c1": "NOT_COMPLETE",
+    "c2ThroughC5": "NOT_RUN"
+  }
+}
