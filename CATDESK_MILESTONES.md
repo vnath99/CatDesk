@@ -8472,3 +8472,18 @@ authentication, protected service or signed artifact was changed. A different
 terminal or another manual response inspection would not resolve these gates.
 No operator relay/sign-in action is pending. Source/live development evidence,
 installed qualification and actual native C1 work remain separately classified.
+
+
+## 2026-11-08T22:28:44.873252+00:00 — retained-owner semantic response flag
+
+The first passive-timer attempt stopped in 3.422 seconds with
+RESPONSE_PROBE_UNPROVEN before observation, preserving the SENT receipt and
+OBSERVING timer. All 1,073 unrelated pins match and owned cleanup passed.
+The source reader selected the correct existing owner but omitted the Python
+flag required for semantic SENT continuation reads; the Python scope guard
+therefore refused that frame. Both receipt-bound response modes now supply
+the existing content-free task-diagnostic flag. No phase, receipt, identity,
+DOM, retry or installation guard changed. 54 Python/native readiness tests,
+strict root/Wake all-target Clippy and formatting pass. Next: one corrected
+retained-owner timer observation of the same SENT event. No message, receipt
+or native call is replayed. Earlier failed evidence remains preserved.

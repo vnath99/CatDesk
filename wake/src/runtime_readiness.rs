@@ -315,7 +315,10 @@ fn inspect_readiness(
         if response_only {
             command.arg("--response-only");
         }
-        if mode == Mode::SentDiagnostics {
+        // Retained-owner reobservation admits the same receipt-bound task
+        // continuations as explicit diagnostics. Both are content-free and
+        // require the Python reader's matching semantic-response flag.
+        if matches!(mode, Mode::SentDiagnostics | Mode::ResponseOwnerHeld) {
             command.arg("--task-diagnostics");
         }
         Some(hash)

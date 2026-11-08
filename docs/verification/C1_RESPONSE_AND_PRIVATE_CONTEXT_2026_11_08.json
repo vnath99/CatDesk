@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Finish the same SENT task event passive timer through the existing receipt-bound reobservation journal. Do not resend. Then qualify exact Web caller tool/app and retained-context availability without assuming an assistant hint proves publication or authentication failure. Installed dev.84 reader acceptance needs the existing protected signed/broker promotion chain; C1 native coding remains incomplete.",
+  "next": "Complete the same SENT event passive timer using the corrected retained-owner diagnostic flag. No receipt/send/native-call replay. Then qualify the exact Web caller tool/app and private-context availability; installed readback acceptance and C1 remain incomplete.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -991,6 +991,36 @@
       "total": 60,
       "strictRootAndWakeAllTargetClippy": "PASS",
       "format": "PASS"
+    },
+    "firstLiveAttempt": {
+      "observedUtc": "2026-11-08T22:26:09.969393+00:00",
+      "sourceCommit": "6e6c1949cf82112b4e93690f5f5b018e974b2135",
+      "elapsedSeconds": 3.422,
+      "status": "RESPONSE_PROBE_UNPROVEN_BEFORE_OBSERVATION",
+      "responseTimerChanged": false,
+      "receiptPreserved": true,
+      "preservationPins": 1073,
+      "preservationMismatches": 0,
+      "ownedProfileAndWakeProcessesAfter": 0,
+      "port3200ListenerPresent": false,
+      "messagesSent": 0,
+      "nativeCalls": 0,
+      "ownerHarnessExit": 1,
+      "ownedCleanupVerified": true
+    },
+    "semanticResponseFlagCorrection": {
+      "observedUtc": "2026-11-08T22:28:44.873252+00:00",
+      "status": "TESTED_SOURCE_MATCHED_OWNER_LIVE_PENDING",
+      "problem": "RETAINED_OWNER_OMITTED_PYTHON_SEMANTIC_SENT_RESPONSE_DIAGNOSTIC_FLAG",
+      "fix": "BOTH_RECEIPT_BOUND_RESPONSE_MODES_USE_EXISTING_CONTENT_FREE_TASK_DIAGNOSTICS",
+      "phaseReceiptAndIdentityGates": "UNCHANGED",
+      "tests": {
+        "pythonProbe": 37,
+        "nativeReadiness": 17,
+        "total": 54,
+        "strictRootAndWakeAllTargetClippy": "PASS",
+        "format": "PASS"
+      }
     }
   }
 }
