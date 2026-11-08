@@ -1902,8 +1902,44 @@ impl Store {
     /// durably present on the exact stored target. This path can only advance
     /// SUBMITTING -> SENT; it never permits replay, downgrade, or retargeting.
     pub(crate) fn reconcile_submitting_sent(&self, id: &str, receipt: Receipt) -> Result<Delivery> {
+        self.reconcile_submitting_sent_inner(id, receipt, None)
+    }
+
+    /// Commit only a fresh browser proof selected by the ordinary work owner.
+    /// No send authority is created; the retained submission witness is required.
+    pub fn reconcile_ordinary_submitting_sent_expected(
+        &self,
+        id: &str,
+        receipt: Receipt,
+        expected: &Delivery,
+    ) -> Result<Delivery> {
+        self.reconcile_submitting_sent_inner(id, receipt, Some(expected))
+    }
+
+    fn reconcile_submitting_sent_inner(
+        &self,
+        id: &str,
+        receipt: Receipt,
+        expected: Option<&Delivery>,
+    ) -> Result<Delivery> {
         let _lock = self.lock()?;
         let mut delivery = self.read_delivery(id)?.ok_or("SUBMISSION_CLAIM_MISSING")?;
+        if let Some(expected) = expected
+            && (&delivery != expected
+                || delivery.event.event_type != "engineering_attention"
+                || !delivery.event.audit_references.is_empty()
+                || !id.strip_prefix("web-work-").is_some_and(|v| {
+                    v.len() == 64
+                        && v.bytes()
+                            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                })
+                || read::<Event>(&self.event_path(id))? != delivery.event
+                || !self.submission_start_path(id).is_file()
+                || receipt.sent_utc < self.submission_started_utc(&delivery)?
+                || receipt.sent_utc > now())
+        {
+            return Err("SUBMISSION_RECONCILIATION_SCOPE_CHANGED".into());
+        }
         if delivery.phase != Phase::Submitting || delivery.receipt.is_some() {
             return Err("SUBMISSION_RECONCILIATION_REFUSED".into());
         }
@@ -2640,6 +2676,101 @@ impl Store {
 mod ordinary_retry_cas_tests {
     use super::*;
     use sha2::{Digest, Sha256};
+    fn submitting_fixture() -> (Store, Delivery, Receipt) {
+        let (store, prior, hash) = fixture();
+        let claimed = store
+            .retry_ordinary_pre_submit_expected(&prior.event.event_id, &prior, &hash)
+            .unwrap();
+        let delivery = store
+            .transition(
+                &claimed.event.event_id,
+                &claimed.owner,
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: delivery.event.event_id.clone(),
+            target_generation: delivery.target.generation,
+            target_digest: delivery.target.digest.clone(),
+            message_digest: delivery.message_digest.clone(),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        (store, delivery, receipt)
+    }
+
+    #[test]
+    fn ordinary_receipt_commit_requires_exact_crossed_delivery_and_preserves_witness() {
+        let (store, prior, receipt) = submitting_fixture();
+        let id = &prior.event.event_id;
+        let witness = fs::read(store.submission_start_path(id)).unwrap();
+        let sent = store
+            .reconcile_ordinary_submitting_sent_expected(id, receipt.clone(), &prior)
+            .unwrap();
+        assert_eq!(sent.phase, Phase::Sent);
+        assert_eq!(sent.receipt, Some(receipt.clone()));
+        assert_eq!(fs::read(store.submission_start_path(id)).unwrap(), witness);
+        assert!(!store.event_path(id).exists());
+        assert_eq!(read::<Event>(&store.archive_path(id)).unwrap(), prior.event);
+        store.record_exact_receipt_timer(id, &receipt).unwrap();
+        assert!(
+            store
+                .reconcile_ordinary_submitting_sent_expected(id, receipt, &prior)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn ordinary_receipt_commit_refuses_changed_scope_queue_witness_or_receipt_without_mutation() {
+        for case in [
+            "expected",
+            "queue",
+            "witness",
+            "wrong-project",
+            "generation",
+            "message",
+            "evidence",
+            "future",
+            "past",
+            "claimed",
+        ] {
+            let (store, prior, mut receipt) = submitting_fixture();
+            let id = &prior.event.event_id;
+            let mut expected = prior.clone();
+            match case {
+                "expected" => expected.reason = Some("changed".into()),
+                "queue" => {
+                    let mut event = prior.event.clone();
+                    event.message = "foreign".into();
+                    atomic(&store.event_path(id), &event).unwrap();
+                }
+                "witness" => fs::remove_file(store.submission_start_path(id)).unwrap(),
+                "wrong-project" => receipt.event_id = format!("web-work-{}", "b".repeat(64)),
+                "generation" => receipt.target_generation += 1,
+                "message" => receipt.message_digest = "c".repeat(64),
+                "evidence" => receipt.evidence = "SUBMISSION_ACCEPTED".into(),
+                "future" => receipt.sent_utc = now() + 1000,
+                "past" => receipt.sent_utc = 1,
+                _ => {
+                    expected.phase = Phase::Claimed;
+                    atomic(&store.delivery_path(id), &expected).unwrap();
+                }
+            }
+            let before = fs::read(store.delivery_path(id)).unwrap();
+            assert!(
+                store
+                    .reconcile_ordinary_submitting_sent_expected(id, receipt, &expected)
+                    .is_err(),
+                "{case}"
+            );
+            assert_eq!(fs::read(store.delivery_path(id)).unwrap(), before);
+            assert!(!store.archive_path(id).exists());
+            assert!(!store.timer_path(id).exists());
+        }
+    }
     fn fixture() -> (Store, Delivery, String) {
         let base = std::env::temp_dir().join(format!(
             "ordinary-retry-cas-{}-{}",

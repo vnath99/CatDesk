@@ -34,11 +34,19 @@ fn validate_selection(
 }
 
 pub(crate) fn deliver(workspace: &Path, project: &str, request_id: &str) -> Result<Value, String> {
-    selected_work(workspace, project, request_id, false, None)
+    selected_work(workspace, project, request_id, false, None, false)
 }
 
 pub(crate) fn inspect(workspace: &Path, project: &str, request_id: &str) -> Result<Value, String> {
-    selected_work(workspace, project, request_id, true, None)
+    selected_work(workspace, project, request_id, true, None, false)
+}
+
+pub(crate) fn reconcile(
+    workspace: &Path,
+    project: &str,
+    request_id: &str,
+) -> Result<Value, String> {
+    selected_work(workspace, project, request_id, false, None, true)
 }
 
 pub(crate) fn retry_pre_submit(
@@ -47,7 +55,14 @@ pub(crate) fn retry_pre_submit(
     request_id: &str,
     expected_sha256: &str,
 ) -> Result<Value, String> {
-    selected_work(workspace, project, request_id, false, Some(expected_sha256))
+    selected_work(
+        workspace,
+        project,
+        request_id,
+        false,
+        Some(expected_sha256),
+        false,
+    )
 }
 
 fn selected_work(
@@ -56,8 +71,9 @@ fn selected_work(
     request_id: &str,
     inspect_only: bool,
     retry_sha256: Option<&str>,
+    reconcile_only: bool,
 ) -> Result<Value, String> {
-    if (inspect_only || retry_sha256.is_some())
+    if (inspect_only || retry_sha256.is_some() || reconcile_only)
         && wake_protocol_client::wake_runtime_mode_for_workspace(workspace)? != "INSTALLED_STORE"
     {
         return Err("WEB_BROWSER_INSTALLED_SCOPE_REQUIRED".into());
@@ -79,7 +95,7 @@ fn selected_work(
     // SENT, SUBMITTING and other historical outcomes are refused by the
     // existing sender before opening an adapter; they never grant replay.
     let prior = wake.delivery(&record.event_id)?;
-    if (inspect_only || retry_sha256.is_some()) && prior.is_none() {
+    if (inspect_only || retry_sha256.is_some() || reconcile_only) && prior.is_none() {
         return Err("WEB_WORK_DELIVERY_MISSING".into());
     }
     let event = match &prior {
@@ -123,6 +139,48 @@ fn selected_work(
         )
     };
     guard()?;
+    if reconcile_only {
+        let prior = prior.as_ref().ok_or("WEB_WORK_DELIVERY_MISSING")?;
+        let observation =
+            runtime::read_registered_delivery_receipt(&wake, project, &target, prior, &guard)?;
+        let receipt = observation
+            .get("persistedReceipt")
+            .filter(|v| !v.is_null())
+            .ok_or("WEB_WORK_RECEIPT_UNPROVEN")?;
+        let receipt: catdesk_wake::store::Receipt =
+            serde_json::from_value(receipt.clone()).map_err(|_| "WEB_WORK_RECEIPT_UNPROVEN")?;
+        // The browser has exited. Only this short local commit holds shared
+        // metadata locks; the original request and target remain authoritative.
+        let _host = wake.host_lock()?;
+        let _browser = runtime::acquire_browser_quiescence(&wake)?;
+        guard()?;
+        let registry =
+            AutonomousProjectRegistryStoreV1::open_read_only(workspace.join(".catdesk/projects"))
+                .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
+        return registry.with_registration_lock(|| {
+            prepared
+                .revalidate_registration()
+                .map_err(|_| "WEB_WORK_PROJECT_REGISTRATION_CHANGED")?;
+            ledger.require_ordinary_request(request_id)?;
+            if ledger.record(request_id)?.as_ref() != Some(&record) {
+                return Err("WEB_WORK_DELIVERY_SELECTION_CHANGED".into());
+            }
+            lease.check_target(&target)?;
+            validate_selection(project, &record, &target, &prior.event)?;
+            let result = wake.reconcile_ordinary_submitting_sent_expected(
+                &record.event_id,
+                receipt.clone(),
+                prior,
+            )?;
+            wake.record_exact_receipt_timer(&record.event_id, &receipt)?;
+            Ok(
+                json!({"action":"web_work_reconcile","projectId":project,"requestId":request_id,
+                "eventId":record.event_id,"phase":result.phase,"receipt":result.receipt,
+                "browserReadOnly":true,"sendAttempted":false,"assistantRetryAttempted":false,
+                "hostStarted":false,"nativeGrantCreated":false,"workResolved":false}),
+            )
+        });
+    }
     if let Some(hash) = retry_sha256 {
         let _host = wake.host_lock()?;
         let _browser = runtime::acquire_browser_quiescence(&wake)?;
@@ -253,6 +311,10 @@ mod tests {
         let before = std::fs::read(&queue).unwrap();
         assert_eq!(
             retry_pre_submit(&control, "alpha", "request-a", &"a".repeat(64)).unwrap_err(),
+            "WEB_BROWSER_INSTALLED_SCOPE_REQUIRED"
+        );
+        assert_eq!(
+            reconcile(&control, "alpha", "request-a").unwrap_err(),
             "WEB_BROWSER_INSTALLED_SCOPE_REQUIRED"
         );
         assert_eq!(std::fs::read(queue).unwrap(), before);

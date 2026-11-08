@@ -139,6 +139,10 @@ pub(crate) enum WebAction {
         request_id: String,
         expected_delivery_sha256: String,
     },
+    WorkReconcile {
+        project_id: String,
+        request_id: String,
+    },
     WorkResolve {
         project_id: String,
         input_file: PathBuf,
@@ -302,7 +306,7 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         ("browser", "inspect") if options.is_empty() => Ok(WebAction::BrowserInspect {
             project_id: project_id.into(),
         }),
-        ("work", "deliver" | "inspect" | "retry-pre-submit") => {
+        ("work", "deliver" | "inspect" | "retry-pre-submit" | "reconcile") => {
             let request_id = options
                 .remove("--request-id")
                 .filter(|id| id.len() <= 128 && catdesk_wake::protocol::valid_id(id))
@@ -330,6 +334,12 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
             }
             if verb == "inspect" {
                 return Ok(WebAction::WorkInspect {
+                    project_id: project_id.into(),
+                    request_id: request_id.into(),
+                });
+            }
+            if verb == "reconcile" {
+                return Ok(WebAction::WorkReconcile {
                     project_id: project_id.into(),
                     request_id: request_id.into(),
                 });
@@ -1681,6 +1691,10 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             project_id,
             request_id,
         } => crate::web_work::inspect_delivery(&workspace, &project_id, &request_id),
+        WebAction::WorkReconcile {
+            project_id,
+            request_id,
+        } => crate::web_work::reconcile_delivery(&workspace, &project_id, &request_id),
         WebAction::WorkRetryPreSubmit {
             project_id,
             request_id,
@@ -1917,6 +1931,32 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn ordinary_reconcile_selects_only_an_existing_request_without_send_overrides() {
+        let base = args(&[
+            "operator",
+            "web",
+            "work",
+            "reconcile",
+            "--project-id",
+            "alpha",
+            "--request-id",
+            "request-a",
+        ]);
+        assert!(matches!(parse(&base), Ok(WebAction::WorkReconcile { .. })));
+        for flag in [
+            "--force",
+            "--message",
+            "--conversation-url",
+            "--execution-key",
+            "--event-id",
+            "--send",
+        ] {
+            let mut changed = base.clone();
+            changed.extend(args(&[flag, "foreign"]));
+            assert!(parse(&changed).is_err());
+        }
+    }
     #[test]
     fn ordinary_retry_requires_exact_delivery_cas_and_has_no_force_or_send_options() {
         let mut base = args(&[

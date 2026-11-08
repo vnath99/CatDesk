@@ -112,6 +112,34 @@ pub(crate) fn submission_observation(line: &str) -> Option<serde_json::Value> {
     crate::runtime::canonical_submission_observation(serde_json::from_str(text).ok()?)
 }
 
+pub(crate) fn persisted_receipt(line: &str) -> Option<crate::store::Receipt> {
+    let text = line.strip_prefix("PROBE:RECEIPT:")?;
+    if text.len() > 1024 {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_str(text).ok()?;
+    if value.as_object()?.len() != 7 {
+        return None;
+    }
+    let receipt: crate::store::Receipt = serde_json::from_value(value).ok()?;
+    let hex = |s: &str| {
+        s.len() == 64
+            && s.bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    };
+    if receipt.schema_version != 1
+        || receipt.target_generation == 0
+        || receipt.sent_utc == 0
+        || receipt.evidence != "EXACT_USER_MESSAGE_APPENDED"
+        || !receipt.event_id.strip_prefix("web-work-").is_some_and(hex)
+        || !hex(&receipt.target_digest)
+        || !hex(&receipt.message_digest)
+    {
+        return None;
+    }
+    Some(receipt)
+}
+
 pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<String>, &'static str> {
     let mut rows = Vec::new();
     run_bounded_observed(command, timeout, &mut rows)?;
@@ -226,6 +254,12 @@ fn sanitized_rows(text: &str) -> Vec<String> {
             }
             if state.starts_with("SUBMISSION:") {
                 return submission_observation(line).is_some();
+            }
+            if state.starts_with("RECEIPT:") {
+                return persisted_receipt(line).is_some();
+            }
+            if state.starts_with("RECEIPT_STATE:") {
+                return state == "RECEIPT_STATE:UNPROVEN";
             }
             if let Some(state) = state.strip_prefix("SUBMISSION_STATE:") {
                 return matches!(
@@ -342,6 +376,29 @@ fn sanitized_rows(text: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn receipt_protocol_allows_only_closed_identity_fields_and_bounded_digests() {
+        let receipt = serde_json::json!({"schemaVersion":1,"eventId":format!("web-work-{}","a".repeat(64)),
+            "targetGeneration":1,"targetDigest":"b".repeat(64),"messageDigest":"c".repeat(64),"sentUtc":1,"evidence":"EXACT_USER_MESSAGE_APPENDED"});
+        assert!(super::persisted_receipt(&format!("PROBE:RECEIPT:{receipt}")).is_some());
+        for (key, value) in [
+            ("schemaVersion", serde_json::json!(true)),
+            ("eventId", serde_json::json!("private")),
+            ("targetDigest", serde_json::json!("B".repeat(64))),
+            ("messageDigest", serde_json::json!("private")),
+            ("sentUtc", serde_json::json!(0)),
+            ("evidence", serde_json::json!("SUBMISSION_ACCEPTED")),
+            ("body", serde_json::json!("PRIVATE_BODY")),
+        ] {
+            let mut bad = receipt.clone();
+            bad[key] = value;
+            assert!(super::persisted_receipt(&format!("PROBE:RECEIPT:{bad}")).is_none());
+        }
+        assert_eq!(
+            super::sanitized_rows("PROBE:RECEIPT_STATE:UNPROVEN\nPROBE:RECEIPT_STATE:PRIVATE_BODY"),
+            ["PROBE:RECEIPT_STATE:UNPROVEN"]
+        );
+    }
     use super::*;
     #[test]
     fn submission_rows_share_strict_metadata_validator_without_receipt_authority() {

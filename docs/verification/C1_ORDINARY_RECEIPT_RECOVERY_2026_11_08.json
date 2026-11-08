@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-08T16:55:24.412945+00:00",
+  "scope": "C1_ORIGINAL_ORDINARY_RECEIPT_RECOVERY",
+  "baselineCommit": "44d5e8d4ba90daaf8104dc4aac52084fb1ff08a6",
+  "live": {
+    "preSubmitMetadataRecovery": "PASS",
+    "originalFailurePreserved": true,
+    "unrelatedPinsAfterRecovery": 1048,
+    "existingServingWindowSeconds": 139.0,
+    "missingAndWrongBearerStatus": 401,
+    "validBearerStatus": 200,
+    "authenticatedCatalogTools": 102,
+    "centralTaskToolListed": true,
+    "existingOfficialOwnerReady": true,
+    "oneOriginalInvitationAttempted": true,
+    "submissionBoundary": "CROSSED",
+    "exactReceiptAtTimeout": false,
+    "durablePhase": "SUBMITTING",
+    "passiveResponseTimer": "OBSERVING",
+    "originalRequestRetained": true,
+    "automaticReplayAllowed": false,
+    "postSubmissionReadOnlyObservation": {
+      "exactConversationAndTopFrame": true,
+      "expectedUserCount": 1,
+      "lastUserMatches": true,
+      "followingTurns": 1,
+      "generation": "IDLE",
+      "composer": "EMPTY",
+      "receiptCreated": false,
+      "stateChanged": false,
+      "preservationPins": 1052,
+      "preservationMismatches": 0,
+      "ownedTreeExited": true,
+      "profileAndWakeProcessCounts": 0,
+      "port3200Closed": true
+    }
+  },
+  "sourceImprovement": {
+    "command": "operator web work reconcile --project-id REGISTERED_PROJECT_ID --request-id ORIGINAL_REQUEST_ID",
+    "usesExistingBoundedBrowserOwner": true,
+    "usesExistingBridgePersistedReceiptReader": true,
+    "usesExistingWakeReceiptAndArchiveCommit": true,
+    "requiresCrossedSubmissionWitness": true,
+    "requiresFreshExactDocumentAndTwoSeparatedUserSamples": true,
+    "requiresMatchingOriginalOpenRequestTargetMessageAndDelivery": true,
+    "partialOutputOrFailedCleanupCannotCommit": true,
+    "noUserSendOrAssistantRetry": true,
+    "noWorkResolutionOrNativeGrant": true,
+    "noInstallationOrSelectionChange": true
+  },
+  "qualification": {
+    "pythonTests": 33,
+    "nativeReadinessTests": 13,
+    "storeTests": 58,
+    "webCliTests": 42,
+    "deliveryTests": 6,
+    "strictClippy": "PASS",
+    "retainedFailures": [
+      "Initial direct use of private Delivery.validate corrected to public event validation.",
+      "Strict collapsible-if lint corrected without weakening validation."
+    ],
+    "focusedTestsTotal": 152,
+    "formatting": "PASS",
+    "completedUtc": "2026-11-08T16:55:50.098467+00:00"
+  },
+  "acceptance": {
+    "source": "TESTED_SOURCE",
+    "separateController": "NOT_BUILT_YET",
+    "liveReceiptReconciliation": "NOT_RUN",
+    "assistantBodyAcknowledgment": "NOT_VERIFIED",
+    "nativeEditTestWakeCycle": "NOT_RUN",
+    "c1": "NOT_COMPLETE",
+    "laterMilestones": "NOT_RUN"
+  },
+  "next": "After final qualification and exact-source build, invoke receipt-only reconciliation once for the retained original SUBMITTING request; do not submit another USER message."
+}

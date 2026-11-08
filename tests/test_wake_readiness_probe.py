@@ -14,6 +14,27 @@ from unittest import mock
 
 
 class ReadinessProbeTests(unittest.TestCase):
+    def test_receipt_reader_uses_existing_no_send_primitive_and_exports_no_content(self):
+        delivery=dict(messageDigest="a"*64,event=dict(eventId="web-work-"+"b"*64,message="PRIVATE_MESSAGE"),
+                      target=dict(generation=1,digest="c"*64))
+        sink=mock.Mock()
+        sink.reconcile_persisted_receipt.return_value=types.SimpleNamespace(record_id=delivery["event"]["eventId"],
+            target_sha256="c"*64,message_sha256="a"*64,browser_sent_at_unix=10)
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):self.probe.report_persisted_receipt(sink,object(),delivery)
+        self.assertIn('PROBE:RECEIPT:',output.getvalue())
+        self.assertNotIn('PRIVATE_MESSAGE',output.getvalue())
+        self.assertEqual([call[0] for call in sink.method_calls],["reconcile_persisted_receipt"])
+        for changed in ("message_sha256","target_sha256","record_id"):
+            setattr(sink.reconcile_persisted_receipt.return_value,changed,"PRIVATE_MISMATCH")
+            output=io.StringIO()
+            with contextlib.redirect_stdout(output):self.probe.report_persisted_receipt(sink,object(),delivery)
+            self.assertEqual(output.getvalue(),"PROBE:RECEIPT_STATE:UNPROVEN\n")
+        sink.reconcile_persisted_receipt.side_effect=RuntimeError("PRIVATE_ERROR")
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):self.probe.report_persisted_receipt(sink,object(),delivery)
+        self.assertNotIn("PRIVATE_",output.getvalue())
+
     def test_event_probe_observes_only_exact_page_and_never_retries_home(self):
         target = "https://chatgpt.com/c/fixture"
         for route in ("EXACT", "HOME"):
@@ -59,6 +80,10 @@ class ReadinessProbeTests(unittest.TestCase):
                 return hashlib.sha256(path.read_bytes()).hexdigest()
             checksum = save(delivery)
             self.assertEqual(self.probe.load_delivery_message(path, checksum, url), message)
+            with self.assertRaises(ValueError):self.probe.load_delivery_message(path,checksum,url,receipt_only=True)
+            submitted=json.loads(json.dumps(delivery));submitted["phase"]="SUBMITTING"
+            self.assertEqual(self.probe.load_delivery_message(path,save(submitted),url,receipt_only=True),submitted)
+            save(delivery)
             self.assertEqual(path.read_text(), json.dumps(delivery))
             with self.assertRaises(ValueError): self.probe.load_delivery_message(path, "0" * 64, url)
             for key, value in [("phase", "SENT"), ("receipt", {}), ("messageDigest", "0" * 64)]:

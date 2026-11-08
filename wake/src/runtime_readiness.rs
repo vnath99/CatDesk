@@ -40,7 +40,7 @@ pub fn inspect_registered_readiness(
     target: &Target,
     keep_current: &dyn Fn() -> Result<()>,
 ) -> Result<serde_json::Value> {
-    inspect_readiness(store, project, target, None, keep_current)
+    inspect_readiness(store, project, target, None, false, keep_current)
 }
 
 pub fn inspect_registered_delivery_readiness(
@@ -50,7 +50,36 @@ pub fn inspect_registered_delivery_readiness(
     delivery: &crate::store::Delivery,
     keep_current: &dyn Fn() -> Result<()>,
 ) -> Result<serde_json::Value> {
-    inspect_readiness(store, project, target, Some(delivery), keep_current)
+    inspect_readiness(store, project, target, Some(delivery), false, keep_current)
+}
+
+/// Explicit fresh-document receipt proof through the same bounded owner.
+/// This never submits, retries an assistant response, or mutates the journal.
+pub fn read_registered_delivery_receipt(
+    store: &Store,
+    project: &str,
+    target: &Target,
+    delivery: &crate::store::Delivery,
+    keep_current: &dyn Fn() -> Result<()>,
+) -> Result<serde_json::Value> {
+    require_receipt_selection(store, delivery)?;
+    inspect_readiness(store, project, target, Some(delivery), true, keep_current)
+}
+
+fn require_receipt_selection(store: &Store, delivery: &crate::store::Delivery) -> Result<()> {
+    delivery.event.validate()?;
+    if delivery.phase != Phase::Submitting
+        || delivery.receipt.is_some()
+        || !store
+            .root()
+            .join("logs")
+            .join(format!("submission-start-{}.json", delivery.event.event_id))
+            .is_file()
+    {
+        return Err("READINESS_SUBMISSION_WITNESS_REQUIRED".into());
+    }
+    store.submission_started_utc(delivery)?;
+    Ok(())
 }
 
 #[cfg(any(windows, test))]
@@ -94,6 +123,7 @@ fn inspect_readiness(
     project: &str,
     target: &Target,
     delivery: Option<&crate::store::Delivery>,
+    receipt_only: bool,
     keep_current: &dyn Fn() -> Result<()>,
 ) -> Result<serde_json::Value> {
     if !crate::protocol::valid_id(project) {
@@ -107,6 +137,9 @@ fn inspect_readiness(
     keep_current()?;
     if let Some(delivery) = delivery {
         require_delivery(store, project, target, delivery)?;
+        if receipt_only {
+            require_receipt_selection(store, delivery)?;
+        }
     }
     // Verify installed identity without requiring new-chat/bootstrap support.
     installed_browser_directory(store)?;
@@ -167,6 +200,9 @@ fn inspect_readiness(
             .arg(path)
             .arg("--delivery-sha256")
             .arg(&hash);
+        if receipt_only {
+            command.arg("--receipt-only");
+        }
         Some(hash)
     } else {
         None
@@ -227,6 +263,38 @@ fn inspect_readiness(
         .iter()
         .rev()
         .find_map(|row| row.strip_prefix("PROBE:SUBMISSION_STATE:"));
+    let receipts: Vec<_> = rows
+        .iter()
+        .filter_map(|row| crate::readiness_probe::persisted_receipt(row))
+        .collect();
+    let receipt = if receipt_only
+        && result.is_ok()
+        && phase == Some("BROWSER_CLOSED")
+        && final_state.is_some()
+        && !rows.iter().any(|row| row == "PROBE:RECEIPT_STATE:UNPROVEN")
+        && tabs
+            .as_ref()
+            .is_some_and(|v| v["state"] == "TARGET_TAB_EXACT" && v["candidateFrame"] == "TOP")
+        && surface
+            .as_ref()
+            .is_some_and(|v| v["route"] == "EXACT" && v["document"] == "COMPLETE")
+        && receipts.len() == 1
+    {
+        let receipt = &receipts[0];
+        let d = delivery.ok_or("READINESS_WORK_DELIVERY_CHANGED")?;
+        if receipt.event_id != d.event.event_id
+            || receipt.target_generation != target.generation
+            || receipt.target_digest != target.digest
+            || receipt.message_digest != d.message_digest
+            || receipt.sent_utc < store.submission_started_utc(d)?
+            || receipt.sent_utc > now()
+        {
+            return Err("READINESS_RECEIPT_BINDING_INVALID".into());
+        }
+        Some(receipt)
+    } else {
+        None
+    };
     Ok(
         serde_json::json!({"action":if delivery.is_some() {"web_work_inspect"} else {"web_browser_inspect"},"projectId":project,
         "status":if result.is_ok() && final_state.is_some() {"BROWSER_READINESS_OBSERVED"} else {"BROWSER_OBSERVATION_INCOMPLETE"},
@@ -235,9 +303,10 @@ fn inspect_readiness(
         "targetGeneration":target.generation,"targetDigest":target.digest,
         "eventId":delivery.map(|d| &d.event.event_id),"sourceDeliverySha256":delivery_hash,
         "submissionObservation":submission,"submissionObservationState":submission_state,
-        "advisory":true,"browserReadOnly":true,"sendAttempted":false,
+        "advisory":!receipt_only,"browserReadOnly":true,"sendAttempted":false,
         "receiptCreated":false,"stateChanged":false,"retryAuthorized":false,"workResolved":false,
-        "submissionOutcome":"NOT_ASSESSED","authenticationVerified":false,
+        "persistedReceipt":receipt,"receiptProofRequested":receipt_only,
+        "submissionOutcome":if receipt.is_some() {"PERSISTED_RECEIPT_PROVEN"} else {"NOT_ASSESSED"},"authenticationVerified":false,
         "ownedTreeExited":true,"hostStarted":false,"schedulerStarted":false}),
     )
 }
@@ -248,6 +317,7 @@ fn inspect_readiness(
     _: &str,
     _: &Target,
     _: Option<&crate::store::Delivery>,
+    _: bool,
     _: &dyn Fn() -> Result<()>,
 ) -> Result<serde_json::Value> {
     Err("READINESS_PLATFORM_UNSUPPORTED".into())

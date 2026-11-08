@@ -51,7 +51,7 @@ def load_observation_sink(path, expected_sha256, profile, url):
     return sink
 
 
-def load_delivery_message(path, expected_sha256, url):
+def load_delivery_message(path, expected_sha256, url, *, receipt_only=False):
     """Read only the exact native-selected durable delivery, never caller text."""
     if (path is None or path.parent.name != "deliveries" or not path.is_file()
             or path.is_symlink() or getattr(path, "is_junction", lambda: False)()
@@ -76,7 +76,30 @@ def load_delivery_message(path, expected_sha256, url):
             or not isinstance(message, str) or not 0 < len(message.encode()) <= 2048
             or delivery["messageDigest"] != hashlib.sha256(message.encode()).hexdigest()):
         raise ValueError("delivery scope changed")
+    if receipt_only:
+        if delivery["phase"] != "SUBMITTING":
+            raise ValueError("crossed submission required")
+        return delivery
     return message
+
+
+def report_persisted_receipt(sink, cdp, delivery, report=print):
+    """Use the existing two-sample persisted USER reader; never retry a response."""
+    event, target = delivery["event"], delivery["target"]
+    try:
+        receipt = sink.reconcile_persisted_receipt(
+            cdp, delivery["messageDigest"], event["message"], event["eventId"], target["digest"]
+        )
+        value = dict(schemaVersion=1, eventId=receipt.record_id,
+                     targetGeneration=target["generation"], targetDigest=receipt.target_sha256,
+                     messageDigest=receipt.message_sha256, sentUtc=int(receipt.browser_sent_at_unix),
+                     evidence="EXACT_USER_MESSAGE_APPENDED")
+        if (value["eventId"] != event["eventId"] or value["targetDigest"] != target["digest"]
+                or value["messageDigest"] != delivery["messageDigest"] or value["sentUtc"] <= 0):
+            raise ValueError("receipt mismatch")
+        report("PROBE:RECEIPT:" + json.dumps(value, separators=(",", ":"), sort_keys=True), flush=True)
+    except Exception:
+        report("PROBE:RECEIPT_STATE:UNPROVEN", flush=True)
 
 
 def report_submission(sink, cdp, message, report=print, sleep=time.sleep):
@@ -342,6 +365,7 @@ def main():
     parser.add_argument("--read-only", action="store_true")
     parser.add_argument("--delivery-file", type=Path)
     parser.add_argument("--delivery-sha256")
+    parser.add_argument("--receipt-only", action="store_true")
     args = parser.parse_args()
     if args.await_start and sys.stdin.readline() != "START\n":
         return 2
@@ -361,11 +385,17 @@ def main():
             print("PROBE:FINAL:OBSERVATION_UNAVAILABLE", flush=True)
             return 0
     message = None
+    receipt_delivery = None
+    if args.receipt_only and (not args.read_only or args.delivery_file is None):
+        return 2
     if args.delivery_file is not None or args.delivery_sha256 is not None:
         try:
             if sink is None or not args.read_only:
                 raise ValueError("read-only primitives required")
-            message = load_delivery_message(args.delivery_file, args.delivery_sha256, url)
+            if args.receipt_only:
+                receipt_delivery = load_delivery_message(args.delivery_file, args.delivery_sha256, url, receipt_only=True)
+            else:
+                message = load_delivery_message(args.delivery_file, args.delivery_sha256, url)
         except Exception:
             print("PROBE:SUBMISSION_STATE:OBSERVATION_UNAVAILABLE", flush=True)
             print("PROBE:FINAL:OBSERVATION_UNAVAILABLE", flush=True)
@@ -430,6 +460,11 @@ def main():
                 report_submission(sink, cdp, message)
             else:
                 print("PROBE:SUBMISSION_STATE:TARGET_UNAVAILABLE", flush=True)
+        if receipt_delivery is not None:
+            if surface is not None and surface.get("route") == "EXACT" and surface.get("document") == "COMPLETE":
+                report_persisted_receipt(sink, cdp, receipt_delivery)
+            else:
+                print("PROBE:RECEIPT_STATE:UNPROVEN", flush=True)
     print("PROBE:PHASE:BROWSER_CLOSED", flush=True)
     print("PROBE:FINAL:" + final, flush=True)
     return 0
