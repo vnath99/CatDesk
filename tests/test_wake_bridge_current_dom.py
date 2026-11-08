@@ -239,10 +239,13 @@ if (options.appForm) {
     for(const control of controls){
       control.attrs['aria-haspopup']=options.appPopup || 'menu';
       control.attrs['aria-controls']=options.menuLinkMismatch?'foreign-menu':'owned-app-menu';
+      if(options.unlinkedMenuControl){delete control.attrs['aria-haspopup'];delete control.attrs['aria-controls'];}
       control.click=()=>{mutations++;control.attrs['aria-expanded']=control.attrs['aria-expanded']==='true'?'false':'true';menu.attrs.hidden=control.attrs['aria-expanded']!=='true';};
     }
     appMenuControl=controls[0]||null;
     if(options.priorMenuOpen) append(document,el('div',{role:'menu',id:'foreign-menu'},'PRIVATE_MENU'));
+    if(options.priorDialogOpen) append(document,el('div',{role:'dialog'},'PRIVATE_DIALOG'));
+    if(options.ambiguousMenuAfterOpen&&options.appExpanded==='true') append(document,el('div',{role:'menu'},'PRIVATE_MENU'));
   }
   if(options.appSemanticLabel) for(const control of controls){delete control.attrs['data-testid'];control.attrs['aria-label']=options.appSemanticLabel;}
   if(options.v5Chip) controls.push(el('button',{'data-testid':'app-chip','aria-label':'CatDesk-Local-Tunnel-v5'}));
@@ -443,6 +446,38 @@ class CurrentDomTests(unittest.TestCase):
         self.assertEqual(cdp.mutations,2)
         self.assertEqual(cdp.options['appExpanded'],'false')
         self.assertNotIn('PRIVATE_',json.dumps(value))
+
+    def test_exact_unlinked_composer_requires_witnessed_fresh_menu_and_proved_close(self):
+        cdp=CurrentDom(appForm=True,appMenuTrace=True,unlinkedMenuControl=True)
+        value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+        self.assertEqual(value['state'],'OBSERVED')
+        self.assertEqual(value['schemaVersion'],2)
+        self.assertEqual(value['ownershipEvidence'],'FRESH_MENU_TRANSITION')
+        self.assertTrue(value['closedVerified'])
+        self.assertEqual(cdp.mutations,2)
+        for options in [dict(priorMenuOpen=True),dict(priorDialogOpen=True),dict(appSemanticLabel='Add files and more'),dict(appExpanded='true')]:
+            with self.subTest(options=options):
+                cdp=CurrentDom(appForm=True,appMenuTrace=True,unlinkedMenuControl=True,**options)
+                value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+                self.assertFalse(value['openAttempted'] or value['openRequested'])
+                self.assertEqual(getattr(cdp,'mutations',0),0)
+
+    def test_unlinked_menu_lost_open_is_not_repeated_and_ambiguity_never_closes_foreign_popup(self):
+        class LostOpen(CurrentDom):
+            def evaluate(self,script):
+                value=super().evaluate(script)
+                if 'const action="OPEN"' in script:raise RuntimeError('PRIVATE_UNKNOWN_OPEN')
+                return value
+        cdp=LostOpen(appForm=True,appMenuTrace=True,unlinkedMenuControl=True)
+        value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+        self.assertEqual(value['state'],'UNPROVEN')
+        self.assertTrue(value['openOutcomeUnknown'] and value['closedVerified'])
+        self.assertEqual(cdp.mutations,2)
+        cdp=CurrentDom(appForm=True,appMenuTrace=True,unlinkedMenuControl=True,ambiguousMenuAfterOpen=True)
+        value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+        self.assertEqual(value['state'],'MENU_UNPROVEN')
+        self.assertFalse(value['closeAttempted'] or value['closedVerified'])
+        self.assertEqual(cdp.mutations,1)
 
     def test_app_menu_refuses_drafts_generation_foreign_turn_and_unsafe_controls(self):
         for options in [dict(appDraft='PRIVATE_DRAFT'),dict(observationStop=True),dict(appPlusCount=2),

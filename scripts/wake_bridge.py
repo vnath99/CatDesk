@@ -966,20 +966,24 @@ class CdpSink:
 
         Every step independently rechecks the original completed USER exchange.
         A lost open result never permits another open. Closing requires fresh
-        positive ownership of the menu linked by the same qualified control.
+        positive ownership through a control link or a witnessed fresh menu
+        transition from the exact known composer control. No item is selected.
         """
-        result=dict(schemaVersion=1,basis='TRANSIENT_MENU_ONLY_NOT_TOOL_CATALOG',state='UNPROVEN',
+        result=dict(schemaVersion=2,basis='TRANSIENT_MENU_ONLY_NOT_TOOL_CATALOG',state='UNPROVEN',
+            ownershipEvidence='NONE',
             openAttempted=False,openRequested=False,openOutcomeUnknown=False,closeAttempted=False,
             closedVerified=False,v5ItemCount=0,v5DisabledCount=0,appsItemCount=0,moreItemCount=0)
-        states={'UNPROVEN','OPEN_REQUESTED','CLOSE_REQUESTED','OBSERVED','CLOSED','DRAFT_PRESENT',
+        states={'UNPROVEN','CONTROL_READY','OPEN_REQUESTED','CLOSE_REQUESTED','OBSERVED','CLOSED','DRAFT_PRESENT',
             'GENERATION_ACTIVE','CONTROL_UNPROVEN','UNSUPPORTED_MENU','PRIOR_MENU_OPEN','MENU_UNPROVEN'}
+        prepared_ownership='NONE'
         def step(action):
             if self.observe_cooperative_response(cdp,message,expected_digest)!='RESPONSE_COMPLETE':
                 raise Attention('RESPONSE_STATE_UNPROVEN')
             document_url=str(cdp.get_current_url())
             script=f"""(() => {{
-                const out={{state:'UNPROVEN',v5ItemCount:0,v5DisabledCount:0,appsItemCount:0,moreItemCount:0}};
+                const out={{state:'UNPROVEN',ownershipEvidence:'NONE',v5ItemCount:0,v5DisabledCount:0,appsItemCount:0,moreItemCount:0}};
                 const action={json.dumps(action)};
+                const preparedOwnership={json.dumps(prepared_ownership)};
                 if(location.href!=={json.dumps(document_url)}||document.readyState!=='complete') return out;
                 let actual,expected;try{{actual=new URL(location.href);expected=new URL({json.dumps(self.url)});}}catch(_){{return out;}}
                 const route=actual.pathname.match(new RegExp('^/(?:c/([A-Za-z0-9_-]{{1,200}})|g/[A-Za-z0-9_-]{{1,200}}/c/([A-Za-z0-9_-]{{1,200}}))$'));
@@ -1012,17 +1016,24 @@ class CdpSink:
                 if(plus.length!==1) return fail('CONTROL_UNPROVEN');
                 const button=plus[0];
                 if(button.getAttribute('type')!=='button'||button.disabled||button.getAttribute('aria-disabled')==='true') return fail('CONTROL_UNPROVEN');
-                if(button.getAttribute('aria-haspopup')!=='menu') return fail('UNSUPPORTED_MENU');
+                const popup=button.getAttribute('aria-haspopup'),id=button.getAttribute('aria-controls');
+                const known=button.getAttribute('data-testid')==='composer-plus-btn'||button.getAttribute('id')==='composer-plus-button';
+                const ownership=popup==='menu'?'CONTROL_LINK':popup===null&&id===null&&known?'FRESH_MENU_TRANSITION':'NONE';
+                if(ownership==='NONE') return fail('UNSUPPORTED_MENU');
+                out.ownershipEvidence=ownership;
                 const expanded=button.getAttribute('aria-expanded'),menus=Array.from(document.querySelectorAll("[role='menu']")).filter(visible);
-                if(action==='OPEN'){{
-                    if(expanded!=='false'||menus.length) return fail('PRIOR_MENU_OPEN');
+                const popups=Array.from(document.querySelectorAll("[role='menu'],[role='dialog'],[role='listbox'],[role='tree'],[role='grid']")).filter(visible);
+                if(action==='PREPARE'||action==='OPEN'){{
+                    if(expanded!=='false'||popups.length) return fail('PRIOR_MENU_OPEN');
+                    if(action==='PREPARE') return fail('CONTROL_READY');
+                    if(preparedOwnership!==ownership) return fail('CONTROL_UNPROVEN');
                     button.click();return fail('OPEN_REQUESTED');
                 }}
-                if(expanded==='false'&&!menus.length) return fail('CLOSED');
-                const id=button.getAttribute('aria-controls');
-                if(expanded!=='true'||typeof id!=='string'||!/^[A-Za-z0-9_:.-]{{1,128}}$/.test(id)) return fail('MENU_UNPROVEN');
-                const menu=document.getElementById(id);
-                if(menus.length!==1||menus[0]!==menu) return fail('MENU_UNPROVEN');
+                if(preparedOwnership!==ownership) return fail('CONTROL_UNPROVEN');
+                if(expanded==='false'&&!popups.length) return fail('CLOSED');
+                if(expanded!=='true'||menus.length!==1||popups.length!==1) return fail('MENU_UNPROVEN');
+                const menu=menus[0];
+                if(ownership==='CONTROL_LINK'&&(typeof id!=='string'||!/^[A-Za-z0-9_:.-]{{1,128}}$/.test(id)||document.getElementById(id)!==menu)) return fail('MENU_UNPROVEN');
                 if(action==='CLOSE'){{button.click();return fail('CLOSE_REQUESTED');}}
                 if(action!=='READ') return out;
                 const items=Array.from(menu.querySelectorAll("[role='menuitem']")).filter(visible);
@@ -1035,12 +1046,18 @@ class CdpSink:
                 return fail('OBSERVED');
             }})()"""
             value=self.cdp_value(cdp.evaluate(script));self.require_response_document(cdp)
-            if (not isinstance(value,dict) or set(value)!={'state','v5ItemCount','v5DisabledCount','appsItemCount','moreItemCount'}
+            if (not isinstance(value,dict) or set(value)!={'state','ownershipEvidence','v5ItemCount','v5DisabledCount','appsItemCount','moreItemCount'}
                     or not isinstance(value['state'],str) or value['state'] not in states
-                    or any(type(value[key]) is not int or not 0<=value[key]<=16 for key in value if key!='state')):
+                    or value['ownershipEvidence'] not in {'NONE','CONTROL_LINK','FRESH_MENU_TRANSITION'}
+                    or any(type(value[key]) is not int or not 0<=value[key]<=16 for key in value if key not in {'state','ownershipEvidence'})):
                 raise Attention('BROWSER_OBSERVATION_INVALID')
             return value
         try:
+            prepared=step('PREPARE')
+            result['state']=prepared['state']
+            if prepared['state']!='CONTROL_READY':return result
+            prepared_ownership=prepared['ownershipEvidence']
+            result['ownershipEvidence']=prepared_ownership
             result['openAttempted']=True
             try:opened=step('OPEN')
             except Exception:

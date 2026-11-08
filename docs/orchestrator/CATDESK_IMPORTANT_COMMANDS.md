@@ -6621,3 +6621,26 @@ browser startup. Unsupported controls, drafts, drift or ambiguous menus fail
 closed. Unknown action results must not be blindly retried. No URL, profile,
 key, force, select or submit override is accepted. It does not upgrade the
 installed Wake adapter. Live menu qualification is pending.
+
+
+## 2026-11-08T23:54:03.235807+00:00 — qualify a fresh-menu transition from the actual known control
+
+The exact-chat read proved the unique known composer button has CLOSED state
+but lacks aria-haspopup/aria-controls. Requiring those attributes in every
+case made the new inspector unnecessarily refuse this UI variant. The existing
+explicit inspect-app-menu action now has a second narrow ownership proof.
+A read-only PREPARE must independently prove the exact completed exchange,
+empty unique composer, one enabled type=button with the fixed composer ID,
+CLOSED state and no visible menu/dialog/listbox/tree/grid. OPEN repeats these
+checks and must retain the prepared ownership category. READ/CLOSE require the
+same known control OPEN and exactly one fresh visible role=menu, with no
+competing popup. Unknown attributes, semantic-label-only controls, preexisting
+popups, drafts, active generation, target drift and ambiguous menus still refuse.
+
+There is at most one open and one close. A lost OPEN result cannot authorize
+reopening; cleanup requires fresh positive ownership. No item selection, text
+entry, app attach, USER send, settings change or native call is added. Existing
+explicit CONTROL_LINK proof remains; schema 2 records the fixed evidence kind
+while native validation retains schema 1 compatibility. No browser owner,
+scheduler, task, grant or release mechanism is introduced. Live qualification
+of this new variant is pending; installed and C1 acceptance remain incomplete.

@@ -1392,5 +1392,28 @@
       "port3200ListenerPresent": false
     },
     "responsePersistenceTests": 7
+  },
+  "freshComposerMenuTransition": {
+    "observedUtc": "2026-11-08T23:54:03.235807+00:00",
+    "status": "SOURCE_TESTED_LIVE_PENDING",
+    "schemaVersion": 2,
+    "legacySchemaAccepted": 1,
+    "ownershipEvidence": [
+      "CONTROL_LINK",
+      "FRESH_MENU_TRANSITION"
+    ],
+    "readOnlyPrepareRequired": true,
+    "sameKnownControlRequired": true,
+    "noPriorPopupRequired": true,
+    "soleFreshRoleMenuRequired": true,
+    "maximumOpens": 1,
+    "maximumCloses": 1,
+    "reopenAfterUnknown": false,
+    "itemSelections": 0,
+    "messagesSent": 0,
+    "nativeCalls": 0,
+    "actualDomTests": 90,
+    "nativeReadinessTests": 19,
+    "installedAcceptance": "NOT_RUN"
   }
 }

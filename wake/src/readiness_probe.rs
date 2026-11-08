@@ -71,8 +71,14 @@ pub(crate) fn app_menu_observation(line: &str) -> Option<serde_json::Value> {
         "closeAttempted",
         "closedVerified",
     ];
-    if value.as_object()?.len() != 12
-        || value["schemaVersion"].as_u64() != Some(1)
+    let version = value["schemaVersion"].as_u64()?;
+    if !matches!(version, 1 | 2)
+        || value.as_object()?.len() != if version == 1 { 12 } else { 13 }
+        || (version == 2
+            && !matches!(
+                value["ownershipEvidence"].as_str()?,
+                "NONE" | "CONTROL_LINK" | "FRESH_MENU_TRANSITION"
+            ))
         || value["basis"] != "TRANSIENT_MENU_ONLY_NOT_TOOL_CATALOG"
         || !matches!(
             value["state"].as_str()?,
@@ -87,6 +93,7 @@ pub(crate) fn app_menu_observation(line: &str) -> Option<serde_json::Value> {
                 | "UNSUPPORTED_MENU"
                 | "PRIOR_MENU_OPEN"
                 | "MENU_UNPROVEN"
+                | "CONTROL_READY"
         )
         || !flags.iter().all(|key| value[*key].as_bool().is_some())
         || ![
@@ -104,7 +111,8 @@ pub(crate) fn app_menu_observation(line: &str) -> Option<serde_json::Value> {
             && !(value["openRequested"] == true
                 && value["closeAttempted"] == true
                 && value["closedVerified"] == true
-                && value["openOutcomeUnknown"] == false))
+                && value["openOutcomeUnknown"] == false
+                && (version == 1 || value["ownershipEvidence"] != "NONE")))
     {
         return None;
     }
@@ -900,4 +908,18 @@ fn app_menu_protocol_requires_closed_counts_and_confirmed_close_for_observed_sta
         sanitized_rows("PROBE:APP_MENU_STATE:UNPROVEN\nPROBE:APP_MENU_STATE:PRIVATE_BODY"),
         ["PROBE:APP_MENU_STATE:UNPROVEN"]
     );
+    let mut current = value;
+    current["schemaVersion"] = serde_json::json!(2);
+    current["ownershipEvidence"] = serde_json::json!("FRESH_MENU_TRANSITION");
+    assert_eq!(
+        app_menu_observation(&format!("PROBE:APP_MENU:{current}")),
+        Some(current.clone())
+    );
+    for bad in ["NONE", "PRIVATE_VALUE"] {
+        let mut changed = current.clone();
+        changed["ownershipEvidence"] = serde_json::json!(bad);
+        assert!(app_menu_observation(&format!("PROBE:APP_MENU:{changed}")).is_none());
+    }
+    current.as_object_mut().unwrap().remove("ownershipEvidence");
+    assert!(app_menu_observation(&format!("PROBE:APP_MENU:{current}")).is_none());
 }
