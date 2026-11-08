@@ -42,7 +42,7 @@ pub(crate) use review_reconcile::{
 };
 pub use scoped_review::{
     run_scoped_review, run_scoped_rollover_continuation, run_scoped_rollover_handoff,
-    run_scoped_task_continuation, run_scoped_work_request,
+    run_scoped_task_continuation, run_scoped_task_continuation_handoff, run_scoped_work_request,
 };
 #[path = "runtime_task_context.rs"]
 mod task_context;
@@ -7580,6 +7580,9 @@ fn attempt(
 }
 
 trait SubmissionAdapter {
+    fn submit_fenced(&mut self, _event: &crate::protocol::Event, _target: &Target) -> Result<()> {
+        Ok(())
+    }
     fn send(&mut self, value: serde_json::Value) -> Result<()>;
     fn receive(
         &mut self,
@@ -7767,6 +7770,8 @@ fn attempt_inner<A: SubmissionAdapter>(
                         None,
                     )?;
                     status.submission = "SUBMITTING".into();
+                    // A durable witness precedes this ownership handoff.
+                    adapter.submit_fenced(&d.event, &d.target)?;
                     adapter.send(serde_json::json!({"submit": true}))?;
                     submit_dispatched = true;
                 }

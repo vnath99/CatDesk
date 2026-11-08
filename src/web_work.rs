@@ -85,6 +85,27 @@ pub(crate) fn context_action(
     args: Value,
     operation: &str,
 ) -> Result<Value, String> {
+    context_action_using(
+        workspace,
+        args,
+        operation,
+        crate::project_mcp_task::run_initial_context_handoff,
+    )
+}
+
+fn context_action_using(
+    workspace: &Path,
+    args: Value,
+    operation: &str,
+    send: impl FnOnce(
+        &crate::delegated::autonomy_projects::ResolvedProjectScopeV1,
+        &crate::web_work_state::WorkRecord,
+        &protocol::Target,
+        crate::project_mcp_task::InitialContextAction,
+        &dyn Fn() -> Result<(), String>,
+        &mut dyn FnMut(&protocol::Event, &protocol::Target) -> Result<(), String>,
+    ) -> Result<Value, String>,
+) -> Result<Value, String> {
     if operation == "context-prepare" {
         return assigned_action(workspace, args, AssignmentAction::PrepareContext);
     }
@@ -141,17 +162,84 @@ pub(crate) fn context_action(
             Ok((record, target))
         },
     )?;
-    crate::project_mcp_task::run_initial_context(
+    let held = std::cell::RefCell::new(Some(lease));
+    let check = || {
+        prepared
+            .revalidate_registration()
+            .map_err(|_| "WEB_WORK_PROJECT_REGISTRATION_CHANGED")?;
+        let paired = mcp::operator_read_project_web_target(&workspace, &request.project_id)
+            .map_err(|_| "WEB_WORK_TARGET_CHANGED")?
+            .ok_or("WEB_WORK_TARGET_CHANGED")?;
+        if paired.generation != target.generation
+            || paired.url != target.url
+            || protocol::digest(&paired.url) != target.digest
+        {
+            return Err("WEB_WORK_TARGET_CHANGED".into());
+        }
+        let current = WorkLedger::open(&workspace, &request.project_id)?
+            .record(&request.request_id)?
+            .ok_or("WEB_WORK_REQUEST_MISSING")?;
+        if current.phase != "OPEN"
+            || current.event_id != record.event_id
+            || current.task_assignment != record.task_assignment
+            || current.target != record.target
+        {
+            return Err("WEB_WORK_ASSIGNMENT_CONFLICT".into());
+        }
+        if let Some(lease) = held.borrow().as_ref() {
+            lease.check_target(&target)?;
+        }
+        Ok(())
+    };
+    let mut handoff = |event: &protocol::Event, actual_target: &protocol::Target| {
+        if !matches!(
+            action,
+            crate::project_mcp_task::InitialContextAction::DeliverContinuation
+        ) {
+            return Err("WEB_TASK_CONTEXT_HANDOFF_INVALID".into());
+        }
+        let metadata = event
+            .wake_metadata()?
+            .ok_or("WEB_TASK_CONTEXT_HANDOFF_INVALID")?;
+        if actual_target != &target
+            || event.project_id != request.project_id
+            || metadata.purpose != protocol::WakePurpose::NewTask
+            || metadata.source_event_id != record.event_id
+            || !metadata
+                .source_turn_id
+                .strip_prefix("initial-context-")
+                .is_some_and(|id| {
+                    id.len() == 64
+                        && id
+                            .bytes()
+                            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                })
+        {
+            return Err("WEB_TASK_CONTEXT_HANDOFF_INVALID".into());
+        }
+        let wake = catdesk_wake::store::Store::open(
+            &wake_protocol_client::wake_root_for_workspace(&workspace)?,
+        )?;
+        let delivery = wake
+            .delivery(&event.event_id)?
+            .ok_or("WEB_TASK_CONTEXT_HANDOFF_UNPROVEN")?;
+        if delivery.event != *event || delivery.target != target {
+            return Err("WEB_TASK_CONTEXT_HANDOFF_UNPROVEN".into());
+        }
+        wake.require_submitting_witness(&delivery)?;
+        check()?;
+        held.borrow_mut()
+            .take()
+            .ok_or("WEB_TASK_CONTEXT_HANDOFF_INVALID")?;
+        Ok(())
+    };
+    send(
         prepared.scope(),
         &record,
         &target,
         action,
-        &|| {
-            prepared
-                .revalidate_registration()
-                .map_err(|_| "WEB_WORK_PROJECT_REGISTRATION_CHANGED")?;
-            lease.check_target(&target)
-        },
+        &check,
+        &mut handoff,
     )
 }
 
@@ -1447,6 +1535,127 @@ pub(crate) mod tests {
             "WEB_WORK_CONTINUATION_SOURCE_REQUIRED"
         );
         reopened.close().await.unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn continuation_releases_only_fenced_delivery_lease_and_keeps_native_route_guards() {
+        use catdesk_wake::store::{Phase, Receipt};
+        let (control, assignment, wake, args, source) = assignment_fixture();
+        wake.publish(&source).unwrap();
+        associate(&control, args.clone(), &assignment).unwrap();
+        let target = wake.config().unwrap().targets["alpha"].clone();
+        let host = wake.host_lock().unwrap();
+        let claimed = wake.claim(&source, &host).unwrap();
+        wake.transition(
+            &source.event_id,
+            &claimed.owner,
+            Phase::Submitting,
+            None,
+            None,
+        )
+        .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: source.event_id.clone(),
+            target_generation: target.generation,
+            target_digest: target.digest.clone(),
+            message_digest: protocol::digest(&source.message),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        wake.record_exact_receipt_timer(&source.event_id, &receipt)
+            .unwrap();
+        wake.transition(
+            &source.event_id,
+            &claimed.owner,
+            Phase::Sent,
+            Some(receipt),
+            None,
+        )
+        .unwrap();
+        wake.complete_timer(&source.event_id).unwrap();
+        // All evidence and code below belongs to a disposable fixture; no browser/native writer.
+        let continuation = protocol::Event {
+            schema_version: 1,
+            event_id: "scoped-continuation".into(),
+            project_id: "alpha".into(),
+            event_type: "engineering_attention".into(),
+            created_utc: now(),
+            message: "Continue exact delivered context".into(),
+            target_generation: target.generation,
+            audit_references: vec![],
+        }
+        .with_wake_metadata(protocol::WakeMetadata {
+            purpose: protocol::WakePurpose::NewTask,
+            source_event_id: source.event_id.clone(),
+            source_turn_id: format!("initial-context-{}", "a".repeat(64)),
+            priority: 0,
+            expires_utc: now() + 600,
+        })
+        .unwrap();
+        wake.publish(&continuation).unwrap();
+        let claimed = wake.claim(&continuation, &host).unwrap();
+        let lease_is_busy = || {
+            assert!(matches!(
+                crate::operator_facade::acquire_web_work_lease(&control, "alpha"),
+                Err(e) if e == "WEB_ROLLOVER_PROJECT_BUSY"
+            ))
+        };
+        let result = context_action_using(
+            &control,
+            args,
+            "context-deliver-continuation",
+            |_, _, expected, _, check, handoff| {
+                lease_is_busy();
+                check()?;
+                assert!(handoff(&continuation, expected).is_err()); // CLAIMED is too early.
+                lease_is_busy();
+                wake.transition(
+                    &continuation.event_id,
+                    &claimed.owner,
+                    Phase::Submitting,
+                    None,
+                    None,
+                )?;
+                let mut foreign = continuation.clone();
+                foreign.project_id = "beta".into();
+                assert_eq!(
+                    handoff(&foreign, expected).unwrap_err(),
+                    "WEB_TASK_CONTEXT_HANDOFF_INVALID"
+                );
+                let wrong = protocol::Target::new(expected.generation + 1, expected.url.clone())?;
+                assert_eq!(
+                    handoff(&continuation, &wrong).unwrap_err(),
+                    "WEB_TASK_CONTEXT_HANDOFF_INVALID"
+                );
+                lease_is_busy();
+                handoff(&continuation, expected)?;
+                let native = crate::operator_facade::acquire_web_work_lease(&control, "alpha")?;
+                // The browser can continue observing while the native route holds its normal fence.
+                check()?;
+                assert_eq!(
+                    handoff(&continuation, expected).unwrap_err(),
+                    "WEB_TASK_CONTEXT_HANDOFF_INVALID"
+                );
+                let path = control.join(".catdesk/projects/projects.json");
+                let bytes = std::fs::read(&path).unwrap();
+                let mut changed: Value = serde_json::from_slice(&bytes).unwrap();
+                changed["projects"][0]["codexThreadId"] = json!("foreign-native-owner");
+                std::fs::write(&path, serde_json::to_vec(&changed).unwrap()).unwrap();
+                assert_eq!(
+                    check().unwrap_err(),
+                    "WEB_WORK_PROJECT_REGISTRATION_CHANGED"
+                );
+                std::fs::write(&path, bytes).unwrap();
+                check()?;
+                drop(native);
+                Ok(json!({"status":"FIXTURE_HANDOFF_VERIFIED"}))
+            },
+        )
+        .unwrap();
+        assert_eq!(result["status"], "FIXTURE_HANDOFF_VERIFIED");
+        assert!(crate::operator_facade::acquire_web_work_lease(&control, "alpha").is_ok());
     }
 
     #[cfg(windows)]

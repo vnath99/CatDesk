@@ -28,7 +28,8 @@ mod context_delivery;
 #[path = "project_task_recovery.rs"]
 mod recovery;
 pub(crate) use context_delivery::{
-    InitialContextAction, prepare_initial_context, retry_initial_context, run_initial_context,
+    InitialContextAction, prepare_initial_context, retry_initial_context,
+    run_initial_context_handoff,
 };
 
 pub(crate) const TOOL: &str = "catdesk_project_task_tool";

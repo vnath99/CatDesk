@@ -596,12 +596,26 @@ pub(crate) fn retry_initial_context(
     Ok(status(&reference, &state(&root, &reference)?))
 }
 
+#[cfg(test)]
 pub(crate) fn run_initial_context(
     scope: &ResolvedProjectScopeV1,
     record: &crate::web_work_state::WorkRecord,
     target: &Target,
     action: InitialContextAction,
     keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<Value, String> {
+    run_initial_context_handoff(scope, record, target, action, keep_running, &mut |_, _| {
+        Ok(())
+    })
+}
+
+pub(crate) fn run_initial_context_handoff(
+    scope: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    target: &Target,
+    action: InitialContextAction,
+    keep_running: &dyn Fn() -> Result<(), String>,
+    after_fence: &mut dyn FnMut(&catdesk_wake::protocol::Event, &Target) -> Result<(), String>,
 ) -> Result<Value, String> {
     let root = crate::wake_protocol_client::wake_root_for_workspace(&scope.control_workspace)?;
     let store = catdesk_wake::store::Store::open(&root)?;
@@ -634,13 +648,25 @@ pub(crate) fn run_initial_context(
             }
             Ok(())
         };
-        let result = catdesk_wake::runtime::run_scoped_task_continuation(
+        let mut handoff = |actual: &catdesk_wake::protocol::Event, actual_target: &Target| {
+            if actual != &event || actual_target != target {
+                return Err("WEB_TASK_CONTEXT_CONTINUATION_CHANGED".into());
+            }
+            let delivery = store
+                .delivery(&event.event_id)?
+                .ok_or("WEB_TASK_CONTEXT_HANDOFF_UNPROVEN")?;
+            store.require_submitting_witness(&delivery)?;
+            load(scope, record, target)?;
+            after_fence(actual, actual_target)
+        };
+        let result = catdesk_wake::runtime::run_scoped_task_continuation_handoff(
             &store,
             &event,
             target,
             180,
             &mut before,
             keep_running,
+            &mut handoff,
         );
         return result.map(|output| with_context_accounting(output, scope, record, target, &store));
     }

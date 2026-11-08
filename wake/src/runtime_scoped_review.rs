@@ -11,6 +11,29 @@ enum Selection<'a> {
     WorkRequest(&'a Event, &'a Target),
 }
 
+struct FencedAdapter<'a, A> {
+    inner: A,
+    handoff: &'a mut dyn FnMut(&Event, &Target) -> Result<()>,
+}
+impl<A: SubmissionAdapter> SubmissionAdapter for FencedAdapter<'_, A> {
+    fn submit_fenced(&mut self, event: &Event, target: &Target) -> Result<()> {
+        self.inner.submit_fenced(event, target)?;
+        (self.handoff)(event, target)
+    }
+    fn send(&mut self, value: Value) -> Result<()> {
+        self.inner.send(value)
+    }
+    fn receive(
+        &mut self,
+        timeout: Duration,
+    ) -> std::result::Result<Result<Value>, mpsc::RecvTimeoutError> {
+        self.inner.receive(timeout)
+    }
+    fn finish(&mut self, grace: Duration) {
+        self.inner.finish(grace)
+    }
+}
+
 /// Deliver one exact ordinary invitation chosen by its central work journal.
 /// Uses the existing sender/receipt protocol without starting the shared host.
 pub fn run_scoped_work_request(
@@ -108,6 +131,27 @@ pub fn run_scoped_task_continuation(
     before_submit: &mut dyn FnMut(&Event, &Target) -> Result<()>,
     keep_running: &dyn Fn() -> Result<()>,
 ) -> Result<Value> {
+    run_scoped_task_continuation_handoff(
+        store,
+        event,
+        target,
+        maximum_seconds,
+        before_submit,
+        keep_running,
+        &mut |_, _| Ok(()),
+    )
+}
+
+/// Handoff follows durable SUBMITTING and precedes the sole native ACK.
+pub fn run_scoped_task_continuation_handoff(
+    store: &Store,
+    event: &Event,
+    target: &Target,
+    maximum_seconds: u64,
+    before_submit: &mut dyn FnMut(&Event, &Target) -> Result<()>,
+    keep_running: &dyn Fn() -> Result<()>,
+    after_fence: &mut dyn FnMut(&Event, &Target) -> Result<()>,
+) -> Result<Value> {
     run_selected_with_adapter(
         store,
         &event.event_id,
@@ -117,12 +161,16 @@ pub fn run_scoped_task_continuation(
         keep_running,
         |deadline, guard| {
             let installed = installed_ordinary_browser_directory(store)?;
-            Adapter::spawn_from_installed_guarded(
+            let inner = Adapter::spawn_from_installed_guarded(
                 store.root(),
                 &installed,
                 deadline.saturating_duration_since(Instant::now()),
                 guard,
-            )
+            )?;
+            Ok(FencedAdapter {
+                inner,
+                handoff: after_fence,
+            })
         },
     )
 }
@@ -1064,6 +1112,78 @@ mod tests {
             std::fs::read(store.root().join("control.json")).unwrap(),
             before_control
         );
+    }
+
+    #[test]
+    fn task_continuation_handoff_follows_durable_fence_and_precedes_the_only_ack() {
+        for deny in [false, true] {
+            let (store, _, target) = fixture(if deny {
+                "handoff-denied"
+            } else {
+                "handoff-admitted"
+            });
+            let event = continuation(&store, &target);
+            let fake = adapter(&event, &target);
+            let admitted = fake.admitted.clone();
+            let ack = fake.ack_count.clone();
+            let handoffs = Cell::new(0);
+            let mut handoff = |actual: &Event, actual_target: &Target| {
+                assert!(admitted.get());
+                assert_eq!(ack.get(), 0);
+                assert_eq!(actual, &event);
+                assert_eq!(actual_target, &target);
+                let delivery = store.delivery(&event.event_id)?.unwrap();
+                store.require_submitting_witness(&delivery)?;
+                handoffs.set(handoffs.get() + 1);
+                if deny {
+                    Err("TEST_HANDOFF_REFUSED".into())
+                } else {
+                    Ok(())
+                }
+            };
+            let result = run_selected_with_adapter(
+                &store,
+                &event.event_id,
+                120,
+                Selection::TaskContinuation(&event, &target),
+                &mut |_, _| {
+                    admitted.set(true);
+                    Ok(())
+                },
+                &|| Ok(()),
+                |_, _| {
+                    Ok(FencedAdapter {
+                        inner: fake,
+                        handoff: &mut handoff,
+                    })
+                },
+            );
+            assert_eq!(handoffs.get(), 1);
+            assert_eq!(ack.get(), u32::from(!deny));
+            let delivery = store.delivery(&event.event_id).unwrap().unwrap();
+            if deny {
+                assert_eq!(result.unwrap_err(), "TEST_HANDOFF_REFUSED");
+                assert_eq!(delivery.phase, Phase::Submitting);
+                assert!(delivery.receipt.is_none());
+                assert!(store.timer(&event.event_id).unwrap().is_none());
+                assert_eq!(
+                    run_selected_with_adapter::<FakeAdapter>(
+                        &store,
+                        &event.event_id,
+                        120,
+                        Selection::TaskContinuation(&event, &target),
+                        &mut |_, _| panic!("cannot authorize replay"),
+                        &|| Ok(()),
+                        |_, _| panic!("cannot start replay"),
+                    )
+                    .unwrap_err(),
+                    "SCOPED_REVIEW_REPLAY_REFUSED"
+                );
+            } else {
+                assert_eq!(result.unwrap()["phase"], "SENT");
+                assert!(delivery.receipt.is_some());
+            }
+        }
     }
 
     #[test]

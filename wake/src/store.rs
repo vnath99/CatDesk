@@ -1897,6 +1897,23 @@ impl Store {
         Ok(start.started_utc)
     }
 
+    /// Positive current-protocol fence proof; legacy fallback is insufficient
+    /// for transferring ownership before the adapter's submit acknowledgment.
+    pub fn require_submitting_witness(&self, delivery: &Delivery) -> Result<u64> {
+        let _lock = self.read_lock()?;
+        if delivery.phase != Phase::Submitting
+            || delivery.receipt.is_some()
+            || self.read_delivery(&delivery.event.event_id)?.as_ref() != Some(delivery)
+            || !self
+                .submission_start_path(&delivery.event.event_id)
+                .try_exists()
+                .map_err(|_| "SUBMISSION_START_UNAVAILABLE")?
+        {
+            return Err("SUBMISSION_HANDOFF_WITNESS_REQUIRED".into());
+        }
+        self.submission_started_utc(delivery)
+    }
+
     /// Reconcile one already-crossed submission boundary after a later
     /// browser-only proof confirms that the exact expected user message is
     /// durably present on the exact stored target. This path can only advance
@@ -3648,6 +3665,46 @@ fn safe_directories_beneath(trusted_parent: &Path, path: &Path) -> Result<()> {
 #[cfg(test)]
 mod submission_reconciliation_tests {
     use super::*;
+
+    #[test]
+    fn ownership_handoff_requires_exact_current_submitting_delivery_and_positive_witness() {
+        for changed in ["none", "phase", "delivery", "missing", "partial", "binding"] {
+            let (_base, store, event, _lease) = fixture(&format!("handoff-{changed}"));
+            let mut delivery = store.delivery(&event.event_id).unwrap().unwrap();
+            let path = store.submission_start_path(&event.event_id);
+            match changed {
+                "phase" => delivery.phase = Phase::Claimed,
+                "delivery" => delivery.updated_utc += 1,
+                "missing" => fs::remove_file(&path).unwrap(),
+                "partial" => fs::write(&path, b"partial").unwrap(),
+                "binding" => {
+                    let mut witness: serde_json::Value = read(&path).unwrap();
+                    witness["targetDigest"] = serde_json::json!("0".repeat(64));
+                    atomic(&path, &witness).unwrap();
+                }
+                _ => {}
+            }
+            let before = fs::read(store.delivery_path(&event.event_id)).unwrap();
+            let witness_before = fs::read(&path).ok();
+            assert_eq!(
+                store.require_submitting_witness(&delivery).is_ok(),
+                changed == "none",
+                "{changed}"
+            );
+            assert_eq!(
+                fs::read(store.delivery_path(&event.event_id)).unwrap(),
+                before
+            );
+            assert_eq!(fs::read(&path).ok(), witness_before);
+            if changed == "missing" {
+                // Historical readback compatibility remains separate from transfer authority.
+                assert_eq!(
+                    store.submission_started_utc(&delivery).unwrap(),
+                    event.created_utc
+                );
+            }
+        }
+    }
 
     fn fixture(label: &str) -> (PathBuf, Store, Event, HostLease) {
         let base = std::env::temp_dir().join(format!(

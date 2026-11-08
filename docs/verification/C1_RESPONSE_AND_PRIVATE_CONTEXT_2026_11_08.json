@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Build the qualified short native-continuation source, then use a bounded existing-backend/existing-official-owner window for that one continuation and its exact native dispatch. Preserve the SENT invitation and SENT context; do not resend either. Independently verify actual code/test artifacts and task-specific Wake before claiming C1.",
+  "next": "Build the qualified durable-submit handoff controller separately, then deliver one original continuation with the existing authenticated serving owners. Independently verify actual native edits, tests and task-specific Wake. Do not replay the SENT invitation or SENT private context.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -196,5 +196,31 @@
     "queued": false,
     "sent": false,
     "nativeExecution": "NOT_RUN"
+  },
+  "continuationLeaseHandoff": {
+    "observedUtc": "2026-11-08T18:14:37.480109+00:00",
+    "baselineCommit": "279477d398cedfe9a434a8c195d46027ed128e80",
+    "observedDefect": "DELIVERY_LEASE_BLOCKED_SAME_PROJECT_NATIVE_CALLBACK",
+    "releaseBoundary": "EXACT_DURABLE_SUBMITTING_AND_WITNESS_BEFORE_ONLY_SUBMIT_ACK",
+    "privateContextAndTargetRechecked": true,
+    "nativeUsesNormalExclusiveProjectLease": true,
+    "browserOwnerAndNoReplayFencesPreserved": true,
+    "browserChecksContinueDuringNativeLease": true,
+    "focusedTests": {
+      "scopedRuntime": 26,
+      "storeAndRecovery": 59,
+      "centralWebWork": 6,
+      "privateContext": 16,
+      "total": 107
+    },
+    "actualWindowsFileLockFixture": "PASS",
+    "strictRootAndWakeAllTargetClippy": "PASS",
+    "formatting": "PASS",
+    "sourceQualification": "PASS",
+    "liveQualification": "NOT_RUN",
+    "messagesSent": 0,
+    "nativeTasksExecuted": 0,
+    "newOwnersOrRegistries": 0,
+    "productionOrSelectedArtifactChanges": 0
   }
 }
