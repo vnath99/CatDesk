@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-08T16:00:00.462746+00:00",
+  "sourceCommit": "e8b0c58eb556ce9e7aa44af9b8e0b94ccadb11a6",
+  "scope": "C1_POST_OPERATOR_SIGNIN_DIAGNOSIS",
+  "operatorReport": {
+    "signedIn": true,
+    "enterDidNotCloseBrowser": true,
+    "forceClosedBrowser": true,
+    "closureFailureCause": "UNVERIFIED"
+  },
+  "localCleanup": {
+    "signInHelperProcessesAtPreflight": 0,
+    "profileProcessesAtPreflight": 0,
+    "agentProcessKills": 0
+  },
+  "boundedPostAuthObservation": {
+    "seconds": 33.859,
+    "route": "HOME",
+    "editor": "MISSING",
+    "history": "ABSENT",
+    "composer": "UNKNOWN",
+    "ownedTreeExited": true,
+    "preservationPins": 1049,
+    "preservationMismatches": 0,
+    "remainingProfileProcesses": 0,
+    "remainingWakeProcesses": 0,
+    "messagesSent": 0,
+    "bindingsChanged": 0,
+    "authenticationProved": false
+  },
+  "rootEvidence": {
+    "historicalIndependentOperatorTerminal": "DIRECT_ALIAS_DIFFERENT_FROM_RECORDED_ROOT_PHYSICAL_PACKAGE_PATH_MATCHED",
+    "currentCodexContext": "BOTH_SPELLINGS_MATCH_RECORDED_IDENTITY",
+    "currentRecordedPhysicalRootMatchesAuthority": true,
+    "authorityBytesUnchanged": true,
+    "sameProfileAuthenticatedAcrossContextsProved": false,
+    "finding": "DIRECT_APPDATA_SPELLING_IS_CONTEXT_DEPENDENT_DO_NOT_USE_FOR_OPERATOR_REAUTH"
+  },
+  "correction": {
+    "operatorLauncher": "PRIVATE_EXISTING_PHYSICAL_PROFILE_REAUTH_WRAPPER",
+    "physicalRootAndProjectPairChecked": true,
+    "runtimeAndProfileMustAlreadyExist": true,
+    "wakeMustBeStopped": true,
+    "existingProcessesRefused": true,
+    "sourceHelperHashPinned": true,
+    "enterMustBePressedInPowerShell": true,
+    "exitAndRemainingProcessCountAudited": true,
+    "preflight": "PASS_ZERO_BROWSER_STARTS",
+    "profileCopiedOrReset": false,
+    "credentialsReadByAgent": false,
+    "unknownMessagesReplayed": false
+  },
+  "deferredWork": {
+    "webdriverComparisonPrototype": "ARCHIVED_PRIVATELY_NOT_SHIPPED",
+    "reason": "RECONCILE_ESTABLISHED_ROOT_AUTHORITY_BEFORE_CHANGING_BROWSER_NAVIGATION",
+    "reviewedSourceRestored": true
+  },
+  "c1": "NOT_COMPLETE",
+  "next": "Operator uses corrected explicit-physical-root launcher; sign in only if prompted. Then bounded read-only verification; no replay or new approval."
+}
