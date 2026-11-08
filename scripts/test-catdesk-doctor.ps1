@@ -157,6 +157,14 @@ try{
  foreach($path in $before.Keys){Require ([IO.File]::ReadAllText($path) -ceq $before[$path]) 'doctor mutated protected fixture data'}
  Require ($script:forbidden -eq 0) 'doctor performed a forbidden probe or mutation'
  . (Join-Path $PSScriptRoot 'catdesk-doctor.ps1')
+ Require (Test-DoctorFacadeWorkspaceScope 'C:\fixture\owner' 'c:\FIXTURE\owner\') 'equivalent facade spelling rejected'
+ Require (-not (Test-DoctorFacadeWorkspaceScope 'C:\fixture\source' 'C:\fixture\installed')) 'foreign facade treated as installed owner'
+ $mismatched=Layer (Invoke-Doctor @{DoctorSupervisorPolicy={'SUPERVISOR_OBSERVER_SCOPE_MISMATCH'}}) 'PERSISTENT_SUPERVISOR'
+ Require ($mismatched.status -ceq 'UNVERIFIED' -and $mismatched.code -ceq 'SUPERVISOR_OBSERVER_SCOPE_MISMATCH') 'observer mismatch falsely claimed registration conflict'
+ Require ($mismatched.nextDiagnostic -ceq 'RUN_CANONICAL_FACADE_DOCTOR') 'observer mismatch lacks canonical owner diagnostic'
+ Require (-not $mismatched.facts.processLivenessVerified -and -not $mismatched.facts.rebootRecoveryVerified) 'observer mismatch granted runtime evidence'
+ $conflicting=Layer (Invoke-Doctor @{DoctorSupervisorPolicy={'SUPERVISOR_REGISTRATION_CONFLICT'}}) 'PERSISTENT_SUPERVISOR'
+ Require ($conflicting.status -ceq 'FAIL' -and $conflicting.code -ceq 'SUPERVISOR_REGISTRATION_CONFLICT') 'real same-owner registration conflict was weakened'
  foreach($local in @($projectRoot,('\\?\'+$projectRoot),$projectRoot.Replace('\','/'))){
   Require (Test-DoctorWorkspaceSpelling $local) 'canonical local workspace spelling refused'
  }

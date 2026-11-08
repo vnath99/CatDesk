@@ -55,5 +55,27 @@
     "globalHostIdleClaimed": false
   },
   "next": "Existing Wake broker/migration and lifecycle-owner admission evidence; no install guard bypass, new request identity or repeated unchanged connector probe.",
+  "laterReadback": {
+    "observedUtc": "2026-11-08T04:46:56.536881Z",
+    "initialSupervisorConflictWasDifferentFacadeScope": true,
+    "canonicalSupervisor": "SUPERVISOR_REGISTERED_MONITOR_STOPPED",
+    "correctedSourceObserver": "SUPERVISOR_OBSERVER_SCOPE_MISMATCH",
+    "correctedSourceStatus": "UNVERIFIED",
+    "nextDiagnostic": "RUN_CANONICAL_FACADE_DOCTOR",
+    "sameScopeConflictStillFails": true,
+    "doctorAssertionsPassed": 152,
+    "runtimeStarts": 0,
+    "networkRequests": 0,
+    "repairs": 0,
+    "installedCanonicalDoctorChanged": false,
+    "sourceInputHashes": {
+      "scripts/catdesk-doctor.ps1": "710afc4ab8bc48d87f23c5b1daa8d673289e9d2726debf6027619fbaff2bc904",
+      "scripts/test-catdesk-doctor.ps1": "f53f11008dc5ec2f7628fa851c1d9869549c419e01c08192ccadd267506a51c0"
+    },
+    "wakeBrokerImageAndProtectedNamespaceObserved": false,
+    "wakeBrokerProvisioningAloneSufficient": false,
+    "wakeBrokerServiceFinalGate": "WAKE_BROKER_TRANSACTION_GATES_UNAVAILABLE",
+    "wakeInstallGuardsChanged": false
+  },
   "operatingRecord": "docs/orchestrator/C0_C1_ACCEPTANCE_2026_11_07.md"
 }

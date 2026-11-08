@@ -14,7 +14,7 @@ it does not resume other projects or change their authority.
 | Selected development | dev.85 controller, host, adapter and bridge match pointer, manifest and authority checksums; retained verification names the same source and artifacts | SELECTED; past finite health is not fresh live health |
 | Canonical backend | Executable, sidecar and generation-4 release pointer match SHA-256 `0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901` | INSTALLED checksum parity; no port-3200 listener |
 | Installed independent Wake | dev.84 artifacts match existing pointer and manifest; stopped | INSTALLED; ordinary sender's required bootstrap protocol absent |
-| Local daemon / supervisor | Passive doctor: `LOCAL_MCP_LISTENER_MISSING` / `SUPERVISOR_REGISTRATION_CONFLICT` | FAIL for serving; supervisor observation is metadata, not owner qualification |
+| Local daemon / supervisor | Canonical-owner doctor: `LOCAL_MCP_LISTENER_MISSING` / `SUPERVISOR_REGISTERED_MONITOR_STOPPED` | FAIL for serving; metadata does not qualify a restart owner |
 | Connector | One read-only v5 status call: `MCP SSE probe returned 429 from openai.org`, UNAVAILABLE / invalid_mcp_response | BLOCKED_EXTERNAL; no retry or inference about daemon health from this response |
 | Existing controlled projects | Two exact native roots clean at their reserved bases; separate native identities; both registry/Wake URL+digest pairs match at generation 1 | PASS metadata only; native writer/authentication liveness not inferred |
 | Existing work | Two original requests OPEN, queued and associated; no delivery records | Preserved; no republish, reassociation, send or execution grant |
@@ -73,7 +73,7 @@ neither a fresh Rust compilation nor whole-application acceptance is claimed.
 ## Exact C1 prerequisites, recorded once
 
 1. Restore the existing backend/official serving owner through its qualified
-   lifecycle; first reconcile the reported supervisor registration conflict.
+   lifecycle. Canonical observation finds a registered but stopped monitor.
    Do not create another tunnel or assume a restart resolves upstream 429.
 2. Qualify a browser package that the existing canonical ordinary sender can
    actually use. Source `installed_bootstrap_directory` refuses dev.84's missing
@@ -81,8 +81,13 @@ neither a fresh Rust compilation nor whole-application acceptance is claimed.
    compatibility finding; **no send command was run to manufacture that error**.
    Selected dev.85 does not authorize replacing installed Wake. The public
    installer still explicitly refuses non-BuildOnly execution with
-   `WAKE_INSTALL_BROKER_UNPROVISIONED`; do not disable it. Reuse the existing
-   reviewed broker/migration procedure and genuine release evidence.
+   `WAKE_INSTALL_BROKER_UNPROVISIONED`; do not disable it. The native guard is
+   also unconditionally closed outside its isolated test feature. The existing
+   broker service deliberately ends at `WAKE_BROKER_TRANSACTION_GATES_UNAVAILABLE`.
+   This is a real transaction-wiring/authority prerequisite; merely installing
+   or starting a broker service cannot resolve it. Its fixed image/namespace
+   are absent in the read-only presence observation. Reuse the existing broker
+   components and genuine review evidence; do not design another installer.
 3. Once serving and package authority are genuinely ready, require a successful
    bounded connector observation and exact current target/native-owner admission.
    Continue the original queued invitation; never replace it to evade an outcome.
@@ -90,9 +95,9 @@ neither a fresh Rust compilation nor whole-application acceptance is claimed.
    verification exit and exact Wake response can pass C1. Queued requests,
    context ACKs and local fixture tests cannot.
 
-Next eligible engineering step is the existing Wake broker/migration admission
-and lifecycle-owner evidence review needed for C1, without executing a known
-refused install or changing authority. No repeat discretionary approval,
+Next eligible engineering step is the missing existing Wake broker/migration
+transaction admission and lifecycle-owner qualification needed for C1, without
+executing a known-refused install or changing authority. No repeat discretionary approval,
 different terminal, new chat or new binding is requested. Any required signing,
 protected-owner or external action must first be identified from that procedure.
 
@@ -103,3 +108,22 @@ absent. No browser, WakeHost, native coding worker, tunnel or recurring automati
 was started. Unrelated host processes were not stopped or certified idle.
 Private payloads, journals, snapshots and detailed owner receipts stay outside
 Git; source input hashes and sanitized evidence are in the verification record.
+
+## 23:46 EST correction — observe the actual lifecycle owner
+
+The initial source-facade doctor observation reported a supervisor registration
+conflict because `Get-AutostartDefinition` correctly pins the executing facade's
+own supervisor path. It was comparing a source worktree launcher against the
+canonical release's registration. The canonical launcher instead reports
+`SUPERVISOR_REGISTERED_MONITOR_STOPPED`; no conflicting registration was proved.
+The earlier observation remains historical evidence, not a reason to overwrite
+the registered task or Run entry.
+
+The source doctor now returns UNVERIFIED / `SUPERVISOR_OBSERVER_SCOPE_MISMATCH`
+and `RUN_CANONICAL_FACADE_DOCTOR` before querying registration from a different
+facade scope. Same-scope registration conflicts still fail. The lifecycle owner,
+registration validator, startup behavior and protected installation are unchanged.
+All **152 doctor assertions pass** (the earlier 144 result remains historical).
+Actual bounded read-only source/canonical readbacks independently verified both
+states, with zero runtime starts, HTTP calls or repairs. The fix is source-qualified;
+it was not copied into the canonical installation.

@@ -1,3 +1,9 @@
+## 2026-11-08T04:47:48.257902+00:00 — C0 supervisor observation corrected; existing Wake transaction gap confirmed
+
+The canonical-owner doctor reports SUPERVISOR_REGISTERED_MONITOR_STOPPED, not a foreign registration. The earlier source-facade conflict compared a different launcher path and is retained as a scoped observation. Source doctor now reports UNVERIFIED/SUPERVISOR_OBSERVER_SCOPE_MISMATCH with RUN_CANONICAL_FACADE_DOCTOR before foreign-scope registration inspection. Same-scope ownership validators and startup/install behavior are unchanged.152 assertions pass; actual bounded source/canonical readbacks confirm both states, zero HTTP/runtime starts/repairs. No canonical helper was replaced.
+
+C1's Wake upgrade prerequisite is implementation as well as protected authority: the existing service deliberately returns WAKE_BROKER_TRANSACTION_GATES_UNAVAILABLE and native install guard remains closed. Fixed broker image/namespace are absent; provisioning alone would not solve this. No futile installer or external retry, operator signing request, new subsystem or guard bypass. Original queued requests and UNKNOWN effects remain preserved. Details and hashes: docs/verification/C0_C1_RECONCILIATION_2026_11_07.json. Next remains the smallest missing existing transaction wiring/admission needed for C1; later milestones not started.
+
 ## 2026-11-03T16:35:17.988364+00:00 — shared composer-structure diagnostics implemented,341 cases pass and exact held-event observation qualified
 
 ## 2026-11-03T19:31:34.880166+00:00 — finite ordinary Web work delivery source qualified; native assignment preparation complete
