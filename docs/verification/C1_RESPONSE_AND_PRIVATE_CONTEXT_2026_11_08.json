@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Build the qualified content-free diagnostic controller separately and inspect only the completed original continuation once. Preserve all SENT messages. Use its advisory hints and the existing pending operator summary to determine why no native callback occurred; do not infer client catalog,429 or execution authority from UI hints.",
+  "next": "Await the single pending redacted assistant explanation. Exact completed exchange and source-controller diagnostics are live-qualified, but no known tool markers or blocker hints were found. Do not infer tool absence,429,authentication or a native failure. Native task remains READY without an attempt; do not resend any SENT message or create an equivalent request.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -297,7 +297,62 @@
     },
     "strictRootAndWakeClippy": "PASS",
     "formatting": "PASS",
-    "separateBuild": "NOT_RUN",
-    "liveObservation": "NOT_RUN"
+    "separateBuild": {
+      "status": "BUILT_NOT_INSTALLED_NOT_SELECTED",
+      "sourceCommit": "9ea39e6c6ea6d932cbf16a3b01fef3c570894b8b",
+      "controllerSha256": "95c8ac20136db3cf0abcbc283ff8f1fdccb9b69c0f8a95ce2e95edee7e768740",
+      "observerArtifactSha256": "3d8848e852b40a8d97e462559b706065b5b498b2cf8525c5f948486ff0cb35bf",
+      "elapsedSeconds": 43.391,
+      "preservationPins": 1064,
+      "preservationMismatches": 0
+    },
+    "liveObservation": {
+      "startedUtc": "2026-11-08T18:42:36.664346+00:00",
+      "finishedUtc": "2026-11-08T18:43:12.727727+00:00",
+      "elapsedSeconds": 36.031,
+      "status": "BROWSER_READINESS_OBSERVED",
+      "finalState": "EXACT_READY_IDLE",
+      "lastPhase": "BROWSER_CLOSED",
+      "responseStage": "RESPONSE_COMPLETE",
+      "taskDiagnostics": {
+        "assistantHints": {
+          "approvalRequested": false,
+          "basis": "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION",
+          "contextUnavailable": false,
+          "knownCodes": [],
+          "nativeDispatchMentioned": false,
+          "schemaVersion": 1,
+          "toolUnavailable": false
+        },
+        "toolDiagnostics": {
+          "basis": "VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT",
+          "busyMarkers": 0,
+          "callMarkers": 0,
+          "countOverflow": false,
+          "errorMarkers": 0,
+          "resultMarkers": 0,
+          "schemaVersion": 1,
+          "scope": "EXACT_USER_EXCHANGE",
+          "selectorCoverage": "KNOWN_MARKERS_ONLY"
+        }
+      },
+      "ownedTreeExited": true,
+      "messagesSent": 0,
+      "assistantRetries": 0,
+      "nativeTasksExecuted": 0,
+      "backendStarts": 0,
+      "officialOwnerStarts": 0,
+      "wakeStarts": 0,
+      "bindingChanges": 0,
+      "reviewAuthorityGranted": false,
+      "rawAssistantTextExported": false,
+      "preservationPins": 1064,
+      "preservationMismatches": 0,
+      "installedProfileProcessMatches": 0,
+      "wakeHostProcessMatches": 0,
+      "port3200ListenerPresent": false
+    },
+    "interpretation": "EXACT_COMPLETED_RESPONSE_VERIFIED_CONTENT_FREE_HINTS_INCONCLUSIVE_NO_EXECUTION_PROOF",
+    "pendingOperatorInput": "ONE_REDACTED_SUMMARY_OF_THE_SELECTED_ASSISTANT_EXPLANATION_ALREADY_REQUESTED"
   }
 }
