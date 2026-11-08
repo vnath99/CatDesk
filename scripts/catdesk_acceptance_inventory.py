@@ -169,7 +169,9 @@ def package_inventory(root, development=False):
         "authorityChecksumMatches": authority_matches,
         "authorityPhysicalIdentity": "NOT_EVALUATED",
         "verificationRecord": verification,
-        "ordinarySenderBootstrapProtocolPresent": compatible,
+        "bootstrapProtocolPresent": compatible,
+        "ordinaryProtocolDeclared": manifest.get("protocolVersion") == 1 and type(manifest.get("protocolVersion")) is int,
+        "capabilityMeaning": "OPERATION_SPECIFIC_DECLARATIONS_NOT_LIVE_BROWSER_ACCEPTANCE",
         "browserReadiness": "NOT_RUN", "liveAcceptance": "NOT_RUN",
         "meaning": "CHECKSUM_INVENTORY_ONLY_NOT_RELEASE_OR_EXECUTION_AUTHORITY",
     }

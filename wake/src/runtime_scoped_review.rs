@@ -29,7 +29,7 @@ pub fn run_scoped_work_request(
         before_submit,
         keep_running,
         |deadline, guard| {
-            let installed = installed_bootstrap_directory(store)?;
+            let installed = installed_ordinary_browser_directory(store)?;
             Adapter::spawn_from_installed_guarded(
                 store.root(),
                 &installed,
@@ -448,6 +448,105 @@ mod tests {
             )
             .unwrap();
         (store, event, target)
+    }
+
+    fn ordinary_package(store: &Store) -> PathBuf {
+        let directory = store.root().join("versions/ordinary-v1");
+        std::fs::create_dir_all(&directory).unwrap();
+        let host = b"synthetic host bytes; never executed";
+        let adapter = b"synthetic ordinary acknowledged-submit adapter; never executed";
+        let bridge = b"synthetic ordinary receipt primitives; never executed";
+        for (name, bytes) in [
+            ("CatDeskWakeHost.exe", host.as_slice()),
+            ("adapter.py", adapter.as_slice()),
+            ("wake_bridge.py", bridge.as_slice()),
+        ] {
+            std::fs::write(directory.join(name), bytes).unwrap();
+        }
+        let host_hash = crate::protocol::digest(std::str::from_utf8(host).unwrap());
+        let adapter_hash = crate::protocol::digest(std::str::from_utf8(adapter).unwrap());
+        let bridge_hash = crate::protocol::digest(std::str::from_utf8(bridge).unwrap());
+        atomic(
+            &store.root().join("current.json"),
+            &json!({
+                "schemaVersion":1,"directory":"ordinary-v1","hostSha256":host_hash,
+                "adapterSha256":adapter_hash,"wakeBridgeSha256":bridge_hash
+            }),
+        )
+        .unwrap();
+        atomic(&directory.join("manifest.json"), &json!({
+            "schemaVersion":1,"protocolVersion":1,"artifacts":{
+                "CatDeskWakeHost.exe":host_hash,"adapter.py":adapter_hash,"wake_bridge.py":bridge_hash
+            }
+        })).unwrap();
+        directory
+    }
+
+    #[test]
+    fn ordinary_package_does_not_require_new_chat_but_bootstrap_still_does() {
+        let (store, event, _) = fixture("ordinary-v1-capability");
+        let directory = ordinary_package(&store);
+        let paths = [
+            store.root().join("current.json"),
+            store.root().join("config.json"),
+            store.root().join("control.json"),
+            store
+                .root()
+                .join("queue")
+                .join(format!("{}.json", event.event_id)),
+        ];
+        let before: Vec<_> = paths.iter().map(|p| std::fs::read(p).unwrap()).collect();
+        assert_eq!(
+            installed_ordinary_browser_directory(&store).unwrap(),
+            directory
+        );
+        assert_eq!(
+            installed_bootstrap_directory(&store).unwrap_err(),
+            "BOOTSTRAP_INSTALLED_PACKAGE_UNSUPPORTED"
+        );
+        assert!(store.delivery(&event.event_id).unwrap().is_none());
+        for (path, bytes) in paths.iter().zip(before) {
+            assert_eq!(std::fs::read(path).unwrap(), bytes);
+        }
+    }
+
+    #[test]
+    fn ordinary_package_keeps_host_adapter_and_manifest_hash_checks() {
+        for changed in [
+            "CatDeskWakeHost.exe",
+            "adapter.py",
+            "wake_bridge.py",
+            "manifest.json",
+        ] {
+            let (store, _, _) = fixture(&format!("ordinary-integrity-{changed}"));
+            let directory = ordinary_package(&store);
+            if changed == "manifest.json" {
+                let mut manifest: Value = read(&directory.join(changed)).unwrap();
+                manifest["artifacts"]["adapter.py"] = json!("0".repeat(64));
+                atomic(&directory.join(changed), &manifest).unwrap();
+            } else {
+                std::fs::write(directory.join(changed), b"unexpected bytes").unwrap();
+            }
+            assert!(
+                installed_ordinary_browser_directory(&store).is_err(),
+                "{changed}"
+            );
+        }
+    }
+
+    #[test]
+    fn ordinary_package_rejects_unknown_or_missing_protocol() {
+        for protocol in [Value::Null, json!(2), json!("1")] {
+            let (store, _, _) = fixture("ordinary-protocol");
+            let directory = ordinary_package(&store);
+            let mut manifest: Value = read(&directory.join("manifest.json")).unwrap();
+            manifest["protocolVersion"] = protocol;
+            atomic(&directory.join("manifest.json"), &manifest).unwrap();
+            assert_eq!(
+                installed_ordinary_browser_directory(&store).unwrap_err(),
+                "ORDINARY_INSTALLED_PACKAGE_UNSUPPORTED"
+            );
+        }
     }
 
     fn adapter(event: &Event, target: &Target) -> FakeAdapter {

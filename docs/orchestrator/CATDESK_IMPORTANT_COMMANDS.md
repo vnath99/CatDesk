@@ -1,3 +1,11 @@
+## 2026-11-08T05:01:44.269511+00:00 — C1 ordinary delivery capability defect corrected in source
+
+The earlier C0 finding that installed dev84 lacks bootstrap remains true, but the inference that ordinary C1 delivery requires a protected Wake upgrade was too broad. The ordinary sender reused the new-chat bootstrap checker. It now shares unchanged pointer/host/adapter/bridge/manifest integrity checks and admits only the existing protocol-1 ordinary acknowledged-send/receipt contract. Bootstrap callers still require bootstrap capability. The installed package and every project/Wake/native identity are unchanged; no installer or broker guard changed.
+
+25 Wake scoped tests,10 coordinator tests,11 inventory tests, strict root/Wake all-target Clippy and formatting pass. Eight offline control-flow cases used checksum-verified installed adapter/primitives with a synthetic browser/sink; they prove no actual UI or Web acceptance. The existing17-check bearer-forwarding suite also passes on current PowerShell. Inventory now names bootstrap capability separately from an ordinary protocol declaration. C1 remains unaccepted; next build a separate development controller, qualify existing bounded backend-only/official-owner serving, then the original queued invitation without replay. No later milestone or replacement subsystem.
+
+Evidence: docs/verification/ORDINARY_WAKE_CAPABILITY_SEPARATION_2026_11_08.json. The existing protected broker transaction gap remains a separate release/rollover concern, not automatically a prerequisite for an ordinary wake.
+
 ## 2026-11-08T04:47:48.257902+00:00 — C0 supervisor observation corrected; existing Wake transaction gap confirmed
 
 The canonical-owner doctor reports SUPERVISOR_REGISTERED_MONITOR_STOPPED, not a foreign registration. The earlier source-facade conflict compared a different launcher path and is retained as a scoped observation. Source doctor now reports UNVERIFIED/SUPERVISOR_OBSERVER_SCOPE_MISMATCH with RUN_CANONICAL_FACADE_DOCTOR before foreign-scope registration inspection. Same-scope ownership validators and startup/install behavior are unchanged.152 assertions pass; actual bounded source/canonical readbacks confirm both states, zero HTTP/runtime starts/repairs. No canonical helper was replaced.

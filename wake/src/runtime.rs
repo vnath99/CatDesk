@@ -2477,7 +2477,7 @@ mod first_conversation_tests {
     }
 }
 
-fn installed_bootstrap_directory(store: &Store) -> Result<PathBuf> {
+fn installed_browser_directory(store: &Store) -> Result<PathBuf> {
     let pointer: serde_json::Value = read(&store.root().join("current.json"))?;
     require_plain_install_directory(&store.root().join("versions"))?;
     let directory = store.root().join("versions").join(install_id(&pointer)?);
@@ -2491,11 +2491,29 @@ fn installed_bootstrap_directory(store: &Store) -> Result<PathBuf> {
     let (adapter, bridge) = verify_installed_browser_artifacts(store.root(), &directory)?;
     require_plain_install_file(&adapter)?;
     require_plain_install_file(&bridge)?;
+    Ok(directory)
+}
+
+fn installed_ordinary_browser_directory(store: &Store) -> Result<PathBuf> {
+    let directory = installed_browser_directory(store)?;
+    let manifest: serde_json::Value = read(&directory.join("manifest.json"))?;
+    // Protocol 1 is the existing acknowledged ordinary send/receipt contract.
+    // It does not advertise new-chat creation or cooperative response polling.
+    if manifest.get("protocolVersion").and_then(|v| v.as_u64()) != Some(1) {
+        return Err("ORDINARY_INSTALLED_PACKAGE_UNSUPPORTED".into());
+    }
+    Ok(directory)
+}
+
+fn installed_bootstrap_directory(store: &Store) -> Result<PathBuf> {
+    let directory = installed_browser_directory(store)?;
     // The pointer and manifest hashes above authorize these installed bytes.
     // Old reviewed packages have no bootstrap protocol and must be rejected
     // before a browser launches or a handoff draft is typed.
-    let adapter_bytes = std::fs::read(adapter).map_err(|_| "BROWSER_ADAPTER_UNAVAILABLE")?;
-    let bridge_bytes = std::fs::read(bridge).map_err(|_| "BROWSER_PRIMITIVES_UNAVAILABLE")?;
+    let adapter_bytes =
+        std::fs::read(directory.join("adapter.py")).map_err(|_| "BROWSER_ADAPTER_UNAVAILABLE")?;
+    let bridge_bytes = std::fs::read(directory.join("wake_bridge.py"))
+        .map_err(|_| "BROWSER_PRIMITIVES_UNAVAILABLE")?;
     if !adapter_bytes
         .windows(b"def bootstrap_attempt(".len())
         .any(|part| part == b"def bootstrap_attempt(")

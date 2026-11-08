@@ -60,7 +60,7 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual("PASS", result["status"])
         self.assertEqual("SELECTED", result["classification"])
         self.assertEqual("NOT_EVALUATED", result["authorityPhysicalIdentity"])
-        self.assertFalse(result["ordinarySenderBootstrapProtocolPresent"])
+        self.assertFalse(result["bootstrapProtocolPresent"])
 
     def test_changed_authority_rejects_matching_artifact_bytes(self):
         self.package(True)
