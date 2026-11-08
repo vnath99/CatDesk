@@ -1614,3 +1614,31 @@ not a repeated send or another browser owner. The prior UNSUPPORTED_MENU
 refusal and cleanup evidence remain preserved. Source tests cover absent, menu,
 dialog, boolean and unknown popup attributes plus absent/invalid references.
 Live popup classification is pending; installed readback and C1 remain incomplete.
+
+
+## 2026-11-08T23:48:06.215595+00:00 — exact-chat popup metadata observed without operator relay
+
+PASS LIVE DEVELOPMENT: the passive registered-profile observer returned
+plusPopup=ABSENT, plusControlReference=ABSENT,
+plusExpanded=CLOSED on the original completed task exchange.
+The read finished in 35.312 seconds with no UI action, USER send
+or native dispatch. These fixed categories explain the prior menu-specific
+refusal; they do not prove a client catalog, app attachment or authentication.
+Do not guess another click from this metadata. The automatic response reader
+again returned COMPLETE and bounded TOOL_UNAVAILABLE / CONTEXT_UNAVAILABLE
+hints, with specific missing subjects unproven, tied to the original task,
+assignment, conversation, receipt, message, generation and target digest.
+
+All 1,076 preservation pins match, the owned tree exited, profile/Wake process
+counts are zero and port 3200 is closed. Source 754edb4a0bf48fcf68e049cd8c64cc5d540bde5d;
+matched separate controller SHA-256 06bf24154f8b3503a116fbb3458c95d7e28c345076d30b9d659fe2340ecc3a0e.
+No installed package, protected release authority, binding, native session,
+credential, backend/tunnel owner or recurring process was changed.
+
+Qualification: 88 actual-DOM tests, 19 native readiness tests, retained probe/CLI
+coverage, seven post-refresh persistence/interruption cases, cached-envelope
+validation/no-replay cases, catalog contract check, formatting and strict
+root/Wake Clippy pass. Source wait-until-idle and guarded refresh behavior is
+preserved; it still requires installed qualification through signed/broker
+promotion. The original native task remains unattempted READY and C1 is not
+complete. No manual assistant-response relay or sign-in action is requested.

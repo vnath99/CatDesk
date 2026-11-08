@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Use the existing read-only composer observer to classify closed popup/link semantics before any further UI action; do not guess a dialog/menu or infer client catalog availability. Preserve the original task/key/grant and completed messages. Installed response/sender qualification separately requires the existing signed/broker promotion authority. No manual response relay is requested. C1 remains incomplete.",
+  "next": "Use the observed closed popup/reference categories to qualify only the existing bounded owner path before any further UI action; do not infer a catalog or attach/send speculatively. Original task/key/grant and completed messages remain frozen. Installed autonomous readback and sender lifecycle require existing signed/broker qualification; C1 native coding remains incomplete. No manual assistant-response relay is pending.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -1350,7 +1350,7 @@
   },
   "composerPopupMetadata": {
     "observedUtc": "2026-11-08T23:44:29.115058+00:00",
-    "status": "SOURCE_TESTED_LIVE_PENDING",
+    "status": "LIVE_READONLY_QUALIFIED_NOT_ACTION_AUTHORITY",
     "schemaVersion": 2,
     "legacySchemaAccepted": 1,
     "fields": [
@@ -1361,6 +1361,36 @@
     "uiActions": 0,
     "authorityGranted": false,
     "actualDomTests": 88,
-    "nativeReadinessTests": 19
+    "nativeReadinessTests": 19,
+    "live": {
+      "observedUtc": "2026-11-08T23:46:51.580661+00:00",
+      "sourceCommit": "754edb4a0bf48fcf68e049cd8c64cc5d540bde5d",
+      "controllerSha256": "06bf24154f8b3503a116fbb3458c95d7e28c345076d30b9d659fe2340ecc3a0e",
+      "elapsedSeconds": 35.312,
+      "presentation": {
+        "basis": "PRESENTATION_ONLY_NOT_TOOL_CATALOG",
+        "editorCount": 1,
+        "plusButtonCount": 1,
+        "plusButtonState": "ENABLED",
+        "plusButtonType": "BUTTON",
+        "plusControlReference": "ABSENT",
+        "plusExpanded": "CLOSED",
+        "plusPopup": "ABSENT",
+        "schemaVersion": 2,
+        "scope": "COMPOSER_FORM",
+        "v5MarkerCount": 0
+      },
+      "responseStage": "RESPONSE_COMPLETE",
+      "taskReceiptAndGenerationAttributed": true,
+      "uiActions": 0,
+      "messagesSent": 0,
+      "nativeCalls": 0,
+      "preservationPins": 1076,
+      "preservationMismatches": 0,
+      "ownedTreeExited": true,
+      "ownedProfileAndWakeProcessesAfter": 0,
+      "port3200ListenerPresent": false
+    },
+    "responsePersistenceTests": 7
   }
 }
