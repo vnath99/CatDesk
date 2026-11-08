@@ -1348,3 +1348,35 @@ DOM, retry or installation guard changed. 54 Python/native readiness tests,
 strict root/Wake all-target Clippy and formatting pass. Next: one corrected
 retained-owner timer observation of the same SENT event. No message, receipt
 or native call is replayed. Earlier failed evidence remains preserved.
+
+
+## 2026-11-08T22:32:07.092644+00:00 — recovered task response and passive timer — checkpoint
+
+PASS LIVE DEVELOPMENT: the original pending clarification is SENT with its
+exact recovered USER receipt. Automatic receipt-bound readback returned a
+completed response and TOOL_UNAVAILABLE / CONTEXT_UNAVAILABLE, without a human
+relay or raw context/key/body export. The corrected retained owner subsequently
+recorded COMPLETE through the existing response-reobservation journal and
+timer CAS in 36.703 seconds, preserving the original timer start. A second
+completed-status read started no browser and changed no task state. All 1,075
+unrelated preservation pins, including the earlier failed journal, match.
+Owned profile/Wake processes are zero and port 3200 is closed. No USER/native
+call was repeated; no backend/tunnel/Wake start, binding, authentication, native
+session, selected package, protected executable or fingerprint changed.
+
+The original native worktree is clean at its original base; its job remains
+READY without an attempt, receipt or task journal. Therefore C1 coding is NOT
+COMPLETE. The newly observed refusal categories are assistant hints, not
+authoritative proof of client catalog, authentication or missing local bytes.
+Next qualify that exact Web caller's app/tool and retained-context availability
+through supported read-only diagnostics, without another task/grant or send.
+The earlier cached-argument rejection is independently known to be pre-execution;
+its precise rejected outer field is unrecorded and remains unasserted.
+
+INSTALLED ACCEPTANCE remains incomplete: installed dev.84 lacks the reader and
+new sender lifecycle. Source wait-until-idle, guarded refresh and persisted
+response verification are not represented as installed behavior. The existing
+approved signed-package/broker admission chain is still required; its precise
+refusals are recorded above once. No new terminal, sign-in or operator response
+inspection is requested. All failed attempts, predecessor histories and
+receipts remain preserved. No later milestone or recurring automation began.

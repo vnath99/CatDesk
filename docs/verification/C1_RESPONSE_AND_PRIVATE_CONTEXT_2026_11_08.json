@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Complete the same SENT event passive timer using the corrected retained-owner diagnostic flag. No receipt/send/native-call replay. Then qualify the exact Web caller tool/app and private-context availability; installed readback acceptance and C1 remain incomplete.",
+  "next": "Readback and its passive timer are recovered; never replay the SENT clarification. Next qualify the affected Web caller app/tool availability and retained original context through supported bounded read-only diagnostics, keeping server catalog, client scope and protected promotion separate. The original native task/grant/key stay unchanged and READY. Installed autonomous lifecycle acceptance still requires the approved signed/broker upgrade path. No new manual relay, login, recurring automation or later milestone is authorized by this checkpoint.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -1021,6 +1021,48 @@
         "strictRootAndWakeAllTargetClippy": "PASS",
         "format": "PASS"
       }
+    },
+    "correctedLive": {
+      "observedUtc": "2026-11-08T22:30:30.375470+00:00",
+      "sourceCommit": "d33844a314645d8f105c36527d156463975dbcd8",
+      "controllerSha256": "c14ae2c502349d978ed70c3b6c53bddbaf509f720cb6ffc9d92acaacbe9d55e2",
+      "status": "LIVE_DEVELOPMENT_PASSIVE_TIMER_RECOVERY_PASSED",
+      "elapsedSeconds": 36.703,
+      "maximumOwnerSeconds": 150,
+      "responseState": "COMPLETE",
+      "originalTimerStartPreserved": true,
+      "existingJournalAndTimerCasUsed": true,
+      "secondReadIdempotentWithoutBrowser": true,
+      "originalReceiptAndHistoryPreserved": true,
+      "preservationPins": 1075,
+      "preservationMismatches": 0,
+      "ownedProfileAndWakeProcessesAfter": 0,
+      "port3200ListenerPresent": false,
+      "messagesSent": 0,
+      "nativeCalls": 0,
+      "backendTunnelWakeStarts": 0,
+      "bindingChanges": 0,
+      "nativeTaskState": "READY",
+      "nativeAttemptOrReceipt": false,
+      "nativeWorkspaceChanges": 0,
+      "nativeTaskJournalPresent": false
     }
+  },
+  "acceptanceAtCheckpoint": {
+    "observedUtc": "2026-11-08T22:32:07.092644+00:00",
+    "boundedSameProfileReadback": "PASS_LIVE_DEVELOPMENT",
+    "originalSubmissionReceiptReconciliation": "PASS_LIVE_DEVELOPMENT",
+    "automaticTaskRefusalClassification": "PASS_LIVE_DEVELOPMENT",
+    "taskAttributedResponseTimerRecovery": "PASS_LIVE_DEVELOPMENT",
+    "noOperatorMessageRelay": "PASS",
+    "ownedCleanup": "PASS",
+    "sourceSenderWaitIdleGuardedRefreshAndPersistedResponse": "TESTED_SOURCE_NOT_INSTALLED",
+    "installedDev84ResponseHandlers": "MISSING_PROTECTED_UPGRADE_NOT_PERFORMED",
+    "originalNativeCodingLoop": "NOT_COMPLETE",
+    "twoProjectLiveNativeCoding": "NOT_RUN",
+    "currentWebTurn": "ASSISTANT_REPORTED_TOOL_UNAVAILABLE_AND_CONTEXT_UNAVAILABLE",
+    "affectedWebCallerCatalogAndContextAvailability": "NOT_INDEPENDENTLY_ESTABLISHED",
+    "originalCachedArgumentRefusal": "PRE_EXECUTION_PRECISE_OLD_FIELD_UNRECORDED",
+    "operatorResponseInspectionOrSignIn": "NOT_REQUIRED"
   }
 }
