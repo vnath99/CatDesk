@@ -808,6 +808,41 @@ class CurrentDomTests(unittest.TestCase):
                     diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
             self.assertEqual(hints,{})
 
+    def test_cached_tool_rejection_is_classified_without_exporting_request_or_keys(self):
+        hints = {}
+        body = ('native.codex.dispatch returned INVALID_ARGUMENT: McpServerError: '
+                'WEB_TASK_CACHED_ARGUMENTS_INVALID. Dispatch rejected. '
+                'PRIVATE_CONTEXT_MARKER executionKey=' + 'f' * 64)
+        self.sink.response_snapshot(CurrentDom(answer=body), 'exact wake message',
+            require_usable_body=True, diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
+        self.assertTrue(bridge.valid_task_response_hints(hints))
+        self.assertEqual(hints['schemaVersion'], 2)
+        self.assertEqual(hints['knownCodes'], ['WEB_TASK_CACHED_ARGUMENTS_INVALID', 'INVALID_ARGUMENT'])
+        self.assertEqual(hints['refusalCategories'], ['DISPATCH_REJECTED'])
+        self.assertNotIn('PRIVATE_CONTEXT_MARKER', json.dumps(hints))
+        self.assertNotIn('f' * 64, json.dumps(hints))
+        self.assertNotIn('executionKey', json.dumps(hints))
+        self.assertFalse(hints['scanTruncated'])
+
+    def test_bounded_classifier_reports_incomplete_coverage_without_exporting_long_body(self):
+        hints = {}
+        self.sink.response_snapshot(CurrentDom(answer='safe text ' * 5000 + ' WEB_TASK_CACHED_ARGUMENTS_INVALID'),
+            'exact wake message', require_usable_body=True, diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
+        self.assertTrue(bridge.valid_task_response_hints(hints))
+        self.assertTrue(hints['scanTruncated'])
+        self.assertEqual(hints['knownCodes'], [])
+        self.assertLess(len(json.dumps(hints)), 800)
+
+    def test_identity_refusal_and_exact_code_boundaries_are_closed(self):
+        hints = {}
+        self.sink.response_snapshot(CurrentDom(answer='Dispatch blocked: private-context SHA-256 mismatch. '
+            'NOT_WEB_TASK_CACHED_ARGUMENTS_INVALID_OTHER PRIVATE_UNKNOWN_CODE'), 'exact wake message',
+            require_usable_body=True, diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
+        self.assertEqual(hints['knownCodes'], [])
+        self.assertEqual(hints['refusalCategories'], ['IDENTITY_MISMATCH', 'DISPATCH_REJECTED'])
+        for replacement in (['PRIVATE_UNKNOWN_CODE'], ['IDENTITY_MISMATCH', 'IDENTITY_MISMATCH'], 'IDENTITY_MISMATCH'):
+            self.assertFalse(bridge.valid_task_response_hints(hints | {'refusalCategories':replacement}))
+
     def test_tool_marker_diagnostics_schema_rejects_content_or_unbounded_values(self):
         tools={}
         self.sink.response_snapshot(CurrentDom(), "exact wake message", diagnostic={}, tool_diagnostic=tools)

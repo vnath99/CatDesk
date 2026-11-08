@@ -67,7 +67,7 @@ class FakeSink:
     def wait_for_submission_accepted(self, cdp, prior, digest, message):
         cdp.timeline.append("accepted")
         return 99.0
-    def durable_receipt_round_trip(self, cdp):
+    def durable_receipt_round_trip(self, cdp, *, completed_response=False):
         cdp.timeline.append("round-trip")
         return cdp
     def confirm_exact_receipt(self, cdp, prior, digest, record, message, wall_time=None):
@@ -79,6 +79,8 @@ class FakeSink:
         if observer is not None:
             observer("GENERATION_WAIT")
             observer("RESPONSE_COMPLETED")
+    def wait_for_persisted_response(self, cdp, message):
+        cdp.timeline.append("persisted-response")
     def reconcile_persisted_receipt(self, cdp, digest, message, record, target_sha256):
         cdp.timeline.append("reconcile")
         cdp.reconciled_message = message
@@ -792,7 +794,7 @@ class AdapterTests(unittest.TestCase):
         self.assertTrue(cdp.sent)
         self.assertEqual(
             cdp.timeline,
-            ["submit", "accepted", "response", "round-trip", "confirm"],
+            ["submit", "accepted", "response", "round-trip", "persisted-response", "confirm"],
         )
         self.assertEqual(
             [item["stage"] for item in emitted[-5:]],
@@ -821,36 +823,51 @@ class AdapterTests(unittest.TestCase):
         self.assertIsNone(error)
         self.assertTrue(cdp.sent)
         self.assertEqual(cdp.keys[0][1], bridge.keyboard_safe_message(message))
-        self.assertEqual(cdp.timeline, ["submit", "accepted", "round-trip", "confirm"])
-        self.assertEqual(emitted[-1]["stage"], "SENT_PENDING_RESPONSE")
+        self.assertEqual(cdp.timeline, ["submit", "accepted", "response", "round-trip", "persisted-response", "confirm"])
+        self.assertEqual(emitted[-1]["stage"], "SENT")
         self.assertEqual(emitted[-1]["receipt"]["messageDigest"], bridge.digest(bridge.normalize_message(message)))
         wire = json.dumps(emitted)
         self.assertNotIn(key, wire)
         self.assertNotIn("taskContract", wire)
 
-    def test_cooperative_delivery_releases_browser_after_durable_user_receipt(self):
+    def test_cooperative_send_keeps_browser_until_completion_refresh_and_persisted_response(self):
         cdp, emitted, error = self.run_attempt(lambda _cdp: {"submit": True}, cooperative=True)
         self.assertIsNone(error)
-        self.assertEqual(cdp.timeline, ["submit", "accepted", "round-trip", "confirm"])
+        self.assertEqual(cdp.timeline, ["submit", "accepted", "response", "round-trip", "persisted-response", "confirm"])
         self.assertEqual([item["stage"] for item in emitted[-3:]],
-                         ["SUBMISSION_ACCEPTED", "USER_MESSAGE_APPENDED", "SENT_PENDING_RESPONSE"])
-        self.assertNotIn("RESPONSE_COMPLETED", [item["stage"] for item in emitted])
+                         ["RESPONSE_COMPLETED", "USER_MESSAGE_APPENDED", "SENT"])
+        self.assertIn("RESPONSE_COMPLETED", [item["stage"] for item in emitted])
         self.assertEqual(emitted[-1]["receipt"], emitted[-2]["receipt"])
 
     def test_cooperative_delivery_keeps_uncertainty_when_fresh_receipt_fails(self):
         class UnprovenSink(FakeSink):
-            def durable_receipt_round_trip(self, cdp):
+            def durable_receipt_round_trip(self, cdp, *, completed_response=False):
                 raise bridge.PostSubmitUnknown("SUBMIT_RECEIPT_ROUND_TRIP_FAILED")
         cdp, emitted, error = self.run_attempt(lambda _cdp: {"submit": True},
                                                sink_type=UnprovenSink, cooperative=True)
         self.assertEqual(error, "SUBMIT_RECEIPT_ROUND_TRIP_FAILED")
-        self.assertEqual(cdp.timeline, ["submit", "accepted"])
+        self.assertEqual(cdp.timeline, ["submit", "accepted", "response"])
         self.assertNotIn("SENT_PENDING_RESPONSE", [item["stage"] for item in emitted])
 
     def test_no_permission_never_submits(self):
         cdp, _, error = self.run_attempt(lambda cdp: {"submit": False})
         self.assertFalse(cdp.sent)
         self.assertEqual(error, "SUBMISSION_NOT_AUTHORIZED")
+
+    def test_post_refresh_response_failure_preserves_one_send_and_cannot_report_sent(self):
+        class MissingPersistedBody(FakeSink):
+            def wait_for_persisted_response(self, cdp, message):
+                cdp.timeline.append("persisted-response-pending")
+                raise bridge.PostSubmitUnknown("RESPONSE_PERSISTENCE_UNPROVEN")
+        for cooperative in (False, True):
+            with self.subTest(cooperative=cooperative):
+                cdp, emitted, error = self.run_attempt(lambda _: {"submit": True},
+                    sink_type=MissingPersistedBody, cooperative=cooperative)
+                self.assertTrue(cdp.sent)
+                self.assertEqual(cdp.timeline.count("submit"), 1)
+                self.assertEqual(error, "RESPONSE_PERSISTENCE_UNPROVEN")
+                self.assertFalse(any(frame["stage"] in {"SENT", "SENT_PENDING_RESPONSE", "USER_MESSAGE_APPENDED"}
+                                     for frame in emitted))
 
     def test_navigation_during_authorization_wait_never_submits(self):
         def navigate(cdp): cdp.url = "https://chatgpt.com/c/wrong"; return {"submit": True}

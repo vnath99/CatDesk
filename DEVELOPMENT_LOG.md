@@ -1066,3 +1066,47 @@ Updated 2026-10-31T09:16:11.848179+00:00.
 The current dated development record is [the October execution log](docs/OCT22_31_EXECUTION_LOG.md). Decisions, failures, verification results and next actions are recorded there. [Milestones](CATDESK_MILESTONES.md) and the [October acceptance ledger](docs/OCTOBER_2026_MVP_ACCEPTANCE.md) distinguish source checks, installed qualification and actual Web operation. Machine-readable sanitized evidence is retained in [docs/verification](docs/verification).
 
 This file supplies the entry point named by the self-contained handoff; it does not replace or duplicate the established history.
+
+
+## 2026-11-08T20:41:03.892841+00:00 — receipt-bound autonomous failure observation — TESTED_SOURCE
+
+Installed dev.84 lacks source snapshots and response observation; the source
+reader also discarded the reported cached-envelope error because its closed
+vocabulary did not include that code. Reuse the existing native browser owner,
+exact SENT receipt, generation and registered target. The read-only inspector now
+links the original task/assignment through the existing WorkLedger and returns
+closed error/refusal categories with explicit bounded-scan coverage. No response
+text, drafts, keys or frozen contexts are exported. Assistant reports remain
+advisory; native receipts/journals take precedence.
+
+Both ordinary and cooperative source sends retain their owned browser until
+generation ends, then guard the exact document and empty editor, refresh and
+require two persisted complete response reads. Active-generation refreshes have
+been removed from the waiter. Missing bodies, resumed generation, changed DOM,
+drafts, authentication failure and interruption fail closed within existing
+bounds, without USER resubmission. Legacy pending-response receipt decoding
+remains compatible for historical recovery.
+
+The original client cached MCP call was attempted once and rejected before native
+admission; its queue remains READY without attempt, receipt or journal, and its
+worktree is clean. All 1,069 preservation pins match. The exact legacy rejected
+outer field was not recorded; do not guess cwd/timeout or rewrite the frozen
+call. New rejection receipts include only a fixed validation invariant and
+`nativeExecutionAttempted:false`, preserving every existing validation refusal.
+Original dispatch remains CLOSED pending independent wire reconciliation.
+
+384 focused tests passed across this slice, plus strict root/Wake all-target
+Clippy and formatting. Retained failed attempts include obsolete test mocks and
+an error-envelope size lint, corrected without weakening guards. Source/live/
+installed acceptance remain distinct; no new send or installed upgrade occurred.
+
+Installed qualification is BLOCKED by the existing unprovisioned Wake broker
+and unfinished protected transaction admission, not by a request for another
+manual ChatGPT response inspection. Service, fixed image and protected namespace
+are absent; ordinary install refuses before mutation. Provisioning alone is
+insufficient. Reuse T-0485's independent package/migration authority and signed
+provisioning procedure; do not bypass it. Next executable task: separate matched
+source-observer build and one bounded read-only inspection of the existing turn.
+See `docs/verification/C1_RESPONSE_AND_PRIVATE_CONTEXT_2026_11_08.json`. C1 remains
+NOT COMPLETE. Other project bindings, native sessions, unknown sends and protected
+release authority are preserved.

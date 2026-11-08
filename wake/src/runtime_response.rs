@@ -151,7 +151,32 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
         "WEB_TASK_NATIVE_NOT_GRANTED",
         "PROJECT_TASK_CALL_ALREADY_COMPLETED",
         "PROJECT_TASK_RECOVERY_REQUIRED",
+        "WEB_TASK_CACHED_ARGUMENTS_INVALID",
+        "INVALID_ARGUMENT",
+        "UNAUTHORIZED",
+        "WEB_TASK_REQUEST_INVALID",
+        "WEB_TASK_BINDING_CHANGED",
     ];
+    let version = hints["schemaVersion"].as_u64()?;
+    let refusals = [
+        "IDENTITY_MISMATCH",
+        "TOOL_UNAVAILABLE",
+        "CONTEXT_UNAVAILABLE",
+        "AUTHORIZATION_REQUIRED",
+        "DISPATCH_REJECTED",
+    ];
+    let valid_refusals = version == 1
+        || hints
+            .get("refusalCategories")
+            .and_then(Value::as_array)
+            .is_some_and(|selected| {
+                let canonical: Vec<Value> = refusals
+                    .iter()
+                    .filter(|kind| selected.contains(&json!(kind)))
+                    .map(|kind| json!(kind))
+                    .collect();
+                *selected == canonical
+            });
     let selected = hints.get("knownCodes")?.as_array()?;
     let canonical: Vec<Value> = codes
         .iter()
@@ -160,7 +185,8 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
         .collect();
     if value.as_object()?.len() != 2
         || tools.as_object()?.len() != 9
-        || hints.as_object()?.len() != 7
+        || hints.as_object()?.len() != if version == 2 { 9 } else { 7 }
+        || (version == 2 && hints["scanTruncated"].as_bool().is_none())
         || tools["schemaVersion"].as_u64() != Some(1)
         || tools["basis"] != "VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT"
         || tools["scope"] != "EXACT_USER_EXCHANGE"
@@ -169,10 +195,11 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
         || !counts
             .iter()
             .all(|field| tools[*field].as_u64().is_some_and(|n| n <= 64))
-        || hints["schemaVersion"].as_u64() != Some(1)
+        || !matches!(version, 1 | 2)
         || hints["basis"] != "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION"
         || !flags.iter().all(|field| hints[*field].as_bool().is_some())
         || *selected != canonical
+        || !valid_refusals
     {
         return None;
     }

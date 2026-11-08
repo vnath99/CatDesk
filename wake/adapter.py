@@ -143,14 +143,14 @@ def attempt(bridge, sb, event, target, *, cooperative=False):
     # Accepted submission starts the passive response timer but is not a
     # durable receipt and cannot transition delivery to SENT.
     emit({"stage": "SUBMISSION_ACCEPTED"})
-    if not cooperative:
-        sink.wait_for_response_completion(
-            cdp, message, observer=lambda stage: emit({"stage": stage})
-        )
-    # A fresh-document round-trip is mandatory in both modes. Cooperative
-    # delivery may close this owner while the assistant is still generating,
-    # but never before independent USER persistence has been proven.
-    sink.durable_receipt_round_trip(cdp)
+    # Negotiating the cooperative protocol must not close the owned browser
+    # while Stop/Pause remains active. Keep existing native submit/ACK fencing;
+    # independent project/tool work does not need this shared browser lease.
+    sink.wait_for_response_completion(
+        cdp, message, observer=lambda stage: emit({"stage": stage})
+    )
+    sink.durable_receipt_round_trip(cdp, completed_response=True)
+    sink.wait_for_persisted_response(cdp, message)
     receipt = sink.confirm_exact_receipt(
         cdp,
         prior,
@@ -166,7 +166,7 @@ def attempt(bridge, sb, event, target, *, cooperative=False):
         "evidence": "EXACT_USER_MESSAGE_APPENDED",
     }
     emit({"stage": "USER_MESSAGE_APPENDED", "receipt": receipt_payload})
-    emit({"stage": "SENT_PENDING_RESPONSE" if cooperative else "SENT", "receipt": receipt_payload})
+    emit({"stage": "SENT", "receipt": receipt_payload})
 
 
 def attention_frame(bridge, error, request=None):

@@ -6511,3 +6511,31 @@ reflect altered or incomplete UI text; it does not establish its cause. Matching
 only a header cannot authorize continuation. Target/query failures retain their
 existing fixed refusal codes. Package/live evidence is recorded separately from
 source fixtures in the parent dated audit.
+
+
+## 2026-11-08T20:41:03.892841+00:00 — bounded task-response diagnosis
+
+Use the qualified controller's existing command:
+
+```text
+operator web review inspect-response --project-id REGISTERED_PROJECT_ID --event-id EXACT_SENT_EVENT_ID
+```
+
+The native owner selects the registered target and exact saved USER receipt.
+`taskAttribution` is read from the existing project WorkLedger and revalidated
+throughout observation; null attribution grants no task identity. Schema-2
+`assistantHints` contains only closed codes/refusals and `scanTruncated`. It is
+not execution or review authority. Prefer original native receipts/journals.
+No input, retry or draft/content export occurs. Source controller qualification
+is separate from installed dev.84, which lacks the snapshot/observe handlers.
+
+`WEB_TASK_CACHED_ARGUMENTS_INVALID` is an outer cached-envelope refusal before
+native admission. New source errors retain that name and add fixed `error.data`
+phase/invariant, with no values or unknown field names. For cached envelopes,
+`cwd`/`timeout` must be absent and dry-run/full-output must be absent or false.
+Do not infer the historical offending field or retry an unreconciled call.
+
+Ordinary install remains refused by `WAKE_INSTALL_BROKER_UNPROVISIONED`; the
+existing protected service transaction is unfinished too. There is no supported
+command that bypasses these prerequisites. See T-0485 before signed provisioning,
+reviewed package/migration admission and installed lifecycle qualification.

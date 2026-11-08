@@ -680,6 +680,7 @@ class WakeBridgeTests(unittest.TestCase):
             def __init__(self): self.reloads, self.reload_at = 0, []
             def get_current_url(self): return "https://chatgpt.com/c/review-one"
             def evaluate(self, script):
+                if script == "location.href": return "https://chatgpt.com/c/review-one"
                 if script == "document.readyState": return "complete"
                 if "#prompt-textarea" in script:
                     return ["ready", True] if self.reloads == 1 else ["count", 0]
@@ -712,6 +713,7 @@ class WakeBridgeTests(unittest.TestCase):
             def get_current_url(self): return "https://chatgpt.com/c/review-one"
             def is_element_visible(self, selector): return False
             def evaluate(self, script):
+                if script == "location.href": return "https://chatgpt.com/c/review-one"
                 if script == "document.readyState": return "complete"
                 if "#prompt-textarea" in script: return ["count", 0]
                 raise AssertionError(script)
@@ -736,6 +738,7 @@ class WakeBridgeTests(unittest.TestCase):
             def get_current_url(self): return "https://chatgpt.com/c/review-one"
             def is_element_visible(self, selector): return False
             def evaluate(self, script):
+                if script == "location.href": return "https://chatgpt.com/c/review-one"
                 if script == "document.readyState": return "complete"
                 if "#prompt-textarea" in script:
                     return ["count", 0] if 9 <= clock.now < 10 else ["ready", True]
@@ -902,6 +905,7 @@ class WakeBridgeTests(unittest.TestCase):
             def get(self, url): self.opens.append(url)
             def is_element_visible(self, _selector): return False
             def evaluate(self, script):
+                if script == "location.href": return "https://chatgpt.com/c/review-one"
                 if script == "document.readyState": return "complete"
                 if "return composerText(visible[0])" in script: return getattr(self, "composer", "")
                 if "#prompt-textarea" in script: return ["ready", True]
@@ -1157,6 +1161,8 @@ class WakeBridgeTests(unittest.TestCase):
             sink, "wait_for_submission_accepted", return_value=99.0
         ), patch.object(sink, "durable_receipt_round_trip"), patch.object(
             sink, "confirm_exact_receipt", return_value=receipt
+        ), patch.object(
+            sink, "wait_for_persisted_response", return_value=None
         ), patch.object(
             sink, "wait_for_response_completion", return_value=None
         ):
@@ -1711,6 +1717,7 @@ class WakeBridgeTests(unittest.TestCase):
                     text, _ = json.JSONDecoder().raw_decode(script.rsplit("const text = ", 1)[1])
                     self.send_keys(wake_bridge.EDITOR, text, timeout=1)
                     return "INSERTED"
+                if script == "location.href": return "https://chatgpt.com/c/review-one"
                 if script == "document.readyState": return "complete"
                 if "return composerText(visible[0])" in script: return self.composer
                 if "#prompt-textarea" in script: return ["ready", self.composer == ""]
@@ -1738,13 +1745,15 @@ class WakeBridgeTests(unittest.TestCase):
         ), patch.object(
             sink, "post_submit_composer_text", return_value=""
         ), patch.object(
+            sink, "wait_for_persisted_response", return_value=None
+        ), patch.object(
             sink, "wait_for_response_completion", return_value=None
         ), patch.object(
             sink, "durable_receipt_round_trip", wraps=sink.durable_receipt_round_trip
         ) as receipt_probe:
             with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "SUBMIT_RECEIPT_ROUND_TRIP_FAILED"):
                 sink.wake(self.record_id, message, lambda: True, lambda: boundary.append("submitted"))
-        receipt_probe.assert_called_once_with(cdp)
+        receipt_probe.assert_called_once_with(cdp, completed_response=True)
         self.assertEqual(["submitted"], boundary)
         self.assertEqual(message, cdp.messages[-1])
 
@@ -2079,7 +2088,7 @@ class WakeBridgeTests(unittest.TestCase):
         self.assertEqual(1, snapshot.call_count)
         retry.assert_not_called()
 
-    def test_active_generation_periodically_refreshes_same_target_until_pause_clears(self):
+    def test_active_generation_keeps_same_browser_without_refresh_until_pause_clears(self):
         class Clock:
             def __init__(self): self.now = 0.0
             def monotonic(self): return self.now
@@ -2098,7 +2107,7 @@ class WakeBridgeTests(unittest.TestCase):
         ), patch.object(
             sink,
             "post_submit_visible_any",
-            side_effect=lambda _cdp, selectors: selectors == wake_bridge.STOP and cdp.reloads == 0,
+            side_effect=lambda _cdp, selectors: selectors == wake_bridge.STOP and clock.now < wake_bridge.RESPONSE_ACTIVE_REFRESH_SECONDS + 1,
         ), patch.object(
             sink, "editor_state", return_value=("ready", True)
         ), patch.object(
@@ -2115,7 +2124,7 @@ class WakeBridgeTests(unittest.TestCase):
                 monotonic=clock.monotonic,
                 sleeper=clock.sleep,
             )
-        self.assertEqual(1, cdp.reloads)
+        self.assertEqual(0, cdp.reloads)
         self.assertGreaterEqual(clock.now, wake_bridge.RESPONSE_ACTIVE_REFRESH_SECONDS)
         self.assertEqual("RESPONSE_COMPLETED", stages[-1])
         reopen.assert_not_called()
@@ -2605,7 +2614,9 @@ class WakeBridgeTests(unittest.TestCase):
         ), patch.object(
             sink, "wait_for_send_control", return_value=None
         ), patch.object(
-            sink, "durable_receipt_round_trip", side_effect=lambda _cdp: timeline.append("reload")
+            sink, "durable_receipt_round_trip", side_effect=lambda _cdp, **_kwargs: timeline.append("reload")
+        ), patch.object(
+            sink, "wait_for_persisted_response", return_value=None
         ), patch.object(
             sink, "wait_for_response_completion", return_value=None
         ) as response_observer, patch.object(
@@ -2702,9 +2713,11 @@ class WakeBridgeTests(unittest.TestCase):
                 def activate_cdp_mode(self, _url): return None
             sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, 1)
             with patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=SB)}), patch.object(
-                sink, "durable_receipt_round_trip", side_effect=lambda _cdp: timeline.append("reload")
+                sink, "durable_receipt_round_trip", side_effect=lambda _cdp, **_kwargs: timeline.append("reload")
             ), patch.object(
-                sink, "wait_for_response_completion", return_value=None
+                sink, "wait_for_persisted_response", return_value=None
+        ), patch.object(
+            sink, "wait_for_response_completion", return_value=None
             ), patch.object(
                 sink, "wait_for_submission_accepted", return_value=99.0
             ), patch.object(
@@ -2815,6 +2828,8 @@ class WakeBridgeTests(unittest.TestCase):
         ), patch.object(
             sink, "durable_receipt_round_trip", return_value=None
         ), patch.object(sink, "confirm_exact_receipt", return_value=object()), patch.object(
+            sink, "wait_for_persisted_response", return_value=None
+        ), patch.object(
             sink, "wait_for_response_completion", return_value=None
         ):
             class ReloadingCdp:
@@ -2896,6 +2911,8 @@ class WakeBridgeTests(unittest.TestCase):
         sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, 1)
         with patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=SB)}), patch.object(
             sink, "wait_for_submission_accepted", return_value=99.0
+        ), patch.object(
+            sink, "wait_for_persisted_response", return_value=None
         ), patch.object(
             sink, "wait_for_response_completion", return_value=None
         ), patch.object(
@@ -2984,6 +3001,8 @@ class WakeBridgeTests(unittest.TestCase):
             sink, "wait_for_submission_accepted", return_value=99.0
         ), patch.object(
             sink, "durable_receipt_round_trip", return_value=None
+        ), patch.object(
+            sink, "wait_for_persisted_response", return_value=None
         ), patch.object(
             sink, "wait_for_response_completion", return_value=None
         ), patch.object(

@@ -190,18 +190,26 @@ TASK_RESPONSE_CODES = (
     "HTTP_429", "WEB_WORK_ROLLOVER_PENDING", "WEB_ROLLOVER_PROJECT_BUSY",
     "WEB_TASK_GRANT_SCOPE_MISMATCH", "WEB_TASK_NATIVE_NOT_GRANTED",
     "PROJECT_TASK_CALL_ALREADY_COMPLETED", "PROJECT_TASK_RECOVERY_REQUIRED",
+    "WEB_TASK_CACHED_ARGUMENTS_INVALID", "INVALID_ARGUMENT", "UNAUTHORIZED",
+    "WEB_TASK_REQUEST_INVALID", "WEB_TASK_BINDING_CHANGED",
 )
+TASK_REFUSAL_CATEGORIES = ("IDENTITY_MISMATCH", "TOOL_UNAVAILABLE", "CONTEXT_UNAVAILABLE",
+                           "AUTHORIZATION_REQUIRED", "DISPATCH_REJECTED")
 
 
 def valid_task_response_hints(value: Any) -> bool:
     """Closed assistant-text hints, never tool availability or execution proof."""
     flags = ("toolUnavailable", "contextUnavailable", "approvalRequested", "nativeDispatchMentioned")
-    return (isinstance(value, dict) and set(value) == set(flags) | {"schemaVersion", "basis", "knownCodes"}
-            and type(value["schemaVersion"]) is int and value["schemaVersion"] == 1
+    version = value.get("schemaVersion") if isinstance(value, dict) else None
+    fields = {"schemaVersion", "basis", "knownCodes"} | ({"refusalCategories", "scanTruncated"} if version == 2 else set())
+    return (isinstance(value, dict) and set(value) == set(flags) | fields
+            and type(version) is int and version in {1, 2}
             and value["basis"] == "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION"
             and all(type(value[key]) is bool for key in flags)
             and isinstance(value["knownCodes"], list)
-            and value["knownCodes"] == [code for code in TASK_RESPONSE_CODES if code in value["knownCodes"]])
+            and value["knownCodes"] == [code for code in TASK_RESPONSE_CODES if code in value["knownCodes"]]
+            and (version == 1 or (type(value["scanTruncated"]) is bool and isinstance(value["refusalCategories"], list)
+                 and value["refusalCategories"] == [kind for kind in TASK_REFUSAL_CATEGORIES if kind in value["refusalCategories"]])))
 
 
 def valid_tool_marker_diagnostics(value: Any) -> bool:
@@ -1398,7 +1406,7 @@ class CdpSink:
             sleeper(READINESS_POLL_SECONDS)
         raise PostSubmitUnknown(last_stage)
 
-    def durable_receipt_round_trip(self, cdp: Any, *, monotonic=time.monotonic, sleeper=time.sleep) -> None:
+    def durable_receipt_round_trip(self, cdp: Any, *, completed_response=False, monotonic=time.monotonic, sleeper=time.sleep) -> None:
         """Require a fresh document load before trusting post-submit DOM evidence.
 
         ChatGPT can optimistically append a submitted user message to the current
@@ -1415,6 +1423,13 @@ class CdpSink:
         after the assistant turn ended, defeating both the live turn timer and
         response-completion observer.
         """
+        if completed_response:
+            self.require_response_document(cdp)
+            status, empty = self.editor_state(cdp)
+            if status != "ready" or not empty:
+                raise PostSubmitUnknown("RESPONSE_REFRESH_DRAFT_OR_EDITOR_UNPROVEN")
+            if self.post_submit_visible_any(cdp, STOP):
+                raise PostSubmitUnknown("RESPONSE_GENERATION_RESUMED")
         marker = "__catdeskWakeReceiptPreReloadV1"
         try:
             cdp.evaluate(f"window.{marker} = true; true")
@@ -1805,11 +1820,22 @@ class CdpSink:
                 const toolUnavailable = new RegExp("(?:tool|run_command|catdesk).{{0,100}}"+unavailable+"|"+unavailable+".{{0,100}}(?:tool|run_command|catdesk)").test(text);
                 const contextUnavailable = new RegExp("(?:nativecall|private context|execution key).{{0,100}}"+unavailable+"|"+unavailable+".{{0,100}}(?:nativecall|private context|execution key)").test(text);
                 const known = {json.dumps(TASK_RESPONSE_CODES)};
-                result.push({{schemaVersion:1,basis:'ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION',
+                const hasCode = code => code === 'HTTP_429' ? /(?:http|status|error)\\s*429/.test(text) :
+                    new RegExp('\\\\b'+code.toLowerCase()+'\\\\b').test(text);
+                const approvalRequested = /(?:need|require|await|waiting for|please).{{0,60}}(?:approval|authorization|permission|approve)/.test(text);
+                const refusals = {{
+                    IDENTITY_MISMATCH:/(?:private.context|assignment|identity|digest|sha.?256).{{0,80}}(?:mismatch|does not match|did not match)/.test(text),
+                    TOOL_UNAVAILABLE:toolUnavailable, CONTEXT_UNAVAILABLE:contextUnavailable,
+                    AUTHORIZATION_REQUIRED:approvalRequested || hasCode('UNAUTHORIZED'),
+                    DISPATCH_REJECTED:hasCode('WEB_TASK_CACHED_ARGUMENTS_INVALID') || /(?:dispatch|tool call).{{0,60}}(?:blocked|rejected|refused)/.test(text)
+                }};
+                result.push({{schemaVersion:2,basis:'ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION',
                     toolUnavailable,contextUnavailable,
-                    approvalRequested:/(?:need|require|await|waiting for|please).{{0,60}}(?:approval|authorization|permission|approve)/.test(text),
+                    approvalRequested,
                     nativeDispatchMentioned:text.includes('native.codex.dispatch'),
-                    knownCodes:known.filter(code => code === 'HTTP_429' ? /(?:http|status|error)\\s*429/.test(text) : text.includes(code.toLowerCase()))}});
+                    scanTruncated:assistantBodyText.length > 32768,
+                    knownCodes:known.filter(hasCode),
+                    refusalCategories:{json.dumps(TASK_REFUSAL_CATEGORIES)}.filter(kind => refusals[kind])}});
             }}
             return result;
         }})()"""
@@ -2133,12 +2159,16 @@ class CdpSink:
     ) -> None:
         """Refresh the current exact target without changing USER-turn ownership.
 
-        This is used only after the USER wake is already accepted and while the
-        active Stop/Pause control remains visible.  Refreshing periodically lets
-        the observer discard a stale client-side generation control while keeping
-        the same browser/profile/conversation.  It never types, clicks Send, or
-        opens a caller-selected target.
+        Retained for existing bounded callers, with no active-generation refresh.
+        The sender uses the fresh-document receipt boundary after completion.
+        Never replace a draft, active generation or unverified document.
         """
+        self.require_response_document(cdp)
+        status, empty = self.editor_state(cdp)
+        if status != "ready" or not empty:
+            raise PostSubmitUnknown("RESPONSE_REFRESH_DRAFT_OR_EDITOR_UNPROVEN")
+        if self.post_submit_visible_any(cdp, STOP):
+            raise PostSubmitUnknown("RESPONSE_GENERATION_RESUMED")
         reload_page = getattr(cdp, "reload", None)
         if not callable(reload_page):
             raise PostSubmitUnknown("RESPONSE_REFRESH_UNAVAILABLE")
@@ -2184,17 +2214,14 @@ class CdpSink:
         The same-tab submission-accepted boundary is required before this
         method is called; durable fresh-document receipt proof intentionally
         happens only after this method returns. It never types or submits
-        another user message. While Stop/Pause remains active, the same browser
-        periodically refreshes the exact authorized conversation and revalidates
-        the latest USER digest so a stale client-side generation control cannot
-        hold the browser forever. If the exact latest turn ends with ChatGPT's
+        another user message. While Stop/Pause remains active, retain the same
+        owned browser without refreshing or interrupting generation. If the exact latest turn ends with ChatGPT's
         bounded delivery-timeout card, it retries only that failed assistant
         turn before any periodic refresh can destroy the transient Retry control.
         """
         total_deadline = monotonic() + RESPONSE_TOTAL_WINDOW_SECONDS
         generation_deadline = monotonic() + RESPONSE_GENERATION_WINDOW_SECONDS
         next_heartbeat = monotonic()
-        next_active_refresh = None
         stable_idle_polls = 0
         retries = 0
         state_query_failures = 0
@@ -2228,21 +2255,6 @@ class CdpSink:
             if count != 1 or turns_after > 1:
                 raise PostSubmitUnknown("RESPONSE_SEQUENCE_DRIFT")
 
-        def wait_for_expected_turn_after_refresh() -> None:
-            deadline = monotonic() + max(self.ui_timeout, READINESS_WINDOW_SECONDS)
-            while monotonic() < deadline:
-                try:
-                    count, turns_after = self.trusted_turn_anchor_state(cdp, expected_message)
-                except Attention:
-                    sleeper(RESPONSE_POLL_SECONDS)
-                    continue
-                if count > 1 or turns_after > 1:
-                    raise PostSubmitUnknown("RESPONSE_SEQUENCE_DRIFT")
-                if count == 1:
-                    return
-                sleeper(RESPONSE_POLL_SECONDS)
-            raise PostSubmitUnknown("RESPONSE_SEQUENCE_DRIFT")
-
         emit_stage("GENERATION_WAIT")
         while monotonic() < total_deadline:
             now = monotonic()
@@ -2272,23 +2284,12 @@ class CdpSink:
                 stable_idle_polls = 0
                 if now >= generation_deadline:
                     raise PostSubmitUnknown("RESPONSE_GENERATION_TIMEOUT")
-                if next_active_refresh is None:
-                    next_active_refresh = now + RESPONSE_ACTIVE_REFRESH_SECONDS
-                if now >= next_active_refresh:
-                    self.refresh_response_observer(
-                        cdp, monotonic=monotonic, sleeper=sleeper
-                    )
-                    wait_for_expected_turn_after_refresh()
-                    next_active_refresh = monotonic() + RESPONSE_ACTIVE_REFRESH_SECONDS
-                    next_heartbeat = monotonic()
-                    continue
                 if now >= next_heartbeat:
                     emit_stage("GENERATION_ACTIVE")
                     next_heartbeat = now + RESPONSE_HEARTBEAT_SECONDS
                 sleeper(RESPONSE_POLL_SECONDS)
                 continue
 
-            next_active_refresh = None
             try:
                 editor_status, _editor_empty = self.editor_state(cdp)
             except Attention as error:
@@ -2371,10 +2372,32 @@ class CdpSink:
             emit_stage("RESPONSE_RETRY_STARTED")
             generation_deadline = monotonic() + RESPONSE_GENERATION_WINDOW_SECONDS
             next_heartbeat = monotonic()
-            next_active_refresh = None
             stable_idle_polls = 0
 
         raise PostSubmitUnknown("RESPONSE_TOTAL_TIMEOUT")
+
+    def wait_for_persisted_response(self, cdp: Any, message: str, *,
+                                    monotonic=time.monotonic, sleeper=time.sleep) -> None:
+        """Read back the same completed exchange after the mandatory fresh load.
+
+        No input, Retry, second refresh or replacement browser is permitted.
+        A remounted/loading response remains pending within this fixed bound;
+        missing/duplicated USER, login, route drift and response errors fail closed.
+        """
+        deadline = monotonic() + POST_SUBMIT_RECEIPT_WINDOW_SECONDS
+        stable = 0
+        while monotonic() < deadline:
+            try:
+                stage = self.observe_cooperative_response(cdp, message, digest(normalize_message(message)))
+            except Attention as error:
+                if str(error) != "RESPONSE_USER_DOCUMENT_NOT_HYDRATED":
+                    raise
+                stage = "RESPONSE_PENDING"
+            stable = stable + 1 if stage == "RESPONSE_COMPLETE" else 0
+            if stable >= 2:
+                return
+            sleeper(min(RESPONSE_POLL_SECONDS, max(0, deadline - monotonic())))
+        raise PostSubmitUnknown("RESPONSE_PERSISTENCE_UNPROVEN")
 
     def reconcile_persisted_receipt(
         self,
@@ -2923,15 +2946,14 @@ class CdpSink:
                             cdp, prior_message_digests, expected_digest, message
                         )
                         # Preserve the same owned browser/profile/conversation
-                        # throughout the assistant lifecycle. Timeout Retry stays in
-                        # place, while a long-lived active Stop/Pause state may receive
-                        # bounded same-target refreshes so stale client UI cannot wedge
-                        # completion. No fresh browser or USER re-submit is permitted.
+                        # throughout generation; do not refresh while Stop/Pause
+                        # remains active. No fresh browser or USER re-submit.
                         self.wait_for_response_completion(cdp, message)
                         # Only after deterministic assistant completion is it safe
                         # to replace this document.  The fresh load proves the USER
                         # turn persisted independently of the sender's optimistic DOM.
-                        self.durable_receipt_round_trip(cdp)
+                        self.durable_receipt_round_trip(cdp, completed_response=True)
+                        self.wait_for_persisted_response(cdp, message)
                         return self.confirm_exact_receipt(
                             cdp,
                             prior_message_digests,

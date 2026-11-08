@@ -644,6 +644,25 @@ fn task_diagnostics_are_closed_content_free_and_cannot_be_execution_receipts() {
         assert!(task_response_diagnostics(&row).is_none());
         assert!(sanitized_rows(&row).is_empty());
     }
+    let mut classified = value.clone();
+    classified["assistantHints"]["schemaVersion"] = serde_json::json!(2);
+    classified["assistantHints"]["scanTruncated"] = serde_json::json!(false);
+    classified["assistantHints"]["knownCodes"] =
+        serde_json::json!(["WEB_TASK_CACHED_ARGUMENTS_INVALID", "INVALID_ARGUMENT"]);
+    classified["assistantHints"]["refusalCategories"] = serde_json::json!(["DISPATCH_REJECTED"]);
+    assert_eq!(
+        task_response_diagnostics(&format!("PROBE:TASK:{classified}")),
+        Some(classified.clone())
+    );
+    for replacement in [
+        serde_json::json!(["PRIVATE_BODY"]),
+        serde_json::json!(["DISPATCH_REJECTED", "DISPATCH_REJECTED"]),
+        serde_json::json!("DISPATCH_REJECTED"),
+    ] {
+        let mut invalid = classified.clone();
+        invalid["assistantHints"]["refusalCategories"] = replacement;
+        assert!(sanitized_rows(&format!("PROBE:TASK:{invalid}")).is_empty());
+    }
     let mut changed = value;
     changed["toolDiagnostics"]["callMarkers"] = serde_json::json!(65);
     assert!(task_response_diagnostics(&format!("PROBE:TASK:{changed}")).is_none());

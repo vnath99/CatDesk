@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Await the single requested redacted explanation from the new post-clarification response. The original hash domains are reconciled, the same-task clarification is SENT/COMPLETE, and the original job remains READY without an attempt. Do not replay any completed message, invent a new grant/task, infer client tool availability or start later gates. The installed full-response snapshot limitation remains separate.",
+  "next": "Build the separately qualified source observer and perform one read-only inspection of the already-delivered rejection. Keep the original dispatch closed, with no manual response relay, send, grant replacement or changed binding. Installed acceptance requires the existing reviewed Wake package/broker authority; provisioning alone does not open its unfinished transaction gate.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -495,5 +495,92 @@
         "protectedAuthorityChanged": false
       }
     ]
+  },
+  "automaticResponseRecovery": {
+    "observedUtc": "2026-11-08T20:41:03.892841+00:00",
+    "baselineCommit": "40e97de44de0ffcf2a851ea5fa5e347ead4265aa",
+    "status": "TESTED_SOURCE_NOT_INSTALLED",
+    "installedAdapter": "dev.84",
+    "installedSourceSnapshot": "UNSUPPORTED",
+    "installedObserveResponse": "UNSUPPORTED",
+    "sourceObservation": "EXACT_SENT_EXCHANGE_CLOSED_CLASSIFICATION_V2",
+    "taskAttribution": "EXISTING_WORK_LEDGER_SOURCE_EVENT_ASSIGNMENT_WITH_GUARDED_READBACK",
+    "newErrorCodes": [
+      "WEB_TASK_CACHED_ARGUMENTS_INVALID",
+      "INVALID_ARGUMENT",
+      "UNAUTHORIZED",
+      "WEB_TASK_REQUEST_INVALID",
+      "WEB_TASK_BINDING_CHANGED"
+    ],
+    "refusalCategories": [
+      "IDENTITY_MISMATCH",
+      "TOOL_UNAVAILABLE",
+      "CONTEXT_UNAVAILABLE",
+      "AUTHORIZATION_REQUIRED",
+      "DISPATCH_REJECTED"
+    ],
+    "assistantHintsAreNativeExecutionProof": false,
+    "bodyScanMaximumCharacters": 32768,
+    "scanTruncationExplicit": true,
+    "rawResponseOrPrivatePayloadExported": false,
+    "legacyDiagnosticV1Accepted": true,
+    "senderLifecycle": "SAME_OWNED_BROWSER_GENERATION_IDLE_GUARDED_REFRESH_TWO_PERSISTED_COMPLETE_READS",
+    "cooperativeSendWaitsForResponse": true,
+    "unknownSubmissionReplayAllowed": false,
+    "cachedRejection": {
+      "phase": "CACHED_ENVELOPE_VALIDATION",
+      "legacyPreciseRejectedField": "UNRECORDED",
+      "nativeExecutionAttempted": false,
+      "originalQueueState": "READY",
+      "originalCallState": "CLOSED_PENDING_ORIGINAL_WIRE_INVARIANT",
+      "originalAssignmentAndCapsuleMatch": true,
+      "journalAbsent": true,
+      "worktreeClean": true,
+      "validationPolicyChanged": false,
+      "newRejectionsIncludeClosedInvariant": true,
+      "retryAuthorized": false
+    },
+    "tests": {
+      "dom": 77,
+      "persistence": 7,
+      "bridge": 126,
+      "adapter": 47,
+      "probe": 36,
+      "nativeReadiness": 17,
+      "nativeResponse": 5,
+      "webCli": 43,
+      "ledger": 6,
+      "cachedTransport": 4,
+      "privateContext": 16,
+      "focusedTotal": 384,
+      "strictRootAndWakeAllTargetsClippy": "PASS",
+      "format": "PASS"
+    },
+    "retainedFailures": [
+      "LEGACY_MOCKS_UPDATED_FOR_NEW_COMPLETION_AND_REFRESH_CONTRACT",
+      "ERROR_ENVELOPE_SIZE_LINT_CORRECTED_BY_BOXING_ERROR_WITHOUT_CHANGING_WIRE_FORMAT",
+      "READONLY_RECONCILIATION_TEST_SELECTOR_CORRECTED_TO_DERIVE_ORIGINAL_SOURCE_EVENT"
+    ],
+    "preservationPins": 1069,
+    "preservationMismatches": 0,
+    "installationGate": {
+      "code": "WAKE_INSTALL_BROKER_UNPROVISIONED",
+      "servicePresent": false,
+      "fixedImagePresent": false,
+      "protectedNamespacePresent": false,
+      "provisioningAloneSufficient": false,
+      "serviceTransactionGate": "WAKE_BROKER_TRANSACTION_GATES_UNAVAILABLE",
+      "prerequisites": [
+        "INDEPENDENT_REVIEWED_PACKAGE_AND_MIGRATION_AUTHORITY",
+        "EXISTING_BROKER_TRANSACTION_ADMISSION_AND_SIGNED_PROTECTED_PROVISIONING"
+      ],
+      "reference": "docs/orchestrator/tickets/T-0485_WAKE_PROTECTED_INSTALL_BROKER.md"
+    },
+    "liveReadOnlyObservation": "NOT_RUN_FOR_THIS_SOURCE_YET",
+    "installedEndToEndAcceptance": "BLOCKED_NOT_CLAIMED",
+    "messagesResent": 0,
+    "nativeDispatchRetried": false,
+    "bindingChanges": 0,
+    "runtimeStarts": 0
   }
 }

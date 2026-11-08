@@ -1145,12 +1145,31 @@ fn inspect_review_response(
     )?;
     let target =
         catdesk_wake::protocol::Target::new(key.target_generation, key.conversation_url.clone())?;
+    let delivery = wake.delivery(event_id)?.ok_or("WEB_REVIEW_EVENT_MISSING")?;
+    let source_event = delivery
+        .event
+        .wake_metadata()?
+        .map(|metadata| metadata.source_event_id)
+        .unwrap_or_else(|| delivery.event.event_id.clone());
+    let task_record =
+        crate::web_work_state::WorkLedger::record_for_event(workspace, project, &source_event)?;
+    if task_record
+        .as_ref()
+        .is_some_and(|record| record.target != target)
+    {
+        return Err("WEB_REVIEW_TASK_BINDING_CHANGED".into());
+    }
     let guard = || {
         prepared
             .revalidate_registration()
             .map_err(|_| "WEB_REVIEW_PROJECT_CHANGED")?;
         if paired_key(workspace, project)? != key {
             return Err("WEB_REVIEW_TARGET_CHANGED".into());
+        }
+        if crate::web_work_state::WorkLedger::record_for_event(workspace, project, &source_event)?
+            != task_record
+        {
+            return Err("WEB_REVIEW_TASK_BINDING_CHANGED".into());
         }
         lease.check_target(&target)
     };
@@ -1160,6 +1179,17 @@ fn inspect_review_response(
     )?;
     guard()?;
     value["action"] = json!("web_review_response_inspect");
+    if crate::web_work_state::WorkLedger::record_for_event(workspace, project, &source_event)?
+        != task_record
+    {
+        return Err("WEB_REVIEW_TASK_BINDING_CHANGED".into());
+    }
+    value["taskAttribution"] = json!(task_record.and_then(|record| {
+        record.task_assignment.map(|assignment|
+        json!({"projectId":project,"requestId":record.request_id,"sourceEventId":record.event_id,
+            "taskId":assignment.task_id,"assignmentSha256":assignment.assignment_sha256,
+            "scopeSha256":assignment.scope_sha256,"executionVerified":false}))
+    }));
     value["eventVerified"] = json!(false);
     value["reviewAuthorityGranted"] = json!(false);
     Ok(value)
