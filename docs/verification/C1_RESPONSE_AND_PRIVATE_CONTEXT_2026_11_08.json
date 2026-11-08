@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Readback and its passive timer are recovered; never replay the SENT clarification. Next qualify the affected Web caller app/tool availability and retained original context through supported bounded read-only diagnostics, keeping server catalog, client scope and protected promotion separate. The original native task/grant/key stay unchanged and READY. Installed autonomous lifecycle acceptance still requires the approved signed/broker upgrade path. No new manual relay, login, recurring automation or later milestone is authorized by this checkpoint.",
+  "next": "Use the matched controller to inspect the same already-completed assistant turn once with the narrower missing-subject classifier. Preserve the SENT receipt, COMPLETE timer, native READY state and original grant. Distinguish unavailable tool from unavailable nativeCall/context/key before choosing any recovery; do not create a plugin, refresh settings, send or dispatch.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -1064,5 +1064,49 @@
     "affectedWebCallerCatalogAndContextAvailability": "NOT_INDEPENDENTLY_ESTABLISHED",
     "originalCachedArgumentRefusal": "PRE_EXECUTION_PRECISE_OLD_FIELD_UNRECORDED",
     "operatorResponseInspectionOrSignIn": "NOT_REQUIRED"
+  },
+  "callerRefusalSubjectDiagnostics": {
+    "observedUtc": "2026-11-08T22:41:38.483233+00:00",
+    "status": "TESTED_SOURCE_SAME_TURN_READ_PENDING",
+    "schemaVersion": 3,
+    "compatiblePreviousVersions": [
+      1,
+      2
+    ],
+    "allowedSubjects": [
+      "RUN_COMMAND",
+      "CENTRAL_TASK_TOOL",
+      "NATIVE_CALL",
+      "PRIVATE_CONTEXT",
+      "EXECUTION_KEY",
+      "CATDESK_APP"
+    ],
+    "scope": "EXACT_RECEIPT_BOUND_ASSISTANT_BODY_ONLY",
+    "basis": "ASSISTANT_HINTS_NOT_CATALOG_OR_EXECUTION_PROOF",
+    "clauseAndSubjectBoundaries": true,
+    "rawContentExport": false,
+    "newSendOrNativeCall": false,
+    "taskGrantKeyAndBindingsChanged": false,
+    "installedPackageChanged": false,
+    "tests": {
+      "actualDom": 79,
+      "pythonProbe": 37,
+      "nativeReadiness": 17,
+      "total": 133,
+      "strictRootAndWakeAllTargetClippy": "PASS",
+      "format": "PASS"
+    },
+    "officialGuidance": {
+      "observedUtc": "2026-11-08T22:41:38.483233+00:00",
+      "sources": [
+        "https://developers.openai.com/api/docs/guides/custom-mcp-server",
+        "https://learn.chatgpt.com/docs/migrate-custom-gpts"
+      ],
+      "pluginInvocation": "SELECT_INSTALLED_PLUGIN_FROM_COMPOSER_NOT_JUST_LITERAL_TEXT",
+      "catalogRefresh": "EXISTING_APP_DETAILS_CAN_REFRESH_TOOLS_NO_NEW_PLUGIN_ASSUMED",
+      "oneHistoricalMentionGuaranteesAllLaterTurns": "NOT_ESTABLISHED",
+      "affectedConversationCurrentCatalog": "NOT_ESTABLISHED",
+      "settingsChanged": false
+    }
   }
 }

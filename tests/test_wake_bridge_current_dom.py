@@ -793,7 +793,8 @@ class CurrentDomTests(unittest.TestCase):
         self.assertTrue(bridge.valid_task_response_hints(hints))
         self.assertEqual([hints[key] for key in ("toolUnavailable","contextUnavailable","approvalRequested","nativeDispatchMentioned")],[True]*4)
         self.assertEqual(hints['knownCodes'],['HTTP_429','WEB_ROLLOVER_PROJECT_BUSY'])
-        self.assertNotIn('PRIVATE_',json.dumps(hints))
+        self.assertNotIn('PRIVATE_KEY_MARKER',json.dumps(hints))
+        self.assertEqual(hints['unavailableSubjects'], ['RUN_COMMAND', 'PRIVATE_CONTEXT'])
         for key,value in [('knownCodes',['UNKNOWN_PRIVATE_CODE']),('knownCodes',['HTTP_429','HTTP_429']),
                           ('toolUnavailable',1),('schemaVersion',True),('text',answer)]:
             self.assertFalse(bridge.valid_task_response_hints(hints | {key:value}))
@@ -818,13 +819,35 @@ class CurrentDomTests(unittest.TestCase):
         self.sink.response_snapshot(CurrentDom(answer=body), 'exact wake message',
             require_usable_body=True, diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
         self.assertTrue(bridge.valid_task_response_hints(hints))
-        self.assertEqual(hints['schemaVersion'], 2)
+        self.assertEqual(hints['schemaVersion'], 3)
         self.assertEqual(hints['knownCodes'], ['WEB_TASK_CACHED_ARGUMENTS_INVALID', 'INVALID_ARGUMENT'])
         self.assertEqual(hints['refusalCategories'], ['DISPATCH_REJECTED'])
         self.assertNotIn('PRIVATE_CONTEXT_MARKER', json.dumps(hints))
         self.assertNotIn('f' * 64, json.dumps(hints))
         self.assertNotIn('executionKey', json.dumps(hints))
         self.assertFalse(hints['scanTruncated'])
+
+    def test_missing_call_does_not_claim_an_available_tool_is_missing(self):
+        for answer, expected in [
+            ("run_command is available, but nativeCall is not visible.", ['NATIVE_CALL']),
+            ("I don't have nativeCall. run_command is available.", ['NATIVE_CALL']),
+            ("The run_command tool is not exposed. The executionKey is missing.", ['RUN_COMMAND', 'EXECUTION_KEY']),
+            ("I have run_command and nativeCall is not available.", ['NATIVE_CALL']),
+            ("CatDesk-Local-Tunnel-v5 is unavailable. Frozen capsule is not visible.", ['PRIVATE_CONTEXT','CATDESK_APP']),
+            ("All tools and the original context are available.", []),
+        ]:
+            with self.subTest(answer=answer):
+                hints = {}
+                self.sink.response_snapshot(CurrentDom(answer=answer), 'exact wake message',
+                    require_usable_body=True, diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
+                self.assertEqual(hints['unavailableSubjects'], expected)
+                self.assertTrue(bridge.valid_task_response_hints(hints))
+                self.assertNotIn(answer, json.dumps(hints))
+                for bad in [['PRIVATE_KEY_MARKER'], ['NATIVE_CALL','NATIVE_CALL'],
+                            ['EXECUTION_KEY','RUN_COMMAND'], 'NATIVE_CALL', None]:
+                    self.assertFalse(bridge.valid_task_response_hints(hints | {'unavailableSubjects':bad}))
+                for bad in [{}, [], True, 4]:
+                    self.assertFalse(bridge.valid_task_response_hints(hints | {'schemaVersion':bad}))
 
     def test_bounded_classifier_reports_incomplete_coverage_without_exporting_long_body(self):
         hints = {}

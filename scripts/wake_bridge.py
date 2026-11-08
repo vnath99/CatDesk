@@ -195,21 +195,27 @@ TASK_RESPONSE_CODES = (
 )
 TASK_REFUSAL_CATEGORIES = ("IDENTITY_MISMATCH", "TOOL_UNAVAILABLE", "CONTEXT_UNAVAILABLE",
                            "AUTHORIZATION_REQUIRED", "DISPATCH_REJECTED")
+TASK_UNAVAILABLE_SUBJECTS = ("RUN_COMMAND", "CENTRAL_TASK_TOOL", "NATIVE_CALL",
+                             "PRIVATE_CONTEXT", "EXECUTION_KEY", "CATDESK_APP")
 
 
 def valid_task_response_hints(value: Any) -> bool:
     """Closed assistant-text hints, never tool availability or execution proof."""
     flags = ("toolUnavailable", "contextUnavailable", "approvalRequested", "nativeDispatchMentioned")
     version = value.get("schemaVersion") if isinstance(value, dict) else None
-    fields = {"schemaVersion", "basis", "knownCodes"} | ({"refusalCategories", "scanTruncated"} if version == 2 else set())
+    fields = {"schemaVersion", "basis", "knownCodes"} | ({"refusalCategories", "scanTruncated"} if version in (2, 3) else set())
+    if version == 3:
+        fields.add("unavailableSubjects")
     return (isinstance(value, dict) and set(value) == set(flags) | fields
-            and type(version) is int and version in {1, 2}
+            and type(version) is int and version in {1, 2, 3}
             and value["basis"] == "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION"
             and all(type(value[key]) is bool for key in flags)
             and isinstance(value["knownCodes"], list)
             and value["knownCodes"] == [code for code in TASK_RESPONSE_CODES if code in value["knownCodes"]]
             and (version == 1 or (type(value["scanTruncated"]) is bool and isinstance(value["refusalCategories"], list)
-                 and value["refusalCategories"] == [kind for kind in TASK_REFUSAL_CATEGORIES if kind in value["refusalCategories"]])))
+                 and value["refusalCategories"] == [kind for kind in TASK_REFUSAL_CATEGORIES if kind in value["refusalCategories"]]))
+            and (version != 3 or (isinstance(value["unavailableSubjects"], list)
+                 and value["unavailableSubjects"] == [subject for subject in TASK_UNAVAILABLE_SUBJECTS if subject in value["unavailableSubjects"]])))
 
 
 def valid_tool_marker_diagnostics(value: Any) -> bool:
@@ -1838,11 +1844,35 @@ class CdpSink:
                     AUTHORIZATION_REQUIRED:approvalRequested || hasCode('UNAUTHORIZED'),
                     DISPATCH_REJECTED:hasCode('WEB_TASK_CACHED_ARGUMENTS_INVALID') || /(?:dispatch|tool call).{{0,60}}(?:blocked|rejected|refused)/.test(text)
                 }};
-                result.push({{schemaVersion:2,basis:'ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION',
+                const subjects = [
+                    ['RUN_COMMAND', /\\brun_command\\b/g],
+                    ['CENTRAL_TASK_TOOL', /\\bcatdesk_web_task_tool\\b/g],
+                    ['NATIVE_CALL', /\\bnativecall\\b/g],
+                    ['PRIVATE_CONTEXT', /\\b(?:private[- ]context|frozen[- ](?:context|capsule))\\b/g],
+                    ['EXECUTION_KEY', /\\bexecution[-_ ]?key\\b/g],
+                    ['CATDESK_APP', /\\bcatdesk(?:[- ]local[- ]tunnel[- ]v5| (?:app|plugin|connector))\\b/g],
+                ];
+                const missing = new RegExp(unavailable+'|not visible|not in (?:this|the) context|cannot reconstruct|cannot retrieve');
+                const unavailableSubjects = new Set();
+                // Keep each subject's predicate inside its own clause and
+                // before the next subject. A nearby missing nativeCall must
+                // not turn an available run_command into a missing tool.
+                for (const clause of text.split(/[.!?;\\n,]+|\\b(?:but|however|whereas)\\b/)) {{
+                    const spans = subjects.flatMap(([subject, pattern]) =>
+                        Array.from(clause.matchAll(pattern), m => ({{subject,start:m.index,end:m.index+m[0].length}})))
+                        .sort((a,b) => a.start-b.start);
+                    spans.forEach((span,index) => {{
+                        const left = index === 0 ? clause.slice(Math.max(0,span.start-100),span.start) : '';
+                        const right = clause.slice(span.end,Math.min(span.end+100,spans[index+1]?.start ?? clause.length));
+                        if (missing.test(left) || missing.test(right)) unavailableSubjects.add(span.subject);
+                    }});
+                }}
+                result.push({{schemaVersion:3,basis:'ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION',
                     toolUnavailable,contextUnavailable,
                     approvalRequested,
                     nativeDispatchMentioned:text.includes('native.codex.dispatch'),
                     scanTruncated:assistantBodyText.length > 32768,
+                    unavailableSubjects:{json.dumps(TASK_UNAVAILABLE_SUBJECTS)}.filter(subject => unavailableSubjects.has(subject)),
                     knownCodes:known.filter(hasCode),
                     refusalCategories:{json.dumps(TASK_REFUSAL_CATEGORIES)}.filter(kind => refusals[kind])}});
             }}

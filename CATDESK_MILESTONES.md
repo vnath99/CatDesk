@@ -8519,3 +8519,30 @@ approved signed-package/broker admission chain is still required; its precise
 refusals are recorded above once. No new terminal, sign-in or operator response
 inspection is requested. All failed attempts, predecessor histories and
 receipts remain preserved. No later milestone or recurring automation began.
+
+
+## 2026-11-08T22:41:38.483233+00:00 — distinguish missing caller tools from missing frozen context
+
+The previous goal turn made authoritative progress: the same original USER
+receipt was recovered and its task-attributed response timer is COMPLETE.
+The task itself remains READY without native execution. This follow-up narrows
+the existing content-free response classifier, rather than repeat a sender or
+claim an unavailable tool from broad nearby words. Schema 3 emits only six
+fixed missing-subject labels. Clause and subject boundaries distinguish an
+available run_command from an unavailable nativeCall. Exact response/receipt/
+project/task/generation checks remain, as do the scan limit and no raw text/key
+export. Native/Python validators preserve schemas 1/2, reject private/duplicate/
+reordered subjects and refuse unknown fields. 133 targeted tests pass (79
+actual DOM, 37 probe and 17 native readiness), plus strict root/Wake all-target
+Clippy and formatting. Next is one changed-parser read of the completed turn,
+not another USER or native call. No binding, authorization or install changes.
+
+Official OpenAI guidance describes choosing the installed plugin from the
+composer and refreshing an existing app's tool catalog. It does not establish
+that one historical mention guarantees availability for every later turn.
+CatDesk's literal mention bytes are not independent proof of composer selection
+or client tool visibility. No settings refresh or replacement plugin is being
+performed. Server publication, client invocation/scope and protected promotion
+remain separate; the affected Web conversation's current catalog is unverified.
+Sources: [custom MCP server](https://developers.openai.com/api/docs/guides/custom-mcp-server),
+[plugin selection](https://learn.chatgpt.com/docs/migrate-custom-gpts).

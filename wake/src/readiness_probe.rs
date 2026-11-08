@@ -684,6 +684,27 @@ fn task_diagnostics_are_closed_content_free_and_cannot_be_execution_receipts() {
         assert!(sanitized_rows(&format!("PROBE:TASK:{invalid}")).is_empty());
     }
     let mut changed = value;
+    let mut scoped = classified.clone();
+    scoped["assistantHints"]["schemaVersion"] = serde_json::json!(3);
+    scoped["assistantHints"]["unavailableSubjects"] =
+        serde_json::json!(["NATIVE_CALL", "EXECUTION_KEY"]);
+    assert_eq!(
+        task_response_diagnostics(&format!("PROBE:TASK:{scoped}")),
+        Some(scoped.clone())
+    );
+    for invalid in [
+        serde_json::json!(["PRIVATE_VALUE"]),
+        serde_json::json!(["NATIVE_CALL", "NATIVE_CALL"]),
+        serde_json::json!(["EXECUTION_KEY", "RUN_COMMAND"]),
+        serde_json::json!(true),
+    ] {
+        let mut bad = scoped.clone();
+        bad["assistantHints"]["unavailableSubjects"] = invalid;
+        assert!(sanitized_rows(&format!("PROBE:TASK:{bad}")).is_empty());
+    }
+    let mut bad = scoped;
+    bad["assistantHints"]["rawText"] = serde_json::json!("PRIVATE_BODY");
+    assert!(sanitized_rows(&format!("PROBE:TASK:{bad}")).is_empty());
     changed["toolDiagnostics"]["callMarkers"] = serde_json::json!(65);
     assert!(task_response_diagnostics(&format!("PROBE:TASK:{changed}")).is_none());
 }
