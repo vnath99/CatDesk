@@ -1288,3 +1288,48 @@ all-target Clippy and formatting. Malformed/uppercase/truncated/foreign receipt
 IDs are rejected and a semantic receipt survives the sanitizer. Next is one
 changed-parser observation of the same pending event, never another message.
 Installed dev.84, protected release authority and C1 remain unchanged.
+
+
+## 2026-11-08T22:24:28.390113+00:00 — automatic task refusal readback — LIVE DEVELOPMENT PASS
+
+The corrected matching development controller recovered the original pending
+USER receipt through two fresh exact observations and the existing guarded CAS.
+The same event is now SENT and archived, with EXACT_USER_MESSAGE_APPENDED. No
+USER or native call was resent. It then observed the completed assistant turn
+and automatically returned TOOL_UNAVAILABLE and CONTEXT_UNAVAILABLE, bound to
+the original task, assignment, source event, message, receipt and generation.
+No error code was captured in this new response. These are assistant refusal
+hints, not proof that the server omitted a tool, the client catalog is missing
+it, authentication failed or retained private bytes were lost. The authoritative
+native job remains READY with no attempt/receipt and no verified code edit.
+The earlier cached-envelope refusal remains a distinct known pre-admission
+failure; its original offending outer field was not retained. No identity,
+grant, key or original inner call has been rewritten.
+
+The 67.703-second monitored window used the same authenticated profile and
+stopped-host owner, made no backend/tunnel/Wake start or binding change, and
+required no human response relay. All 1,071 unrelated pins match. Both browser
+owners exited; profile/Wake process counts are zero and port 3200 is closed.
+The new receipt, archive and passive timer are validated separately before
+accepting their hashes. Earlier timeout and failed receipt attempts remain.
+
+SOURCE FOLLOW-UP: the existing response-reobservation journal now selects the
+same native read-only owner for narrow task-context continuations as it already
+does for ordinary invitations. Its original witness, timer CAS, cancellation,
+changed-target and sibling-isolation tests remain; no response retry or task
+completion authority is added. A receipt-commit lock-order correction uses the
+prepared registry/ledger snapshot and Store target CAS instead of reacquiring
+the global target mutex under the registry lock. 60 focused tests pass (16
+response-reobservation and 44 CLI), with strict root/Wake all-target Clippy and
+formatting. Next: finish this same event's passive timer through that existing
+journal, rather than leave the project falsely waiting on an already read turn.
+
+INSTALLED ACCEPTANCE IS NOT COMPLETE. Installed dev.84 lacks the new response
+handlers and the source sender's wait-until-idle/guarded-refresh lifecycle. Its
+protected install still requires the approved signed package and broker
+admission; current gates are WAKE_INSTALL_BROKER_UNPROVISIONED and
+WAKE_BROKER_TRANSACTION_GATES_UNAVAILABLE. No fingerprint, selected package,
+authentication, protected service or signed artifact was changed. A different
+terminal or another manual response inspection would not resolve these gates.
+No operator relay/sign-in action is pending. Source/live development evidence,
+installed qualification and actual native C1 work remain separately classified.

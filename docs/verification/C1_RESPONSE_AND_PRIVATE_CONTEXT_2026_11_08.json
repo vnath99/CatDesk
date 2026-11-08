@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Run one changed-parser, same-event fresh receipt observation. If it proves the exact USER, commit through the existing guarded CAS and read the corresponding task diagnostic. No new send/native call. Preserve the earlier unproven attempt; do not claim its hidden raw receipt was captured.",
+  "next": "Finish the same SENT task event passive timer through the existing receipt-bound reobservation journal. Do not resend. Then qualify exact Web caller tool/app and retained-context availability without assuming an assistant hint proves publication or authentication failure. Installed dev.84 reader acceptance needs the existing protected signed/broker promotion chain; C1 native coding remains incomplete.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -903,6 +903,94 @@
         "strictRootAndWakeAllTargetClippy": "PASS",
         "format": "PASS"
       }
+    },
+    "changedParserLive": {
+      "observedUtc": "2026-11-08T22:18:48.323988+00:00",
+      "sourceCommit": "f98feb4b7eccaa00089f2f96e30c076c5a3ebca6",
+      "controllerSha256": "7b400a8d5a487502790b28d1b4faa90d220280f6675d76b5e01eec1111aaf8d8",
+      "status": "LIVE_DEVELOPMENT_READBACK_PASSED_NOT_INSTALLED",
+      "elapsedSeconds": 67.703,
+      "maximumOwnerSeconds": 270,
+      "receiptEvidence": "EXACT_USER_MESSAGE_APPENDED",
+      "durablePhase": "SENT",
+      "sameOriginalEventTaskAssignmentMessageReceiptAndGeneration": true,
+      "responseStage": "RESPONSE_COMPLETE",
+      "refusalCategories": [
+        "TOOL_UNAVAILABLE",
+        "CONTEXT_UNAVAILABLE"
+      ],
+      "knownErrorCodes": [],
+      "taskDiagnostics": {
+        "assistantHints": {
+          "approvalRequested": false,
+          "basis": "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION",
+          "contextUnavailable": true,
+          "knownCodes": [],
+          "nativeDispatchMentioned": false,
+          "refusalCategories": [
+            "TOOL_UNAVAILABLE",
+            "CONTEXT_UNAVAILABLE"
+          ],
+          "scanTruncated": false,
+          "schemaVersion": 2,
+          "toolUnavailable": true
+        },
+        "toolDiagnostics": {
+          "basis": "VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT",
+          "busyMarkers": 0,
+          "callMarkers": 0,
+          "countOverflow": false,
+          "errorMarkers": 0,
+          "resultMarkers": 0,
+          "schemaVersion": 1,
+          "scope": "EXACT_USER_EXCHANGE",
+          "selectorCoverage": "KNOWN_MARKERS_ONLY"
+        }
+      },
+      "rawDraftContextKeyOrResponseExported": false,
+      "operatorRelayRequired": false,
+      "messagesResent": 0,
+      "nativeCallsIssuedByHarness": 0,
+      "nativeState": "READY",
+      "nativeAttemptPresent": false,
+      "nativeReceiptPresent": false,
+      "nativeExecutionVerified": false,
+      "backendTunnelWakeStarts": 0,
+      "bindingChanges": 0,
+      "preservationPins": 1071,
+      "preservationMismatches": 0,
+      "ownedTreeExited": true,
+      "ownedProfileAndWakeProcessesAfter": 0,
+      "port3200ListenerPresent": false
+    },
+    "remainingGates": {
+      "webTaskReadiness": "ASSISTANT_REPORTED_TOOL_AND_CONTEXT_UNAVAILABLE_NOT_CLIENT_CATALOG_PROOF",
+      "retainedPrivateContext": "LOCAL_AUTHORITATIVE_BYTES_AND_ORIGINAL_RECEIPTS_PRESERVED",
+      "nativeCoding": "NOT_EXECUTED_NO_ATTEMPT_OR_RECEIPT",
+      "originalCachedEnvelope": "PRE_EXECUTION_REFUSAL_PRECISE_OLD_FIELD_UNRECORDED",
+      "installedResponseReader": "DEV84_LACKS_RESPONSE_HANDLERS",
+      "protectedUpgrade": "EXISTING_APPROVED_SIGNED_PACKAGE_AND_BROKER_ADMISSION_REQUIRED",
+      "installRefusal": "WAKE_INSTALL_BROKER_UNPROVISIONED",
+      "brokerTransaction": "WAKE_BROKER_TRANSACTION_GATES_UNAVAILABLE",
+      "operatorRelayOrNewSignInRequired": false,
+      "sourceSenderWaitAndRefresh": "TESTED_SOURCE_NOT_INSTALLED_ACCEPTANCE",
+      "laterMilestones": "NOT_STARTED"
+    }
+  },
+  "taskResponseTimerRecovery": {
+    "observedUtc": "2026-11-08T22:24:28.390113+00:00",
+    "status": "TESTED_SOURCE_LIVE_TIMER_COMMIT_PENDING",
+    "existingCommand": "operator web review reobserve --project-id PROJECT --event-id EXISTING_EVENT",
+    "sameReceiptBoundNativeReadinessOwnerForTaskContinuation": true,
+    "existingJournalAndExactTimerCas": true,
+    "newSendOrExecutionAuthority": false,
+    "registryCommitAvoidsGlobalTargetMutexInversion": true,
+    "tests": {
+      "responseReobservation": 16,
+      "cli": 44,
+      "total": 60,
+      "strictRootAndWakeAllTargetClippy": "PASS",
+      "format": "PASS"
     }
   }
 }

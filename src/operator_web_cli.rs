@@ -1251,7 +1251,25 @@ fn inspect_review_response(
             )
             .map_err(|_| "WEB_REVIEW_PROJECT_CHANGED")?;
             registry.with_registration_lock(|| {
-                guard()?;
+                // Never reacquire the global paired-target mutex under the
+                // registration lock. The prepared registry snapshot and the
+                // Store's target CAS fence the same binding without inversion.
+                prepared
+                    .revalidate_registration()
+                    .map_err(|_| "WEB_REVIEW_PROJECT_CHANGED")?;
+                if prepared.scope().project.chatgpt_target_url.as_deref()
+                    != Some(target.url.as_str())
+                    || prepared.scope().project.chatgpt_target_sha256.as_deref()
+                        != Some(target.digest.as_str())
+                    || crate::web_work_state::WorkLedger::record_for_event(
+                        workspace,
+                        project,
+                        &source_event,
+                    )? != task_record
+                {
+                    return Err("WEB_REVIEW_TASK_BINDING_CHANGED".into());
+                }
+                lease.check_target(&target)?;
                 let sent = wake.reconcile_task_continuation_sent_expected(
                     event_id,
                     receipt.clone(),

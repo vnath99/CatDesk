@@ -2,6 +2,37 @@
 use super::*;
 use serde_json::{Value, json};
 
+fn uses_readiness_reader(event: &crate::protocol::Event) -> Result<bool> {
+    let exact_hash = |value: &str| {
+        value.len() == 64
+            && value
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    };
+    let ordinary = event.audit_references.is_empty()
+        && event
+            .event_id
+            .strip_prefix("web-work-")
+            .is_some_and(exact_hash);
+    let continuation = event
+        .event_id
+        .strip_prefix("wake-intent-")
+        .is_some_and(exact_hash)
+        && event.audit_references.len() == 5
+        && event.wake_metadata()?.is_some_and(|metadata| {
+            metadata.purpose == crate::protocol::WakePurpose::NewTask
+                && metadata
+                    .source_event_id
+                    .strip_prefix("web-work-")
+                    .is_some_and(exact_hash)
+                && metadata
+                    .source_turn_id
+                    .strip_prefix("initial-context-")
+                    .is_some_and(exact_hash)
+        });
+    Ok(event.event_type == "engineering_attention" && (ordinary || continuation))
+}
+
 /// Re-observe one exact receipt under stopped-host ownership. The caller's
 /// commit guard holds the project registry lock only for the final Wake CAS.
 /// An old timer's automatic observation budget is deliberately not renewed.
@@ -24,18 +55,7 @@ where
         keep_running,
         commit_guard,
         |delivery, deadline, guard| {
-            if delivery.event.event_type == "engineering_attention"
-                && delivery.event.audit_references.is_empty()
-                && delivery
-                    .event
-                    .event_id
-                    .strip_prefix("web-work-")
-                    .is_some_and(|v| {
-                        v.len() == 64
-                            && v.bytes()
-                                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-                    })
-            {
+            if uses_readiness_reader(&delivery.event)? {
                 return readiness::read_sent_response_observation(
                     store, project, target, delivery, guard,
                 );
@@ -131,6 +151,44 @@ where
 mod tests {
     use super::super::scheduler::tests::{fixture, sent};
     use super::*;
+
+    #[test]
+    fn semantic_task_completion_uses_same_readonly_owner_without_promoting_other_events() {
+        let (store, _lease) = fixture("task-reobserve-reader");
+        let target = store.config().unwrap().targets["alpha"].clone();
+        let event = store
+            .produce_expected_wake(
+                "alpha",
+                "task continuation",
+                &target,
+                crate::store::WakeIntent {
+                    purpose: crate::protocol::WakePurpose::NewTask,
+                    source_event_id: &format!("web-work-{}", "a".repeat(64)),
+                    source_turn_id: &format!("initial-context-{}", "b".repeat(64)),
+                    priority: 0,
+                    ttl_seconds: 600,
+                },
+            )
+            .unwrap();
+        assert!(uses_readiness_reader(&event).unwrap());
+        for (from, to) in [
+            ("NEW_TASK", "ROLLOVER"),
+            ("web-work-", "foreign-"),
+            ("initial-context-", "foreign-"),
+        ] {
+            let mut changed = event.clone();
+            for field in &mut changed.audit_references {
+                *field = field.replace(from, to);
+            }
+            assert!(!uses_readiness_reader(&changed).unwrap());
+        }
+        let mut changed = event.clone();
+        changed.event_type = "source_review".into();
+        assert!(!uses_readiness_reader(&changed).unwrap());
+        changed = event;
+        changed.event_id = "wake-intent-unknown".into();
+        assert!(!uses_readiness_reader(&changed).unwrap());
+    }
 
     fn witness(delivery: &crate::store::Delivery, stage: &str) -> Value {
         json!({"stage":stage,"eventId":delivery.event.event_id,
