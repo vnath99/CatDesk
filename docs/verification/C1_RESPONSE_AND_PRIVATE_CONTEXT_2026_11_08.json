@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Build the qualified durable-submit handoff controller separately, then deliver one original continuation with the existing authenticated serving owners. Independently verify actual native edits, tests and task-specific Wake. Do not replay the SENT invitation or SENT private context.",
+  "next": "Read the exact completed continuation assistant explanation through a supported capability or the single pending operator summary. Native dispatch was not observed; its cause is not established. Do not resend the completed continuation, invitation or private context. Preserve the READY native job and exact grant. C1 remains incomplete; no later gates started.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -192,10 +192,10 @@
     "contextStateTestsPassed": 16,
     "strictRootClippy": "PASS",
     "formatting": "PASS",
-    "sourceOnly": true,
-    "queued": false,
-    "sent": false,
-    "nativeExecution": "NOT_RUN"
+    "sourceOnly": false,
+    "queued": true,
+    "sent": true,
+    "nativeExecution": "NOT_RUN_NO_WEB_NATIVE_ATTEMPT"
   },
   "continuationLeaseHandoff": {
     "observedUtc": "2026-11-08T18:14:37.480109+00:00",
@@ -217,10 +217,58 @@
     "strictRootAndWakeAllTargetClippy": "PASS",
     "formatting": "PASS",
     "sourceQualification": "PASS",
-    "liveQualification": "NOT_RUN",
+    "liveQualification": "EXACT_CONTINUATION_SENT_WITH_SUCCESSFUL_HANDOFF_NATIVE_CALLBACK_NOT_OBSERVED",
     "messagesSent": 0,
     "nativeTasksExecuted": 0,
     "newOwnersOrRegistries": 0,
     "productionOrSelectedArtifactChanges": 0
+  },
+  "liveNativeContinuation": {
+    "startedUtc": "2026-11-08T18:19:13.831821+00:00",
+    "finishedUtc": "2026-11-08T18:24:46.573607+00:00",
+    "elapsedSeconds": 332.75,
+    "maximumServingSeconds": 360,
+    "maximumBrowserSeconds": 180,
+    "sourceCommit": "ca3faf6302c14eba836e5fabb7f4919db60abb25",
+    "controllerSha256": "b5607541b3a88acb77ee01c362eebbd3646320e08f13cb90f0f16771e05b8499",
+    "installedServingSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "existingFiniteSupervisorStates": [
+      "RECOVERED",
+      "MONITORING_COMPLETE"
+    ],
+    "authenticationStatusCodes": [
+      401,
+      401,
+      200
+    ],
+    "localToolCatalogCount": 102,
+    "centralTaskToolInLocalCatalog": true,
+    "clientToolVisibilityEstablishedByThisRun": false,
+    "extraConnectorProbes": 0,
+    "existingOfficialOwnerReady": true,
+    "continuationSentOnce": true,
+    "exactContinuationReceiptVerified": true,
+    "adapterResponseTimer": "COMPLETE",
+    "independentAssistantBodyRead": "UNAVAILABLE_INSTALLED_SNAPSHOT_CAPABILITY_MISSING",
+    "nativeQueueState": "READY",
+    "nativeAttemptPresent": false,
+    "nativeReceiptPresent": false,
+    "nativeChangedTrackedFileCount": 0,
+    "nativeCodingAcceptance": "NOT_PASSED_NO_NATIVE_EXECUTION",
+    "originalInvitationResent": false,
+    "privateContextResent": false,
+    "localNativeDispatchFallback": false,
+    "newTunnels": 0,
+    "authenticationChanges": 0,
+    "bindingChanges": 0,
+    "recurringStarts": 0,
+    "unrelatedPreservationPins": 1059,
+    "preservationMismatches": 0,
+    "backendStopped": true,
+    "officialOwnerStopped": true,
+    "officialProfilePreserved": true,
+    "installedProfileProcessMatches": 0,
+    "wakeHostProcessMatches": 0,
+    "port3200ListenerPresent": false
   }
 }
