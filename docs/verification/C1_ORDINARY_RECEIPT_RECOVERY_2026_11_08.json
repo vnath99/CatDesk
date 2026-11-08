@@ -66,12 +66,43 @@
   },
   "acceptance": {
     "source": "TESTED_SOURCE",
-    "separateController": "NOT_BUILT_YET",
-    "liveReceiptReconciliation": "NOT_RUN",
+    "separateController": "BUILT_NOT_SELECTED_NOT_INSTALLED",
+    "liveReceiptReconciliation": "LIVE_QUALIFIED_CONTROLLED_ORIGINAL_REQUEST",
     "assistantBodyAcknowledgment": "NOT_VERIFIED",
     "nativeEditTestWakeCycle": "NOT_RUN",
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "After final qualification and exact-source build, invoke receipt-only reconciliation once for the retained original SUBMITTING request; do not submit another USER message."
+  "next": "Verify the exact assistant acknowledgment without another USER submission; then qualify the existing assigned-task context/grant delivery and original native coding lane. Installed dev84 private-context/cooperative reader capabilities remain separate from this qualified controller.",
+  "liveReceiptReconciliation": {
+    "startedUtc": "2026-11-08T16:57:55.083230+00:00",
+    "finishedUtc": "2026-11-08T16:58:30.199354+00:00",
+    "elapsedSeconds": 35.078,
+    "sourceCommit": "7c43e5aa042c7c585b7153ad6b9055bde087cb5a",
+    "controllerSha256": "1e7559f4a56eb48e773e5d4eb8358e131665713b6de238e4d15e0ee1fdfecf4f",
+    "messagesSent": 0,
+    "assistantRetries": 0,
+    "exactReceiptVerified": true,
+    "archiveVerified": true,
+    "durablePhase": "SENT",
+    "responseState": "OBSERVING",
+    "unrelatedPreservationPins": 1050,
+    "preservationMismatches": 0,
+    "installedProfileProcessMatches": 0,
+    "wakeHostProcessMatches": 0,
+    "port3200ListenerPresent": false,
+    "ownedTreeExitProved": true,
+    "productionChanges": 0,
+    "selectedPackageChanges": 0,
+    "projectBindingsChanged": 0
+  },
+  "separateControllerBuild": {
+    "sourceCommit": "7c43e5aa042c7c585b7153ad6b9055bde087cb5a",
+    "controllerSha256": "1e7559f4a56eb48e773e5d4eb8358e131665713b6de238e4d15e0ee1fdfecf4f",
+    "elapsedSeconds": 47.437,
+    "preservationPins": 1052,
+    "preservationMismatches": 0,
+    "installed": false,
+    "selected": false
+  }
 }
