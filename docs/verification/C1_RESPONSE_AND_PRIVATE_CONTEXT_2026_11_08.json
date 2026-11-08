@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Await the single pending redacted assistant explanation. Exact completed exchange and source-controller diagnostics are live-qualified, but no known tool markers or blocker hints were found. Do not infer tool absence,429,authentication or a native failure. Native task remains READY without an attempt; do not resend any SENT message or create an equivalent request.",
+  "next": "Build the qualified identity-correction controller, freeze one original-task clarification after native no-effect proof, then attempt it once in bounded existing authenticated serving owners. Never replay the prior SENT messages or create a replacement task/grant. Independently verify any actual native edits, tests and task-specific Wake before claiming C1.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -354,5 +354,40 @@
     },
     "interpretation": "EXACT_COMPLETED_RESPONSE_VERIFIED_CONTENT_FREE_HINTS_INCONCLUSIVE_NO_EXECUTION_PROOF",
     "pendingOperatorInput": "ONE_REDACTED_SUMMARY_OF_THE_SELECTED_ASSISTANT_EXPLANATION_ALREADY_REQUESTED"
+  },
+  "contextIdentityReconciliation": {
+    "observedUtc": "2026-11-08T19:45:22.114296+00:00",
+    "operatorReportedRefusal": "DISPATCH_BLOCKED_PRIVATE_CONTEXT_SHA256_MISMATCH",
+    "dispatchAttempted": false,
+    "independentFrozenRecordChecksPassed": 19,
+    "preservationPins": 1064,
+    "preservationMismatches": 0,
+    "cause": "FULL_PRIVATE_CONTEXT_AND_DELIVERED_USER_DIGEST_DOMAINS_NOT_EXPLICITLY_LINKED",
+    "frozenAssignmentUnchanged": true,
+    "originalGrantKeyAndNativeSelectionUnchanged": true,
+    "replacementHashesAccepted": false,
+    "historicalSentAndUnknownMessagesPreserved": true,
+    "newNativeContinuationLabelsAllThreeDomains": true,
+    "clarificationUsesExistingPrivateContextStoreAndSemanticQueue": true,
+    "newTaskOrGrantCreated": false,
+    "readyWithoutAttemptReceiptOrJournalRequired": true,
+    "preSubmitIdentityAndNativeStateRechecked": true,
+    "sameDurableSubmitLeaseHandoff": true,
+    "sameStableNativeCallAndQueueAdmission": true,
+    "clarificationContextAccountingIncluded": true,
+    "focusedTests": {
+      "identity": 3,
+      "privateContext": 16,
+      "webCli": 43,
+      "centralWork": 6,
+      "total": 68
+    },
+    "strictRootAllTargetClippy": "PASS",
+    "formatting": "PASS",
+    "separateBuild": "NOT_RUN",
+    "liveClarification": "NOT_RUN",
+    "nativeCoding": "NOT_RUN",
+    "operatorActionRequired": false,
+    "installedFullSnapshotCapability": "STILL_UNAVAILABLE_UNCHANGED"
   }
 }

@@ -6,6 +6,8 @@ use catdesk_wake::{
     runtime::{TaskContextOperation, TaskContextSubmission},
     store::{Receipt, atomic},
 };
+#[path = "project_task_context_identity.rs"]
+mod identity;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum InitialContextAction {
@@ -13,6 +15,8 @@ pub(crate) enum InitialContextAction {
     Reconcile,
     Continue,
     DeliverContinuation,
+    ClarifyIdentity,
+    DeliverClarification,
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -348,6 +352,7 @@ fn account_sent_context(
     record: &crate::web_work_state::WorkRecord,
     target: &Target,
     wake: &catdesk_wake::store::Store,
+    selected_event: Option<&str>,
 ) -> Result<Value, String> {
     use crate::web_conversation_context::{ConversationKey, WebContextStore};
     let (reference, payload, private) = load(scope, record, target)?;
@@ -410,8 +415,32 @@ fn account_sent_context(
         }
         _ => "NOT_SENT",
     };
-    Ok(json!({"initial":initial,"continuation":continuation,
-        "rawTextPersisted":false,"browserStarted":false,"providerContextExact":false}))
+    let mut output = json!({"initial":initial,"continuation":continuation,
+        "rawTextPersisted":false,"browserStarted":false,"providerContextExact":false});
+    if let Some(selected) = selected_event.filter(|selected| *selected != id)
+        && let Some(delivery) = wake.delivery(selected)?
+        && delivery.phase == catdesk_wake::store::Phase::Sent
+        && delivery.target == *target
+        && delivery.event.project_id == scope.project.project_id
+        && delivery.event.wake_metadata()?.is_some_and(|m| {
+            m.purpose == catdesk_wake::protocol::WakePurpose::NewTask
+                && m.source_event_id == record.event_id
+        })
+    {
+        output["selectedContinuation"] = json!(meter_status(
+            meter
+                .record_delivered_user(
+                    &key,
+                    &delivery.event.message,
+                    delivery
+                        .receipt
+                        .as_ref()
+                        .ok_or("WEB_TASK_CONTEXT_RECEIPT_REQUIRED")?
+                )
+                .map(|_| ())
+        ));
+    }
+    Ok(output)
 }
 
 fn with_context_accounting(
@@ -421,11 +450,14 @@ fn with_context_accounting(
     target: &Target,
     store: &catdesk_wake::store::Store,
 ) -> Value {
-    output["contextAccounting"] = account_sent_context(scope, record, target, store)
-        .unwrap_or_else(|reason| {
-            json!({"initial":meter_status(Err(reason)),
+    let selected = output["eventId"].as_str().map(str::to_owned);
+    output["contextAccounting"] =
+        account_sent_context(scope, record, target, store, selected.as_deref()).unwrap_or_else(
+            |reason| {
+                json!({"initial":meter_status(Err(reason)),
             "continuation":"UNAVAILABLE","deliveryOutcomeChanged":false})
-        });
+            },
+        );
     output
 }
 
@@ -619,13 +651,26 @@ pub(crate) fn run_initial_context_handoff(
 ) -> Result<Value, String> {
     let root = crate::wake_protocol_client::wake_root_for_workspace(&scope.control_workspace)?;
     let store = catdesk_wake::store::Store::open(&root)?;
-    if matches!(
+    let clarification = matches!(
         action,
-        InitialContextAction::Continue | InitialContextAction::DeliverContinuation
-    ) {
+        InitialContextAction::ClarifyIdentity | InitialContextAction::DeliverClarification
+    );
+    if clarification
+        || matches!(
+            action,
+            InitialContextAction::Continue | InitialContextAction::DeliverContinuation
+        )
+    {
         keep_running()?;
-        let queued = queue_continuation(scope, record, target, &store)?;
-        if action == InitialContextAction::Continue {
+        let queued = if clarification {
+            identity::queue(scope, record, target, &store)?
+        } else {
+            queue_continuation(scope, record, target, &store)?
+        };
+        if matches!(
+            action,
+            InitialContextAction::Continue | InitialContextAction::ClarifyIdentity
+        ) {
             return Ok(queued);
         }
         let event_id = queued["eventId"]
@@ -643,6 +688,9 @@ pub(crate) fn run_initial_context_handoff(
         let mut before = |actual: &catdesk_wake::protocol::Event, actual_target: &Target| {
             keep_running()?;
             load(scope, record, target)?;
+            if clarification {
+                identity::validate(scope, record, target, &store)?;
+            }
             if actual != &event || actual_target != target {
                 return Err("WEB_TASK_CONTEXT_CONTINUATION_CHANGED".into());
             }
@@ -657,6 +705,9 @@ pub(crate) fn run_initial_context_handoff(
                 .ok_or("WEB_TASK_CONTEXT_HANDOFF_UNPROVEN")?;
             store.require_submitting_witness(&delivery)?;
             load(scope, record, target)?;
+            if clarification {
+                identity::validate(scope, record, target, &store)?;
+            }
             after_fence(actual, actual_target)
         };
         let result = catdesk_wake::runtime::run_scoped_task_continuation_handoff(
@@ -682,13 +733,19 @@ pub(crate) fn run_initial_context_handoff(
         },
     )
 }
-fn continuation_message(message_sha: &str, selection: &Value, native_only: bool) -> String {
-    if native_only {
+fn continuation_message(
+    message_sha: &str,
+    selection: &Value,
+    full_context_sha: Option<&str>,
+) -> String {
+    if let Some(full_sha) = full_context_sha {
         return format!(
-            "CatDesk assigned-task continuation for {}/{}. Use nativeCall from the private context USER SHA-256 {} already delivered here. Dispatch that frozen native task once now. Preserve its grant, stable call ID and other sessions; never replay completed/unknown calls. Report actual edits, tests and blockers.",
+            "CatDesk assigned-task continuation for {}/{}. Capsule fullPrivateContextSha256={}. deliveredUserMessageSha256={} is the USER receipt digest, a different hash domain; never compare it to fullPrivateContextSha256. assignmentSha256={}. Match the capsule's same-named full-context and assignment fields, then use its existing nativeCall once now. Preserve its grant, stable call ID and other sessions; never replay completed/unknown calls. Refuse any same-field mismatch. Report actual edits, tests and blockers.",
             selection["projectId"].as_str().unwrap_or(""),
             selection["requestId"].as_str().unwrap_or(""),
-            message_sha
+            full_sha,
+            message_sha,
+            selection["assignmentSha256"].as_str().unwrap_or("")
         );
     }
     format!(
@@ -714,10 +771,33 @@ fn queue_continuation(
     let message = continuation_message(
         &reference.message_sha256,
         &selection,
-        payload
-            .message
-            .starts_with("CatDesk private assigned-task context (native-only)."),
+        identity::capsule_full_context_digest(&payload)?.as_deref(),
     );
+    let id = continuation_identity(&reference, record)?;
+    if let Some(prior) = store.delivery(&id)? {
+        let metadata = prior
+            .event
+            .wake_metadata()?
+            .ok_or("WEB_TASK_CONTEXT_CONTINUATION_CHANGED")?;
+        if prior.target != *target
+            || prior.event.project_id != scope.project.project_id
+            || metadata.source_event_id != record.event_id
+            || metadata.source_turn_id != format!("initial-context-{}", reference.storage_id)
+            || (prior.event.message != message
+                && prior.event.message != identity::legacy_native_message(&reference))
+        {
+            return Err("WEB_TASK_CONTEXT_CONTINUATION_CHANGED".into());
+        }
+        // Historical SENT/unknown messages keep their exact original bytes.
+        // The existing runtime still refuses their replay; clarification is explicit.
+        return Ok(
+            json!({"status":"TASK_CONTINUATION_QUEUED","projectId":scope.project.project_id,
+            "requestId":record.request_id,"taskId":reference.assignment.task_id,"eventId":id,
+            "messageSha256":prior.message_digest,"targetGeneration":target.generation,"targetSha256":target.digest,
+            "deliveryPhase":prior.phase,"queueOnly":true,"hostStarted":false,"executionKeyDisclosed":false,
+            "nativeSessionAction":"NONE","taskCompleted":false}),
+        );
+    }
     let turn = format!("initial-context-{}", reference.storage_id);
     let event = store.produce_expected_wake(
         &scope.project.project_id,
@@ -860,14 +940,17 @@ mod tests {
         let selection =
             json!({"projectId":"alpha","requestId":"original","assignmentSha256":"b".repeat(64)});
         let sha = "a".repeat(64);
-        let short = continuation_message(&sha, &selection, true);
-        assert!(short.chars().count() < 450);
+        let full_sha = "b".repeat(64);
+        let short = continuation_message(&sha, &selection, Some(&full_sha));
+        assert!(short.chars().count() < 900);
         assert!(!short.contains('\n'));
         assert!(short.contains(&sha));
+        assert!(short.contains(&format!("fullPrivateContextSha256={full_sha}")));
+        assert!(short.contains(&format!("deliveredUserMessageSha256={sha}")));
         assert!(short.contains("alpha/original"));
         assert!(short.contains("nativeCall"));
         assert!(short.contains("never replay completed/unknown"));
-        let ordinary = continuation_message(&sha, &selection, false);
+        let ordinary = continuation_message(&sha, &selection, None);
         assert!(ordinary.contains(&selection.to_string()));
         assert!(ordinary.contains(&sha));
     }
@@ -1350,7 +1433,7 @@ mod tests {
         let (scope, record, store, _) = fixture(true);
         prepare_initial_context(&scope, &record, &record.target).unwrap();
         assert_eq!(
-            account_sent_context(&scope, &record, &record.target, &store).unwrap_err(),
+            account_sent_context(&scope, &record, &record.target, &store, None).unwrap_err(),
             "WEB_TASK_CONTEXT_RECEIPT_REQUIRED"
         );
         sent(&scope, &record, &store);

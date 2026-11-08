@@ -379,7 +379,7 @@ pub(crate) async fn handle(control: &str, request: &JsonRpcRequest) -> JsonRpcRe
 }
 
 #[cfg(all(test, windows))]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::delegated::autonomy_projects::{
         AutonomousProjectRegistryV1, resolve_registered_project_from_control_root,
@@ -505,6 +505,11 @@ mod tests {
     }
     fn native_fixture(id: &str) -> Fixture {
         fixture_capabilities(id, false, true)
+    }
+
+    pub(crate) fn with_native_context_fixture<T>(read: impl FnOnce(&Path, &Value) -> T) -> T {
+        let fixture = native_fixture("alpha");
+        read(&fixture.control, &fixture.pins)
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

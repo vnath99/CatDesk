@@ -119,6 +119,12 @@ fn context_action_using(
         "context-deliver-continuation" => {
             crate::project_mcp_task::InitialContextAction::DeliverContinuation
         }
+        "context-clarify-identity" => {
+            crate::project_mcp_task::InitialContextAction::ClarifyIdentity
+        }
+        "context-deliver-clarification" => {
+            crate::project_mcp_task::InitialContextAction::DeliverClarification
+        }
         _ => return Err("WEB_TASK_CONTEXT_OPERATION_INVALID".into()),
     };
     let request = AssignmentRequest::parse(args)?;
@@ -195,6 +201,7 @@ fn context_action_using(
         if !matches!(
             action,
             crate::project_mcp_task::InitialContextAction::DeliverContinuation
+                | crate::project_mcp_task::InitialContextAction::DeliverClarification
         ) {
             return Err("WEB_TASK_CONTEXT_HANDOFF_INVALID".into());
         }
