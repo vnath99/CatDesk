@@ -186,6 +186,23 @@ def valid_response_control_diagnostics(value: Any) -> bool:
 
 TOOL_MARKER_COUNTS = ("callMarkers", "resultMarkers", "errorMarkers", "busyMarkers")
 
+TASK_RESPONSE_CODES = (
+    "HTTP_429", "WEB_WORK_ROLLOVER_PENDING", "WEB_ROLLOVER_PROJECT_BUSY",
+    "WEB_TASK_GRANT_SCOPE_MISMATCH", "WEB_TASK_NATIVE_NOT_GRANTED",
+    "PROJECT_TASK_CALL_ALREADY_COMPLETED", "PROJECT_TASK_RECOVERY_REQUIRED",
+)
+
+
+def valid_task_response_hints(value: Any) -> bool:
+    """Closed assistant-text hints, never tool availability or execution proof."""
+    flags = ("toolUnavailable", "contextUnavailable", "approvalRequested", "nativeDispatchMentioned")
+    return (isinstance(value, dict) and set(value) == set(flags) | {"schemaVersion", "basis", "knownCodes"}
+            and type(value["schemaVersion"]) is int and value["schemaVersion"] == 1
+            and value["basis"] == "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION"
+            and all(type(value[key]) is bool for key in flags)
+            and isinstance(value["knownCodes"], list)
+            and value["knownCodes"] == [code for code in TASK_RESPONSE_CODES if code in value["knownCodes"]])
+
 
 def valid_tool_marker_diagnostics(value: Any) -> bool:
     """Visible, known UI markers only; never tool arguments or execution proof."""
@@ -1516,7 +1533,8 @@ class CdpSink:
 
     def response_snapshot(self, cdp: Any, message: str, *, require_usable_body: bool = False,
                           diagnostic: dict | None = None,
-                          tool_diagnostic: dict | None = None) -> tuple[int, int, bool, bool]:
+                          tool_diagnostic: dict | None = None,
+                          execution_diagnostic: dict | None = None) -> tuple[int, int, bool, bool]:
         """Return only bounded structural signals for the latest user turn.
 
         The timeout detector is intentionally exact-text and scoped strictly
@@ -1528,6 +1546,10 @@ class CdpSink:
             tool_diagnostic.clear()
             if diagnostic is None:
                 raise ValueError("tool diagnostics require an explicit diagnostic read")
+        if execution_diagnostic is not None:
+            execution_diagnostic.clear()
+            if diagnostic is None or tool_diagnostic is None:
+                raise ValueError("task hints require explicit response and tool diagnostics")
         script = f"""(() => {{
             const timeoutText = {json.dumps("Message delivery timed out. Please try again.")};
             const retryLabel = {json.dumps("Retry")};
@@ -1535,6 +1557,7 @@ class CdpSink:
             const requireUsableBody = {str(require_usable_body).lower()};
             const includeDiagnostic = {str(diagnostic is not None).lower()};
             const includeToolDiagnostic = {str(tool_diagnostic is not None).lower()};
+            const includeExecutionDiagnostic = {str(execution_diagnostic is not None).lower()};
             const normalize = value => String(value || '').replace(/\\s+/g, ' ').trim();
             const visible = element => {{
                 if (!element) return false;
@@ -1774,13 +1797,27 @@ class CdpSink:
                     errorMarkers:Math.min(errors.length,64),busyMarkers:Math.min(busy.length,64),
                     countOverflow:[calls,results,errors,busy].some(items => items.length > 64)}});
             }}
+            if (includeExecutionDiagnostic) {{
+                const text = assistantBodyText.slice(0,32768).toLowerCase().replace(/[‘’]/g, "'");
+                // Hints from this exact assistant body only. Never return body
+                // text, unknown codes, credentials, labels or quoted payloads.
+                const unavailable = "(?:unavailable|not available|not exposed|not listed|missing|don't have|do not have|cannot access|can't access|no access)";
+                const toolUnavailable = new RegExp("(?:tool|run_command|catdesk).{{0,100}}"+unavailable+"|"+unavailable+".{{0,100}}(?:tool|run_command|catdesk)").test(text);
+                const contextUnavailable = new RegExp("(?:nativecall|private context|execution key).{{0,100}}"+unavailable+"|"+unavailable+".{{0,100}}(?:nativecall|private context|execution key)").test(text);
+                const known = {json.dumps(TASK_RESPONSE_CODES)};
+                result.push({{schemaVersion:1,basis:'ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION',
+                    toolUnavailable,contextUnavailable,
+                    approvalRequested:/(?:need|require|await|waiting for|please).{{0,60}}(?:approval|authorization|permission|approve)/.test(text),
+                    nativeDispatchMentioned:text.includes('native.codex.dispatch'),
+                    knownCodes:known.filter(code => code === 'HTTP_429' ? /(?:http|status|error)\\s*429/.test(text) : text.includes(code.toLowerCase()))}});
+            }}
             return result;
         }})()"""
         try:
             value = self.cdp_value(cdp.evaluate(script))
         except Exception as error:
             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED") from error
-        if (not isinstance(value, list) or len(value) not in {5, 7, 8} or
+        if (not isinstance(value, list) or len(value) not in {5, 7, 8, 9} or
                 value[0] not in {"ready", "missing-user", "invalid", "load-error"} or
                 not isinstance(value[1], int) or isinstance(value[1], bool) or
                 not isinstance(value[2], int) or isinstance(value[2], bool) or
@@ -1794,7 +1831,7 @@ class CdpSink:
         if diagnostic is not None:
             allowed = {"ASSISTANT_NOT_MOUNTED", "ASSISTANT_BODY_UNPROVEN",
                        "ASSISTANT_COMPLETION_ACTION_UNPROVEN", "COMPLETE"}
-            if (len(value) != (8 if tool_diagnostic is not None else 7) or
+            if (len(value) != (9 if execution_diagnostic is not None else 8 if tool_diagnostic is not None else 7) or
                     not isinstance(value[5], str) or value[5] not in allowed or
                     not valid_response_control_diagnostics(value[6])):
                 raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
@@ -1802,6 +1839,10 @@ class CdpSink:
                 if not valid_tool_marker_diagnostics(value[7]):
                     raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
                 tool_diagnostic.update(value[7])
+            if execution_diagnostic is not None:
+                if not valid_task_response_hints(value[8]):
+                    raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
+                execution_diagnostic.update(value[8])
             diagnostic["reason"] = value[5]
             diagnostic["controls"] = value[6]
         elif len(value) != 5:

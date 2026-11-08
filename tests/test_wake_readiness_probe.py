@@ -14,6 +14,51 @@ from unittest import mock
 
 
 class ReadinessProbeTests(unittest.TestCase):
+    def test_sent_continuation_diagnostics_cannot_admit_unknown_or_unreceived_delivery(self):
+        url="https://chatgpt.com/c/fixture"
+        event_id="wake-intent-"+"b"*64
+        message="frozen continuation"
+        refs=['catdesk.wake.v1:'+k+':'+v for k,v in [('purpose','NEW_TASK'),('source-event','web-work-'+'a'*64),
+            ('source-turn','initial-context-'+'c'*64),('priority','0'),('expires-utc','100')]]
+        target=dict(generation=1,url=url,digest=hashlib.sha256(url.encode()).hexdigest())
+        digest=hashlib.sha256(message.encode()).hexdigest()
+        value=dict(phase='SENT',messageDigest=digest,target=target,event=dict(eventId=event_id,projectId='alpha',
+            eventType='engineering_attention',targetGeneration=1,message=message,auditReferences=refs),
+            receipt=dict(schemaVersion=1,eventId=event_id,targetGeneration=1,targetDigest=target['digest'],
+                messageDigest=digest,sentUtc=10,evidence='EXACT_USER_MESSAGE_APPENDED'))
+        with tempfile.TemporaryDirectory() as root:
+            path=Path(root)/'deliveries'/(event_id+'.json');path.parent.mkdir()
+            def read(item,**kw):
+                path.write_text(json.dumps(item));checksum=hashlib.sha256(path.read_bytes()).hexdigest()
+                return self.probe.load_delivery_message(path,checksum,url,response_only=True,**kw)
+            with self.assertRaises(ValueError):read(value)
+            self.assertEqual(read(value,sent_diagnostics=True),value)
+            for changed in [value | {'phase':'SUBMITTING'},value | {'receipt':None},
+                value | {'event':value['event'] | {'auditReferences':refs[:-1]}},
+                value | {'event':value['event'] | {'auditReferences':[v.replace('NEW_TASK','ROLLOVER') for v in refs]}}]:
+                with self.assertRaises((ValueError,KeyError)):read(changed,sent_diagnostics=True)
+
+    def test_task_diagnostic_read_requires_two_identical_completed_samples_without_text(self):
+        delivery=dict(messageDigest='a'*64,event=dict(eventId='wake-intent-'+'b'*64,message='PRIVATE_USER'),target=dict(generation=1,digest='c'*64))
+        hints=dict(schemaVersion=1,basis='ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION',toolUnavailable=True,
+            contextUnavailable=False,approvalRequested=False,nativeDispatchMentioned=False,knownCodes=[])
+        tools=dict(schemaVersion=1,basis='VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT',scope='EXACT_USER_EXCHANGE',
+            selectorCoverage='KNOWN_MARKERS_ONLY',callMarkers=0,resultMarkers=0,errorMarkers=0,busyMarkers=0,countOverflow=False)
+        sink=mock.Mock();sink.response_observation_reason='COMPLETE';sink.response_observation_controls=None
+        sink.observe_cooperative_response.return_value='RESPONSE_COMPLETE'
+        def snapshot(*args,**kw):
+            kw['diagnostic'].update(reason='COMPLETE');kw['tool_diagnostic'].update(tools);kw['execution_diagnostic'].update(hints)
+            return (0,0,True,True)
+        sink.response_snapshot.side_effect=snapshot
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):self.probe.report_sent_response(sink,object(),delivery,sleep=lambda _:None,task_diagnostics=True)
+        self.assertIn('PROBE:TASK:',output.getvalue());self.assertNotIn('PRIVATE_',output.getvalue())
+        self.assertEqual(sink.response_snapshot.call_count,2)
+        sink.response_snapshot.side_effect=lambda *a,**k:(0,0,True,False)
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):self.probe.report_sent_response(sink,object(),delivery,sleep=lambda _:None,task_diagnostics=True)
+        self.assertEqual(output.getvalue(),'PROBE:RESPONSE_STATE:UNPROVEN\n')
+
     def test_response_observer_is_receipt_bound_stable_and_never_retries(self):
         delivery=dict(messageDigest="a"*64,event=dict(eventId="web-work-"+"b"*64,message="PRIVATE_USER"),target=dict(generation=1,digest="c"*64))
         sink=types.SimpleNamespace(observe_cooperative_response=mock.Mock(return_value="RESPONSE_COMPLETE"),response_observation_reason="COMPLETE",response_observation_controls=None)

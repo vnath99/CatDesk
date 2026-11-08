@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Read the exact completed continuation assistant explanation through a supported capability or the single pending operator summary. Native dispatch was not observed; its cause is not established. Do not resend the completed continuation, invitation or private context. Preserve the READY native job and exact grant. C1 remains incomplete; no later gates started.",
+  "next": "Build the qualified content-free diagnostic controller separately and inspect only the completed original continuation once. Preserve all SENT messages. Use its advisory hints and the existing pending operator summary to determine why no native callback occurred; do not infer client catalog,429 or execution authority from UI hints.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -270,5 +270,34 @@
     "installedProfileProcessMatches": 0,
     "wakeHostProcessMatches": 0,
     "port3200ListenerPresent": false
+  },
+  "sentTaskResponseDiagnostics": {
+    "observedUtc": "2026-11-08T18:40:23.138204+00:00",
+    "baselineCommit": "b47e3e569c7e1e93d1274223b96d1e3fb3a565ae",
+    "command": "operator web review inspect-response --project-id REGISTERED_PROJECT_ID --event-id EXACT_SENT_EVENT_ID",
+    "sameNativeReadOnlyOwner": true,
+    "exactSentReceiptTimerAndPairedTargetRequired": true,
+    "twoStableCompletedSamplesRequired": true,
+    "closedCappedToolMarkerCounts": true,
+    "closedAssistantReportedHintsOnly": true,
+    "rawTextExported": false,
+    "executionKeysExported": false,
+    "newMessagesOrRetries": 0,
+    "stateChanges": 0,
+    "protectedSnapshotOrReviewAuthorityChanged": false,
+    "reviewAuthorityGranted": false,
+    "sourceTests": {
+      "probe": 36,
+      "domScript": 74,
+      "nativeReadinessScopePrivacy": 17,
+      "webCli": 43,
+      "response": 5,
+      "reobservation": 15,
+      "total": 190
+    },
+    "strictRootAndWakeClippy": "PASS",
+    "formatting": "PASS",
+    "separateBuild": "NOT_RUN",
+    "liveObservation": "NOT_RUN"
   }
 }

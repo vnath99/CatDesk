@@ -782,6 +782,32 @@ class CurrentDomTests(unittest.TestCase):
                     diagnostic={}, tool_diagnostic=tools)
             self.assertEqual(tools,{})
 
+    def test_exact_assistant_task_hints_are_closed_and_not_execution_authority(self):
+        hints, tools = {}, {}
+        answer = "PRIVATE_KEY_MARKER. The run_command tool is not exposed. Private context is missing. Please approve. native.codex.dispatch HTTP 429 WEB_ROLLOVER_PROJECT_BUSY UNKNOWN_PRIVATE_CODE"
+        result = self.sink.response_snapshot(CurrentDom(answer=answer), "exact wake message",
+            require_usable_body=True, diagnostic={}, tool_diagnostic=tools, execution_diagnostic=hints)
+        self.assertEqual(result, (0,0,True,True))
+        self.assertTrue(bridge.valid_task_response_hints(hints))
+        self.assertEqual([hints[key] for key in ("toolUnavailable","contextUnavailable","approvalRequested","nativeDispatchMentioned")],[True]*4)
+        self.assertEqual(hints['knownCodes'],['HTTP_429','WEB_ROLLOVER_PROJECT_BUSY'])
+        self.assertNotIn('PRIVATE_',json.dumps(hints))
+        for key,value in [('knownCodes',['UNKNOWN_PRIVATE_CODE']),('knownCodes',['HTTP_429','HTTP_429']),
+                          ('toolUnavailable',1),('schemaVersion',True),('text',answer)]:
+            self.assertFalse(bridge.valid_task_response_hints(hints | {key:value}))
+        self.sink.response_snapshot(CurrentDom(answer="A usable answer."), "exact wake message",
+            diagnostic={}, tool_diagnostic=tools, execution_diagnostic=hints)
+        self.assertFalse(any(hints[key] for key in ('toolUnavailable','contextUnavailable','approvalRequested','nativeDispatchMentioned')))
+        self.assertEqual(hints['knownCodes'],[])
+
+    def test_task_hints_refuse_foreign_or_duplicate_exchange_and_reset_previous_hints(self):
+        for options in ({'duplicateUser':True},{'userText':'different request'}):
+            hints={'PRIVATE_STALE_HINT':True}
+            with self.assertRaises(bridge.PostSubmitUnknown):
+                self.sink.response_snapshot(CurrentDom(**options),"exact wake message",
+                    diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+            self.assertEqual(hints,{})
+
     def test_tool_marker_diagnostics_schema_rejects_content_or_unbounded_values(self):
         tools={}
         self.sink.response_snapshot(CurrentDom(), "exact wake message", diagnostic={}, tool_diagnostic=tools)

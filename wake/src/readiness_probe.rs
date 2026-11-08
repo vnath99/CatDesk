@@ -148,6 +148,14 @@ pub(crate) fn sent_response_observation(line: &str) -> Option<serde_json::Value>
     crate::runtime::canonical_response_observation(serde_json::from_str(text).ok()?)
 }
 
+pub(crate) fn task_response_diagnostics(line: &str) -> Option<serde_json::Value> {
+    let text = line.strip_prefix("PROBE:TASK:")?;
+    if text.len() > 2048 {
+        return None;
+    }
+    crate::runtime::canonical_task_response_diagnostics(serde_json::from_str(text).ok()?)
+}
+
 pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<String>, &'static str> {
     let mut rows = Vec::new();
     run_bounded_observed(command, timeout, &mut rows)?;
@@ -271,6 +279,9 @@ fn sanitized_rows(text: &str) -> Vec<String> {
             }
             if state.starts_with("RESPONSE:") {
                 return sent_response_observation(line).is_some();
+            }
+            if state.starts_with("TASK:") {
+                return task_response_diagnostics(line).is_some();
             }
             if let Some(reason) = state.strip_prefix("RESPONSE_STATE:") {
                 return matches!(
@@ -608,4 +619,32 @@ mod tests {
         assert!(!rows.join(" ").contains("PRIVATE_SENTINEL"));
         assert!(!rows.join(" ").contains("PRIVATE_TAB_SENTINEL"));
     }
+}
+#[test]
+fn task_diagnostics_are_closed_content_free_and_cannot_be_execution_receipts() {
+    let value = serde_json::json!({"toolDiagnostics":{"schemaVersion":1,
+            "basis":"VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT","scope":"EXACT_USER_EXCHANGE",
+            "selectorCoverage":"KNOWN_MARKERS_ONLY","callMarkers":0,"resultMarkers":0,
+            "errorMarkers":0,"busyMarkers":0,"countOverflow":false},"assistantHints":{"schemaVersion":1,
+            "basis":"ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION","toolUnavailable":true,
+            "contextUnavailable":false,"approvalRequested":false,"nativeDispatchMentioned":false,"knownCodes":["HTTP_429"]}});
+    assert_eq!(
+        task_response_diagnostics(&format!("PROBE:TASK:{value}")),
+        Some(value.clone())
+    );
+    for (field, replacement) in [
+        ("knownCodes", serde_json::json!(["PRIVATE_BODY"])),
+        ("knownCodes", serde_json::json!(["HTTP_429", "HTTP_429"])),
+        ("toolUnavailable", serde_json::json!(1)),
+        ("text", serde_json::json!("PRIVATE_KEY")),
+    ] {
+        let mut changed = value.clone();
+        changed["assistantHints"][field] = replacement;
+        let row = format!("PROBE:TASK:{changed}");
+        assert!(task_response_diagnostics(&row).is_none());
+        assert!(sanitized_rows(&row).is_empty());
+    }
+    let mut changed = value;
+    changed["toolDiagnostics"]["callMarkers"] = serde_json::json!(65);
+    assert!(task_response_diagnostics(&format!("PROBE:TASK:{changed}")).is_none());
 }

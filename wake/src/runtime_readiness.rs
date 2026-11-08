@@ -7,6 +7,27 @@ enum Mode {
     Advisory,
     Receipt,
     ResponseOwnerHeld,
+    SentDiagnostics,
+}
+
+/// Explicit content-free inspection of an exact SENT ordinary/task exchange.
+/// This never creates review/producer authority or changes a delivery/timer.
+pub fn inspect_sent_task_response_diagnostics(
+    store: &Store,
+    project: &str,
+    target: &Target,
+    event: &str,
+    keep_current: &dyn Fn() -> Result<()>,
+) -> Result<serde_json::Value> {
+    let (delivery, _) = store.sent_response_scope(project, target, event)?;
+    inspect_readiness(
+        store,
+        project,
+        target,
+        Some(&delivery),
+        Mode::SentDiagnostics,
+        keep_current,
+    )
 }
 
 #[cfg(any(windows, test))]
@@ -150,6 +171,30 @@ fn require_delivery(
             Phase::Claimed | Phase::Submitting | Phase::Attention
         ) && delivery.receipt.is_none()
     };
+    let ordinary = delivery.event.audit_references.is_empty()
+        && delivery
+            .event
+            .event_id
+            .strip_prefix("web-work-")
+            .is_some_and(exact_hash);
+    let continuation = response_only
+        && delivery
+            .event
+            .event_id
+            .strip_prefix("wake-intent-")
+            .is_some_and(exact_hash)
+        && delivery.event.wake_metadata()?.is_some_and(|metadata| {
+            metadata.purpose == crate::protocol::WakePurpose::NewTask
+                && metadata
+                    .source_event_id
+                    .strip_prefix("web-work-")
+                    .is_some_and(exact_hash)
+                && metadata
+                    .source_turn_id
+                    .strip_prefix("initial-context-")
+                    .is_some_and(exact_hash)
+                && delivery.event.audit_references.len() == 5
+        });
     if !phase_valid
         || !matches!(
             delivery.phase,
@@ -159,23 +204,21 @@ fn require_delivery(
         || delivery.event.project_id != project
         || delivery.event.target_generation != target.generation
         || delivery.event.event_type != "engineering_attention"
-        || !delivery.event.audit_references.is_empty()
+        || !(ordinary || continuation)
         || delivery.message_digest != crate::protocol::digest(&delivery.event.message)
-        || !delivery
-            .event
-            .event_id
-            .strip_prefix("web-work-")
-            .is_some_and(|id| {
-                id.len() == 64
-                    && id
-                        .bytes()
-                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-            })
         || store.delivery(&delivery.event.event_id)?.as_ref() != Some(delivery)
     {
         return Err("READINESS_WORK_DELIVERY_CHANGED".into());
     }
     Ok(())
+}
+
+#[cfg(any(windows, test))]
+fn exact_hash(id: &str) -> bool {
+    id.len() == 64
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 #[cfg(windows)]
@@ -188,13 +231,13 @@ fn inspect_readiness(
     keep_current: &dyn Fn() -> Result<()>,
 ) -> Result<serde_json::Value> {
     let receipt_only = mode == Mode::Receipt;
-    let response_only = mode == Mode::ResponseOwnerHeld;
+    let response_only = matches!(mode, Mode::ResponseOwnerHeld | Mode::SentDiagnostics);
     if !crate::protocol::valid_id(project) {
         return Err("READINESS_PROJECT_INVALID".into());
     }
     require_selection(store, project, target)?;
     keep_current()?;
-    let _host = if response_only {
+    let _host = if mode == Mode::ResponseOwnerHeld {
         None
     } else {
         Some(store.host_lock()?)
@@ -272,6 +315,9 @@ fn inspect_readiness(
         }
         if response_only {
             command.arg("--response-only");
+        }
+        if mode == Mode::SentDiagnostics {
+            command.arg("--task-diagnostics");
         }
         Some(hash)
     } else {
@@ -395,6 +441,20 @@ fn inspect_readiness(
     } else {
         None
     };
+    let diagnostics: Vec<_> = rows
+        .iter()
+        .filter_map(|row| crate::readiness_probe::task_response_diagnostics(row))
+        .collect();
+    let task_diagnostics = if mode == Mode::SentDiagnostics
+        && response
+            .as_ref()
+            .is_some_and(|v| v["stage"] == "RESPONSE_COMPLETE")
+        && diagnostics.len() == 1
+    {
+        Some(&diagnostics[0])
+    } else {
+        None
+    };
     Ok(
         serde_json::json!({"action":if delivery.is_some() {"web_work_inspect"} else {"web_browser_inspect"},"projectId":project,
         "status":if result.is_ok() && final_state.is_some() {"BROWSER_READINESS_OBSERVED"} else {"BROWSER_OBSERVATION_INCOMPLETE"},
@@ -406,6 +466,7 @@ fn inspect_readiness(
         "advisory":!receipt_only,"browserReadOnly":true,"sendAttempted":false,
         "receiptCreated":false,"stateChanged":false,"retryAuthorized":false,"workResolved":false,
         "persistedReceipt":receipt,"receiptProofRequested":receipt_only,"responseObservation":response,
+        "taskDiagnostics":task_diagnostics,"reviewAuthorityGranted":false,
         "submissionOutcome":if receipt.is_some() {"PERSISTED_RECEIPT_PROVEN"} else {"NOT_ASSESSED"},"authenticationVerified":false,
         "ownedTreeExited":true,"hostStarted":false,"schedulerStarted":false}),
     )
@@ -426,6 +487,71 @@ fn inspect_readiness(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sent_continuation_inspection_requires_exact_semantic_receipt_without_retry_or_mutation() {
+        let (store, lease) = super::super::scheduler::tests::fixture("sent-continuation-inspect");
+        let target = store.config().unwrap().targets["alpha"].clone();
+        let event = store
+            .produce_expected_wake(
+                "alpha",
+                "Continue exact context",
+                &target,
+                crate::store::WakeIntent {
+                    purpose: crate::protocol::WakePurpose::NewTask,
+                    source_event_id: &format!("web-work-{}", "a".repeat(64)),
+                    source_turn_id: &format!("initial-context-{}", "b".repeat(64)),
+                    priority: 0,
+                    ttl_seconds: 600,
+                },
+            )
+            .unwrap();
+        let claimed = store.claim(&event, &lease).unwrap();
+        assert!(require_delivery(&store, "alpha", &target, &claimed, true).is_err());
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: event.event_id.clone(),
+            target_generation: target.generation,
+            target_digest: target.digest.clone(),
+            message_digest: crate::protocol::digest(&event.message),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        store
+            .record_exact_receipt_timer(&event.event_id, &receipt)
+            .unwrap();
+        let sent = store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Sent,
+                Some(receipt),
+                None,
+            )
+            .unwrap();
+        let path = store
+            .root()
+            .join("deliveries")
+            .join(format!("{}.json", event.event_id));
+        let before = std::fs::read(&path).unwrap();
+        require_delivery(&store, "alpha", &target, &sent, true).unwrap();
+        assert!(require_delivery(&store, "alpha", &target, &sent, false).is_err());
+        assert!(require_delivery(&store, "beta", &target, &sent, true).is_err());
+        let mut unknown = sent.clone();
+        unknown.phase = Phase::Submitting;
+        unknown.receipt = None;
+        assert!(require_delivery(&store, "alpha", &target, &unknown, true).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+    }
 
     #[test]
     fn sent_delivery_requires_explicit_receipt_bound_response_scope() {

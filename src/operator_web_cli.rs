@@ -105,6 +105,10 @@ pub(crate) enum WebAction {
         project_id: String,
         event_id: String,
     },
+    ReviewInspectResponse {
+        project_id: String,
+        event_id: String,
+    },
     ReviewReobserve {
         project_id: String,
         event_id: String,
@@ -571,14 +575,19 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         ("context", "capture") if options.is_empty() => Ok(WebAction::ContextCapture {
             project_id: project_id.into(),
         }),
-        ("review", "read" | "reobserve" | "reconcile" | "diagnose") => {
+        ("review", "read" | "inspect-response" | "reobserve" | "reconcile" | "diagnose") => {
             let event_id = options
                 .remove("--event-id")
                 .ok_or("WEB_USAGE: --event-id is required")?;
             if !catdesk_wake::protocol::valid_id(event_id) || !options.is_empty() {
                 return Err("WEB_USAGE: invalid review event or unexpected option".into());
             }
-            if verb == "diagnose" {
+            if verb == "inspect-response" {
+                Ok(WebAction::ReviewInspectResponse {
+                    project_id: project_id.into(),
+                    event_id: event_id.into(),
+                })
+            } else if verb == "diagnose" {
                 Ok(WebAction::ReviewDiagnose {
                     project_id: project_id.into(),
                     event_id: event_id.into(),
@@ -1115,6 +1124,41 @@ fn review_tool_diagnostics(snapshot: &Value) -> Result<Option<Value>, String> {
 /// Explicit local read only; private response text is never a status field.
 fn read_review(workspace: &Path, project: &str, event_id: &str) -> Result<Value, String> {
     read_review_guarded(workspace, project, event_id, None, &|| Ok(()))
+}
+
+fn inspect_review_response(
+    workspace: &Path,
+    project: &str,
+    event_id: &str,
+) -> Result<Value, String> {
+    let key = paired_key(workspace, project)?;
+    let lease = crate::operator_facade::acquire_web_work_lease(workspace, project)?;
+    let prepared =
+        crate::delegated::autonomy_projects::PreparedProjectScopeV1::resolve(workspace, project)
+            .map_err(|_| "WEB_REVIEW_PROJECT_CHANGED")?;
+    let wake = catdesk_wake::store::Store::open(
+        &crate::wake_protocol_client::wake_root_for_workspace(workspace)?,
+    )?;
+    let target =
+        catdesk_wake::protocol::Target::new(key.target_generation, key.conversation_url.clone())?;
+    let guard = || {
+        prepared
+            .revalidate_registration()
+            .map_err(|_| "WEB_REVIEW_PROJECT_CHANGED")?;
+        if paired_key(workspace, project)? != key {
+            return Err("WEB_REVIEW_TARGET_CHANGED".into());
+        }
+        lease.check_target(&target)
+    };
+    guard()?;
+    let mut value = catdesk_wake::runtime::inspect_sent_task_response_diagnostics(
+        &wake, project, &target, event_id, &guard,
+    )?;
+    guard()?;
+    value["action"] = json!("web_review_response_inspect");
+    value["eventVerified"] = json!(false);
+    value["reviewAuthorityGranted"] = json!(false);
+    Ok(value)
 }
 
 pub(super) fn read_review_guarded(
@@ -1668,6 +1712,10 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             project_id,
             event_id,
         } => read_review(&workspace, &project_id, &event_id),
+        WebAction::ReviewInspectResponse {
+            project_id,
+            event_id,
+        } => inspect_review_response(&workspace, &project_id, &event_id),
         WebAction::ReviewReobserve {
             project_id,
             event_id,
@@ -2690,6 +2738,34 @@ mod tests {
         let mut invalid = valid;
         *invalid.last_mut().unwrap() = "../event".into();
         assert!(parse(&invalid).is_err());
+    }
+
+    #[test]
+    fn response_inspection_is_explicit_and_refuses_send_and_scope_overrides() {
+        let valid = args(&[
+            "operator",
+            "web",
+            "review",
+            "inspect-response",
+            "--project-id",
+            "alpha",
+            "--event-id",
+            "wake-intent-existing",
+        ]);
+        assert!(matches!(
+            parse(&valid),
+            Ok(WebAction::ReviewInspectResponse { .. })
+        ));
+        for extra in [
+            ["--submit", "true"],
+            ["--conversation-url", "https://chatgpt.com/c/foreign"],
+            ["--input-file", "payload.json"],
+        ] {
+            let mut changed = valid.clone();
+            changed.extend(args(&extra));
+            assert!(parse(&changed).is_err());
+        }
+        assert!(parse(&valid[..6]).is_err());
     }
 
     #[test]

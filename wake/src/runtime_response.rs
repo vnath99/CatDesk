@@ -111,15 +111,68 @@ pub(crate) fn canonical_observation(value: Value) -> Option<Value> {
     };
     if !valid_observation_metadata(&value)
         || !value["eventId"].as_str().is_some_and(|id| {
-            id.strip_prefix("web-work-").is_some_and(|v| {
-                v.len() == 64
-                    && v.bytes()
-                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-            })
+            id.strip_prefix("web-work-")
+                .or_else(|| id.strip_prefix("wake-intent-"))
+                .is_some_and(|v| {
+                    v.len() == 64
+                        && v.bytes()
+                            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                })
         })
         || !value["targetGeneration"].as_u64().is_some_and(|n| n > 0)
         || !hex(&value["targetDigest"])
         || !hex(&value["messageDigest"])
+    {
+        return None;
+    }
+    Some(value)
+}
+
+pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
+    let tools = value.get("toolDiagnostics")?;
+    let hints = value.get("assistantHints")?;
+    let counts = [
+        "callMarkers",
+        "resultMarkers",
+        "errorMarkers",
+        "busyMarkers",
+    ];
+    let flags = [
+        "toolUnavailable",
+        "contextUnavailable",
+        "approvalRequested",
+        "nativeDispatchMentioned",
+    ];
+    let codes = [
+        "HTTP_429",
+        "WEB_WORK_ROLLOVER_PENDING",
+        "WEB_ROLLOVER_PROJECT_BUSY",
+        "WEB_TASK_GRANT_SCOPE_MISMATCH",
+        "WEB_TASK_NATIVE_NOT_GRANTED",
+        "PROJECT_TASK_CALL_ALREADY_COMPLETED",
+        "PROJECT_TASK_RECOVERY_REQUIRED",
+    ];
+    let selected = hints.get("knownCodes")?.as_array()?;
+    let canonical: Vec<Value> = codes
+        .iter()
+        .filter(|code| selected.contains(&json!(code)))
+        .map(|code| json!(code))
+        .collect();
+    if value.as_object()?.len() != 2
+        || tools.as_object()?.len() != 9
+        || hints.as_object()?.len() != 7
+        || tools["schemaVersion"].as_u64() != Some(1)
+        || tools["basis"] != "VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT"
+        || tools["scope"] != "EXACT_USER_EXCHANGE"
+        || tools["selectorCoverage"] != "KNOWN_MARKERS_ONLY"
+        || tools["countOverflow"].as_bool().is_none()
+        || !counts
+            .iter()
+            .all(|field| tools[*field].as_u64().is_some_and(|n| n <= 64))
+        || hints["schemaVersion"].as_u64() != Some(1)
+        || hints["basis"] != "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION"
+        || !flags.iter().all(|field| hints[*field].as_bool().is_some())
+        || *selected != canonical
     {
         return None;
     }

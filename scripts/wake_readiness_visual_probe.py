@@ -51,7 +51,7 @@ def load_observation_sink(path, expected_sha256, profile, url):
     return sink
 
 
-def load_delivery_message(path, expected_sha256, url, *, receipt_only=False, response_only=False):
+def load_delivery_message(path, expected_sha256, url, *, receipt_only=False, response_only=False, sent_diagnostics=False):
     """Read only the exact native-selected durable delivery, never caller text."""
     if (path is None or path.parent.name != "deliveries" or not path.is_file()
             or path.is_symlink() or getattr(path, "is_junction", lambda: False)()
@@ -64,10 +64,21 @@ def load_delivery_message(path, expected_sha256, url, *, receipt_only=False, res
     delivery = json.loads(content)
     event, target = delivery["event"], delivery["target"]
     message = event["message"]
+    ordinary = event["auditReferences"] == [] and re.fullmatch(r"web-work-[0-9a-f]{64}", event["eventId"])
+    continuation = False
+    if sent_diagnostics and response_only and re.fullmatch(r"wake-intent-[0-9a-f]{64}", event["eventId"]):
+        refs = event["auditReferences"]
+        fields = dict(item.removeprefix("catdesk.wake.v1:").split(":", 1) for item in refs
+                      if isinstance(item, str) and item.startswith("catdesk.wake.v1:"))
+        continuation = (len(refs) == len(fields) == 5
+                        and fields.get("purpose") == "NEW_TASK"
+                        and re.fullmatch(r"web-work-[0-9a-f]{64}", fields.get("source-event", ""))
+                        and re.fullmatch(r"initial-context-[0-9a-f]{64}", fields.get("source-turn", ""))
+                        and fields.get("priority", "").isdigit() and 0 <= int(fields["priority"]) <= 255
+                        and fields.get("expires-utc", "").isdigit() and int(fields["expires-utc"]) > 0)
     if (delivery["phase"] not in ({"SENT"} if response_only else {"CLAIMED", "SUBMITTING", "ATTENTION"})
             or (not response_only and delivery.get("receipt") is not None)
-            or event["eventType"] != "engineering_attention" or event["auditReferences"] != []
-            or not re.fullmatch(r"web-work-[0-9a-f]{64}", event["eventId"])
+            or event["eventType"] != "engineering_attention" or not (ordinary or continuation)
             or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", event["projectId"])
             or path.name != event["eventId"] + ".json"
             or type(target["generation"]) is not int or target["generation"] <= 0
@@ -91,7 +102,7 @@ def load_delivery_message(path, expected_sha256, url, *, receipt_only=False, res
     return message
 
 
-def report_sent_response(sink, cdp, delivery, report=print, sleep=time.sleep):
+def report_sent_response(sink, cdp, delivery, report=print, sleep=time.sleep, *, task_diagnostics=False):
     """Observe only the assistant paired with this exact durable USER receipt."""
     event, target = delivery["event"], delivery["target"]
     try:
@@ -107,14 +118,26 @@ def report_sent_response(sink, cdp, delivery, report=print, sleep=time.sleep):
                 value["diagnosticReason"] = reason
             if controls is not None:
                 value["completionControls"] = controls
-            return value
+            extra = None
+            if task_diagnostics and stage == "RESPONSE_COMPLETE":
+                diagnostic, tools, hints = {}, {}, {}
+                state = sink.response_snapshot(cdp, event["message"], require_usable_body=True,
+                    diagnostic=diagnostic, tool_diagnostic=tools, execution_diagnostic=hints)
+                sink.require_response_document(cdp)
+                if state != (0, 0, True, True) or diagnostic.get("reason") != "COMPLETE":
+                    raise ValueError("task response changed")
+                extra = dict(toolDiagnostics=tools, assistantHints=hints)
+            return value, extra
         first = sample()
         sleep(.25)
-        value = sample()
-        if first != value:
+        current = sample()
+        if first != current:
             report("PROBE:RESPONSE_STATE:UNSTABLE", flush=True)
             return
+        value, extra = current
         report("PROBE:RESPONSE:" + json.dumps(value, separators=(",", ":"), sort_keys=True), flush=True)
+        if extra is not None:
+            report("PROBE:TASK:" + json.dumps(extra, separators=(",", ":"), sort_keys=True), flush=True)
     except Exception as error:
         reason = str(error)
         allowed = {"RESPONSE_LOAD_ERROR", "RESPONSE_NETWORK_ERROR", "LOGIN_OR_PROFILE_REQUIRED",
@@ -407,6 +430,7 @@ def main():
     parser.add_argument("--delivery-sha256")
     parser.add_argument("--receipt-only", action="store_true")
     parser.add_argument("--response-only", action="store_true")
+    parser.add_argument("--task-diagnostics", action="store_true")
     args = parser.parse_args()
     if args.await_start and sys.stdin.readline() != "START\n":
         return 2
@@ -428,14 +452,14 @@ def main():
     message = None
     receipt_delivery = None
     response_delivery = None
-    if (args.receipt_only and args.response_only) or ((args.receipt_only or args.response_only) and (not args.read_only or args.delivery_file is None)):
+    if (args.task_diagnostics and not args.response_only) or (args.receipt_only and args.response_only) or ((args.receipt_only or args.response_only) and (not args.read_only or args.delivery_file is None)):
         return 2
     if args.delivery_file is not None or args.delivery_sha256 is not None:
         try:
             if sink is None or not args.read_only:
                 raise ValueError("read-only primitives required")
             if args.response_only:
-                response_delivery = load_delivery_message(args.delivery_file, args.delivery_sha256, url, response_only=True)
+                response_delivery = load_delivery_message(args.delivery_file, args.delivery_sha256, url, response_only=True, sent_diagnostics=args.task_diagnostics)
             elif args.receipt_only:
                 receipt_delivery = load_delivery_message(args.delivery_file, args.delivery_sha256, url, receipt_only=True)
             else:
@@ -511,7 +535,7 @@ def main():
                 print("PROBE:RECEIPT_STATE:UNPROVEN", flush=True)
         if response_delivery is not None:
             if surface is not None and surface.get("route") == "EXACT" and surface.get("document") == "COMPLETE":
-                report_sent_response(sink, cdp, response_delivery)
+                report_sent_response(sink, cdp, response_delivery, task_diagnostics=args.task_diagnostics)
             else:
                 print("PROBE:RESPONSE_STATE:UNPROVEN", flush=True)
     print("PROBE:PHASE:BROWSER_CLOSED", flush=True)
