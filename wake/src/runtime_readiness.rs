@@ -447,6 +447,10 @@ fn inspect_readiness(
         .iter()
         .filter_map(|row| crate::readiness_probe::task_response_diagnostics(row))
         .collect();
+    let app_observation = rows
+        .iter()
+        .rev()
+        .find_map(|row| crate::readiness_probe::composer_app_observation(row));
     let task_diagnostics = if mode == Mode::SentDiagnostics
         && response
             .as_ref()
@@ -468,7 +472,7 @@ fn inspect_readiness(
         "advisory":!receipt_only,"browserReadOnly":true,"sendAttempted":false,
         "receiptCreated":false,"stateChanged":false,"retryAuthorized":false,"workResolved":false,
         "persistedReceipt":receipt,"receiptProofRequested":receipt_only,"responseObservation":response,
-        "taskDiagnostics":task_diagnostics,"reviewAuthorityGranted":false,
+        "taskDiagnostics":task_diagnostics,"appPresentation":app_observation,"reviewAuthorityGranted":false,
         "submissionOutcome":if receipt.is_some() {"PERSISTED_RECEIPT_PROVEN"} else {"NOT_ASSESSED"},"authenticationVerified":false,
         "ownedTreeExited":true,"hostStarted":false,"schedulerStarted":false}),
     )

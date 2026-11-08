@@ -218,6 +218,17 @@ if (options.observationStop) document.children.push(el('button', {'data-testid':
 if (options.observationLogin) document.children.push(el('a', {href:'/auth/login'}));
 if (options.observationCaptcha) document.children.push(el('iframe', {title:'captcha'}));
 if (options.observationNetwork) document.children.push(el('div', {id:'main-frame-error'}), el('div', {id:'error-code'}));
+if (options.appForm) {
+  const editor=el('div',{id:'prompt-textarea'},options.appDraft || '');
+  const controls=Array.from({length:options.appPlusCount ?? 1},()=>el('button',{
+    'data-testid':'composer-plus-btn',type:options.appPlusType || 'button',
+    'aria-expanded':options.appExpanded || 'false',disabled:options.appDisabled || false},'PRIVATE_CONTROL'));
+  if(options.v5Chip) controls.push(el('button',{'data-testid':'app-chip','aria-label':'CatDesk-Local-Tunnel-v5'}));
+  if(options.foreignChip) controls.push(el('button',{'data-testid':'app-chip','aria-label':'PRIVATE_OTHER_APP'}));
+  append(document,el('form',{},'',[editor,...controls]));
+  if(options.duplicateAppEditor) append(document,el('div',{id:'prompt-textarea'},'PRIVATE_DRAFT'));
+  if(options.outsideV5) append(document,el('button',{'data-testid':'app-chip','aria-label':'CatDesk-Local-Tunnel-v5'}));
+}
 global.window = {getComputedStyle: () => ({visibility:'visible', display:'block'})};
 global.location = {href:options.location || 'https://chatgpt.com/c/current-dom'};
 if (options.composerCount !== undefined) {
@@ -326,6 +337,34 @@ class CurrentDomTests(unittest.TestCase):
         self.sink = bridge.NewConversationSink(
             "https://chatgpt.com/c/current-dom", Path(self.directory.name), 1, 1
         )
+
+    def test_composer_app_metadata_never_reads_draft_or_claims_catalog_authority(self):
+        cdp=CurrentDom(appForm=True,v5Chip=True,foreignChip=True,appDraft='PRIVATE_DRAFT',traceClicks=True)
+        value=self.sink.composer_app_observation(cdp)
+        self.assertEqual(value['scope'],'COMPOSER_FORM')
+        self.assertEqual(value['v5MarkerCount'],1)
+        self.assertEqual(value['plusButtonType'],'BUTTON')
+        self.assertEqual(value['plusButtonState'],'ENABLED')
+        self.assertEqual(value['plusExpanded'],'CLOSED')
+        self.assertEqual(value['basis'],'PRESENTATION_ONLY_NOT_TOOL_CATALOG')
+        self.assertNotIn('PRIVATE_',json.dumps(value))
+        self.assertEqual(cdp.mutations,0)
+        outside=self.sink.composer_app_observation(CurrentDom(appForm=True,outsideV5=True))
+        self.assertEqual(outside['v5MarkerCount'],0)
+        ambiguous=self.sink.composer_app_observation(CurrentDom(appForm=True,duplicateAppEditor=True))
+        self.assertEqual(ambiguous['scope'],'UNPROVEN')
+        self.assertEqual(ambiguous['plusButtonCount'],0)
+        duplicate=self.sink.composer_app_observation(CurrentDom(appForm=True,appPlusCount=2))
+        self.assertEqual(duplicate['plusButtonCount'],2)
+        self.assertEqual(duplicate['plusButtonType'],'UNKNOWN')
+
+    def test_composer_app_metadata_refuses_foreign_and_unknown_documents(self):
+        with self.assertRaises(bridge.Attention):
+            self.sink.composer_app_observation(CurrentDom(appForm=True,location='https://chatgpt.com/c/foreign'))
+        class Failure(CurrentDom):
+            def evaluate(self,script):raise RuntimeError('PRIVATE_PAGE')
+        with self.assertRaises(RuntimeError):
+            self.sink.composer_app_observation(Failure(appForm=True))
 
     def test_typing_confirmation_reads_text_data_and_native_attribute_signature(self):
         class NativeSignatureDom(CurrentDom):

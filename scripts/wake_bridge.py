@@ -894,6 +894,59 @@ class CdpSink:
         if isinstance(current, str) and current.startswith("chrome-error://"):
             return True
         return all(self.visible(cdp, s) for s in NETWORK)
+    def composer_app_observation(self, cdp: Any) -> dict[str, Any]:
+        """Read only fixed app/control metadata; never open a menu or read a draft.
+
+        Presentation is deliberately weaker than an authenticated tool catalog.
+        Only controls inside the unique editor's form count; history, sidebar,
+        assistant text and arbitrary app names are never returned.
+        """
+        self.require_response_document(cdp)
+        document_url = str(cdp.get_current_url())
+        script = f"""(() => {{
+            const result={{schemaVersion:1,scope:'UNPROVEN',editorCount:0,plusButtonCount:0,
+                plusButtonType:'UNKNOWN',plusButtonState:'UNKNOWN',plusExpanded:'UNKNOWN',
+                v5MarkerCount:0,basis:'PRESENTATION_ONLY_NOT_TOOL_CATALOG'}};
+            if(location.href!=={json.dumps(document_url)} || document.readyState!=='complete') return result;
+            let actual,expected;
+            try {{actual=new URL(location.href);expected=new URL({json.dumps(self.url)});}} catch (_) {{return result;}}
+            const route=actual.pathname.match(new RegExp('^/(?:c/([A-Za-z0-9_-]{{1,200}})|g/[A-Za-z0-9_-]{{1,200}}/c/([A-Za-z0-9_-]{{1,200}}))$'));
+            if(actual.protocol!=='https:' || !['chatgpt.com','chat.openai.com'].includes(actual.hostname) ||
+                actual.port || actual.username || actual.password || actual.search || actual.hash ||
+                !route || (route[1]||route[2])!==expected.pathname.split('/').pop()) return result;
+            const visible=node=>{{const style=window.getComputedStyle(node);return Boolean(node.getClientRects().length && style.visibility!=='hidden' && style.display!=='none');}};
+            const editors=Array.from(document.querySelectorAll({json.dumps(', '.join(EDITOR_SELECTORS))})).filter(visible);
+            result.editorCount=Math.min(editors.length,16);
+            if(editors.length!==1) return result;
+            const editor=editors[0],form=editor.closest('form');
+            if(!form) return result;
+            result.scope='COMPOSER_FORM';
+            const plus=Array.from(form.querySelectorAll("button[data-testid='composer-plus-btn']")).filter(node=>visible(node)&&!editor.contains(node));
+            result.plusButtonCount=Math.min(plus.length,16);
+            if(plus.length===1){{
+                const button=plus[0],type=button.getAttribute('type'),expanded=button.getAttribute('aria-expanded');
+                result.plusButtonType=type==='button'?'BUTTON':type==='submit'?'SUBMIT':'UNKNOWN';
+                result.plusButtonState=button.disabled||button.getAttribute('aria-disabled')==='true'?'DISABLED':'ENABLED';
+                result.plusExpanded=expanded==='true'?'OPEN':expanded==='false'?'CLOSED':'UNKNOWN';
+            }}
+            const candidates=Array.from(form.querySelectorAll("button[aria-label], [data-testid='app-pill'], [data-testid='app-chip']"))
+                .filter(node=>visible(node)&&!editor.contains(node));
+            const selected=candidates.filter(node=>['CatDesk-Local-Tunnel-v5','@CatDesk-Local-Tunnel-v5'].includes((node.getAttribute('aria-label')||node.textContent||'').trim()));
+            result.v5MarkerCount=Math.min(selected.filter(node=>!selected.some(parent=>parent!==node&&parent.contains(node))).length,16);
+            return result;
+        }})()"""
+        value=self.cdp_value(cdp.evaluate(script))
+        self.require_response_document(cdp)
+        counts=('editorCount','plusButtonCount','v5MarkerCount')
+        vocab={'scope':{'UNPROVEN','COMPOSER_FORM'},'plusButtonType':{'UNKNOWN','BUTTON','SUBMIT'},
+            'plusButtonState':{'UNKNOWN','ENABLED','DISABLED'},'plusExpanded':{'UNKNOWN','OPEN','CLOSED'}}
+        if (not isinstance(value,dict) or set(value)!={'schemaVersion','basis',*counts,*vocab}
+                or type(value['schemaVersion']) is not int or value['schemaVersion']!=1
+                or value['basis']!='PRESENTATION_ONLY_NOT_TOOL_CATALOG'
+                or any(type(value[key]) is not int or not 0<=value[key]<=16 for key in counts)
+                or any(not isinstance(value[key],str) or value[key] not in allowed for key,allowed in vocab.items())):
+            raise Attention('BROWSER_OBSERVATION_INVALID')
+        return value
     @staticmethod
     def document_ready_state(cdp: Any) -> str | None:
         """Return only a bounded, non-content document readiness signal.

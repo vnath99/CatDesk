@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Use the matched controller to inspect the same already-completed assistant turn once with the narrower missing-subject classifier. Preserve the SENT receipt, COMPLETE timer, native READY state and original grant. Distinguish unavailable tool from unavailable nativeCall/context/key before choosing any recovery; do not create a plugin, refresh settings, send or dispatch.",
+  "next": "Inspect the exact completed task once with composer app metadata. The conservative missing-subject classifier did not identify a specific tool/key; do not infer one or resend. Qualify the actual known composer control before considering any separately bounded app-menu action. Preserve SENT/COMPLETE, original task/grant and installed state.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -1107,6 +1107,52 @@
       "oneHistoricalMentionGuaranteesAllLaterTurns": "NOT_ESTABLISHED",
       "affectedConversationCurrentCatalog": "NOT_ESTABLISHED",
       "settingsChanged": false
+    },
+    "live": {
+      "observedUtc": "2026-11-08T22:44:23.704049+00:00",
+      "sourceCommit": "0aafff0c18ab3c8992b1c555d5080c86b8394e69",
+      "controllerSha256": "36fa7f8a25be8a3878521b5f0139ee0b11c918ae411becfadc3f9ea1be5b7f4f",
+      "elapsedSeconds": 36.391,
+      "status": "LIVE_READ_PASSED_SUBJECT_ATTRIBUTION_UNPROVEN",
+      "responseStage": "RESPONSE_COMPLETE",
+      "unavailableSubjects": [],
+      "coarseHints": [
+        "TOOL_UNAVAILABLE",
+        "CONTEXT_UNAVAILABLE"
+      ],
+      "specificMissingToolOrField": "NOT_ESTABLISHED",
+      "messagesSent": 0,
+      "nativeCalls": 0,
+      "bindingChanges": 0,
+      "preservationPins": 1076,
+      "preservationMismatches": 0,
+      "ownedProfileAndWakeProcessesAfter": 0,
+      "port3200ListenerPresent": false
+    }
+  },
+  "composerAppObservation": {
+    "observedUtc": "2026-11-08T22:55:15.979599+00:00",
+    "status": "TESTED_SOURCE_MATCHED_LIVE_PENDING",
+    "existingCommand": "operator web review inspect-response --project-id PROJECT --event-id EXISTING_EVENT",
+    "scope": "UNIQUE_EDITOR_COMPOSER_FORM_ON_EXACT_REGISTERED_DOCUMENT",
+    "fields": [
+      "EDITOR_COUNT",
+      "KNOWN_PLUS_BUTTON_COUNT_TYPE_ENABLED_EXPANDED",
+      "FIXED_V5_PRESENTATION_MARKER_COUNT"
+    ],
+    "authority": "PRESENTATION_ONLY_NOT_TOOL_CATALOG",
+    "draftOrUnknownLabelsExported": false,
+    "clicks": 0,
+    "typing": 0,
+    "settingsChanges": 0,
+    "newOwnerOrScheduler": false,
+    "tests": {
+      "actualDom": 81,
+      "pythonProbe": 38,
+      "nativeReadiness": 18,
+      "total": 137,
+      "strictRootAndWakeAllTargetClippy": "PASS",
+      "format": "PASS"
     }
   }
 }

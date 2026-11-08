@@ -14,6 +14,19 @@ from unittest import mock
 
 
 class ReadinessProbeTests(unittest.TestCase):
+    def test_composer_app_report_keeps_private_failures_closed(self):
+        value=dict(schemaVersion=1,scope='COMPOSER_FORM',editorCount=1,plusButtonCount=1,
+            plusButtonType='BUTTON',plusButtonState='ENABLED',plusExpanded='CLOSED',
+            v5MarkerCount=0,basis='PRESENTATION_ONLY_NOT_TOOL_CATALOG')
+        sink=types.SimpleNamespace(composer_app_observation=mock.Mock(return_value=value))
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):self.probe.report_composer_apps(sink,object())
+        self.assertEqual(json.loads(output.getvalue().split('PROBE:APP:')[1]),value)
+        sink.composer_app_observation.side_effect=RuntimeError('PRIVATE_DRAFT_OR_CREDENTIAL')
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):self.probe.report_composer_apps(sink,object())
+        self.assertEqual(output.getvalue(),'PROBE:APP_STATE:UNPROVEN\n')
+
     def test_pending_continuation_observation_preserves_phase_and_exact_scope(self):
         url = "https://chatgpt.com/c/fixture"
         identity = "wake-intent-" + "b" * 64

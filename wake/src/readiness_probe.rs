@@ -7,6 +7,37 @@ use std::{
 };
 
 /// Whitelist metadata at the native boundary, even if a helper prints content.
+pub(crate) fn composer_app_observation(line: &str) -> Option<serde_json::Value> {
+    let text = line.strip_prefix("PROBE:APP:")?;
+    if text.len() > 1024 {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_str(text).ok()?;
+    if value.as_object()?.len() != 9
+        || value["schemaVersion"].as_u64() != Some(1)
+        || value["basis"] != "PRESENTATION_ONLY_NOT_TOOL_CATALOG"
+        || !matches!(value["scope"].as_str()?, "UNPROVEN" | "COMPOSER_FORM")
+        || !matches!(
+            value["plusButtonType"].as_str()?,
+            "UNKNOWN" | "BUTTON" | "SUBMIT"
+        )
+        || !matches!(
+            value["plusButtonState"].as_str()?,
+            "UNKNOWN" | "ENABLED" | "DISABLED"
+        )
+        || !matches!(
+            value["plusExpanded"].as_str()?,
+            "UNKNOWN" | "OPEN" | "CLOSED"
+        )
+        || !["editorCount", "plusButtonCount", "v5MarkerCount"]
+            .iter()
+            .all(|key| value[*key].as_u64().is_some_and(|n| n <= 16))
+    {
+        return None;
+    }
+    Some(value)
+}
+
 pub(crate) fn surface_observation(line: &str) -> Option<serde_json::Value> {
     let text = line.strip_prefix("PROBE:SURFACE:")?;
     if text.len() > 1024 {
@@ -268,6 +299,12 @@ fn sanitized_rows(text: &str) -> Vec<String> {
             };
             if state.starts_with("SURFACE:") {
                 return surface_observation(line).is_some();
+            }
+            if state.starts_with("APP:") {
+                return composer_app_observation(line).is_some();
+            }
+            if state.starts_with("APP_STATE:") {
+                return state == "APP_STATE:UNPROVEN";
             }
             if state.starts_with("TAB:") {
                 return tab_observation(line).is_some();
@@ -707,4 +744,27 @@ fn task_diagnostics_are_closed_content_free_and_cannot_be_execution_receipts() {
     assert!(sanitized_rows(&format!("PROBE:TASK:{bad}")).is_empty());
     changed["toolDiagnostics"]["callMarkers"] = serde_json::json!(65);
     assert!(task_response_diagnostics(&format!("PROBE:TASK:{changed}")).is_none());
+}
+
+#[test]
+#[cfg(test)]
+fn composer_app_metadata_is_bounded_presentation_not_catalog_or_action_authority() {
+    let value = serde_json::json!({"schemaVersion":1,"scope":"COMPOSER_FORM","editorCount":1,
+        "plusButtonCount":1,"plusButtonType":"BUTTON","plusButtonState":"ENABLED","plusExpanded":"CLOSED",
+        "v5MarkerCount":0,"basis":"PRESENTATION_ONLY_NOT_TOOL_CATALOG"});
+    let line = format!("PROBE:APP:{value}");
+    assert_eq!(composer_app_observation(&line), Some(value.clone()));
+    assert_eq!(sanitized_rows(&line), [line]);
+    for (key, invalid) in [
+        ("schemaVersion", serde_json::json!(true)),
+        ("editorCount", serde_json::json!(17)),
+        ("v5MarkerCount", serde_json::json!(true)),
+        ("scope", serde_json::json!("AUTHENTICATED")),
+        ("plusButtonType", serde_json::json!("PRIVATE_VALUE")),
+        ("rawText", serde_json::json!("PRIVATE_DRAFT")),
+    ] {
+        let mut changed = value.clone();
+        changed[key] = invalid;
+        assert!(sanitized_rows(&format!("PROBE:APP:{changed}")).is_empty());
+    }
 }

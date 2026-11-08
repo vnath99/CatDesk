@@ -179,6 +179,14 @@ def report_submission(sink, cdp, message, report=print, sleep=time.sleep):
         report("PROBE:SUBMISSION_STATE:OBSERVATION_UNAVAILABLE", flush=True)
 
 
+def report_composer_apps(sink, cdp, report=print):
+    try:
+        value=sink.composer_app_observation(cdp)
+        report('PROBE:APP:'+json.dumps(value,separators=(',',':'),sort_keys=True),flush=True)
+    except Exception:
+        report('PROBE:APP_STATE:UNPROVEN',flush=True)
+
+
 def surface_state(value):
     route = value["route"]
     if route != "EXACT":
@@ -536,6 +544,8 @@ def main():
         if response_delivery is not None:
             if surface is not None and surface.get("route") == "EXACT" and surface.get("document") == "COMPLETE":
                 report_sent_response(sink, cdp, response_delivery, task_diagnostics=args.task_diagnostics)
+                if args.task_diagnostics:
+                    report_composer_apps(sink, cdp)
             else:
                 print("PROBE:RESPONSE_STATE:UNPROVEN", flush=True)
     print("PROBE:PHASE:BROWSER_CLOSED", flush=True)

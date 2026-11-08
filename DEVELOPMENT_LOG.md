@@ -1407,3 +1407,26 @@ performed. Server publication, client invocation/scope and protected promotion
 remain separate; the affected Web conversation's current catalog is unverified.
 Sources: [custom MCP server](https://developers.openai.com/api/docs/guides/custom-mcp-server),
 [plugin selection](https://learn.chatgpt.com/docs/migrate-custom-gpts).
+
+
+## 2026-11-08T22:55:15.979599+00:00 — exact composer app-control observation
+
+The changed-parser completed-turn read passed in 36.391 seconds with exact
+task/receipt attribution and all 1,076 pins preserved, but returned no specific
+missing subject. Broad TOOL_UNAVAILABLE / CONTEXT_UNAVAILABLE hints therefore
+do not identify an actual missing tool or frozen field. This is a diagnostic
+limit, not permission to change the key, resend context, dispatch or replace
+the plugin. The response and timer remain COMPLETE; native work is unattempted.
+
+The existing read-only response probe now also returns closed app-presentation
+metadata from the unique editor's form on the exact registered document. It
+reports only bounded editor/control counts, the known plus button's type,
+enabled/expanded states and fixed v5 marker count. It reads no draft text and
+returns no unknown labels. It opens no menu, clicks/types nothing and changes
+no app, connection or authentication setting. Its basis explicitly excludes
+tool-catalog or execution authority. Foreign/ambiguous documents fail closed.
+137 tests pass (81 DOM, 38 probe, 18 native), with strict root/Wake all-target
+Clippy and formatting. The initial new DOM fixture accidentally added a second
+editor through an existing trace mode; the guard correctly refused it. That
+failed receipt is preserved; the fixture now traces clicks without adding an
+editor. Next: one same-event read through the matched existing owner.
