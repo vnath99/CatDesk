@@ -20,6 +20,7 @@ pub(crate) use review::action as review_action;
 #[path = "web_work_delivery.rs"]
 mod delivery;
 pub(crate) use delivery::deliver;
+pub(crate) use delivery::inspect as inspect_delivery;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

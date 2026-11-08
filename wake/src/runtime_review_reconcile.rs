@@ -344,11 +344,25 @@ fn diagnosis_frame(value: Value, delivery: &Delivery) -> Result<SubmissionObserv
         || parsed.target_generation != delivery.target.generation
         || parsed.target_digest != delivery.target.digest
         || parsed.message_digest != delivery.message_digest
-        || !matches!(
-            view.composer_class.as_str(),
-            "EXACT" | "PREFIX" | "OTHER" | "EMPTY" | "UNAVAILABLE"
-        )
-        || view.composer_bytes > 16 * 1024
+    {
+        return Err("SCOPED_DIAGNOSE_FRAME_INVALID".into());
+    }
+    validate_submission_observation(&view)?;
+    Ok(view)
+}
+
+/// Shared metadata boundary for the no-send adapter and profile observer.
+pub(crate) fn canonical_submission_observation(value: Value) -> Option<Value> {
+    let view: SubmissionObservation = serde_json::from_value(value).ok()?;
+    validate_submission_observation(&view).ok()?;
+    serde_json::to_value(view).ok()
+}
+
+fn validate_submission_observation(view: &SubmissionObservation) -> Result<()> {
+    if !matches!(
+        view.composer_class.as_str(),
+        "EXACT" | "PREFIX" | "OTHER" | "EMPTY" | "UNAVAILABLE"
+    ) || view.composer_bytes > 16 * 1024
         || view.coverage != "VISIBLE_BOUNDED_ONLY"
         || view.expected_user_count.is_some_and(|n| n > 512)
         || view.trusted_matches.is_some_and(|n| n > 512)
@@ -376,7 +390,7 @@ fn diagnosis_frame(value: Value, delivery: &Delivery) -> Result<SubmissionObserv
     {
         return Err("SCOPED_DIAGNOSE_FRAME_INVALID".into());
     }
-    Ok(view)
+    Ok(())
 }
 
 fn require_diagnosis_adapter(bytes: &[u8]) -> Result<()> {

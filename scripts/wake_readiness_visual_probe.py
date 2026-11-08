@@ -51,6 +51,48 @@ def load_observation_sink(path, expected_sha256, profile, url):
     return sink
 
 
+def load_delivery_message(path, expected_sha256, url):
+    """Read only the exact native-selected durable delivery, never caller text."""
+    if (path is None or path.parent.name != "deliveries" or not path.is_file()
+            or path.is_symlink() or getattr(path, "is_junction", lambda: False)()
+            or path.parent.is_symlink() or getattr(path.parent, "is_junction", lambda: False)()):
+        raise ValueError("delivery unavailable")
+    with path.open("rb") as stream:
+        content = stream.read(65537)
+    if len(content) > 65536 or hashlib.sha256(content).hexdigest() != expected_sha256:
+        raise ValueError("delivery identity changed")
+    delivery = json.loads(content)
+    event, target = delivery["event"], delivery["target"]
+    message = event["message"]
+    if (delivery["phase"] not in {"CLAIMED", "SUBMITTING", "ATTENTION"}
+            or delivery.get("receipt") is not None
+            or event["eventType"] != "engineering_attention" or event["auditReferences"] != []
+            or not re.fullmatch(r"web-work-[0-9a-f]{64}", event["eventId"])
+            or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", event["projectId"])
+            or path.name != event["eventId"] + ".json"
+            or type(target["generation"]) is not int or target["generation"] <= 0
+            or event["targetGeneration"] != target["generation"]
+            or target["url"] != url or target["digest"] != hashlib.sha256(url.encode()).hexdigest()
+            or not isinstance(message, str) or not 0 < len(message.encode()) <= 2048
+            or delivery["messageDigest"] != hashlib.sha256(message.encode()).hexdigest()):
+        raise ValueError("delivery scope changed")
+    return message
+
+
+def report_submission(sink, cdp, message, report=print, sleep=time.sleep):
+    """Two unchanged bounded samples are advisory; never prove durable delivery."""
+    try:
+        first, comparison = sink.submission_diagnostic_sample(cdp, message)
+        sleep(.25)
+        value, current = sink.submission_diagnostic_sample(cdp, message)
+        available = value["composerClass"] != "UNAVAILABLE" or value["expectedUserCount"] is not None
+        value["stable"] = available and current == comparison
+        report("PROBE:SUBMISSION:" + json.dumps(value, separators=(",", ":"), sort_keys=True), flush=True)
+        report("PROBE:SUBMISSION_STATE:OBSERVED", flush=True)
+    except Exception:
+        report("PROBE:SUBMISSION_STATE:OBSERVATION_UNAVAILABLE", flush=True)
+
+
 def surface_state(value):
     route = value["route"]
     if route != "EXACT":
@@ -298,6 +340,8 @@ def main():
     parser.add_argument("--primitives", type=Path)
     parser.add_argument("--primitives-sha256")
     parser.add_argument("--read-only", action="store_true")
+    parser.add_argument("--delivery-file", type=Path)
+    parser.add_argument("--delivery-sha256")
     args = parser.parse_args()
     if args.await_start and sys.stdin.readline() != "START\n":
         return 2
@@ -314,6 +358,16 @@ def main():
         try:
             sink = load_observation_sink(args.primitives, args.primitives_sha256, profile, url)
         except Exception:
+            print("PROBE:FINAL:OBSERVATION_UNAVAILABLE", flush=True)
+            return 0
+    message = None
+    if args.delivery_file is not None or args.delivery_sha256 is not None:
+        try:
+            if sink is None or not args.read_only:
+                raise ValueError("read-only primitives required")
+            message = load_delivery_message(args.delivery_file, args.delivery_sha256, url)
+        except Exception:
+            print("PROBE:SUBMISSION_STATE:OBSERVATION_UNAVAILABLE", flush=True)
             print("PROBE:FINAL:OBSERVATION_UNAVAILABLE", flush=True)
             return 0
     def observation(cdp):
@@ -371,6 +425,11 @@ def main():
             print("PROBE:SURFACE:" + json.dumps(surface, separators=(",", ":"), sort_keys=True), flush=True)
         if final == "CHROME_ERROR" and last != final:
             print("PROBE:NETWORK:" + chrome_error_detail(cdp), flush=True)
+        if message is not None:
+            if surface is not None and surface.get("route") == "EXACT" and surface.get("document") == "COMPLETE":
+                report_submission(sink, cdp, message)
+            else:
+                print("PROBE:SUBMISSION_STATE:TARGET_UNAVAILABLE", flush=True)
     print("PROBE:PHASE:BROWSER_CLOSED", flush=True)
     print("PROBE:FINAL:" + final, flush=True)
     return 0

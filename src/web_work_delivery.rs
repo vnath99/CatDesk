@@ -34,6 +34,24 @@ fn validate_selection(
 }
 
 pub(crate) fn deliver(workspace: &Path, project: &str, request_id: &str) -> Result<Value, String> {
+    selected_work(workspace, project, request_id, false)
+}
+
+pub(crate) fn inspect(workspace: &Path, project: &str, request_id: &str) -> Result<Value, String> {
+    selected_work(workspace, project, request_id, true)
+}
+
+fn selected_work(
+    workspace: &Path,
+    project: &str,
+    request_id: &str,
+    inspect_only: bool,
+) -> Result<Value, String> {
+    if inspect_only
+        && wake_protocol_client::wake_runtime_mode_for_workspace(workspace)? != "INSTALLED_STORE"
+    {
+        return Err("WEB_BROWSER_INSTALLED_SCOPE_REQUIRED".into());
+    }
     let prepared = PreparedProjectScopeV1::resolve(workspace, project)
         .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
     let lease = crate::operator_facade::acquire_web_work_lease(workspace, project)?;
@@ -50,8 +68,12 @@ pub(crate) fn deliver(workspace: &Path, project: &str, request_id: &str) -> Resu
     let wake = Store::open(&wake_protocol_client::wake_root_for_workspace(workspace)?)?;
     // SENT, SUBMITTING and other historical outcomes are refused by the
     // existing sender before opening an adapter; they never grant replay.
-    let event = match wake.delivery(&record.event_id)? {
-        Some(delivery) => delivery.event,
+    let prior = wake.delivery(&record.event_id)?;
+    if inspect_only && prior.is_none() {
+        return Err("WEB_WORK_DELIVERY_MISSING".into());
+    }
+    let event = match &prior {
+        Some(delivery) => delivery.event.clone(),
         None => read(
             &wake
                 .root()
@@ -91,6 +113,17 @@ pub(crate) fn deliver(workspace: &Path, project: &str, request_id: &str) -> Resu
         )
     };
     guard()?;
+    if inspect_only {
+        let mut result = runtime::inspect_registered_delivery_readiness(
+            &wake,
+            project,
+            &target,
+            prior.as_ref().ok_or("WEB_WORK_DELIVERY_MISSING")?,
+            &guard,
+        )?;
+        result["requestId"] = json!(request_id);
+        return Ok(result);
+    }
     let mut before_submit = |actual: &Event, actual_target: &Target| {
         guard()?;
         if actual != &event || actual_target != &target {
@@ -104,6 +137,23 @@ pub(crate) fn deliver(workspace: &Path, project: &str, request_id: &str) -> Resu
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn work_inspection_preserves_development_isolation_without_browser_or_queue_changes() {
+        let (control, _, wake, _, event) = crate::web_work::tests::assignment_fixture_for("alpha");
+        wake.publish(&event).unwrap();
+        let path = wake
+            .root()
+            .join("queue")
+            .join(format!("{}.json", event.event_id));
+        let before = std::fs::read(&path).unwrap();
+        assert_eq!(
+            inspect(&control, "alpha", "request-a").unwrap_err(),
+            "WEB_BROWSER_INSTALLED_SCOPE_REQUIRED"
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert!(wake.delivery(&event.event_id).unwrap().is_none());
+    }
 
     #[test]
     fn scoped_work_delivery_replay_refusal_preserves_real_request_and_receipt_files() {

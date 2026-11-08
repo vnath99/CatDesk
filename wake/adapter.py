@@ -927,70 +927,8 @@ def source_snapshot(bridge, sb, request):
 
 
 def submission_diagnostic_sample(bridge, sink, cdp, message):
-    """Return bounded comparisons, never draft text or unrelated draft hashes."""
-    if not sink.exact(cdp.get_current_url()):
-        raise bridge.Attention("SUBMISSION_DIAGNOSE_TARGET_CHANGED")
-    expected = bridge.normalize_message(message)
-    observation = {
-        "composerClass": "UNAVAILABLE", "composerBytes": 0,
-        "legacyAvailable": False, "readersAgree": None,
-        "legacyMatchesExpected": None, "expectedUserCount": None,
-        "lastUserMatches": None, "trustedMatches": None, "turnsAfter": None,
-        "stable": False, "coverage": "VISIBLE_BOUNDED_ONLY",
-    }
-    private_tokens = []
-    if sink.document_ready_state(cdp) == "complete":
-        structure_reader = getattr(sink, "composer_structure_diagnostics", None)
-        if callable(structure_reader):
-            try:
-                structure = structure_reader(cdp)
-                if not bridge.valid_composer_structure_diagnostic(structure):
-                    raise ValueError("invalid structure diagnostic")
-                observation["composerStructure"] = structure
-            except Exception:
-                observation["composerStructure"] = {
-                    "schemaVersion": 1, "reason": "UNAVAILABLE", "nodesExamined": 0,
-                }
-        try:
-            actual = sink.composer_plain_text(cdp)
-            normalized = bridge.normalize_message(actual)
-            observation["composerBytes"] = len(actual.encode("utf-8"))
-            observation["composerClass"] = ("EMPTY" if not normalized else
-                "EXACT" if normalized == expected else
-                "PREFIX" if expected.startswith(normalized) else "OTHER")
-            private_tokens.append(bridge.digest(normalized))
-            try:
-                legacy, available = sink.legacy_composer_observation(cdp)
-                if not available:
-                    raise ValueError("legacy read unavailable")
-                if len(legacy.encode("utf-8")) > bridge.MAX_USER_MESSAGE_CHARS:
-                    raise ValueError("bounded legacy read required")
-                legacy = bridge.normalize_message(legacy)
-                observation.update(legacyAvailable=True, readersAgree=legacy == normalized,
-                                   legacyMatchesExpected=legacy == expected)
-                private_tokens.append(bridge.digest(legacy))
-            except Exception:
-                pass
-        except Exception:
-            pass
-        try:
-            users = sink.user_message_digests(cdp)
-            count, after = sink.trusted_turn_anchor_state(cdp, message)
-            if (len(users) > bridge.MAX_USER_MESSAGES or type(count) is not int or
-                    type(after) is not int or not 0 <= count <= bridge.MAX_USER_MESSAGES or
-                    not 0 <= after <= 1024):
-                raise ValueError("bounded turn read required")
-            expected_digest = bridge.digest(expected)
-            observation.update(expectedUserCount=users.count(expected_digest),
-                lastUserMatches=bool(users) and users[-1] == expected_digest,
-                trustedMatches=count, turnsAfter=after)
-            private_tokens.extend(users)
-        except Exception:
-            pass
-    if not sink.exact(cdp.get_current_url()):
-        raise bridge.Attention("SUBMISSION_DIAGNOSE_TARGET_CHANGED")
-    # Comparison tokens are private working values and never enter the frame.
-    return observation, (json.dumps(observation, sort_keys=True), tuple(private_tokens))
+    """Reuse the same no-send comparison reader as the bounded observer."""
+    return bridge.submission_diagnostic_sample(sink, cdp, message)
 
 
 def diagnose_submission(bridge, sb, request, *, clock=None, sleep=None):

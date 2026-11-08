@@ -130,6 +130,10 @@ pub(crate) enum WebAction {
         project_id: String,
         request_id: String,
     },
+    WorkInspect {
+        project_id: String,
+        request_id: String,
+    },
     WorkResolve {
         project_id: String,
         input_file: PathBuf,
@@ -293,13 +297,19 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         ("browser", "inspect") if options.is_empty() => Ok(WebAction::BrowserInspect {
             project_id: project_id.into(),
         }),
-        ("work", "deliver") => {
+        ("work", "deliver" | "inspect") => {
             let request_id = options
                 .remove("--request-id")
                 .filter(|id| id.len() <= 128 && catdesk_wake::protocol::valid_id(id))
                 .ok_or("WEB_USAGE: --request-id is required")?;
             if !options.is_empty() {
                 return Err("WEB_USAGE: unexpected delivery option".into());
+            }
+            if verb == "inspect" {
+                return Ok(WebAction::WorkInspect {
+                    project_id: project_id.into(),
+                    request_id: request_id.into(),
+                });
             }
             Ok(WebAction::WorkDeliver {
                 project_id: project_id.into(),
@@ -1644,6 +1654,10 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             project_id,
             request_id,
         } => crate::web_work::deliver(&workspace, &project_id, &request_id),
+        WebAction::WorkInspect {
+            project_id,
+            request_id,
+        } => crate::web_work::inspect_delivery(&workspace, &project_id, &request_id),
         WebAction::WorkResolve {
             project_id,
             input_file,
@@ -1901,6 +1915,39 @@ mod tests {
         duplicate.extend(args(&["--project-id", "beta"]));
         assert!(parse(&duplicate).is_err());
         assert!(parse(&base[..4]).is_err());
+    }
+
+    #[test]
+    fn work_inspection_requires_existing_request_without_message_or_route_override() {
+        let base = args(&[
+            "operator",
+            "web",
+            "work",
+            "inspect",
+            "--project-id",
+            "alpha",
+            "--request-id",
+            "existing-one",
+        ]);
+        assert!(
+            matches!(parse(&base), Ok(WebAction::WorkInspect { project_id, request_id }) if project_id == "alpha" && request_id == "existing-one")
+        );
+        for option in [
+            "--event-id",
+            "--message",
+            "--delivery-file",
+            "--conversation-url",
+            "--force",
+            "--input-file",
+            "--workspace",
+            "--profile",
+            "--execution-key",
+        ] {
+            let mut invalid = base.clone();
+            invalid.extend(args(&[option, "unapproved"]));
+            assert!(parse(&invalid).is_err());
+        }
+        assert!(parse(&base[..base.len() - 2]).is_err());
     }
 
     #[test]

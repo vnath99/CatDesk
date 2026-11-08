@@ -104,6 +104,14 @@ pub(crate) fn tab_observation(line: &str) -> Option<serde_json::Value> {
     Some(value)
 }
 
+pub(crate) fn submission_observation(line: &str) -> Option<serde_json::Value> {
+    let text = line.strip_prefix("PROBE:SUBMISSION:")?;
+    if text.len() > 2048 {
+        return None;
+    }
+    crate::runtime::canonical_submission_observation(serde_json::from_str(text).ok()?)
+}
+
 pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<String>, &'static str> {
     let mut rows = Vec::new();
     run_bounded_observed(command, timeout, &mut rows)?;
@@ -216,6 +224,15 @@ fn sanitized_rows(text: &str) -> Vec<String> {
             if state.starts_with("TAB:") {
                 return tab_observation(line).is_some();
             }
+            if state.starts_with("SUBMISSION:") {
+                return submission_observation(line).is_some();
+            }
+            if let Some(state) = state.strip_prefix("SUBMISSION_STATE:") {
+                return matches!(
+                    state,
+                    "TARGET_UNAVAILABLE" | "OBSERVATION_UNAVAILABLE" | "OBSERVED"
+                );
+            }
             if let Some(phase) = state.strip_prefix("PHASE:") {
                 return matches!(
                     phase,
@@ -314,6 +331,8 @@ fn sanitized_rows(text: &str) -> Vec<String> {
                 format!("PROBE:SURFACE:{value}")
             } else if let Some(value) = tab_observation(line) {
                 format!("PROBE:TAB:{value}")
+            } else if let Some(value) = submission_observation(line) {
+                format!("PROBE:SUBMISSION:{value}")
             } else {
                 line.to_owned()
             }
@@ -324,6 +343,29 @@ fn sanitized_rows(text: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn submission_rows_share_strict_metadata_validator_without_receipt_authority() {
+        let value = serde_json::json!({"composerClass":"OTHER","composerBytes":4,
+            "legacyAvailable":false,"readersAgree":null,"legacyMatchesExpected":null,
+            "expectedUserCount":2,"lastUserMatches":true,"trustedMatches":2,"turnsAfter":1,
+            "stable":true,"coverage":"VISIBLE_BOUNDED_ONLY"});
+        assert_eq!(
+            submission_observation(&format!("PROBE:SUBMISSION:{value}")),
+            Some(value.clone())
+        );
+        for (key, bad) in [
+            ("expectedUserCount", serde_json::json!(513)),
+            ("expectedUserCount", serde_json::json!(true)),
+            ("composerClass", serde_json::json!("PRIVATE_DRAFT")),
+            ("composerText", serde_json::json!("PRIVATE_DRAFT")),
+            ("receiptCreated", serde_json::json!(true)),
+            ("coverage", serde_json::json!("FULL_DURABLE_HISTORY")),
+        ] {
+            let mut changed = value.clone();
+            changed[key] = bad;
+            assert!(submission_observation(&format!("PROBE:SUBMISSION:{changed}")).is_none());
+        }
+    }
     #[test]
     fn partial_protocol_rejects_private_phases_and_unattributed_submission_claims() {
         assert_eq!(

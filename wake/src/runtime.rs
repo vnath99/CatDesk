@@ -27,12 +27,14 @@ mod readiness;
 mod review_reconcile;
 #[path = "runtime_scoped_review.rs"]
 mod scoped_review;
-pub use readiness::inspect_registered_readiness;
+pub use readiness::{inspect_registered_delivery_readiness, inspect_registered_readiness};
 pub(crate) use response::validate_observation as validate_response_observation;
-pub(crate) use review_reconcile::validate_pre_edit_refusal_frame;
 pub use review_reconcile::{
     SubmissionDiagnosisReport, diagnose_scoped_review_guarded, diagnosed_scoped_review_guarded,
     reconcile_scoped_review_guarded,
+};
+pub(crate) use review_reconcile::{
+    canonical_submission_observation, validate_pre_edit_refusal_frame,
 };
 pub use scoped_review::{
     run_scoped_review, run_scoped_rollover_continuation, run_scoped_rollover_handoff,

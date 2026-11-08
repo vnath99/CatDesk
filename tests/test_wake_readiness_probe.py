@@ -14,6 +14,81 @@ from unittest import mock
 
 
 class ReadinessProbeTests(unittest.TestCase):
+    def test_event_probe_observes_only_exact_page_and_never_retries_home(self):
+        target = "https://chatgpt.com/c/fixture"
+        for route in ("EXACT", "HOME"):
+            cdp = types.SimpleNamespace(get_tabs=lambda: [], get_current_url=lambda: target if route == "EXACT" else "https://chatgpt.com/")
+            browser = mock.MagicMock(); browser.cdp = cdp
+            factory = mock.Mock(return_value=mock.MagicMock(__enter__=mock.Mock(return_value=browser), __exit__=mock.Mock(return_value=False)))
+            sink = mock.Mock()
+            sink.browser_surface_observation.return_value = dict(route=route, document="COMPLETE", editor="READY", composer="EMPTY", history="PRESENT", generation="IDLE", assistant="ABSENT", exchange="UNATTRIBUTED", recovery="OBSERVATION_ONLY")
+            sink.submission_diagnostic_sample.return_value = (dict(composerClass="EMPTY", expectedUserCount=0), "PRIVATE_COMPARISON")
+            with tempfile.TemporaryDirectory() as profile:
+                argv=["probe", "--await-start", "--read-only", "--profile", profile, "--primitives", "wake_bridge.py", "--primitives-sha256", "a"*64, "--delivery-file", "delivery.json", "--delivery-sha256", "b"*64, "--conversation-url", target, "--seconds", "5"]
+                output=io.StringIO()
+                with mock.patch.object(sys,"argv",argv), mock.patch.object(sys,"stdin",io.StringIO("START\n")), \
+                        mock.patch.dict(sys.modules,{"seleniumbase":types.SimpleNamespace(SB=factory)}), \
+                        mock.patch.object(self.probe,"load_observation_sink",return_value=sink), \
+                        mock.patch.object(self.probe,"load_delivery_message",return_value="PRIVATE_EXPECTED_MESSAGE"), \
+                        mock.patch.object(self.probe.time,"monotonic",side_effect=[0,0,10]), contextlib.redirect_stdout(output):
+                    self.assertEqual(self.probe.main(),0)
+                self.assertNotIn("PRIVATE_",output.getvalue())
+                if route == "HOME":
+                    sink.submission_diagnostic_sample.assert_not_called()
+                    self.assertIn("PROBE:SUBMISSION_STATE:TARGET_UNAVAILABLE",output.getvalue())
+                else:
+                    self.assertEqual(sink.submission_diagnostic_sample.call_count,2)
+                    self.assertIn("PROBE:SUBMISSION_STATE:OBSERVED",output.getvalue())
+                self.assertNotIn("HOME_CHECK",output.getvalue())
+                self.assertEqual(browser.activate_cdp_mode.call_count,1)
+
+    def test_delivery_reader_requires_exact_persisted_identity_and_scope(self):
+        url = "https://chatgpt.com/c/fixture"
+        identity = "web-work-" + "a" * 64
+        message = "frozen ordinary invitation"
+        delivery = {"phase": "ATTENTION", "receipt": None,
+            "messageDigest": hashlib.sha256(message.encode()).hexdigest(),
+            "event": {"eventId": identity, "projectId": "alpha", "eventType": "engineering_attention",
+                "auditReferences": [], "targetGeneration": 1, "message": message},
+            "target": {"generation": 1, "url": url, "digest": hashlib.sha256(url.encode()).hexdigest()}}
+        with tempfile.TemporaryDirectory() as root:
+            directory = Path(root) / "deliveries"; directory.mkdir()
+            path = directory / (identity + ".json")
+            def save(value):
+                path.write_text(json.dumps(value), encoding="utf-8")
+                return hashlib.sha256(path.read_bytes()).hexdigest()
+            checksum = save(delivery)
+            self.assertEqual(self.probe.load_delivery_message(path, checksum, url), message)
+            self.assertEqual(path.read_text(), json.dumps(delivery))
+            with self.assertRaises(ValueError): self.probe.load_delivery_message(path, "0" * 64, url)
+            for key, value in [("phase", "SENT"), ("receipt", {}), ("messageDigest", "0" * 64)]:
+                changed = dict(delivery, **{key: value})
+                with self.subTest(key=key), self.assertRaises(ValueError):
+                    self.probe.load_delivery_message(path, save(changed), url)
+            for key, value in [("eventType", "source_review"), ("targetGeneration", 2), ("auditReferences", ["private-review"]), ("eventId", "other")]:
+                changed = dict(delivery, event=dict(delivery["event"], **{key: value}))
+                with self.subTest(key=key), self.assertRaises(ValueError):
+                    self.probe.load_delivery_message(path, save(changed), url)
+            with self.assertRaises(ValueError): self.probe.load_delivery_message(path, save(delivery), "https://chatgpt.com/c/foreign")
+
+    def test_submission_samples_export_only_comparisons_and_keep_duplicate_counts_advisory(self):
+        value = dict(composerClass="OTHER", composerBytes=21, legacyAvailable=False,
+            readersAgree=None, legacyMatchesExpected=None, expectedUserCount=2,
+            lastUserMatches=True, trustedMatches=2, turnsAfter=1, stable=False, coverage="VISIBLE_BOUNDED_ONLY")
+        sink = mock.Mock()
+        sink.submission_diagnostic_sample.return_value = (value, ("PRIVATE_DRAFT_HASH", "PRIVATE_HISTORY_HASH"))
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output): self.probe.report_submission(sink, object(), "PRIVATE_EXPECTED_MESSAGE", sleep=lambda _: None)
+        rows = output.getvalue().splitlines()
+        observed = json.loads(rows[0].removeprefix("PROBE:SUBMISSION:"))
+        self.assertEqual(observed["expectedUserCount"], 2)
+        self.assertTrue(observed["stable"])
+        self.assertNotIn("PRIVATE_", output.getvalue())
+        sink.submission_diagnostic_sample.side_effect = ValueError("PRIVATE_FAILURE")
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output): self.probe.report_submission(sink, object(), "PRIVATE_EXPECTED_MESSAGE", sleep=lambda _: None)
+        self.assertEqual(output.getvalue(), "PROBE:SUBMISSION_STATE:OBSERVATION_UNAVAILABLE\n")
+
     def setUp(self):
         spec = importlib.util.spec_from_file_location(
             "readiness_probe", Path(__file__).resolve().parents[1] / "scripts/wake_readiness_visual_probe.py")
