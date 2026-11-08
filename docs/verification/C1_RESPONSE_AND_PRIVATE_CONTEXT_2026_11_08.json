@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Build the qualified diagnostics correction, inspect the original context-preparation refusal once without a browser/send, and implement the specific measured limit or other failed prerequisite. Original queue job/grant must not be duplicated and original invitation must not be resent.",
+  "next": "Build the qualified fresh-native capsule representation, prepare the original context once while preserving its existing READY job/grant, verify bounded wire and full private context, then run the one authorized bounded context delivery and continuation.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -101,13 +101,37 @@
     "nativeTasksExecuted": 0,
     "contextPreparation": "REFUSED_BEFORE_BROWSER",
     "reportedError": "WEB_OPERATION_REFUSED",
-    "preciseTaskContextReason": "NOT_YET_EXPOSED_BY_PRIOR_CONTROLLER",
-    "all1052PreservationPinsMatch": true
+    "preciseTaskContextReason": "TASK_CONTEXT_REQUEST_TOO_LARGE",
+    "all1052PreservationPinsMatch": true,
+    "additionalNewTaskPinsPreserved": 5
   },
   "diagnosticCorrection": {
     "scope": "CLOSED_TASK_CONTEXT_ERROR_CODES_ONLY",
     "arbitraryTaskErrorsStillRedacted": true,
     "qualification": "PASS_STABLE_CODE_PRIVACY_TEST_STRICT_CLIPPY_AND_FORMATTING",
-    "noAuthorityOrStateGuardChange": true
+    "noAuthorityOrStateGuardChange": true,
+    "liveExactReasonVerified": true
+  },
+  "nativeContextRepresentation": {
+    "scope": "NEW_FRESH_EXACT_NATIVE_GRANTS_ONLY",
+    "fullPrivateContextPreserved": true,
+    "frozenNativeTaskObjectivesAndVerificationUnchanged": true,
+    "maximumCapsuleCharacters": 1400,
+    "sameExistingNativeDispatchArgumentScope": true,
+    "fixedCallIdWithinExistingTaskJournal": "native-dispatch-1",
+    "completedUnknownOrPatchHistoryPreventsCapsule": true,
+    "smallAndNonNativeContextsRemainFull": true,
+    "oldFrozenPayloadsNeverRegenerated": true,
+    "wireLimitUnchangedBytes": 8192,
+    "boundedPrivateContextSendSeconds": 180,
+    "installedTypingDelayFloorSecondsPerCharacter": 0.042,
+    "newBrowserOrSchedulerOwner": false,
+    "qualification": {
+      "contextStateAndRecoveryTestsPassed": 15,
+      "strictRootAllTargetClippy": "PASS",
+      "formatting": "PASS"
+    },
+    "actualCapsulePreparation": "NOT_RUN_YET",
+    "actualSend": "NOT_RUN"
   }
 }

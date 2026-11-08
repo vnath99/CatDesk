@@ -429,6 +429,74 @@ fn with_context_accounting(
     output
 }
 
+// Full private context and the native queue retain every objective and check.
+// A fresh exact native grant can use a bounded launch capsule over the existing
+// acknowledged transport; ordinary and previously used task contexts stay full.
+fn initial_context_message(
+    context: &Value,
+    project: &str,
+    request: &str,
+    target: &Target,
+) -> Result<String, String> {
+    let render = |context: &Value, project: &str, request: &str| -> Result<String, String> {
+        Ok(format!(
+            "CatDesk private assigned-task context. Project: {}. Request: {}.\n{}\nKeep executionKey private. Do not echo it, log it, write it into project files or disclose it to another conversation. Acknowledge receipt only; wait for the separate exact CatDesk assigned-task continuation event before making tool calls. Preserve current native work and completed/unknown call IDs. This context grants only the existing task scope; it grants no new permissions.",
+            project,
+            request,
+            serde_json::to_string(context).map_err(|_| "WEB_TASK_CONTEXT_INVALID")?
+        ))
+    };
+    let validate = |message: &str| {
+        let event_id = format!("task-context-{}", "0".repeat(64));
+        for operation in [
+            TaskContextOperation::Submit,
+            TaskContextOperation::Reconcile,
+        ] {
+            TaskContextSubmission {
+                project_id: project,
+                event_id: &event_id,
+                target,
+                message,
+                operation,
+                maximum_seconds: 120,
+            }
+            .validate()?;
+        }
+        Ok::<(), String>(())
+    };
+    let message = render(context, project, request)?;
+    if message.len() > 16 * 1024 {
+        return Err("WEB_TASK_CONTEXT_TOO_LARGE".into());
+    }
+    let fresh_native = context["nativeQueue"]["selection"].is_object()
+        && ["journaledCalls", "patchProposals", "patchApplications"]
+            .iter()
+            .all(|key| {
+                context
+                    .get(*key)
+                    .and_then(Value::as_array)
+                    .is_some_and(|items| items.is_empty())
+            });
+    if fresh_native && message.chars().count() > 1400 {
+        let native_call = json!({"projectId":context["projectId"],"requestId":context["requestId"],
+            "sourceEventId":context["sourceEventId"],"taskId":context["taskId"],"assignmentSha256":context["assignmentSha256"],
+            "expectedTargetGeneration":context["expectedTargetGeneration"],"expectedTargetSha256":context["expectedTargetSha256"],
+            "executionKey":context["executionKey"],"callId":"native-dispatch-1","tool":"native.codex.dispatch","arguments":{}});
+        let capsule = json!({"nativeCall":native_call,"fullPrivateContextSha256":digest(&serde_json::to_string(context).map_err(|_|"WEB_TASK_CONTEXT_INVALID")?)});
+        let compact = format!(
+            "CatDesk private assigned-task context (native-only).\n{}\nKeep executionKey private. Acknowledge only; await the separate assigned-task continuation. Then use catdesk_web_task_tool with nativeCall, or run_command with command CATDESK_WEB_TASK=<nativeCall JSON>. Execute only this frozen native task; never replay a completed/unknown call. The native job retains the full objectives and checks.",
+            serde_json::to_string(&capsule).map_err(|_| "WEB_TASK_CONTEXT_INVALID")?
+        );
+        if compact.chars().count() > 1400 {
+            return Err("WEB_TASK_CONTEXT_NATIVE_CAPSULE_TOO_LARGE".into());
+        }
+        validate(&compact)?;
+        return Ok(compact);
+    }
+    validate(&message)?;
+    Ok(message)
+}
+
 pub(crate) fn prepare_initial_context(
     scope: &ResolvedProjectScopeV1,
     record: &crate::web_work_state::WorkRecord,
@@ -445,15 +513,12 @@ pub(crate) fn prepare_initial_context(
     context["expectedTargetGeneration"] = json!(target.generation);
     context["expectedTargetSha256"] = json!(target.digest);
     context["targetSelection"] = json!("MATCH_THIS_VERIFIED_TARGET_AND_THE_SEPARATE_CONTINUATION");
-    let message = format!(
-        "CatDesk private assigned-task context. Project: {}. Request: {}.\n{}\nKeep executionKey private. Do not echo it, log it, write it into project files or disclose it to another conversation. Acknowledge receipt only; wait for the separate exact CatDesk assigned-task continuation event before making tool calls. Preserve current native work and completed/unknown call IDs. This context grants only the existing task scope; it grants no new permissions.",
-        scope.project.project_id,
-        record.request_id,
-        serde_json::to_string(&context).map_err(|_| "WEB_TASK_CONTEXT_INVALID")?
-    );
-    if message.len() > 16 * 1024 {
-        return Err("WEB_TASK_CONTEXT_TOO_LARGE".into());
-    }
+    let message = initial_context_message(
+        &context,
+        &scope.project.project_id,
+        &record.request_id,
+        target,
+    )?;
     let payload = Payload {
         schema_version: 1,
         context,
@@ -690,7 +755,7 @@ fn run_with_sender(
         } else {
             TaskContextOperation::Reconcile
         },
-        maximum_seconds: 120,
+        maximum_seconds: 180,
     };
     let outcome = send(
         store,
@@ -746,6 +811,66 @@ fn run_with_sender(
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
+    #[test]
+    fn fresh_native_capsule_preserves_full_private_task_and_exact_existing_call_scope() {
+        let target = Target::new(1, "https://chatgpt.com/c/fixture".into()).unwrap();
+        let context = json!({"projectId":"alpha","requestId":"original","sourceEventId":format!("web-work-{}","a".repeat(64)),"taskId":"task-original",
+            "assignmentSha256":"c".repeat(64),"expectedTargetGeneration":1,"expectedTargetSha256":target.digest,"executionKey":"e".repeat(64),
+            "taskContract":{"objective":"essential objective".repeat(100),"allowedPaths":["src/task.py"]},
+            "journaledCalls":[],"patchProposals":[],"patchApplications":[],
+            "nativeQueue":{"selection":{"taskId":"original","maximumSeconds":180},"statusTool":"native.codex.status","snapshot":{"display":"x".repeat(7000)}}});
+        let before = context.clone();
+        let message = initial_context_message(&context, "alpha", "original", &target).unwrap();
+        let wire: Value = serde_json::from_str(message.lines().nth(1).unwrap()).unwrap();
+        assert!(message.chars().count() <= 1400);
+        assert_eq!(context, before);
+        assert_eq!(
+            wire["fullPrivateContextSha256"],
+            json!(digest(&serde_json::to_string(&context).unwrap()))
+        );
+        for key in [
+            "projectId",
+            "requestId",
+            "sourceEventId",
+            "taskId",
+            "assignmentSha256",
+            "expectedTargetGeneration",
+            "expectedTargetSha256",
+            "executionKey",
+        ] {
+            assert_eq!(wire["nativeCall"][key], context[key]);
+        }
+        assert_eq!(wire["nativeCall"]["callId"], "native-dispatch-1");
+        assert_eq!(wire["nativeCall"]["tool"], "native.codex.dispatch");
+        let mut unknown = context.clone();
+        unknown["journaledCalls"] = json!([{"callId":"previous","status":"OUTCOME_UNKNOWN"}]);
+        assert_eq!(
+            initial_context_message(&unknown, "alpha", "original", &target).unwrap_err(),
+            "TASK_CONTEXT_REQUEST_TOO_LARGE"
+        );
+    }
+
+    #[test]
+    fn small_or_non_native_context_cannot_silently_drop_facts_to_fit_wire() {
+        let target = Target::new(1, "https://chatgpt.com/c/fixture".into()).unwrap();
+        let small = json!({"nativeQueue":{"selection":{"taskId":"original"},"snapshot":{"status":"READY"}},"taskContract":{"objective":"unchanged"}});
+        let message = initial_context_message(&small, "alpha", "original", &target).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(message.lines().nth(1).unwrap()).unwrap(),
+            small
+        );
+        let large = json!({"taskContract":{"objective":"x".repeat(10000)}});
+        assert_eq!(
+            initial_context_message(&large, "alpha", "original", &target).unwrap_err(),
+            "TASK_CONTEXT_REQUEST_TOO_LARGE"
+        );
+        let mut insufficient = large.clone();
+        insufficient["nativeQueue"] = json!({"snapshot":{}});
+        assert_eq!(
+            initial_context_message(&insufficient, "alpha", "original", &target).unwrap_err(),
+            "TASK_CONTEXT_REQUEST_TOO_LARGE"
+        );
+    }
     use catdesk_wake::store::{Phase, Store, now};
 
     fn fixture(
