@@ -8675,3 +8675,64 @@ state refuses CONTROL_UNPROVEN. No text, filenames, values or unknown labels
 are exported. Eight structural/attachment cases exercise the actual DOM code;
 no existing send, draft, lease, route or native-dispatch guard was relaxed.
 A fresh matched controller and one bounded inspection remain required.
+
+
+## 2026-11-08T23:38:56.743620+00:00 — structural-control exact-task menu qualification
+
+LIVE_MENU_FAIL_CLOSED_UNSUPPORTED_MENU: the existing registered-profile owner completed one task/receipt-bound
+observation in 34.5 seconds. The original assistant response
+remains COMPLETE; diagnostics were returned automatically, without an operator
+relay. Menu state: UNSUPPORTED_MENU; open requested: false;
+close attempted: false; closed verified:
+false; unknown open outcome:
+false. Fixed v5 item count:
+0, disabled count: 0.
+
+These are transient presentation observations, not tool-catalog, authentication
+or native-execution authority. No app was selected, USER message sent, native
+call retried, backend/tunnel/Wake started, setting changed or binding updated.
+All 1,076 preservation pins match; the owned process tree exited, registered
+profile/Wake process counts are zero and port 3200 is closed.
+
+Runtime source 544af0093fa0d39b78ce4390ed20ed388b323191, separate controller
+SHA-256 d5e463bef6e8d550fac66f25feff7977062e571c40cb2d3de6a0df603a682896. No installed runtime
+was replaced. Installed dev.84 response readback remains unqualified and the
+original C1 native task is still unattempted READY. Its cached-envelope refusal
+precedes native execution; the precise originally rejected field is unrecorded.
+Keep the frozen task/key/grant and completed messages unchanged.
+
+
+## 2026-11-08T23:40:59.049886+00:00 — cached transport catalog guidance and acceptance boundary
+
+The existing run_command catalog description now explains its reserved
+CATDESK_WEB_TASK envelope: omit cwd/timeout entirely, including null; optional
+dry_run/include_full_output are false or absent; no unknown outer fields.
+The shell schema and all authentication, grant, plan, journal and no-replay
+checks are unchanged. A catalog regression verifies the client-visible guidance
+against existing transport metadata. This removes a documentation gap; it does
+not establish which field caused the historical rejection. The installed
+canonical server did not record that invariant. Never rewrite the original
+frozen task/key/grant or treat an argument refusal as retry authorization.
+
+Autonomous exact-task readback is LIVE QUALIFIED through a separate development
+controller: response completion plus closed refusal/error hints were returned
+to Codex without an operator relay. Native journals remain preferred for
+execution proof. The latest hints are TOOL_UNAVAILABLE / CONTEXT_UNAVAILABLE,
+with specific missing subjects unproven. The controlled response, task, USER
+receipt, target digest and generation were independently matched.
+
+Installed dev.84 still lacks the new response handlers and sender lifecycle.
+The source sender waits while generation is active and performs only a guarded
+post-completion refresh plus persisted-response checks; this is not installed
+acceptance. Promotion still requires the existing signed/broker authority
+(WAKE_INSTALL_BROKER_UNPROVISIONED and WAKE_BROKER_TRANSACTION_GATES_UNAVAILABLE).
+The exact-chat app action separately refused UNSUPPORTED_MENU before clicking.
+That does not prove absent tools or authentication failure. No alternate
+browser owner, settings change, USER replay, native dispatch or manual response
+relay was used. All owned test processes exited; project state is preserved.
+
+Next eligible implementation is closed, read-only classification of the actual
+composer control's popup/link semantics through the existing observer, before
+any further UI action. Protected upgrade qualification remains a separate
+prerequisite for installed end-to-end acceptance. No operator action or secret
+is currently requested. C1 native edit/test/Wake remains NOT COMPLETE.

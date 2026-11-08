@@ -749,7 +749,7 @@ async fn handle_tools_list(
             tools.push(json!({
                 "name": "run_command",
                 "title": "Run command",
-                "description": "Execute a shell command inside the workspace root. Common directory-listing commands are parsed before execution and may return structured workspace listings instead of raw shell output. Returns stdout and stderr for non-intercepted commands.",
+                "description": "Execute a shell command inside the workspace root. Common directory-listing commands are parsed before execution and may return structured workspace listings instead of raw shell output. Returns stdout and stderr for non-intercepted commands. Reserved scoped-task transport: CATDESK_WEB_TASK= followed by JSON of the unchanged authorized task call is validated by the existing central dispatcher and is never shell input. For that reserved envelope, omit cwd and timeout entirely (including null); dry_run and include_full_output must be false or absent, allow_without_plan may be boolean, and no other outer fields are accepted. Existing authentication, task grants, plan policy and no-replay rules still apply. An argument refusal does not authorize a retry or a replacement task.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -13766,6 +13766,47 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(workspace_root);
+    }
+
+    #[tokio::test]
+    async fn run_command_catalog_explains_reserved_envelope_without_changing_shell_schema() {
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!("reserved-envelope-catalog")),
+            method: "tools/list".into(),
+            params: json!({}),
+        };
+        let response = handle_tools_list(&req, Mode::Both, ToolMode::MultiTools, &None).await;
+        let tool = response.result.as_ref().unwrap()["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["name"] == "run_command")
+            .unwrap();
+        let description = tool["description"].as_str().unwrap();
+        for instruction in [
+            "CATDESK_WEB_TASK=",
+            "never shell input",
+            "omit cwd and timeout entirely (including null)",
+            "false or absent",
+            "no other outer fields",
+            "does not authorize a retry",
+        ] {
+            assert!(description.contains(instruction));
+        }
+        assert_eq!(tool["inputSchema"]["required"], json!(["command"]));
+        assert_eq!(tool["inputSchema"]["properties"]["cwd"]["type"], "string");
+        assert_eq!(
+            tool["inputSchema"]["properties"]["timeout"]["type"],
+            "number"
+        );
+        let metadata = crate::web_task_dispatch::cached_transport_metadata();
+        assert_eq!(
+            metadata["outerArguments"]["mustBeAbsent"],
+            json!(["cwd", "timeout"])
+        );
+        assert_eq!(metadata["shellExecuted"], false);
+        assert_eq!(metadata["sameCallIdAndJournal"], true);
     }
 
     #[tokio::test]

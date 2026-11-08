@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Keep the original native task and completed deliveries unchanged. Resolve affected Web caller attachment/context through an explicitly qualified existing composer path only if the exact menu supports it; menu counts are not a catalog or grant. Complete installed response-reader promotion only through the existing signed/broker authority. C1 native edit/test/Wake and installed end-to-end acceptance remain incomplete; no manual assistant-response relay is required.",
+  "next": "Use the existing read-only composer observer to classify closed popup/link semantics before any further UI action; do not guess a dialog/menu or infer client catalog availability. Preserve the original task/key/grant and completed messages. Installed response/sender qualification separately requires the existing signed/broker promotion authority. No manual response relay is requested. C1 remains incomplete.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -1238,7 +1238,7 @@
   },
   "transientAppMenuInspection": {
     "observedUtc": "2026-11-08T23:31:00.551708+00:00",
-    "status": "LIVE_MENU_FAIL_CLOSED_DRAFT_PRESENT",
+    "status": "LIVE_MENU_FAIL_CLOSED_UNSUPPORTED_MENU",
     "sourceOnly": true,
     "owner": "EXISTING_TASK_RECEIPT_BOUND_NATIVE_READINESS_OWNER",
     "maximumOpenActions": 1,
@@ -1261,6 +1261,50 @@
       "format": "PASS"
     },
     "live": {
+      "observedUtc": "2026-11-08T23:38:11.166187+00:00",
+      "sourceCommit": "544af0093fa0d39b78ce4390ed20ed388b323191",
+      "controllerSha256": "d5e463bef6e8d550fac66f25feff7977062e571c40cb2d3de6a0df603a682896",
+      "elapsedSeconds": 34.5,
+      "maximumOwnerSeconds": 150,
+      "observation": {
+        "appsItemCount": 0,
+        "basis": "TRANSIENT_MENU_ONLY_NOT_TOOL_CATALOG",
+        "closeAttempted": false,
+        "closedVerified": false,
+        "moreItemCount": 0,
+        "openAttempted": true,
+        "openOutcomeUnknown": false,
+        "openRequested": false,
+        "schemaVersion": 1,
+        "state": "UNSUPPORTED_MENU",
+        "v5DisabledCount": 0,
+        "v5ItemCount": 0
+      },
+      "responseStage": "RESPONSE_COMPLETE",
+      "taskReceiptAndGenerationAttributed": true,
+      "messagesSent": 0,
+      "nativeCalls": 0,
+      "appSelections": 0,
+      "bindingChanges": 0,
+      "settingsChanges": 0,
+      "preservationPins": 1076,
+      "preservationMismatches": 0,
+      "ownedTreeExited": true,
+      "ownedProfileAndWakeProcessesAfter": 0,
+      "port3200ListenerPresent": false
+    },
+    "structuralControlCorrection": {
+      "observedUtc": "2026-11-08T23:35:34.788336+00:00",
+      "status": "LIVE_FAIL_CLOSED_UNSUPPORTED_MENU",
+      "emptyFilePickerIsDraft": false,
+      "selectedFileRefused": true,
+      "unknownInputState": "CONTROL_UNPROVEN",
+      "hiddenInputsAndButtonIconsAreStructural": true,
+      "draftsCleared": 0,
+      "actualDomTests": 87,
+      "previousLiveRefusalPreserved": true
+    },
+    "firstLive": {
       "observedUtc": "2026-11-08T23:33:24.739174+00:00",
       "sourceCommit": "ed0f3e32bce1021c27acbfb8c987b723553af953",
       "controllerSha256": "05376be8e994cc1694cf14872971ff8178e602dda4d24468d06a29d2678485cd",
@@ -1292,17 +1336,16 @@
       "ownedTreeExited": true,
       "ownedProfileAndWakeProcessesAfter": 0,
       "port3200ListenerPresent": false
-    },
-    "structuralControlCorrection": {
-      "observedUtc": "2026-11-08T23:35:34.788336+00:00",
-      "status": "SOURCE_TESTED_MATCHED_LIVE_PENDING",
-      "emptyFilePickerIsDraft": false,
-      "selectedFileRefused": true,
-      "unknownInputState": "CONTROL_UNPROVEN",
-      "hiddenInputsAndButtonIconsAreStructural": true,
-      "draftsCleared": 0,
-      "actualDomTests": 87,
-      "previousLiveRefusalPreserved": true
     }
+  },
+  "cachedTransportCatalogGuidance": {
+    "observedUtc": "2026-11-08T23:40:59.049886+00:00",
+    "status": "SOURCE_TESTED_NOT_INSTALLED",
+    "toolNameUnchanged": true,
+    "shellSchemaUnchanged": true,
+    "reservedEnvelopeDocumented": true,
+    "validationUnchanged": true,
+    "historicalRejectedInvariant": "UNRECORDED",
+    "nativeCallRetried": false
   }
 }
