@@ -109,6 +109,10 @@ pub(crate) enum WebAction {
         project_id: String,
         event_id: String,
     },
+    ReviewInspectSubmission {
+        project_id: String,
+        event_id: String,
+    },
     ReviewReobserve {
         project_id: String,
         event_id: String,
@@ -583,7 +587,11 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         ("context", "capture") if options.is_empty() => Ok(WebAction::ContextCapture {
             project_id: project_id.into(),
         }),
-        ("review", "read" | "inspect-response" | "reobserve" | "reconcile" | "diagnose") => {
+        (
+            "review",
+            "read" | "inspect-response" | "inspect-submission" | "reobserve" | "reconcile"
+            | "diagnose",
+        ) => {
             let event_id = options
                 .remove("--event-id")
                 .ok_or("WEB_USAGE: --event-id is required")?;
@@ -592,6 +600,11 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
             }
             if verb == "inspect-response" {
                 Ok(WebAction::ReviewInspectResponse {
+                    project_id: project_id.into(),
+                    event_id: event_id.into(),
+                })
+            } else if verb == "inspect-submission" {
+                Ok(WebAction::ReviewInspectSubmission {
                     project_id: project_id.into(),
                     event_id: event_id.into(),
                 })
@@ -1138,6 +1151,7 @@ fn inspect_review_response(
     workspace: &Path,
     project: &str,
     event_id: &str,
+    pending: bool,
 ) -> Result<Value, String> {
     let key = paired_key(workspace, project)?;
     let lease = crate::operator_facade::acquire_web_work_lease(workspace, project)?;
@@ -1157,6 +1171,14 @@ fn inspect_review_response(
         .unwrap_or_else(|| delivery.event.event_id.clone());
     let task_record =
         crate::web_work_state::WorkLedger::record_for_event(workspace, project, &source_event)?;
+    if pending
+        && (delivery.receipt.is_some()
+            || task_record
+                .as_ref()
+                .is_none_or(|record| record.task_assignment.is_none()))
+    {
+        return Err("WEB_REVIEW_TASK_BINDING_REQUIRED".into());
+    }
     if task_record
         .as_ref()
         .is_some_and(|record| record.target != target)
@@ -1178,11 +1200,21 @@ fn inspect_review_response(
         lease.check_target(&target)
     };
     guard()?;
-    let mut value = catdesk_wake::runtime::inspect_sent_task_response_diagnostics(
-        &wake, project, &target, event_id, &guard,
-    )?;
+    let mut value = if pending {
+        catdesk_wake::runtime::inspect_registered_delivery_readiness(
+            &wake, project, &target, &delivery, &guard,
+        )?
+    } else {
+        catdesk_wake::runtime::inspect_sent_task_response_diagnostics(
+            &wake, project, &target, event_id, &guard,
+        )?
+    };
     guard()?;
-    value["action"] = json!("web_review_response_inspect");
+    value["action"] = json!(if pending {
+        "web_review_submission_inspect"
+    } else {
+        "web_review_response_inspect"
+    });
     if crate::web_work_state::WorkLedger::record_for_event(workspace, project, &source_event)?
         != task_record
     {
@@ -1753,7 +1785,11 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
         WebAction::ReviewInspectResponse {
             project_id,
             event_id,
-        } => inspect_review_response(&workspace, &project_id, &event_id),
+        } => inspect_review_response(&workspace, &project_id, &event_id, false),
+        WebAction::ReviewInspectSubmission {
+            project_id,
+            event_id,
+        } => inspect_review_response(&workspace, &project_id, &event_id, true),
         WebAction::ReviewReobserve {
             project_id,
             event_id,
@@ -2802,6 +2838,38 @@ mod tests {
             let mut changed = valid.clone();
             changed.extend(args(&extra));
             assert!(parse(&changed).is_err());
+        }
+        assert!(parse(&valid[..6]).is_err());
+    }
+
+    #[test]
+    fn submission_inspection_selects_only_registered_project_and_existing_event() {
+        let valid = args(&[
+            "operator",
+            "web",
+            "review",
+            "inspect-submission",
+            "--project-id",
+            "alpha",
+            "--event-id",
+            "wake-intent-existing",
+        ]);
+        assert!(matches!(
+            parse(&valid),
+            Ok(WebAction::ReviewInspectSubmission { .. })
+        ));
+        for option in [
+            "--submit",
+            "--force",
+            "--message",
+            "--input-file",
+            "--profile",
+            "--conversation-url",
+            "--execution-key",
+        ] {
+            let mut invalid = valid.clone();
+            invalid.extend(args(&[option, "foreign"]));
+            assert!(parse(&invalid).is_err());
         }
         assert!(parse(&valid[..6]).is_err());
     }

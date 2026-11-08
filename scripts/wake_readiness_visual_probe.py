@@ -66,7 +66,7 @@ def load_delivery_message(path, expected_sha256, url, *, receipt_only=False, res
     message = event["message"]
     ordinary = event["auditReferences"] == [] and re.fullmatch(r"web-work-[0-9a-f]{64}", event["eventId"])
     continuation = False
-    if sent_diagnostics and response_only and re.fullmatch(r"wake-intent-[0-9a-f]{64}", event["eventId"]):
+    if (not response_only or sent_diagnostics) and re.fullmatch(r"wake-intent-[0-9a-f]{64}", event["eventId"]):
         refs = event["auditReferences"]
         fields = dict(item.removeprefix("catdesk.wake.v1:").split(":", 1) for item in refs
                       if isinstance(item, str) and item.startswith("catdesk.wake.v1:"))

@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Build the exact reviewed source controller, then freeze and deliver one same-task transport clarification through the existing authenticated owner. Original nativeCall fields, key, call ID, grant and task are unchanged. Only a fresh READY/no-attempt/no-journal proof permits this known pre-admission recovery; uncertain effects remain held. Native work must originate from the actual registered Web conversation, with no local dispatch fallback. Do not make the unfinished protected Wake upgrade a blanket prerequisite for C1.",
+  "next": "Build a matched separate controller and inspect the exact pending task continuation once, read-only. Do not resend or infer failure from the timeout or missing native attempt. Establish positive fresh receipt evidence before any guarded journal reconciliation. Installed dev.84 readback and C1 coding acceptance remain incomplete.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -743,6 +743,71 @@
     },
     "nativeOwnerObservation": "NOT_LOADED_WITH_COMPLETED_LATEST_TURN_NOT_AN_EXCLUSIVE_WRITER_LEASE_PROOF",
     "liveNativeExecution": "NOT_RUN_FOR_THIS_RECOVERY",
-    "installedWakeUpgrade": "UNCHANGED_BLOCKED_SEPARATE_FROM_C1"
+    "installedWakeUpgrade": "UNCHANGED_BLOCKED_SEPARATE_FROM_C1",
+    "liveAttempt": {
+      "observedUtc": "2026-11-08T21:41:37.883169+00:00",
+      "status": "UNKNOWN_SUBMISSION_NO_REPLAY",
+      "elapsedSeconds": 391.61,
+      "maximumSeconds": 420,
+      "senderError": "SCOPED_REVIEW_TIMEOUT",
+      "cliPreviouslyReturned": "WEB_OPERATION_REFUSED",
+      "durablePhase": "SUBMITTING",
+      "receiptPresent": false,
+      "submissionWitnessPresent": true,
+      "ackOrUserSubmissionEstablished": false,
+      "nativeState": "READY",
+      "nativeAttemptPresent": false,
+      "nativeReceiptPresent": false,
+      "nativeJournalPresent": false,
+      "sourceEditsVerified": false,
+      "backendReady": true,
+      "existingOfficialReady": true,
+      "authMatrix": [
+        401,
+        401,
+        200
+      ],
+      "localCatalogTools": 102,
+      "centralTaskToolListed": true,
+      "backendStopped": true,
+      "officialStopped": true,
+      "profilePreserved": true,
+      "ownedProfileAndWakeProcessesAfter": 0,
+      "preservationPinsChecked": 1068,
+      "preservationMismatches": 0
+    }
+  },
+  "pendingTaskObservation": {
+    "observedUtc": "2026-11-08T22:00:06.532166+00:00",
+    "status": "TESTED_SOURCE_LIVE_INSPECTION_PENDING",
+    "operatorCommand": "operator web review inspect-submission --project-id PROJECT --event-id EXISTING_EVENT",
+    "scope": "EXISTING_PENDING_TASK_DELIVERY_ONLY",
+    "sameOwnerAndProfile": true,
+    "checks": [
+      "PAIRED_PROJECT_AND_TARGET",
+      "UNCHANGED_TASK_ASSIGNMENT_AND_LEDGER",
+      "CLAIMED_SUBMITTING_OR_ATTENTION_WITHOUT_RECEIPT",
+      "EXACT_EVENT_MESSAGE_AND_DELIVERY_HASH",
+      "SEMANTIC_NEW_TASK_SOURCE_EVENT_AND_INITIAL_CONTEXT",
+      "LEASE_REVALIDATED_AFTER_BROWSER_EXIT"
+    ],
+    "mutations": 0,
+    "sendCapability": false,
+    "receiptAuthority": false,
+    "retryAuthority": false,
+    "rawDraftOrResponseExported": false,
+    "newBrowserService": false,
+    "protectedInstallChanged": false,
+    "fixedDiagnosticCodes": "NINE_EXPLICIT_SCOPED_REVIEW_CODES_NO_FREEFORM_DETAIL",
+    "sourceTests": {
+      "pythonProbe": 37,
+      "nativeReadiness": 17,
+      "cli": 44,
+      "errorSanitizer": 1,
+      "total": 99,
+      "strictRootAllTargetClippy": "PASS",
+      "strictWakeAllTargetClippy": "PASS",
+      "format": "PASS"
+    }
   }
 }

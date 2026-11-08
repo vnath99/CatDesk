@@ -14,6 +14,51 @@ from unittest import mock
 
 
 class ReadinessProbeTests(unittest.TestCase):
+    def test_pending_continuation_observation_preserves_phase_and_exact_scope(self):
+        url = "https://chatgpt.com/c/fixture"
+        identity = "wake-intent-" + "b" * 64
+        message = "frozen task continuation"
+        refs = ["catdesk.wake.v1:" + k + ":" + v for k, v in [
+            ("purpose", "NEW_TASK"), ("source-event", "web-work-" + "a" * 64),
+            ("source-turn", "initial-context-" + "c" * 64),
+            ("priority", "0"), ("expires-utc", "100")]]
+        target = dict(generation=1, url=url, digest=hashlib.sha256(url.encode()).hexdigest())
+        value = dict(phase="SUBMITTING", receipt=None,
+            messageDigest=hashlib.sha256(message.encode()).hexdigest(), target=target,
+            event=dict(eventId=identity, projectId="alpha", eventType="engineering_attention",
+                targetGeneration=1, message=message, auditReferences=refs))
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "deliveries" / (identity + ".json")
+            path.parent.mkdir()
+            def read(item, **kwargs):
+                path.write_text(json.dumps(item), encoding="utf-8")
+                checksum = hashlib.sha256(path.read_bytes()).hexdigest()
+                return self.probe.load_delivery_message(path, checksum, url, **kwargs)
+            for phase in ("CLAIMED", "SUBMITTING", "ATTENTION"):
+                current = value | {"phase": phase}
+                self.assertEqual(read(current), message)
+                if phase == "SUBMITTING":
+                    self.assertEqual(read(current, receipt_only=True), current)
+                else:
+                    with self.assertRaises(ValueError):
+                        read(current, receipt_only=True)
+                with self.assertRaises(ValueError):
+                    read(current, response_only=True, sent_diagnostics=True)
+            for changed in [value | {"phase": "SENT"}, value | {"receipt": {}},
+                value | {"messageDigest": "0" * 64},
+                value | {"target": target | {"url": url + "-foreign"}},
+                value | {"event": value["event"] | {"targetGeneration": 2}},
+                value | {"event": value["event"] | {"auditReferences": refs[:-1]}},
+                value | {"event": value["event"] | {"auditReferences": refs + [refs[0]]}},
+                *[value | {"event": value["event"] | {"auditReferences": [
+                    ref.replace(old, new) for ref in refs]}}
+                    for old, new in [("NEW_TASK", "ROLLOVER"), ("web-work-", "foreign-"),
+                        ("initial-context-", "foreign-"), ("priority:0", "priority:256")]]]:
+                with self.subTest(changed=changed), self.assertRaises((ValueError, KeyError)):
+                    read(changed)
+            self.assertEqual(read(value), message)
+            self.assertEqual(json.loads(path.read_text()), value)
+
     def test_sent_continuation_diagnostics_cannot_admit_unknown_or_unreceived_delivery(self):
         url="https://chatgpt.com/c/fixture"
         event_id="wake-intent-"+"b"*64

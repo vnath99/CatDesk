@@ -1197,3 +1197,35 @@ one guarded original-task Web delivery. No local-only code-dispatch fallback.
 The architecture explicitly permits C1 on the existing development lane; the
 unfinished protected Wake upgrade remains separate and is not a blanket C1
 prerequisite. C1 and installed automatic-readback acceptance remain incomplete.
+
+
+## 2026-11-08T22:00:06.532166+00:00 — task-bound pending submission observation — TESTED_SOURCE
+
+The one original-task transport clarification reached SUBMITTING and timed out
+with SCOPED_REVIEW_TIMEOUT. No receipt, native attempt or task journal was
+created; the original task remains READY and its source worktree unchanged.
+This is UNKNOWN, not a failed send. A submission-start witness does not prove
+ACK, browser input or remote acceptance. Do not rerun that delivery. The live
+window lasted 391.610 seconds within its 420-second owner limit; finite backend
+and the existing official tunnel were ready, authentication returned 401/401/200,
+and both owners stopped. Profile/Wake processes returned to zero; 1,068
+unrelated preserved pins match. The original native job also remains unchanged.
+
+Two demonstrated diagnostic gaps are corrected without adding a sender or
+service. The CLI now exposes nine explicit bounded SCOPED_REVIEW codes rather
+than hiding the timeout as WEB_OPERATION_REFUSED; arbitrary details remain
+redacted. A local inspect-submission command reuses the stopped-host read-only
+browser owner for exact pending semantic task continuations. It requires a
+registered paired project, an existing task assignment, immutable ledger and
+delivery identity, and before/after lease/target revalidation. It returns only
+closed browser/composer/USER-match diagnostics and task attribution. It neither
+reconciles a receipt nor grants retry/review/producer authority. SENT response
+inspection retains its separate exact receipt requirement.
+
+99 focused tests pass: 37 Python probe, 17 native readiness, 44 CLI and one error
+sanitizer test, with strict root and Wake all-target Clippy and formatting.
+Coverage includes pending/SENT separation, wrong project/target/digest, missing
+receipt, malformed semantic identity and forbidden input/send overrides.
+Next: matched read-only inspection of the pending event. No resend, new task,
+new grant or native call is authorized by this diagnostic. Installed dev.84
+remains unchanged; installed automatic response acceptance and C1 are incomplete.

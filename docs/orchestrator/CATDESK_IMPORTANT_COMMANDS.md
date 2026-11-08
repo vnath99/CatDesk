@@ -6567,3 +6567,19 @@ prior native effect, changed immutable proof or uncertain submission fails
 closed. Existing SENT/unknown messages are never recreated. These are local
 operator commands for an already-authorized task, not new MCP tools or release
 promotion authority. Current protected Wake installation gates remain unchanged.
+
+
+## 2026-11-08T22:00:06.532166+00:00 — inspect an uncertain task continuation without sending
+
+```text
+operator web review inspect-submission --project-id PROJECT --event-id EXISTING_EVENT
+```
+
+Uses the existing registered profile and stopped-host native read-only owner.
+Requires the existing paired target, task-bound WorkLedger record and exact
+pending CLAIMED/SUBMITTING/ATTENTION delivery without a receipt. No caller URL,
+profile, text, key, force or submit option exists. Output is advisory closed
+metadata, not a receipt, proof of failed input, native execution or retry grant.
+A missing or duplicate USER remains uncertain; preserve drafts. The separate
+inspect-response command still requires an exact SENT receipt. A source-qualified
+controller is not an installed Wake upgrade.

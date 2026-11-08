@@ -177,12 +177,11 @@ fn require_delivery(
             .event_id
             .strip_prefix("web-work-")
             .is_some_and(exact_hash);
-    let continuation = response_only
-        && delivery
-            .event
-            .event_id
-            .strip_prefix("wake-intent-")
-            .is_some_and(exact_hash)
+    let continuation = delivery
+        .event
+        .event_id
+        .strip_prefix("wake-intent-")
+        .is_some_and(exact_hash)
         && delivery.event.wake_metadata()?.is_some_and(|metadata| {
             metadata.purpose == crate::protocol::WakePurpose::NewTask
                 && metadata
@@ -508,7 +507,8 @@ mod tests {
             .unwrap();
         let claimed = store.claim(&event, &lease).unwrap();
         assert!(require_delivery(&store, "alpha", &target, &claimed, true).is_err());
-        store
+        require_delivery(&store, "alpha", &target, &claimed, false).unwrap();
+        let submitting = store
             .transition(
                 &event.event_id,
                 lease.owner(),
@@ -517,6 +517,8 @@ mod tests {
                 None,
             )
             .unwrap();
+        require_delivery(&store, "alpha", &target, &submitting, false).unwrap();
+        assert!(require_delivery(&store, "beta", &target, &submitting, false).is_err());
         let receipt = Receipt {
             schema_version: 1,
             event_id: event.event_id.clone(),
