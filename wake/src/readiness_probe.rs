@@ -13,8 +13,25 @@ pub(crate) fn composer_app_observation(line: &str) -> Option<serde_json::Value> 
         return None;
     }
     let value: serde_json::Value = serde_json::from_str(text).ok()?;
-    if value.as_object()?.len() != 9
-        || value["schemaVersion"].as_u64() != Some(1)
+    let version = value["schemaVersion"].as_u64()?;
+    if !matches!(version, 1 | 2)
+        || value.as_object()?.len() != if version == 1 { 9 } else { 11 }
+        || (version == 2
+            && (!matches!(
+                value["plusPopup"].as_str()?,
+                "UNKNOWN"
+                    | "ABSENT"
+                    | "MENU"
+                    | "DIALOG"
+                    | "LISTBOX"
+                    | "TREE"
+                    | "GRID"
+                    | "TRUE"
+                    | "FALSE"
+            ) || !matches!(
+                value["plusControlReference"].as_str()?,
+                "UNKNOWN" | "ABSENT" | "PRESENT" | "INVALID"
+            )))
         || value["basis"] != "PRESENTATION_ONLY_NOT_TOOL_CATALOG"
         || !matches!(
             value["scope"].as_str()?,
@@ -835,6 +852,25 @@ fn composer_app_metadata_is_bounded_presentation_not_catalog_or_action_authority
         changed[key] = invalid;
         assert!(sanitized_rows(&format!("PROBE:APP:{changed}")).is_empty());
     }
+    let mut current = value.clone();
+    current["schemaVersion"] = serde_json::json!(2);
+    current["plusPopup"] = serde_json::json!("DIALOG");
+    current["plusControlReference"] = serde_json::json!("PRESENT");
+    assert_eq!(
+        composer_app_observation(&format!("PROBE:APP:{current}")),
+        Some(current.clone())
+    );
+    for (key, bad) in [
+        ("plusPopup", serde_json::json!("PRIVATE_VALUE")),
+        ("plusControlReference", serde_json::json!("PRIVATE_ID")),
+        ("rawControlId", serde_json::json!("PRIVATE_ID")),
+    ] {
+        let mut changed = current.clone();
+        changed[key] = bad;
+        assert!(sanitized_rows(&format!("PROBE:APP:{changed}")).is_empty());
+    }
+    current.as_object_mut().unwrap().remove("plusPopup");
+    assert!(composer_app_observation(&format!("PROBE:APP:{current}")).is_none());
 }
 
 #[test]

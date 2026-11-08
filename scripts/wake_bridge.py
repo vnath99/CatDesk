@@ -905,8 +905,9 @@ class CdpSink:
         self.require_response_document(cdp)
         document_url = str(cdp.get_current_url())
         script = f"""(() => {{
-            const result={{schemaVersion:1,scope:'UNPROVEN',editorCount:0,plusButtonCount:0,
+            const result={{schemaVersion:2,scope:'UNPROVEN',editorCount:0,plusButtonCount:0,
                 plusButtonType:'UNKNOWN',plusButtonState:'UNKNOWN',plusExpanded:'UNKNOWN',
+                plusPopup:'UNKNOWN',plusControlReference:'UNKNOWN',
                 v5MarkerCount:0,basis:'PRESENTATION_ONLY_NOT_TOOL_CATALOG'}};
             if(location.href!=={json.dumps(document_url)} || document.readyState!=='complete') return result;
             let actual,expected;
@@ -936,6 +937,9 @@ class CdpSink:
                 result.plusButtonType=type==='button'?'BUTTON':type==='submit'?'SUBMIT':'UNKNOWN';
                 result.plusButtonState=button.disabled||button.getAttribute('aria-disabled')==='true'?'DISABLED':'ENABLED';
                 result.plusExpanded=expanded==='true'?'OPEN':expanded==='false'?'CLOSED':'UNKNOWN';
+                const popup=button.getAttribute('aria-haspopup'),reference=button.getAttribute('aria-controls');
+                result.plusPopup=popup===null?'ABSENT':['menu','dialog','listbox','tree','grid','true','false'].includes(popup)?popup.toUpperCase():'UNKNOWN';
+                result.plusControlReference=reference===null?'ABSENT':/^[A-Za-z0-9_:.-]{{1,128}}$/.test(reference)?'PRESENT':'INVALID';
             }}
             const candidates=Array.from(scope.querySelectorAll("button[aria-label], [data-testid='app-pill'], [data-testid='app-chip']"))
                 .filter(node=>visible(node)&&!editor.contains(node));
@@ -947,9 +951,11 @@ class CdpSink:
         self.require_response_document(cdp)
         counts=('editorCount','plusButtonCount','v5MarkerCount')
         vocab={'scope':{'UNPROVEN','COMPOSER_FORM','COMPOSER_CONTAINER'},'plusButtonType':{'UNKNOWN','BUTTON','SUBMIT'},
-            'plusButtonState':{'UNKNOWN','ENABLED','DISABLED'},'plusExpanded':{'UNKNOWN','OPEN','CLOSED'}}
+            'plusButtonState':{'UNKNOWN','ENABLED','DISABLED'},'plusExpanded':{'UNKNOWN','OPEN','CLOSED'},
+            'plusPopup':{'UNKNOWN','ABSENT','MENU','DIALOG','LISTBOX','TREE','GRID','TRUE','FALSE'},
+            'plusControlReference':{'UNKNOWN','ABSENT','PRESENT','INVALID'}}
         if (not isinstance(value,dict) or set(value)!={'schemaVersion','basis',*counts,*vocab}
-                or type(value['schemaVersion']) is not int or value['schemaVersion']!=1
+                or type(value['schemaVersion']) is not int or value['schemaVersion']!=2
                 or value['basis']!='PRESENTATION_ONLY_NOT_TOOL_CATALOG'
                 or any(type(value[key]) is not int or not 0<=value[key]<=16 for key in counts)
                 or any(not isinstance(value[key],str) or value[key] not in allowed for key,allowed in vocab.items())):

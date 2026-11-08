@@ -1347,5 +1347,20 @@
     "validationUnchanged": true,
     "historicalRejectedInvariant": "UNRECORDED",
     "nativeCallRetried": false
+  },
+  "composerPopupMetadata": {
+    "observedUtc": "2026-11-08T23:44:29.115058+00:00",
+    "status": "SOURCE_TESTED_LIVE_PENDING",
+    "schemaVersion": 2,
+    "legacySchemaAccepted": 1,
+    "fields": [
+      "plusPopup",
+      "plusControlReference"
+    ],
+    "rawIdsOrValuesExported": false,
+    "uiActions": 0,
+    "authorityGranted": false,
+    "actualDomTests": 88,
+    "nativeReadinessTests": 19
   }
 }

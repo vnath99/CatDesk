@@ -8736,3 +8736,20 @@ composer control's popup/link semantics through the existing observer, before
 any further UI action. Protected upgrade qualification remains a separate
 prerequisite for installed end-to-end acceptance. No operator action or secret
 is currently requested. C1 native edit/test/Wake remains NOT COMPLETE.
+
+
+## 2026-11-08T23:44:29.115058+00:00 — explain unsupported composer semantics without UI action
+
+The existing passive composer observer now returns schema 2 with two fixed
+categories: plusPopup and plusControlReference. It reads only the qualified
+composer control's aria-haspopup category and whether a syntactically bounded
+aria-controls reference exists; raw values/IDs, labels, drafts and conversation
+text are not exported. Native validation accepts closed schema 1/2 records
+and rejects unknown values, missing fields or injected content. It grants no
+click, attachment, send, retry, catalog or release authority.
+
+This is the next bounded read of the original receipt-bound completed task,
+not a repeated send or another browser owner. The prior UNSUPPORTED_MENU
+refusal and cleanup evidence remain preserved. Source tests cover absent, menu,
+dialog, boolean and unknown popup attributes plus absent/invalid references.
+Live popup classification is pending; installed readback and C1 remain incomplete.

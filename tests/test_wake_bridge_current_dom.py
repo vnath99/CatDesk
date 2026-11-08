@@ -225,6 +225,10 @@ if (options.appForm) {
   const controls=Array.from({length:options.appPlusCount ?? 1},()=>el('button',{
     'data-testid':'composer-plus-btn',type:options.appPlusType || 'button',
     'aria-expanded':options.appExpanded || 'false',disabled:options.appDisabled || false},'PRIVATE_CONTROL'));
+  for(const control of controls){
+    if(options.appPopupMetadata!==undefined) control.attrs['aria-haspopup']=options.appPopupMetadata;
+    if(options.appControlsMetadata!==undefined) control.attrs['aria-controls']=options.appControlsMetadata;
+  }
   if(options.appMenuTrace){
     const menu=el('div',{role:'menu',id:'owned-app-menu',hidden:options.appExpanded!=='true'},'',[
       el('div',{role:'menuitem','aria-disabled':options.v5Disabled?'true':'false'},'CatDesk-Local-Tunnel-v5'),
@@ -367,6 +371,20 @@ class CurrentDom:
 
 @unittest.skipUnless(shutil.which("node"), "Node.js required for offline DOM probes")
 class CurrentDomTests(unittest.TestCase):
+    def test_passive_composer_popup_metadata_is_closed_and_never_returns_control_ids(self):
+        for popup,expected in [(None,'ABSENT'),('menu','MENU'),('dialog','DIALOG'),('true','TRUE'),('false','FALSE'),('PRIVATE_VALUE','UNKNOWN')]:
+            with self.subTest(popup=popup):
+                options={} if popup is None else dict(appPopupMetadata=popup)
+                cdp=CurrentDom(appForm=True,appControlsMetadata='PRIVATE_CONTROL_ID',traceClicks=True,**options)
+                value=self.sink.composer_app_observation(cdp)
+                self.assertEqual(value['schemaVersion'],2)
+                self.assertEqual(value['plusPopup'],expected)
+                self.assertEqual(value['plusControlReference'],'PRESENT')
+                self.assertNotIn('PRIVATE_',json.dumps(value))
+                self.assertEqual(getattr(cdp,'mutations',0),0)
+        self.assertEqual(self.sink.composer_app_observation(CurrentDom(appForm=True))['plusControlReference'],'ABSENT')
+        self.assertEqual(self.sink.composer_app_observation(CurrentDom(appForm=True,appControlsMetadata='unsafe id'))['plusControlReference'],'INVALID')
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
