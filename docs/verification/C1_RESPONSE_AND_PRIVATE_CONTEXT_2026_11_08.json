@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Build the separately qualified source observer and perform one read-only inspection of the already-delivered rejection. Keep the original dispatch closed, with no manual response relay, send, grant replacement or changed binding. Installed acceptance requires the existing reviewed Wake package/broker authority; provisioning alone does not open its unfinished transaction gate.",
+  "next": "Build the source observer with corrected multi-block body coverage and perform one new bounded read-only observation of the same completed response. No send, native retry or manual relay. Original dispatch remains closed. Installed end-to-end qualification still requires the existing reviewed Wake broker/package authority.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -576,11 +576,56 @@
       ],
       "reference": "docs/orchestrator/tickets/T-0485_WAKE_PROTECTED_INSTALL_BROKER.md"
     },
-    "liveReadOnlyObservation": "NOT_RUN_FOR_THIS_SOURCE_YET",
+    "liveReadOnlyObservation": {
+      "status": "PARTIAL_GENERIC_REJECTION_AUTOMATICALLY_CAPTURED",
+      "sourceCommit": "e0adf4efe43259a19eef4ffb20b2150efcf068f6",
+      "controllerSha256": "1f32afb06ce7fb00e3b7aa527cb5ec368abb007040b1bc6ecf40a0fd05dab3a1",
+      "startedUtc": "2026-11-08T20:43:15.936709+00:00",
+      "finishedUtc": "2026-11-08T20:43:52.974145+00:00",
+      "elapsedSeconds": 36.985,
+      "responseComplete": true,
+      "originalTaskAndAssignmentMatched": true,
+      "knownCodes": [
+        "INVALID_ARGUMENT"
+      ],
+      "refusalCategories": [
+        "DISPATCH_REJECTED"
+      ],
+      "fineErrorCodeRecovered": false,
+      "rawResponseExported": false,
+      "preservationPins": 1069,
+      "preservationMismatches": 0,
+      "messagesSent": 0,
+      "nativeCalls": 0,
+      "backendStarts": 0,
+      "wakeStarts": 0,
+      "ownedTreeExited": true,
+      "installedProfileProcessesAfter": 0,
+      "wakeProcessesAfter": 0,
+      "ownerExitCode": 0,
+      "harnessExitCode": 1,
+      "harnessFailure": "EXPECTED_FINER_CODE_NOT_OBSERVED"
+    },
     "installedEndToEndAcceptance": "BLOCKED_NOT_CLAIMED",
     "messagesResent": 0,
     "nativeDispatchRetried": false,
     "bindingChanges": 0,
-    "runtimeStarts": 0
+    "runtimeStarts": 0,
+    "bodyCoverageCorrection": {
+      "observedUtc": "2026-11-08T20:47:17.776256+00:00",
+      "status": "TESTED_SOURCE_AWAITING_MATCHED_LIVE_OBSERVATION",
+      "defect": "ONLY_FIRST_DEDICATED_ASSISTANT_BODY_WAS_SCANNED",
+      "correction": "ALL_VISIBLE_NON_NESTED_DEDICATED_BODIES_INSIDE_THE_EXACT_ASSISTANT_UNIT",
+      "bodyNodeMaximum": 64,
+      "controlAndUserNodesExcluded": true,
+      "bodyCopyCannotCompleteAnswer": true,
+      "tests": {
+        "actualDomScripts": 78,
+        "persistence": 7,
+        "probe": 36,
+        "focusedTotal": 121
+      },
+      "actualMissingCodeCauseNotYetEstablished": true
+    }
   }
 }

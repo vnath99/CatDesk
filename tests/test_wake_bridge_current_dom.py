@@ -141,6 +141,8 @@ const assistant = el('div', {'data-content-search-unit-key':'fallback-turn-0:2:a
     ]),
   ]),
 ]);
+for (const body of options.additionalAnswerBodies || [])
+  append(assistant, el('div', {class:'markdown'}, body));
 if (options.timeoutCard) append(assistant, el('div', {role:'alert'}, '', [
   el('p', {}, 'Message delivery timed out. Please try again.'),
   ...Array.from({length:options.retryOnlyOutside ? 0 : (options.retryCount ?? 1)}, () => button(options.retryLabel || 'Retry')),
@@ -842,6 +844,15 @@ class CurrentDomTests(unittest.TestCase):
         self.assertEqual(hints['refusalCategories'], ['IDENTITY_MISMATCH', 'DISPATCH_REJECTED'])
         for replacement in (['PRIVATE_UNKNOWN_CODE'], ['IDENTITY_MISMATCH', 'IDENTITY_MISMATCH'], 'IDENTITY_MISMATCH'):
             self.assertFalse(bridge.valid_task_response_hints(hints | {'refusalCategories':replacement}))
+
+    def test_rejection_in_later_answer_block_is_not_silently_discarded(self):
+        hints = {}
+        self.sink.response_snapshot(CurrentDom(answer='native.codex.dispatch returned INVALID_ARGUMENT.',
+            additionalAnswerBodies=['McpServerError: WEB_TASK_CACHED_ARGUMENTS_INVALID.', 'PRIVATE_KEY_MARKER']),
+            'exact wake message', require_usable_body=True, diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
+        self.assertEqual(hints['knownCodes'], ['WEB_TASK_CACHED_ARGUMENTS_INVALID','INVALID_ARGUMENT'])
+        self.assertEqual(hints['refusalCategories'], ['DISPATCH_REJECTED'])
+        self.assertNotIn('PRIVATE_KEY_MARKER', json.dumps(hints))
 
     def test_tool_marker_diagnostics_schema_rejects_content_or_unbounded_values(self):
         tools={}

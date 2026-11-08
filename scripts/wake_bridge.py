@@ -1662,17 +1662,26 @@ class CdpSink:
             // UI offers no known body node, cooperative observation stays
             // pending instead of inferring an answer from button labels.
             const contentSelector = '[data-message-content], .markdown, [class~="prose"], [data-markdown-text-style="assistant-message"]';
-            const bodyNode = latestAssistant
-                ? (latestAssistant.matches(contentSelector) ? latestAssistant :
-                   latestAssistant.querySelector(contentSelector))
-                : null;
+            const bodyCandidates = latestAssistant ? Array.from(new Set([
+                ...(latestAssistant.matches(contentSelector) ? [latestAssistant] : []),
+                ...latestAssistant.querySelectorAll(contentSelector)
+            ])) : [];
+            if (bodyCandidates.length > 64) return ['invalid', 0, 0, false, false];
+            // A final answer may have several markdown/body blocks. Selecting
+            // only the first silently loses later tool-error details. Retain
+            // document order and discard nested duplicates, never borrow a
+            // neighbouring tool/user/historical unit as an answer body.
+            const bodyNodes = bodyCandidates.filter(node => visible(node) &&
+                !bodyCandidates.some(other => other !== node && other.contains(node)));
+            const bodyNode = bodyNodes.length ? bodyNodes[0] : null;
             let assistantBodyText = '';
-            if (bodyNode && visible(bodyNode)) {{
-                const bodyCopy = bodyNode.cloneNode(true);
-                bodyCopy.querySelectorAll('button, [role="button"], [role="toolbar"], [aria-hidden="true"]')
+            for (const body of bodyNodes) {{
+                const bodyCopy = body.cloneNode(true);
+                bodyCopy.querySelectorAll('button, [role="button"], [role="toolbar"], [aria-hidden="true"], ' + userNodeSelector)
                     .forEach(control => control.remove());
-                assistantBodyText = normalize(bodyCopy.textContent);
+                assistantBodyText += ' ' + normalize(bodyCopy.textContent);
             }}
+            assistantBodyText = normalize(assistantBodyText);
             // ChatGPT can render an old assistant as a load-error placeholder
             // while retaining Copy/Regenerate controls. Those controls alone
             // are not evidence of a usable completed response.
@@ -1706,7 +1715,7 @@ class CdpSink:
                     ...scope.querySelectorAll("button[data-testid='copy-turn-action-button']"),
                     ...scope.querySelectorAll(".turn-action-controls button[aria-label='Copy']"),
                     ...scope.querySelectorAll(".turn-action-controls button[aria-label='Copy message']"),
-                ])).filter(button => !bodyNode || !bodyNode.contains(button));
+                ])).filter(button => !bodyNodes.some(body => body.contains(button)));
                 if (actions.length > 1) break;
                 if (actions.length === 1) {{
                     assistantCompletionAction = actions[0];

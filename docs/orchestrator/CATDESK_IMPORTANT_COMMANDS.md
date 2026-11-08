@@ -6539,3 +6539,12 @@ Ordinary install remains refused by `WAKE_INSTALL_BROKER_UNPROVISIONED`; the
 existing protected service transaction is unfinished too. There is no supported
 command that bypasses these prerequisites. See T-0485 before signed provisioning,
 reviewed package/migration admission and installed lifecycle qualification.
+
+
+### 2026-11-08T20:47:17.776256+00:00 — multi-block response coverage
+
+The source task diagnostic scans all visible non-nested dedicated answer blocks
+inside the exact assistant unit, with a maximum of 64 body candidates and a
+32,768-character classification prefix. Later body controls cannot prove
+completion. Generic rejection capture is live-qualified through a separate
+controller; fine-code coverage and installed acceptance remain separate.

@@ -1110,3 +1110,24 @@ source-observer build and one bounded read-only inspection of the existing turn.
 See `docs/verification/C1_RESPONSE_AND_PRIVATE_CONTEXT_2026_11_08.json`. C1 remains
 NOT COMPLETE. Other project bindings, native sessions, unknown sends and protected
 release authority are preserved.
+
+
+## 2026-11-08T20:47:17.776256+00:00 — automatic live readback and body-coverage correction
+
+A matched source controller inspected the existing completed task response in
+36.985 seconds, with the original receipt, task, assignment and generation
+verified. It automatically returned `INVALID_ARGUMENT`, a dispatch-refusal
+category and the `native.codex.dispatch` mention; no operator relay or message
+resend was needed. All 1,069 pins matched and the owned browser exited; profile
+and Wake process counts returned to zero. No backend or tunnel was started.
+
+This is PARTIAL: the specific cached-envelope code was not recovered, and the
+strict harness correctly failed that expectation after successful runtime cleanup.
+The earlier receipt is preserved. Source inspection demonstrated a first-body-only
+coverage gap: later dedicated markdown blocks were discarded. The reader now
+collects visible, non-nested body blocks only inside the exact assistant unit,
+excludes controls/USER nodes and bounds node count and scanned text. 121 focused
+checks pass (78 actual-DOM script, seven persistence, 36 probe). Whether this
+explains the missing live code requires the next matched read-only observation;
+no unchanged browser audit or resend is authorized by this correction. Installed
+dev.84/broker gates and the original native dispatch hold remain unchanged.
