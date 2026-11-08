@@ -8635,3 +8635,43 @@ TOOL_UNAVAILABLE / CONTEXT_UNAVAILABLE hints without an operator relay; specific
 missing subjects remain unproven. Installed dev.84 readback and C1 native coding
 acceptance remain incomplete. The original task, grant, key and completed
 messages are preserved; no retry is authorized by these diagnostics.
+
+
+## 2026-11-08T23:34:51.499365+00:00 — autonomous exact-task menu qualification
+
+LIVE_MENU_FAIL_CLOSED_DRAFT_PRESENT: the existing registered-profile owner completed one task/receipt-bound
+observation in 35.078 seconds. The original assistant response
+remains COMPLETE; diagnostics were returned automatically, without an operator
+relay. Menu state: DRAFT_PRESENT; open requested: false;
+close attempted: false; closed verified:
+false; unknown open outcome:
+false. Fixed v5 item count:
+0, disabled count: 0.
+
+These are transient presentation observations, not tool-catalog, authentication
+or native-execution authority. No app was selected, USER message sent, native
+call retried, backend/tunnel/Wake started, setting changed or binding updated.
+All 1,076 preservation pins match; the owned process tree exited, registered
+profile/Wake process counts are zero and port 3200 is closed.
+
+Runtime source ed0f3e32bce1021c27acbfb8c987b723553af953, separate controller
+SHA-256 05376be8e994cc1694cf14872971ff8178e602dda4d24468d06a29d2678485cd. No installed runtime
+was replaced. Installed dev.84 response readback remains unqualified and the
+original C1 native task is still unattempted READY. Its cached-envelope refusal
+precedes native execution; the precise originally rejected field is unrecorded.
+Keep the frozen task/key/grant and completed messages unchanged.
+
+
+## 2026-11-08T23:35:34.788336+00:00 — distinguish structural composer controls from draft evidence
+
+The first bounded menu inspection refused before any click because the new
+menu guard treated every form input/image as draft evidence. The existing
+passive surface reader independently reported EMPTY. This disagreement does
+not prove that an operator draft exists or authorize clearing anything.
+The guard now distinguishes empty file pickers, hidden structural inputs and
+button icons from composer content. Selected files, known attachment markers,
+editor media/text and unowned visible media still refuse. Unknown input/file
+state refuses CONTROL_UNPROVEN. No text, filenames, values or unknown labels
+are exported. Eight structural/attachment cases exercise the actual DOM code;
+no existing send, draft, lease, route or native-dispatch guard was relaxed.
+A fresh matched controller and one bounded inspection remain required.

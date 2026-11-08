@@ -986,7 +986,17 @@ class CdpSink:
                 const editor=editors[0],form=editor.closest('form');
                 if(!form||form.querySelector("[data-message-author-role], [data-content-search-turn-key], [data-testid^='conversation-turn-']")) return fail('CONTROL_UNPROVEN');
                 const text=typeof editor.value==='string'?editor.value:(editor.textContent||'');
-                if(text.trim()||form.querySelector('img,video,audio,input,[data-file-id]')) return fail('DRAFT_PRESENT');
+                if(text.trim()||editor.querySelector('img,video,audio,input,[data-file-id]')||
+                        form.querySelector('[data-file-id], [data-testid*="attachment" i], [data-testid*="file-thumbnail" i]')) return fail('DRAFT_PRESENT');
+                // Empty upload pickers and button icons are structural controls,
+                // not unsent attachments. Unknown input state still fails closed.
+                for(const input of form.querySelectorAll('input')){{
+                    const type=(input.getAttribute('type')||'text').toLowerCase();
+                    if(type==='hidden') continue;
+                    if(type!=='file'||!input.files||typeof input.files.length!=='number'||typeof input.value!=='string') return fail('CONTROL_UNPROVEN');
+                    if(input.files.length||input.value) return fail('DRAFT_PRESENT');
+                }}
+                if(Array.from(form.querySelectorAll('img,video,audio')).some(node=>visible(node)&&!node.closest('button'))) return fail('DRAFT_PRESENT');
                 let plus=[];
                 for(let candidate=form,depth=0;candidate&&depth<4;candidate=candidate.parentElement,depth++){{
                     if(['BODY','MAIN','HTML'].includes(candidate.tagName.toUpperCase())||candidate.querySelector("[data-message-author-role], [data-content-search-turn-key], [data-testid^='conversation-turn-']")) break;

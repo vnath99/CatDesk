@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Implement one explicitly bounded transient app-menu inspection through the same qualified owner, anchored to this SENT receipt/task and exact idle empty composer. Revalidate one enabled non-submit known control and explicit menu semantics, permit at most one open and one close, return only fixed v5/menu metadata, and preserve all task/binding/history state. Do not attach, change settings, send, rehydrate context or dispatch. If the supported menu cannot be independently identified, return UNPROVEN once rather than guessing or asking for another response relay. C1 and installed acceptance remain incomplete.",
+  "next": "Keep the original native task and completed deliveries unchanged. Resolve affected Web caller attachment/context through an explicitly qualified existing composer path only if the exact menu supports it; menu counts are not a catalog or grant. Complete installed response-reader promotion only through the existing signed/broker authority. C1 native edit/test/Wake and installed end-to-end acceptance remain incomplete; no manual assistant-response relay is required.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -1238,7 +1238,7 @@
   },
   "transientAppMenuInspection": {
     "observedUtc": "2026-11-08T23:31:00.551708+00:00",
-    "status": "SOURCE_QUALIFIED_LIVE_PENDING",
+    "status": "LIVE_MENU_FAIL_CLOSED_DRAFT_PRESENT",
     "sourceOnly": true,
     "owner": "EXISTING_TASK_RECEIPT_BOUND_NATIVE_READINESS_OWNER",
     "maximumOpenActions": 1,
@@ -1259,6 +1259,50 @@
       "total": 190,
       "strictRootAndWakeAllTargetClippy": "PASS",
       "format": "PASS"
+    },
+    "live": {
+      "observedUtc": "2026-11-08T23:33:24.739174+00:00",
+      "sourceCommit": "ed0f3e32bce1021c27acbfb8c987b723553af953",
+      "controllerSha256": "05376be8e994cc1694cf14872971ff8178e602dda4d24468d06a29d2678485cd",
+      "elapsedSeconds": 35.078,
+      "maximumOwnerSeconds": 150,
+      "observation": {
+        "appsItemCount": 0,
+        "basis": "TRANSIENT_MENU_ONLY_NOT_TOOL_CATALOG",
+        "closeAttempted": false,
+        "closedVerified": false,
+        "moreItemCount": 0,
+        "openAttempted": true,
+        "openOutcomeUnknown": false,
+        "openRequested": false,
+        "schemaVersion": 1,
+        "state": "DRAFT_PRESENT",
+        "v5DisabledCount": 0,
+        "v5ItemCount": 0
+      },
+      "responseStage": "RESPONSE_COMPLETE",
+      "taskReceiptAndGenerationAttributed": true,
+      "messagesSent": 0,
+      "nativeCalls": 0,
+      "appSelections": 0,
+      "bindingChanges": 0,
+      "settingsChanges": 0,
+      "preservationPins": 1076,
+      "preservationMismatches": 0,
+      "ownedTreeExited": true,
+      "ownedProfileAndWakeProcessesAfter": 0,
+      "port3200ListenerPresent": false
+    },
+    "structuralControlCorrection": {
+      "observedUtc": "2026-11-08T23:35:34.788336+00:00",
+      "status": "SOURCE_TESTED_MATCHED_LIVE_PENDING",
+      "emptyFilePickerIsDraft": false,
+      "selectedFileRefused": true,
+      "unknownInputState": "CONTROL_UNPROVEN",
+      "hiddenInputsAndButtonIconsAreStructural": true,
+      "draftsCleared": 0,
+      "actualDomTests": 87,
+      "previousLiveRefusalPreserved": true
     }
   }
 }

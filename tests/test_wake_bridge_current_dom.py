@@ -244,6 +244,17 @@ if (options.appForm) {
   if(options.v5Chip) controls.push(el('button',{'data-testid':'app-chip','aria-label':'CatDesk-Local-Tunnel-v5'}));
   if(options.foreignChip) controls.push(el('button',{'data-testid':'app-chip','aria-label':'PRIVATE_OTHER_APP'}));
   const form=el('form',{},'',[editor,...(options.appControlOutsideForm?[]:controls)]);
+  if(options.appFileInput){
+    const input=el('input',{type:'file'});
+    input.files=options.appUnknownFileList?null:{length:options.appSelectedFile?1:0};
+    input.value=options.appSelectedFile?'PRIVATE_FILENAME':'';
+    append(form,input);
+  }
+  if(options.appHiddenInput) append(form,el('input',{type:'hidden'}));
+  if(options.appUnknownInput) append(form,el('input',{type:'text'}));
+  if(options.appButtonIcon) append(controls[0],el('img'));
+  if(options.appUnownedImage) append(form,el('img'));
+  if(options.appAttachment) append(form,el('div',{'data-testid':'attachment-preview'},'PRIVATE_FILE'));
   const container=options.appControlOutsideForm?el('div',{},'',[form,...controls]):form;
   if(options.appHistoryContainer) append(container,el('div',{'data-message-author-role':'user'},'PRIVATE_HISTORY'));
   append(document,container);
@@ -425,6 +436,25 @@ class CurrentDomTests(unittest.TestCase):
                 value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
                 self.assertNotEqual(value['state'],'OBSERVED')
                 self.assertFalse(value['openRequested'])
+                self.assertEqual(getattr(cdp,'mutations',0),0)
+                self.assertNotIn('PRIVATE_',json.dumps(value))
+
+    def test_app_menu_distinguishes_empty_upload_controls_from_unsent_attachments(self):
+        for options in [dict(appFileInput=True),dict(appHiddenInput=True),dict(appButtonIcon=True)]:
+            with self.subTest(options=options):
+                cdp=CurrentDom(appForm=True,appMenuTrace=True,**options)
+                value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+                self.assertEqual(value['state'],'OBSERVED')
+                self.assertTrue(value['closedVerified'])
+                self.assertEqual(cdp.mutations,2)
+        for options,state in [(dict(appFileInput=True,appSelectedFile=True),'DRAFT_PRESENT'),
+                (dict(appFileInput=True,appUnknownFileList=True),'CONTROL_UNPROVEN'),
+                (dict(appUnknownInput=True),'CONTROL_UNPROVEN'),
+                (dict(appUnownedImage=True),'DRAFT_PRESENT'),(dict(appAttachment=True),'DRAFT_PRESENT')]:
+            with self.subTest(options=options):
+                cdp=CurrentDom(appForm=True,appMenuTrace=True,**options)
+                value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+                self.assertEqual(value['state'],state)
                 self.assertEqual(getattr(cdp,'mutations',0),0)
                 self.assertNotIn('PRIVATE_',json.dumps(value))
 
