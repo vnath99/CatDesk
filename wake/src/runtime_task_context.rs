@@ -96,8 +96,12 @@ fn checked_wire(request: &TaskContextSubmission<'_>) -> Result<(Value, String)> 
     target.validate()?;
     let message_digest =
         crate::protocol::digest(&message.split_whitespace().collect::<Vec<_>>().join(" "));
+    // The retained press_keys adapter emits literal Enter/Tab key events for
+    // control whitespace. Send the same canonical message without those keys;
+    // private storage and the normalized message identity stay unchanged.
+    let typed_message = message.replace(['\n', '\r', '\t'], " ");
     let mut wire = json!({"cooperative":true,"event":{"eventId":event_id,
-        "projectId":project_id,"targetGeneration":target.generation,"message":message},"target":target});
+        "projectId":project_id,"targetGeneration":target.generation,"message":typed_message},"target":target});
     if operation == TaskContextOperation::Reconcile {
         wire["reconcile"] = json!(true);
     }
@@ -305,6 +309,34 @@ mod tests {
         collections::VecDeque,
         rc::Rc,
     };
+
+    #[test]
+    fn private_wire_never_types_enter_or_tab_before_native_submit_ack() {
+        let (_, target) = fixture("private-context-control-whitespace");
+        let mut request = request(&target);
+        request.message =
+            "Frozen header\n{\"path\":\"two  spaces.py\",\"literal\":\"\\n\"}\r\nWait\there.";
+        let before = request.message.to_owned();
+        let (wire, hash) = checked_wire(&request).unwrap();
+        let typed = wire["event"]["message"].as_str().unwrap();
+        assert!(!typed.chars().any(|c| matches!(c, '\n' | '\r' | '\t')));
+        assert!(typed.contains("two  spaces.py"));
+        assert!(typed.contains("\\n"));
+        assert_eq!(
+            hash,
+            crate::protocol::digest(&before.split_whitespace().collect::<Vec<_>>().join(" "))
+        );
+        assert_eq!(
+            crate::protocol::digest(&typed.split_whitespace().collect::<Vec<_>>().join(" ")),
+            hash
+        );
+        assert_eq!(request.message, before);
+        request.operation = TaskContextOperation::Reconcile;
+        assert_eq!(
+            checked_wire(&request).unwrap().0["event"]["message"],
+            wire["event"]["message"]
+        );
+    }
 
     #[test]
     fn legacy_final_sent_requires_preceding_exact_user_receipt_and_one_ack() {
