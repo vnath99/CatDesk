@@ -29,7 +29,8 @@ mod review_reconcile;
 mod scoped_review;
 pub use readiness::{
     inspect_registered_delivery_readiness, inspect_registered_readiness,
-    inspect_sent_task_response_diagnostics, read_registered_delivery_receipt,
+    inspect_sent_task_app_menu, inspect_sent_task_response_diagnostics,
+    read_registered_delivery_receipt,
 };
 pub(crate) use response::canonical_observation as canonical_response_observation;
 pub(crate) use response::canonical_task_diagnostics as canonical_task_response_diagnostics;

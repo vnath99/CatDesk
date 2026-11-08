@@ -127,6 +127,7 @@ EDITOR_SELECTORS = (
     "[contenteditable='true'][data-lexical-editor='true']",
 )
 EDITOR = EDITOR_SELECTORS[0]
+COMPOSER_APP_CONTROL_SELECTOR = "button[data-testid='composer-plus-btn'], button#composer-plus-button, button[aria-label='Add files and more'], button[aria-label='Add files and tools'], button[aria-label='Add files or tools'], button[aria-label='Open composer menu'], button[aria-label='Tools'], button[aria-label='Apps'], button[aria-label='Use apps']"
 SEND = ("button[data-testid='send-button']", "button[aria-label='Send prompt']", "button[aria-label='Send message']", "button#composer-submit-button", "button[type='submit'][aria-label='Send']")
 USER_MESSAGE = "[data-message-author-role='user'], article[data-turn='user']"
 USER_MESSAGE_CONTENT = "[data-message-content], .whitespace-pre-wrap"
@@ -923,7 +924,7 @@ class CdpSink:
             if(form.querySelector("[data-message-author-role], [data-content-search-turn-key], [data-testid^='conversation-turn-']")) return result;
             result.scope='COMPOSER_FORM';
             let scope=form,plus=[];
-            const selector="button[data-testid='composer-plus-btn'], button#composer-plus-button, button[aria-label='Add files and more'], button[aria-label='Add files and tools'], button[aria-label='Add files or tools'], button[aria-label='Open composer menu'], button[aria-label='Tools'], button[aria-label='Apps'], button[aria-label='Use apps']";
+            const selector={json.dumps(COMPOSER_APP_CONTROL_SELECTOR)};
             for(let candidate=form,depth=0;candidate&&depth<4;candidate=candidate.parentElement,depth++){{
                 if(['BODY','MAIN','HTML'].includes(candidate.tagName.toUpperCase()) || candidate.querySelector("[data-message-author-role], [data-content-search-turn-key], [data-testid^='conversation-turn-']")) break;
                 const matches=Array.from(candidate.querySelectorAll(selector)).filter(node=>visible(node)&&!editor.contains(node));
@@ -954,6 +955,101 @@ class CdpSink:
                 or any(not isinstance(value[key],str) or value[key] not in allowed for key,allowed in vocab.items())):
             raise Attention('BROWSER_OBSERVATION_INVALID')
         return value
+    def inspect_composer_app_menu(self, cdp: Any, message: str, expected_digest: str, *, sleeper=time.sleep) -> dict[str, Any]:
+        """One transient menu open/close, no item selection, input or settings.
+
+        Every step independently rechecks the original completed USER exchange.
+        A lost open result never permits another open. Closing requires fresh
+        positive ownership of the menu linked by the same qualified control.
+        """
+        result=dict(schemaVersion=1,basis='TRANSIENT_MENU_ONLY_NOT_TOOL_CATALOG',state='UNPROVEN',
+            openAttempted=False,openRequested=False,openOutcomeUnknown=False,closeAttempted=False,
+            closedVerified=False,v5ItemCount=0,v5DisabledCount=0,appsItemCount=0,moreItemCount=0)
+        states={'UNPROVEN','OPEN_REQUESTED','CLOSE_REQUESTED','OBSERVED','CLOSED','DRAFT_PRESENT',
+            'GENERATION_ACTIVE','CONTROL_UNPROVEN','UNSUPPORTED_MENU','PRIOR_MENU_OPEN','MENU_UNPROVEN'}
+        def step(action):
+            if self.observe_cooperative_response(cdp,message,expected_digest)!='RESPONSE_COMPLETE':
+                raise Attention('RESPONSE_STATE_UNPROVEN')
+            document_url=str(cdp.get_current_url())
+            script=f"""(() => {{
+                const out={{state:'UNPROVEN',v5ItemCount:0,v5DisabledCount:0,appsItemCount:0,moreItemCount:0}};
+                const action={json.dumps(action)};
+                if(location.href!=={json.dumps(document_url)}||document.readyState!=='complete') return out;
+                let actual,expected;try{{actual=new URL(location.href);expected=new URL({json.dumps(self.url)});}}catch(_){{return out;}}
+                const route=actual.pathname.match(new RegExp('^/(?:c/([A-Za-z0-9_-]{{1,200}})|g/[A-Za-z0-9_-]{{1,200}}/c/([A-Za-z0-9_-]{{1,200}}))$'));
+                if(actual.protocol!=='https:'||!['chatgpt.com','chat.openai.com'].includes(actual.hostname)||actual.port||actual.username||actual.password||actual.search||actual.hash||!route||(route[1]||route[2])!==expected.pathname.split('/').pop()) return out;
+                const visible=node=>{{const style=node&&window.getComputedStyle(node);return Boolean(node&&node.getClientRects().length&&style.visibility!=='hidden'&&style.display!=='none');}};
+                const fail=state=>Object.assign(out,{{state}});
+                if({json.dumps(STOP)}.some(s=>Array.from(document.querySelectorAll(s)).some(visible))) return fail('GENERATION_ACTIVE');
+                const editors=Array.from(document.querySelectorAll({json.dumps(', '.join(EDITOR_SELECTORS))})).filter(visible);
+                if(editors.length!==1) return fail('CONTROL_UNPROVEN');
+                const editor=editors[0],form=editor.closest('form');
+                if(!form||form.querySelector("[data-message-author-role], [data-content-search-turn-key], [data-testid^='conversation-turn-']")) return fail('CONTROL_UNPROVEN');
+                const text=typeof editor.value==='string'?editor.value:(editor.textContent||'');
+                if(text.trim()||form.querySelector('img,video,audio,input,[data-file-id]')) return fail('DRAFT_PRESENT');
+                let plus=[];
+                for(let candidate=form,depth=0;candidate&&depth<4;candidate=candidate.parentElement,depth++){{
+                    if(['BODY','MAIN','HTML'].includes(candidate.tagName.toUpperCase())||candidate.querySelector("[data-message-author-role], [data-content-search-turn-key], [data-testid^='conversation-turn-']")) break;
+                    plus=Array.from(candidate.querySelectorAll({json.dumps(COMPOSER_APP_CONTROL_SELECTOR)})).filter(node=>visible(node)&&!editor.contains(node));
+                    if(plus.length) break;
+                }}
+                if(plus.length!==1) return fail('CONTROL_UNPROVEN');
+                const button=plus[0];
+                if(button.getAttribute('type')!=='button'||button.disabled||button.getAttribute('aria-disabled')==='true') return fail('CONTROL_UNPROVEN');
+                if(button.getAttribute('aria-haspopup')!=='menu') return fail('UNSUPPORTED_MENU');
+                const expanded=button.getAttribute('aria-expanded'),menus=Array.from(document.querySelectorAll("[role='menu']")).filter(visible);
+                if(action==='OPEN'){{
+                    if(expanded!=='false'||menus.length) return fail('PRIOR_MENU_OPEN');
+                    button.click();return fail('OPEN_REQUESTED');
+                }}
+                if(expanded==='false'&&!menus.length) return fail('CLOSED');
+                const id=button.getAttribute('aria-controls');
+                if(expanded!=='true'||typeof id!=='string'||!/^[A-Za-z0-9_:.-]{{1,128}}$/.test(id)) return fail('MENU_UNPROVEN');
+                const menu=document.getElementById(id);
+                if(menus.length!==1||menus[0]!==menu) return fail('MENU_UNPROVEN');
+                if(action==='CLOSE'){{button.click();return fail('CLOSE_REQUESTED');}}
+                if(action!=='READ') return out;
+                const items=Array.from(menu.querySelectorAll("[role='menuitem']")).filter(visible);
+                const named=name=>items.filter(node=>(node.innerText||node.textContent||'').trim()===name);
+                const v5=[...named('CatDesk-Local-Tunnel-v5'),...named('CatDesk Local Tunnel v5')];
+                out.v5ItemCount=Math.min(v5.length,16);
+                out.v5DisabledCount=Math.min(v5.filter(node=>node.disabled||node.getAttribute('aria-disabled')==='true').length,16);
+                out.appsItemCount=Math.min(named('Apps').length+named('Use apps').length,16);
+                out.moreItemCount=Math.min(named('More').length,16);
+                return fail('OBSERVED');
+            }})()"""
+            value=self.cdp_value(cdp.evaluate(script));self.require_response_document(cdp)
+            if (not isinstance(value,dict) or set(value)!={'state','v5ItemCount','v5DisabledCount','appsItemCount','moreItemCount'}
+                    or not isinstance(value['state'],str) or value['state'] not in states
+                    or any(type(value[key]) is not int or not 0<=value[key]<=16 for key in value if key!='state')):
+                raise Attention('BROWSER_OBSERVATION_INVALID')
+            return value
+        try:
+            result['openAttempted']=True
+            try:opened=step('OPEN')
+            except Exception:
+                result['openOutcomeUnknown']=True;raise
+            result['state']=opened['state']
+            if opened['state']!='OPEN_REQUESTED':return result
+            result['openRequested']=True
+            sleeper(.25);first=step('READ');sleeper(.25);second=step('READ')
+            if first==second and second['state']=='OBSERVED':result.update(second)
+            else:result['state']='MENU_UNPROVEN'
+        except Exception:
+            result['state']='UNPROVEN'
+        finally:
+            if result['openRequested'] or result['openOutcomeUnknown']:
+                try:
+                    owned=step('READ')
+                    if owned['state']=='OBSERVED':
+                        result['closeAttempted']=True
+                        if step('CLOSE')['state']=='CLOSE_REQUESTED':
+                            sleeper(.25);a=step('READ');sleeper(.25);b=step('READ')
+                            result['closedVerified']=a['state']==b['state']=='CLOSED'
+                    elif owned['state']=='CLOSED':result['closedVerified']=True
+                except Exception:pass
+        if result['state']=='OBSERVED' and not result['closedVerified']:result['state']='MENU_UNPROVEN'
+        return result
     @staticmethod
     def document_ready_state(cdp: Any) -> str | None:
         """Return only a bounded, non-content document readiness signal.

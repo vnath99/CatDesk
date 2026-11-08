@@ -218,11 +218,28 @@ if (options.observationStop) document.children.push(el('button', {'data-testid':
 if (options.observationLogin) document.children.push(el('a', {href:'/auth/login'}));
 if (options.observationCaptcha) document.children.push(el('iframe', {title:'captcha'}));
 if (options.observationNetwork) document.children.push(el('div', {id:'main-frame-error'}), el('div', {id:'error-code'}));
+let appMenuControl=null;
 if (options.appForm) {
-  const editor=el('div',{id:'prompt-textarea'},options.appDraft || '');
+  const editor=el('div',{id:'prompt-textarea',contenteditable:'true'},options.appDraft || '');
+  editor.isContentEditable=true;
   const controls=Array.from({length:options.appPlusCount ?? 1},()=>el('button',{
     'data-testid':'composer-plus-btn',type:options.appPlusType || 'button',
     'aria-expanded':options.appExpanded || 'false',disabled:options.appDisabled || false},'PRIVATE_CONTROL'));
+  if(options.appMenuTrace){
+    const menu=el('div',{role:'menu',id:'owned-app-menu',hidden:options.appExpanded!=='true'},'',[
+      el('div',{role:'menuitem','aria-disabled':options.v5Disabled?'true':'false'},'CatDesk-Local-Tunnel-v5'),
+      el('div',{role:'menuitem'},'PRIVATE_OTHER_APP'),el('div',{role:'menuitem'},'Apps'),
+    ]);
+    append(document,menu);
+    document.getElementById=id=>document.querySelectorAll('[id]').find(node=>node.getAttribute('id')===id)||null;
+    for(const control of controls){
+      control.attrs['aria-haspopup']=options.appPopup || 'menu';
+      control.attrs['aria-controls']=options.menuLinkMismatch?'foreign-menu':'owned-app-menu';
+      control.click=()=>{mutations++;control.attrs['aria-expanded']=control.attrs['aria-expanded']==='true'?'false':'true';menu.attrs.hidden=control.attrs['aria-expanded']!=='true';};
+    }
+    appMenuControl=controls[0]||null;
+    if(options.priorMenuOpen) append(document,el('div',{role:'menu',id:'foreign-menu'},'PRIVATE_MENU'));
+  }
   if(options.appSemanticLabel) for(const control of controls){delete control.attrs['data-testid'];control.attrs['aria-label']=options.appSemanticLabel;}
   if(options.v5Chip) controls.push(el('button',{'data-testid':'app-chip','aria-label':'CatDesk-Local-Tunnel-v5'}));
   if(options.foreignChip) controls.push(el('button',{'data-testid':'app-chip','aria-label':'PRIVATE_OTHER_APP'}));
@@ -290,7 +307,7 @@ if (options.traceMutations) {
 global.Node = {DOCUMENT_POSITION_FOLLOWING:4};
 const value = eval(inputFrame.script);
 const editor = document.querySelector('#prompt-textarea');
-process.stdout.write(JSON.stringify(options.normalizationTrace ? {
+process.stdout.write(JSON.stringify(options.appMenuTrace ? {value,mutations,expanded:appMenuControl?.getAttribute('aria-expanded')||'false'} : options.normalizationTrace ? {
   value, mutations, commands, editorText:editor?.textContent || '', linked:Boolean(editor?.querySelector('a[href], [text-link-href]'))
 } : (options.traceMutations || options.traceClicks) ? {value, mutations} : value));
 """
@@ -321,6 +338,10 @@ class CurrentDom:
         if result.returncode:
             raise AssertionError(result.stderr)
         observed = json.loads(result.stdout)
+        if self.options.get('appMenuTrace'):
+            self.options['appExpanded']=observed['expanded']
+            self.mutations=getattr(self,'mutations',0)+observed['mutations']
+            return observed['value']
         if self.options.get("normalizationTrace"):
             self.mutations = getattr(self, "mutations", 0) + observed["mutations"]
             self.commands = getattr(self, "commands", []) + observed["commands"]
@@ -382,6 +403,74 @@ class CurrentDomTests(unittest.TestCase):
         for label in ('Send','PRIVATE_UNKNOWN_CONTROL'):
             value=self.sink.composer_app_observation(CurrentDom(appForm=True,appSemanticLabel=label))
             self.assertEqual(value['plusButtonCount'],0)
+
+    def test_receipt_bound_app_menu_reads_fixed_labels_and_closes_without_selecting(self):
+        cdp=CurrentDom(appForm=True,appMenuTrace=True)
+        value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+        self.assertEqual(value['state'],'OBSERVED')
+        self.assertTrue(value['openRequested'] and value['closeAttempted'] and value['closedVerified'])
+        self.assertEqual(value['v5ItemCount'],1)
+        self.assertEqual(value['appsItemCount'],1)
+        self.assertEqual(cdp.mutations,2)
+        self.assertEqual(cdp.options['appExpanded'],'false')
+        self.assertNotIn('PRIVATE_',json.dumps(value))
+
+    def test_app_menu_refuses_drafts_generation_foreign_turn_and_unsafe_controls(self):
+        for options in [dict(appDraft='PRIVATE_DRAFT'),dict(observationStop=True),dict(appPlusCount=2),
+                dict(appPlusType='submit'),dict(appDisabled=True),dict(appPopup='dialog'),
+                dict(priorMenuOpen=True),dict(userText='different wake'),dict(duplicateUser=True),
+                dict(location='https://chatgpt.com/c/foreign')]:
+            with self.subTest(options=options):
+                cdp=CurrentDom(appForm=True,appMenuTrace=True,**options)
+                value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+                self.assertNotEqual(value['state'],'OBSERVED')
+                self.assertFalse(value['openRequested'])
+                self.assertEqual(getattr(cdp,'mutations',0),0)
+                self.assertNotIn('PRIVATE_',json.dumps(value))
+
+    def test_unknown_menu_open_result_never_reopens_and_only_closes_proven_owned_menu(self):
+        class LostOpen(CurrentDom):
+            lost=False
+            def evaluate(self,script):
+                value=super().evaluate(script)
+                if 'const action="OPEN"' in script and not self.lost:
+                    self.lost=True
+                    raise RuntimeError('PRIVATE_UNKNOWN_OUTCOME')
+                return value
+        cdp=LostOpen(appForm=True,appMenuTrace=True)
+        value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+        self.assertEqual(value['state'],'UNPROVEN')
+        self.assertTrue(value['openOutcomeUnknown'] and value['closedVerified'])
+        self.assertEqual(cdp.mutations,2)
+        mismatch=CurrentDom(appForm=True,appMenuTrace=True,menuLinkMismatch=True)
+        value=self.sink.inspect_composer_app_menu(mismatch,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+        self.assertEqual(value['state'],'MENU_UNPROVEN')
+        self.assertFalse(value['closedVerified'] or value['closeAttempted'])
+        self.assertEqual(mismatch.mutations,1)
+        # A held/failed menu has no shared state that blocks an independent owner.
+        independent=CurrentDom(appForm=True,appMenuTrace=True)
+        self.assertEqual(self.sink.inspect_composer_app_menu(independent,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)['state'],'OBSERVED')
+
+    def test_interrupted_menu_close_or_target_drift_never_retries_ui_actions(self):
+        class LostClose(CurrentDom):
+            def evaluate(self,script):
+                value=super().evaluate(script)
+                if 'const action="CLOSE"' in script:raise RuntimeError('PRIVATE_CLOSE_UNKNOWN')
+                return value
+        cdp=LostClose(appForm=True,appMenuTrace=True)
+        value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+        self.assertEqual(value['state'],'MENU_UNPROVEN')
+        self.assertEqual(cdp.mutations,2)
+        class DriftAfterOpen(CurrentDom):
+            def evaluate(self,script):
+                value=super().evaluate(script)
+                if 'const action="OPEN"' in script:self.options['location']='https://chatgpt.com/c/foreign'
+                return value
+        cdp=DriftAfterOpen(appForm=True,appMenuTrace=True)
+        value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+        self.assertEqual(value['state'],'UNPROVEN')
+        self.assertFalse(value['closeAttempted'])
+        self.assertEqual(cdp.mutations,1)
 
     def test_typing_confirmation_reads_text_data_and_native_attribute_signature(self):
         class NativeSignatureDom(CurrentDom):

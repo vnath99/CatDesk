@@ -14,6 +14,22 @@ from unittest import mock
 
 
 class ReadinessProbeTests(unittest.TestCase):
+    def test_menu_report_binds_only_existing_delivery_and_never_exports_private_errors(self):
+        delivery=dict(messageDigest='a'*64,event=dict(message='PRIVATE_USER'))
+        value=dict(schemaVersion=1,basis='TRANSIENT_MENU_ONLY_NOT_TOOL_CATALOG',state='UNPROVEN',
+            openAttempted=False,openRequested=False,openOutcomeUnknown=False,closeAttempted=False,
+            closedVerified=False,v5ItemCount=0,v5DisabledCount=0,appsItemCount=0,moreItemCount=0)
+        sink=types.SimpleNamespace(inspect_composer_app_menu=mock.Mock(return_value=value))
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):self.probe.report_app_menu(sink,object(),delivery)
+        self.assertEqual(json.loads(output.getvalue().split('PROBE:APP_MENU:')[1]),value)
+        self.assertNotIn('PRIVATE_',output.getvalue())
+        self.assertEqual(sink.inspect_composer_app_menu.call_args.args[1:],('PRIVATE_USER','a'*64))
+        sink.inspect_composer_app_menu.side_effect=RuntimeError('PRIVATE_CREDENTIAL')
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):self.probe.report_app_menu(sink,object(),delivery)
+        self.assertEqual(output.getvalue(),'PROBE:APP_MENU_STATE:UNPROVEN\n')
+
     def test_composer_app_report_keeps_private_failures_closed(self):
         value=dict(schemaVersion=1,scope='COMPOSER_FORM',editorCount=1,plusButtonCount=1,
             plusButtonType='BUTTON',plusButtonState='ENABLED',plusExpanded='CLOSED',

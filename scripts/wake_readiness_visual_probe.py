@@ -133,17 +133,19 @@ def report_sent_response(sink, cdp, delivery, report=print, sleep=time.sleep, *,
         current = sample()
         if first != current:
             report("PROBE:RESPONSE_STATE:UNSTABLE", flush=True)
-            return
+            return False
         value, extra = current
         report("PROBE:RESPONSE:" + json.dumps(value, separators=(",", ":"), sort_keys=True), flush=True)
         if extra is not None:
             report("PROBE:TASK:" + json.dumps(extra, separators=(",", ":"), sort_keys=True), flush=True)
+        return value['stage']=='RESPONSE_COMPLETE'
     except Exception as error:
         reason = str(error)
         allowed = {"RESPONSE_LOAD_ERROR", "RESPONSE_NETWORK_ERROR", "LOGIN_OR_PROFILE_REQUIRED",
                    "RESPONSE_EXPECTED_USER_DUPLICATED", "RESPONSE_SEQUENCE_DRIFT", "RESPONSE_STATE_UNPROVEN",
                    "RESPONSE_TIMEOUT_RETRY_REQUIRED", "RESPONSE_TARGET_DRIFT", "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"}
         report("PROBE:RESPONSE_STATE:" + (reason if reason in allowed else "UNPROVEN"), flush=True)
+        return False
 
 
 def report_persisted_receipt(sink, cdp, delivery, report=print):
@@ -185,6 +187,12 @@ def report_composer_apps(sink, cdp, report=print):
         report('PROBE:APP:'+json.dumps(value,separators=(',',':'),sort_keys=True),flush=True)
     except Exception:
         report('PROBE:APP_STATE:UNPROVEN',flush=True)
+
+def report_app_menu(sink,cdp,delivery,report=print):
+    try:
+        value=sink.inspect_composer_app_menu(cdp,delivery['event']['message'],delivery['messageDigest'])
+        report('PROBE:APP_MENU:'+json.dumps(value,separators=(',',':'),sort_keys=True),flush=True)
+    except Exception:report('PROBE:APP_MENU_STATE:UNPROVEN',flush=True)
 
 
 def surface_state(value):
@@ -439,6 +447,7 @@ def main():
     parser.add_argument("--receipt-only", action="store_true")
     parser.add_argument("--response-only", action="store_true")
     parser.add_argument("--task-diagnostics", action="store_true")
+    parser.add_argument("--inspect-app-menu", action="store_true")
     args = parser.parse_args()
     if args.await_start and sys.stdin.readline() != "START\n":
         return 2
@@ -460,6 +469,8 @@ def main():
     message = None
     receipt_delivery = None
     response_delivery = None
+    if args.inspect_app_menu and not (args.task_diagnostics and args.response_only and args.read_only and args.profile is not None and args.delivery_file is not None):
+        return 2
     if (args.task_diagnostics and not args.response_only) or (args.receipt_only and args.response_only) or ((args.receipt_only or args.response_only) and (not args.read_only or args.delivery_file is None)):
         return 2
     if args.delivery_file is not None or args.delivery_sha256 is not None:
@@ -543,9 +554,11 @@ def main():
                 print("PROBE:RECEIPT_STATE:UNPROVEN", flush=True)
         if response_delivery is not None:
             if surface is not None and surface.get("route") == "EXACT" and surface.get("document") == "COMPLETE":
-                report_sent_response(sink, cdp, response_delivery, task_diagnostics=args.task_diagnostics)
+                completed=report_sent_response(sink, cdp, response_delivery, task_diagnostics=args.task_diagnostics)
                 if args.task_diagnostics:
                     report_composer_apps(sink, cdp)
+                if args.inspect_app_menu and completed:
+                    report_app_menu(sink,cdp,response_delivery)
             else:
                 print("PROBE:RESPONSE_STATE:UNPROVEN", flush=True)
     print("PROBE:PHASE:BROWSER_CLOSED", flush=True)

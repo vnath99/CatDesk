@@ -6601,3 +6601,23 @@ force, send or native-dispatch option is accepted. This is not source-review
 producer authority. After successful reconciliation use inspect-response on
 the same event; do not rerun the send. Source qualification is distinct from
 protected installed Wake acceptance.
+
+
+## 2026-11-08T23:31:00.551708+00:00 — explicit transient app-menu inspection (source-qualified only)
+
+```text
+operator web review inspect-app-menu --project-id PROJECT --event-id EXISTING_SENT_EVENT
+```
+
+Requires a task-assigned WorkLedger record, paired registry/Wake target, current
+project lease, exact SENT receipt, COMPLETE timer, stopped host and exclusive
+registered-profile owner. Uses the existing bounded native readiness controller.
+Unlike inspect-response, this command explicitly permits one composer-menu open
+and close; browserReadOnly is false and transientMenuInspection is true. It
+cannot select an app, enter text or send. Output is fixed label counts and
+closure proof, not a client tool catalog or review/dispatch authority.
+READINESS_COMPLETED_RESPONSE_REQUIRED refuses an incomplete timer before
+browser startup. Unsupported controls, drafts, drift or ambiguous menus fail
+closed. Unknown action results must not be blindly retried. No URL, profile,
+key, force, select or submit override is accepted. It does not upgrade the
+installed Wake adapter. Live menu qualification is pending.

@@ -109,6 +109,10 @@ pub(crate) enum WebAction {
         project_id: String,
         event_id: String,
     },
+    ReviewInspectAppMenu {
+        project_id: String,
+        event_id: String,
+    },
     ReviewInspectSubmission {
         project_id: String,
         event_id: String,
@@ -595,6 +599,7 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
             "review",
             "read"
             | "inspect-response"
+            | "inspect-app-menu"
             | "inspect-submission"
             | "reconcile-submission"
             | "reobserve"
@@ -609,6 +614,11 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
             }
             if verb == "inspect-response" {
                 Ok(WebAction::ReviewInspectResponse {
+                    project_id: project_id.into(),
+                    event_id: event_id.into(),
+                })
+            } else if verb == "inspect-app-menu" {
+                Ok(WebAction::ReviewInspectAppMenu {
                     project_id: project_id.into(),
                     event_id: event_id.into(),
                 })
@@ -1164,6 +1174,7 @@ fn read_review(workspace: &Path, project: &str, event_id: &str) -> Result<Value,
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum TaskObservation {
     SentResponse,
+    AppMenu,
     PendingSubmission,
     ReconcileSubmission,
 }
@@ -1174,7 +1185,10 @@ fn inspect_review_response(
     event_id: &str,
     mode: TaskObservation,
 ) -> Result<Value, String> {
-    let pending = mode != TaskObservation::SentResponse;
+    let pending = matches!(
+        mode,
+        TaskObservation::PendingSubmission | TaskObservation::ReconcileSubmission
+    );
     let key = paired_key(workspace, project)?;
     let lease = crate::operator_facade::acquire_web_work_lease(workspace, project)?;
     let prepared =
@@ -1193,6 +1207,13 @@ fn inspect_review_response(
         .unwrap_or_else(|| delivery.event.event_id.clone());
     let task_record =
         crate::web_work_state::WorkLedger::record_for_event(workspace, project, &source_event)?;
+    if mode == TaskObservation::AppMenu
+        && task_record
+            .as_ref()
+            .is_none_or(|record| record.task_assignment.is_none())
+    {
+        return Err("WEB_REVIEW_TASK_BINDING_REQUIRED".into());
+    }
     if pending
         && (delivery.receipt.is_some()
             || task_record
@@ -1222,7 +1243,11 @@ fn inspect_review_response(
         lease.check_target(&target)
     };
     guard()?;
-    let mut value = if mode == TaskObservation::ReconcileSubmission {
+    let mut value = if mode == TaskObservation::AppMenu {
+        catdesk_wake::runtime::inspect_sent_task_app_menu(
+            &wake, project, &target, event_id, &guard,
+        )?
+    } else if mode == TaskObservation::ReconcileSubmission {
         catdesk_wake::runtime::read_registered_delivery_receipt(
             &wake, project, &target, &delivery, &guard,
         )?
@@ -1292,7 +1317,9 @@ fn inspect_review_response(
             value["receiptCommitState"] = json!("UNPROVEN");
         }
     }
-    value["action"] = json!(if mode == TaskObservation::ReconcileSubmission {
+    value["action"] = json!(if mode == TaskObservation::AppMenu {
+        "web_task_app_menu_inspect"
+    } else if mode == TaskObservation::ReconcileSubmission {
         "web_task_submission_reconcile"
     } else if pending {
         "web_review_submission_inspect"
@@ -1893,6 +1920,10 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             &event_id,
             TaskObservation::ReconcileSubmission,
         ),
+        WebAction::ReviewInspectAppMenu {
+            project_id,
+            event_id,
+        } => inspect_review_response(&workspace, &project_id, &event_id, TaskObservation::AppMenu),
         WebAction::ReviewReobserve {
             project_id,
             event_id,
@@ -2940,6 +2971,38 @@ mod tests {
         ] {
             let mut changed = valid.clone();
             changed.extend(args(&extra));
+            assert!(parse(&changed).is_err());
+        }
+        assert!(parse(&valid[..6]).is_err());
+    }
+
+    #[test]
+    fn app_menu_inspection_is_explicit_task_bound_and_cannot_select_or_send() {
+        let valid = args(&[
+            "operator",
+            "web",
+            "review",
+            "inspect-app-menu",
+            "--project-id",
+            "alpha",
+            "--event-id",
+            "wake-intent-existing",
+        ]);
+        assert!(matches!(
+            parse(&valid),
+            Ok(WebAction::ReviewInspectAppMenu { .. })
+        ));
+        for extra in [
+            "--select",
+            "--app",
+            "--url",
+            "--submit",
+            "--input-file",
+            "--key",
+            "--force",
+        ] {
+            let mut changed = valid.clone();
+            changed.extend(args(&[extra, "foreign"]));
             assert!(parse(&changed).is_err());
         }
         assert!(parse(&valid[..6]).is_err());

@@ -1,5 +1,6 @@
-//! Advisory observation through the existing stopped-host browser owner.
-//! No event claim, USER input, assistant action, or delivery reconciliation.
+//! Observation through the existing stopped-host owner. Passive modes have no
+//! UI action; explicit AppMenu permits only one linked-menu open/close, never
+//! event claims, USER input, item selection or delivery reconciliation.
 use super::*;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -8,6 +9,30 @@ enum Mode {
     Receipt,
     ResponseOwnerHeld,
     SentDiagnostics,
+    AppMenu,
+}
+
+/// Explicit transient menu inspection of one completed receipt-bound task.
+/// No menu item is selected and no input, settings or authority is changed.
+pub fn inspect_sent_task_app_menu(
+    store: &Store,
+    project: &str,
+    target: &Target,
+    event: &str,
+    keep_current: &dyn Fn() -> Result<()>,
+) -> Result<serde_json::Value> {
+    let (delivery, timer) = store.sent_response_scope(project, target, event)?;
+    if timer.response_state != ResponseState::Complete {
+        return Err("READINESS_COMPLETED_RESPONSE_REQUIRED".into());
+    }
+    inspect_readiness(
+        store,
+        project,
+        target,
+        Some(&delivery),
+        Mode::AppMenu,
+        keep_current,
+    )
 }
 
 /// Explicit content-free inspection of an exact SENT ordinary/task exchange.
@@ -230,7 +255,10 @@ fn inspect_readiness(
     keep_current: &dyn Fn() -> Result<()>,
 ) -> Result<serde_json::Value> {
     let receipt_only = mode == Mode::Receipt;
-    let response_only = matches!(mode, Mode::ResponseOwnerHeld | Mode::SentDiagnostics);
+    let response_only = matches!(
+        mode,
+        Mode::ResponseOwnerHeld | Mode::SentDiagnostics | Mode::AppMenu
+    );
     if !crate::protocol::valid_id(project) {
         return Err("READINESS_PROJECT_INVALID".into());
     }
@@ -318,8 +346,14 @@ fn inspect_readiness(
         // Retained-owner reobservation admits the same receipt-bound task
         // continuations as explicit diagnostics. Both are content-free and
         // require the Python reader's matching semantic-response flag.
-        if matches!(mode, Mode::SentDiagnostics | Mode::ResponseOwnerHeld) {
+        if matches!(
+            mode,
+            Mode::SentDiagnostics | Mode::ResponseOwnerHeld | Mode::AppMenu
+        ) {
             command.arg("--task-diagnostics");
+        }
+        if mode == Mode::AppMenu {
+            command.arg("--inspect-app-menu");
         }
         Some(hash)
     } else {
@@ -451,7 +485,7 @@ fn inspect_readiness(
         .iter()
         .rev()
         .find_map(|row| crate::readiness_probe::composer_app_observation(row));
-    let task_diagnostics = if mode == Mode::SentDiagnostics
+    let task_diagnostics = if matches!(mode, Mode::SentDiagnostics | Mode::AppMenu)
         && response
             .as_ref()
             .is_some_and(|v| v["stage"] == "RESPONSE_COMPLETE")
@@ -469,10 +503,11 @@ fn inspect_readiness(
         "targetGeneration":target.generation,"targetDigest":target.digest,
         "eventId":delivery.map(|d| &d.event.event_id),"sourceDeliverySha256":delivery_hash,
         "submissionObservation":submission,"submissionObservationState":submission_state,
-        "advisory":!receipt_only,"browserReadOnly":true,"sendAttempted":false,
+        "advisory":!receipt_only,"browserReadOnly":mode!=Mode::AppMenu,"transientMenuInspection":mode==Mode::AppMenu,"sendAttempted":false,
         "receiptCreated":false,"stateChanged":false,"retryAuthorized":false,"workResolved":false,
         "persistedReceipt":receipt,"receiptProofRequested":receipt_only,"responseObservation":response,
-        "taskDiagnostics":task_diagnostics,"appPresentation":app_observation,"reviewAuthorityGranted":false,
+        "taskDiagnostics":task_diagnostics,"appPresentation":app_observation,
+        "appMenuObservation":rows.iter().rev().find_map(|row|crate::readiness_probe::app_menu_observation(row)),"reviewAuthorityGranted":false,
         "submissionOutcome":if receipt.is_some() {"PERSISTED_RECEIPT_PROVEN"} else {"NOT_ASSESSED"},"authenticationVerified":false,
         "ownedTreeExited":true,"hostStarted":false,"schedulerStarted":false}),
     )
@@ -553,6 +588,11 @@ mod tests {
             .join(format!("{}.json", event.event_id));
         let before = std::fs::read(&path).unwrap();
         require_delivery(&store, "alpha", &target, &sent, true).unwrap();
+        assert_eq!(
+            inspect_sent_task_app_menu(&store, "alpha", &target, &event.event_id, &|| Ok(()))
+                .unwrap_err(),
+            "READINESS_COMPLETED_RESPONSE_REQUIRED"
+        );
         assert!(require_delivery(&store, "alpha", &target, &sent, false).is_err());
         assert!(require_delivery(&store, "beta", &target, &sent, true).is_err());
         let mut unknown = sent.clone();

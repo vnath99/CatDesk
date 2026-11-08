@@ -41,6 +41,59 @@ pub(crate) fn composer_app_observation(line: &str) -> Option<serde_json::Value> 
     Some(value)
 }
 
+pub(crate) fn app_menu_observation(line: &str) -> Option<serde_json::Value> {
+    let text = line.strip_prefix("PROBE:APP_MENU:")?;
+    if text.len() > 1536 {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_str(text).ok()?;
+    let flags = [
+        "openAttempted",
+        "openRequested",
+        "openOutcomeUnknown",
+        "closeAttempted",
+        "closedVerified",
+    ];
+    if value.as_object()?.len() != 12
+        || value["schemaVersion"].as_u64() != Some(1)
+        || value["basis"] != "TRANSIENT_MENU_ONLY_NOT_TOOL_CATALOG"
+        || !matches!(
+            value["state"].as_str()?,
+            "UNPROVEN"
+                | "OPEN_REQUESTED"
+                | "CLOSE_REQUESTED"
+                | "OBSERVED"
+                | "CLOSED"
+                | "DRAFT_PRESENT"
+                | "GENERATION_ACTIVE"
+                | "CONTROL_UNPROVEN"
+                | "UNSUPPORTED_MENU"
+                | "PRIOR_MENU_OPEN"
+                | "MENU_UNPROVEN"
+        )
+        || !flags.iter().all(|key| value[*key].as_bool().is_some())
+        || ![
+            "v5ItemCount",
+            "v5DisabledCount",
+            "appsItemCount",
+            "moreItemCount",
+        ]
+        .iter()
+        .all(|key| value[*key].as_u64().is_some_and(|n| n <= 16))
+        || value["v5DisabledCount"].as_u64()? > value["v5ItemCount"].as_u64()?
+        || (value["openRequested"] == true && value["openAttempted"] != true)
+        || (value["closeAttempted"] == true && value["openAttempted"] != true)
+        || (value["state"] == "OBSERVED"
+            && !(value["openRequested"] == true
+                && value["closeAttempted"] == true
+                && value["closedVerified"] == true
+                && value["openOutcomeUnknown"] == false))
+    {
+        return None;
+    }
+    Some(value)
+}
+
 pub(crate) fn surface_observation(line: &str) -> Option<serde_json::Value> {
     let text = line.strip_prefix("PROBE:SURFACE:")?;
     if text.len() > 1024 {
@@ -305,6 +358,12 @@ fn sanitized_rows(text: &str) -> Vec<String> {
             }
             if state.starts_with("APP:") {
                 return composer_app_observation(line).is_some();
+            }
+            if state.starts_with("APP_MENU:") {
+                return app_menu_observation(line).is_some();
+            }
+            if state.starts_with("APP_MENU_STATE:") {
+                return state == "APP_MENU_STATE:UNPROVEN";
             }
             if state.starts_with("APP_STATE:") {
                 return state == "APP_STATE:UNPROVEN";
@@ -776,4 +835,33 @@ fn composer_app_metadata_is_bounded_presentation_not_catalog_or_action_authority
         changed[key] = invalid;
         assert!(sanitized_rows(&format!("PROBE:APP:{changed}")).is_empty());
     }
+}
+
+#[test]
+#[cfg(test)]
+fn app_menu_protocol_requires_closed_counts_and_confirmed_close_for_observed_state() {
+    let value = serde_json::json!({"schemaVersion":1,"basis":"TRANSIENT_MENU_ONLY_NOT_TOOL_CATALOG","state":"OBSERVED",
+        "openAttempted":true,"openRequested":true,"openOutcomeUnknown":false,"closeAttempted":true,"closedVerified":true,
+        "v5ItemCount":1,"v5DisabledCount":0,"appsItemCount":1,"moreItemCount":0});
+    let line = format!("PROBE:APP_MENU:{value}");
+    assert_eq!(app_menu_observation(&line), Some(value.clone()));
+    assert_eq!(sanitized_rows(&line), [line]);
+    for (key, bad) in [
+        ("rawText", serde_json::json!("PRIVATE_KEY")),
+        ("v5ItemCount", serde_json::json!(17)),
+        ("v5DisabledCount", serde_json::json!(2)),
+        ("closedVerified", serde_json::json!(false)),
+        ("openAttempted", serde_json::json!(false)),
+        ("openOutcomeUnknown", serde_json::json!(true)),
+        ("closeAttempted", serde_json::json!(false)),
+        ("state", serde_json::json!("PRIVATE_STATE")),
+    ] {
+        let mut changed = value.clone();
+        changed[key] = bad;
+        assert!(sanitized_rows(&format!("PROBE:APP_MENU:{changed}")).is_empty());
+    }
+    assert_eq!(
+        sanitized_rows("PROBE:APP_MENU_STATE:UNPROVEN\nPROBE:APP_MENU_STATE:PRIVATE_BODY"),
+        ["PROBE:APP_MENU_STATE:UNPROVEN"]
+    );
 }

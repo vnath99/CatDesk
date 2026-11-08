@@ -1235,5 +1235,30 @@
       "authenticationOrAdminScopesAssessed": false,
       "affectedConversationAttachmentOrCatalogAssessed": false
     }
+  },
+  "transientAppMenuInspection": {
+    "observedUtc": "2026-11-08T23:31:00.551708+00:00",
+    "status": "SOURCE_QUALIFIED_LIVE_PENDING",
+    "sourceOnly": true,
+    "owner": "EXISTING_TASK_RECEIPT_BOUND_NATIVE_READINESS_OWNER",
+    "maximumOpenActions": 1,
+    "maximumCloseActions": 1,
+    "itemSelections": 0,
+    "messagesSent": 0,
+    "nativeCalls": 0,
+    "settingsChanges": 0,
+    "unknownOutcomeRetryAuthorized": false,
+    "catalogAuthority": false,
+    "installedAcceptance": "NOT_RUN",
+    "tests": {
+      "actualDom": 86,
+      "pythonProbe": 39,
+      "nativeReadiness": 19,
+      "operatorCli": 45,
+      "stableErrorSanitizer": 1,
+      "total": 190,
+      "strictRootAndWakeAllTargetClippy": "PASS",
+      "format": "PASS"
+    }
   }
 }

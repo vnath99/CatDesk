@@ -713,3 +713,25 @@ or settings action. Unsupported menu structure must fail closed, rather than
 generate further unchanged audits or a manual assistant-response relay.
 Native C1 code execution and installed dev.84 response/lifecycle acceptance
 remain incomplete; their separate existing gates are unchanged.
+
+
+## 2026-11-08T23:31:00.551708+00:00 — task-bound transient menu inspection
+
+The existing response-observation owner now supports an explicit local
+inspect-app-menu command for a SENT task with a COMPLETE response timer. It
+rechecks the exact original exchange before every browser action, requires an
+idle exact document and empty unique composer, and opens only one enabled
+non-submit control with explicit menu semantics. Reading requires the sole
+visible menu to match that control's aria-controls. At most one open and one
+close are permitted; unknown outcomes never authorize reopening or resending.
+Only fixed app-label counts are exported. No item selection, typing, settings,
+new owner, scheduler, native call or release authority is added.
+
+Source qualification covers changed DOM, drafts, generation, wrong/duplicate
+USER, target drift, foreign menus, lost open/close acknowledgments and independent
+owners after failure. Live qualification of this new menu path is pending.
+The earlier exact-task automatic readback already recovered COMPLETE and bounded
+TOOL_UNAVAILABLE / CONTEXT_UNAVAILABLE hints without an operator relay; specific
+missing subjects remain unproven. Installed dev.84 readback and C1 native coding
+acceptance remain incomplete. The original task, grant, key and completed
+messages are preserved; no retry is authorized by these diagnostics.
