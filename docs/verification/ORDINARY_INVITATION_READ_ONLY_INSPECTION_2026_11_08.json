@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "observedUtc": "2026-11-08T06:04:12Z",
+  "observedUtc": "2026-11-08T06:09:02.949422+00:00",
   "scope": "C1_ORIGINAL_INVITATION_DIAGNOSIS",
   "baselineCommit": "5c57ac4189bd682df4dc61872fe9271f0c1fbaa7",
   "finding": {
@@ -14,7 +14,11 @@
     "command": "operator web work inspect --project-id REGISTERED_PROJECT_ID --request-id EXISTING_REQUEST_ID",
     "selection": "EXISTING_OPEN_ORDINARY_WORK_LEDGER_AND_PAIRED_WAKE_TARGET",
     "runtimeScope": "INSTALLED_STORE_ONLY",
-    "acceptedRetainedDeliveryPhases": ["CLAIMED", "SUBMITTING", "ATTENTION"],
+    "acceptedRetainedDeliveryPhases": [
+      "CLAIMED",
+      "SUBMITTING",
+      "ATTENTION"
+    ],
     "requiresAbsentReceipt": true,
     "eventAndMessageDigestVerified": true,
     "deliveryFileHashCheckedBeforeExecutionAndAfterCleanup": true,
@@ -22,7 +26,16 @@
     "browserOwner": "EXISTING_STOPPED_HOST_PROFILE_OBSERVER",
     "comparisonReader": "EXISTING_ADAPTER_READER_SHARED_WITH_WAKE_BRIDGE",
     "metadataValidator": "EXISTING_NATIVE_SUBMISSION_DIAGNOSIS_VALIDATOR",
-    "visibleComparisonFields": ["composerClass", "composerBytes", "expectedUserCount", "lastUserMatches", "trustedMatches", "turnsAfter", "stable", "coverage"],
+    "visibleComparisonFields": [
+      "composerClass",
+      "composerBytes",
+      "expectedUserCount",
+      "lastUserMatches",
+      "trustedMatches",
+      "turnsAfter",
+      "stable",
+      "coverage"
+    ],
     "coverage": "VISIBLE_BOUNDED_ONLY",
     "zeroOrDuplicateCountsResolveDelivery": false,
     "receiptCreated": false,
@@ -36,12 +49,30 @@
     "sourceOnlyFallbackStillRequiresCompiledSha256": true
   },
   "qualification": {
-    "pythonReadiness": {"passed": 32, "command": "python -I -m unittest discover -s tests -p test_wake_readiness_probe.py -v"},
-    "adapterRegression": {"passed": 46, "command": "python -I -m unittest discover -s wake/tests -p test_adapter.py -v"},
-    "wakeReadiness": {"passed": 12, "command": "cargo test --locked --offline --manifest-path wake/Cargo.toml --lib readiness -- --test-threads=2"},
-    "reviewReconciliationRegression": {"passed": 14, "command": "cargo test --locked --offline --manifest-path wake/Cargo.toml --lib runtime::review_reconcile::tests -- --test-threads=2"},
-    "webCli": {"passed": 40, "command": "cargo test --locked --offline --bin catdesk operator_facade::web::tests -- --test-threads=2"},
-    "deliveryRegression": {"passed": 4, "command": "cargo test --locked --offline --bin catdesk web_work::delivery::tests -- --test-threads=2"},
+    "pythonReadiness": {
+      "passed": 32,
+      "command": "python -I -m unittest discover -s tests -p test_wake_readiness_probe.py -v"
+    },
+    "adapterRegression": {
+      "passed": 46,
+      "command": "python -I -m unittest discover -s wake/tests -p test_adapter.py -v"
+    },
+    "wakeReadiness": {
+      "passed": 12,
+      "command": "cargo test --locked --offline --manifest-path wake/Cargo.toml --lib readiness -- --test-threads=2"
+    },
+    "reviewReconciliationRegression": {
+      "passed": 14,
+      "command": "cargo test --locked --offline --manifest-path wake/Cargo.toml --lib runtime::review_reconcile::tests -- --test-threads=2"
+    },
+    "webCli": {
+      "passed": 40,
+      "command": "cargo test --locked --offline --bin catdesk operator_facade::web::tests -- --test-threads=2"
+    },
+    "deliveryRegression": {
+      "passed": 4,
+      "command": "cargo test --locked --offline --bin catdesk web_work::delivery::tests -- --test-threads=2"
+    },
     "strictRootAndWakeAllTargetClippy": "PASS",
     "formatting": "PASS",
     "packagedHelperSurvivesSourceEditsAndRejectsWrongHash": "PASS",
@@ -51,7 +82,7 @@
   },
   "acceptance": {
     "implementation": "TESTED_SOURCE",
-    "separateControllerBuild": "NOT_RUN_AT_THIS_CHECKPOINT",
+    "separateControllerBuild": "PASS_RETAINED_HELPER_NOT_INSTALLED",
     "eventAwareInstalledProfileObservation": "NOT_RUN",
     "previousLiveObserverEvidence": "REGISTERED_READ_ONLY_BROWSER_OBSERVATION_2026_11_08.json",
     "profileAccessPrerequisite": "PENDING_EXISTING_OPERATOR_ACCOUNT_ACCESS_CHECK",
@@ -61,5 +92,24 @@
     "newBrowserOrConnectorChecksThisIncrement": 0,
     "c1": "NOT_COMPLETE",
     "c2ThroughC5": "NOT_RUN"
+  },
+  "implementationCommit": "a000ba3519daaaec11d193991f3b930dfd8e14e6",
+  "developmentController": {
+    "classification": "BUILT_SEPARATELY_NOT_INSTALLED",
+    "sha256": "bde8796da5a3e1ca3c5a99b38ebbd5941a6ef3a37b036431d3b779e776cb4f97",
+    "observerArtifactSha256": "0ccc94a27ffc826627fcdcd75308e8179d99b7d3c1b1a6d17129457a105fb301",
+    "buildSeconds": 54.156,
+    "preservationPins": 1049,
+    "preservationMismatches": 0
+  },
+  "operatorWrapperQualification": {
+    "samePendingCommandRetained": true,
+    "sameProjectWorkspaceAndReadOnlyScope": true,
+    "oldWrapperPreserved": true,
+    "controllerAndHelperHashesVerified": true,
+    "preflight": "PASS_ARTIFACT_IDENTITIES_ONLY",
+    "preflightCatdeskCommands": 0,
+    "preflightBrowserStarts": 0,
+    "accountAccessStillUnverified": true
   }
 }
