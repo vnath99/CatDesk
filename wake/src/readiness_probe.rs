@@ -131,7 +131,11 @@ pub(crate) fn persisted_receipt(line: &str) -> Option<crate::store::Receipt> {
         || receipt.target_generation == 0
         || receipt.sent_utc == 0
         || receipt.evidence != "EXACT_USER_MESSAGE_APPENDED"
-        || !receipt.event_id.strip_prefix("web-work-").is_some_and(hex)
+        || !receipt
+            .event_id
+            .strip_prefix("web-work-")
+            .or_else(|| receipt.event_id.strip_prefix("wake-intent-"))
+            .is_some_and(hex)
         || !hex(&receipt.target_digest)
         || !hex(&receipt.message_digest)
     {
@@ -444,6 +448,22 @@ mod tests {
         let receipt = serde_json::json!({"schemaVersion":1,"eventId":format!("web-work-{}","a".repeat(64)),
             "targetGeneration":1,"targetDigest":"b".repeat(64),"messageDigest":"c".repeat(64),"sentUtc":1,"evidence":"EXACT_USER_MESSAGE_APPENDED"});
         assert!(super::persisted_receipt(&format!("PROBE:RECEIPT:{receipt}")).is_some());
+        let mut continuation = receipt.clone();
+        continuation["eventId"] = serde_json::json!(format!("wake-intent-{}", "a".repeat(64)));
+        assert!(super::persisted_receipt(&format!("PROBE:RECEIPT:{continuation}")).is_some());
+        assert_eq!(
+            super::sanitized_rows(&format!("PROBE:RECEIPT:{continuation}")),
+            [format!("PROBE:RECEIPT:{continuation}")]
+        );
+        for id in [
+            "wake-intent-private".into(),
+            format!("wake-intent-{}", "A".repeat(64)),
+            format!("wake-intent-{}", "a".repeat(63)),
+            format!("source-review-{}", "a".repeat(64)),
+        ] {
+            continuation["eventId"] = serde_json::json!(id);
+            assert!(super::persisted_receipt(&format!("PROBE:RECEIPT:{continuation}")).is_none());
+        }
         for (key, value) in [
             ("schemaVersion", serde_json::json!(true)),
             ("eventId", serde_json::json!("private")),

@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Use one matched-source fresh-document receipt observation for the same pending task event. Commit only an exact independently verified receipt through the existing CAS, then observe its task-attributable assistant diagnostic. Do not resend any message or native call. Installed dev.84 response capability and C1 code execution are still incomplete.",
+  "next": "Run one changed-parser, same-event fresh receipt observation. If it proves the exact USER, commit through the existing guarded CAS and read the corresponding task diagnostic. No new send/native call. Preserve the earlier unproven attempt; do not claim its hidden raw receipt was captured.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -866,6 +866,43 @@
       "total": 105,
       "strictRootAndWakeAllTargetClippy": "PASS",
       "format": "PASS"
+    },
+    "firstLiveAttempt": {
+      "observedUtc": "2026-11-08T22:13:01.875474+00:00",
+      "sourceCommit": "a16fc43ea198d5c0aaa01651eb76630563623c9a",
+      "elapsedSeconds": 35.109,
+      "status": "RECEIPT_UNPROVEN_NO_COMMIT",
+      "returnedCode": "WEB_WORK_RECEIPT_UNPROVEN",
+      "receiptCreated": false,
+      "responseReadAttempted": false,
+      "messagesSent": 0,
+      "nativeCalls": 0,
+      "durablePhase": "SUBMITTING",
+      "preservationPins": 1071,
+      "preservationMismatches": 0,
+      "ownedProfileAndWakeProcessesAfter": 0,
+      "port3200ListenerPresent": false,
+      "ownerHarnessExit": 1,
+      "ownedCleanupVerified": true
+    },
+    "parserCorrection": {
+      "observedUtc": "2026-11-08T22:16:33.576229+00:00",
+      "status": "TESTED_SOURCE_CHANGED_PARSER_LIVE_PENDING",
+      "demonstratedSourceDefect": "RECEIPT_PARSER_DISCARDED_VALID_WAKE_INTENT_IDS",
+      "exactPreviousRawReceipt": "NOT_RETAINED_DO_NOT_CLAIM_OTHER_FAILURES_EXCLUDED",
+      "acceptedIds": [
+        "web-work-LOWERCASE_SHA256",
+        "wake-intent-LOWERCASE_SHA256"
+      ],
+      "runtimeExactTaskDeliveryAndWitnessChecks": "UNCHANGED",
+      "receiptUnprovenNowPreserves": "SANITIZED_DIAGNOSTICS_AND_OWNER_EXIT_WITHOUT_COMMIT",
+      "tests": {
+        "nativeReadiness": 17,
+        "cli": 44,
+        "total": 61,
+        "strictRootAndWakeAllTargetClippy": "PASS",
+        "format": "PASS"
+      }
     }
   }
 }

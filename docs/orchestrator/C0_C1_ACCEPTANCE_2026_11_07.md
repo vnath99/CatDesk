@@ -501,3 +501,29 @@ wrong phase and repeat commit. Next: matched-source fresh receipt proof and
 response classification for this same event. This is not installed Wake
 qualification; installed dev.84 and protected release authority are unchanged.
 C1 native editing and installed autonomous response acceptance remain incomplete.
+
+
+## 2026-11-08T22:16:33.576229+00:00 — semantic receipt parser correction
+
+The first fresh-receipt live attempt returned WEB_WORK_RECEIPT_UNPROVEN after
+35.109 seconds, committed nothing and did not start response inspection. Its
+owner harness exited one; owned cleanup passed, all 1,071 unrelated pins match,
+and profile/Wake processes and the port listener are absent. The pending
+submission and original READY native job remain unchanged. No send was retried.
+
+Source inspection found a precise coverage defect: the receipt parser admitted
+only web-work IDs, silently discarding otherwise valid wake-intent receipts
+from the newly eligible task-continuation reader. It now accepts either exact
+lowercase SHA-256 form. Runtime still independently requires the exact pending
+project/event/message/target, semantic identity, original witness, fresh receipt
+and registry-locked CAS. No wider event type or producer authority is admitted.
+The old attempt's raw receipt was not retained, so this does not exclude other
+causes of its unproven result. The CLI now retains already-sanitized readiness
+and owned-exit evidence when receipt proof is absent, with explicit
+TASK_RECEIPT_UNPROVEN and no commit or retry authority.
+
+61 focused tests pass (17 native readiness and 44 CLI) plus strict root/Wake
+all-target Clippy and formatting. Malformed/uppercase/truncated/foreign receipt
+IDs are rejected and a semantic receipt survives the sanitizer. Next is one
+changed-parser observation of the same pending event, never another message.
+Installed dev.84, protected release authority and C1 remain unchanged.

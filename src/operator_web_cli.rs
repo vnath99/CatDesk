@@ -1237,34 +1237,42 @@ fn inspect_review_response(
     };
     guard()?;
     if mode == TaskObservation::ReconcileSubmission {
-        let receipt = value
-            .get("persistedReceipt")
-            .filter(|r| !r.is_null())
-            .ok_or("WEB_WORK_RECEIPT_UNPROVEN")?;
-        let receipt: catdesk_wake::store::Receipt =
-            serde_json::from_value(receipt.clone()).map_err(|_| "WEB_WORK_RECEIPT_UNPROVEN")?;
-        // Browser ownership has fully exited. Reuse the existing short registry
-        // lock and exact-delivery CAS; no shared lock spans browser observation.
-        let _host = wake.host_lock()?;
-        let _browser = catdesk_wake::runtime::acquire_browser_quiescence(&wake)?;
-        guard()?;
-        let registry =
-            AutonomousProjectRegistryStoreV1::open_read_only(workspace.join(".catdesk/projects"))
-                .map_err(|_| "WEB_REVIEW_PROJECT_CHANGED")?;
-        registry.with_registration_lock(|| {
+        let receipt = value.get("persistedReceipt").filter(|r| !r.is_null());
+        if let Some(receipt) = receipt {
+            let receipt: catdesk_wake::store::Receipt =
+                serde_json::from_value(receipt.clone()).map_err(|_| "WEB_WORK_RECEIPT_UNPROVEN")?;
+            // Browser ownership has fully exited. Reuse the existing short registry
+            // lock and exact-delivery CAS; no shared lock spans browser observation.
+            let _host = wake.host_lock()?;
+            let _browser = catdesk_wake::runtime::acquire_browser_quiescence(&wake)?;
             guard()?;
-            let sent = wake.reconcile_task_continuation_sent_expected(
-                event_id,
-                receipt.clone(),
-                &delivery,
-            )?;
-            wake.record_exact_receipt_timer(event_id, &receipt)?;
-            value["deliveryPhase"] = json!(sent.phase);
-            value["receipt"] = json!(receipt);
-            value["receiptCreated"] = json!(true);
-            value["stateChanged"] = json!(true);
-            Ok(())
-        })?;
+            let registry = AutonomousProjectRegistryStoreV1::open_read_only(
+                workspace.join(".catdesk/projects"),
+            )
+            .map_err(|_| "WEB_REVIEW_PROJECT_CHANGED")?;
+            registry.with_registration_lock(|| {
+                guard()?;
+                let sent = wake.reconcile_task_continuation_sent_expected(
+                    event_id,
+                    receipt.clone(),
+                    &delivery,
+                )?;
+                wake.record_exact_receipt_timer(event_id, &receipt)?;
+                value["deliveryPhase"] = json!(sent.phase);
+                value["receipt"] = json!(receipt);
+                value["receiptCreated"] = json!(true);
+                value["stateChanged"] = json!(true);
+                value["receiptCommitState"] = json!("COMMITTED");
+                Ok(())
+            })?;
+        } else {
+            // Retain only the already-sanitized observation and cleanup proof.
+            // A no-proof result must not be flattened into an opaque error or
+            // treated as a failed send, receipt, native effect or replay grant.
+            value["status"] = json!("TASK_RECEIPT_UNPROVEN");
+            value["reason"] = json!("WEB_WORK_RECEIPT_UNPROVEN");
+            value["receiptCommitState"] = json!("UNPROVEN");
+        }
     }
     value["action"] = json!(if mode == TaskObservation::ReconcileSubmission {
         "web_task_submission_reconcile"
