@@ -116,7 +116,7 @@ pub fn run_scoped_task_continuation(
         before_submit,
         keep_running,
         |deadline, guard| {
-            let installed = installed_bootstrap_directory(store)?;
+            let installed = installed_ordinary_browser_directory(store)?;
             Adapter::spawn_from_installed_guarded(
                 store.root(),
                 &installed,

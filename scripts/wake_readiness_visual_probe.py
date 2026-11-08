@@ -51,7 +51,7 @@ def load_observation_sink(path, expected_sha256, profile, url):
     return sink
 
 
-def load_delivery_message(path, expected_sha256, url, *, receipt_only=False):
+def load_delivery_message(path, expected_sha256, url, *, receipt_only=False, response_only=False):
     """Read only the exact native-selected durable delivery, never caller text."""
     if (path is None or path.parent.name != "deliveries" or not path.is_file()
             or path.is_symlink() or getattr(path, "is_junction", lambda: False)()
@@ -64,8 +64,8 @@ def load_delivery_message(path, expected_sha256, url, *, receipt_only=False):
     delivery = json.loads(content)
     event, target = delivery["event"], delivery["target"]
     message = event["message"]
-    if (delivery["phase"] not in {"CLAIMED", "SUBMITTING", "ATTENTION"}
-            or delivery.get("receipt") is not None
+    if (delivery["phase"] not in ({"SENT"} if response_only else {"CLAIMED", "SUBMITTING", "ATTENTION"})
+            or (not response_only and delivery.get("receipt") is not None)
             or event["eventType"] != "engineering_attention" or event["auditReferences"] != []
             or not re.fullmatch(r"web-work-[0-9a-f]{64}", event["eventId"])
             or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", event["projectId"])
@@ -76,11 +76,51 @@ def load_delivery_message(path, expected_sha256, url, *, receipt_only=False):
             or not isinstance(message, str) or not 0 < len(message.encode()) <= 2048
             or delivery["messageDigest"] != hashlib.sha256(message.encode()).hexdigest()):
         raise ValueError("delivery scope changed")
+    if response_only:
+        receipt = delivery.get("receipt")
+        if (not isinstance(receipt, dict) or receipt.get("schemaVersion") != 1
+                or receipt.get("eventId") != event["eventId"] or receipt.get("targetGeneration") != target["generation"]
+                or receipt.get("targetDigest") != target["digest"] or receipt.get("messageDigest") != delivery["messageDigest"]
+                or receipt.get("evidence") != "EXACT_USER_MESSAGE_APPENDED" or type(receipt.get("sentUtc")) is not int or receipt["sentUtc"] <= 0):
+            raise ValueError("sent receipt required")
+        return delivery
     if receipt_only:
         if delivery["phase"] != "SUBMITTING":
             raise ValueError("crossed submission required")
         return delivery
     return message
+
+
+def report_sent_response(sink, cdp, delivery, report=print, sleep=time.sleep):
+    """Observe only the assistant paired with this exact durable USER receipt."""
+    event, target = delivery["event"], delivery["target"]
+    try:
+        def sample():
+            stage = sink.observe_cooperative_response(cdp, event["message"], delivery["messageDigest"])
+            if stage not in {"RESPONSE_COMPLETE", "RESPONSE_PENDING"}:
+                raise ValueError("unsupported response state")
+            value = dict(stage=stage, eventId=event["eventId"], targetGeneration=target["generation"],
+                         targetDigest=target["digest"], messageDigest=delivery["messageDigest"])
+            reason = getattr(sink, "response_observation_reason", None)
+            controls = getattr(sink, "response_observation_controls", None)
+            if reason is not None:
+                value["diagnosticReason"] = reason
+            if controls is not None:
+                value["completionControls"] = controls
+            return value
+        first = sample()
+        sleep(.25)
+        value = sample()
+        if first != value:
+            report("PROBE:RESPONSE_STATE:UNSTABLE", flush=True)
+            return
+        report("PROBE:RESPONSE:" + json.dumps(value, separators=(",", ":"), sort_keys=True), flush=True)
+    except Exception as error:
+        reason = str(error)
+        allowed = {"RESPONSE_LOAD_ERROR", "RESPONSE_NETWORK_ERROR", "LOGIN_OR_PROFILE_REQUIRED",
+                   "RESPONSE_EXPECTED_USER_DUPLICATED", "RESPONSE_SEQUENCE_DRIFT", "RESPONSE_STATE_UNPROVEN",
+                   "RESPONSE_TIMEOUT_RETRY_REQUIRED", "RESPONSE_TARGET_DRIFT", "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"}
+        report("PROBE:RESPONSE_STATE:" + (reason if reason in allowed else "UNPROVEN"), flush=True)
 
 
 def report_persisted_receipt(sink, cdp, delivery, report=print):
@@ -366,6 +406,7 @@ def main():
     parser.add_argument("--delivery-file", type=Path)
     parser.add_argument("--delivery-sha256")
     parser.add_argument("--receipt-only", action="store_true")
+    parser.add_argument("--response-only", action="store_true")
     args = parser.parse_args()
     if args.await_start and sys.stdin.readline() != "START\n":
         return 2
@@ -386,13 +427,16 @@ def main():
             return 0
     message = None
     receipt_delivery = None
-    if args.receipt_only and (not args.read_only or args.delivery_file is None):
+    response_delivery = None
+    if (args.receipt_only and args.response_only) or ((args.receipt_only or args.response_only) and (not args.read_only or args.delivery_file is None)):
         return 2
     if args.delivery_file is not None or args.delivery_sha256 is not None:
         try:
             if sink is None or not args.read_only:
                 raise ValueError("read-only primitives required")
-            if args.receipt_only:
+            if args.response_only:
+                response_delivery = load_delivery_message(args.delivery_file, args.delivery_sha256, url, response_only=True)
+            elif args.receipt_only:
                 receipt_delivery = load_delivery_message(args.delivery_file, args.delivery_sha256, url, receipt_only=True)
             else:
                 message = load_delivery_message(args.delivery_file, args.delivery_sha256, url)
@@ -465,6 +509,11 @@ def main():
                 report_persisted_receipt(sink, cdp, receipt_delivery)
             else:
                 print("PROBE:RECEIPT_STATE:UNPROVEN", flush=True)
+        if response_delivery is not None:
+            if surface is not None and surface.get("route") == "EXACT" and surface.get("document") == "COMPLETE":
+                report_sent_response(sink, cdp, response_delivery)
+            else:
+                print("PROBE:RESPONSE_STATE:UNPROVEN", flush=True)
     print("PROBE:PHASE:BROWSER_CLOSED", flush=True)
     print("PROBE:FINAL:" + final, flush=True)
     return 0

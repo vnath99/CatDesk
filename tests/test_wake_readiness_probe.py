@@ -14,6 +14,23 @@ from unittest import mock
 
 
 class ReadinessProbeTests(unittest.TestCase):
+    def test_response_observer_is_receipt_bound_stable_and_never_retries(self):
+        delivery=dict(messageDigest="a"*64,event=dict(eventId="web-work-"+"b"*64,message="PRIVATE_USER"),target=dict(generation=1,digest="c"*64))
+        sink=types.SimpleNamespace(observe_cooperative_response=mock.Mock(return_value="RESPONSE_COMPLETE"),response_observation_reason="COMPLETE",response_observation_controls=None)
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):self.probe.report_sent_response(sink,object(),delivery,sleep=lambda _:None)
+        self.assertEqual(sink.observe_cooperative_response.call_count,2)
+        value=json.loads(output.getvalue().split("PROBE:RESPONSE:")[1]);self.assertEqual(value["stage"],"RESPONSE_COMPLETE")
+        self.assertNotIn("PRIVATE_USER",output.getvalue())
+        sink.observe_cooperative_response.side_effect=["RESPONSE_PENDING","RESPONSE_COMPLETE"]
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):self.probe.report_sent_response(sink,object(),delivery,sleep=lambda _:None)
+        self.assertEqual(output.getvalue(),"PROBE:RESPONSE_STATE:UNSTABLE\n")
+        for reason,expected in [("RESPONSE_LOAD_ERROR","RESPONSE_LOAD_ERROR"),("PRIVATE_ERROR_BODY","UNPROVEN")]:
+            sink.observe_cooperative_response.side_effect=RuntimeError(reason)
+            output=io.StringIO()
+            with contextlib.redirect_stdout(output):self.probe.report_sent_response(sink,object(),delivery,sleep=lambda _:None)
+            self.assertEqual(output.getvalue(),"PROBE:RESPONSE_STATE:"+expected+"\n")
     def test_receipt_reader_uses_existing_no_send_primitive_and_exports_no_content(self):
         delivery=dict(messageDigest="a"*64,event=dict(eventId="web-work-"+"b"*64,message="PRIVATE_MESSAGE"),
                       target=dict(generation=1,digest="c"*64))
@@ -83,6 +100,12 @@ class ReadinessProbeTests(unittest.TestCase):
             with self.assertRaises(ValueError):self.probe.load_delivery_message(path,checksum,url,receipt_only=True)
             submitted=json.loads(json.dumps(delivery));submitted["phase"]="SUBMITTING"
             self.assertEqual(self.probe.load_delivery_message(path,save(submitted),url,receipt_only=True),submitted)
+            sent=json.loads(json.dumps(delivery));sent["phase"]="SENT"
+            with self.assertRaises(ValueError):self.probe.load_delivery_message(path,save(sent),url,response_only=True)
+            sent["receipt"]=dict(schemaVersion=1,eventId=identity,targetGeneration=1,targetDigest=sent["target"]["digest"],messageDigest=sent["messageDigest"],sentUtc=1,evidence="EXACT_USER_MESSAGE_APPENDED")
+            self.assertEqual(self.probe.load_delivery_message(path,save(sent),url,response_only=True),sent)
+            sent["receipt"]["messageDigest"]="f"*64
+            with self.assertRaises(ValueError):self.probe.load_delivery_message(path,save(sent),url,response_only=True)
             save(delivery)
             self.assertEqual(path.read_text(), json.dumps(delivery))
             with self.assertRaises(ValueError): self.probe.load_delivery_message(path, "0" * 64, url)

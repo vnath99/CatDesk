@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-08T17:14:06.847940+00:00",
+  "baselineCommit": "4d66dcb9963e60c2ff1d8c63414a6ec1e6378d8d",
+  "scope": "C1_ORIGINAL_RESPONSE_AND_ASSIGNED_CONTEXT",
+  "implementation": {
+    "command": "operator web work response --project-id REGISTERED_PROJECT_ID --request-id ORIGINAL_REQUEST_ID",
+    "existingReceiptAndReobservationJournalReused": true,
+    "sameNativeBrowserOwner": true,
+    "sameSharedBridgeResponseReader": true,
+    "exactSentReceiptAndProjectPairRequired": true,
+    "twoStableResponseSamples": true,
+    "usableBodyAndCompletionControlRequired": true,
+    "rawConversationTextExported": false,
+    "assistantRetryAllowed": false,
+    "userSendAllowed": false,
+    "partialProbeOrFailedCleanupCannotComplete": true,
+    "metadataLocksReleasedDuringBrowserWait": true,
+    "privateContextSubmitUsesExistingOrdinaryProtocol": true,
+    "legacyExactUserThenMatchingSentSupported": true,
+    "privateContextReconcileStillRequiresCooperativeReader": true,
+    "privatePayloadStaysOutsideWakeQueueAndStatus": true,
+    "existingContextSizeAndUnknownOutcomeFencesPreserved": true,
+    "ordinaryContinuationDoesNotRequireNewChatBootstrap": true,
+    "installedPackageAndSelectedRuntimeUnchanged": true
+  },
+  "qualification": {
+    "pythonTests": 34,
+    "nativeReadinessTests": 15,
+    "responseTests": 5,
+    "reobservationTests": 15,
+    "privateContextTests": 15,
+    "webCliTests": 42,
+    "deliveryTests": 6,
+    "focusedTestsTotal": 132,
+    "exactInstalledAdapterOfflineCases": 8,
+    "offlineBrowserStarts": 0,
+    "offlineMessagesSent": 0,
+    "strictRootAndWakeAllTargetClippy": "PASS",
+    "formatting": "PASS",
+    "retainedCorrection": "Removed unused mut in the new legacy-context test before final lint qualification."
+  },
+  "acceptance": {
+    "source": "TESTED_SOURCE",
+    "separateController": "NOT_BUILT_YET",
+    "liveAssistantCompletion": "NOT_RUN",
+    "livePrivateTaskContext": "NOT_RUN",
+    "nativeEditTestWakeCycle": "NOT_RUN",
+    "c1": "NOT_COMPLETE",
+    "laterMilestones": "NOT_RUN"
+  },
+  "next": "Build exact source separately and run one receipt-bound response observation for the original SENT invitation; proceed to the existing exact assigned native task only after its grant and context checks."
+}

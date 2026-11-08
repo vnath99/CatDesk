@@ -31,6 +31,7 @@ pub use readiness::{
     inspect_registered_delivery_readiness, inspect_registered_readiness,
     read_registered_delivery_receipt,
 };
+pub(crate) use response::canonical_observation as canonical_response_observation;
 pub(crate) use response::validate_observation as validate_response_observation;
 pub use review_reconcile::{
     SubmissionDiagnosisReport, diagnose_scoped_review_guarded, diagnosed_scoped_review_guarded,

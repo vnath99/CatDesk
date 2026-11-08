@@ -140,6 +140,14 @@ pub(crate) fn persisted_receipt(line: &str) -> Option<crate::store::Receipt> {
     Some(receipt)
 }
 
+pub(crate) fn sent_response_observation(line: &str) -> Option<serde_json::Value> {
+    let text = line.strip_prefix("PROBE:RESPONSE:")?;
+    if text.len() > 2048 {
+        return None;
+    }
+    crate::runtime::canonical_response_observation(serde_json::from_str(text).ok()?)
+}
+
 pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<String>, &'static str> {
     let mut rows = Vec::new();
     run_bounded_observed(command, timeout, &mut rows)?;
@@ -261,6 +269,25 @@ fn sanitized_rows(text: &str) -> Vec<String> {
             if state.starts_with("RECEIPT_STATE:") {
                 return state == "RECEIPT_STATE:UNPROVEN";
             }
+            if state.starts_with("RESPONSE:") {
+                return sent_response_observation(line).is_some();
+            }
+            if let Some(reason) = state.strip_prefix("RESPONSE_STATE:") {
+                return matches!(
+                    reason,
+                    "UNPROVEN"
+                        | "UNSTABLE"
+                        | "RESPONSE_LOAD_ERROR"
+                        | "RESPONSE_NETWORK_ERROR"
+                        | "LOGIN_OR_PROFILE_REQUIRED"
+                        | "RESPONSE_EXPECTED_USER_DUPLICATED"
+                        | "RESPONSE_SEQUENCE_DRIFT"
+                        | "RESPONSE_STATE_UNPROVEN"
+                        | "RESPONSE_TIMEOUT_RETRY_REQUIRED"
+                        | "RESPONSE_TARGET_DRIFT"
+                        | "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"
+                );
+            }
             if let Some(state) = state.strip_prefix("SUBMISSION_STATE:") {
                 return matches!(
                     state,
@@ -376,6 +403,31 @@ fn sanitized_rows(text: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn response_protocol_reuses_closed_validator_and_rejects_content_or_foreign_shapes() {
+        let value = serde_json::json!({"stage":"RESPONSE_COMPLETE","eventId":format!("web-work-{}","a".repeat(64)),"targetGeneration":1,"targetDigest":"a".repeat(64),"messageDigest":"b".repeat(64),"diagnosticReason":"COMPLETE"});
+        assert_eq!(
+            super::sent_response_observation(&format!("PROBE:RESPONSE:{value}")),
+            Some(value.clone())
+        );
+        for (key, bad) in [
+            ("response", serde_json::json!("PRIVATE_BODY")),
+            ("diagnosticReason", serde_json::json!("PRIVATE_ERROR")),
+            ("stage", serde_json::json!("SENT")),
+            ("targetGeneration", serde_json::json!(true)),
+            ("messageDigest", serde_json::json!("INVALID")),
+        ] {
+            let mut v = value.clone();
+            v[key] = bad;
+            assert!(super::sent_response_observation(&format!("PROBE:RESPONSE:{v}")).is_none());
+        }
+        assert_eq!(
+            super::sanitized_rows(
+                "PROBE:RESPONSE_STATE:RESPONSE_LOAD_ERROR\nPROBE:RESPONSE_STATE:PRIVATE_BODY"
+            ),
+            ["PROBE:RESPONSE_STATE:RESPONSE_LOAD_ERROR"]
+        );
+    }
     #[test]
     fn receipt_protocol_allows_only_closed_identity_fields_and_bounded_digests() {
         let receipt = serde_json::json!({"schemaVersion":1,"eventId":format!("web-work-{}","a".repeat(64)),

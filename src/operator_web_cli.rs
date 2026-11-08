@@ -139,6 +139,10 @@ pub(crate) enum WebAction {
         request_id: String,
         expected_delivery_sha256: String,
     },
+    WorkResponse {
+        project_id: String,
+        request_id: String,
+    },
     WorkReconcile {
         project_id: String,
         request_id: String,
@@ -306,7 +310,7 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         ("browser", "inspect") if options.is_empty() => Ok(WebAction::BrowserInspect {
             project_id: project_id.into(),
         }),
-        ("work", "deliver" | "inspect" | "retry-pre-submit" | "reconcile") => {
+        ("work", "deliver" | "inspect" | "retry-pre-submit" | "reconcile" | "response") => {
             let request_id = options
                 .remove("--request-id")
                 .filter(|id| id.len() <= 128 && catdesk_wake::protocol::valid_id(id))
@@ -334,6 +338,12 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
             }
             if verb == "inspect" {
                 return Ok(WebAction::WorkInspect {
+                    project_id: project_id.into(),
+                    request_id: request_id.into(),
+                });
+            }
+            if verb == "response" {
+                return Ok(WebAction::WorkResponse {
                     project_id: project_id.into(),
                     request_id: request_id.into(),
                 });
@@ -1691,6 +1701,10 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             project_id,
             request_id,
         } => crate::web_work::inspect_delivery(&workspace, &project_id, &request_id),
+        WebAction::WorkResponse {
+            project_id,
+            request_id,
+        } => crate::web_work::observe_response(&workspace, &project_id, &request_id),
         WebAction::WorkReconcile {
             project_id,
             request_id,
@@ -1944,6 +1958,12 @@ mod tests {
             "request-a",
         ]);
         assert!(matches!(parse(&base), Ok(WebAction::WorkReconcile { .. })));
+        let mut response_args = base.clone();
+        response_args[3] = "response".into();
+        assert!(matches!(
+            parse(&response_args),
+            Ok(WebAction::WorkResponse { .. })
+        ));
         for flag in [
             "--force",
             "--message",

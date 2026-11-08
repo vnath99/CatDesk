@@ -55,11 +55,7 @@ fn valid_completion_controls(value: &Value) -> bool {
             .all(|key| value.get(key).and_then(Value::as_bool).is_some())
 }
 
-pub(crate) fn validate_observation(delivery: &Delivery, value: &Value) -> Result<bool> {
-    let receipt = delivery
-        .receipt
-        .as_ref()
-        .ok_or("RESPONSE_PROBE_RECEIPT_REQUIRED")?;
+fn valid_observation_metadata(value: &Value) -> bool {
     let stage = value.get("stage").and_then(Value::as_str);
     let controls_valid = value.get("completionControls").is_none_or(|controls| {
         value.get("diagnosticReason").is_some()
@@ -100,10 +96,44 @@ pub(crate) fn validate_observation(delivery: &Delivery, value: &Value) -> Result
                 }
         }
     };
+    matches!(stage, Some("RESPONSE_PENDING" | "RESPONSE_COMPLETE"))
+        && diagnostic_valid
+        && controls_valid
+}
+
+pub(crate) fn canonical_observation(value: Value) -> Option<Value> {
+    let hex = |v: &Value| {
+        v.as_str().is_some_and(|s| {
+            s.len() == 64
+                && s.bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        })
+    };
+    if !valid_observation_metadata(&value)
+        || !value["eventId"].as_str().is_some_and(|id| {
+            id.strip_prefix("web-work-").is_some_and(|v| {
+                v.len() == 64
+                    && v.bytes()
+                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            })
+        })
+        || !value["targetGeneration"].as_u64().is_some_and(|n| n > 0)
+        || !hex(&value["targetDigest"])
+        || !hex(&value["messageDigest"])
+    {
+        return None;
+    }
+    Some(value)
+}
+
+pub(crate) fn validate_observation(delivery: &Delivery, value: &Value) -> Result<bool> {
+    let receipt = delivery
+        .receipt
+        .as_ref()
+        .ok_or("RESPONSE_PROBE_RECEIPT_REQUIRED")?;
+    let stage = value.get("stage").and_then(Value::as_str);
     if delivery.phase != Phase::Sent
-        || !matches!(stage, Some("RESPONSE_PENDING" | "RESPONSE_COMPLETE"))
-        || !diagnostic_valid
-        || !controls_valid
+        || !valid_observation_metadata(value)
         || value.get("eventId").and_then(Value::as_str) != Some(delivery.event.event_id.as_str())
         || value.get("targetGeneration").and_then(Value::as_u64) != Some(delivery.target.generation)
         || value.get("targetDigest").and_then(Value::as_str)

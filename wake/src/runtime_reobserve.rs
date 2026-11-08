@@ -24,6 +24,22 @@ where
         keep_running,
         commit_guard,
         |delivery, deadline, guard| {
+            if delivery.event.event_type == "engineering_attention"
+                && delivery.event.audit_references.is_empty()
+                && delivery
+                    .event
+                    .event_id
+                    .strip_prefix("web-work-")
+                    .is_some_and(|v| {
+                        v.len() == 64
+                            && v.bytes()
+                                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                    })
+            {
+                return readiness::read_sent_response_observation(
+                    store, project, target, delivery, guard,
+                );
+            }
             let installed = installed_bootstrap_directory(store)?;
             let mut adapter = Adapter::spawn_from_installed_guarded(
                 store.root(),

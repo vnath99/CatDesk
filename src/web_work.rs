@@ -22,6 +22,7 @@ mod delivery;
 pub(crate) use delivery::deliver;
 pub(crate) use delivery::inspect as inspect_delivery;
 pub(crate) use delivery::reconcile as reconcile_delivery;
+pub(crate) use delivery::response as observe_response;
 pub(crate) use delivery::retry_pre_submit;
 
 #[derive(Deserialize)]

@@ -43,7 +43,12 @@ pub fn run_private_task_context(
         before_submit,
         keep_running,
         |deadline, guard| {
-            let installed = installed_bootstrap_directory(store)?;
+            let installed = installed_ordinary_browser_directory(store)?;
+            if request.operation == TaskContextOperation::Reconcile {
+                let bytes = std::fs::read(installed.join("adapter.py"))
+                    .map_err(|_| "BROWSER_ADAPTER_UNAVAILABLE")?;
+                require_reconcile_protocol(&bytes)?;
+            }
             Adapter::spawn_from_installed_guarded(
                 store.root(),
                 &installed,
@@ -52,6 +57,19 @@ pub fn run_private_task_context(
             )
         },
     )
+}
+
+fn require_reconcile_protocol(bytes: &[u8]) -> Result<()> {
+    if ![
+        b"def reconcile_submission(".as_slice(),
+        b"SENT_PENDING_RESPONSE".as_slice(),
+    ]
+    .iter()
+    .all(|marker| bytes.windows(marker.len()).any(|part| part == *marker))
+    {
+        return Err("TASK_CONTEXT_RECONCILE_PACKAGE_UNSUPPORTED".into());
+    }
+    Ok(())
 }
 
 fn checked_wire(request: &TaskContextSubmission<'_>) -> Result<(Value, String)> {
@@ -198,6 +216,15 @@ fn run_with_adapter<A: SubmissionAdapter>(
                 Some("READINESS_OBSERVED") => {
                     readiness_observation(&frame)?;
                 }
+                Some("SENT") if submitted || operation == TaskContextOperation::Reconcile => {
+                    if frame.as_object().is_none_or(|v| v.len() != 2)
+                        || witnessed.as_ref() != Some(&frame["receipt"])
+                    {
+                        return Err("TASK_CONTEXT_RECEIPT_INVALID".into());
+                    }
+                    return serde_json::from_value(frame["receipt"].clone())
+                        .map_err(|_| "TASK_CONTEXT_RECEIPT_INVALID".into());
+                }
                 Some("ATTENTION") => {
                     let reason = match frame.get("reason").and_then(Value::as_str) {
                         Some("LOGIN_OR_PROFILE_REQUIRED") => "LOGIN_OR_PROFILE_REQUIRED",
@@ -220,7 +247,19 @@ fn run_with_adapter<A: SubmissionAdapter>(
                     | "RECEIPT_BASELINE_READY"
                     | "PREWRITE_CONFIRMED"
                     | "SUBMISSION_ACCEPTED",
+                    // The retained protocol-1 adapter waits for its assistant
+                    // before emitting the exact USER receipt and final SENT.
+                    // These fixed progress frames grant no extra action/ACK.
                 ) => {}
+                Some(
+                    "GENERATION_WAIT"
+                    | "GENERATION_ACTIVE"
+                    | "RESPONSE_TIMEOUT_DETECTED"
+                    | "RESPONSE_RETRYING"
+                    | "RESPONSE_RETRY_STARTED"
+                    | "RESPONSE_COMPLETED"
+                    | "RESPONSE_COMPLETED_AFTER_REOPEN",
+                ) if submitted => {}
                 _ => return Err("TASK_CONTEXT_FRAME_INVALID".into()),
             }
         }
@@ -266,6 +305,55 @@ mod tests {
         collections::VecDeque,
         rc::Rc,
     };
+
+    #[test]
+    fn legacy_final_sent_requires_preceding_exact_user_receipt_and_one_ack() {
+        for valid in [true, false] {
+            let (store, target) = fixture("private-legacy-receipt");
+            let request = request(&target);
+            let exact = receipt(&request);
+            let mut frames = vec![
+                json!({"stage":"BEFORE_SUBMIT"}),
+                json!({"stage":"SUBMISSION_ACCEPTED"}),
+                json!({"stage":"RESPONSE_COMPLETED"}),
+            ];
+            if valid {
+                frames.push(json!({"stage":"USER_MESSAGE_APPENDED","receipt":exact}));
+            }
+            frames.push(json!({"stage":"SENT","receipt":exact}));
+            let adapter = fake(frames);
+            let sent = adapter.sent.clone();
+            let admitted = adapter.admitted.clone();
+            let result = run_with_adapter(
+                &store,
+                &request,
+                &mut || {
+                    admitted.set(true);
+                    Ok(())
+                },
+                &|| Ok(()),
+                |_, _| Ok(adapter),
+            );
+            assert_eq!(result.is_ok(), valid);
+            assert_eq!(
+                sent.borrow()
+                    .iter()
+                    .filter(|frame| **frame == json!({"submit":true}))
+                    .count(),
+                1
+            );
+        }
+    }
+
+    #[test]
+    fn private_reconciliation_requires_cooperative_reader_instead_of_new_chat_capability() {
+        assert!(require_reconcile_protocol(b"def reconcile_submission(): pass").is_err());
+        assert!(
+            require_reconcile_protocol(b"def reconcile_submission(): pass\nSENT_PENDING_RESPONSE")
+                .is_ok()
+        );
+        assert!(require_reconcile_protocol(b"def bootstrap_attempt(): pass").is_err());
+    }
 
     struct Fake {
         frames: VecDeque<Value>,

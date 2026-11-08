@@ -2,6 +2,13 @@
 //! No event claim, USER input, assistant action, or delivery reconciliation.
 use super::*;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Advisory,
+    Receipt,
+    ResponseOwnerHeld,
+}
+
 #[cfg(any(windows, test))]
 fn verified_primitives(source: &Path, adjacent: &Path, expected: &str) -> Result<PathBuf> {
     let path = match std::fs::symlink_metadata(adjacent) {
@@ -40,7 +47,7 @@ pub fn inspect_registered_readiness(
     target: &Target,
     keep_current: &dyn Fn() -> Result<()>,
 ) -> Result<serde_json::Value> {
-    inspect_readiness(store, project, target, None, false, keep_current)
+    inspect_readiness(store, project, target, None, Mode::Advisory, keep_current)
 }
 
 pub fn inspect_registered_delivery_readiness(
@@ -50,7 +57,14 @@ pub fn inspect_registered_delivery_readiness(
     delivery: &crate::store::Delivery,
     keep_current: &dyn Fn() -> Result<()>,
 ) -> Result<serde_json::Value> {
-    inspect_readiness(store, project, target, Some(delivery), false, keep_current)
+    inspect_readiness(
+        store,
+        project,
+        target,
+        Some(delivery),
+        Mode::Advisory,
+        keep_current,
+    )
 }
 
 /// Explicit fresh-document receipt proof through the same bounded owner.
@@ -63,7 +77,41 @@ pub fn read_registered_delivery_receipt(
     keep_current: &dyn Fn() -> Result<()>,
 ) -> Result<serde_json::Value> {
     require_receipt_selection(store, delivery)?;
-    inspect_readiness(store, project, target, Some(delivery), true, keep_current)
+    inspect_readiness(
+        store,
+        project,
+        target,
+        Some(delivery),
+        Mode::Receipt,
+        keep_current,
+    )
+}
+
+/// Only the existing reobservation owner calls this while retaining host ownership.
+pub(super) fn read_sent_response_observation(
+    store: &Store,
+    project: &str,
+    target: &Target,
+    delivery: &crate::store::Delivery,
+    keep_current: &dyn Fn() -> Result<()>,
+) -> Result<serde_json::Value> {
+    let observed = inspect_readiness(
+        store,
+        project,
+        target,
+        Some(delivery),
+        Mode::ResponseOwnerHeld,
+        keep_current,
+    )?;
+    if let Some(value) = observed.get("responseObservation").filter(|v| !v.is_null()) {
+        return Ok(value.clone());
+    }
+    let reason = observed["observations"].as_array().and_then(|rows| {
+        rows.iter()
+            .rev()
+            .find_map(|row| row.as_str()?.strip_prefix("PROBE:RESPONSE_STATE:"))
+    });
+    Err(reason.unwrap_or("RESPONSE_PROBE_UNPROVEN").into())
 }
 
 fn require_receipt_selection(store: &Store, delivery: &crate::store::Delivery) -> Result<()> {
@@ -88,12 +136,25 @@ fn require_delivery(
     project: &str,
     target: &Target,
     delivery: &crate::store::Delivery,
+    response_only: bool,
 ) -> Result<()> {
     delivery.event.validate()?;
-    if !matches!(
-        delivery.phase,
-        Phase::Claimed | Phase::Submitting | Phase::Attention
-    ) || delivery.receipt.is_some()
+    let phase_valid = if response_only {
+        store
+            .sent_response_scope(project, target, &delivery.event.event_id)?
+            .0
+            == *delivery
+    } else {
+        matches!(
+            delivery.phase,
+            Phase::Claimed | Phase::Submitting | Phase::Attention
+        ) && delivery.receipt.is_none()
+    };
+    if !phase_valid
+        || !matches!(
+            delivery.phase,
+            Phase::Claimed | Phase::Submitting | Phase::Attention | Phase::Sent
+        )
         || delivery.target != *target
         || delivery.event.project_id != project
         || delivery.event.target_generation != target.generation
@@ -123,20 +184,26 @@ fn inspect_readiness(
     project: &str,
     target: &Target,
     delivery: Option<&crate::store::Delivery>,
-    receipt_only: bool,
+    mode: Mode,
     keep_current: &dyn Fn() -> Result<()>,
 ) -> Result<serde_json::Value> {
+    let receipt_only = mode == Mode::Receipt;
+    let response_only = mode == Mode::ResponseOwnerHeld;
     if !crate::protocol::valid_id(project) {
         return Err("READINESS_PROJECT_INVALID".into());
     }
     require_selection(store, project, target)?;
     keep_current()?;
-    let _host = store.host_lock()?;
+    let _host = if response_only {
+        None
+    } else {
+        Some(store.host_lock()?)
+    };
     let _browser = acquire_browser_quiescence(store)?;
     require_selection(store, project, target)?;
     keep_current()?;
     if let Some(delivery) = delivery {
-        require_delivery(store, project, target, delivery)?;
+        require_delivery(store, project, target, delivery, response_only)?;
         if receipt_only {
             require_receipt_selection(store, delivery)?;
         }
@@ -203,6 +270,9 @@ fn inspect_readiness(
         if receipt_only {
             command.arg("--receipt-only");
         }
+        if response_only {
+            command.arg("--response-only");
+        }
         Some(hash)
     } else {
         None
@@ -230,7 +300,7 @@ fn inspect_readiness(
     require_selection(store, project, target)?;
     keep_current()?;
     if let Some(delivery) = delivery {
-        require_delivery(store, project, target, delivery)?;
+        require_delivery(store, project, target, delivery, response_only)?;
         let path = store
             .root()
             .join("deliveries")
@@ -295,6 +365,36 @@ fn inspect_readiness(
     } else {
         None
     };
+    let response = if response_only
+        && result.is_ok()
+        && phase == Some("BROWSER_CLOSED")
+        && final_state.is_some()
+        && tabs
+            .as_ref()
+            .is_some_and(|v| v["state"] == "TARGET_TAB_EXACT" && v["candidateFrame"] == "TOP")
+        && surface
+            .as_ref()
+            .is_some_and(|v| v["route"] == "EXACT" && v["document"] == "COMPLETE")
+        && !rows
+            .iter()
+            .any(|row| row.starts_with("PROBE:RESPONSE_STATE:"))
+    {
+        let values: Vec<_> = rows
+            .iter()
+            .filter_map(|row| crate::readiness_probe::sent_response_observation(row))
+            .collect();
+        if values.len() == 1 {
+            response::validate_observation(
+                delivery.ok_or("READINESS_WORK_DELIVERY_CHANGED")?,
+                &values[0],
+            )?;
+            Some(values[0].clone())
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     Ok(
         serde_json::json!({"action":if delivery.is_some() {"web_work_inspect"} else {"web_browser_inspect"},"projectId":project,
         "status":if result.is_ok() && final_state.is_some() {"BROWSER_READINESS_OBSERVED"} else {"BROWSER_OBSERVATION_INCOMPLETE"},
@@ -305,7 +405,7 @@ fn inspect_readiness(
         "submissionObservation":submission,"submissionObservationState":submission_state,
         "advisory":!receipt_only,"browserReadOnly":true,"sendAttempted":false,
         "receiptCreated":false,"stateChanged":false,"retryAuthorized":false,"workResolved":false,
-        "persistedReceipt":receipt,"receiptProofRequested":receipt_only,
+        "persistedReceipt":receipt,"receiptProofRequested":receipt_only,"responseObservation":response,
         "submissionOutcome":if receipt.is_some() {"PERSISTED_RECEIPT_PROVEN"} else {"NOT_ASSESSED"},"authenticationVerified":false,
         "ownedTreeExited":true,"hostStarted":false,"schedulerStarted":false}),
     )
@@ -317,7 +417,7 @@ fn inspect_readiness(
     _: &str,
     _: &Target,
     _: Option<&crate::store::Delivery>,
-    _: bool,
+    _: Mode,
     _: &dyn Fn() -> Result<()>,
 ) -> Result<serde_json::Value> {
     Err("READINESS_PLATFORM_UNSUPPORTED".into())
@@ -326,6 +426,62 @@ fn inspect_readiness(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sent_delivery_requires_explicit_receipt_bound_response_scope() {
+        let (store, lease) = super::super::scheduler::tests::fixture("ordinary-response-scope");
+        drop(lease);
+        let target = store.config().unwrap().targets["alpha"].clone();
+        let event = store
+            .produce_expected_with_audit(
+                &format!("web-work-{}", "a".repeat(64)),
+                "alpha",
+                "engineering_attention",
+                "ordinary response",
+                &target,
+                &[],
+            )
+            .unwrap();
+        let host = store.host_lock().unwrap();
+        let claimed = store.claim(&event, &host).unwrap();
+        store
+            .transition(
+                &event.event_id,
+                &claimed.owner,
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: event.event_id.clone(),
+            target_generation: target.generation,
+            target_digest: target.digest.clone(),
+            message_digest: crate::protocol::digest(&event.message),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        store
+            .record_exact_receipt_timer(&event.event_id, &receipt)
+            .unwrap();
+        let sent = store
+            .transition(
+                &event.event_id,
+                &claimed.owner,
+                Phase::Sent,
+                Some(receipt),
+                None,
+            )
+            .unwrap();
+        drop(host);
+        require_delivery(&store, "alpha", &target, &sent, true).unwrap();
+        assert!(require_delivery(&store, "alpha", &target, &sent, false).is_err());
+        assert!(require_delivery(&store, "beta", &target, &sent, true).is_err());
+        let mut foreign = sent.clone();
+        foreign.message_digest = "b".repeat(64);
+        assert!(require_delivery(&store, "alpha", &target, &foreign, true).is_err());
+    }
 
     #[test]
     fn packaged_observer_survives_source_edits_but_bad_adjacent_never_falls_back() {
@@ -408,7 +564,7 @@ mod tests {
                 .join("deliveries")
                 .join(format!("{}.json", event.event_id));
             let before = std::fs::read(&path).unwrap();
-            require_delivery(&store, "alpha", &target, &delivery).unwrap();
+            require_delivery(&store, "alpha", &target, &delivery, false).unwrap();
             for field in ["project", "digest", "message", "phase", "event", "target"] {
                 let mut changed = delivery.clone();
                 match field {
@@ -419,7 +575,7 @@ mod tests {
                     "event" => changed.event.event_id = format!("web-work-{}", "b".repeat(64)),
                     _ => changed.target = Target::new(2, target.url.clone()).unwrap(),
                 }
-                assert!(require_delivery(&store, "alpha", &target, &changed).is_err());
+                assert!(require_delivery(&store, "alpha", &target, &changed, false).is_err());
             }
             #[cfg(windows)]
             assert_eq!(

@@ -33,47 +33,54 @@ fn validate_selection(
     Ok(())
 }
 
+enum Action<'a> {
+    Deliver,
+    Inspect,
+    Retry(&'a str),
+    Reconcile,
+    Response,
+}
+
 pub(crate) fn deliver(workspace: &Path, project: &str, request_id: &str) -> Result<Value, String> {
-    selected_work(workspace, project, request_id, false, None, false)
+    selected_work(workspace, project, request_id, Action::Deliver)
 }
-
 pub(crate) fn inspect(workspace: &Path, project: &str, request_id: &str) -> Result<Value, String> {
-    selected_work(workspace, project, request_id, true, None, false)
+    selected_work(workspace, project, request_id, Action::Inspect)
 }
-
 pub(crate) fn reconcile(
     workspace: &Path,
     project: &str,
     request_id: &str,
 ) -> Result<Value, String> {
-    selected_work(workspace, project, request_id, false, None, true)
+    selected_work(workspace, project, request_id, Action::Reconcile)
 }
-
+pub(crate) fn response(workspace: &Path, project: &str, request_id: &str) -> Result<Value, String> {
+    selected_work(workspace, project, request_id, Action::Response)
+}
 pub(crate) fn retry_pre_submit(
     workspace: &Path,
     project: &str,
     request_id: &str,
-    expected_sha256: &str,
+    hash: &str,
 ) -> Result<Value, String> {
-    selected_work(
-        workspace,
-        project,
-        request_id,
-        false,
-        Some(expected_sha256),
-        false,
-    )
+    selected_work(workspace, project, request_id, Action::Retry(hash))
 }
 
 fn selected_work(
     workspace: &Path,
     project: &str,
     request_id: &str,
-    inspect_only: bool,
-    retry_sha256: Option<&str>,
-    reconcile_only: bool,
+    action: Action<'_>,
 ) -> Result<Value, String> {
-    if (inspect_only || retry_sha256.is_some() || reconcile_only)
+    let inspect_only = matches!(action, Action::Inspect);
+    let reconcile_only = matches!(action, Action::Reconcile);
+    let response_only = matches!(action, Action::Response);
+    let retry_sha256 = if let Action::Retry(hash) = action {
+        Some(hash)
+    } else {
+        None
+    };
+    if (inspect_only || retry_sha256.is_some() || reconcile_only || response_only)
         && wake_protocol_client::wake_runtime_mode_for_workspace(workspace)? != "INSTALLED_STORE"
     {
         return Err("WEB_BROWSER_INSTALLED_SCOPE_REQUIRED".into());
@@ -95,7 +102,9 @@ fn selected_work(
     // SENT, SUBMITTING and other historical outcomes are refused by the
     // existing sender before opening an adapter; they never grant replay.
     let prior = wake.delivery(&record.event_id)?;
-    if (inspect_only || retry_sha256.is_some() || reconcile_only) && prior.is_none() {
+    if (inspect_only || retry_sha256.is_some() || reconcile_only || response_only)
+        && prior.is_none()
+    {
         return Err("WEB_WORK_DELIVERY_MISSING".into());
     }
     let event = match &prior {
@@ -139,6 +148,35 @@ fn selected_work(
         )
     };
     guard()?;
+    if response_only {
+        let registry =
+            AutonomousProjectRegistryStoreV1::open_read_only(workspace.join(".catdesk/projects"))
+                .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
+        let mut result = runtime::reobserve_sent_response_guarded(
+            &wake,
+            project,
+            &target,
+            &record.event_id,
+            &guard,
+            |commit| {
+                registry.with_registration_lock(|| {
+                    prepared
+                        .revalidate_registration()
+                        .map_err(|_| "WEB_WORK_PROJECT_REGISTRATION_CHANGED")?;
+                    ledger.require_ordinary_request(request_id)?;
+                    if ledger.record(request_id)?.as_ref() != Some(&record) {
+                        return Err("WEB_WORK_DELIVERY_SELECTION_CHANGED".into());
+                    }
+                    lease.check_target(&target)?;
+                    commit()
+                })
+            },
+        )?;
+        result["action"] = json!("web_work_response");
+        result["projectId"] = json!(project);
+        result["requestId"] = json!(request_id);
+        return Ok(result);
+    }
     if reconcile_only {
         let prior = prior.as_ref().ok_or("WEB_WORK_DELIVERY_MISSING")?;
         let observation =
@@ -315,6 +353,10 @@ mod tests {
         );
         assert_eq!(
             reconcile(&control, "alpha", "request-a").unwrap_err(),
+            "WEB_BROWSER_INSTALLED_SCOPE_REQUIRED"
+        );
+        assert_eq!(
+            response(&control, "alpha", "request-a").unwrap_err(),
             "WEB_BROWSER_INSTALLED_SCOPE_REQUIRED"
         );
         assert_eq!(std::fs::read(queue).unwrap(), before);
