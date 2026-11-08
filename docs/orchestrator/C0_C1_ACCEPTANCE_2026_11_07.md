@@ -683,3 +683,33 @@ opens a menu nor exports unknown labels. Exact document, unique editor and
 no-catalog-authority rules remain. 138 targeted tests plus strict root/Wake
 all-target Clippy and formatting pass. Next is one changed-control read of the
 same completed event; no resend, dispatch or connection-setting change.
+
+
+## 2026-11-08T23:10:18.099505+00:00 — known composer control identified live
+
+PASS LIVE DEVELOPMENT: the changed-control observer identifies one enabled,
+closed, type=button menu candidate in the unique composer form on the exact
+registered task conversation. The assistant response is COMPLETE; v5 marker
+count is zero, which does not establish absence or disconnection. This read
+finished in 34.391 seconds, sent/clicked nothing, preserved all 1,076 pins, and
+returned owned profile/Wake counts to zero with port 3200 closed. Source commit
+983ec14f8b85d0780daa04be8978d22b162b1c87 and controller SHA-256
+4d581715baf0ac84a634c387ae8bf69fec867e5457a46d43f6424f5d4af9014c are
+recorded; this is not installed qualification.
+
+The connected account's existing plugin-permission metadata was also read
+through the supported management tool. Personal settings remain in the private
+audit, unchanged. That read does not establish this browser profile's account,
+conversation attachment, tool catalog, OAuth/admin scope or release authority.
+No permission or connection setting was changed and no replacement plugin was
+created. The exact missing Web tool/context field remains unproven; no native
+call was retried and the original task/grant/key remain preserved.
+
+Next eligible engineering task: one bounded, task/receipt-bound app-menu read
+through the existing owner. Require exact idle document, empty composer, one
+enabled non-submit known control and verified menu semantics; open/close at
+most once and report only fixed labels/counts. No attach, send, authentication
+or settings action. Unsupported menu structure must fail closed, rather than
+generate further unchanged audits or a manual assistant-response relay.
+Native C1 code execution and installed dev.84 response/lifecycle acceptance
+remain incomplete; their separate existing gates are unchanged.

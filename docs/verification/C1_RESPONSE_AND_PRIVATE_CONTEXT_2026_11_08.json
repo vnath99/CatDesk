@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Use one changed-control read on the same SENT/COMPLETE event. A known plus selector was not found inside the form; check only fixed semantic labels in at most four composer-only ancestors, refusing history/body/main boundaries. No menu, settings, context send or native retry. Current caller catalog and specific missing context remain unproven.",
+  "next": "Implement one explicitly bounded transient app-menu inspection through the same qualified owner, anchored to this SENT receipt/task and exact idle empty composer. Revalidate one enabled non-submit known control and explicit menu semantics, permit at most one open and one close, return only fixed v5/menu metadata, and preserve all task/binding/history state. Do not attach, change settings, send, rehydrate context or dispatch. If the supported menu cannot be independently identified, return UNPROVEN once rather than guessing or asking for another response relay. C1 and installed acceptance remain incomplete.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -1197,6 +1197,43 @@
         "strictRootAndWakeAllTargetClippy": "PASS",
         "format": "PASS"
       }
+    },
+    "changedControlLive": {
+      "observedUtc": "2026-11-08T23:06:07.598106+00:00",
+      "sourceCommit": "983ec14f8b85d0780daa04be8978d22b162b1c87",
+      "controllerSha256": "4d581715baf0ac84a634c387ae8bf69fec867e5457a46d43f6424f5d4af9014c",
+      "status": "LIVE_KNOWN_CONTROL_IDENTIFIED_NOT_APP_CATALOG_PROOF",
+      "elapsedSeconds": 34.391,
+      "maximumOwnerSeconds": 150,
+      "presentation": {
+        "basis": "PRESENTATION_ONLY_NOT_TOOL_CATALOG",
+        "editorCount": 1,
+        "plusButtonCount": 1,
+        "plusButtonState": "ENABLED",
+        "plusButtonType": "BUTTON",
+        "plusExpanded": "CLOSED",
+        "schemaVersion": 1,
+        "scope": "COMPOSER_FORM",
+        "v5MarkerCount": 0
+      },
+      "taskReceiptAndGenerationAttributed": true,
+      "messagesSent": 0,
+      "nativeCalls": 0,
+      "uiActions": 0,
+      "bindingChanges": 0,
+      "permissionChanges": 0,
+      "preservationPins": 1076,
+      "preservationMismatches": 0,
+      "ownedProfileAndWakeProcessesAfter": 0,
+      "port3200ListenerPresent": false
+    },
+    "permissionRead": {
+      "observedUtc": "2026-11-08T23:09:13Z",
+      "status": "VERIFIED_UNCHANGED_PRIVATE_AUDIT_RETAINED",
+      "scope": "CONNECTED_ACCOUNT_PLUGIN_PERMISSIONS_NOT_AFFECTED_BROWSER_ATTACHMENT",
+      "settingsChanged": false,
+      "authenticationOrAdminScopesAssessed": false,
+      "affectedConversationAttachmentOrCatalogAssessed": false
     }
   }
 }
