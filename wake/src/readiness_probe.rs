@@ -16,7 +16,10 @@ pub(crate) fn composer_app_observation(line: &str) -> Option<serde_json::Value> 
     if value.as_object()?.len() != 9
         || value["schemaVersion"].as_u64() != Some(1)
         || value["basis"] != "PRESENTATION_ONLY_NOT_TOOL_CATALOG"
-        || !matches!(value["scope"].as_str()?, "UNPROVEN" | "COMPOSER_FORM")
+        || !matches!(
+            value["scope"].as_str()?,
+            "UNPROVEN" | "COMPOSER_FORM" | "COMPOSER_CONTAINER"
+        )
         || !matches!(
             value["plusButtonType"].as_str()?,
             "UNKNOWN" | "BUTTON" | "SUBMIT"
@@ -755,6 +758,12 @@ fn composer_app_metadata_is_bounded_presentation_not_catalog_or_action_authority
     let line = format!("PROBE:APP:{value}");
     assert_eq!(composer_app_observation(&line), Some(value.clone()));
     assert_eq!(sanitized_rows(&line), [line]);
+    let mut container = value.clone();
+    container["scope"] = serde_json::json!("COMPOSER_CONTAINER");
+    assert_eq!(
+        composer_app_observation(&format!("PROBE:APP:{container}")),
+        Some(container)
+    );
     for (key, invalid) in [
         ("schemaVersion", serde_json::json!(true)),
         ("editorCount", serde_json::json!(17)),

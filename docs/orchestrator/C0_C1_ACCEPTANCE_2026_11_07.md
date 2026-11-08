@@ -669,3 +669,17 @@ Clippy and formatting. The initial new DOM fixture accidentally added a second
 editor through an existing trace mode; the guard correctly refused it. That
 failed receipt is preserved; the fixture now traces clicks without adding an
 editor. Next: one same-event read through the matched existing owner.
+
+
+## 2026-11-08T23:02:44.345028+00:00 — composer-control compatibility
+
+The exact-task app-presentation read passed in 34.031 seconds: unique editor,
+composer form, completed idle response, no known plus selector or v5 marker in
+that form. All 1,076 pins and cleanup checks pass; no click/input or data change
+occurred. This does not prove that the plugin is absent or disconnected.
+The read-only probe now checks fixed semantic labels and at most four
+composer-only ancestors, stopping before history or body/main/html. It neither
+opens a menu nor exports unknown labels. Exact document, unique editor and
+no-catalog-authority rules remain. 138 targeted tests plus strict root/Wake
+all-target Clippy and formatting pass. Next is one changed-control read of the
+same completed event; no resend, dispatch or connection-setting change.

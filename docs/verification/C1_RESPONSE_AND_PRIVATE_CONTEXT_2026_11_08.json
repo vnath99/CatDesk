@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Inspect the exact completed task once with composer app metadata. The conservative missing-subject classifier did not identify a specific tool/key; do not infer one or resend. Qualify the actual known composer control before considering any separately bounded app-menu action. Preserve SENT/COMPLETE, original task/grant and installed state.",
+  "next": "Use one changed-control read on the same SENT/COMPLETE event. A known plus selector was not found inside the form; check only fixed semantic labels in at most four composer-only ancestors, refusing history/body/main boundaries. No menu, settings, context send or native retry. Current caller catalog and specific missing context remain unproven.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -1153,6 +1153,50 @@
       "total": 137,
       "strictRootAndWakeAllTargetClippy": "PASS",
       "format": "PASS"
+    },
+    "firstLive": {
+      "observedUtc": "2026-11-08T22:57:29.786383+00:00",
+      "sourceCommit": "5e6b556810e622021cc20670cc240779d367e07e",
+      "elapsedSeconds": 34.031,
+      "status": "LIVE_PRESENTATION_OBSERVED_NO_SUPPORTED_PLUS_SELECTOR_IN_FORM",
+      "presentation": {
+        "basis": "PRESENTATION_ONLY_NOT_TOOL_CATALOG",
+        "editorCount": 1,
+        "plusButtonCount": 0,
+        "plusButtonState": "UNKNOWN",
+        "plusButtonType": "UNKNOWN",
+        "plusExpanded": "UNKNOWN",
+        "schemaVersion": 1,
+        "scope": "COMPOSER_FORM",
+        "v5MarkerCount": 0
+      },
+      "missingPluginOrClientCatalogInferred": false,
+      "messagesSent": 0,
+      "nativeCalls": 0,
+      "uiActions": 0,
+      "preservationPins": 1076,
+      "preservationMismatches": 0,
+      "ownedProfileAndWakeProcessesAfter": 0,
+      "port3200ListenerPresent": false
+    },
+    "controlCompatibility": {
+      "observedUtc": "2026-11-08T23:02:44.345028+00:00",
+      "status": "TESTED_SOURCE_CHANGED_CONTROL_READ_PENDING",
+      "knownSemanticLabels": true,
+      "boundedComposerAncestors": 4,
+      "bodyMainHtmlAndHistoryBoundaries": "REFUSE",
+      "unknownLabelsExported": false,
+      "menusOpened": 0,
+      "clickOrTypingCapabilityAdded": false,
+      "catalogAuthority": false,
+      "tests": {
+        "actualDom": 82,
+        "pythonProbe": 38,
+        "nativeReadiness": 18,
+        "total": 138,
+        "strictRootAndWakeAllTargetClippy": "PASS",
+        "format": "PASS"
+      }
     }
   }
 }

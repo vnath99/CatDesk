@@ -223,9 +223,13 @@ if (options.appForm) {
   const controls=Array.from({length:options.appPlusCount ?? 1},()=>el('button',{
     'data-testid':'composer-plus-btn',type:options.appPlusType || 'button',
     'aria-expanded':options.appExpanded || 'false',disabled:options.appDisabled || false},'PRIVATE_CONTROL'));
+  if(options.appSemanticLabel) for(const control of controls){delete control.attrs['data-testid'];control.attrs['aria-label']=options.appSemanticLabel;}
   if(options.v5Chip) controls.push(el('button',{'data-testid':'app-chip','aria-label':'CatDesk-Local-Tunnel-v5'}));
   if(options.foreignChip) controls.push(el('button',{'data-testid':'app-chip','aria-label':'PRIVATE_OTHER_APP'}));
-  append(document,el('form',{},'',[editor,...controls]));
+  const form=el('form',{},'',[editor,...(options.appControlOutsideForm?[]:controls)]);
+  const container=options.appControlOutsideForm?el('div',{},'',[form,...controls]):form;
+  if(options.appHistoryContainer) append(container,el('div',{'data-message-author-role':'user'},'PRIVATE_HISTORY'));
+  append(document,container);
   if(options.duplicateAppEditor) append(document,el('div',{id:'prompt-textarea'},'PRIVATE_DRAFT'));
   if(options.outsideV5) append(document,el('button',{'data-testid':'app-chip','aria-label':'CatDesk-Local-Tunnel-v5'}));
 }
@@ -365,6 +369,19 @@ class CurrentDomTests(unittest.TestCase):
             def evaluate(self,script):raise RuntimeError('PRIVATE_PAGE')
         with self.assertRaises(RuntimeError):
             self.sink.composer_app_observation(Failure(appForm=True))
+
+    def test_composer_app_controls_allow_known_labels_but_never_cross_into_history(self):
+        for outside in (False, True):
+            value=self.sink.composer_app_observation(CurrentDom(appForm=True,appSemanticLabel='Add files and more',
+                appControlOutsideForm=outside))
+            self.assertEqual(value['scope'],'COMPOSER_CONTAINER' if outside else 'COMPOSER_FORM')
+            self.assertEqual(value['plusButtonCount'],1)
+            self.assertEqual(value['plusButtonType'],'BUTTON')
+        value=self.sink.composer_app_observation(CurrentDom(appForm=True,appControlOutsideForm=True,appHistoryContainer=True))
+        self.assertEqual(value['plusButtonCount'],0)
+        for label in ('Send','PRIVATE_UNKNOWN_CONTROL'):
+            value=self.sink.composer_app_observation(CurrentDom(appForm=True,appSemanticLabel=label))
+            self.assertEqual(value['plusButtonCount'],0)
 
     def test_typing_confirmation_reads_text_data_and_native_attribute_signature(self):
         class NativeSignatureDom(CurrentDom):

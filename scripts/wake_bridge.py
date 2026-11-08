@@ -898,7 +898,7 @@ class CdpSink:
         """Read only fixed app/control metadata; never open a menu or read a draft.
 
         Presentation is deliberately weaker than an authenticated tool catalog.
-        Only controls inside the unique editor's form count; history, sidebar,
+        Only its form or bounded composer-only ancestors count; history, sidebar,
         assistant text and arbitrary app names are never returned.
         """
         self.require_response_document(cdp)
@@ -920,8 +920,15 @@ class CdpSink:
             if(editors.length!==1) return result;
             const editor=editors[0],form=editor.closest('form');
             if(!form) return result;
+            if(form.querySelector("[data-message-author-role], [data-content-search-turn-key], [data-testid^='conversation-turn-']")) return result;
             result.scope='COMPOSER_FORM';
-            const plus=Array.from(form.querySelectorAll("button[data-testid='composer-plus-btn']")).filter(node=>visible(node)&&!editor.contains(node));
+            let scope=form,plus=[];
+            const selector="button[data-testid='composer-plus-btn'], button#composer-plus-button, button[aria-label='Add files and more'], button[aria-label='Add files and tools'], button[aria-label='Add files or tools'], button[aria-label='Open composer menu'], button[aria-label='Tools'], button[aria-label='Apps'], button[aria-label='Use apps']";
+            for(let candidate=form,depth=0;candidate&&depth<4;candidate=candidate.parentElement,depth++){{
+                if(['BODY','MAIN','HTML'].includes(candidate.tagName.toUpperCase()) || candidate.querySelector("[data-message-author-role], [data-content-search-turn-key], [data-testid^='conversation-turn-']")) break;
+                const matches=Array.from(candidate.querySelectorAll(selector)).filter(node=>visible(node)&&!editor.contains(node));
+                if(matches.length){{scope=candidate;plus=matches;result.scope=candidate===form?'COMPOSER_FORM':'COMPOSER_CONTAINER';break;}}
+            }}
             result.plusButtonCount=Math.min(plus.length,16);
             if(plus.length===1){{
                 const button=plus[0],type=button.getAttribute('type'),expanded=button.getAttribute('aria-expanded');
@@ -929,7 +936,7 @@ class CdpSink:
                 result.plusButtonState=button.disabled||button.getAttribute('aria-disabled')==='true'?'DISABLED':'ENABLED';
                 result.plusExpanded=expanded==='true'?'OPEN':expanded==='false'?'CLOSED':'UNKNOWN';
             }}
-            const candidates=Array.from(form.querySelectorAll("button[aria-label], [data-testid='app-pill'], [data-testid='app-chip']"))
+            const candidates=Array.from(scope.querySelectorAll("button[aria-label], [data-testid='app-pill'], [data-testid='app-chip']"))
                 .filter(node=>visible(node)&&!editor.contains(node));
             const selected=candidates.filter(node=>['CatDesk-Local-Tunnel-v5','@CatDesk-Local-Tunnel-v5'].includes((node.getAttribute('aria-label')||node.textContent||'').trim()));
             result.v5MarkerCount=Math.min(selected.filter(node=>!selected.some(parent=>parent!==node&&parent.contains(node))).length,16);
@@ -938,7 +945,7 @@ class CdpSink:
         value=self.cdp_value(cdp.evaluate(script))
         self.require_response_document(cdp)
         counts=('editorCount','plusButtonCount','v5MarkerCount')
-        vocab={'scope':{'UNPROVEN','COMPOSER_FORM'},'plusButtonType':{'UNKNOWN','BUTTON','SUBMIT'},
+        vocab={'scope':{'UNPROVEN','COMPOSER_FORM','COMPOSER_CONTAINER'},'plusButtonType':{'UNKNOWN','BUTTON','SUBMIT'},
             'plusButtonState':{'UNKNOWN','ENABLED','DISABLED'},'plusExpanded':{'UNKNOWN','OPEN','CLOSED'}}
         if (not isinstance(value,dict) or set(value)!={'schemaVersion','basis',*counts,*vocab}
                 or type(value['schemaVersion']) is not int or value['schemaVersion']!=1
