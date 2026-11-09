@@ -2376,3 +2376,27 @@ runtime package, installation, browser, native dispatch or replay occurred. The
 historical route is still unproved; authentication expiry is not inferred. Genuine
 current Web source review remains NOT_OBTAINED, installed/live qualification of
 this patch is NOT_RUN, and the full authorized C1 cycle remains INCOMPLETE.
+
+
+### 2026-11-09T16:58:30.4567247+00:00 — DEV inspector runs autonomously; authentication gates continuation
+
+[Recorded evidence](../verification/DEV_INSPECTOR_LOADER_2026_11_09.json) separates
+the following qualification layers:
+
+| Layer | Actual result | Acceptance limit |
+| --- | --- | --- |
+| Windows launch diagnosis | Old full command line reproduced WinError 206 before child creation. | No START, profile, browser or send in reproduction. |
+| Source/build | Source `754d753`; current 38 tests plus strict lint/formatting; locked/offline build PASS. | Prior 326 qualification is separate, not an added test total. |
+| Isolated DEV selection | GUI `671d526e…` selected; verified `d46ba664…` previous and f71 bytes retained; 15s local health PASS. | Local metadata/runtime qualification creates no protected production authority. |
+| Actual public read-only inspector | Completed in 46.875s; `TARGET_DRIFT`, controlled/candidate route `AUTH`; owned tree exited. | Authentication and history/editor/composer/assistant readiness remain unverified. |
+| Task-scoped readiness journal | Source-tested correction included in this DEV package. | Actual task-scoped live qualification NOT_RUN. |
+| Protected MAIN/C1 | Focused source, published inputs, frozen task/grant and claim preserved. | No current independent MAIN review, protected promotion, installed reader acceptance or full C1 cycle. |
+
+All 68 observation pins matched. A separate read-only inventory found no
+exact-profile browser or selected/staged GUI processes; it performed no process
+actions. No arbitrary page content, private target identity or authentication
+expiry explanation is inferred. The existing operator availability request is
+pending for the documented same-profile authentication flow, and no login owner
+remains running. Readiness must be re-observed before using the pending original
+review's supported pre-submit/resume transitions. Neither first-send wrapper,
+unknown submission nor native call may be replayed. **C1 remains INCOMPLETE.**

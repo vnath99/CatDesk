@@ -3154,3 +3154,38 @@ unchanged; no new runtime package, installation, browser, native action or retry
 occurred. Genuine current Web review remains NOT_OBTAINED and C1 INCOMPLETE. The
 historical failed browser route was not reconstructed, and authentication expiry
 is not inferred. Deploy/qualify this patch through existing procedures separately.
+
+
+### 2026-11-09T16:58:30.4567247+00:00 — DEV inspector launch qualified; authentication remains unverified
+
+An actual Windows launch of the old full command line reproduced WinError 206:
+36,511 quoted UTF-16 code units, no START token, no real profile and no child or
+browser created. Source `754d753` reuses the established embedded loader and stdin
+START request. The current 38 regression tests, formatting and strict root/Wake
+Clippy passed; the prior 326-test qualification remains separate and was not
+rerun or added to the current count. See the [evidence record](docs/verification/DEV_INSPECTOR_LOADER_2026_11_09.json).
+
+The exact-source locked/offline build completed in 109.609s. Normal DEV selection
+and a finite 15s authenticated loopback qualification completed in 47.187s:
+401/401/200 authentication, a 79-tool catalog, registry read, natural owned-tree
+and reader closure, and actual TCP refusal 10061. GUI `671d526e…` is selected;
+verified `d46ba664…` remains previous and older f71 bytes remain preserved.
+The 45 critical selection pins and both retained-package checks had zero
+mismatches; the existing profile identity and pending review/claim stayed intact.
+
+The actual public read-only inspector then completed in 46.875s. It reported
+`TARGET_DRIFT`; both controlled and candidate tab metadata classified `AUTH`.
+Authentication remains unverified, and history, editor, composer, generation and
+assistant state remain `UNKNOWN`. This does not establish authentication expiry
+or export conversation content. All 68 observation pins matched and the owned
+browser tree exited; a separate read-only inventory found zero exact-profile
+browser or selected/staged GUI processes, without process actions.
+
+This qualifies the isolated DEV advisory inspector, not the task-scoped readiness
+journal, whose live qualification remains NOT_RUN. The existing operator
+availability request is pending for the documented same-profile authentication
+flow; no browser or login owner remains waiting. No new question, message, retry,
+native dispatch, serving pipeline or recurring owner was started by inspection.
+Focused MAIN source `ae3f814`, its published inputs and frozen review remain
+unchanged. Protected promotion and installed-reader acceptance are not established;
+**C1 remains INCOMPLETE**.

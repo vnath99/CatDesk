@@ -9849,3 +9849,28 @@ all-target Clippy and formatting PASS. The selected DEV package and frozen main
 review stay unchanged. No new runtime package, installation or live test occurred;
 current genuine Web review is NOT_OBTAINED and C1 remains INCOMPLETE. This does not
 reconstruct the old route, establish authentication expiry or authorize replay.
+
+
+### 2026-11-09T16:58:30.4567247+00:00 — actual DEV inspector qualified; AUTH route remains a live gate
+
+Source `754d753` replaces the demonstrated Windows command-line launch failure
+with the existing embedded loader/stdin protocol. The current 38 tests and strict
+root/Wake Clippy/formatting passed, separately from prior 326 qualification.
+A build from that commit and normal DEV selection/verification passed; the
+current GUI is `671d526e…`, with verified `d46ba664…` previous and older f71 bytes
+preserved. Local health proved 401/401/200 authentication, catalog/registry read,
+owned-tree/reader exit and TCP refusal 10061.
+
+The actual bounded read-only public inspector completed in 46.875s and returned
+`TARGET_DRIFT` with controlled/candidate route `AUTH`. Authentication and all page
+surfaces remain unverified; expiry is not inferred. Its 68 preservation pins
+matched, the existing profile identity was preserved, and separate cleanup found
+zero exact-profile browser or selected/staged GUI processes. See the
+[evidence record](docs/verification/DEV_INSPECTOR_LOADER_2026_11_09.json).
+
+The task-scoped readiness journal is source-tested but live NOT_RUN. The existing
+operator availability request remains pending for supported same-profile
+authentication; no unattended login process or new question was created. No send,
+retry, native dispatch, binding, production or recurring-owner change occurred.
+The focused MAIN source/frozen review remain unchanged. No protected promotion,
+installed reader acceptance or complete C1 cycle is claimed. **C1 INCOMPLETE.**
