@@ -1763,3 +1763,48 @@ exercise all three non-ARIA variants, ambiguous portals, unchanged chips,
 privacy and exact task/route guards. Fixture visibility now respects hidden
 ancestors. Live qualification and installed acceptance remain separate; C1
 native coding has not executed and no completed message/call is replayed.
+
+
+## 2026-11-09T00:52:01.099652+00:00 — non-ARIA panel remains unproven; prioritize original C1 serving path
+
+LIVE DIAGNOSTIC ONLY: the bounded original-task observer returned MENU_ABSENT
+with control OPEN, zero recognized popup roles and no qualified HTML popover,
+known portal or fresh inline action panel. It selected nothing, sent no USER
+message and made no native call. The owned browser exited in
+35.562 seconds. All 1,076 pins matched; profile/Wake counts
+are zero and port 3200 is closed. These observations do not prove absent v5
+tools or explain the original native admission failure. Do not repeat menu
+opening solely to demonstrate unavailable markup.
+
+Read-only installed-source reconciliation corrects an overbroad interpretation:
+selected dev.84 adapter.py::attempt already calls wait_for_response_completion
+while retaining the browser and then durable_receipt_round_trip. The retained
+bridge also has completion waiting. Its older waiter permits periodic active-
+generation refresh and lacks the current source's guarded persistence/readback
+features. Thus the gaps are missing response-snapshot/readback operations and
+unqualified current-DOM completion/lifecycle behavior, not complete absence of
+a completion wait. No selected bytes, pointer, manifest or fingerprint changed.
+
+The original serving record proves an authenticated backend and ready existing
+external owner during its bounded window, with 102 server tools including the
+central dispatcher. The exact assistant completion time is unavailable; do not
+attribute its tool-unavailable hint to owner shutdown or missing client tools
+without stronger evidence. The original Web call did reach v5 at least once
+and was refused before native execution. Its precise invalid outer field is
+unrecorded; the original native task remains READY with no attempt, receipt or
+task journal. No original message/call is authorized for blind replay.
+
+Next C1 work should assess one supported, idempotent serving-restored task
+continuation under the SAME original grant, key, assignment, stable call and
+registered target, after fresh native no-effect and canonical-envelope checks.
+Keep backend/tunnel owners monitored through native outcome and response
+verification, then stop them through their existing owners. Do not invent a
+replacement task/grant, fabricate review authority or make a protected upgrade
+a blanket prerequisite. Implement any missing continuation transition before
+sending; do not improvise a raw browser message. Installed readback and C1 code
+execution remain incomplete. No operator response relay is requested.
+
+Runtime source 78a44ac4e5522e9d538cb4285fba61b29e06c247, separate controller SHA-256
+f2faf0495c9e844361956d16cbeb22029719102ed21bda732d90f96d9a8b818c. 94 DOM tests, 19 native tests,
+formatting and strict root/Wake Clippy pass. Prior failed fixture expectations
+are retained; the existing guard correctly refused before clicking.

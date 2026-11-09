@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Use the existing receipt-bound observer to classify inline composer, standard HTML popover and known portal metadata for the observed OPEN-with-zero-role-popups variant. Do not infer tool absence or enable selection from MENU_ABSENT. Preserve original task/key/grant and completed messages. Installed response/sender qualification still requires existing signed/broker authority. C1 native coding remains incomplete; no operator relay is requested.",
+  "next": "Prioritize assessing/implementing one idempotent serving-restored continuation for the same original native task/grant/key/call and target, only after fresh original no-effect and canonical-envelope proof. Keep qualified existing serving owners live through bounded native outcome and automatic response verification. Do not resend old messages, invent tasks/grants, treat menu absence as catalog absence, or bypass selected-artifact/review authority. C1 and installed readback remain incomplete.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -1551,7 +1551,7 @@
   },
   "nonAriaComposerPanelQualification": {
     "observedUtc": "2026-11-09T00:35:39.887198+00:00",
-    "status": "SOURCE_TESTED_LIVE_PENDING",
+    "status": "LIVE_PANEL_UNPROVEN_NOT_CLIENT_CATALOG_EVIDENCE",
     "schemaVersion": 4,
     "legacySchemasAccepted": [
       1,
@@ -1575,7 +1575,45 @@
     "actualDomTests": 94,
     "nativeReadinessTests": 19,
     "installedAcceptance": "NOT_RUN",
-    "retainedFixtureCorrection": "Historical assistant-root fixture is refused before UI action by the existing exact-response guard; corrected later-state/one-click expectations, preserving failed runs."
+    "retainedFixtureCorrection": "Historical assistant-root fixture is refused before UI action by the existing exact-response guard; corrected later-state/one-click expectations, preserving failed runs.",
+    "live": {
+      "observedUtc": "2026-11-09T00:38:52.610953+00:00",
+      "sourceCommit": "78a44ac4e5522e9d538cb4285fba61b29e06c247",
+      "controllerSha256": "f2faf0495c9e844361956d16cbeb22029719102ed21bda732d90f96d9a8b818c",
+      "elapsedSeconds": 35.562,
+      "observation": {
+        "appsItemCount": 0,
+        "basis": "TRANSIENT_MENU_ONLY_NOT_TOOL_CATALOG",
+        "closeAttempted": false,
+        "closedVerified": false,
+        "dialogCount": 0,
+        "expandedState": "OPEN",
+        "menuCount": 0,
+        "moreItemCount": 0,
+        "openAttempted": true,
+        "openOutcomeUnknown": false,
+        "openRequested": true,
+        "otherPopupCount": 0,
+        "ownershipEvidence": "FRESH_MENU_TRANSITION",
+        "panelActionCount": 0,
+        "panelCount": 0,
+        "panelKind": "UNPROVEN",
+        "schemaVersion": 4,
+        "state": "MENU_ABSENT",
+        "v5DisabledCount": 0,
+        "v5ItemCount": 0
+      },
+      "responseStage": "RESPONSE_COMPLETE",
+      "taskReceiptAndGenerationAttributed": true,
+      "messagesSent": 0,
+      "nativeCalls": 0,
+      "itemSelections": 0,
+      "preservationPins": 1076,
+      "preservationMismatches": 0,
+      "ownedTreeExited": true,
+      "ownedProfileAndWakeProcessesAfter": 0,
+      "port3200ListenerPresent": false
+    }
   },
   "originalTransportServingTimeline": {
     "source": "PRESERVED_HISTORICAL_OWNER_RECORD",
@@ -1595,5 +1633,20 @@
     "assistantActualCompletionTimeEstablished": false,
     "toolUnavailabilityCause": "NOT_ESTABLISHED",
     "clientCatalogInferredFromServerOrUi": false
+  },
+  "installedLifecycleReconciliation": {
+    "observedUtc": "2026-11-09T00:52:01.099652+00:00",
+    "package": "dev.84",
+    "evidence": [
+      "adapter.py::attempt",
+      "wake_bridge.py::wait_for_response_completion"
+    ],
+    "completionWaitAlreadyCalled": true,
+    "postCompletionReceiptRefreshAlreadyCalled": true,
+    "olderWaiterPermitsActiveGenerationRefresh": true,
+    "currentSourcePostRefreshResponsePersistenceQualifiedInInstalledPackage": false,
+    "responseSnapshotOperationAvailable": false,
+    "currentDomInstalledCompletionQualification": "NOT_ESTABLISHED",
+    "installedArtifactsChanged": false
   }
 }
