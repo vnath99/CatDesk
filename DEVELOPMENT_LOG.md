@@ -3026,3 +3026,47 @@ current canonical checkout, and neither is the separately qualified v7 debug
 artifact. Source synchronization, genuine review/ACK/snapshot, protected producer
 and release acceptance must follow their existing procedures; this live read
 supplies none of their missing authority.
+
+
+### 2026-11-09T15:21:34Z — focused observer release prepared; source-read qualification remains open
+
+The isolated release source `ae3f81445dc543d236732060e8d02e54b8c3a978` contains
+18 focused code paths over the genuinely accepted `313f6a31` baseline. Its source
+and immutable review-input publication `8d96edea45ba759ccd809d5b4d52d1e3126db4f9`
+have exact remote SHA readbacks. Existing feature-branch code is unchanged.
+553 targeted tests and strict root/Wake Clippy passed. The unsigned debug image
+built in 95.47 seconds; SHA-256 is
+`3a10e362b9794a4afa9ba26117709905eb0c9c04cf9208299571c7fe9c0b7aca`.
+
+Bounded development loopback health passed in 13.094 seconds: unauthorized and
+invalid-authentication requests returned 401/401, authenticated health returned
+200, and the 79-tool catalog contained the required review tools. The owned
+process exited naturally and its endpoint closed. `SOURCE_READ_NOT_QUALIFIED`
+remains: read-only mode correctly refused raw `run_command`; no policy was changed.
+This proves neither v5 ChatGPT source access nor installed acceptance.
+
+The complete immutable review packet has 50 fragments across 11 partial groups;
+no review has yet been authorized, claimed or sent. All 1,103 preservation pins
+matched. No browser, message, native task or production action was introduced.
+Next qualify the supported source-read route before freezing/sending review, then
+use the existing review, acknowledgment, snapshot, producer and guarded promotion
+chain. C1 and both original task fences remain incomplete; no replay is authorized.
+
+
+### 2026-11-09T15:51:11.662850+00:00 — focused review admission and committed claim reconciled
+
+The twelve frozen public-source review messages passed normal scoped admission
+using the already selected compatible development controller. The focused main
+candidate correctly refused newer development-only grant-transfer metadata; no
+ledger was rewritten and no additional release feature was required for the two
+canonical C1 ledgers. Frozen message bytes and project bindings remain unchanged.
+
+The report-only claim committed once. Its owner reached the outer deadline after
+the initial preservation pass consumed 49 seconds. The original timeout remains
+recorded. Durable event, baseline, idempotency and accounting evidence plus fresh
+read-only status reconciled the claim without replay: WAITING_FOR_CHATGPT, no
+native provider, 4,759 prior native files and 1,107 critical pins preserved, and
+exactly one new accounting row for this report. No source review has been sent
+yet, no cumulative acceptance exists and C1 remains incomplete. Next is one
+bounded source-review delivery through the existing serving owners, followed by
+actual source-read corroboration. No operator action is presently required.

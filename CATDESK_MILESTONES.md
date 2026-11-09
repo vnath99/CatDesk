@@ -9763,3 +9763,28 @@ native job still has no attempt; verified code and result Wake remain NOT_RUN. I
 dev.84 and original Bug/trace fences remain unchanged; C1 is INCOMPLETE.
 The recorded canonical checkout `313f6a31`, installed `0c19770e` artifact with
 review lineage `9ea9e7be`, and v7 debug source are separate source/artifact roles.
+
+
+### 2026-11-09T15:21:34Z — focused observer release TESTED_SOURCE; review access unqualified
+
+Focused source `ae3f81445dc543d236732060e8d02e54b8c3a978` retains accepted `313f6a31`
+lineage with 18 changed code paths. Source and input publication
+`8d96edea45ba759ccd809d5b4d52d1e3126db4f9` have verified remote SHAs.
+553 targeted tests and strict root/Wake Clippy passed. The uninstalled debug build
+and 13.094-second development health test passed: 401/401/200, catalog79,
+natural exit and closed endpoint. Raw source reads remain
+`SOURCE_READ_NOT_QUALIFIED` because read-only mode refused `run_command`;
+permissions were preserved. Fifty complete fragments form 11 partial review
+inputs, not an authorized or completed review. All 1,103 pins matched; no new
+browser, message, native execution or production action. Installed/v5 acceptance,
+C1 and the original task fences remain incomplete.
+
+
+### 2026-11-09T15:51:11.662850+00:00 — source-review batch admitted; claim reconciled without replay
+
+The unchanged twelve-message batch is locally authorized. Its report-only claim
+is WAITING_FOR_CHATGPT after durable/read-only reconciliation of an owner timeout.
+All 4,759 prior native files and 1,107 critical pins were preserved. No review
+message, native provider, source acceptance or promotion has occurred; C1 stays
+incomplete. The existing compatible development controller coordinates this
+workflow while the focused main candidate remains a separate release target.
