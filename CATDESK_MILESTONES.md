@@ -9788,3 +9788,35 @@ All 4,759 prior native files and 1,107 critical pins were preserved. No review
 message, native provider, source acceptance or promotion has occurred; C1 stays
 incomplete. The existing compatible development controller coordinates this
 workflow while the focused main candidate remains a separate release target.
+
+
+### 2026-11-09T16:16:18Z — isolated DEV qualified; current Web review NOT_OBTAINED
+
+The full response-reader package passed normal isolated DEV selection and a
+15-second backend health test: authentication 401/401/200, 79 tools, registered
+project read, natural owned-tree exit and closed endpoint. Qualification took
+56.422 seconds. The verified working predecessor, older artifacts, profile and
+1,106 critical pins were preserved with zero mismatches. This is local DEV
+qualification, not protected production promotion, installed observer acceptance
+or evidence for C1 completion.
+
+A 12-second read-only preflight allowance was too short. The first attempt sent
+nothing and retained its failed receipt. A separate 45-second-bounded preflight
+passed in 13.656 seconds with 1,122 pins preserved. Its earlier unsettled TCP
+projection was corrected to distinguish asynchronous incompletion from an actual
+refusal; the independent connection result was Windows error 10061. No old test
+was retroactively marked healthy.
+
+The subsequent 109.577-second monitored window qualified the existing backend's
+401/401/200 authentication and 102-tool catalog, plus existing Secure MCP owner
+readiness. Browser readiness then refused with LOGIN_OR_PROFILE_REQUIRED before
+submission. No authentication-expiry cause is proved. Delivery ATTENTION,
+coordinator OPEN and one unstarted reservation remain preserved; there is no
+receipt, response timer or submission witness. No message was confirmed and no
+native action occurred. Cleanup passed: both serving owners stopped, the endpoint
+closed, test-owned processes exited and all 1,121 pins matched.
+
+Current genuine Web review remains NOT_OBTAINED; no producer or promotion authority
+was created and C1 remains INCOMPLETE. Operator inspection of the existing profile
+is pending, with sign-in only if prompted and the supported command still under
+diagnosis. No profile recreation, reservation reset or blind resend is permitted.
