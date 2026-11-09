@@ -7254,3 +7254,23 @@ matching sibling `wake_bridge.py`, existing adapter and host. No fifth unsigned
 script or source checkout is required. Qualification remains separate from fixed
 broker provisioning, independent review/signature and pinned exact-source CI.
 See the dated C0/C1 acceptance entry for the implementation and migration gates.
+
+
+### 2026-11-09T11:55:10.393420+00:00 — interpret review readback without forcing completion
+
+Use the qualified existing controller and exact registered workspace/project/event:
+`operator web review diagnose --project-id <registered-project> --event-id <sent-event>`.
+In the updated source, `snapshotVerified` proves bounded readable attribution;
+`diagnosis.responseProgress.completionRecorded` separately reports the exact scoped
+durable timer. A verified snapshot does not complete a timer, resolve work, grant
+retry or approve a build. These new fields are not yet installed.
+
+The existing `operator web review reobserve` command can reconcile a SENT receipt
+under stopped-host ownership. It never sends and may still return PENDING with
+`ASSISTANT_COMPLETION_ACTION_UNPROVEN`. Preserve that result; do not repeatedly
+re-observe unchanged evidence or clear the guard. Only then may the separate
+normal work-resolution procedure close genuinely completed work. The existing
+development adapter already supports source-review snapshots; the protected
+installed dev.84 adapter lacks them. Keep the two roots and their qualification
+records distinct. No new authentication/profile/connection setup is required by
+this source diagnostic change.

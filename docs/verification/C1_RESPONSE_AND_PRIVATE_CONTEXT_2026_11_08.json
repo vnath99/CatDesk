@@ -2340,5 +2340,39 @@
       "c1NativeCoding": "INCOMPLETE",
       "originalNativeReplayAuthorized": false
     }
+  },
+  "nov09ReaderProgress": {
+    "observedUtc": "2026-11-09T11:55:10.393420+00:00",
+    "action": "READER_PROGRESS_DIAGNOSTIC_SOURCE_AND_INDEPENDENT_LIVE_READS",
+    "parentCommit": "01a5467953d1d3831b292bcfb6bb5043a9213c90",
+    "sourceFile": "src/operator_web_review.rs",
+    "sourceTests": 6,
+    "strictRootClippy": "PASS",
+    "initialClippyAdmission": "DEFERRED_BEFORE_LAUNCH_RESOURCE_HEADROOM",
+    "clippyAfterBrowserExit": "PASS",
+    "existingDevelopmentReaderSource": "f71a17be41d73875a82a553eda77a40e81cb72fc",
+    "observationControllerSource": "5c553eaec4c29c8ce4b7b1101abb38f472c629ed",
+    "byovdRead": {
+      "verified": true,
+      "elapsedSeconds": 34.906,
+      "verdict": "INCONCLUSIVE",
+      "reviewedSource": "b25119e8c47cfe261aae06b461c3697e3841cdb6"
+    },
+    "byovdClosure": "REFUSED_WEB_WORK_COMPLETED_RESPONSE_REQUIRED",
+    "byovdReobservation": "PENDING_ASSISTANT_COMPLETION_ACTION_UNPROVEN",
+    "byovdTimerChanged": false,
+    "bugBountyDiagnosis": {
+      "snapshotVerified": true,
+      "elapsedSeconds": 36.375
+    },
+    "sourceReviewAuthorityCreated": false,
+    "messagesSent": 0,
+    "nativeDispatches": 0,
+    "installedChanges": 0,
+    "bindingChanges": 0,
+    "preservationPins": 1090,
+    "preservationMismatches": 0,
+    "newDiagnosticInstalledAcceptance": "NOT_RUN",
+    "c1": "INCOMPLETE"
   }
 }

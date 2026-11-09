@@ -46,6 +46,7 @@ where
     let key = paired_key(workspace, project)?;
     let target =
         catdesk_wake::protocol::Target::new(key.target_generation, key.conversation_url.clone())?;
+    let progress = response_progress(&store, project, event, &target)?;
     let guard = || lease.check_target(&target);
     guard()?;
     let read = read_review_using(
@@ -57,6 +58,9 @@ where
         snapshotter,
     )?;
     guard()?;
+    if response_progress(&store, project, event, &target)? != progress {
+        return Err("WEB_REVIEW_RESPONSE_PROGRESS_CHANGED".into());
+    }
     let verified = read["eventVerified"] == true;
     let mut diagnosis = json!({
         "scope":"CONFIRMED_SENT_RESPONSE", "snapshotVerified":verified,
@@ -66,6 +70,9 @@ where
         "stateChanged":false, "sendAttempted":false,
         "retryAuthorized":false, "workResolved":false
     });
+    // Readable text and a durable completion witness are independent facts.
+    // Neither a snapshot nor this projection may finish a timer or close work.
+    diagnosis["responseProgress"] = progress;
     if !verified {
         diagnosis["reason"] = json!(catdesk_wake::runtime::snapshot_diagnostic_code(
             read["reason"].as_str().unwrap_or("SOURCE_SNAPSHOT_FAILED")
@@ -81,6 +88,35 @@ where
         "targetGeneration":target.generation,"targetDigest":target.digest,
         "deliveryPhase":"SENT", "diagnosis":diagnosis,
         "sendAttempted":false,"stateChanged":false,"workResolved":false}),
+    )
+}
+
+fn response_progress(
+    store: &catdesk_wake::store::Store,
+    project: &str,
+    event: &str,
+    target: &catdesk_wake::protocol::Target,
+) -> Result<Value, String> {
+    let timer = store.timer(event)?;
+    if timer.as_ref().is_some_and(|timer| {
+        timer.event_id != event
+            || timer.project_id != project
+            || timer.target_generation != target.generation
+            || timer.target_digest != target.digest
+    }) {
+        return Err("WEB_REVIEW_RESPONSE_PROGRESS_SCOPE_CHANGED".into());
+    }
+    let state = match timer.as_ref().map(|timer| &timer.response_state) {
+        Some(catdesk_wake::store::ResponseState::Complete) => "COMPLETE",
+        Some(catdesk_wake::store::ResponseState::Observing) => "OBSERVING",
+        Some(catdesk_wake::store::ResponseState::Retrying) => "RETRYING",
+        Some(catdesk_wake::store::ResponseState::Attention) => "ATTENTION",
+        None => "NOT_RECORDED",
+    };
+    Ok(
+        json!({"state":state,"completionRecorded":state == "COMPLETE",
+        "basis":"EXACT_DELIVERY_SCOPED_DURABLE_TIMER",
+        "snapshotCompletesTimer":false,"retryAuthorized":false}),
     )
 }
 
@@ -348,6 +384,14 @@ mod tests {
         assert_eq!(result["deliveryPhase"], "SENT");
         assert_eq!(result["diagnosis"]["snapshotVerified"], true);
         assert_eq!(result["diagnosis"]["responseState"], "SNAPSHOT_VERIFIED");
+        assert_eq!(
+            result["diagnosis"]["responseProgress"]["state"],
+            "OBSERVING"
+        );
+        assert_eq!(
+            result["diagnosis"]["responseProgress"]["completionRecorded"],
+            false
+        );
         assert_eq!(result["diagnosis"]["responseBodyExported"], false);
         assert_eq!(result["stateChanged"], false);
         assert_eq!(result["workResolved"], false);
@@ -363,6 +407,116 @@ mod tests {
         for (path, bytes) in before {
             assert_eq!(std::fs::read(path).unwrap(), bytes);
         }
+    }
+
+    #[test]
+    fn readable_review_reports_completion_separately_without_mutating_timers() {
+        use catdesk_wake::store::ResponseState;
+        let (control, store, delivery) = sent_fixture();
+        let path = store
+            .root()
+            .join(format!("turns/{}.json", delivery.event.event_id));
+        let mut timer = store.timer(&delivery.event.event_id).unwrap().unwrap();
+        for (state, label) in [
+            (ResponseState::Observing, "OBSERVING"),
+            (ResponseState::Retrying, "RETRYING"),
+            (ResponseState::Attention, "ATTENTION"),
+            (ResponseState::Complete, "COMPLETE"),
+        ] {
+            timer.response_state = state;
+            timer.completed_utc = (label == "COMPLETE").then_some(timer.started_utc);
+            catdesk_wake::store::atomic(&path, &timer).unwrap();
+            let before = pins(&control, &store, &delivery.event.event_id);
+            let result = diagnose_using(
+                &control,
+                "alpha",
+                &delivery.event.event_id,
+                |_, _, _, _, _| {
+                    report(
+                        Some(json!({"messages":[
+                            {"role":"USER","text":delivery.event.message,"textComplete":true},
+                            {"role":"ASSISTANT","text":"bounded answer","textComplete":true}
+                        ]})),
+                        None,
+                    )
+                },
+            )
+            .unwrap();
+            assert_eq!(result["diagnosis"]["snapshotVerified"], true);
+            let progress = &result["diagnosis"]["responseProgress"];
+            assert_eq!(progress["state"], label);
+            assert_eq!(progress["completionRecorded"], label == "COMPLETE");
+            assert_eq!(progress["snapshotCompletesTimer"], false);
+            assert_eq!(progress["retryAuthorized"], false);
+            for (file, bytes) in before {
+                assert_eq!(std::fs::read(file).unwrap(), bytes);
+            }
+        }
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(
+            response_progress(&store, "alpha", &delivery.event.event_id, &delivery.target).unwrap()
+                ["state"],
+            "NOT_RECORDED"
+        );
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn response_progress_refuses_foreign_or_changed_timer_without_granting_completion() {
+        let (control, store, delivery) = sent_fixture();
+        let path = store
+            .root()
+            .join(format!("turns/{}.json", delivery.event.event_id));
+        let original = store.timer(&delivery.event.event_id).unwrap().unwrap();
+        for field in ["project", "event", "generation", "digest"] {
+            let mut timer = original.clone();
+            match field {
+                "project" => timer.project_id = "beta".into(),
+                "event" => timer.event_id = "other-event".into(),
+                "generation" => timer.target_generation += 1,
+                _ => timer.target_digest = "b".repeat(64),
+            }
+            catdesk_wake::store::atomic(&path, &timer).unwrap();
+            let before = std::fs::read(&path).unwrap();
+            assert!(
+                diagnose_using(
+                    &control,
+                    "alpha",
+                    &delivery.event.event_id,
+                    |_, _, _, _, _| panic!("foreign timer must refuse before browser")
+                )
+                .is_err()
+            );
+            assert_eq!(std::fs::read(&path).unwrap(), before);
+        }
+        catdesk_wake::store::atomic(&path, &original).unwrap();
+        let result = diagnose_using(
+            &control,
+            "alpha",
+            &delivery.event.event_id,
+            |_, _, _, _, _| {
+                let mut changed = original.clone();
+                changed.response_state = catdesk_wake::store::ResponseState::Complete;
+                changed.completed_utc = Some(changed.started_utc);
+                catdesk_wake::store::atomic(&path, &changed).unwrap();
+                report(
+                    Some(json!({"messages":[
+                        {"role":"USER","text":delivery.event.message,"textComplete":true},
+                        {"role":"ASSISTANT","text":"answer","textComplete":true}
+                    ]})),
+                    None,
+                )
+            },
+        );
+        assert_eq!(result.unwrap_err(), "WEB_REVIEW_RESPONSE_PROGRESS_CHANGED");
+        assert_eq!(
+            store
+                .timer(&delivery.event.event_id)
+                .unwrap()
+                .unwrap()
+                .response_state,
+            catdesk_wake::store::ResponseState::Complete
+        );
     }
 
     #[test]

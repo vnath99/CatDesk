@@ -1793,3 +1793,48 @@ release-branch CI policy. Complete those EXISTING gates before consuming this
 artifact; do not copy it over installed bytes or rewrite fingerprints. C1 native
 code, independent verification and result Wake remain INCOMPLETE. No later gate
 is opened and no recurring automation is enabled.
+
+
+### 2026-11-09T11:55:10.393420+00:00 — separate readable review snapshots from durable completion
+
+Reused the existing selected **development** adapter (source `f71a17be`) rather
+than duplicating its full response reader. With the separately built source
+`5c553eae` controller, the registered BYOVD public-source review was read and
+attributed automatically in 34.906 seconds: its historical verdict is
+**INCONCLUSIVE**, for source `b25119e8`, not the current candidate. No operator
+message relay or new USER submission was required.
+
+The normal work closure correctly refused `WEB_WORK_COMPLETED_RESPONSE_REQUIRED`:
+its durable timer remains OBSERVING. One supported, exact-receipt re-observation
+returned PENDING / `ASSISTANT_COMPLETION_ACTION_UNPROVEN`; the assistant body
+was present but its completion control was unproved. The timer and OPEN work
+record remain unchanged. Do not force closure, borrow a USER/code-block Copy
+control, reuse an expired review grant or resend the request. Readability is not
+a completion witness or independent release approval.
+
+A small source change to `operator web review diagnose` now reports
+`responseProgress` separately from `snapshotVerified`: scoped durable timer state,
+`completionRecorded`, and explicit non-authority flags. Missing timers are
+NOT_RECORDED; foreign timers refuse before browser access, and observed progress
+changes refuse. No timer, work closure or retry is authorized by the diagnostic.
+Six focused tests PASS, including all timer states, missing/foreign/changed
+records, privacy, bad receipts and uncertain submission. Strict root Clippy PASS.
+Its first admission was deferred before launch for resource headroom; it passed
+after the owned browser exited. New fields are **SOURCE-TESTED, not installed**.
+
+Independent Bug Bounty snapshot diagnosis passed in 36.375 seconds while BYOVD
+remained pending. This proves independent read-only observation, not concurrent
+native coding or a new source review. All owners exited; existing 1,090 protected
+pins and 346 development pins matched. No messages, native dispatches, binding
+changes, protected installation or recurring automation were performed.
+
+The original cached-argument field remains unrecovered: original server summaries
+omitted outer argument values and error data. Preserve its task/grant/key/fences.
+The installed dev.84 reader gap and broker source/provisioning/review gates remain;
+the existing development reader can support genuine review without first upgrading
+that protected adapter. No fresh current-source review was sent through the pending
+BYOVD lane. Next: establish the missing assistant completion-control evidence through
+the existing bounded owner, then finish the original review disposition before
+using that lane again; qualify current-source independent review through an eligible
+registered lane. No operator action is requested for this checkpoint. C1 remains
+INCOMPLETE; no new build/install/production acceptance is claimed.
