@@ -6850,3 +6850,41 @@ of the already completed serving continuation with a matched separate controller
 No USER message or native call will be sent. Installed upgrade and C1 coding
 remain incomplete; the observed INVALID_ARGUMENT is not assigned an invented
 specific cause. Existing protected promotion gates remain unchanged.
+
+
+## 2026-11-09T01:41:42.775777+00:00 — completed-response argument diagnosis, live
+
+PASS: the matched controller observed the same already-SENT task exchange
+COMPLETE in 36.578 seconds. Schema 4 captured INVALID_ARGUMENT;
+recognized tool names, argument categories and cached invariants were empty.
+The exact task/assignment, event/message, receipt hash and target generation
+were checked. There was no send, assistant retry, native call, menu action,
+backend/tunnel/Wake start or operator response relay. All 1,081 preservation
+pins matched and the owned browser exited, with browser/Wake counts zero and
+no port-3200 listener. This qualified source readback, not an installed upgrade.
+
+LIMITATION: the readable assistant body supplies no recognized specific cause
+or tool identity. Empty categories do not prove an absent tool or a harmless
+failure. Do not infer a new cached-envelope refusal from the generic hint or
+retry the original call. The native task remains unattempted/unchanged according
+to its preserved authoritative job; no C1 code or task-result Wake is complete.
+
+Read-only comparison with installed reviewed source 9ea9e7b confirms that the
+UI request/response summaries live only in a capped in-memory log; they are not
+a retained task-specific failure receipt after shutdown. Its cached-envelope
+refusal precedes native handling and lacks the newer source's structured
+invariant data. Usage counters do not supply the missing task attribution.
+No historical request detail was recovered and no service was restarted to
+recheck that unchanged dependency. Current source contains fixed error-data
+categories; their existence is not proof that the installed server emitted them.
+
+Runtime source 70315ed3cf1e683991114f375d58b4e8e3641172; separate controller
+481cf35a3c760bc2572b91a9e7383098361a3a47c058793164f1c3ddb0d8d608;
+adjacent observer af0b08dca106a52921a7cac5528d9f1800833a1c41612a51fb15d276788f8b88.
+Next eligible investigation is bounded, task-attributed observation of any
+existing completed tool-detail/trace surface through the same qualified browser
+owner. Establish its DOM identity before permitting any expansion; unknown or
+ambiguous controls remain untouched. Do not add speculative argument changes,
+new continuation messages, broad clicking or another observer service. Preserve
+the original call/grant and existing release gates. C1 remains incomplete;
+C2 is not started and no operator response relay is requested.

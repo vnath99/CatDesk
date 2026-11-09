@@ -1728,6 +1728,50 @@
     "probeTests": 39,
     "nativeReadinessTests": 19,
     "rootAndWakeClippy": "PASS",
-    "installedAcceptance": "NOT_RUN"
+    "installedAcceptance": "NOT_RUN",
+    "live": {
+      "observedUtc": "2026-11-09T01:41:42.775777+00:00",
+      "sourceCommit": "70315ed3cf1e683991114f375d58b4e8e3641172",
+      "controllerSha256": "481cf35a3c760bc2572b91a9e7383098361a3a47c058793164f1c3ddb0d8d608",
+      "status": "LIVE_READONLY_CLASSIFIER_PASS_CAUSE_UNPROVEN",
+      "elapsedSeconds": 36.578,
+      "responseState": "COMPLETE",
+      "originalTaskAndReceiptAttributed": true,
+      "assistantHints": {
+        "approvalRequested": false,
+        "argumentIssues": [],
+        "basis": "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION",
+        "cachedInvariants": [],
+        "contextUnavailable": false,
+        "knownCodes": [
+          "INVALID_ARGUMENT"
+        ],
+        "mentionedTools": [],
+        "nativeDispatchMentioned": false,
+        "refusalCategories": [],
+        "scanTruncated": false,
+        "schemaVersion": 4,
+        "toolUnavailable": false,
+        "unavailableSubjects": []
+      },
+      "newMessages": 0,
+      "nativeCalls": 0,
+      "servingOwnerStarts": 0,
+      "preservationPins": 1081,
+      "preservationMismatches": 0,
+      "ownedTreeExited": true,
+      "browserWakeProcessesAfter": 0,
+      "port3200ListenerAfter": false,
+      "installedAcceptance": "NOT_QUALIFIED",
+      "nativeCoding": "INCOMPLETE"
+    },
+    "installedServerEvidence": {
+      "reviewedSourceCommit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+      "uiRequestResponseLogs": "MEMORY_ONLY_CAPPED_500",
+      "cachedEnvelopeValidationBeforeNativeHandler": true,
+      "structuredInvariantDataPresent": false,
+      "historicalTaskAttributedRequestRecovered": false,
+      "causeInferredFromUsageCounters": false
+    }
   }
 }
