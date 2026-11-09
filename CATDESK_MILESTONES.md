@@ -8845,3 +8845,39 @@ No new UI action, weaker ownership rule, alternate browser service or retry
 capability is added. Actual-DOM tests cover dialog, listbox and unclassified
 shape failures without selection/retry. A matched live diagnostic is pending;
 installed dev.84 and C1 native coding acceptance remain incomplete.
+
+
+## 2026-11-09T00:14:27.517178+00:00 — live composer failure classified without operator relay
+
+PASS LIVE DIAGNOSTIC, NOT APP/CODING ACCEPTANCE: the task/receipt-bound
+observer returned MENU_ABSENT, expandedState=OPEN, menuCount=0, dialogCount=0
+and otherPopupCount=0. The known semantic control was opened once; no item
+selection or close click was issued after popup ownership remained unproven.
+The owned browser then exited and cleanup passed in 36.391
+seconds. All 1,076 preservation pins matched; profile/Wake process counts are
+zero and port 3200 is closed. No USER/native call, binding, setting, backend,
+tunnel, installed package or recurring automation changed.
+
+This proves only that supported popup roles were absent while the control
+reported OPEN. An inline, non-ARIA or not-yet-mounted panel remains unverified;
+tool absence, authentication failure and lost authority are not inferred.
+The assistant exchange remains
+COMPLETE, with automatically returned TOOL_UNAVAILABLE / CONTEXT_UNAVAILABLE
+hints and no proved specific missing subject. Task, assignment, exact
+conversation, USER message, delivery receipt, generation and digest agree.
+Native execution remains unattempted READY; the original frozen call/grant/key
+and completed messages are unchanged. C1 and installed acceptance are incomplete.
+
+Runtime source 3514c4d1747e34cd6fca0b2ae01118b894bffa2e, separate controller SHA-256
+f7154f15ad1a760059f80a4c48bbca078f506c057e200a2c4469891733493fa7. 92 actual-DOM and 19 native
+readiness tests, formatting and strict root/Wake Clippy pass. A retained lint
+correction replaces an equivalent three-version OR pattern with 1..=3; the
+initial failed lint receipt is preserved. Protected signed/broker upgrade gates
+remain separate and were not retried.
+
+Next executable task: extend the existing scoped observer with closed metadata
+for an inline composer panel, standard HTML popover or known popup portal,
+then qualify only the actually observed structure. Do not guess another
+selection, infer a client catalog, introduce a browser owner or replay a USER
+message/native call. No operator response relay, screenshot or sign-in is
+requested. The goal remains ACTIVE; this turn made source/live progress.

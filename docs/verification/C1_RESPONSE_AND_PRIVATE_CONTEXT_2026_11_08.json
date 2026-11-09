@@ -49,7 +49,7 @@
     "c1": "NOT_COMPLETE",
     "laterMilestones": "NOT_RUN"
   },
-  "next": "Use the observed closed popup/reference categories to qualify only the existing bounded owner path before any further UI action; do not infer a catalog or attach/send speculatively. Original task/key/grant and completed messages remain frozen. Installed autonomous readback and sender lifecycle require existing signed/broker qualification; C1 native coding remains incomplete. No manual assistant-response relay is pending.",
+  "next": "Use the existing receipt-bound observer to classify inline composer, standard HTML popover and known portal metadata for the observed OPEN-with-zero-role-popups variant. Do not infer tool absence or enable selection from MENU_ABSENT. Preserve original task/key/grant and completed messages. Installed response/sender qualification still requires existing signed/broker authority. C1 native coding remains incomplete; no operator relay is requested.",
   "liveAssistantObservation": {
     "sourceCommit": "5a6cf663d3ea28743e04d40e9445711db3930fb0",
     "controllerSha256": "4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600",
@@ -1490,7 +1490,7 @@
   },
   "composerPopupFailureDiagnostics": {
     "observedUtc": "2026-11-09T00:07:44.583808+00:00",
-    "status": "SOURCE_TESTED_LIVE_PENDING",
+    "status": "LIVE_FAILURE_CLASSIFIED_NOT_APP_ACTION_AUTHORITY",
     "schemaVersion": 3,
     "legacySchemasAccepted": [
       1,
@@ -1510,6 +1510,43 @@
     "newUiActions": 0,
     "rawContentExported": false,
     "actualDomTests": 92,
-    "nativeReadinessTests": 19
+    "nativeReadinessTests": 19,
+    "retainedValidationCorrection": "Equivalent schema version pattern changed to 1..=3 after standalone Wake Clippy refusal; failed receipt preserved.",
+    "live": {
+      "observedUtc": "2026-11-09T00:12:21.465544+00:00",
+      "sourceCommit": "3514c4d1747e34cd6fca0b2ae01118b894bffa2e",
+      "controllerSha256": "f7154f15ad1a760059f80a4c48bbca078f506c057e200a2c4469891733493fa7",
+      "elapsedSeconds": 36.391,
+      "maximumOwnerSeconds": 150,
+      "observation": {
+        "appsItemCount": 0,
+        "basis": "TRANSIENT_MENU_ONLY_NOT_TOOL_CATALOG",
+        "closeAttempted": false,
+        "closedVerified": false,
+        "dialogCount": 0,
+        "expandedState": "OPEN",
+        "menuCount": 0,
+        "moreItemCount": 0,
+        "openAttempted": true,
+        "openOutcomeUnknown": false,
+        "openRequested": true,
+        "otherPopupCount": 0,
+        "ownershipEvidence": "FRESH_MENU_TRANSITION",
+        "schemaVersion": 3,
+        "state": "MENU_ABSENT",
+        "v5DisabledCount": 0,
+        "v5ItemCount": 0
+      },
+      "responseStage": "RESPONSE_COMPLETE",
+      "taskReceiptAndGenerationAttributed": true,
+      "messagesSent": 0,
+      "nativeCalls": 0,
+      "itemSelections": 0,
+      "preservationPins": 1076,
+      "preservationMismatches": 0,
+      "ownedTreeExited": true,
+      "ownedProfileAndWakeProcessesAfter": 0,
+      "port3200ListenerPresent": false
+    }
   }
 }
