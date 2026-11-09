@@ -9725,3 +9725,28 @@ Existing exact-response owner adds a fixed-vocabulary redacted refusal projectio
 Quote/code/value and role boundaries tested; action authority unchanged. Partial
 forwarding telemetry recovers no exact tool receipt. Native C1 remains closed and
 incomplete; new package/live and installed qualification remain separate.
+
+
+### 2026-11-09T14:19:01.725799+00:00 — v6 same-receipt read PASS; precise refusal still unresolved
+
+Source `321fdbc5` passed 264 current targeted tests and strict root/Wake Clippy;
+the previous `2da7b956` 127-test legacy bridge baseline remains separate. The
+unsigned, unselected debug package built in 46.281 seconds and passed artifact
+qualification. Its same-receipt read passed in 34.625 seconds with COMPLETE,
+qualified canonical-body coverage, one block and no unselected-text gap. Output
+was only DISPATCH_REJECTED with empty refusalTerms; no precise cause was proved.
+Three incomplete forwarding records retain no method, arguments or result and
+do not establish that no call or effect occurred. The native job remains READY without a new
+attempt; no message, human relay or retry. Cleanup and all 1,103 pins passed.
+The v7 follow-up is unpublished source-only work, with three targeted JavaScript
+cases passed and Rust validation pending at handoff; no qualification transfers.
+Installed dev.84 and the original Bug/trace fences remain unchanged. C1 is
+INCOMPLETE and no operator action is currently required.
+
+
+### 2026-11-09T14:27:34.887359+00:00 — structured refusal reports TESTED_SOURCE
+
+V7 adds bounded root-only JSON report classification and closed provenance without
+raw body export or recovery authority.269 tests/strictClippy/source review PASS.
+Current C1 still lacks native code, independent verification and result Wake.
+New package/live qualification precedes genuine reviewed main promotion.

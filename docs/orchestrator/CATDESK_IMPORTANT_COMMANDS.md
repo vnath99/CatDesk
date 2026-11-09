@@ -7329,3 +7329,14 @@ new grant, native retry or source-promotion authority. An empty or redacted
 projection remains inconclusive. The original exact event/receipt/task/target
 checks and existing unknown fences remain mandatory. Qualify the exact package;
 this source entry does not establish installed parity.
+
+
+### 2026-11-09T14:27:34.887359+00:00 — structured refusal provenance
+
+The existing exact-event `operator web review inspect-response` can emit v7
+`assistantHints.refusalReport`. STRUCTURED means a bounded whole assistant JSON
+report with a known root refusal state; it is not an MCP/native receipt. Only one
+known reason field may feed the existing redacted terms. NONE/UNPROVEN and omitted
+projections remain uncertain. No grant, retry, trace reopen or source-promotion
+authority is derived from this metadata. Qualify the actual installed package
+separately from source tests and controlled debug reads.

@@ -403,33 +403,45 @@ def valid_task_response_hints(value: Any) -> bool:
     """Closed assistant-text hints, never tool availability or execution proof."""
     flags = ("toolUnavailable", "contextUnavailable", "approvalRequested", "nativeDispatchMentioned")
     version = value.get("schemaVersion") if isinstance(value, dict) else None
-    fields = {"schemaVersion", "basis", "knownCodes"} | ({"refusalCategories", "scanTruncated"} if version in (2, 3, 4, 5, 6) else set())
-    if version in (3, 4, 5, 6):
+    fields = {"schemaVersion", "basis", "knownCodes"} | ({"refusalCategories", "scanTruncated"} if version in (2, 3, 4, 5, 6, 7) else set())
+    if version in (3, 4, 5, 6, 7):
         fields.add("unavailableSubjects")
     extra = {"mentionedTools":TASK_MENTIONED_TOOLS, "argumentIssues":TASK_ARGUMENT_ISSUES,
-             "cachedInvariants":TASK_CACHED_INVARIANTS} if version in (4, 5, 6) else {}
-    if version in (5, 6):
+             "cachedInvariants":TASK_CACHED_INVARIANTS} if version in (4, 5, 6, 7) else {}
+    if version in (5, 6, 7):
         extra["identityIssues"] = TASK_IDENTITY_ISSUES
     fields.update(extra)
-    if version == 6:
+    if version in (6, 7):
         fields.add("refusalTerms")
-    if version in (4, 5, 6) and "trace" in value:
+    if version == 7:
+        fields.add("refusalReport")
+    if version in (4, 5, 6, 7) and "trace" in value:
         fields.add("trace")
     return (isinstance(value, dict) and set(value) == set(flags) | fields
-            and type(version) is int and version in {1, 2, 3, 4, 5, 6}
+            and type(version) is int and version in {1, 2, 3, 4, 5, 6, 7}
             and value["basis"] == "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION"
             and all(type(value[key]) is bool for key in flags)
             and isinstance(value["knownCodes"], list)
             and value["knownCodes"] == [code for code in TASK_RESPONSE_CODES if code in value["knownCodes"]]
             and (version == 1 or (type(value["scanTruncated"]) is bool and isinstance(value["refusalCategories"], list)
                  and value["refusalCategories"] == [kind for kind in TASK_REFUSAL_CATEGORIES if kind in value["refusalCategories"]]))
-            and (version not in (3, 4, 5, 6) or (isinstance(value["unavailableSubjects"], list)
+            and (version not in (3, 4, 5, 6, 7) or (isinstance(value["unavailableSubjects"], list)
                  and value["unavailableSubjects"] == [subject for subject in TASK_UNAVAILABLE_SUBJECTS if subject in value["unavailableSubjects"]]))
             and all(isinstance(value[field], list) and value[field] == [item for item in allowed if item in value[field]]
                     for field, allowed in extra.items())
-            and (version != 6 or (isinstance(value["refusalTerms"], list) and len(value["refusalTerms"]) <= 32
+            and (version not in (6, 7) or (isinstance(value["refusalTerms"], list) and len(value["refusalTerms"]) <= 32
                  and all(isinstance(term, str) and term in TASK_REFUSAL_TERMS for term in value["refusalTerms"])
                  and all(a != "REDACTED" or b != "REDACTED" for a, b in zip(value["refusalTerms"], value["refusalTerms"][1:]))))
+            and (version != 7 or (isinstance(value['refusalReport'], dict)
+                 and set(value['refusalReport']) == {'source', 'state', 'reasonFieldPresent', 'projectionOmitted'}
+                 and value['refusalReport']['source'] in ('PROSE', 'STRUCTURED', 'NONE')
+                 and value['refusalReport']['state'] in ('BLOCKED', 'REJECTED', 'REFUSED', 'UNPROVEN')
+                 and type(value['refusalReport']['reasonFieldPresent']) is bool
+                 and type(value['refusalReport']['projectionOmitted']) is bool
+                 and ((value['refusalReport']['source'] == 'NONE') == (value['refusalReport']['state'] == 'UNPROVEN'))
+                 and (value['refusalReport']['source'] != 'NONE' or not value['refusalTerms'])
+                 and (value['refusalReport']['source'] == 'STRUCTURED' or not value['refusalReport']['reasonFieldPresent'])
+                 and value['refusalReport']['projectionOmitted'] == (not value['refusalTerms'])))
             and ("trace" not in value or valid_task_trace_metadata(value["trace"])))
 
 
@@ -2233,7 +2245,7 @@ class CdpSink:
             // Diagnostic text may include unlabelled text inside the exact
             // assistant's unique selection-marked body. This never changes
             // completion/bodyNodes/Copy authority or borrows whole-unit text.
-            let assistantDiagnosticText = '', assistantRefusalText = '', bodyCoverage = null;
+            let assistantDiagnosticText = '', assistantRefusalText = '', structuredReportQuoted = false, bodyCoverage = null;
             if (includeDiagnostic || includeExecutionDiagnostic) {{
             const selectionSelector = '[data-chatgpt-selection-message-id]';
             const toolSubtree = "[data-tool-call-id], [data-tool-call], [data-tool-response-id], " +
@@ -2265,6 +2277,7 @@ class CdpSink:
             }};
             assistantDiagnosticText = normalize(diagnosticNodes.map(node=>strippedText(node)).join(' '));
             assistantRefusalText = normalize(diagnosticNodes.map(node=>strippedText(node,true)).join(' '));
+            structuredReportQuoted=diagnosticNodes.some(node=>Boolean(node.closest('blockquote')||node.querySelector('blockquote')));
             let unselectedTextPresent = false;
             if (includeDiagnostic && latestAssistant && !diagnosticNodes.includes(latestAssistant)) {{
                 const remainder = latestAssistant.cloneNode(true);
@@ -2599,10 +2612,7 @@ class CdpSink:
                         .replace(/\\b[a-z_][a-z0-9_]*\\s*=\\s*[^\\s,;]+/g,mask)
                         .replace(/\\b(?:executionkey|key|token|password|secret|context|payload|arguments|capsule)\\s*:\\s*[^\\s,;]+/g,mask);
                 }};
-                const refusalText=maskRefusalValues(assistantRefusalText.slice(0,32768).toLowerCase().replace(/[‘’]/g,"'"));
-                const refusalAnchor = /\\b(?:dispatch|tool[- ]call)\\s+(?:(?:is|was)\\s+)?(?:blocked|rejected|refused)\\b/.exec(refusalText);
-                if (refusalAnchor) {{
-                    const redacted = refusalText.slice(refusalAnchor.index,refusalAnchor.index+480);
+                const projectRefusalTerms = redacted => {{
                     for (const chunk of redacted.split(/\\s+/)) {{
                         if (!chunk || (!/[a-z0-9_]/.test(chunk) && !chunk.includes('\\u0000'))) continue;
                         const word = chunk.replace(/^[^a-z0-9_]+|[^a-z0-9_]+$/g,'').toUpperCase();
@@ -2611,8 +2621,48 @@ class CdpSink:
                         if (term !== 'REDACTED' || refusalTerms[refusalTerms.length-1] !== 'REDACTED') refusalTerms.push(term);
                         if (refusalTerms.length === 32) break;
                     }}
+                }};
+                const refusalReport={{source:'NONE',state:'UNPROVEN',reasonFieldPresent:false,projectionOmitted:true}};
+                const reportBody=assistantDiagnosticText.trim();
+                const structuredCandidate=reportBody.startsWith('{{') || reportBody.startsWith('[') || reportBody.startsWith('```');
+                if(structuredCandidate && !structuredReportQuoted && reportBody.length<=8192 && completionActionReady && assistantBodyText.length>0) {{
+                    let parsed=null,reportJson=reportBody;
+                    const fence=/^```(?:json)?\\s*([\\s\\S]*?)\\s*```$/i.exec(reportBody);
+                    if(fence)reportJson=fence[1];
+                    try{{parsed=JSON.parse(reportJson);}}catch(_){{}}
+                    if(parsed && typeof parsed==='object' && !Array.isArray(parsed)) {{
+                        const states=['status','state','outcome','dispatch'].flatMap(field=>{{
+                            if(!Object.hasOwn(parsed,field)||typeof parsed[field]!=='string')return [];
+                            const state=/^(?:(?:DISPATCH|TOOL_CALL)_)?(BLOCKED|REJECTED|REFUSED)$/.exec(parsed[field].trim().toUpperCase().replace(/[ -]+/g,'_'));
+                            return state ? [state[1]] : [];
+                        }});
+                        if(states.length && new Set(states).size===1) {{
+                            refusalReport.source='STRUCTURED';refusalReport.state=states[0];
+                            const reasons=['reason','error','detail','message'].flatMap(field=>{{
+                                if(!Object.hasOwn(parsed,field))return [];
+                                const value=parsed[field];
+                                if(typeof value==='string' && value.trim())return [value];
+                                if(field==='error' && value && typeof value==='object' && !Array.isArray(value) &&
+                                    Object.hasOwn(value,'message') && typeof value.message==='string' && value.message.trim())return [value.message];
+                                return [];
+                            }});
+                            const uniqueReasons=Array.from(new Set(reasons));
+                            if(uniqueReasons.length===1) {{
+                                refusalReport.reasonFieldPresent=true;
+                                projectRefusalTerms(maskRefusalValues(uniqueReasons[0].toLowerCase().replace(/[‘’]/g,"'")).slice(0,480));
+                            }}
+                        }}
+                    }}
+                }} else if(!structuredCandidate) {{
+                    const refusalText=maskRefusalValues(assistantRefusalText.slice(0,32768).toLowerCase().replace(/[‘’]/g,"'"));
+                    const refusalAnchor=/\\b(?:dispatch|tool[- ]call).{{0,60}}?\\b(blocked|rejected|refused)\\b/.exec(refusalText);
+                    if(refusalAnchor && !/\\b(?:not|never|no longer)\\s+(?:blocked|rejected|refused)\\b/.test(refusalAnchor[0])) {{
+                        refusalReport.source='PROSE';refusalReport.state=refusalAnchor[1].toUpperCase();
+                        projectRefusalTerms(refusalText.slice(refusalAnchor.index,refusalAnchor.index+480));
+                    }}
                 }}
-                result.push({{schemaVersion:6,basis:'ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION',
+                refusalReport.projectionOmitted=refusalTerms.length===0;
+                result.push({{schemaVersion:7,basis:'ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION',
                     toolUnavailable,contextUnavailable,
                     approvalRequested,
                     nativeDispatchMentioned:text.includes('native.codex.dispatch'),
@@ -2623,6 +2673,7 @@ class CdpSink:
                     cachedInvariants:cachedInvariants.filter(hasCode),
                     identityIssues:{json.dumps(TASK_IDENTITY_ISSUES)}.filter(issue=>identityIssues.has(issue)),
                     refusalTerms,
+                    refusalReport,
                     trace:{{schemaVersion:1,scope:'EXACT_USER_EXCHANGE',basis:'PRESENTATION_ONLY_NOT_TOOL_RECEIPT',
                         knownControls:Math.min(traceControls.length,64),expandedControls:traceExpanded,collapsedControls:traceCollapsed,
                         unprovenControls:traceUnknown,linkedPanels:traceLinked,visiblePanels:traceVisible}},

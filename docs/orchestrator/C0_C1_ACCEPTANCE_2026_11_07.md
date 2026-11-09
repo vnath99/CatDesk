@@ -2141,3 +2141,73 @@ previous commit's legacy bridge baseline. This is source qualification only;
 one unselected package and same-response no-send read must be qualified next.
 It does not authorize a retry, unknown trace reopen, legacy clarification or
 protected promotion. C1 code/verification/result Wake is still INCOMPLETE.
+
+
+### 2026-11-09T14:19:01.725799+00:00 — v6 redacted refusal projection live PASS; no precise cause or retry authority
+
+Source `321fdbc5d6f90df2926889d4b7cf14f051575f5a` passed 264 current targeted
+source tests and strict root/Wake Clippy. The retained 127-test legacy bridge
+baseline belongs to source `2da7b956` and is separate, not an addition to this
+current-source test total. The unsigned, unselected debug package
+`1.0.0-dev.85-46bf6a260607-2ba108b3903a` built in 46.281 seconds; its
+manifest SHA-256 is
+`14022834b8d09c8985770eac2513b5a55e028b23ade8e953f0dc10c1ab0a953e`. Checksums and bounded pre-start WEB_USAGE
+refusal passed. This is not protected producer or installed release evidence.
+
+One read of the SAME original receipt passed in 34.625 seconds with exact
+immutable task attribution and a COMPLETE response. Canonical-body coverage was
+QUALIFIED, with one selected block and no unselected-text gap. The v6 projection
+returned **empty refusalTerms** and only **DISPATCH_REJECTED**; no known error,
+cached invariant, identity cause or precise refusal reason was recovered. This
+proves the bounded safe read/projection, not the precise underlying reason. Empty
+terms are not evidence that no tool call occurred, that no effect was possible,
+or that the original request may be retried. No human relay, additional message
+or native queue attempt occurred. The native job remains READY.
+
+Retained telemetry contains three forwarding records at 13:17:12–13:17:13 UTC,
+within the separately audited 13:15:06–13:17:34 UTC serving window. It retains no
+method, arguments, tool result or exact invariant; RPC coverage is incomplete and
+the exited daemon's memory-only summaries are unavailable. These records are
+neither no-call/no-effect proof nor a reason to replay the native request. The
+original unknown trace fence and Bug task remain preserved.
+
+The owned browser tree exited and all 1,103 preservation pins matched. The
+backend and existing tunnel remain stopped after normal cleanup; no new serving
+owner, authentication or binding change was introduced by this browser-only read.
+Installed dev.84 and its full-snapshot promotion remain unchanged/NOT_RUN. Native
+code, independent verification, result Wake and full C1 remain INCOMPLETE.
+
+A v7 structured-report follow-up is unpublished SOURCE_ONLY work. At handoff,
+three targeted JavaScript cases had passed and its 35-test Rust validation was
+still in progress; no Rust PASS, package, installed or live qualification is
+claimed for it here. It must preserve fixed redacted output and cannot inherit
+v6's live result. No arbitrary body or term export and no retry is authorized by
+these diagnostics. No operator action is required at this checkpoint.
+
+
+### 2026-11-09T14:27:34.887359+00:00 — distinguish structured refusal reports from prose
+
+The last qualified live read returned no safe refusal terms, so it still does not
+establish a precise cause or authorize native replay. V7 now distinguishes bounded
+whole-body JSON refusal reports from prose. It admits only one complete object
+(or sole JSON fence), an unambiguous known root refusal state, and a single known
+reason field. It never searches nested context/payload objects. The selected reason
+passes the same fixed-word/value-redaction limits; no raw JSON or body leaves the
+observer. Unsupported, conflicting, overlong and ambiguous reports retain an
+explicit omitted/unproven result. A code example is not a report.
+
+Closed refusalReport metadata records only PROSE/STRUCTURED/NONE, a fixed refusal
+state, qualified reason presence and projection omission. Native/Python validators
+agree: NONE has no terms, and empty terms require the omitted witness. Existing
+schemas1–6 remain valid. Completion, grant, lease, scope, no-replay and native
+execution authority are unchanged.269 relevant tests and strict root/Wake Clippy
+PASS; limited independent source review PASS. A stale empty-projection test was
+corrected without relaxing the production guard. Package/live qualification and
+installed promotion remain separate; C1 is still INCOMPLETE.
+
+Producer preparation also clarified source truth: the canonical checkout is clean
+at313f6a31, while installed0c's retained review lineage names9ea9e7be. They must not
+be conflated. A fresh genuine current Web review can precede the existing guarded
+source-only fast-forward, finalization/snapshot/ACK and main reviewed-build/release
+chain. Neither a public commit nor this local review creates producer authority.
+The old Wake adapter and all project/native histories remain preserved.

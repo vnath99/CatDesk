@@ -146,6 +146,11 @@ if (options.canonicalUnlabelledText)
   append(assistant.children[1], el('p', {}, options.canonicalUnlabelledText));
 if (options.quotedAnswerTag)
   append(assistant.children[1], el(options.quotedAnswerTag, {}, options.quotedAnswerText || ''));
+if (options.bodyQuoteWrapper) {
+  const body=assistant.children[1].children[0];
+  const quote=el('blockquote',{},'',[body]);
+  assistant.children[1].children[0]=quote;quote.parentElement=assistant.children[1];
+}
 if (options.assistantOutsideText)
   append(assistant, el('p', {}, options.assistantOutsideText));
 if (options.secondSelectionBody)
@@ -276,6 +281,7 @@ if(options.laterExchange) {
 }
 if (options.retryOnlyOutside) document.children.push(button('Retry'));
 if (options.historicalLoadError) document.children.unshift(el('div', {'data-message-author-role':'assistant'}, 'This response couldn’t load'));
+if (options.historicalRefusalReport) document.children.unshift(el('div', {'data-message-author-role':'assistant'}, options.historicalRefusalReport));
 if (options.historicalToolMarker) document.children.unshift(el('div', {'data-testid':'mcp-tool-call'}, 'PRIVATE_OLD_TOOL'));
 document.readyState = options.documentState || 'complete';
 if (options.observationEditor) document.children.push(el('div', {id:'prompt-textarea'}, options.observationDraft || ''));
@@ -1258,7 +1264,7 @@ class CurrentDomTests(unittest.TestCase):
         self.sink.response_snapshot(CurrentDom(answer=body), 'exact wake message',
             require_usable_body=True, diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
         self.assertTrue(bridge.valid_task_response_hints(hints))
-        self.assertEqual(hints['schemaVersion'], 6)
+        self.assertEqual(hints['schemaVersion'], 7)
         self.assertEqual(hints['knownCodes'], ['WEB_TASK_CACHED_ARGUMENTS_INVALID', 'INVALID_ARGUMENT'])
         self.assertEqual(hints['refusalCategories'], ['DISPATCH_REJECTED'])
         self.assertNotIn('PRIVATE_CONTEXT_MARKER', json.dumps(hints))
@@ -1285,7 +1291,7 @@ class CurrentDomTests(unittest.TestCase):
                 for bad in [['PRIVATE_KEY_MARKER'], ['NATIVE_CALL','NATIVE_CALL'],
                             ['EXECUTION_KEY','RUN_COMMAND'], 'NATIVE_CALL', None]:
                     self.assertFalse(bridge.valid_task_response_hints(hints | {'unavailableSubjects':bad}))
-                for bad in [{}, [], True, 7]:
+                for bad in [{}, [], True, 8]:
                     self.assertFalse(bridge.valid_task_response_hints(hints | {'schemaVersion':bad}))
 
     def test_natural_refusals_identify_only_known_identity_domains_without_values(self):
@@ -1486,7 +1492,9 @@ class CurrentDomTests(unittest.TestCase):
         self.assertTrue(bridge.valid_task_response_hints(hints))
         for bad in [['PRIVATE_TEXT'],['REDACTED','REDACTED'],['CONTEXT']*33,[123],True,{},None]:
             self.assertFalse(bridge.valid_task_response_hints(hints | {'refusalTerms':bad}))
-        self.assertTrue(bridge.valid_task_response_hints(hints | {'refusalTerms':[]}))
+        self.assertFalse(bridge.valid_task_response_hints(hints | {'refusalTerms':[]}))
+        self.assertTrue(bridge.valid_task_response_hints(hints | {'refusalTerms':[],
+            'refusalReport':hints['refusalReport'] | {'projectionOmitted':True}}))
 
     def test_refusal_terms_exclude_rendered_code_and_blockquotes_without_changing_other_hints(self):
         for tag in ['pre','code','blockquote']:
@@ -1501,6 +1509,79 @@ class CurrentDomTests(unittest.TestCase):
                     quotedAnswerTag=tag,quotedAnswerText='Dispatch rejected because context grant key.'),
                     'exact wake message',diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
                 self.assertEqual(hints['refusalTerms'],['DISPATCH','BLOCKED','BECAUSE','SCOPE','IS','MISSING'])
+
+    def test_structured_refusal_report_uses_only_root_state_and_one_known_reason(self):
+        for report in [
+                {'status':'DISPATCH_BLOCKED','reason':'nativeCall is not provided.','payload':{'context':'PRIVATE_NESTED_CONTEXT'}},
+                {'state':'REJECTED','error':{'message':'nativeCall is not provided.','secret':'PRIVATE_NESTED_CONTEXT'}},
+                {'outcome':'TOOL_CALL_REFUSED','detail':'nativeCall is not provided.'}]:
+            for fenced in [False,True]:
+                with self.subTest(report=report,fenced=fenced):
+                    body=json.dumps(report)
+                    if fenced:body='```json\n'+body+'\n```'
+                    hints={}
+                    self.sink.response_snapshot(CurrentDom(answer=body),'exact wake message',
+                        diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+                    self.assertEqual(hints['refusalTerms'],['NATIVECALL','IS','NOT','PROVIDED'])
+                    self.assertEqual(hints['refusalReport'],dict(source='STRUCTURED',
+                        state='BLOCKED' if 'status' in report else 'REJECTED' if 'state' in report else 'REFUSED',
+                        reasonFieldPresent=True,projectionOmitted=False))
+                    self.assertTrue(bridge.valid_task_response_hints(hints))
+                    self.assertNotIn('PRIVATE_NESTED_CONTEXT',json.dumps(hints))
+
+    def test_structured_refusal_reason_preserves_value_redaction_and_reports_omission(self):
+        for report,terms,present in [
+                ({'status':'BLOCKED','message':'nativeCall is not provided. "context grant key" '
+                    'executionKey=source 123 https://private.example/source'},['NATIVECALL','IS','NOT','PROVIDED','REDACTED'],True),
+                ({'status':'BLOCKED','payload':{'reason':'PRIVATE_NESTED_REASON'}},[],False),
+                ({'status':'BLOCKED','error':{'cause':{'message':'PRIVATE_NESTED_REASON'}}},[],False),
+                ({'status':'BLOCKED','reason':'context missing','message':'grant expired'},[],False)]:
+            with self.subTest(report=report):
+                hints={}
+                self.sink.response_snapshot(CurrentDom(answer=json.dumps(report)),'exact wake message',
+                    diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+                self.assertEqual(hints['refusalTerms'],terms)
+                self.assertEqual(hints['refusalReport'],dict(source='STRUCTURED',state='BLOCKED',
+                    reasonFieldPresent=present,projectionOmitted=not terms))
+                for private in ['PRIVATE_NESTED_REASON','private.example','executionKey','123']:
+                    self.assertNotIn(private,json.dumps(hints['refusalTerms']))
+
+    def test_structured_refusal_report_refuses_capsules_examples_conflicts_and_oversize(self):
+        capsule=json.dumps({'capsule':{'status':'BLOCKED','reason':'context missing'},'privateContext':'PRIVATE_CONTEXT'})
+        for body,options in [
+                (capsule,{}),
+                (json.dumps({'status':'COMPLETE','reason':'Dispatch rejected because context missing'}),{}),
+                (json.dumps({'status':'BLOCKED','state':'REFUSED','reason':'context missing'}),{}),
+                (json.dumps({'status':'BLOCKED','reason':'context missing','payload':'x'*8192}),{}),
+                (json.dumps({'status':'BLOCKED','reason':'context missing'}),{'bodyQuoteWrapper':True}),
+                ('Example report: ',{'quotedAnswerTag':'pre','quotedAnswerText':json.dumps({'status':'BLOCKED','reason':'context missing'})}),
+                ('A useful answer.',{'historicalRefusalReport':json.dumps({'status':'BLOCKED','reason':'context missing'})}),
+                ('A useful answer.',{'selectionToolText':json.dumps({'status':'BLOCKED','reason':'context missing'})})]:
+            with self.subTest(body=body[:60],options=options):
+                hints={}
+                self.sink.response_snapshot(CurrentDom(answer=body,**options),'exact wake message',
+                    diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+                self.assertEqual(hints['refusalTerms'],[])
+                self.assertEqual(hints['refusalReport'],dict(source='NONE',state='UNPROVEN',
+                    reasonFieldPresent=False,projectionOmitted=True))
+        hints={}
+        self.sink.response_snapshot(CurrentDom(answer='A useful answer.',userText=capsule),capsule,
+            diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+        self.assertEqual(hints['refusalReport']['source'],'NONE')
+
+    def test_prose_refusal_report_supports_bounded_adverbs_and_validates_closed_provenance(self):
+        hints={}
+        self.sink.response_snapshot(CurrentDom(answer='Dispatch operation was blocked because context is missing.'),
+            'exact wake message',diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+        report=hints['refusalReport']
+        self.assertEqual(report,dict(source='PROSE',state='BLOCKED',reasonFieldPresent=False,projectionOmitted=False))
+        self.assertEqual(hints['refusalTerms'],['DISPATCH','REDACTED','WAS','BLOCKED','BECAUSE','CONTEXT','IS','MISSING'])
+        for changed in [report | {'source':'PRIVATE_SOURCE'},report | {'state':'PRIVATE_STATE'},
+                report | {'reasonFieldPresent':'PRIVATE_VALUE'},report | {'projectionOmitted':1},
+                report | {'text':'PRIVATE_TEXT'},report | {'source':'NONE'},report | {'reasonFieldPresent':True},
+                report | {'source':'NONE','state':'UNPROVEN'},
+                report | {'projectionOmitted':True}]:
+            self.assertFalse(bridge.valid_task_response_hints(hints | {'refusalReport':changed}))
 
     def test_argument_hints_report_only_closed_tools_causes_and_invariants(self):
         hints = {}
@@ -1528,8 +1609,9 @@ class CurrentDomTests(unittest.TestCase):
         for field in ['mentionedTools','argumentIssues','cachedInvariants']:
             self.assertEqual(hints[field],[])
         self.assertNotIn('retryAuthorized',hints)
-        for version in [1,2,3,4,5]:
-            legacy = {k:v for k,v in hints.items() if k!='refusalTerms'}
+        for version in [1,2,3,4,5,6]:
+            legacy = {k:v for k,v in hints.items() if k!='refusalReport'}
+            if version<6:legacy.pop('refusalTerms')
             if version<5:legacy.pop('identityIssues')
             if version<4:
                 for key in ['mentionedTools','argumentIssues','cachedInvariants','trace']:legacy.pop(key)

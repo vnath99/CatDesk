@@ -1568,6 +1568,56 @@ fn ordered_refusal_terms_are_fixed_bounded_redactions_not_response_content_or_au
 }
 
 #[test]
+fn refusal_report_provenance_is_closed_consistent_and_not_native_evidence() {
+    let mut value = identity_hint_fixture();
+    value["assistantHints"]["schemaVersion"] = serde_json::json!(7);
+    value["assistantHints"]["refusalTerms"] = serde_json::json!(["BLOCKED", "CONTEXT", "MISSING"]);
+    value["assistantHints"]["refusalReport"] = serde_json::json!({"source":"STRUCTURED","state":"BLOCKED","reasonFieldPresent":true,"projectionOmitted":false});
+    assert_eq!(
+        task_response_diagnostics(&format!("PROBE:TASK:{value}")),
+        Some(value.clone())
+    );
+    for (field, replacement) in [
+        ("source", serde_json::json!("PRIVATE_BODY")),
+        ("state", serde_json::json!("CODEX_PRIVATE_ERROR")),
+        ("reasonFieldPresent", serde_json::json!(1)),
+        ("projectionOmitted", serde_json::json!(true)),
+        ("rawText", serde_json::json!("PRIVATE_SECRET")),
+        ("source", serde_json::json!("NONE")),
+        ("state", serde_json::json!("UNPROVEN")),
+    ] {
+        let mut invalid = value.clone();
+        invalid["assistantHints"]["refusalReport"][field] = replacement;
+        assert!(sanitized_rows(&format!("PROBE:TASK:{invalid}")).is_empty());
+    }
+    let mut prose = value.clone();
+    prose["assistantHints"]["refusalReport"]["source"] = serde_json::json!("PROSE");
+    assert!(task_response_diagnostics(&format!("PROBE:TASK:{prose}")).is_none());
+    prose["assistantHints"]["refusalReport"]["reasonFieldPresent"] = serde_json::json!(false);
+    assert_eq!(
+        task_response_diagnostics(&format!("PROBE:TASK:{prose}")),
+        Some(prose)
+    );
+    let mut none = value.clone();
+    none["assistantHints"]["refusalTerms"] = serde_json::json!([]);
+    none["assistantHints"]["refusalReport"] = serde_json::json!({"source":"NONE","state":"UNPROVEN","reasonFieldPresent":false,"projectionOmitted":true});
+    assert_eq!(
+        task_response_diagnostics(&format!("PROBE:TASK:{none}")),
+        Some(none)
+    );
+    value["assistantHints"]
+        .as_object_mut()
+        .unwrap()
+        .remove("refusalReport");
+    assert!(task_response_diagnostics(&format!("PROBE:TASK:{value}")).is_none());
+    value["assistantHints"]["schemaVersion"] = serde_json::json!(6);
+    assert_eq!(
+        task_response_diagnostics(&format!("PROBE:TASK:{value}")),
+        Some(value)
+    );
+}
+
+#[test]
 #[cfg(test)]
 fn app_menu_protocol_requires_closed_counts_and_confirmed_close_for_observed_state() {
     let value = serde_json::json!({"schemaVersion":1,"basis":"TRANSIENT_MENU_ONLY_NOT_TOOL_CATALOG","state":"OBSERVED",

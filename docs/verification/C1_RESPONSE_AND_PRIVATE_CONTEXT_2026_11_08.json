@@ -2755,5 +2755,164 @@
     "bindingsChanged": 0,
     "newLiveQualification": "NOT_RUN",
     "c1": "INCOMPLETE"
+  },
+  "nov09RefusalTermsLive": {
+    "observedUtc": "2026-11-09T14:19:01.725799+00:00",
+    "action": "V6_REFUSAL_TERMS_LIVE_QUALIFICATION",
+    "sourceCommit": "321fdbc5d6f90df2926889d4b7cf14f051575f5a",
+    "currentSourceTests": {
+      "results": {
+        "rustReadiness": 34,
+        "rustResponse": 5,
+        "pythonReadiness": 51,
+        "adapter": 47,
+        "currentDom": 127
+      },
+      "total": 264
+    },
+    "legacyBridgeBaseline": {
+      "source": "2da7b956af7179d7701fc94511262f8511921f11",
+      "tests": 127,
+      "scope": "PREVIOUS_COMMIT_BASELINE_NOT_CURRENT_TEST_TOTAL"
+    },
+    "rootClippy": "PASS",
+    "wakeClippy": "PASS",
+    "package": {
+      "packageId": "1.0.0-dev.85-46bf6a260607-2ba108b3903a",
+      "manifestSha256": "14022834b8d09c8985770eac2513b5a55e028b23ade8e953f0dc10c1ab0a953e",
+      "buildElapsedSeconds": 46.281,
+      "lockedOffline": true,
+      "signed": false,
+      "selected": false,
+      "installed": false,
+      "protectedProducerAuthority": false
+    },
+    "artifactQualification": {
+      "checksums": "PASS",
+      "prestartRefusal": "PASS",
+      "exitCode": 2,
+      "errorCode": "WEB_USAGE"
+    },
+    "liveRead": {
+      "status": "PASS",
+      "elapsedSeconds": 34.625,
+      "sameOriginalReceipt": true,
+      "immutableTaskAttributionVerified": true,
+      "humanRelayUsed": false,
+      "responseStage": "RESPONSE_COMPLETE",
+      "schemaVersion": 6,
+      "bodyCoverage": {
+        "canonicalBody": "QUALIFIED",
+        "selectedBlocks": 1,
+        "unselectedTextPresent": false
+      },
+      "refusalTerms": [],
+      "refusalTermsState": "EMPTY",
+      "refusalCategories": [
+        "DISPATCH_REJECTED"
+      ],
+      "knownCodes": [],
+      "cachedInvariants": [],
+      "identityIssues": [],
+      "preciseCause": "UNRESOLVED",
+      "basis": "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION",
+      "retryAuthorized": false
+    },
+    "retainedForwardingTelemetry": {
+      "forwardedRecords": 3,
+      "auditedServingWindowUtc": {
+        "start": "2026-11-09T13:15:06Z",
+        "end": "2026-11-09T13:17:34Z"
+      },
+      "methodRetained": false,
+      "argumentsRetained": false,
+      "toolResultRetained": false,
+      "exactInvariantRecovered": false,
+      "completeRpcCoverage": false,
+      "memoryOnlyDaemonSummariesUnavailable": true,
+      "noCallOrNoEffectProof": false,
+      "retryAuthorized": false,
+      "recordTimeBucketsUtc": [
+        "2026-11-09T13:17:12Z",
+        "2026-11-09T13:17:13Z"
+      ],
+      "recordTimestampPrecision": "SECOND_BUCKETS"
+    },
+    "nativeQueueState": "READY",
+    "newNativeQueueAttempts": 0,
+    "nativeExecution": "NOT_RUN",
+    "newMessages": 0,
+    "humanRelayUsed": false,
+    "preservationPins": 1103,
+    "preservationMismatches": 0,
+    "ownedTreeExited": true,
+    "backendAndExistingTunnel": "STOPPED_AFTER_NORMAL_CLEANUP",
+    "installedWakeAdapter": "DEV_84_UNCHANGED",
+    "installedFullSnapshotPromotion": "NOT_RUN",
+    "originalBugUntouched": true,
+    "unknownTraceFencePreserved": true,
+    "v7Followup": {
+      "publication": "UNPUBLISHED_SOURCE_ONLY",
+      "targetedJavascriptTests": {
+        "count": 3,
+        "status": "PASS_AT_HANDOFF"
+      },
+      "rustValidation": {
+        "selectedTests": 35,
+        "status": "IN_PROGRESS_AT_HANDOFF_NOT_COUNTED_AS_PASS"
+      },
+      "packageQualification": "NOT_RUN_HERE",
+      "installedQualification": "NOT_RUN",
+      "liveQualification": "NOT_RUN",
+      "inheritsV6Qualification": false,
+      "arbitraryBodyOrTermExportAllowed": false
+    },
+    "verifiedCode": "NOT_RUN",
+    "resultWake": "NOT_RUN",
+    "operatorActionRequired": false,
+    "c1": "INCOMPLETE"
+  },
+  "nov09RefusalReportSource": {
+    "observedUtc": "2026-11-09T14:27:34.442275+00:00",
+    "action": "BOUNDED_STRUCTURED_REFUSAL_SOURCE_QUALIFICATION",
+    "sourceParent": "321fdbc5d6f90df2926889d4b7cf14f051575f5a",
+    "tests": {
+      "rustReadiness": 35,
+      "rustResponse": 5,
+      "pythonReadiness": 51,
+      "adapter": 47,
+      "currentDom": 131
+    },
+    "totalDistinctTests": 269,
+    "rootClippy": "PASS",
+    "wakeClippy": "PASS",
+    "limitedSourceReview": "PASS",
+    "successfulOwnerAttempts": {
+      "readiness-tests": 1,
+      "response-tests": 1,
+      "python-tests": 1,
+      "adapter-tests": 1,
+      "dom-tests": 2,
+      "refusal-report-dom-tests": 1,
+      "refusal-terms-dom-tests": 1,
+      "root-clippy": 1,
+      "wake-clippy": 1,
+      "fmt": 1
+    },
+    "schemaVersion": 7,
+    "maximumStructuredBodyCodeUnits": 8192,
+    "maximumTerms": 32,
+    "bodyExported": false,
+    "nativeEvidenceGranted": false,
+    "reviewCorrections": [
+      "NONE_PROVENANCE_REQUIRES_EMPTY_TERMS",
+      "EMPTY_PROJECTION_REQUIRES_OMITTED_WITNESS"
+    ],
+    "newMessages": 0,
+    "nativeDispatches": 0,
+    "installedChanges": 0,
+    "bindingsChanged": 0,
+    "newLiveQualification": "NOT_RUN",
+    "c1": "INCOMPLETE"
   }
 }

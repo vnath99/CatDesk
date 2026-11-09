@@ -447,7 +447,7 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
         "CURRENT",
         "ORIGINAL",
     ];
-    let valid_refusal_terms = version != 6
+    let valid_refusal_terms = version < 6
         || hints
             .get("refusalTerms")
             .and_then(Value::as_array)
@@ -461,6 +461,26 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
                         .windows(2)
                         .all(|pair| pair[0] != "REDACTED" || pair[1] != "REDACTED")
             });
+    let valid_refusal_report = version != 7
+        || hints.get("refusalReport").is_some_and(|report| {
+            report.as_object().is_some_and(|map| map.len() == 4)
+                && matches!(
+                    report["source"].as_str(),
+                    Some("PROSE" | "STRUCTURED" | "NONE")
+                )
+                && matches!(
+                    report["state"].as_str(),
+                    Some("BLOCKED" | "REJECTED" | "REFUSED" | "UNPROVEN")
+                )
+                && report["reasonFieldPresent"].as_bool().is_some()
+                && report["projectionOmitted"].as_bool().is_some()
+                && (report["source"] == "NONE") == (report["state"] == "UNPROVEN")
+                && (report["reasonFieldPresent"] == false || report["source"] == "STRUCTURED")
+                && hints["refusalTerms"].as_array().is_some_and(|terms| {
+                    report["projectionOmitted"] == terms.is_empty()
+                        && (report["source"] != "NONE" || terms.is_empty())
+                })
+        });
     let trace = hints.get("trace");
     let valid_trace = trace.is_none_or(|trace| {
         let counts = [
@@ -471,7 +491,7 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
             "linkedPanels",
             "visiblePanels",
         ];
-        matches!(version, 4..=6)
+        matches!(version, 4..=7)
             && trace
                 .as_object()
                 .is_some_and(|map| map.len() == counts.len() + 3)
@@ -498,7 +518,9 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
     if value.as_object()?.len() != 2
         || tools.as_object()?.len() != 9
         || hints.as_object()?.len()
-            != if version == 6 {
+            != if version == 7 {
+                16 + usize::from(trace.is_some())
+            } else if version == 6 {
                 15 + usize::from(trace.is_some())
             } else if version == 5 {
                 14 + usize::from(trace.is_some())
@@ -520,7 +542,7 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
         || !counts
             .iter()
             .all(|field| tools[*field].as_u64().is_some_and(|n| n <= 64))
-        || !matches!(version, 1..=6)
+        || !matches!(version, 1..=7)
         || hints["basis"] != "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION"
         || !flags.iter().all(|field| hints[*field].as_bool().is_some())
         || *selected != canonical
@@ -529,6 +551,7 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
         || !valid_argument_hints
         || !valid_identity_hints
         || !valid_refusal_terms
+        || !valid_refusal_report
         || !valid_trace
     {
         return None;
