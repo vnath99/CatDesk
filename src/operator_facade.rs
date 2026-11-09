@@ -16,6 +16,9 @@ use crate::mcp;
 #[path = "operator_web_cli.rs"]
 mod web;
 
+#[path = "operator_web_existing.rs"]
+mod existing_web;
+
 #[path = "operator_development_backend.rs"]
 mod development_backend;
 
@@ -118,6 +121,7 @@ const MAX_REPAIR_OUTPUT_BYTES: usize = 64 * 1024;
 pub(crate) enum OperatorAction {
     Codex(crate::operator_codex_cli::OperatorCodexAction),
     Web(web::WebAction),
+    WebExisting(existing_web::ExistingResponseAction),
     WebDevelopment(WebDevelopmentAction),
     InstalledBackend {
         maximum_seconds: u64,
@@ -297,7 +301,10 @@ pub(crate) fn parse_operator_action(
         Some("web-dev-runtime") => parse_web_development_action(&args)
             .map(OperatorAction::WebDevelopment)
             .map(Some),
-        Some("web") => web::parse(&args).map(OperatorAction::Web).map(Some),
+        Some("web") => match existing_web::parse(&args)? {
+            Some(action) => Ok(Some(OperatorAction::WebExisting(action))),
+            None => web::parse(&args).map(OperatorAction::Web).map(Some),
+        },
         Some("codex") => crate::operator_codex_cli::parse_action(&args)
             .map(OperatorAction::Codex)
             .map(Some),
@@ -1042,6 +1049,7 @@ pub(crate) async fn execute_operator_action(
         && !matches!(
             &action,
             OperatorAction::Web(_)
+                | OperatorAction::WebExisting(_)
                 | OperatorAction::Codex(_)
                 | OperatorAction::ProjectControl { .. }
         )
@@ -1103,6 +1111,7 @@ pub(crate) async fn execute_operator_action(
             }
         }
         OperatorAction::Web(action) => web::execute(action, workspace).await,
+        OperatorAction::WebExisting(action) => existing_web::execute(action, workspace),
         OperatorAction::InstalledBackend { maximum_seconds } => {
             installed_backend::run(workspace, maximum_seconds).await
         }
@@ -2467,6 +2476,47 @@ mod tests {
             ]))
             .is_err()
         );
+    }
+
+    #[test]
+    fn existing_response_observation_uses_only_read_only_cli_route() {
+        for verb in ["inspect-response", "inspect-history-response"] {
+            let args = [
+                "operator",
+                "web",
+                "review",
+                verb,
+                "--project-id",
+                "alpha",
+                "--event-id",
+                "event-one",
+            ];
+            assert!(matches!(
+                parse_operator_action(args.map(str::to_owned)),
+                Ok(Some(OperatorAction::WebExisting(_)))
+            ));
+            let mut invalid: Vec<String> = args.map(str::to_owned).into();
+            invalid.extend(["--retry".into(), "true".into()]);
+            assert!(parse_operator_action(invalid).is_err());
+        }
+        assert!(matches!(
+            parse_operator_action(
+                [
+                    "operator",
+                    "web",
+                    "review",
+                    "reobserve",
+                    "--project-id",
+                    "alpha",
+                    "--event-id",
+                    "event-one",
+                ]
+                .map(str::to_owned)
+            ),
+            Ok(Some(OperatorAction::Web(
+                web::WebAction::ReviewReobserve { .. }
+            )))
+        ));
     }
 
     #[test]

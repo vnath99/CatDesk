@@ -7458,3 +7458,15 @@ neither new source registered. B/G/H/I remain open; next create the frozen secon
 seed once with diagnostic capture, then qualify a matched package before actual
 simultaneous rollover. Connector429 is independent. See
 [C18 evidence](docs/verification/C18_INITIAL_SOURCE_RECOVERY_2026_10_23.json).
+
+
+### 2026-11-09 — focused main response-reader release qualification
+
+A focused observer patch over accepted `313f6a31` has passed553 targeted tests and strict root/Wake Clippy.
+It reuses the current browser owner for receipt-bound response diagnostics and
+keeps cached-envelope error categories in the existing MCP response/traffic path.
+The original frozen calls retain their no-replay fences. Current-source independent
+review, canonical snapshot/ACK, protected producer, MAIN promotion and installed C1
+acceptance remain open; Wake broker/package authority is separate and unchanged.
+See `docs/orchestrator/CATDESK_IMPORTANT_COMMANDS.md` for the two read-only observation commands and
+their admission requirements. No profile, tunnel or recurring owner is introduced.

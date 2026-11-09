@@ -2011,3 +2011,15 @@ old target are not acceptable shortcuts.
   without a corresponding CatDesk registry commit; no WakeHost launch/browser
   event, protected main-image rotation, production daemon reload or private
   signer use was performed by this recovery work.
+
+
+### 2026-11-09 — focused main response-reader release qualification
+
+A focused observer patch over accepted `313f6a31` has passed553 targeted tests and strict root/Wake Clippy.
+It reuses the current browser owner for receipt-bound response diagnostics and
+keeps cached-envelope error categories in the existing MCP response/traffic path.
+The original frozen calls retain their no-replay fences. Current-source independent
+review, canonical snapshot/ACK, protected producer, MAIN promotion and installed C1
+acceptance remain open; Wake broker/package authority is separate and unchanged.
+See `CATDESK_IMPORTANT_COMMANDS.md` for the two read-only observation commands and
+their admission requirements. No profile, tunnel or recurring owner is introduced.

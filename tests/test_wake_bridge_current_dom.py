@@ -36,7 +36,7 @@ class Element {
   get disabled() { return this.attrs.disabled === true; }
   getAttribute(name) { return this.attrs[name] ?? null; }
   hasAttribute(name) { return Object.hasOwn(this.attrs, name); }
-  getClientRects() { return this.attrs.hidden ? [] : [1]; }
+  getClientRects() { for(let node=this;node;node=node.parentElement) if(node.attrs.hidden) return []; return [1]; }
   matches(selector) { return selector.split(',').some(raw => {
     const s = raw.trim();
     const has = s.match(/^([^:]+):has\(([^()]+)\)$/);
@@ -141,6 +141,29 @@ const assistant = el('div', {'data-content-search-unit-key':'fallback-turn-0:2:a
     ]),
   ]),
 ]);
+if (options.canonicalUnlabelledText)
+  append(assistant.children[1], el('p', {}, options.canonicalUnlabelledText));
+if (options.quotedAnswerTag)
+  append(assistant.children[1], el(options.quotedAnswerTag, {}, options.quotedAnswerText || ''));
+if (options.bodyQuoteWrapper) {
+  const body=assistant.children[1].children[0];
+  const quote=el('blockquote',{},'',[body]);
+  assistant.children[1].children[0]=quote;quote.parentElement=assistant.children[1];
+}
+if (options.assistantOutsideText)
+  append(assistant, el('p', {}, options.assistantOutsideText));
+if (options.secondSelectionBody)
+  append(assistant, el('div', {'data-chatgpt-selection-message-id':'second-assistant-body'}, options.secondSelectionBody));
+if (options.selectionToolText)
+  append(assistant.children[1], el('div', {'data-testid':'mcp-tool-result'}, options.selectionToolText));
+if (options.selectionBodyWrapper) {
+  const markedBody=assistant.children[1];
+  const attrs=options.selectionBodyWrapper==='user' ? {'data-message-author-role':'user'} : {'data-testid':'mcp-tool-result'};
+  const wrapper=el('div',attrs,'',[markedBody]);
+  assistant.children[1]=wrapper;wrapper.parentElement=assistant;
+}
+for (const body of options.additionalAnswerBodies || [])
+  append(assistant, el('div', {class:'markdown'}, body));
 if (options.timeoutCard) append(assistant, el('div', {role:'alert'}, '', [
   el('p', {}, 'Message delivery timed out. Please try again.'),
   ...Array.from({length:options.retryOnlyOutside ? 0 : (options.retryCount ?? 1)}, () => button(options.retryLabel || 'Retry')),
@@ -150,6 +173,52 @@ if (options.userTimeoutQuote) {
   append(user.children[0], button('Retry'));
 }
 const children = options.userOnly ? [user] : [user, assistant];
+for (const [index, trace] of (options.traceControls || []).entries()) {
+  const id='PRIVATE_TRACE_PANEL_'+index;
+  const control=el(trace.summary ? 'summary' : 'button', trace.summary ? {} : {
+    ...(options.traceInteractive ? {type:trace.type || 'button'} : {}),
+    ...(trace.expanded===undefined ? {} : {'aria-expanded':String(trace.expanded)}),
+    ...(trace.linked ? {'aria-controls':id} : {})
+  }, trace.label || 'Worked for 46s');
+  const panel=el('div',{id,hidden:trace.expanded!==true},'PRIVATE_TRACE_ARGUMENTS');
+  if(options.traceInteractive) {
+    panel.text=options.tracePanelText || 'run_command INVALID_ARGUMENT WEB_TASK_CACHED_ARGUMENTS_INVALID CWD_OVERRIDE_FORBIDDEN PRIVATE_TRACE_VALUE';
+    if(options.traceJson)append(panel,el('pre',{},options.traceJson));
+  }
+  let node=trace.summary ? el('details',trace.expanded ? {open:''} : {},'', [control,panel]) : control;
+  if(options.traceInteractive && !trace.summary) {
+    const wrapper=el('section',{},'', options.traceRolePanel ? [control] : [control,panel]);node=wrapper;
+    control.click=()=>{
+      mutations++;control.attrs['aria-expanded']='true';panel.attrs.hidden=false;
+      if(options.traceLoading) {
+        const finalText=panel.text;panel.text='Loading details…';panel.attrs['aria-busy']='true';
+        if(options.traceLoading==='delayed')setTimeout(()=>{panel.text=finalText;panel.attrs['aria-busy']='false';},20);
+      }
+      if(options.traceRolePanel){panel.attrs.role='complementary';append(document,panel);}
+      if(options.traceClickThrows)throw Error('test click outcome unknown');
+      if(options.traceChangedControl)append(wrapper,el('button',{type:'button','aria-expanded':'true'},'Worked for 20s'));
+      if(options.traceAmbiguousPanels)append(wrapper,el('div',{},'PRIVATE_SECOND_PANEL'));
+    };
+  }
+  if(options.traceInteractive && trace.summary)control.click=()=>{mutations++;node.attrs.open='';panel.attrs.hidden=false;};
+  if(trace.placement==='user')append(user.children[0],node);
+  else if(trace.placement==='code')append(assistant.children[1].children[0],el('pre',{},'',[node]));
+  else children.splice(1,0,node);
+  if(!trace.summary && trace.linked && !options.traceInteractive)children.splice(1,0,panel);
+}
+if (options.unmountedLoadError) {
+  for (let i = 0; i < (options.unmountedErrorCount || 1); i++) {
+    const card = el('div', {}, '', [el('p', {}, 'This response couldn’t load')]);
+    if (options.unmountedPlacement === 'user') append(user.children[0], card);
+    else if (options.unmountedPlacement === 'code') children.push(el('pre', {}, '', [card]));
+    else if (options.unmountedPlacement === 'tool') children.push(el('div', {'data-testid':'mcp-tool-result'}, '', [card]));
+    else if (options.unmountedPlacement === 'unit') children.push(el('div', {'data-content-search-unit-key':'unknown-tool'}, '', [card]));
+    else if (options.unmountedPlacement === 'quote') children.push(el('blockquote', {}, '', [card]));
+    else if (options.unmountedPlacement === 'control') children.push(el('button', {}, '', [card]));
+    else if (options.unmountedPlacement === 'before') children.unshift(card);
+    else children.push(card);
+  }
+}
 for (let i = 0; i < (options.toolMarkerCount || 0); i++) {
   const card = el('div', {'data-testid':'mcp-tool-call', 'data-tool-call-id':'PRIVATE_CALL_ID',
     'aria-busy':options.toolBusy ? 'true' : 'false', hidden:options.toolHidden || false},
@@ -175,7 +244,11 @@ for (const control of options.submitControls || []) children.push(el('button', {
 if (options.extraAssistant) children.push(el('div', {'data-content-search-unit-key':'assistant-2'}, '', [
   el('h4', {'data-conversation-role':'assistant'}, 'ChatGPT said:'),
 ]));
-if (options.toolbar !== false) children.push(el('div', {class:'turn-action-controls'}, '', [button(options.assistantCopyLabel || 'Copy')]));
+if (options.toolbar !== false) {
+  const action = button(options.assistantCopyLabel || 'Copy');
+  if (options.diagnosticActionAttributes) Object.assign(action.attrs, options.diagnosticActionAttributes);
+  children.push(el('div', {class:'turn-action-controls'}, '', [action]));
+}
 if (options.duplicateToolbar) children.push(el('div', {class:'turn-action-controls'}, '', [button(options.assistantCopyLabel || 'Copy')]));
 const paired = el('div', {'data-content-search-turn-key':'fallback-turn-0'}, '', children);
 if (options.bareUser) {
@@ -194,8 +267,20 @@ if (options.legacyTurns) {
       el('div', {class:'turn-action-controls'}, '', [el('button', {'data-testid':'copy-turn-action-button','aria-label':'Copy'}, 'Copy')])]),
   ];
 }
+if(options.laterExchange) {
+  const later=paired.cloneNode(true);
+  later.attrs['data-content-search-turn-key']='fallback-turn-1';
+  const laterUser=later.querySelector('[data-user-message-bubble]');
+  const laterBody=laterUser.querySelector('[data-message-content], [data-markdown-text-tone="user-message"], .whitespace-pre-wrap');
+  (laterBody||laterUser).text=options.laterSameUser?'exact wake message':'foreign later request';
+  if(!options.laterSameUser)(laterBody||laterUser).children=[];
+  const laterAssistant=later.querySelector('.markdown');
+  if(laterAssistant)laterAssistant.text='PRIVATE_LATER_RESPONSE HTTP 429 WEB_TASK_NATIVE_ARGUMENTS_INVALID';
+  append(document,later);
+}
 if (options.retryOnlyOutside) document.children.push(button('Retry'));
 if (options.historicalLoadError) document.children.unshift(el('div', {'data-message-author-role':'assistant'}, 'This response couldn’t load'));
+if (options.historicalRefusalReport) document.children.unshift(el('div', {'data-message-author-role':'assistant'}, options.historicalRefusalReport));
 if (options.historicalToolMarker) document.children.unshift(el('div', {'data-testid':'mcp-tool-call'}, 'PRIVATE_OLD_TOOL'));
 document.readyState = options.documentState || 'complete';
 if (options.observationEditor) document.children.push(el('div', {id:'prompt-textarea'}, options.observationDraft || ''));
@@ -797,7 +882,9 @@ class CurrentDomTests(unittest.TestCase):
                 self.assertEqual(controls["completionActionFound"], complete)
                 self.assertEqual(result[3], complete)
                 self.assertNotIn("PRIVATE_", json.dumps(diagnostic))
-                self.assertLess(len(json.dumps(diagnostic)), 1500)
+                # Fixed button shape and body coverage share the existing
+                # 4096-byte native response-frame bound; no text is admitted.
+                self.assertLess(len(json.dumps(diagnostic).encode('utf-8')), 4096)
         self.sink.observe_cooperative_response(CurrentDom(observationEditor=True),
             "exact wake message", bridge.digest("exact wake message"))
         self.assertIsNotNone(self.sink.response_observation_controls)
@@ -983,6 +1070,659 @@ class CurrentDomTests(unittest.TestCase):
     def test_user_timeout_quote_is_not_an_assistant_timeout_card(self):
         cdp = CurrentDom(userTimeoutQuote=True)
         self.assertEqual(self.sink.response_snapshot(cdp, "exact wake message")[:2], (0, 0))
+
+
+    def test_historical_response_is_exact_bounded_and_cannot_change_latest_or_retry_rules(self):
+        for legacy in [False,True]:
+            with self.subTest(legacy=legacy):
+                cdp=CurrentDom(observationEditor=True,laterExchange=True,legacyTurns=legacy,traceClicks=True,
+                    answer='native.codex.dispatch returned WEB_TASK_CACHED_ARGUMENTS_INVALID.')
+                with self.assertRaises(bridge.Attention):
+                    self.sink.observe_cooperative_response(cdp,'exact wake message',bridge.digest('exact wake message'))
+                self.assertEqual(self.sink.observe_cooperative_response(cdp,'exact wake message',bridge.digest('exact wake message'),historical=True),'RESPONSE_COMPLETE')
+                diagnostic,tools,hints={},{},{}
+                self.sink.response_snapshot(cdp,'exact wake message',require_usable_body=True,diagnostic=diagnostic,
+                    tool_diagnostic=tools,execution_diagnostic=hints,historical=True)
+                self.assertEqual(hints['knownCodes'],['WEB_TASK_CACHED_ARGUMENTS_INVALID'])
+                self.assertEqual(hints['mentionedTools'],['NATIVE_DISPATCH'])
+                self.assertNotIn('PRIVATE_',json.dumps(hints))
+                with self.assertRaises(bridge.PostSubmitUnknown):self.sink.click_response_timeout_retry(cdp,'exact wake message')
+                with self.assertRaises(TypeError):self.sink.response_snapshot(cdp,'exact wake message',require_usable_body=True,
+                    diagnostic={},tool_diagnostic={},execution_diagnostic={},historical=True,trace_action=('OPEN','a'*32),trace_observation={})
+                self.assertEqual(cdp.mutations,0)
+
+
+    def test_historical_response_refuses_wrong_duplicate_expired_or_unfinished_exchange(self):
+        for options,expected in [({'laterSameUser':True},'RESPONSE_EXPECTED_USER_DUPLICATED'),
+                ({'userText':'foreign original'},None),({'observationLogin':True},'LOGIN_OR_PROFILE_REQUIRED'),
+                ({'observationNetwork':True},'RESPONSE_NETWORK_ERROR')]:
+            with self.subTest(options=options):
+                cdp=CurrentDom(observationEditor=True,laterExchange=True,**options)
+                with self.assertRaises(bridge.Attention) as failure:
+                    self.sink.observe_cooperative_response(cdp,'exact wake message',bridge.digest('exact wake message'),historical=True)
+                if expected:self.assertEqual(str(failure.exception),expected)
+        for options in [dict(observationStop=True),dict(answer=''),dict(toolbar=False)]:
+            self.assertEqual(self.sink.observe_cooperative_response(CurrentDom(observationEditor=True,laterExchange=True,**options),
+                'exact wake message',bridge.digest('exact wake message'),historical=True),'RESPONSE_PENDING')
+
+
+    def test_exact_assistant_task_hints_are_closed_and_not_execution_authority(self):
+        hints, tools = {}, {}
+        answer = "PRIVATE_KEY_MARKER. The run_command tool is not exposed. Private context is missing. Please approve. native.codex.dispatch HTTP 429 WEB_ROLLOVER_PROJECT_BUSY UNKNOWN_PRIVATE_CODE"
+        result = self.sink.response_snapshot(CurrentDom(answer=answer), "exact wake message",
+            require_usable_body=True, diagnostic={}, tool_diagnostic=tools, execution_diagnostic=hints)
+        self.assertEqual(result, (0,0,True,True))
+        self.assertTrue(bridge.valid_task_response_hints(hints))
+        self.assertEqual([hints[key] for key in ("toolUnavailable","contextUnavailable","approvalRequested","nativeDispatchMentioned")],[True]*4)
+        self.assertEqual(hints['knownCodes'],['HTTP_429','WEB_ROLLOVER_PROJECT_BUSY'])
+        self.assertNotIn('PRIVATE_KEY_MARKER',json.dumps(hints))
+        self.assertEqual(hints['unavailableSubjects'], ['RUN_COMMAND', 'PRIVATE_CONTEXT'])
+        for key,value in [('knownCodes',['UNKNOWN_PRIVATE_CODE']),('knownCodes',['HTTP_429','HTTP_429']),
+                          ('toolUnavailable',1),('schemaVersion',True),('text',answer)]:
+            self.assertFalse(bridge.valid_task_response_hints(hints | {key:value}))
+        self.sink.response_snapshot(CurrentDom(answer="A usable answer."), "exact wake message",
+            diagnostic={}, tool_diagnostic=tools, execution_diagnostic=hints)
+        self.assertFalse(any(hints[key] for key in ('toolUnavailable','contextUnavailable','approvalRequested','nativeDispatchMentioned')))
+        self.assertEqual(hints['knownCodes'],[])
+
+
+    def test_task_hints_refuse_foreign_or_duplicate_exchange_and_reset_previous_hints(self):
+        for options in ({'duplicateUser':True},{'userText':'different request'}):
+            hints={'PRIVATE_STALE_HINT':True}
+            with self.assertRaises(bridge.PostSubmitUnknown):
+                self.sink.response_snapshot(CurrentDom(**options),"exact wake message",
+                    diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+            self.assertEqual(hints,{})
+
+
+    def test_cached_tool_rejection_is_classified_without_exporting_request_or_keys(self):
+        hints = {}
+        body = ('native.codex.dispatch returned INVALID_ARGUMENT: McpServerError: '
+                'WEB_TASK_CACHED_ARGUMENTS_INVALID. Dispatch rejected. '
+                'PRIVATE_CONTEXT_MARKER executionKey=' + 'f' * 64)
+        self.sink.response_snapshot(CurrentDom(answer=body), 'exact wake message',
+            require_usable_body=True, diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
+        self.assertTrue(bridge.valid_task_response_hints(hints))
+        self.assertEqual(hints['schemaVersion'], 7)
+        self.assertEqual(hints['knownCodes'], ['WEB_TASK_CACHED_ARGUMENTS_INVALID', 'INVALID_ARGUMENT'])
+        self.assertEqual(hints['refusalCategories'], ['DISPATCH_REJECTED'])
+        self.assertNotIn('PRIVATE_CONTEXT_MARKER', json.dumps(hints))
+        self.assertNotIn('f' * 64, json.dumps(hints))
+        self.assertNotIn('executionKey', json.dumps(hints))
+        self.assertFalse(hints['scanTruncated'])
+
+
+    def test_missing_call_does_not_claim_an_available_tool_is_missing(self):
+        for answer, expected in [
+            ("run_command is available, but nativeCall is not visible.", ['NATIVE_CALL']),
+            ("I don't have nativeCall. run_command is available.", ['NATIVE_CALL']),
+            ("The run_command tool is not exposed. The executionKey is missing.", ['RUN_COMMAND', 'EXECUTION_KEY']),
+            ("I have run_command and nativeCall is not available.", ['NATIVE_CALL']),
+            ("CatDesk-Local-Tunnel-v5 is unavailable. Frozen capsule is not visible.", ['PRIVATE_CONTEXT','CATDESK_APP']),
+            ("All tools and the original context are available.", []),
+        ]:
+            with self.subTest(answer=answer):
+                hints = {}
+                self.sink.response_snapshot(CurrentDom(answer=answer), 'exact wake message',
+                    require_usable_body=True, diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
+                self.assertEqual(hints['unavailableSubjects'], expected)
+                self.assertTrue(bridge.valid_task_response_hints(hints))
+                self.assertNotIn(answer, json.dumps(hints))
+                for bad in [['PRIVATE_KEY_MARKER'], ['NATIVE_CALL','NATIVE_CALL'],
+                            ['EXECUTION_KEY','RUN_COMMAND'], 'NATIVE_CALL', None]:
+                    self.assertFalse(bridge.valid_task_response_hints(hints | {'unavailableSubjects':bad}))
+                for bad in [{}, [], True, 8]:
+                    self.assertFalse(bridge.valid_task_response_hints(hints | {'schemaVersion':bad}))
+
+
+    def test_natural_refusals_identify_only_known_identity_domains_without_values(self):
+        hints={}
+        body=("run_command is available; nativeCall is not supplied. "
+            "fullPrivateContextSha256 is not provided. assignmentSha256 doesn’t match. "
+            "deliveredUserMessageSha256 does not match. Cannot verify execution grant. "
+            "The conversation target is unverified. Dispatch rejected. PRIVATE_VALUE="+'f'*64)
+        self.sink.response_snapshot(CurrentDom(answer=body),'exact wake message',
+            require_usable_body=True,diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+        self.assertTrue(bridge.valid_task_response_hints(hints))
+        self.assertEqual(hints['identityIssues'],['FULL_PRIVATE_CONTEXT_MISSING','ASSIGNMENT_MISMATCH',
+            'DELIVERED_USER_MESSAGE_MISMATCH','NATIVE_CALL_MISSING','EXECUTION_GRANT_UNVERIFIED',
+            'CONVERSATION_TARGET_UNVERIFIED'])
+        self.assertEqual(hints['unavailableSubjects'],['NATIVE_CALL'])
+        self.assertFalse(hints['toolUnavailable'])
+        self.assertTrue(hints['contextUnavailable'])
+        self.assertEqual(hints['refusalCategories'],['IDENTITY_MISMATCH','CONTEXT_UNAVAILABLE','DISPATCH_REJECTED'])
+        for value in ['PRIVATE_VALUE','f'*64,'fullPrivateContextSha256','assignmentSha256']:
+            self.assertNotIn(value,json.dumps(hints))
+        for bad in [['UNKNOWN_PRIVATE_FIELD'],hints['identityIssues']*2,
+                list(reversed(hints['identityIssues'])),True,{},None]:
+            self.assertFalse(bridge.valid_task_response_hints(hints | {'identityIssues':bad}))
+
+
+    def test_natural_missing_and_unverified_predicates_preserve_negations_and_clause_scope(self):
+        for body,subjects,issues in [
+            ('nativeCall is not present. fullPrivateContextSha256 is not included.',
+                ['NATIVE_CALL'],['FULL_PRIVATE_CONTEXT_MISSING','NATIVE_CALL_MISSING']),
+            ('Cannot find nativeCall. assignmentSha256 was not supplied.',
+                ['NATIVE_CALL'],['ASSIGNMENT_MISSING','NATIVE_CALL_MISSING']),
+            ('run_command is not provided. The nativeCall is present.', ['RUN_COMMAND'],[]),
+            ("run_command is available. nativeCall is not missing. fullPrivateContextSha256 is verified. "
+                "assignmentSha256 has no mismatch. deliveredUserMessageSha256 matches. "
+                "The execution grant is not unverified. Cannot find a mismatch in the conversation target.",[],[]),
+            ('assignmentSha256 is not mismatched.',[],[]),
+        ]:
+            with self.subTest(body=body):
+                hints={}
+                self.sink.response_snapshot(CurrentDom(answer=body),'exact wake message',
+                    diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+                self.assertEqual(hints['unavailableSubjects'],subjects)
+                self.assertEqual(hints['identityIssues'],issues)
+        hints={}
+        self.sink.response_snapshot(CurrentDom(answer='Cannot verify private context.'),'exact wake message',
+            diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+        self.assertTrue(hints['contextUnavailable'])
+        self.assertEqual(hints['identityIssues'],[])
+        self.assertNotIn('IDENTITY_MISMATCH',hints['refusalCategories'])
+
+
+    def test_canonical_marked_body_includes_unlabelled_diagnostic_text_without_completing_new_body(self):
+        hints={};diagnostic={}
+        result=self.sink.response_snapshot(CurrentDom(answer='Dispatch rejected.',
+            canonicalUnlabelledText='fullPrivateContextSha256 is not supplied. nativeCall is not supplied. PRIVATE_SECRET'),
+            'exact wake message',require_usable_body=True,diagnostic=diagnostic,tool_diagnostic={},execution_diagnostic=hints)
+        self.assertEqual(result,(0,0,True,True))
+        self.assertEqual(hints['identityIssues'],['FULL_PRIVATE_CONTEXT_MISSING','NATIVE_CALL_MISSING'])
+        self.assertEqual(diagnostic['controls']['bodyCoverage'],dict(selectedBlocks=1,
+            canonicalBody='QUALIFIED',unselectedTextPresent=False))
+        self.assertNotIn('PRIVATE_SECRET',json.dumps(hints))
+        result=self.sink.response_snapshot(CurrentDom(controlsOnly=True,
+            canonicalUnlabelledText='nativeCall is not supplied.'),'exact wake message',
+            require_usable_body=True,diagnostic=diagnostic,tool_diagnostic={},execution_diagnostic=hints)
+        self.assertFalse(result[3])
+        self.assertFalse(diagnostic['controls']['assistantBodyPresent'])
+
+
+    def test_canonical_diagnostic_body_preserves_known_blocks_and_discloses_outside_text(self):
+        for options,issues,outside,blocks in [
+            ({'assistantOutsideText':'assignmentSha256 does not match. PRIVATE_OUTSIDE'},[],True,1),
+            ({'additionalAnswerBodies':['assignmentSha256 does not match.']},['ASSIGNMENT_MISMATCH'],False,2),
+        ]:
+            hints={};diagnostic={}
+            self.sink.response_snapshot(CurrentDom(answer='Dispatch rejected.',**options),'exact wake message',
+                require_usable_body=True,diagnostic=diagnostic,tool_diagnostic={},execution_diagnostic=hints)
+            self.assertEqual(hints['identityIssues'],issues)
+            self.assertEqual(diagnostic['controls']['bodyCoverage'],dict(selectedBlocks=blocks,
+                canonicalBody='QUALIFIED',unselectedTextPresent=outside))
+            self.assertNotIn('PRIVATE_OUTSIDE',json.dumps(hints))
+
+
+    def test_ambiguous_or_tool_contaminated_marked_body_cannot_supply_diagnostic_context(self):
+        for options in [dict(secondSelectionBody='assignmentSha256 does not match. PRIVATE_SECOND'),
+                dict(selectionToolText='assignmentSha256 does not match. PRIVATE_TOOL')]:
+            hints={};diagnostic={}
+            self.sink.response_snapshot(CurrentDom(answer='Dispatch rejected.',**options),'exact wake message',
+                require_usable_body=True,diagnostic=diagnostic,tool_diagnostic={},execution_diagnostic=hints)
+            self.assertEqual(hints['identityIssues'],[])
+            self.assertEqual(diagnostic['controls']['bodyCoverage']['canonicalBody'],'UNPROVEN')
+            self.assertNotIn('PRIVATE_',json.dumps(hints))
+
+
+    def test_body_coverage_diagnostic_is_closed_and_preserves_legacy_metadata(self):
+        diagnostic={}
+        self.sink.response_snapshot(CurrentDom(),'exact wake message',require_usable_body=True,diagnostic=diagnostic)
+        controls=diagnostic['controls'];coverage=controls['bodyCoverage']
+        self.assertTrue(bridge.valid_response_control_diagnostics(controls))
+        for changed in [coverage | {'selectedBlocks':0},coverage | {'selectedBlocks':65},
+                coverage | {'selectedBlocks':True},coverage | {'canonicalBody':'PRIVATE_MARKER'},
+                coverage | {'unselectedTextPresent':'PRIVATE_TEXT'},coverage | {'text':'PRIVATE_BODY'}]:
+            self.assertFalse(bridge.valid_response_control_diagnostics(controls | {'bodyCoverage':changed}))
+        self.assertTrue(bridge.valid_response_control_diagnostics({k:v for k,v in controls.items() if k!='bodyCoverage'}))
+
+
+    def test_selection_body_nested_in_tool_or_user_wrapper_is_not_assistant_diagnostic_text(self):
+        for wrapper in ['tool','user']:
+            with self.subTest(wrapper=wrapper):
+                hints={};diagnostic={}
+                cdp=CurrentDom(answer='assignmentSha256 does not match. PRIVATE_WRAPPED',
+                    selectionBodyWrapper=wrapper)
+                if wrapper=='user':
+                    # Existing role admission rejects a USER-containing
+                    # assistant unit before any diagnostic text is classified.
+                    with self.assertRaisesRegex(bridge.PostSubmitUnknown,'^RESPONSE_STATE_QUERY_FAILED$'):
+                        self.sink.response_snapshot(cdp,'exact wake message',require_usable_body=True,
+                            diagnostic=diagnostic,tool_diagnostic={},execution_diagnostic=hints)
+                    self.assertEqual(hints,{})
+                    continue
+                self.sink.response_snapshot(cdp,'exact wake message',require_usable_body=True,
+                    diagnostic=diagnostic,tool_diagnostic={},execution_diagnostic=hints)
+                self.assertEqual(hints['identityIssues'],[])
+                self.assertEqual(diagnostic['controls']['bodyCoverage'],dict(selectedBlocks=0,
+                    canonicalBody='UNPROVEN',unselectedTextPresent=False))
+                self.assertNotIn('PRIVATE_WRAPPED',json.dumps(hints))
+
+
+    def test_bounded_classifier_reports_incomplete_coverage_without_exporting_long_body(self):
+        hints = {}
+        self.sink.response_snapshot(CurrentDom(answer='safe text ' * 5000 + ' WEB_TASK_CACHED_ARGUMENTS_INVALID'),
+            'exact wake message', require_usable_body=True, diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
+        self.assertTrue(bridge.valid_task_response_hints(hints))
+        self.assertTrue(hints['scanTruncated'])
+        self.assertEqual(hints['knownCodes'], [])
+        self.assertLess(len(json.dumps(hints)), 1100)
+
+
+    def test_refusal_terms_are_ordered_fixed_words_from_only_the_current_assistant(self):
+        hints={}
+        self.sink.response_snapshot(CurrentDom(answer='Dispatch rejected because nativeCall is not provided. '
+            'Original assignment digest is missing.',observationEditor=True,
+            observationDraft='Dispatch blocked because approval is required. PRIVATE_DRAFT'),
+            'exact wake message',diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+        self.assertEqual(hints['refusalTerms'],['DISPATCH','REJECTED','BECAUSE','NATIVECALL','IS','NOT',
+            'PROVIDED','ORIGINAL','ASSIGNMENT','DIGEST','IS','MISSING'])
+        self.assertTrue(bridge.valid_task_response_hints(hints))
+        self.assertNotIn('APPROVAL',hints['refusalTerms'])
+        self.assertNotIn('PRIVATE_DRAFT',json.dumps(hints))
+
+
+    def test_refusal_terms_redact_values_quotes_urls_paths_numbers_and_unknown_identifiers(self):
+        hints={}
+        body=('Dispatch rejected because "context grant key" https://source.example/context '
+            r'C:\private\source.txt '
+            'executionKey=source 123 ' + 'source'*8 + ' unknownprivateword private_otherword; '
+            'context missing. PRIVATE_FROZEN_VALUE')
+        self.sink.response_snapshot(CurrentDom(answer=body),'exact wake message',
+            diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+        self.assertEqual(hints['refusalTerms'],['DISPATCH','REJECTED','BECAUSE','REDACTED',
+            'CONTEXT','MISSING','REDACTED'])
+        self.assertTrue(bridge.valid_task_response_hints(hints))
+        for private in ['context grant key','source.example',r'C:\private','executionKey','123',
+                'source'*8,'unknownprivateword','PRIVATE_FROZEN_VALUE']:
+            self.assertNotIn(private,json.dumps(hints['refusalTerms']))
+
+
+    def test_refusal_terms_require_a_literal_refusal_anchor_and_never_read_outside_480_characters(self):
+        for body in ['A useful answer. Native dispatch was not attempted.',
+                'Dispatch is available. Context is missing.',
+                'Dispatch rejected. ' + 'x'*480 + ' approval required.']:
+            with self.subTest(body=body[:50]):
+                hints={}
+                self.sink.response_snapshot(CurrentDom(answer=body),'exact wake message',
+                    diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+                expected=['DISPATCH','REJECTED','REDACTED'] if body.startswith('Dispatch rejected.') else []
+                self.assertEqual(hints['refusalTerms'],expected)
+
+
+    def test_refusal_anchor_cannot_start_inside_quoted_code_or_value_spans(self):
+        for body in ['"Dispatch rejected because context grant key"',
+                '“Dispatch rejected because context grant key”',
+                '`Dispatch rejected because context grant key`',
+                '```Dispatch rejected because context grant key```',
+                "'prefix can't Dispatch rejected because context grant key'",
+                '‘prefix can’t Dispatch rejected because context grant key’',
+                r'payload="before \"Dispatch rejected because context grant key\" after"',
+                '"unclosed prior value Dispatch rejected because context grant key',
+                '“unclosed prior value Dispatch rejected because context grant key',
+                'payload=Dispatch rejected because context grant key']:
+            with self.subTest(body=body):
+                hints={}
+                self.sink.response_snapshot(CurrentDom(answer=body),'exact wake message',
+                    diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+                self.assertEqual(hints['refusalTerms'],[])
+        for body in ['Prior "Dispatch rejected because context grant key". '
+                'Dispatch blocked because scope is missing.',
+                "The caller can't proceed. Dispatch blocked because scope is missing."]:
+            with self.subTest(body=body):
+                hints={}
+                self.sink.response_snapshot(CurrentDom(answer=body),'exact wake message',
+                    diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+                self.assertEqual(hints['refusalTerms'],['DISPATCH','BLOCKED','BECAUSE','SCOPE','IS','MISSING'])
+
+
+    def test_refusal_terms_allow_repetition_but_bound_output_and_validate_closed_vocabulary(self):
+        hints={}
+        self.sink.response_snapshot(CurrentDom(answer='Dispatch blocked because '+'context '*100),
+            'exact wake message',diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+        self.assertEqual(hints['refusalTerms'],['DISPATCH','BLOCKED','BECAUSE']+['CONTEXT']*29)
+        self.assertTrue(bridge.valid_task_response_hints(hints))
+        for bad in [['PRIVATE_TEXT'],['REDACTED','REDACTED'],['CONTEXT']*33,[123],True,{},None]:
+            self.assertFalse(bridge.valid_task_response_hints(hints | {'refusalTerms':bad}))
+        self.assertFalse(bridge.valid_task_response_hints(hints | {'refusalTerms':[]}))
+        self.assertTrue(bridge.valid_task_response_hints(hints | {'refusalTerms':[],
+            'refusalReport':hints['refusalReport'] | {'projectionOmitted':True}}))
+
+
+    def test_refusal_terms_exclude_rendered_code_and_blockquotes_without_changing_other_hints(self):
+        for tag in ['pre','code','blockquote']:
+            with self.subTest(tag=tag):
+                hints={}
+                self.sink.response_snapshot(CurrentDom(answer='A useful answer. ',quotedAnswerTag=tag,
+                    quotedAnswerText='Dispatch rejected because context grant key. WEB_TASK_CACHED_ARGUMENTS_INVALID'),
+                    'exact wake message',diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+                self.assertEqual(hints['refusalTerms'],[])
+                self.assertIn('WEB_TASK_CACHED_ARGUMENTS_INVALID',hints['knownCodes'])
+                self.sink.response_snapshot(CurrentDom(answer='Dispatch blocked because scope is missing. ',
+                    quotedAnswerTag=tag,quotedAnswerText='Dispatch rejected because context grant key.'),
+                    'exact wake message',diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+                self.assertEqual(hints['refusalTerms'],['DISPATCH','BLOCKED','BECAUSE','SCOPE','IS','MISSING'])
+
+
+    def test_structured_refusal_report_uses_only_root_state_and_one_known_reason(self):
+        for report in [
+                {'status':'DISPATCH_BLOCKED','reason':'nativeCall is not provided.','payload':{'context':'PRIVATE_NESTED_CONTEXT'}},
+                {'state':'REJECTED','error':{'message':'nativeCall is not provided.','secret':'PRIVATE_NESTED_CONTEXT'}},
+                {'outcome':'TOOL_CALL_REFUSED','detail':'nativeCall is not provided.'}]:
+            for fenced in [False,True]:
+                with self.subTest(report=report,fenced=fenced):
+                    body=json.dumps(report)
+                    if fenced:body='```json\n'+body+'\n```'
+                    hints={}
+                    self.sink.response_snapshot(CurrentDom(answer=body),'exact wake message',
+                        diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+                    self.assertEqual(hints['refusalTerms'],['NATIVECALL','IS','NOT','PROVIDED'])
+                    self.assertEqual(hints['refusalReport'],dict(source='STRUCTURED',
+                        state='BLOCKED' if 'status' in report else 'REJECTED' if 'state' in report else 'REFUSED',
+                        reasonFieldPresent=True,projectionOmitted=False))
+                    self.assertTrue(bridge.valid_task_response_hints(hints))
+                    self.assertNotIn('PRIVATE_NESTED_CONTEXT',json.dumps(hints))
+
+
+    def test_structured_refusal_reason_preserves_value_redaction_and_reports_omission(self):
+        for report,terms,present in [
+                ({'status':'BLOCKED','message':'nativeCall is not provided. "context grant key" '
+                    'executionKey=source 123 https://private.example/source'},['NATIVECALL','IS','NOT','PROVIDED','REDACTED'],True),
+                ({'status':'BLOCKED','payload':{'reason':'PRIVATE_NESTED_REASON'}},[],False),
+                ({'status':'BLOCKED','error':{'cause':{'message':'PRIVATE_NESTED_REASON'}}},[],False),
+                ({'status':'BLOCKED','reason':'context missing','message':'grant expired'},[],False)]:
+            with self.subTest(report=report):
+                hints={}
+                self.sink.response_snapshot(CurrentDom(answer=json.dumps(report)),'exact wake message',
+                    diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+                self.assertEqual(hints['refusalTerms'],terms)
+                self.assertEqual(hints['refusalReport'],dict(source='STRUCTURED',state='BLOCKED',
+                    reasonFieldPresent=present,projectionOmitted=not terms))
+                for private in ['PRIVATE_NESTED_REASON','private.example','executionKey','123']:
+                    self.assertNotIn(private,json.dumps(hints['refusalTerms']))
+
+
+    def test_structured_refusal_report_refuses_capsules_examples_conflicts_and_oversize(self):
+        capsule=json.dumps({'capsule':{'status':'BLOCKED','reason':'context missing'},'privateContext':'PRIVATE_CONTEXT'})
+        for body,options in [
+                (capsule,{}),
+                (json.dumps({'status':'COMPLETE','reason':'Dispatch rejected because context missing'}),{}),
+                (json.dumps({'status':'BLOCKED','state':'REFUSED','reason':'context missing'}),{}),
+                (json.dumps({'status':'BLOCKED','reason':'context missing','payload':'x'*8192}),{}),
+                (json.dumps({'status':'BLOCKED','reason':'context missing'}),{'bodyQuoteWrapper':True}),
+                ('Example report: ',{'quotedAnswerTag':'pre','quotedAnswerText':json.dumps({'status':'BLOCKED','reason':'context missing'})}),
+                ('A useful answer.',{'historicalRefusalReport':json.dumps({'status':'BLOCKED','reason':'context missing'})}),
+                ('A useful answer.',{'selectionToolText':json.dumps({'status':'BLOCKED','reason':'context missing'})})]:
+            with self.subTest(body=body[:60],options=options):
+                hints={}
+                self.sink.response_snapshot(CurrentDom(answer=body,**options),'exact wake message',
+                    diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+                self.assertEqual(hints['refusalTerms'],[])
+                self.assertEqual(hints['refusalReport'],dict(source='NONE',state='UNPROVEN',
+                    reasonFieldPresent=False,projectionOmitted=True))
+        hints={}
+        self.sink.response_snapshot(CurrentDom(answer='A useful answer.',userText=capsule),capsule,
+            diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+        self.assertEqual(hints['refusalReport']['source'],'NONE')
+
+
+    def test_prose_refusal_report_supports_bounded_adverbs_and_validates_closed_provenance(self):
+        hints={}
+        self.sink.response_snapshot(CurrentDom(answer='Dispatch operation was blocked because context is missing.'),
+            'exact wake message',diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+        report=hints['refusalReport']
+        self.assertEqual(report,dict(source='PROSE',state='BLOCKED',reasonFieldPresent=False,projectionOmitted=False))
+        self.assertEqual(hints['refusalTerms'],['DISPATCH','REDACTED','WAS','BLOCKED','BECAUSE','CONTEXT','IS','MISSING'])
+        for changed in [report | {'source':'PRIVATE_SOURCE'},report | {'state':'PRIVATE_STATE'},
+                report | {'reasonFieldPresent':'PRIVATE_VALUE'},report | {'projectionOmitted':1},
+                report | {'text':'PRIVATE_TEXT'},report | {'source':'NONE'},report | {'reasonFieldPresent':True},
+                report | {'source':'NONE','state':'UNPROVEN'},
+                report | {'projectionOmitted':True}]:
+            self.assertFalse(bridge.valid_task_response_hints(hints | {'refusalReport':changed}))
+
+
+    def test_argument_hints_report_only_closed_tools_causes_and_invariants(self):
+        hints = {}
+        body = ('run_command returned INVALID_ARGUMENT: invalid JSON, missing required field. '
+                'native.codex.dispatch was not attempted. CWD_OVERRIDE_FORBIDDEN '
+                'PAYLOAD_JSON_INVALID PRIVATE_FIELD=PRIVATE_VALUE executionKey=' + 'e'*64)
+        self.sink.response_snapshot(CurrentDom(answer=body), 'exact wake message',
+            diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
+        self.assertTrue(bridge.valid_task_response_hints(hints))
+        self.assertEqual(hints['mentionedTools'], ['RUN_COMMAND','NATIVE_DISPATCH'])
+        self.assertEqual(hints['argumentIssues'], ['JSON_SYNTAX','MISSING_REQUIRED_FIELD'])
+        self.assertEqual(hints['cachedInvariants'], ['CWD_OVERRIDE_FORBIDDEN','PAYLOAD_JSON_INVALID'])
+        for private in ['PRIVATE_FIELD','PRIVATE_VALUE','executionKey','e'*64]:
+            self.assertNotIn(private,json.dumps(hints))
+        for field in ['mentionedTools','argumentIssues','cachedInvariants']:
+            for bad in [['PRIVATE_VALUE'], hints[field]*2, True, {}, None]:
+                self.assertFalse(bridge.valid_task_response_hints(hints | {field:bad}))
+
+
+    def test_argument_hints_preserve_uncertainty_and_exact_code_boundaries(self):
+        hints = {}
+        self.sink.response_snapshot(CurrentDom(answer='INVALID_ARGUMENT. '
+            'NOT_CWD_OVERRIDE_FORBIDDEN_OTHER PRIVATE_TOOL_NAME.'), 'exact wake message',
+            diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
+        self.assertEqual(hints['knownCodes'], ['INVALID_ARGUMENT'])
+        for field in ['mentionedTools','argumentIssues','cachedInvariants']:
+            self.assertEqual(hints[field],[])
+        self.assertNotIn('retryAuthorized',hints)
+        for version in [1,2,3,4,5,6]:
+            legacy = {k:v for k,v in hints.items() if k!='refusalReport'}
+            if version<6:legacy.pop('refusalTerms')
+            if version<5:legacy.pop('identityIssues')
+            if version<4:
+                for key in ['mentionedTools','argumentIssues','cachedInvariants','trace']:legacy.pop(key)
+            legacy['schemaVersion']=version
+            if version<3:legacy.pop('unavailableSubjects')
+            if version==1:
+                legacy.pop('refusalCategories');legacy.pop('scanTruncated')
+            self.assertTrue(bridge.valid_task_response_hints(legacy))
+
+
+    def test_actual_dispatch_schema_and_admission_error_names_are_recognized_without_values(self):
+        hints={}
+        self.sink.response_snapshot(CurrentDom(answer='INVALID_ARGUMENT: WEB_TASK_ARGUMENTS_INVALID '
+            'WEB_TASK_NATIVE_ARGUMENTS_INVALID WEB_TASK_REQUEST_ID_REQUIRED '
+            'WEB_TASK_CENTRAL_MODE_REQUIRED WEB_TASK_CENTRAL_AUTH_REQUIRED PLAN_REQUIRED '
+            'PRIVATE_CONTEXT='+ 'b'*64), 'exact wake message',
+            diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+        self.assertEqual(hints['knownCodes'],['INVALID_ARGUMENT','WEB_TASK_ARGUMENTS_INVALID',
+            'WEB_TASK_NATIVE_ARGUMENTS_INVALID','WEB_TASK_REQUEST_ID_REQUIRED',
+            'WEB_TASK_CENTRAL_MODE_REQUIRED','WEB_TASK_CENTRAL_AUTH_REQUIRED','PLAN_REQUIRED'])
+        self.assertTrue(bridge.valid_task_response_hints(hints))
+        self.assertNotIn('PRIVATE_CONTEXT',json.dumps(hints));self.assertNotIn('b'*64,json.dumps(hints))
+
+
+    def test_trace_metadata_is_task_bound_passive_and_exports_no_labels_or_panels(self):
+        for options, expected in [
+            ([{'expanded':False,'linked':True}],(1,0,1,0,1,0)),
+            ([{'expanded':True,'linked':True}],(1,1,0,0,1,1)),
+            ([{}],(1,0,0,1,0,0)),
+            ([{'summary':True,'expanded':False}],(1,0,1,0,1,0)),
+            ([{'summary':True,'expanded':True}],(1,1,0,0,1,1)),
+            ([{'placement':'user'},{'placement':'code'},{'label':'PRIVATE_UNKNOWN_LABEL'}],(0,0,0,0,0,0)),
+        ]:
+            with self.subTest(options=options):
+                hints={}
+                cdp=CurrentDom(traceControls=options,traceClicks=True)
+                self.sink.response_snapshot(cdp,'exact wake message',diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+                trace=hints['trace']
+                self.assertTrue(bridge.valid_task_response_hints(hints))
+                self.assertEqual(tuple(trace[k] for k in bridge.TASK_TRACE_COUNTS),expected)
+                self.assertEqual(cdp.mutations,0)
+                for private in ['PRIVATE_TRACE_PANEL','PRIVATE_TRACE_ARGUMENTS','PRIVATE_UNKNOWN_LABEL','Worked for']:
+                    self.assertNotIn(private,json.dumps(hints))
+                for field, bad in [('knownControls',True),('knownControls',65),('knownControls',-1),
+                        ('knownControls',2),('scope','OTHER_EXCHANGE'),('rawText','PRIVATE_CONTEXT')]:
+                    self.assertFalse(bridge.valid_task_trace_metadata(trace | {field:bad}))
+
+
+    def test_trace_metadata_cannot_escape_foreign_or_duplicate_exchange(self):
+        for options in [{'duplicateUser':True},{'userText':'another request'}]:
+            hints={'trace':'PRIVATE_STALE_TRACE'}
+            with self.assertRaises(bridge.PostSubmitUnknown):
+                self.sink.response_snapshot(CurrentDom(traceControls=[{'expanded':True,'linked':True}],**options),
+                    'exact wake message',diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+            self.assertEqual(hints,{})
+
+
+    def test_identity_refusal_and_exact_code_boundaries_are_closed(self):
+        hints = {}
+        self.sink.response_snapshot(CurrentDom(answer='Dispatch blocked: private-context SHA-256 mismatch. '
+            'NOT_WEB_TASK_CACHED_ARGUMENTS_INVALID_OTHER PRIVATE_UNKNOWN_CODE'), 'exact wake message',
+            require_usable_body=True, diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
+        self.assertEqual(hints['knownCodes'], [])
+        self.assertEqual(hints['refusalCategories'], ['IDENTITY_MISMATCH', 'DISPATCH_REJECTED'])
+        for replacement in (['PRIVATE_UNKNOWN_CODE'], ['IDENTITY_MISMATCH', 'IDENTITY_MISMATCH'], 'IDENTITY_MISMATCH'):
+            self.assertFalse(bridge.valid_task_response_hints(hints | {'refusalCategories':replacement}))
+
+
+    def test_rejection_in_later_answer_block_is_not_silently_discarded(self):
+        hints = {}
+        self.sink.response_snapshot(CurrentDom(answer='native.codex.dispatch returned INVALID_ARGUMENT.',
+            additionalAnswerBodies=['McpServerError: WEB_TASK_CACHED_ARGUMENTS_INVALID.', 'PRIVATE_KEY_MARKER']),
+            'exact wake message', require_usable_body=True, diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
+        self.assertEqual(hints['knownCodes'], ['WEB_TASK_CACHED_ARGUMENTS_INVALID','INVALID_ARGUMENT'])
+        self.assertEqual(hints['refusalCategories'], ['DISPATCH_REJECTED'])
+        self.assertNotIn('PRIVATE_KEY_MARKER', json.dumps(hints))
+
+
+    def test_button_shape_classifies_structure_without_exporting_attributes_or_qualifying_copy(self):
+        diagnostic = {}
+        self.sink.response_snapshot(CurrentDom(assistantCopyLabel='PRIVATE_LABEL',
+            diagnosticActionAttributes={'title':'Copy response','data-state':'closed',
+                'data-tooltip-content':'PRIVATE_TOOLTIP','data-testid':'PRIVATE_ID'}),
+            'exact wake message',require_usable_body=True,diagnostic=diagnostic)
+        shape = diagnostic['controls']['buttonShape']
+        self.assertTrue(bridge.valid_response_button_shape(shape))
+        shared = [row for row in shape['buttons'] if row['location']=='SHARED']
+        self.assertEqual(len(shared),1)
+        self.assertEqual(shared[0]['aria'],'OTHER')
+        self.assertEqual(shared[0]['title'],'COPY_RESPONSE')
+        self.assertEqual(shared[0]['tooltip'],'OTHER')
+        self.assertEqual(shared[0]['testId'],'OTHER')
+        self.assertEqual(shared[0]['dataState'],'CLOSED')
+        self.assertEqual(shared[0]['toolbar'],'ACTION')
+        self.assertFalse(diagnostic['controls']['completionActionFound'])
+        self.assertNotIn('PRIVATE_',json.dumps(diagnostic))
+        self.assertTrue(any(row['location']=='USER' for row in shape['buttons']))
+        self.assertTrue(any(row['location']=='BODY' for row in shape['buttons']))
+        self.sink.response_snapshot(CurrentDom(diagnosticExtraButtons=100,
+            diagnosticButtonLabel='PRIVATE_EXTRA'), 'exact wake message',
+            require_usable_body=True,diagnostic=diagnostic)
+        shape = diagnostic['controls']['buttonShape']
+        self.assertTrue(shape['countOverflow'])
+        self.assertEqual(len(shape['buttons']),8)
+        self.assertNotIn('PRIVATE_',json.dumps(shape))
+
+
+    def test_button_shape_schema_refuses_arbitrary_text_and_accepts_legacy_controls(self):
+        diagnostic = {}
+        self.sink.response_snapshot(CurrentDom(), 'exact wake message',
+            require_usable_body=True,diagnostic=diagnostic)
+        controls = diagnostic['controls']
+        legacy = {key:value for key,value in controls.items() if key!='buttonShape'}
+        self.assertTrue(bridge.valid_response_control_diagnostics(legacy))
+        shape = controls['buttonShape']
+        for extra in [{'rawText':'PRIVATE_DRAFT'},{'schemaVersion':True},
+                      {'buttons':shape['buttons']*8},{'countOverflow':True}]:
+            self.assertFalse(bridge.valid_response_button_shape(shape | extra))
+        for field in shape['buttons'][0]:
+            for bad in ['PRIVATE_TOKEN',None,{},[]]:
+                rows=[shape['buttons'][0] | {field:bad}]
+                self.assertFalse(bridge.valid_response_button_shape(shape | {'buttons':rows}))
+
+
+    def test_button_shape_redacts_object_prototype_names_as_unknown_labels(self):
+        for label in ['constructor','__proto__','toString']:
+            diagnostic = {}
+            self.sink.response_snapshot(CurrentDom(assistantCopyLabel=label,
+                diagnosticActionAttributes={'title':label,'data-tooltip-content':label}),
+                'exact wake message',require_usable_body=True,diagnostic=diagnostic)
+            shape = diagnostic['controls']['buttonShape']
+            self.assertTrue(bridge.valid_response_button_shape(shape))
+            row = next(row for row in shape['buttons'] if row['location']=='SHARED')
+            for key in ['aria','title','tooltip']:
+                self.assertEqual(row[key],'OTHER')
+            self.assertFalse(diagnostic['controls']['completionActionFound'])
+
+
+    def test_unmounted_current_error_card_is_diagnosed_without_any_mutation(self):
+        cdp = CurrentDom(userOnly=True, unmountedLoadError=True,
+                         observationEditor=True, traceClicks=True)
+        self.assertEqual(self.sink.trusted_turn_anchor_state(cdp, 'exact wake message'), (1, 0))
+        with self.assertRaisesRegex(bridge.Attention, '^RESPONSE_LOAD_ERROR$'):
+            self.sink.observe_cooperative_response(cdp, 'exact wake message', bridge.digest('exact wake message'))
+        self.assertEqual(cdp.mutations, 0)
+
+
+    def test_unmounted_error_detection_excludes_quotes_tools_history_and_ambiguity(self):
+        for options in [
+            *[{'unmountedLoadError': True, 'unmountedPlacement': where}
+              for where in ['user', 'code', 'tool', 'unit', 'quote', 'control', 'before']],
+            {'unmountedLoadError': True, 'unmountedErrorCount': 2},
+            {'historicalLoadError': True}, {},
+        ]:
+            with self.subTest(options=options):
+                cdp = CurrentDom(userOnly=True, observationEditor=True, traceClicks=True, **options)
+                self.assertEqual(self.sink.observe_cooperative_response(
+                    cdp, 'exact wake message', bridge.digest('exact wake message')), 'RESPONSE_PENDING')
+                self.assertEqual(self.sink.response_observation_reason, 'ASSISTANT_NOT_MOUNTED')
+                self.assertEqual(cdp.mutations, 0)
+
+
+    def test_unmounted_error_does_not_override_active_generation_or_duplicate_user(self):
+        cdp = CurrentDom(userOnly=True, unmountedLoadError=True,
+                         observationEditor=True, observationStop=True)
+        self.assertEqual(self.sink.observe_cooperative_response(
+            cdp, 'exact wake message', bridge.digest('exact wake message')), 'RESPONSE_PENDING')
+        self.assertEqual(self.sink.response_observation_reason, 'GENERATION_ACTIVE')
+        with self.assertRaisesRegex(bridge.Attention, '^RESPONSE_EXPECTED_USER_DUPLICATED$'):
+            self.sink.observe_cooperative_response(
+                CurrentDom(userOnly=True, unmountedLoadError=True, duplicateUser=True, observationEditor=True),
+                'exact wake message', bridge.digest('exact wake message'))
+
+
+    def test_completion_uses_actual_document_even_if_driver_metadata_is_stale(self):
+        cdp = CurrentDom(metadataLocation='https://chatgpt.com/', observationEditor=True)
+        self.assertEqual(self.sink.observe_cooperative_response(
+            cdp, 'exact wake message', bridge.digest('exact wake message')), 'RESPONSE_COMPLETE')
+
+
+    def test_completion_refuses_foreign_document_despite_expected_driver_metadata(self):
+        cdp = CurrentDom(location='https://chatgpt.com/c/foreign', metadataLocation=self.sink.url,
+                         observationEditor=True, traceClicks=True)
+        with self.assertRaisesRegex(bridge.Attention, '^RESPONSE_TARGET_DRIFT$'):
+            self.sink.observe_cooperative_response(cdp, 'exact wake message', bridge.digest('exact wake message'))
+        self.assertEqual(getattr(cdp, 'mutations', 0), 0)
+
+
+    def test_completion_rechecks_document_after_reading_exact_response(self):
+        cdp = CurrentDom(observationEditor=True)
+        original = self.sink.response_snapshot
+        def drift(*args, **kwargs):
+            result = original(*args, **kwargs)
+            cdp.options['location'] = 'https://chatgpt.com/c/foreign'
+            return result
+        with patch.object(self.sink, 'response_snapshot', side_effect=drift), \
+                self.assertRaisesRegex(bridge.Attention, '^RESPONSE_TARGET_DRIFT$'):
+            self.sink.observe_cooperative_response(cdp, 'exact wake message', bridge.digest('exact wake message'))
+
+
+    def test_completion_requires_readable_document_route_without_private_failure_text(self):
+        for value in [None, {}, 17]:
+            class InvalidDocument:
+                def evaluate(self, _): return value
+                def get_current_url(self): raise AssertionError('driver metadata is not document authority')
+            with self.assertRaisesRegex(bridge.Attention, '^RESPONSE_TARGET_DRIFT$'):
+                self.sink.require_response_document(InvalidDocument())
+        class Unavailable:
+            def evaluate(self, _): raise RuntimeError('PRIVATE_BROWSER_DETAILS')
+        with self.assertRaisesRegex(bridge.Attention, '^RESPONSE_TARGET_QUERY_FAILED$'):
+            self.sink.require_response_document(Unavailable())
 
 
 if __name__ == "__main__":

@@ -333,6 +333,28 @@ impl WorkLedger {
             .find(|record| record.request_id == request_id))
     }
 
+    /// Read-only attribution from a durable delivery's source event. This never
+    /// creates a ledger namespace or borrows another project's task record.
+    pub(crate) fn record_for_event(
+        workspace: &Path,
+        project_id: &str,
+        event_id: &str,
+    ) -> Result<Option<WorkRecord>, String> {
+        let ledger = Self::at(workspace, project_id)?;
+        let parent = ledger.path.parent().ok_or("WEB_WORK_LEDGER_UNSAFE")?;
+        plain(parent.parent().ok_or("WEB_WORK_LEDGER_UNSAFE")?, true)?;
+        match fs::symlink_metadata(parent) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => return Err("WEB_WORK_LEDGER_UNAVAILABLE".into()),
+            Ok(_) => plain(parent, true)?,
+        }
+        Ok(ledger
+            .load()?
+            .records
+            .into_iter()
+            .find(|record| record.event_id == event_id))
+    }
+
     /// The assignment archive is persisted and read back before this link.
     /// An unlinked archive never grants permission to start or resume work.
     pub(crate) fn associate(
@@ -572,6 +594,56 @@ mod tests {
             WorkLedger::status(&workspace, "alpha")["active"]["requestId"],
             "one"
         );
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn response_attribution_is_read_only_and_cannot_borrow_another_projects_task() {
+        let (workspace, alpha, beta) = fixture();
+        prepare(&alpha, "one", "body").unwrap();
+        prepare(&beta, "one", "sibling").unwrap();
+        let original = alpha.record("one").unwrap().unwrap();
+        let before = fs::read(&alpha.path).unwrap();
+        let sibling = fs::read(&beta.path).unwrap();
+        assert_eq!(
+            WorkLedger::record_for_event(&workspace, "alpha", &original.event_id).unwrap(),
+            Some(original.clone())
+        );
+        assert!(
+            WorkLedger::record_for_event(&workspace, "beta", &original.event_id)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            WorkLedger::record_for_event(&workspace, "unobserved", &original.event_id)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            !alpha
+                .path
+                .parent()
+                .unwrap()
+                .join("unobserved.json")
+                .exists()
+        );
+        assert_eq!(fs::read(&alpha.path).unwrap(), before);
+        assert_eq!(fs::read(&beta.path).unwrap(), sibling);
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn response_attribution_does_not_create_missing_ledger_directory() {
+        let workspace = std::env::temp_dir().join(format!("web-work-read-only-{}", Uuid::new_v4()));
+        fs::create_dir_all(workspace.join(".catdesk")).unwrap();
+        assert!(
+            WorkLedger::record_for_event(&workspace, "alpha", "event-one")
+                .unwrap()
+                .is_none()
+        );
+        assert!(!workspace.join(".catdesk/web-work").exists());
+        assert!(WorkLedger::record_for_event(&workspace, "../alpha", "event-one").is_err());
+        assert!(!workspace.join(".catdesk/web-work").exists());
         fs::remove_dir_all(workspace).unwrap();
     }
 

@@ -2024,7 +2024,7 @@ struct LoginPreflight {
     _browser: File,
 }
 
-fn browser_child_path(path: &Path, directory: bool) -> Result<PathBuf> {
+pub(crate) fn browser_child_path(path: &Path, directory: bool) -> Result<PathBuf> {
     let compatible = runtime::browser_process_root(path)?;
     // Normal spelling must still resolve to the same approved object. A
     // packaged-process root-view difference is a refusal, never a rebind.

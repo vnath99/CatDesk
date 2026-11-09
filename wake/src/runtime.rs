@@ -16,6 +16,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[path = "runtime_readiness.rs"]
+mod readiness;
+pub use readiness::{inspect_historical_task_response, inspect_sent_task_response_diagnostics};
 #[path = "runtime_reobserve.rs"]
 mod reobserve;
 #[path = "runtime_response.rs"]
@@ -25,7 +28,11 @@ pub use reobserve::reobserve_sent_response_guarded;
 mod review_reconcile;
 #[path = "runtime_scoped_review.rs"]
 mod scoped_review;
-pub(crate) use response::validate_observation as validate_response_observation;
+pub(crate) use response::{
+    canonical_observation as canonical_response_observation,
+    canonical_task_diagnostics as canonical_task_response_diagnostics,
+    validate_observation as validate_response_observation,
+};
 pub use review_reconcile::{diagnose_scoped_review_guarded, reconcile_scoped_review_guarded};
 pub use scoped_review::{
     run_scoped_review, run_scoped_rollover_continuation, run_scoped_rollover_handoff,
@@ -2052,7 +2059,7 @@ pub fn bootstrap_message_digest(
     ))
 }
 
-fn installed_bootstrap_directory(store: &Store) -> Result<PathBuf> {
+fn installed_browser_directory(store: &Store) -> Result<PathBuf> {
     let pointer: serde_json::Value = read(&store.root().join("current.json"))?;
     require_plain_install_directory(&store.root().join("versions"))?;
     let directory = store.root().join("versions").join(install_id(&pointer)?);
@@ -2066,11 +2073,18 @@ fn installed_bootstrap_directory(store: &Store) -> Result<PathBuf> {
     let (adapter, bridge) = verify_installed_browser_artifacts(store.root(), &directory)?;
     require_plain_install_file(&adapter)?;
     require_plain_install_file(&bridge)?;
+    Ok(directory)
+}
+
+fn installed_bootstrap_directory(store: &Store) -> Result<PathBuf> {
+    let directory = installed_browser_directory(store)?;
     // The pointer and manifest hashes above authorize these installed bytes.
     // Old reviewed packages have no bootstrap protocol and must be rejected
     // before a browser launches or a handoff draft is typed.
-    let adapter_bytes = std::fs::read(adapter).map_err(|_| "BROWSER_ADAPTER_UNAVAILABLE")?;
-    let bridge_bytes = std::fs::read(bridge).map_err(|_| "BROWSER_PRIMITIVES_UNAVAILABLE")?;
+    let adapter_bytes =
+        std::fs::read(directory.join("adapter.py")).map_err(|_| "BROWSER_ADAPTER_UNAVAILABLE")?;
+    let bridge_bytes = std::fs::read(directory.join("wake_bridge.py"))
+        .map_err(|_| "BROWSER_PRIMITIVES_UNAVAILABLE")?;
     if !adapter_bytes
         .windows(b"def bootstrap_attempt(".len())
         .any(|part| part == b"def bootstrap_attempt(")
@@ -4021,7 +4035,7 @@ mod bootstrap_runtime_tests {
             expected
         );
         assert_eq!(
-            compose_bootstrap_message("project-one", "rollover-1", &source(), &"é".repeat(9000))
+            compose_bootstrap_message("project-one", "rollover-1", &source(), &"Ã©".repeat(9000))
                 .unwrap_err(),
             "BOOTSTRAP_MESSAGE_TOO_LONG"
         );

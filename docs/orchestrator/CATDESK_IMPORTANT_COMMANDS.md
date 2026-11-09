@@ -5822,3 +5822,40 @@ reflect altered or incomplete UI text; it does not establish its cause. Matching
 only a header cannot authorize continuation. Target/query failures retain their
 existing fixed refusal codes. Package/live evidence is recorded separately from
 source fixtures in the parent dated audit.
+
+
+### 2026-11-09 — focused main response-reader release qualification
+
+The response-reader release is being qualified as a focused patch over the
+acknowledged `313f6a31` source. It preserves the existing development branch and
+installed artifacts. MAIN promotion and Wake package selection remain separate.
+The accepted older source alone still delegates full snapshots to the selected
+adapter, so building it alone would not resolve the missing installed reader.
+
+The focused MAIN path adds these receipt-bound, read-only commands:
+
+```text
+CatDeskBinagotchy.exe operator web review inspect-response --project-id PROJECT --event-id ORIGINAL_SENT_EVENT
+CatDeskBinagotchy.exe operator web review inspect-history-response --project-id PROJECT --event-id ORIGINAL_SENT_EVENT
+```
+
+Run in the project's existing approved control workspace. Admission revalidates
+the registered project, exact URL/generation, original delivery/message receipt,
+task assignment and browser ownership before and after observation. Historical
+observation also requires the original completed response witness. Output contains
+closed error/refusal categories and bounded redactions; it is not native execution,
+source-review, no-effect or retry authority. No new message is submitted by either
+command. Existing automatic completion observation waits for idle generation and
+two stable completion samples within its deadline; ambiguous cases stay closed.
+
+The release also preserves fixed cached-envelope failure categories in JSON-RPC
+error data and existing traffic summaries. This distinguishes future pre-execution
+validation refusals without exporting argument values. The original frozen
+refusals cannot be assigned a new invariant retroactively and must not be retried.
+
+Qualification status:553 targeted tests and strict root/Wake Clippy pass; independent current patch review,
+committed canonical snapshot/ACK, protected reviewed-build producer, guarded MAIN
+release-pair promotion and installed end-to-end acceptance are still required.
+Use the existing lifecycle and rollback procedures. Neither a debug executable nor
+a source-test result grants release authority. The Wake installation broker stays
+separate; no alternative installer, profile, tunnel or scheduler is introduced.

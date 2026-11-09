@@ -51,6 +51,151 @@ def load_observation_sink(path, expected_sha256, profile, url):
     return sink
 
 
+def load_delivery_message(path, expected_sha256, url, *, receipt_only=False, response_only=False, sent_diagnostics=False, source_review_diagnostics=False):
+    """Read only the exact native-selected durable delivery, never caller text."""
+    if (path is None or path.parent.name != "deliveries" or not path.is_file()
+            or path.is_symlink() or getattr(path, "is_junction", lambda: False)()
+            or path.parent.is_symlink() or getattr(path.parent, "is_junction", lambda: False)()):
+        raise ValueError("delivery unavailable")
+    with path.open("rb") as stream:
+        content = stream.read(65537)
+    if len(content) > 65536 or hashlib.sha256(content).hexdigest() != expected_sha256:
+        raise ValueError("delivery identity changed")
+    delivery = json.loads(content)
+    event, target = delivery["event"], delivery["target"]
+    message = event["message"]
+    ordinary = event["auditReferences"] == [] and re.fullmatch(r"web-work-[0-9a-f]{64}", event["eventId"])
+    continuation = False
+    if (not response_only or sent_diagnostics) and re.fullmatch(r"wake-intent-[0-9a-f]{64}", event["eventId"]):
+        refs = event["auditReferences"]
+        fields = dict(item.removeprefix("catdesk.wake.v1:").split(":", 1) for item in refs
+                      if isinstance(item, str) and item.startswith("catdesk.wake.v1:"))
+        continuation = (len(refs) == len(fields) == 5
+                        and fields.get("purpose") == "NEW_TASK"
+                        and re.fullmatch(r"web-work-[0-9a-f]{64}", fields.get("source-event", ""))
+                        and re.fullmatch(r"initial-context-[0-9a-f]{64}", fields.get("source-turn", ""))
+                        and fields.get("priority", "").isdigit() and 0 <= int(fields["priority"]) <= 255
+                        and fields.get("expires-utc", "").isdigit() and int(fields["expires-utc"]) > 0)
+    refs = event["auditReferences"]
+    source_review = (source_review_diagnostics is True and sent_diagnostics is True
+        and response_only is True and receipt_only is False
+        and event["eventType"] == "source_review"
+        and re.fullmatch(r"web-work-[0-9a-f]{64}", event["eventId"])
+        and isinstance(refs, list) and len(refs) == 1 and isinstance(refs[0], str)
+        and re.fullmatch(r"catdesk-review-v1:[A-Za-z0-9_-]{1,128}", refs[0]))
+    admitted_type = (event["eventType"] == "engineering_attention" and (ordinary or continuation)) or source_review
+    if (delivery["phase"] not in ({"SENT"} if response_only else {"CLAIMED", "SUBMITTING", "ATTENTION"})
+            or (not response_only and delivery.get("receipt") is not None)
+            or not admitted_type or (source_review_diagnostics and not source_review)
+            or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", event["projectId"])
+            or path.name != event["eventId"] + ".json"
+            or type(target["generation"]) is not int or target["generation"] <= 0
+            or event["targetGeneration"] != target["generation"]
+            or target["url"] != url or target["digest"] != hashlib.sha256(url.encode()).hexdigest()
+            or not isinstance(message, str) or not 0 < len(message.encode()) <= 2048
+            or delivery["messageDigest"] != hashlib.sha256(message.encode()).hexdigest()):
+        raise ValueError("delivery scope changed")
+    if response_only:
+        receipt = delivery.get("receipt")
+        if (not isinstance(receipt, dict) or receipt.get("schemaVersion") != 1
+                or receipt.get("eventId") != event["eventId"] or receipt.get("targetGeneration") != target["generation"]
+                or receipt.get("targetDigest") != target["digest"] or receipt.get("messageDigest") != delivery["messageDigest"]
+                or receipt.get("evidence") != "EXACT_USER_MESSAGE_APPENDED" or type(receipt.get("sentUtc")) is not int or receipt["sentUtc"] <= 0):
+            raise ValueError("sent receipt required")
+        return delivery
+    if receipt_only:
+        if delivery["phase"] != "SUBMITTING":
+            raise ValueError("crossed submission required")
+        return delivery
+    return message
+
+
+def report_sent_response(sink, cdp, delivery, report=print, sleep=time.sleep, *, task_diagnostics=False,
+                         historical=False, await_deadline=None, monotonic=time.monotonic):
+    """Observe one receipt; only its retained owner may await response settling.
+
+    The optional deadline is the caller's existing observation deadline, never a
+    renewed allowance. Every sample repeats the exact document/USER and failure
+    guards. Waiting neither reloads the page nor retries/submits anything.
+    """
+    event, target = delivery["event"], delivery["target"]
+    try:
+        def sample():
+            scope_args={'historical':True} if historical else {}
+            stage = sink.observe_cooperative_response(cdp, event["message"], delivery["messageDigest"],**scope_args)
+            if stage not in {"RESPONSE_COMPLETE", "RESPONSE_PENDING"}:
+                raise ValueError("unsupported response state")
+            value = dict(stage=stage, eventId=event["eventId"], targetGeneration=target["generation"],
+                         targetDigest=target["digest"], messageDigest=delivery["messageDigest"])
+            reason = getattr(sink, "response_observation_reason", None)
+            controls = getattr(sink, "response_observation_controls", None)
+            if reason is not None:
+                value["diagnosticReason"] = reason
+            if controls is not None:
+                value["completionControls"] = controls
+            extra = None
+            if task_diagnostics and stage == "RESPONSE_COMPLETE":
+                diagnostic, tools, hints = {}, {}, {}
+                state = sink.response_snapshot(cdp, event["message"], require_usable_body=True,
+                    diagnostic=diagnostic, tool_diagnostic=tools, execution_diagnostic=hints,**scope_args)
+                sink.require_response_document(cdp)
+                if state != (0, 0, True, True) or diagnostic.get("reason") != "COMPLETE":
+                    raise ValueError("task response changed")
+                extra = dict(toolDiagnostics=tools, assistantHints=hints)
+            return value, extra
+        if await_deadline is not None and historical:
+            raise ValueError("historical observation cannot await generation")
+        first = sample()
+        if await_deadline is None:
+            # Passive and historical diagnostics retain their single pair.
+            sleep(.25)
+            current = sample()
+            if first != current:
+                report("PROBE:RESPONSE_STATE:UNSTABLE", flush=True)
+                return False
+        else:
+            if monotonic() > await_deadline:
+                report("PROBE:RESPONSE_STATE:UNSTABLE", flush=True)
+                return False
+            while True:
+                remaining = await_deadline - monotonic()
+                if remaining <= 0:
+                    current = None
+                else:
+                    # Await mounting/body/control readiness as well as Stop.
+                    # Successful changes reset the pair; errors never retry.
+                    sleep(min(.25 if first[0]["stage"] == "RESPONSE_COMPLETE" else 1.0, remaining))
+                    current = None if monotonic() >= await_deadline else sample()
+                if current is None:
+                    if first[0]["stage"] == "RESPONSE_PENDING":
+                        # Only the latest bounded sample can describe pending;
+                        # it cannot complete, retry or renew the original timer.
+                        current = first
+                        break
+                    report("PROBE:RESPONSE_STATE:UNSTABLE", flush=True)
+                    return False
+                if monotonic() > await_deadline:
+                    report("PROBE:RESPONSE_STATE:UNSTABLE", flush=True)
+                    return False
+                if current[0]["stage"] == "RESPONSE_COMPLETE" and first == current:
+                    break
+                first = current
+        value, extra = current
+        prefix="PROBE:HISTORY_RESPONSE:" if historical else "PROBE:RESPONSE:"
+        report(prefix + json.dumps(value, separators=(",", ":"), sort_keys=True), flush=True)
+        if extra is not None:
+            report("PROBE:TASK:" + json.dumps(extra, separators=(",", ":"), sort_keys=True), flush=True)
+        return value['stage']=='RESPONSE_COMPLETE'
+    except Exception as error:
+        reason = str(error)
+        allowed = {"RESPONSE_LOAD_ERROR", "RESPONSE_NETWORK_ERROR", "LOGIN_OR_PROFILE_REQUIRED",
+                   "RESPONSE_EXPECTED_USER_NOT_FOUND", "RESPONSE_USER_REPRESENTATION_MISMATCH", "RESPONSE_SEQUENCE_QUERY_FAILED",
+                   "RESPONSE_EXPECTED_USER_DUPLICATED", "RESPONSE_SEQUENCE_DRIFT", "RESPONSE_STATE_UNPROVEN",
+                   "RESPONSE_TIMEOUT_RETRY_REQUIRED", "RESPONSE_TARGET_DRIFT", "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"}
+        report("PROBE:RESPONSE_STATE:" + (reason if reason in allowed else "UNPROVEN"), flush=True)
+        return False
+
+
 def surface_state(value):
     route = value["route"]
     if route != "EXACT":
@@ -298,6 +443,13 @@ def main():
     parser.add_argument("--primitives", type=Path)
     parser.add_argument("--primitives-sha256")
     parser.add_argument("--read-only", action="store_true")
+    parser.add_argument("--delivery-file", type=Path)
+    parser.add_argument("--delivery-sha256")
+    parser.add_argument("--response-only", action="store_true")
+    parser.add_argument("--historical-response", action="store_true")
+    parser.add_argument("--task-diagnostics", action="store_true")
+    parser.add_argument("--source-review-diagnostics", action="store_true")
+    parser.add_argument("--await-existing-response", action="store_true")
     args = parser.parse_args()
     if args.await_start and sys.stdin.readline() != "START\n":
         return 2
@@ -316,6 +468,27 @@ def main():
         except Exception:
             print("PROBE:FINAL:OBSERVATION_UNAVAILABLE", flush=True)
             return 0
+    response_delivery = None
+    scoped_response = (args.response_only and args.read_only and args.profile is not None
+                       and args.delivery_file is not None and args.delivery_sha256 is not None)
+    if ((args.task_diagnostics and not scoped_response)
+            or (args.response_only and not scoped_response)
+            or (args.historical_response and not (scoped_response and args.task_diagnostics))
+            or (args.source_review_diagnostics and not (scoped_response and args.task_diagnostics))
+            or (args.source_review_diagnostics and args.historical_response)
+            or (args.await_existing_response and (not (scoped_response and args.task_diagnostics)
+                or args.historical_response or args.source_review_diagnostics))):
+        return 2
+    if args.delivery_file is not None or args.delivery_sha256 is not None:
+        try:
+            if sink is None or not scoped_response:
+                raise ValueError("read-only response primitives required")
+            response_delivery = load_delivery_message(args.delivery_file, args.delivery_sha256, url,
+                response_only=True, sent_diagnostics=args.task_diagnostics,
+                source_review_diagnostics=args.source_review_diagnostics)
+        except Exception:
+            print("PROBE:FINAL:OBSERVATION_UNAVAILABLE", flush=True)
+            return 0
     def observation(cdp):
         if sink is None:
             return classify(cdp, url), None
@@ -324,12 +497,16 @@ def main():
             return surface_state(value), value
         except Exception:
             return "OBSERVATION_UNAVAILABLE", None
+    print("PROBE:PHASE:IMPORT_BROWSER", flush=True)
     from seleniumbase import SB
     def report_tab(facts):
         print("PROBE:TAB:" + json.dumps(facts, separators=(",", ":"), sort_keys=True), flush=True)
+    print("PROBE:PHASE:BROWSER_START", flush=True)
     with SB(uc=True, user_data_dir=str(profile)) as sb:
+        print("PROBE:PHASE:CDP_NAVIGATION", flush=True)
         sb.activate_cdp_mode(url)
         cdp = sb.cdp
+        print("PROBE:PHASE:OBSERVING", flush=True)
         if args.profile is not None:
             print("PROBE:" + select_registered_target_tab(cdp, url, report_tab), flush=True)
         last = None
@@ -358,6 +535,9 @@ def main():
             if surface is not None and surface != last_surface:
                 print("PROBE:SURFACE:" + json.dumps(surface, separators=(",", ":"), sort_keys=True), flush=True)
                 last_surface = surface
+            if (args.await_existing_response and response_delivery is not None and surface is not None
+                    and surface.get("route") == "EXACT" and surface.get("document") == "COMPLETE"):
+                break
             if not args.read_only and args.profile is not None and state == "HOME" and not recovery_attempted and time.monotonic() >= recover_after:
                 recovery_attempted = True
                 print("PROBE:HOME_CHECK:" + recover_empty_home(cdp, url), flush=True)
@@ -367,6 +547,14 @@ def main():
             print("PROBE:SURFACE:" + json.dumps(surface, separators=(",", ":"), sort_keys=True), flush=True)
         if final == "CHROME_ERROR" and last != final:
             print("PROBE:NETWORK:" + chrome_error_detail(cdp), flush=True)
-        print("PROBE:FINAL:" + final, flush=True)
+        if response_delivery is not None:
+            if surface is not None and surface.get("route") == "EXACT" and surface.get("document") == "COMPLETE":
+                report_sent_response(sink, cdp, response_delivery, task_diagnostics=args.task_diagnostics,
+                    historical=args.historical_response, await_deadline=deadline if args.await_existing_response else None,
+                    sleep=time.sleep, monotonic=time.monotonic)
+            else:
+                print("PROBE:RESPONSE_STATE:UNPROVEN", flush=True)
+    print("PROBE:PHASE:BROWSER_CLOSED", flush=True)
+    print("PROBE:FINAL:" + final, flush=True)
     return 0
 if __name__ == "__main__": raise SystemExit(main())

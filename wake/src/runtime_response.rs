@@ -41,25 +41,95 @@ fn valid_completion_controls(value: &Value) -> bool {
         "completionActionFound",
         "assistantInsideSemanticUnit",
     ];
-    value
-        .as_object()
-        .is_some_and(|map| map.len() == COUNTS.len() + FLAGS.len())
-        && COUNTS.iter().all(|key| {
-            value
-                .get(key)
-                .and_then(Value::as_u64)
-                .is_some_and(|n| n <= 64)
+    let button_shape = value.get("buttonShape");
+    let body_coverage = value.get("bodyCoverage");
+    value.as_object().is_some_and(|map| {
+        map.len()
+            == COUNTS.len()
+                + FLAGS.len()
+                + usize::from(button_shape.is_some())
+                + usize::from(body_coverage.is_some())
+    }) && COUNTS.iter().all(|key| {
+        value
+            .get(key)
+            .and_then(Value::as_u64)
+            .is_some_and(|n| n <= 64)
+    }) && FLAGS
+        .iter()
+        .all(|key| value.get(key).and_then(Value::as_bool).is_some())
+        && button_shape.is_none_or(valid_button_shape)
+        && body_coverage.is_none_or(|coverage| {
+            coverage.as_object().is_some_and(|map| map.len() == 3)
+                && coverage["selectedBlocks"].as_u64().is_some_and(|n| n <= 64)
+                && matches!(
+                    coverage["canonicalBody"].as_str(),
+                    Some("QUALIFIED" | "UNPROVEN")
+                )
+                && (coverage["canonicalBody"] != "QUALIFIED"
+                    || coverage["selectedBlocks"].as_u64().is_some_and(|n| n > 0))
+                && coverage["unselectedTextPresent"].as_bool().is_some()
         })
-        && FLAGS
-            .iter()
-            .all(|key| value.get(key).and_then(Value::as_bool).is_some())
 }
 
-pub(crate) fn validate_observation(delivery: &Delivery, value: &Value) -> Result<bool> {
-    let receipt = delivery
-        .receipt
-        .as_ref()
-        .ok_or("RESPONSE_PROBE_RECEIPT_REQUIRED")?;
+/// Fixed vocabulary and capped structural metadata only. These observations
+/// must never qualify an assistant completion action or grant an interaction.
+fn valid_button_shape(value: &Value) -> bool {
+    const LABELS: &[&str] = &[
+        "ABSENT",
+        "OTHER",
+        "COPY",
+        "COPY_MESSAGE",
+        "COPY_RESPONSE",
+        "GOOD_RESPONSE",
+        "BAD_RESPONSE",
+        "READ_ALOUD",
+        "MORE",
+        "RETRY",
+        "SHARE",
+        "REGENERATE",
+    ];
+    let Some(map) = value.as_object() else {
+        return false;
+    };
+    let Some(buttons) = value.get("buttons").and_then(Value::as_array) else {
+        return false;
+    };
+    let Some(overflow) = value.get("countOverflow").and_then(Value::as_bool) else {
+        return false;
+    };
+    let member = |row: &Value, key: &str, allowed: &[&str]| {
+        row.get(key)
+            .and_then(Value::as_str)
+            .is_some_and(|text| allowed.contains(&text))
+    };
+    map.len() == 3
+        && value.get("schemaVersion").and_then(Value::as_u64) == Some(1)
+        && buttons.len() <= 8
+        && (!overflow || buttons.len() == 8)
+        && buttons.iter().all(|row| {
+            row.as_object().is_some_and(|map| map.len() == 10)
+                && ["aria", "title", "tooltip"]
+                    .iter()
+                    .all(|key| member(row, key, LABELS))
+                && member(row, "testId", &["ABSENT", "OTHER", "COPY"])
+                && member(row, "dataState", &["ABSENT", "OTHER", "OPEN", "CLOSED"])
+                && member(
+                    row,
+                    "location",
+                    &["USER", "BODY", "ASSISTANT", "SHARED", "AUXILIARY", "OTHER"],
+                )
+                && member(row, "toolbar", &["ACTION", "ROLE", "NONE"])
+                && ["visible", "afterAssistant"]
+                    .iter()
+                    .all(|key| row.get(key).and_then(Value::as_bool).is_some())
+                && row
+                    .get("svgCount")
+                    .and_then(Value::as_u64)
+                    .is_some_and(|n| n <= 4)
+        })
+}
+
+fn valid_observation_metadata(value: &Value) -> bool {
     let stage = value.get("stage").and_then(Value::as_str);
     let controls_valid = value.get("completionControls").is_none_or(|controls| {
         value.get("diagnosticReason").is_some()
@@ -100,10 +170,403 @@ pub(crate) fn validate_observation(delivery: &Delivery, value: &Value) -> Result
                 }
         }
     };
+    matches!(stage, Some("RESPONSE_PENDING" | "RESPONSE_COMPLETE"))
+        && diagnostic_valid
+        && controls_valid
+}
+
+pub(crate) fn canonical_observation(value: Value) -> Option<Value> {
+    let hex = |v: &Value| {
+        v.as_str().is_some_and(|s| {
+            s.len() == 64
+                && s.bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        })
+    };
+    if !valid_observation_metadata(&value)
+        || !value["eventId"].as_str().is_some_and(|id| {
+            id.strip_prefix("web-work-")
+                .or_else(|| id.strip_prefix("wake-intent-"))
+                .is_some_and(|v| {
+                    v.len() == 64
+                        && v.bytes()
+                            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                })
+        })
+        || !value["targetGeneration"].as_u64().is_some_and(|n| n > 0)
+        || !hex(&value["targetDigest"])
+        || !hex(&value["messageDigest"])
+    {
+        return None;
+    }
+    Some(value)
+}
+
+pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
+    let tools = value.get("toolDiagnostics")?;
+    let hints = value.get("assistantHints")?;
+    let counts = [
+        "callMarkers",
+        "resultMarkers",
+        "errorMarkers",
+        "busyMarkers",
+    ];
+    let flags = [
+        "toolUnavailable",
+        "contextUnavailable",
+        "approvalRequested",
+        "nativeDispatchMentioned",
+    ];
+    let codes = [
+        "HTTP_429",
+        "WEB_WORK_ROLLOVER_PENDING",
+        "WEB_ROLLOVER_PROJECT_BUSY",
+        "WEB_TASK_GRANT_SCOPE_MISMATCH",
+        "WEB_TASK_NATIVE_NOT_GRANTED",
+        "PROJECT_TASK_CALL_ALREADY_COMPLETED",
+        "PROJECT_TASK_RECOVERY_REQUIRED",
+        "WEB_TASK_CACHED_ARGUMENTS_INVALID",
+        "INVALID_ARGUMENT",
+        "UNAUTHORIZED",
+        "WEB_TASK_REQUEST_INVALID",
+        "WEB_TASK_BINDING_CHANGED",
+        "WEB_TASK_ARGUMENTS_INVALID",
+        "WEB_TASK_NATIVE_ARGUMENTS_INVALID",
+        "WEB_TASK_REQUEST_ID_REQUIRED",
+        "WEB_TASK_CENTRAL_MODE_REQUIRED",
+        "WEB_TASK_CENTRAL_AUTH_REQUIRED",
+        "PLAN_REQUIRED",
+    ];
+    let version = hints["schemaVersion"].as_u64()?;
+    let refusals = [
+        "IDENTITY_MISMATCH",
+        "TOOL_UNAVAILABLE",
+        "CONTEXT_UNAVAILABLE",
+        "AUTHORIZATION_REQUIRED",
+        "DISPATCH_REJECTED",
+    ];
+    let valid_refusals = version == 1
+        || hints
+            .get("refusalCategories")
+            .and_then(Value::as_array)
+            .is_some_and(|selected| {
+                let canonical: Vec<Value> = refusals
+                    .iter()
+                    .filter(|kind| selected.contains(&json!(kind)))
+                    .map(|kind| json!(kind))
+                    .collect();
+                *selected == canonical
+            });
+    let subjects = [
+        "RUN_COMMAND",
+        "CENTRAL_TASK_TOOL",
+        "NATIVE_CALL",
+        "PRIVATE_CONTEXT",
+        "EXECUTION_KEY",
+        "CATDESK_APP",
+    ];
+    let valid_subjects = version < 3
+        || hints
+            .get("unavailableSubjects")
+            .and_then(Value::as_array)
+            .is_some_and(|selected| {
+                let canonical: Vec<Value> = subjects
+                    .iter()
+                    .filter(|subject| selected.contains(&json!(subject)))
+                    .map(|subject| json!(subject))
+                    .collect();
+                *selected == canonical
+            });
+    let categories: &[(&str, &[&str])] = &[
+        (
+            "mentionedTools",
+            &[
+                "RUN_COMMAND",
+                "CENTRAL_TASK_TOOL",
+                "NATIVE_DISPATCH",
+                "NATIVE_STATUS",
+            ],
+        ),
+        (
+            "argumentIssues",
+            &[
+                "JSON_SYNTAX",
+                "MISSING_REQUIRED_FIELD",
+                "UNEXPECTED_FIELD",
+                "TYPE_MISMATCH",
+                "TOOL_NAME_REJECTED",
+                "CACHED_ENVELOPE_REJECTED",
+            ],
+        ),
+        (
+            "cachedInvariants",
+            &[
+                "ARGUMENTS_NOT_OBJECT",
+                "COMMAND_NOT_STRING",
+                "PLAN_FLAG_NOT_BOOLEAN",
+                "DRY_RUN_NOT_FALSE",
+                "FULL_OUTPUT_NOT_FALSE",
+                "CWD_OVERRIDE_FORBIDDEN",
+                "TIMEOUT_OVERRIDE_FORBIDDEN",
+                "UNSUPPORTED_OUTER_FIELD",
+                "COMMAND_TOO_LARGE",
+                "RESERVED_PREFIX_INVALID",
+                "PAYLOAD_JSON_INVALID",
+                "PAYLOAD_NOT_OBJECT",
+            ],
+        ),
+    ];
+    let valid_argument_hints = version < 4
+        || categories.iter().all(|(field, allowed)| {
+            hints
+                .get(*field)
+                .and_then(Value::as_array)
+                .is_some_and(|selected| {
+                    let canonical: Vec<Value> = allowed
+                        .iter()
+                        .filter(|item| selected.contains(&json!(item)))
+                        .map(|item| json!(item))
+                        .collect();
+                    *selected == canonical
+                })
+        });
+    let identity_issues = [
+        "FULL_PRIVATE_CONTEXT_MISSING",
+        "FULL_PRIVATE_CONTEXT_MISMATCH",
+        "FULL_PRIVATE_CONTEXT_UNVERIFIED",
+        "ASSIGNMENT_MISSING",
+        "ASSIGNMENT_MISMATCH",
+        "ASSIGNMENT_UNVERIFIED",
+        "DELIVERED_USER_MESSAGE_MISSING",
+        "DELIVERED_USER_MESSAGE_MISMATCH",
+        "DELIVERED_USER_MESSAGE_UNVERIFIED",
+        "NATIVE_CALL_MISSING",
+        "NATIVE_CALL_MISMATCH",
+        "NATIVE_CALL_UNVERIFIED",
+        "EXECUTION_GRANT_MISSING",
+        "EXECUTION_GRANT_MISMATCH",
+        "EXECUTION_GRANT_UNVERIFIED",
+        "CONVERSATION_TARGET_MISSING",
+        "CONVERSATION_TARGET_MISMATCH",
+        "CONVERSATION_TARGET_UNVERIFIED",
+    ];
+    let valid_identity_hints = version < 5
+        || hints
+            .get("identityIssues")
+            .and_then(Value::as_array)
+            .is_some_and(|selected| {
+                let canonical: Vec<Value> = identity_issues
+                    .iter()
+                    .filter(|item| selected.contains(&json!(item)))
+                    .map(|item| json!(item))
+                    .collect();
+                *selected == canonical
+            });
+    // Ordered diagnostic words are a closed projection, never a body excerpt
+    // or a value. Repetitions preserve negation; unknown words stay REDACTED.
+    let refusal_terms = [
+        "REDACTED",
+        "DISPATCH",
+        "BLOCKED",
+        "REJECTED",
+        "REFUSED",
+        "REQUIRED",
+        "PROVIDED",
+        "SUPPLIED",
+        "INCLUDED",
+        "NOT",
+        "CANNOT",
+        "BECAUSE",
+        "CONTEXT",
+        "PRIVATE",
+        "FROZEN",
+        "CAPSULE",
+        "ASSIGNMENT",
+        "DIGEST",
+        "HASH",
+        "MATCH",
+        "MISMATCH",
+        "GRANT",
+        "TASK",
+        "REQUEST",
+        "MESSAGE",
+        "NATIVECALL",
+        "TOOL",
+        "TOOLS",
+        "RUN_COMMAND",
+        "CATDESK_WEB_TASK_TOOL",
+        "NATIVE",
+        "CODEX",
+        "EXECUTION",
+        "KEY",
+        "ARGUMENTS",
+        "PAYLOAD",
+        "SCOPE",
+        "WORKSPACE",
+        "RECEIPT",
+        "AUTHORIZATION",
+        "AUTHENTICATION",
+        "PERMISSION",
+        "APPROVAL",
+        "POLICY",
+        "UNTRUSTED",
+        "INSTRUCTION",
+        "SOURCE",
+        "MISSING",
+        "AVAILABLE",
+        "UNAVAILABLE",
+        "ENABLED",
+        "DISABLED",
+        "CONNECTED",
+        "VERIFIED",
+        "UNVERIFIED",
+        "IDENTITY",
+        "SCHEMA",
+        "INVALID",
+        "ERROR",
+        "FAILED",
+        "EXPIRED",
+        "DUPLICATE",
+        "UNKNOWN",
+        "ACCESS",
+        "READ",
+        "WRITE",
+        "ONLY",
+        "NO",
+        "IS",
+        "WAS",
+        "THE",
+        "A",
+        "AN",
+        "TO",
+        "FROM",
+        "WITH",
+        "WITHOUT",
+        "THIS",
+        "THAT",
+        "CURRENT",
+        "ORIGINAL",
+    ];
+    let valid_refusal_terms = version < 6
+        || hints
+            .get("refusalTerms")
+            .and_then(Value::as_array)
+            .is_some_and(|terms| {
+                terms.len() <= 32
+                    && terms.iter().all(|term| {
+                        term.as_str()
+                            .is_some_and(|term| refusal_terms.contains(&term))
+                    })
+                    && terms
+                        .windows(2)
+                        .all(|pair| pair[0] != "REDACTED" || pair[1] != "REDACTED")
+            });
+    let valid_refusal_report = version != 7
+        || hints.get("refusalReport").is_some_and(|report| {
+            report.as_object().is_some_and(|map| map.len() == 4)
+                && matches!(
+                    report["source"].as_str(),
+                    Some("PROSE" | "STRUCTURED" | "NONE")
+                )
+                && matches!(
+                    report["state"].as_str(),
+                    Some("BLOCKED" | "REJECTED" | "REFUSED" | "UNPROVEN")
+                )
+                && report["reasonFieldPresent"].as_bool().is_some()
+                && report["projectionOmitted"].as_bool().is_some()
+                && (report["source"] == "NONE") == (report["state"] == "UNPROVEN")
+                && (report["reasonFieldPresent"] == false || report["source"] == "STRUCTURED")
+                && hints["refusalTerms"].as_array().is_some_and(|terms| {
+                    report["projectionOmitted"] == terms.is_empty()
+                        && (report["source"] != "NONE" || terms.is_empty())
+                })
+        });
+    let trace = hints.get("trace");
+    let valid_trace = trace.is_none_or(|trace| {
+        let counts = [
+            "knownControls",
+            "expandedControls",
+            "collapsedControls",
+            "unprovenControls",
+            "linkedPanels",
+            "visiblePanels",
+        ];
+        matches!(version, 4..=7)
+            && trace
+                .as_object()
+                .is_some_and(|map| map.len() == counts.len() + 3)
+            && trace["schemaVersion"].as_u64() == Some(1)
+            && trace["scope"] == "EXACT_USER_EXCHANGE"
+            && trace["basis"] == "PRESENTATION_ONLY_NOT_TOOL_RECEIPT"
+            && counts
+                .iter()
+                .all(|field| trace[*field].as_u64().is_some_and(|n| n <= 64))
+            && trace["expandedControls"].as_u64().unwrap_or(0)
+                + trace["collapsedControls"].as_u64().unwrap_or(0)
+                + trace["unprovenControls"].as_u64().unwrap_or(0)
+                == trace["knownControls"].as_u64().unwrap_or(0)
+            && trace["visiblePanels"].as_u64() <= trace["linkedPanels"].as_u64()
+            && trace["visiblePanels"].as_u64() <= trace["expandedControls"].as_u64()
+            && trace["linkedPanels"].as_u64() <= trace["knownControls"].as_u64()
+    });
+    let selected = hints.get("knownCodes")?.as_array()?;
+    let canonical: Vec<Value> = codes
+        .iter()
+        .filter(|code| selected.contains(&json!(code)))
+        .map(|code| json!(code))
+        .collect();
+    if value.as_object()?.len() != 2
+        || tools.as_object()?.len() != 9
+        || hints.as_object()?.len()
+            != if version == 7 {
+                16 + usize::from(trace.is_some())
+            } else if version == 6 {
+                15 + usize::from(trace.is_some())
+            } else if version == 5 {
+                14 + usize::from(trace.is_some())
+            } else if version == 4 {
+                13 + usize::from(trace.is_some())
+            } else if version == 3 {
+                10
+            } else if version == 2 {
+                9
+            } else {
+                7
+            }
+        || (version >= 2 && hints["scanTruncated"].as_bool().is_none())
+        || tools["schemaVersion"].as_u64() != Some(1)
+        || tools["basis"] != "VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT"
+        || tools["scope"] != "EXACT_USER_EXCHANGE"
+        || tools["selectorCoverage"] != "KNOWN_MARKERS_ONLY"
+        || tools["countOverflow"].as_bool().is_none()
+        || !counts
+            .iter()
+            .all(|field| tools[*field].as_u64().is_some_and(|n| n <= 64))
+        || !matches!(version, 1..=7)
+        || hints["basis"] != "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION"
+        || !flags.iter().all(|field| hints[*field].as_bool().is_some())
+        || *selected != canonical
+        || !valid_refusals
+        || !valid_subjects
+        || !valid_argument_hints
+        || !valid_identity_hints
+        || !valid_refusal_terms
+        || !valid_refusal_report
+        || !valid_trace
+    {
+        return None;
+    }
+    Some(value)
+}
+
+pub(crate) fn validate_observation(delivery: &Delivery, value: &Value) -> Result<bool> {
+    let receipt = delivery
+        .receipt
+        .as_ref()
+        .ok_or("RESPONSE_PROBE_RECEIPT_REQUIRED")?;
+    let stage = value.get("stage").and_then(Value::as_str);
     if delivery.phase != Phase::Sent
-        || !matches!(stage, Some("RESPONSE_PENDING" | "RESPONSE_COMPLETE"))
-        || !diagnostic_valid
-        || !controls_valid
+        || !valid_observation_metadata(value)
         || value.get("eventId").and_then(Value::as_str) != Some(delivery.event.event_id.as_str())
         || value.get("targetGeneration").and_then(Value::as_u64) != Some(delivery.target.generation)
         || value.get("targetDigest").and_then(Value::as_str)

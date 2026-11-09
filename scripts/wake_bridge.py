@@ -112,12 +112,155 @@ RESPONSE_CONTROL_FLAGS = (
 
 def valid_response_control_diagnostics(value: Any) -> bool:
     """Closed, capped DOM-shape metadata; never text or action authority."""
-    return (isinstance(value, dict) and set(value) == set(RESPONSE_CONTROL_COUNTS + RESPONSE_CONTROL_FLAGS)
+    base = set(RESPONSE_CONTROL_COUNTS + RESPONSE_CONTROL_FLAGS)
+    return (isinstance(value, dict) and base <= set(value) <= base | {"buttonShape", "bodyCoverage"}
             and all(type(value[key]) is int and 0 <= value[key] <= 64 for key in RESPONSE_CONTROL_COUNTS)
-            and all(type(value[key]) is bool for key in RESPONSE_CONTROL_FLAGS))
+            and all(type(value[key]) is bool for key in RESPONSE_CONTROL_FLAGS)
+            and ("buttonShape" not in value or valid_response_button_shape(value["buttonShape"]))
+            and ("bodyCoverage" not in value or (isinstance(value["bodyCoverage"], dict)
+                and set(value["bodyCoverage"]) == {"selectedBlocks", "canonicalBody", "unselectedTextPresent"}
+                and type(value["bodyCoverage"]["selectedBlocks"]) is int
+                and 0 <= value["bodyCoverage"]["selectedBlocks"] <= 64
+                and value["bodyCoverage"]["canonicalBody"] in ("QUALIFIED", "UNPROVEN")
+                and (value["bodyCoverage"]["canonicalBody"] != "QUALIFIED" or value["bodyCoverage"]["selectedBlocks"] > 0)
+                and type(value["bodyCoverage"]["unselectedTextPresent"]) is bool)))
 
 
 TOOL_MARKER_COUNTS = ("callMarkers", "resultMarkers", "errorMarkers", "busyMarkers")
+
+RESPONSE_BUTTON_LABELS = frozenset({"ABSENT", "OTHER", "COPY", "COPY_MESSAGE", "COPY_RESPONSE",
+    "GOOD_RESPONSE", "BAD_RESPONSE", "READ_ALOUD", "MORE", "RETRY", "SHARE", "REGENERATE"})
+
+
+TASK_RESPONSE_CODES = (
+    "HTTP_429", "WEB_WORK_ROLLOVER_PENDING", "WEB_ROLLOVER_PROJECT_BUSY",
+    "WEB_TASK_GRANT_SCOPE_MISMATCH", "WEB_TASK_NATIVE_NOT_GRANTED",
+    "PROJECT_TASK_CALL_ALREADY_COMPLETED", "PROJECT_TASK_RECOVERY_REQUIRED",
+    "WEB_TASK_CACHED_ARGUMENTS_INVALID", "INVALID_ARGUMENT", "UNAUTHORIZED",
+    "WEB_TASK_REQUEST_INVALID", "WEB_TASK_BINDING_CHANGED",
+    "WEB_TASK_ARGUMENTS_INVALID", "WEB_TASK_NATIVE_ARGUMENTS_INVALID", "WEB_TASK_REQUEST_ID_REQUIRED",
+    "WEB_TASK_CENTRAL_MODE_REQUIRED", "WEB_TASK_CENTRAL_AUTH_REQUIRED", "PLAN_REQUIRED",
+)
+
+
+TASK_REFUSAL_CATEGORIES = ("IDENTITY_MISMATCH", "TOOL_UNAVAILABLE", "CONTEXT_UNAVAILABLE",
+                           "AUTHORIZATION_REQUIRED", "DISPATCH_REJECTED")
+
+
+TASK_UNAVAILABLE_SUBJECTS = ("RUN_COMMAND", "CENTRAL_TASK_TOOL", "NATIVE_CALL",
+                             "PRIVATE_CONTEXT", "EXECUTION_KEY", "CATDESK_APP")
+
+
+TASK_MENTIONED_TOOLS = ("RUN_COMMAND", "CENTRAL_TASK_TOOL", "NATIVE_DISPATCH", "NATIVE_STATUS")
+
+
+TASK_ARGUMENT_ISSUES = ("JSON_SYNTAX", "MISSING_REQUIRED_FIELD", "UNEXPECTED_FIELD",
+                        "TYPE_MISMATCH", "TOOL_NAME_REJECTED", "CACHED_ENVELOPE_REJECTED")
+
+
+TASK_IDENTITY_ISSUES = tuple(domain + "_" + state
+    for domain in ("FULL_PRIVATE_CONTEXT", "ASSIGNMENT", "DELIVERED_USER_MESSAGE",
+                   "NATIVE_CALL", "EXECUTION_GRANT", "CONVERSATION_TARGET")
+    for state in ("MISSING", "MISMATCH", "UNVERIFIED"))
+
+
+TASK_REFUSAL_TERMS = ("REDACTED", "DISPATCH", "BLOCKED", "REJECTED", "REFUSED", "REQUIRED", "PROVIDED",
+    "SUPPLIED", "INCLUDED", "NOT", "CANNOT", "BECAUSE", "CONTEXT", "PRIVATE", "FROZEN", "CAPSULE",
+    "ASSIGNMENT", "DIGEST", "HASH", "MATCH", "MISMATCH", "GRANT", "TASK", "REQUEST", "MESSAGE",
+    "NATIVECALL", "TOOL", "TOOLS", "RUN_COMMAND", "CATDESK_WEB_TASK_TOOL", "NATIVE", "CODEX", "EXECUTION",
+    "KEY", "ARGUMENTS", "PAYLOAD", "SCOPE", "WORKSPACE", "RECEIPT", "AUTHORIZATION", "AUTHENTICATION",
+    "PERMISSION", "APPROVAL", "POLICY", "UNTRUSTED", "INSTRUCTION", "SOURCE", "MISSING", "AVAILABLE",
+    "UNAVAILABLE", "ENABLED", "DISABLED", "CONNECTED", "VERIFIED", "UNVERIFIED", "IDENTITY", "SCHEMA",
+    "INVALID", "ERROR", "FAILED", "EXPIRED", "DUPLICATE", "UNKNOWN", "ACCESS", "READ", "WRITE", "ONLY",
+    "NO", "IS", "WAS", "THE", "A", "AN", "TO", "FROM", "WITH", "WITHOUT", "THIS", "THAT", "CURRENT", "ORIGINAL")
+
+
+TASK_CACHED_INVARIANTS = ("ARGUMENTS_NOT_OBJECT", "COMMAND_NOT_STRING", "PLAN_FLAG_NOT_BOOLEAN",
+                          "DRY_RUN_NOT_FALSE", "FULL_OUTPUT_NOT_FALSE", "CWD_OVERRIDE_FORBIDDEN",
+                          "TIMEOUT_OVERRIDE_FORBIDDEN", "UNSUPPORTED_OUTER_FIELD", "COMMAND_TOO_LARGE",
+                          "RESERVED_PREFIX_INVALID", "PAYLOAD_JSON_INVALID", "PAYLOAD_NOT_OBJECT")
+
+
+TASK_TRACE_COUNTS = ("knownControls", "expandedControls", "collapsedControls", "unprovenControls",
+                     "linkedPanels", "visiblePanels")
+
+
+def valid_response_button_shape(value: Any) -> bool:
+    """Fixed structural categories only, including unknown-label redaction."""
+    fields = {"aria", "title", "tooltip", "testId", "dataState", "location", "toolbar",
+              "visible", "afterAssistant", "svgCount"}
+    return (isinstance(value, dict) and set(value) == {"schemaVersion", "countOverflow", "buttons"}
+        and type(value["schemaVersion"]) is int and value["schemaVersion"] == 1
+        and type(value["countOverflow"]) is bool and isinstance(value["buttons"], list)
+        and len(value["buttons"]) <= 8 and (not value["countOverflow"] or len(value["buttons"]) == 8)
+        and all(isinstance(row, dict) and set(row) == fields
+            and all(isinstance(row[key], str) and row[key] in RESPONSE_BUTTON_LABELS for key in ("aria", "title", "tooltip"))
+            and row["testId"] in ("ABSENT", "OTHER", "COPY")
+            and row["dataState"] in ("ABSENT", "OTHER", "OPEN", "CLOSED")
+            and row["location"] in ("USER", "BODY", "ASSISTANT", "SHARED", "AUXILIARY", "OTHER")
+            and row["toolbar"] in ("ACTION", "ROLE", "NONE")
+            and type(row["visible"]) is bool and type(row["afterAssistant"]) is bool
+            and type(row["svgCount"]) is int and 0 <= row["svgCount"] <= 4
+            for row in value["buttons"]))
+
+
+def valid_task_trace_metadata(value: Any) -> bool:
+    """Presentation metadata only; never panel text, identifiers or click authority."""
+    return (isinstance(value, dict) and set(value) == set(TASK_TRACE_COUNTS) | {"schemaVersion", "scope", "basis"}
+            and type(value["schemaVersion"]) is int and value["schemaVersion"] == 1
+            and value["scope"] == "EXACT_USER_EXCHANGE"
+            and value["basis"] == "PRESENTATION_ONLY_NOT_TOOL_RECEIPT"
+            and all(type(value[key]) is int and 0 <= value[key] <= 64 for key in TASK_TRACE_COUNTS)
+            and value['expandedControls'] + value['collapsedControls'] + value['unprovenControls'] == value['knownControls']
+            and value['visiblePanels'] <= min(value['linkedPanels'],value['expandedControls'])
+            and value['linkedPanels'] <= value['knownControls'])
+
+
+def valid_task_response_hints(value: Any) -> bool:
+    """Closed assistant-text hints, never tool availability or execution proof."""
+    flags = ("toolUnavailable", "contextUnavailable", "approvalRequested", "nativeDispatchMentioned")
+    version = value.get("schemaVersion") if isinstance(value, dict) else None
+    fields = {"schemaVersion", "basis", "knownCodes"} | ({"refusalCategories", "scanTruncated"} if version in (2, 3, 4, 5, 6, 7) else set())
+    if version in (3, 4, 5, 6, 7):
+        fields.add("unavailableSubjects")
+    extra = {"mentionedTools":TASK_MENTIONED_TOOLS, "argumentIssues":TASK_ARGUMENT_ISSUES,
+             "cachedInvariants":TASK_CACHED_INVARIANTS} if version in (4, 5, 6, 7) else {}
+    if version in (5, 6, 7):
+        extra["identityIssues"] = TASK_IDENTITY_ISSUES
+    fields.update(extra)
+    if version in (6, 7):
+        fields.add("refusalTerms")
+    if version == 7:
+        fields.add("refusalReport")
+    if version in (4, 5, 6, 7) and "trace" in value:
+        fields.add("trace")
+    return (isinstance(value, dict) and set(value) == set(flags) | fields
+            and type(version) is int and version in {1, 2, 3, 4, 5, 6, 7}
+            and value["basis"] == "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION"
+            and all(type(value[key]) is bool for key in flags)
+            and isinstance(value["knownCodes"], list)
+            and value["knownCodes"] == [code for code in TASK_RESPONSE_CODES if code in value["knownCodes"]]
+            and (version == 1 or (type(value["scanTruncated"]) is bool and isinstance(value["refusalCategories"], list)
+                 and value["refusalCategories"] == [kind for kind in TASK_REFUSAL_CATEGORIES if kind in value["refusalCategories"]]))
+            and (version not in (3, 4, 5, 6, 7) or (isinstance(value["unavailableSubjects"], list)
+                 and value["unavailableSubjects"] == [subject for subject in TASK_UNAVAILABLE_SUBJECTS if subject in value["unavailableSubjects"]]))
+            and all(isinstance(value[field], list) and value[field] == [item for item in allowed if item in value[field]]
+                    for field, allowed in extra.items())
+            and (version not in (6, 7) or (isinstance(value["refusalTerms"], list) and len(value["refusalTerms"]) <= 32
+                 and all(isinstance(term, str) and term in TASK_REFUSAL_TERMS for term in value["refusalTerms"])
+                 and all(a != "REDACTED" or b != "REDACTED" for a, b in zip(value["refusalTerms"], value["refusalTerms"][1:]))))
+            and (version != 7 or (isinstance(value['refusalReport'], dict)
+                 and set(value['refusalReport']) == {'source', 'state', 'reasonFieldPresent', 'projectionOmitted'}
+                 and value['refusalReport']['source'] in ('PROSE', 'STRUCTURED', 'NONE')
+                 and value['refusalReport']['state'] in ('BLOCKED', 'REJECTED', 'REFUSED', 'UNPROVEN')
+                 and type(value['refusalReport']['reasonFieldPresent']) is bool
+                 and type(value['refusalReport']['projectionOmitted']) is bool
+                 and ((value['refusalReport']['source'] == 'NONE') == (value['refusalReport']['state'] == 'UNPROVEN'))
+                 and (value['refusalReport']['source'] != 'NONE' or not value['refusalTerms'])
+                 and (value['refusalReport']['source'] == 'STRUCTURED' or not value['refusalReport']['reasonFieldPresent'])
+                 and value['refusalReport']['projectionOmitted'] == (not value['refusalTerms'])))
+            and ("trace" not in value or valid_task_trace_metadata(value["trace"])))
+
 
 
 def valid_tool_marker_diagnostics(value: Any) -> bool:
@@ -152,6 +295,29 @@ const assistantLoadError = element => {
     if (body && clean(body) && clean(body) !== marker) return false;
     return [element, ...element.querySelectorAll('div, p, span')]
         .some(node => visible(node) && clean(node) === marker);
+};
+// Some failed replies have no ASSISTANT role/header at all. This is only a
+// failure observation, never response completion or permission to click Retry.
+const unmountedExchangeLoadError = (boundary, userSelector) => {
+    if (!boundary) return false;
+    const users = Array.from(boundary.querySelectorAll(userSelector));
+    if (!users.length || users.length > 128) return false;
+    const excluded = userSelector + ', pre, code, blockquote, button, input, textarea, [contenteditable], [data-content-search-unit-key], ' +
+        '[data-message-content], .markdown, [class~="prose"], ' +
+        '[data-markdown-text-style="assistant-message"], ' +
+        '[data-testid="mcp-tool-call"], [data-testid="mcp-tool-result"], ' +
+        '[data-tool-call-id], [data-mcp-tool-call-id], [role="button"], ' +
+        '[role="toolbar"], [aria-hidden="true"]';
+    const nodes = Array.from(boundary.querySelectorAll('div, p, span'));
+    if (nodes.length > 2048) return false;
+    const candidates = nodes.filter(node =>
+        visible(node) && !node.closest(excluded) &&
+        users.every(user => Boolean(user.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)) &&
+        assistantLoadError(node));
+    // A parent and its child can describe one card; two separate cards are
+    // ambiguous and remain unverified instead of borrowing historical UI.
+    const leaves = candidates.filter(node => !candidates.some(other => other !== node && node.contains(other)));
+    return leaves.length === 1;
 };
 """
 # Shared by observation and the sole qualified assistant Retry action. Never
@@ -1289,7 +1455,9 @@ class CdpSink:
 
     def response_snapshot(self, cdp: Any, message: str, *, require_usable_body: bool = False,
                           diagnostic: dict | None = None,
-                          tool_diagnostic: dict | None = None) -> tuple[int, int, bool, bool]:
+                          tool_diagnostic: dict | None = None,
+                          execution_diagnostic: dict | None = None,
+                          historical: bool = False) -> tuple[int, int, bool, bool]:
         """Return only bounded structural signals for the latest user turn.
 
         The timeout detector is intentionally exact-text and scoped strictly
@@ -1301,13 +1469,21 @@ class CdpSink:
             tool_diagnostic.clear()
             if diagnostic is None:
                 raise ValueError("tool diagnostics require an explicit diagnostic read")
+        if execution_diagnostic is not None:
+            execution_diagnostic.clear()
+            if diagnostic is None or tool_diagnostic is None:
+                raise ValueError("task hints require explicit response and tool diagnostics")
+        if type(historical) is not bool or (historical and (not require_usable_body or diagnostic is None)):
+            raise ValueError('historical observation must be passive and explicit')
         script = f"""(() => {{
             const timeoutText = {json.dumps("Message delivery timed out. Please try again.")};
             const retryLabel = {json.dumps("Retry")};
             const expectedWake = {json.dumps(normalize_message(message))};
             const requireUsableBody = {str(require_usable_body).lower()};
+            const historical = {str(historical).lower()};
             const includeDiagnostic = {str(diagnostic is not None).lower()};
             const includeToolDiagnostic = {str(tool_diagnostic is not None).lower()};
+            const includeExecutionDiagnostic = {str(execution_diagnostic is not None).lower()};
             const normalize = value => String(value || '').replace(/\\s+/g, ' ').trim();
             const visible = element => {{
                 if (!element) return false;
@@ -1340,9 +1516,14 @@ class CdpSink:
             const followsLatestUser = element =>
                 Boolean(latestUser.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING);
             const pairedTurn = latestUser.matches("[data-content-search-turn-key]");
+            const followingTurns = turnContainers.filter(turn => followsLatestUser(turn));
+            const historicalUserSelector = "[data-message-author-role='user'], [data-turn='user'], [data-user-message-bubble], [class~='group/user-message']";
+            const nextUser = historical ? followingTurns.find(turn => turn.matches(historicalUserSelector) || turn.querySelector(historicalUserSelector)) : null;
+            const beforeNextUser = element => !nextUser || (element !== nextUser && !nextUser.contains(element) &&
+                Boolean(element.compareDocumentPosition(nextUser) & Node.DOCUMENT_POSITION_FOLLOWING));
             const inWakeExchange = element =>
-                Boolean(element && (latestUser.contains(element) || followsLatestUser(element)));
-            const turnsAfterWake = turnContainers.filter(turn => followsLatestUser(turn));
+                Boolean(element && (latestUser.contains(element) || (followsLatestUser(element) && beforeNextUser(element))));
+            const turnsAfterWake = followingTurns.filter(beforeNextUser);
             if (turnsAfterWake.length > 1)
                 return ['invalid', 0, 0, false, false];
             {RESPONSE_ASSISTANT_SCOPE}
@@ -1397,16 +1578,72 @@ class CdpSink:
             // UI offers no known body node, cooperative observation stays
             // pending instead of inferring an answer from button labels.
             const contentSelector = '[data-message-content], .markdown, [class~="prose"], [data-markdown-text-style="assistant-message"]';
-            const bodyNode = latestAssistant
-                ? (latestAssistant.matches(contentSelector) ? latestAssistant :
-                   latestAssistant.querySelector(contentSelector))
-                : null;
+            const bodyCandidates = latestAssistant ? Array.from(new Set([
+                ...(latestAssistant.matches(contentSelector) ? [latestAssistant] : []),
+                ...latestAssistant.querySelectorAll(contentSelector)
+            ])) : [];
+            if (bodyCandidates.length > 64) return ['invalid', 0, 0, false, false];
+            // A final answer may have several markdown/body blocks. Selecting
+            // only the first silently loses later tool-error details. Retain
+            // document order and discard nested duplicates, never borrow a
+            // neighbouring tool/user/historical unit as an answer body.
+            const bodyNodes = bodyCandidates.filter(node => visible(node) &&
+                !bodyCandidates.some(other => other !== node && other.contains(node)));
+            const bodyNode = bodyNodes.length ? bodyNodes[0] : null;
             let assistantBodyText = '';
-            if (bodyNode && visible(bodyNode)) {{
-                const bodyCopy = bodyNode.cloneNode(true);
-                bodyCopy.querySelectorAll('button, [role="button"], [role="toolbar"], [aria-hidden="true"]')
+            for (const body of bodyNodes) {{
+                const bodyCopy = body.cloneNode(true);
+                bodyCopy.querySelectorAll('button, [role="button"], [role="toolbar"], [aria-hidden="true"], ' + userNodeSelector)
                     .forEach(control => control.remove());
-                assistantBodyText = normalize(bodyCopy.textContent);
+                assistantBodyText += ' ' + normalize(bodyCopy.textContent);
+            }}
+            assistantBodyText = normalize(assistantBodyText);
+            // Diagnostic text may include unlabelled text inside the exact
+            // assistant's unique selection-marked body. This never changes
+            // completion/bodyNodes/Copy authority or borrows whole-unit text.
+            let assistantDiagnosticText = '', assistantRefusalText = '', structuredReportQuoted = false, bodyCoverage = null;
+            if (includeDiagnostic || includeExecutionDiagnostic) {{
+            const selectionSelector = '[data-chatgpt-selection-message-id]';
+            const toolSubtree = "[data-tool-call-id], [data-tool-call], [data-tool-response-id], " +
+                "[data-testid='tool-call'], [data-testid='mcp-tool-call'], [data-testid='tool-result'], [data-testid='mcp-tool-result']";
+            const selectionBodies = latestAssistant ? Array.from(new Set([
+                ...(latestAssistant.matches(selectionSelector) ? [latestAssistant] : []),
+                ...latestAssistant.querySelectorAll(selectionSelector)
+            ])) : [];
+            const canonicalBody = selectionBodies.length === 1 && visible(selectionBodies[0]) &&
+                !selectionBodies[0].closest(userNodeSelector + ', ' + toolSubtree) &&
+                !selectionBodies[0].querySelector(userNodeSelector + ', ' + toolSubtree +
+                    ', [data-content-search-unit-key], [data-message-author-role], article[data-turn]')
+                ? selectionBodies[0] : null;
+            const diagnosticCandidates = (canonicalBody ? [...bodyCandidates, canonicalBody] : bodyCandidates)
+                .filter(node => !node.closest(userNodeSelector + ', ' + toolSubtree));
+            const diagnosticNodes = Array.from(new Set(diagnosticCandidates)).filter(node => visible(node) &&
+                !node.closest(userNodeSelector + ', ' + toolSubtree) &&
+                !diagnosticCandidates.some(other => other !== node && other.contains(node)))
+                .sort((a,b) => a === b ? 0 : (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1);
+            if (diagnosticNodes.length > 64) return ['invalid', 0, 0, false, false];
+            const strippedText = (node, maskQuotedCode=false) => {{
+                if(maskQuotedCode && node.closest('pre, code, blockquote'))return '';
+                const copy = node.cloneNode(true);
+                copy.querySelectorAll('button, [role="button"], [role="toolbar"], [aria-hidden="true"], ' +
+                    'h4[data-conversation-role], ' + userNodeSelector + ', ' + toolSubtree)
+                    .forEach(control => control.remove());
+                if(maskQuotedCode)copy.querySelectorAll('pre, code, blockquote').forEach(quoted => quoted.remove());
+                return normalize(copy.textContent);
+            }};
+            assistantDiagnosticText = normalize(diagnosticNodes.map(node=>strippedText(node)).join(' '));
+            assistantRefusalText = normalize(diagnosticNodes.map(node=>strippedText(node,true)).join(' '));
+            structuredReportQuoted=diagnosticNodes.some(node=>Boolean(node.closest('blockquote')||node.querySelector('blockquote')));
+            let unselectedTextPresent = false;
+            if (includeDiagnostic && latestAssistant && !diagnosticNodes.includes(latestAssistant)) {{
+                const remainder = latestAssistant.cloneNode(true);
+                remainder.querySelectorAll(contentSelector + (canonicalBody ? ', ' + selectionSelector : '') +
+                    ', button, [role="button"], [role="toolbar"], [aria-hidden="true"], h4[data-conversation-role], ' +
+                    userNodeSelector + ', ' + toolSubtree).forEach(node => node.remove());
+                unselectedTextPresent = normalize(remainder.textContent).length > 0;
+            }}
+            bodyCoverage = {{selectedBlocks:diagnosticNodes.length,
+                canonicalBody:canonicalBody ? 'QUALIFIED' : 'UNPROVEN',unselectedTextPresent}};
             }}
             // ChatGPT can render an old assistant as a load-error placeholder
             // while retaining Copy/Regenerate controls. Those controls alone
@@ -1414,6 +1651,9 @@ class CdpSink:
             {RESPONSE_LOAD_ERROR_DETECTOR}
             if (assistantLoadError(latestAssistant))
                 return ['load-error', 0, 0, true, false];
+            if (!latestAssistant && pairedTurn && turnsAfterWake.length === 0 &&
+                    unmountedExchangeLoadError(responseBoundary, userNodeSelector))
+                return ['load-error', 0, 0, false, false];
             const latestAssistantTurn = latestAssistant
                 ? (latestAssistant.closest("[data-content-search-turn-key]") ||
                    latestAssistant.closest("[data-testid^='conversation-turn-']") ||
@@ -1438,7 +1678,7 @@ class CdpSink:
                     ...scope.querySelectorAll("button[data-testid='copy-turn-action-button']"),
                     ...scope.querySelectorAll(".turn-action-controls button[aria-label='Copy']"),
                     ...scope.querySelectorAll(".turn-action-controls button[aria-label='Copy message']"),
-                ])).filter(button => !bodyNode || !bodyNode.contains(button));
+                ])).filter(button => !bodyNodes.some(body => body.contains(button)));
                 if (actions.length > 1) break;
                 if (actions.length === 1) {{
                     assistantCompletionAction = actions[0];
@@ -1495,6 +1735,39 @@ class CdpSink:
                 const knownCopySelector = "button[data-testid='copy-turn-action-button'], .turn-action-controls button[aria-label='Copy'], .turn-action-controls button[aria-label='Copy message']";
                 const turn = pairedTurn ? latestUser : latestAssistantTurn;
                 const parent = turn && turn.parentElement;
+                // Diagnostic categories cannot introduce a completion selector.
+                // Never export raw labels, attributes, DOM IDs, SVG paths or text.
+                const labelCategory = raw => {{
+                    const label = normalize(raw).toLowerCase();
+                    const labels = {{'copy':'COPY','copy message':'COPY_MESSAGE','copy response':'COPY_RESPONSE',
+                        'good response':'GOOD_RESPONSE','bad response':'BAD_RESPONSE','read aloud':'READ_ALOUD',
+                        'more':'MORE','retry':'RETRY','share':'SHARE','regenerate':'REGENERATE'}};
+                    return Object.hasOwn(labels,label) ? labels[label] : (label ? 'OTHER' : 'ABSENT');
+                }};
+                const turnButtons = turn ? Array.from(turn.querySelectorAll('button')) : [];
+                const buttonShape = {{schemaVersion:1, countOverflow:turnButtons.length > 8,
+                    buttons:turnButtons.slice(0,8).map(button => {{
+                        const followsAssistant = Boolean(latestAssistant &&
+                            (latestAssistant.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING));
+                        const testId = button.getAttribute('data-testid');
+                        const dataState = normalize(button.getAttribute('data-state')).toLowerCase();
+                        return {{aria:labelCategory(button.getAttribute('aria-label')),
+                            title:labelCategory(button.getAttribute('title')),
+                            tooltip:labelCategory(button.getAttribute('data-tooltip-content') ||
+                                button.querySelector('svg title')?.textContent),
+                            testId:!testId ? 'ABSENT' : testId === 'copy-turn-action-button' ? 'COPY' : 'OTHER',
+                            dataState:!dataState ? 'ABSENT' : dataState === 'open' ? 'OPEN' :
+                                dataState === 'closed' ? 'CLOSED' : 'OTHER',
+                            location:button.closest(userNodeSelector) ? 'USER' :
+                                bodyNodes.some(body => body.contains(button)) ? 'BODY' :
+                                latestAssistant?.contains(button) ? 'ASSISTANT' :
+                                button.closest('[data-content-search-unit-key]') ? 'AUXILIARY' :
+                                followsAssistant ? 'SHARED' : 'OTHER',
+                            toolbar:button.closest('.turn-action-controls') ? 'ACTION' :
+                                button.closest('[role="toolbar"]') ? 'ROLE' : 'NONE',
+                            visible:visible(button),afterAssistant:followsAssistant,
+                            svgCount:Math.min(button.querySelectorAll('svg').length,4)}};
+                    }})}};
                 const shared = turn && latestAssistant ? Array.from(turn.querySelectorAll(
                     ".turn-action-controls button[aria-label='Copy'], " +
                     ".turn-action-controls button[aria-label='Copy message']"
@@ -1524,6 +1797,8 @@ class CdpSink:
                     completionActionFound: Boolean(assistantCompletionAction),
                     assistantInsideSemanticUnit: Boolean(latestAssistant && pairedAssistantUnits.some(unit =>
                         unit === latestAssistant || unit.contains(latestAssistant))),
+                    buttonShape,
+                    bodyCoverage,
                 }});
             }}
             if (includeToolDiagnostic) {{
@@ -1544,13 +1819,230 @@ class CdpSink:
                     errorMarkers:Math.min(errors.length,64),busyMarkers:Math.min(busy.length,64),
                     countOverflow:[calls,results,errors,busy].some(items => items.length > 64)}});
             }}
+            if (includeExecutionDiagnostic) {{
+                const text = assistantDiagnosticText.slice(0,32768).toLowerCase().replace(/[‘’]/g, "'");
+                // Hints from this exact assistant body only. Never return body
+                // text, unknown codes, credentials, labels or quoted payloads.
+                const known = {json.dumps(TASK_RESPONSE_CODES)};
+                const hasCode = code => code === 'HTTP_429' ? /(?:http|status|error)\\s*429/.test(text) :
+                    new RegExp('\\\\b'+code.toLowerCase()+'\\\\b').test(text);
+                const approvalRequested = /(?:need|require|await|waiting for|please).{{0,60}}(?:approval|authorization|permission|approve)/.test(text);
+                const subjects = [
+                    ['RUN_COMMAND', /\\brun_command\\b/g],
+                    ['CENTRAL_TASK_TOOL', /\\bcatdesk_web_task_tool\\b/g],
+                    ['NATIVE_CALL', /\\bnative[-_ ]?call\\b/g],
+                    ['PRIVATE_CONTEXT', /\\b(?:private[- ]context|frozen[- ](?:context|capsule))\\b/g],
+                    ['EXECUTION_KEY', /\\bexecution[-_ ]?key\\b/g],
+                    ['CATDESK_APP', /\\bcatdesk(?:[- ]local[- ]tunnel[- ]v5| (?:app|plugin|connector))\\b/g],
+                ];
+                const identitySubjects = [
+                    ['FULL_PRIVATE_CONTEXT', /\\bfull[-_ ]?private[-_ ]?context[-_ ]?(?:sha[-_ ]?256|digest)\\b/g],
+                    ['ASSIGNMENT', /\\bassignment[-_ ]?(?:sha[-_ ]?256|digest)\\b/g],
+                    ['DELIVERED_USER_MESSAGE', /\\bdelivered[-_ ]?user[-_ ]?message[-_ ]?(?:sha[-_ ]?256|digest)\\b/g],
+                    ['NATIVE_CALL', /\\bnative[-_ ]?call\\b/g],
+                    ['EXECUTION_GRANT', /\\b(?:execution[-_ ]?)?grant\\b/g],
+                    ['CONVERSATION_TARGET', /\\b(?:(?:conversation|wake)[-_ ]?target|expected[-_ ]?target[-_ ]?(?:sha[-_ ]?256|generation|url)|target[-_ ](?:binding|generation|url|digest))\\b/g],
+                ];
+                const scrubNegated = part => part
+                    .replace(/\\b(?:not|never|no|no longer|isn't|aren't|wasn't|weren't)\\s+(?:missing|unavailable|absent|unverified|mismatched)\\b/g,' ')
+                    .replace(/\\b(?:no|without|not a)\\s+(?:a )?mismatch(?:es)?\\b/g,' ')
+                    .replace(/\\b(?:cannot|can't|did not|didn't) (?:find|identify|detect|observe) (?:a |any )?mismatch\\b/g,' ')
+                    .replace(/\\bmismatch(?: was| is| has been)? resolved\\b/g,' ');
+                const missing = part => /\\b(?:unavailable|missing|absent|not (?:available|exposed|listed|present|provided|supplied|included|visible)|don't have|do not have|no access|not in (?:this|the) context|(?:cannot|can't) (?:access|find|locate|reconstruct|retrieve))\\b/.test(scrubNegated(part));
+                const mismatch = part => /\\b(?:mismatch(?:es|ed)?|does not match|doesn't match|did not match|didn't match|do not match|don't match)\\b/.test(scrubNegated(part));
+                const unverified = part => /\\b(?:(?:cannot|can't|could not|couldn't|unable to) (?:independently )?verify|unverified|not (?:independently )?verified)\\b/.test(scrubNegated(part));
+                const unavailableSubjects = new Set();
+                const identityIssues = new Set();
+                let genericToolUnavailable = false, genericIdentityMismatch = false, contextUnverified = false;
+                // Keep each subject's predicate inside its own clause and
+                // before the next subject. A nearby missing nativeCall must
+                // not turn an available run_command into a missing tool.
+                for (const clause of text.split(/[.!?;\\n,]+|\\b(?:but|however|whereas)\\b/)) {{
+                    const found = [...subjects.flatMap(([subject,pattern]) =>
+                        Array.from(clause.matchAll(pattern),m=>({{subject,start:m.index,end:m.index+m[0].length}}))),
+                        ...identitySubjects.flatMap(([domain,pattern]) =>
+                        Array.from(clause.matchAll(pattern),m=>({{domain,start:m.index,end:m.index+m[0].length}}))),
+                        ...Array.from(clause.matchAll(/\\b(?:private[- ]context|assignment|identity|digest|sha[- ]?256)\\b/g),
+                            m=>({{identity:true,start:m.index,end:m.index+m[0].length}}))]
+                        .sort((a,b)=>a.start-b.start || b.end-a.end);
+                    const spans=[];
+                    for (const item of found) {{
+                        let span=spans[spans.length-1];
+                        if (!span || item.start >= span.end) {{span={{start:item.start,end:item.end,subjects:new Set(),domains:new Set(),identity:false}};spans.push(span);}}
+                        span.end=Math.max(span.end,item.end);
+                        if(item.subject)span.subjects.add(item.subject);
+                        if(item.domain)span.domains.add(item.domain);
+                        span.identity ||= Boolean(item.identity);
+                    }}
+                    if(!spans.length && /\\b(?:tools?|functions?)\\b/.test(clause) && missing(clause))genericToolUnavailable=true;
+                    spans.forEach((span,index) => {{
+                        const left = index === 0 ? clause.slice(Math.max(0,span.start-100),span.start) : '';
+                        const right = clause.slice(span.end,Math.min(span.end+100,spans[index+1]?.start ?? clause.length));
+                        const absent=missing(left)||missing(right), differs=mismatch(left)||mismatch(right), uncertain=unverified(left)||unverified(right);
+                        if(absent)for(const subject of span.subjects)unavailableSubjects.add(subject);
+                        if(uncertain && ['NATIVE_CALL','PRIVATE_CONTEXT','EXECUTION_KEY'].some(subject=>span.subjects.has(subject)))contextUnverified=true;
+                        for(const domain of span.domains) {{
+                            if(absent)identityIssues.add(domain+'_MISSING');
+                            if(differs)identityIssues.add(domain+'_MISMATCH');
+                            if(uncertain)identityIssues.add(domain+'_UNVERIFIED');
+                        }}
+                        if(span.identity && differs)genericIdentityMismatch=true;
+                    }});
+                }}
+                const toolUnavailable=genericToolUnavailable || ['RUN_COMMAND','CENTRAL_TASK_TOOL','CATDESK_APP'].some(subject=>unavailableSubjects.has(subject));
+                const contextUnavailable=contextUnverified || ['NATIVE_CALL','PRIVATE_CONTEXT','EXECUTION_KEY'].some(subject=>unavailableSubjects.has(subject)) ||
+                    Array.from(identityIssues).some(issue=>issue.endsWith('_MISSING')||issue.endsWith('_UNVERIFIED'));
+                const refusals = {{
+                    IDENTITY_MISMATCH:genericIdentityMismatch || Array.from(identityIssues).some(issue=>issue.endsWith('_MISMATCH')),
+                    TOOL_UNAVAILABLE:toolUnavailable, CONTEXT_UNAVAILABLE:contextUnavailable,
+                    AUTHORIZATION_REQUIRED:approvalRequested || hasCode('UNAUTHORIZED'),
+                    DISPATCH_REJECTED:hasCode('WEB_TASK_CACHED_ARGUMENTS_INVALID') || /(?:dispatch|tool call).{{0,60}}(?:blocked|rejected|refused)/.test(text)
+                }};
+                const mentionedTools = {{
+                    RUN_COMMAND:/\\brun_command\\b/.test(text),
+                    CENTRAL_TASK_TOOL:/\\bcatdesk_web_task_tool\\b/.test(text),
+                    NATIVE_DISPATCH:/\\bnative\\.codex\\.dispatch\\b/.test(text),
+                    NATIVE_STATUS:/\\bnative\\.codex\\.status\\b/.test(text)
+                }};
+                // Fixed classifications only. No unknown field name, value,
+                // provider excerpt, parsed envelope or arbitrary code leaves
+                // the browser. A reported cause remains an assistant hint;
+                // it cannot establish a fresh call or authorize a retry.
+                const argumentIssues = {{
+                    JSON_SYNTAX:/(?:invalid|malformed|parse|parsing|syntax).{{0,50}}json|json.{{0,50}}(?:invalid|malformed|parse|parsing|syntax)|unexpected token|unterminated (?:string|object)/.test(text),
+                    MISSING_REQUIRED_FIELD:/(?:missing|required).{{0,45}}(?:field|argument|parameter)|(?:field|argument|parameter).{{0,45}}(?:missing|required)/.test(text),
+                    UNEXPECTED_FIELD:/(?:unknown|unexpected|unrecognized|unsupported|extra).{{0,35}}(?:field|argument|parameter|property)|additional properties (?:are )?not allowed/.test(text),
+                    TYPE_MISMATCH:/(?:invalid|incorrect|wrong|unexpected).{{0,25}}type|(?:expected|must be|must have).{{0,30}}(?:object|string|boolean|integer|array)/.test(text),
+                    TOOL_NAME_REJECTED:/(?:unknown|unrecognized|unsupported|invalid|no such).{{0,20}}(?:tool|function)|(?:tool|function).{{0,35}}(?:not found|does not exist)/.test(text),
+                    CACHED_ENVELOPE_REJECTED:hasCode('WEB_TASK_CACHED_ARGUMENTS_INVALID')
+                }};
+                const cachedInvariants = {json.dumps(TASK_CACHED_INVARIANTS)};
+                // Only known completed-work trace labels outside user/prose/code
+                // can identify candidates. Observe, never click or export labels.
+                const traceScope = pairedTurn ? latestUser : responseBoundary;
+                const traceExcluded = "pre, code, [data-markdown-text-style='assistant-message'], .markdown, [class~='prose']";
+                const traceControls = Array.from(traceScope ? traceScope.querySelectorAll('button, [role="button"], summary') : [])
+                    .filter(node => visible(node) && !node.closest(userNodeSelector) && !node.closest(traceExcluded))
+                    .filter(node => /^(?:worked|thought) for \\d+(?:\\.\\d+)?(?:ms|s|m|h)(?: \\d+(?:\\.\\d+)?(?:ms|s|m|h))?(?:\\s*[>›])?$/i.test(
+                        normalize(node.innerText || node.textContent || node.getAttribute('aria-label') || '')));
+                let traceExpanded=0,traceCollapsed=0,traceUnknown=0,traceLinked=0,traceVisible=0;
+                for (const control of traceControls.slice(0,64)) {{
+                    const details = control.tagName.toLowerCase()==='summary' ? control.closest('details') : null;
+                    const expanded = details ? (details.hasAttribute('open') ? 'true' : 'false') : control.getAttribute('aria-expanded');
+                    if (expanded==='true') traceExpanded++;
+                    else if (expanded==='false') traceCollapsed++;
+                    else traceUnknown++;
+                    const id=control.getAttribute('aria-controls');
+                    const panels=details ? [details] : (id && id.length<=256 ? Array.from(document.querySelectorAll('[id]')).filter(n => n.getAttribute('id')===id) : []);
+                    if (panels.length===1) {{ traceLinked++; if (visible(panels[0]) && expanded==='true') traceVisible++; }}
+                }}
+                // A short fixed-vocabulary projection can explain a natural
+                // refusal which has no known error code. It is never raw text
+                // or execution/retry authority. Unknown/value spans collapse
+                // to one marker; quoted content, paths, URLs, identifiers and
+                // every numeric token are deliberately excluded.
+                const refusalTerms = [], refusalVocabulary = new Set({json.dumps(TASK_REFUSAL_TERMS)});
+                // Mask on the full bounded scan before locating an anchor.
+                // Otherwise a window beginning inside a quoted prior value
+                // would lose its opening quote and misclassify that value.
+                const maskRefusalValues = input => {{
+                    const masked=input.split('');
+                    const mark=(start,end)=>{{masked[start]='\\u0000';for(let p=start+1;p<end;p++)masked[p]=' ';}};
+                    for(let i=0;i<input.length;i++) {{
+                        const opening=input[i];
+                        if(opening==="'" && /[a-z0-9]/.test(input[i-1]||'') && /[a-z0-9]/.test(input[i+1]||''))continue;
+                        if(!['"',"'",'`','“','”'].includes(opening))continue;
+                        const delimiter=opening==='`' && input.startsWith('```',i) ? '```' : opening;
+                        const closing=opening==='“' ? '”' : opening==='”' ? '“' : delimiter;
+                        let end=input.length;
+                        for(let p=i+delimiter.length;p<input.length;p++) {{
+                            if(input[p]===String.fromCharCode(92)){{p++;continue;}}
+                            if(closing==="'" && input[p]==="'" && /[a-z0-9]/.test(input[p-1]||'') && /[a-z0-9]/.test(input[p+1]||''))continue;
+                            if(input.startsWith(closing,p)){{end=p+closing.length;break;}}
+                        }}
+                        mark(i,end);i=end-1;
+                    }}
+                    const mask=part=>'\\u0000'+' '.repeat(part.length-1);
+                    return masked.join('')
+                        .replace(/(?:https?:\\/\\/|file:\\/\\/|[a-z]:[\\\\/]|\\\\\\\\)[^\\s]*/g,mask)
+                        .replace(/\\b[a-z_][a-z0-9_]*\\s*=\\s*[^\\s,;]+/g,mask)
+                        .replace(/\\b(?:executionkey|key|token|password|secret|context|payload|arguments|capsule)\\s*:\\s*[^\\s,;]+/g,mask);
+                }};
+                const projectRefusalTerms = redacted => {{
+                    for (const chunk of redacted.split(/\\s+/)) {{
+                        if (!chunk || (!/[a-z0-9_]/.test(chunk) && !chunk.includes('\\u0000'))) continue;
+                        const word = chunk.replace(/^[^a-z0-9_]+|[^a-z0-9_]+$/g,'').toUpperCase();
+                        const term = chunk.length < 24 && /^[A-Z_]+$/.test(word) && refusalVocabulary.has(word)
+                            ? word : 'REDACTED';
+                        if (term !== 'REDACTED' || refusalTerms[refusalTerms.length-1] !== 'REDACTED') refusalTerms.push(term);
+                        if (refusalTerms.length === 32) break;
+                    }}
+                }};
+                const refusalReport={{source:'NONE',state:'UNPROVEN',reasonFieldPresent:false,projectionOmitted:true}};
+                const reportBody=assistantDiagnosticText.trim();
+                const structuredCandidate=reportBody.startsWith('{{') || reportBody.startsWith('[') || reportBody.startsWith('```');
+                if(structuredCandidate && !structuredReportQuoted && reportBody.length<=8192 && completionActionReady && assistantBodyText.length>0) {{
+                    let parsed=null,reportJson=reportBody;
+                    const fence=/^```(?:json)?\\s*([\\s\\S]*?)\\s*```$/i.exec(reportBody);
+                    if(fence)reportJson=fence[1];
+                    try{{parsed=JSON.parse(reportJson);}}catch(_){{}}
+                    if(parsed && typeof parsed==='object' && !Array.isArray(parsed)) {{
+                        const states=['status','state','outcome','dispatch'].flatMap(field=>{{
+                            if(!Object.hasOwn(parsed,field)||typeof parsed[field]!=='string')return [];
+                            const state=/^(?:(?:DISPATCH|TOOL_CALL)_)?(BLOCKED|REJECTED|REFUSED)$/.exec(parsed[field].trim().toUpperCase().replace(/[ -]+/g,'_'));
+                            return state ? [state[1]] : [];
+                        }});
+                        if(states.length && new Set(states).size===1) {{
+                            refusalReport.source='STRUCTURED';refusalReport.state=states[0];
+                            const reasons=['reason','error','detail','message'].flatMap(field=>{{
+                                if(!Object.hasOwn(parsed,field))return [];
+                                const value=parsed[field];
+                                if(typeof value==='string' && value.trim())return [value];
+                                if(field==='error' && value && typeof value==='object' && !Array.isArray(value) &&
+                                    Object.hasOwn(value,'message') && typeof value.message==='string' && value.message.trim())return [value.message];
+                                return [];
+                            }});
+                            const uniqueReasons=Array.from(new Set(reasons));
+                            if(uniqueReasons.length===1) {{
+                                refusalReport.reasonFieldPresent=true;
+                                projectRefusalTerms(maskRefusalValues(uniqueReasons[0].toLowerCase().replace(/[‘’]/g,"'")).slice(0,480));
+                            }}
+                        }}
+                    }}
+                }} else if(!structuredCandidate) {{
+                    const refusalText=maskRefusalValues(assistantRefusalText.slice(0,32768).toLowerCase().replace(/[‘’]/g,"'"));
+                    const refusalAnchor=/\\b(?:dispatch|tool[- ]call).{{0,60}}?\\b(blocked|rejected|refused)\\b/.exec(refusalText);
+                    if(refusalAnchor && !/\\b(?:not|never|no longer)\\s+(?:blocked|rejected|refused)\\b/.test(refusalAnchor[0])) {{
+                        refusalReport.source='PROSE';refusalReport.state=refusalAnchor[1].toUpperCase();
+                        projectRefusalTerms(refusalText.slice(refusalAnchor.index,refusalAnchor.index+480));
+                    }}
+                }}
+                refusalReport.projectionOmitted=refusalTerms.length===0;
+                result.push({{schemaVersion:7,basis:'ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION',
+                    toolUnavailable,contextUnavailable,
+                    approvalRequested,
+                    nativeDispatchMentioned:text.includes('native.codex.dispatch'),
+                    scanTruncated:assistantDiagnosticText.length > 32768,
+                    unavailableSubjects:{json.dumps(TASK_UNAVAILABLE_SUBJECTS)}.filter(subject => unavailableSubjects.has(subject)),
+                    mentionedTools:{json.dumps(TASK_MENTIONED_TOOLS)}.filter(tool => mentionedTools[tool]),
+                    argumentIssues:{json.dumps(TASK_ARGUMENT_ISSUES)}.filter(issue => argumentIssues[issue]),
+                    cachedInvariants:cachedInvariants.filter(hasCode),
+                    identityIssues:{json.dumps(TASK_IDENTITY_ISSUES)}.filter(issue=>identityIssues.has(issue)),
+                    refusalTerms,
+                    refusalReport,
+                    trace:{{schemaVersion:1,scope:'EXACT_USER_EXCHANGE',basis:'PRESENTATION_ONLY_NOT_TOOL_RECEIPT',
+                        knownControls:Math.min(traceControls.length,64),expandedControls:traceExpanded,collapsedControls:traceCollapsed,
+                        unprovenControls:traceUnknown,linkedPanels:traceLinked,visiblePanels:traceVisible}},
+                    knownCodes:known.filter(hasCode),
+                    refusalCategories:{json.dumps(TASK_REFUSAL_CATEGORIES)}.filter(kind => refusals[kind])}});
+            }}
             return result;
         }})()"""
         try:
             value = self.cdp_value(cdp.evaluate(script))
         except Exception as error:
             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED") from error
-        if (not isinstance(value, list) or len(value) not in {5, 7, 8} or
+        if (not isinstance(value, list) or len(value) not in {5, 7, 8, 9} or
                 value[0] not in {"ready", "missing-user", "invalid", "load-error"} or
                 not isinstance(value[1], int) or isinstance(value[1], bool) or
                 not isinstance(value[2], int) or isinstance(value[2], bool) or
@@ -1564,7 +2056,7 @@ class CdpSink:
         if diagnostic is not None:
             allowed = {"ASSISTANT_NOT_MOUNTED", "ASSISTANT_BODY_UNPROVEN",
                        "ASSISTANT_COMPLETION_ACTION_UNPROVEN", "COMPLETE"}
-            if (len(value) != (8 if tool_diagnostic is not None else 7) or
+            if (len(value) != (9 if execution_diagnostic is not None else 8 if tool_diagnostic is not None else 7) or
                     not isinstance(value[5], str) or value[5] not in allowed or
                     not valid_response_control_diagnostics(value[6])):
                 raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
@@ -1572,13 +2064,27 @@ class CdpSink:
                 if not valid_tool_marker_diagnostics(value[7]):
                     raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
                 tool_diagnostic.update(value[7])
+            if execution_diagnostic is not None:
+                if not valid_task_response_hints(value[8]):
+                    raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
+                execution_diagnostic.update(value[8])
             diagnostic["reason"] = value[5]
             diagnostic["controls"] = value[6]
         elif len(value) != 5:
             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
         return value[1], value[2], value[3], value[4]
 
-    def observe_cooperative_response(self, cdp: Any, message: str, expected_digest: str) -> str:
+    def require_response_document(self, cdp: Any) -> None:
+        """Bind observation to the evaluated document, not driver metadata."""
+        try:
+            current = self.cdp_value(cdp.evaluate("location.href"))
+        except Exception as error:
+            raise Attention("RESPONSE_TARGET_QUERY_FAILED") from error
+        if not isinstance(current, str) or not self.exact(current):
+            raise Attention("RESPONSE_TARGET_DRIFT")
+
+
+    def observe_cooperative_response(self, cdp: Any, message: str, expected_digest: str, *, historical: bool = False) -> str:
         """One read-only check of a durably sent USER turn on a new document.
 
         The caller opens the exact target before this check. In particular,
@@ -1588,12 +2094,7 @@ class CdpSink:
         # fixed structural reasons leave the browser, never text or selectors.
         self.response_observation_reason = None
         self.response_observation_controls = None
-        try:
-            current = str(cdp.get_current_url())
-        except Exception as error:
-            raise Attention("RESPONSE_TARGET_QUERY_FAILED") from error
-        if not self.exact(current):
-            raise Attention("RESPONSE_TARGET_DRIFT")
+        self.require_response_document(cdp)
         if self.post_submit_visible_any(cdp, NETWORK):
             raise Attention("RESPONSE_NETWORK_ERROR")
         if (self.post_submit_visible_any(cdp, LOGIN) or
@@ -1619,7 +2120,7 @@ class CdpSink:
             if count > 0:
                 raise Attention("RESPONSE_USER_REPRESENTATION_MISMATCH")
             raise Attention(self.missing_user_reason(cdp, message, users))
-        if users[-1] != expected_digest or count != 1 or turns_after > 1:
+        if count != 1 or (not historical and (users[-1] != expected_digest or turns_after > 1)):
             raise Attention("RESPONSE_SEQUENCE_DRIFT")
         if self.post_submit_visible_any(cdp, STOP):
             self.response_observation_reason = "GENERATION_ACTIVE"
@@ -1633,13 +2134,16 @@ class CdpSink:
             return "RESPONSE_PENDING"
         diagnostic = {}
         try:
+            scope_args={'historical':True} if historical else {}
             timeout_count, _retry_count, assistant_after_user, completed = self.response_snapshot(
-                cdp, message, require_usable_body=True, diagnostic=diagnostic
+                cdp, message, require_usable_body=True, diagnostic=diagnostic, **scope_args
             )
         except PostSubmitUnknown as error:
+            self.require_response_document(cdp)
             if str(error) == "RESPONSE_LOAD_ERROR":
                 raise Attention("RESPONSE_LOAD_ERROR") from error
             raise Attention("RESPONSE_STATE_UNPROVEN") from error
+        self.require_response_document(cdp)
         if timeout_count:
             raise Attention("RESPONSE_TIMEOUT_RETRY_REQUIRED")
         self.response_observation_reason = diagnostic.get("reason")

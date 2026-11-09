@@ -1,0 +1,237 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-09T15:06:19.671243+00:00",
+  "sourceRevision": "COMMIT_CONTAINING_THIS_RECORD",
+  "acceptedBase": "313f6a31f13c04c90d6098fad57f1e6a6c99cfd7",
+  "purpose": "FOCUSED_EXISTING_MAIN_RESPONSE_OBSERVER_AND_CLOSED_CACHED_REFUSAL_DIAGNOSTICS",
+  "changedCodePaths": 18,
+  "sourceFiles": [
+    {
+      "path": "scripts/wake_bridge.py",
+      "sha256GitBytes": "f05aa5e15f05e2f8406d68f59a894e5b6f1469e6cc8a100c0aee9ffac23f8de8"
+    },
+    {
+      "path": "scripts/wake_readiness_visual_probe.py",
+      "sha256GitBytes": "6a1cd1dbf5013ad136ef84baec69ef937106b2eeba2163fcefd42bcbe58b1e7b"
+    },
+    {
+      "path": "src/main.rs",
+      "sha256GitBytes": "69330a9f1bae72dbaa2e3dae7d149d1237fd435f8f496022c05cb654d38697d5"
+    },
+    {
+      "path": "src/mcp.rs",
+      "sha256GitBytes": "e59cbb1bff4aa2ba71250d01634dcad08e06df8131573d620902388ede0c65e3"
+    },
+    {
+      "path": "src/operator_facade.rs",
+      "sha256GitBytes": "f6897e6ba3660d3f544b690f872539cc006d86dc36ec6df89e2cfd4c1aad34f5"
+    },
+    {
+      "path": "src/operator_web_existing.rs",
+      "sha256GitBytes": "0b581ecc3a5f1dd9edc528413dc4a5719e8c1e4e6ef1230fe04b0f517ec2cc96"
+    },
+    {
+      "path": "src/server.rs",
+      "sha256GitBytes": "fc91b4e2cd5200d010976b275a8d648bb55e02d4c0d08017694cfdd30a049902"
+    },
+    {
+      "path": "src/web_task_dispatch.rs",
+      "sha256GitBytes": "ac7e1459fd8cd0eb7ac4c70067b8017504c1a966d3ca11663a5f4e8caa154d3c"
+    },
+    {
+      "path": "src/web_work_state.rs",
+      "sha256GitBytes": "2f39c12642435d86827373acbb79ea35d7f86dcde69822197f98bcf893f08f8b"
+    },
+    {
+      "path": "tests/test_wake_bridge_current_dom.py",
+      "sha256GitBytes": "50c00d37626b60318f4a884a96ac7ec958c4edb587dae8cff49fd14cc5fb59e0"
+    },
+    {
+      "path": "tests/test_wake_readiness_probe.py",
+      "sha256GitBytes": "b366aded97853ad910d15fa114e216d6ccad003cab30f9bb34d0a70e0879d719"
+    },
+    {
+      "path": "wake/src/development_runtime.rs",
+      "sha256GitBytes": "03e91e23a0a8af94555c83ea0b106c9d9bf884d39278dd5e9892493da00748bf"
+    },
+    {
+      "path": "wake/src/readiness_probe.rs",
+      "sha256GitBytes": "9ead4d537dc472691a8c656e6a46485bb3d9d9d7c4448cb53d8b0f967cbd1239"
+    },
+    {
+      "path": "wake/src/runtime.rs",
+      "sha256GitBytes": "69365cccfd989fa53d2a1ec64ec8338c56118323cbcc9b8f58bc2e73ea05a221"
+    },
+    {
+      "path": "wake/src/runtime_readiness.rs",
+      "sha256GitBytes": "dcc1b35c966bc43eafac0bb4eac1fa46ad3d2c28ff4632d4f95cae59dbe2e1ef"
+    },
+    {
+      "path": "wake/src/runtime_reobserve.rs",
+      "sha256GitBytes": "20fcd46f645335146f235e61ad1c9859693ddc14d22facd42570f27b1ace4d09"
+    },
+    {
+      "path": "wake/src/runtime_response.rs",
+      "sha256GitBytes": "f4594382e9eff53892326c4e865a76ab1e75d2798409f36436e1099e46be38cd"
+    },
+    {
+      "path": "wake/src/store_reobserve.rs",
+      "sha256GitBytes": "a2bffdfca0d256406dc0ae59689ae43e81db99b390a4af9fa3a6cceea6b7d18c"
+    }
+  ],
+  "qualification": {
+    "uniquePassingTests": 553,
+    "ignoredCliOptInTests": 2,
+    "suite": "TARGETED_NOT_FULL_REPOSITORY",
+    "countsBasis": "Observed bounded test tool output; owner receipts retain process exit/timeout evidence",
+    "checks": [
+      {
+        "stage": "python-readiness",
+        "attempt": 2,
+        "passingTests": 43,
+        "ownerExitCode": 0,
+        "timedOut": false,
+        "terminationFailed": false
+      },
+      {
+        "stage": "python-dom",
+        "attempt": 2,
+        "passingTests": 106,
+        "ownerExitCode": 0,
+        "timedOut": false,
+        "terminationFailed": false
+      },
+      {
+        "stage": "python-bridge",
+        "attempt": 1,
+        "passingTests": 126,
+        "ownerExitCode": 0,
+        "timedOut": false,
+        "terminationFailed": false
+      },
+      {
+        "stage": "readiness",
+        "attempt": 2,
+        "passingTests": 17,
+        "ownerExitCode": 0,
+        "timedOut": false,
+        "terminationFailed": false
+      },
+      {
+        "stage": "response",
+        "attempt": 1,
+        "passingTests": 5,
+        "ownerExitCode": 0,
+        "timedOut": false,
+        "terminationFailed": false
+      },
+      {
+        "stage": "reobserve",
+        "attempt": 1,
+        "passingTests": 16,
+        "ownerExitCode": 0,
+        "timedOut": false,
+        "terminationFailed": false
+      },
+      {
+        "stage": "cli",
+        "attempt": 1,
+        "passingTests": 225,
+        "ownerExitCode": 0,
+        "timedOut": false,
+        "terminationFailed": false
+      },
+      {
+        "stage": "ledger",
+        "attempt": 1,
+        "passingTests": 7,
+        "ownerExitCode": 0,
+        "timedOut": false,
+        "terminationFailed": false
+      },
+      {
+        "stage": "cached",
+        "attempt": 2,
+        "passingTests": 5,
+        "ownerExitCode": 0,
+        "timedOut": false,
+        "terminationFailed": false
+      },
+      {
+        "stage": "telemetry",
+        "attempt": 2,
+        "passingTests": 1,
+        "ownerExitCode": 0,
+        "timedOut": false,
+        "terminationFailed": false
+      },
+      {
+        "stage": "errors",
+        "attempt": 1,
+        "passingTests": 1,
+        "ownerExitCode": 0,
+        "timedOut": false,
+        "terminationFailed": false
+      },
+      {
+        "stage": "wire",
+        "attempt": 1,
+        "passingTests": 1,
+        "ownerExitCode": 0,
+        "timedOut": false,
+        "terminationFailed": false
+      },
+      {
+        "stage": "wake-clippy",
+        "attempt": 1,
+        "passingTests": null,
+        "ownerExitCode": 0,
+        "timedOut": false,
+        "terminationFailed": false
+      },
+      {
+        "stage": "root-clippy",
+        "attempt": 2,
+        "passingTests": null,
+        "ownerExitCode": 0,
+        "timedOut": false,
+        "terminationFailed": false
+      },
+      {
+        "stage": "fmt-check",
+        "attempt": 1,
+        "passingTests": null,
+        "ownerExitCode": 0,
+        "timedOut": false,
+        "terminationFailed": false
+      }
+    ],
+    "postErrorLayoutReruns": [
+      "wire",
+      "cached",
+      "telemetry"
+    ],
+    "sourceReview": "LOCAL_QUALITY_REVIEW_ONLY",
+    "producerAuthority": false
+  },
+  "preservation": {
+    "pinsChecked": 1103,
+    "mismatches": 0,
+    "newMessages": 0,
+    "nativeAttempts": 0,
+    "productionChanges": 0,
+    "bindingChanges": 0,
+    "newRecurringOwners": 0
+  },
+  "installedAcceptance": "NOT_RUN",
+  "c1": "INCOMPLETE",
+  "remaining": [
+    "GENUINE_CURRENT_FOCUSED_SOURCE_REVIEW",
+    "CANONICAL_SOURCE_INTEGRATION_AND_COMMITTED_SNAPSHOT_ACK",
+    "PROTECTED_REVIEWED_BUILD_AND_GUARDED_MAIN_PROMOTION",
+    "INSTALLED_RESPONSE_READER_QUALIFICATION",
+    "ORIGINAL_NATIVE_REFUSAL_RECOVERY_AND_TRUE_C1_CYCLE"
+  ],
+  "originalCachedInvariant": "NOT_RECOVERED_FROM_RETAINED_ORIGINAL_RPC_EVIDENCE",
+  "wakeBroker": "SEPARATE_EXISTING_UNPROVISIONED_TRANSACTION_GATES_NOT_BYPASSED"
+}

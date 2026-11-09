@@ -409,12 +409,53 @@ fn summarize_response(resp: &Value) -> String {
             .get("message")
             .and_then(Value::as_str)
             .unwrap_or("Unknown error");
+        if let Some(invariant) = cached_refusal_invariant(err) {
+            return format!(
+                "id={id}:error({code} {msg}) phase=CACHED_ENVELOPE_VALIDATION invariant={invariant} nativeExecutionAttempted=false retryAuthorized=false"
+            );
+        }
         return format!("id={id}:error({code} {msg})");
     }
     if resp.get("result").is_some() {
         return format!("id={id}:result");
     }
     format!("id={id}:unknown")
+}
+
+/// Preserve only the validator's closed pre-execution classification. Never
+/// copy arbitrary error data, field names, argument values or parser excerpts
+/// into the existing traffic summary, and do not infer this for old replies.
+fn cached_refusal_invariant(error: &Value) -> Option<&str> {
+    if error.get("code").and_then(Value::as_i64) != Some(-32602)
+        || error.get("message").and_then(Value::as_str) != Some("WEB_TASK_CACHED_ARGUMENTS_INVALID")
+    {
+        return None;
+    }
+    let data = error.get("data")?.as_object()?;
+    if data.len() != 4
+        || data.get("phase")?.as_str()? != "CACHED_ENVELOPE_VALIDATION"
+        || data.get("nativeExecutionAttempted")?.as_bool()?
+        || data.get("retryAuthorized")?.as_bool()?
+    {
+        return None;
+    }
+    let invariant = data.get("invariant")?.as_str()?;
+    matches!(
+        invariant,
+        "ARGUMENTS_NOT_OBJECT"
+            | "COMMAND_NOT_STRING"
+            | "PLAN_FLAG_NOT_BOOLEAN"
+            | "DRY_RUN_NOT_FALSE"
+            | "FULL_OUTPUT_NOT_FALSE"
+            | "CWD_OVERRIDE_FORBIDDEN"
+            | "TIMEOUT_OVERRIDE_FORBIDDEN"
+            | "UNSUPPORTED_OUTER_FIELD"
+            | "COMMAND_TOO_LARGE"
+            | "RESERVED_PREFIX_INVALID"
+            | "PAYLOAD_JSON_INVALID"
+            | "PAYLOAD_NOT_OBJECT"
+    )
+    .then_some(invariant)
 }
 
 fn extract_turn_token_usage(result: Option<&Value>) -> Option<(u64, u64)> {
@@ -965,6 +1006,78 @@ mod tests {
     use std::sync::Arc;
     use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::sync::{Mutex, mpsc::unbounded_channel};
+
+    #[test]
+    fn cached_refusal_summary_retains_only_closed_preexecution_evidence() {
+        let error = |invariant: &str| {
+            json!({"code":-32602,"message":"WEB_TASK_CACHED_ARGUMENTS_INVALID",
+                "data":{"phase":"CACHED_ENVELOPE_VALIDATION","invariant":invariant,
+                    "nativeExecutionAttempted":false,"retryAuthorized":false}})
+        };
+        for invariant in [
+            "ARGUMENTS_NOT_OBJECT",
+            "COMMAND_NOT_STRING",
+            "PLAN_FLAG_NOT_BOOLEAN",
+            "DRY_RUN_NOT_FALSE",
+            "FULL_OUTPUT_NOT_FALSE",
+            "CWD_OVERRIDE_FORBIDDEN",
+            "TIMEOUT_OVERRIDE_FORBIDDEN",
+            "UNSUPPORTED_OUTER_FIELD",
+            "COMMAND_TOO_LARGE",
+            "RESERVED_PREFIX_INVALID",
+            "PAYLOAD_JSON_INVALID",
+            "PAYLOAD_NOT_OBJECT",
+        ] {
+            let summary = summarize_response(&json!({"id":7,"error":error(invariant)}));
+            assert!(summary.contains(&format!("invariant={invariant}")));
+            assert!(summary.contains("nativeExecutionAttempted=false retryAuthorized=false"));
+            assert!(summary.len() < 256);
+        }
+        let legacy = json!({"id":7,"error":{"code":-32602,
+            "message":"WEB_TASK_CACHED_ARGUMENTS_INVALID"}});
+        let original = summarize_response(&legacy);
+        assert!(!original.contains("invariant="));
+        let mut cases = vec![
+            error("PRIVATE_CONTEXT_OR_KEY"),
+            error("CWD_OVERRIDE_FORBIDDEN"),
+        ];
+        cases[1]["data"]["PRIVATE_FIELD_NAME"] = json!("PRIVATE_VALUE");
+        for field in ["nativeExecutionAttempted", "retryAuthorized"] {
+            let mut value = error("CWD_OVERRIDE_FORBIDDEN");
+            value["data"][field] = json!(true);
+            cases.push(value);
+        }
+        for field in [
+            "phase",
+            "invariant",
+            "nativeExecutionAttempted",
+            "retryAuthorized",
+        ] {
+            let mut value = error("CWD_OVERRIDE_FORBIDDEN");
+            value["data"].as_object_mut().unwrap().remove(field);
+            cases.push(value);
+            let mut value = error("CWD_OVERRIDE_FORBIDDEN");
+            value["data"][field] = Value::Null;
+            cases.push(value);
+        }
+        let mut wrong_phase = error("CWD_OVERRIDE_FORBIDDEN");
+        wrong_phase["data"]["phase"] = json!("PRIVATE_PHASE");
+        cases.push(wrong_phase);
+        let mut wrong_type = error("CWD_OVERRIDE_FORBIDDEN");
+        wrong_type["data"]["retryAuthorized"] = json!("false");
+        cases.push(wrong_type);
+        let mut wrong_code = error("CWD_OVERRIDE_FORBIDDEN");
+        wrong_code["code"] = json!(-32000);
+        assert!(cached_refusal_invariant(&wrong_code).is_none());
+        let mut wrong_message = error("CWD_OVERRIDE_FORBIDDEN");
+        wrong_message["message"] = json!("OTHER_ERROR");
+        assert!(cached_refusal_invariant(&wrong_message).is_none());
+        for value in cases {
+            let summary = summarize_response(&json!({"id":7,"error":value}));
+            assert_eq!(summary, original);
+            assert!(!summary.contains("PRIVATE_"));
+        }
+    }
 
     #[tokio::test]
     async fn transport_status_reports_central_dispatch_prerequisites_without_granting_execution() {

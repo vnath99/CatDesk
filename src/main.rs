@@ -2719,6 +2719,19 @@ fn operator_web_error_code(error: &str) -> &str {
             | "SCOPED_DIAGNOSE_PACKAGE_UNSUPPORTED"
             | "SCOPED_DIAGNOSE_TIMEOUT"
             | "SCOPED_DIAGNOSE_UNAVAILABLE"
+            | "READINESS_COMPLETED_RESPONSE_REQUIRED"
+            | "READINESS_PROJECT_INVALID"
+            | "READINESS_REQUIRES_STOPPED_WAKE"
+            | "READINESS_REGISTERED_TARGET_CHANGED"
+            | "READINESS_SOURCE_UNAVAILABLE"
+            | "READINESS_SOURCE_HASH_MISMATCH"
+            | "READINESS_WORK_DELIVERY_CHANGED"
+            | "READINESS_PLATFORM_UNSUPPORTED"
+            | "PROBE_LAUNCH_FAILED"
+            | "PROBE_CONTAINMENT_FAILED"
+            | "PROBE_CLEANUP_UNVERIFIED"
+            | "PROBE_WAIT_FAILED"
+            | "PROBE_PROGRAM_SIZE_INVALID"
     ) {
         return code;
     }
@@ -4041,6 +4054,19 @@ mod tests {
             "SCOPED_DIAGNOSE_PACKAGE_UNSUPPORTED",
             "SCOPED_DIAGNOSE_TIMEOUT",
             "SCOPED_DIAGNOSE_UNAVAILABLE",
+            "READINESS_COMPLETED_RESPONSE_REQUIRED",
+            "READINESS_PROJECT_INVALID",
+            "READINESS_REQUIRES_STOPPED_WAKE",
+            "READINESS_REGISTERED_TARGET_CHANGED",
+            "READINESS_SOURCE_UNAVAILABLE",
+            "READINESS_SOURCE_HASH_MISMATCH",
+            "READINESS_WORK_DELIVERY_CHANGED",
+            "READINESS_PLATFORM_UNSUPPORTED",
+            "PROBE_LAUNCH_FAILED",
+            "PROBE_CONTAINMENT_FAILED",
+            "PROBE_CLEANUP_UNVERIFIED",
+            "PROBE_WAIT_FAILED",
+            "PROBE_PROGRAM_SIZE_INVALID",
         ] {
             assert_eq!(operator_web_error_code(code), code);
             assert_eq!(

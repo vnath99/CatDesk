@@ -32,37 +32,51 @@ pub(crate) fn cached_transport_metadata() -> Value {
     json!({"mcpTool":"run_command","commandPrefix":CACHED_COMMAND_PREFIX,
         "payload":"JSON_SERIALIZE_THE_SAME_SCOPED_TASK_ARGUMENTS",
         "requiredArguments":schema()["inputSchema"]["required"],
+        "outerArguments":{"required":["command"],"optionalBoolean":["allow_without_plan"],
+            "falseOnly":["dry_run","include_full_output"],"mustBeAbsent":["cwd","timeout"],
+            "unknownFieldsAllowed":false},
         "shellExecuted":false,"cwdOverrideAllowed":false,"timeoutOverrideAllowed":false,
         "sameCallIdAndJournal":true,"centralPlanPolicyRetained":true})
 }
 
-fn cached_request(request: &JsonRpcRequest) -> Result<JsonRpcRequest, String> {
-    let invalid = || "WEB_TASK_CACHED_ARGUMENTS_INVALID".to_owned();
+/// Fixed categories only. Never return an argument value, unknown field name,
+/// JSON parser excerpt, task envelope or execution key in an error receipt.
+#[derive(Debug, PartialEq, Eq)]
+struct CachedInvalid(&'static str);
+
+fn cached_request(request: &JsonRpcRequest) -> Result<JsonRpcRequest, CachedInvalid> {
     let arguments = request.params["arguments"]
         .as_object()
-        .ok_or_else(invalid)?;
+        .ok_or(CachedInvalid("ARGUMENTS_NOT_OBJECT"))?;
     for (name, value) in arguments {
         match name.as_str() {
             "command" if value.is_string() => {}
             "allow_without_plan" if value.is_boolean() => {}
             "dry_run" | "include_full_output" if value == &Value::Bool(false) => {}
-            _ => return Err(invalid()),
+            "command" => return Err(CachedInvalid("COMMAND_NOT_STRING")),
+            "allow_without_plan" => return Err(CachedInvalid("PLAN_FLAG_NOT_BOOLEAN")),
+            "dry_run" => return Err(CachedInvalid("DRY_RUN_NOT_FALSE")),
+            "include_full_output" => return Err(CachedInvalid("FULL_OUTPUT_NOT_FALSE")),
+            "cwd" => return Err(CachedInvalid("CWD_OVERRIDE_FORBIDDEN")),
+            "timeout" => return Err(CachedInvalid("TIMEOUT_OVERRIDE_FORBIDDEN")),
+            _ => return Err(CachedInvalid("UNSUPPORTED_OUTER_FIELD")),
         }
     }
     let command = arguments
         .get("command")
         .and_then(Value::as_str)
-        .ok_or_else(invalid)?;
+        .ok_or(CachedInvalid("COMMAND_NOT_STRING"))?;
     if command.len() > 2 * 1024 * 1024 {
-        return Err(invalid());
+        return Err(CachedInvalid("COMMAND_TOO_LARGE"));
     }
     let payload = command
         .trim_start()
         .strip_prefix(CACHED_COMMAND_PREFIX)
-        .ok_or_else(invalid)?;
-    let task: Value = serde_json::from_str(payload).map_err(|_| invalid())?;
+        .ok_or(CachedInvalid("RESERVED_PREFIX_INVALID"))?;
+    let task: Value =
+        serde_json::from_str(payload).map_err(|_| CachedInvalid("PAYLOAD_JSON_INVALID"))?;
     if !task.is_object() {
-        return Err(invalid());
+        return Err(CachedInvalid("PAYLOAD_NOT_OBJECT"));
     }
     Ok(JsonRpcRequest {
         jsonrpc: request.jsonrpc.clone(),
@@ -77,7 +91,18 @@ fn cached_request(request: &JsonRpcRequest) -> Result<JsonRpcRequest, String> {
 pub(crate) async fn handle_cached(control: &str, request: &JsonRpcRequest) -> JsonRpcResponse {
     let adapted = match cached_request(request) {
         Ok(adapted) => adapted,
-        Err(reason) => return JsonRpcResponse::error(request.id.clone(), -32602, reason),
+        Err(reason) => {
+            let mut response = JsonRpcResponse::error(
+                request.id.clone(),
+                -32602,
+                "WEB_TASK_CACHED_ARGUMENTS_INVALID".into(),
+            );
+            response.error.as_mut().expect("constructed error").data = Some(json!({
+                "phase":"CACHED_ENVELOPE_VALIDATION", "invariant":reason.0,
+                "nativeExecutionAttempted":false, "retryAuthorized":false
+            }));
+            return response;
+        }
     };
     if let Err(response) = crate::mcp::enforce_cached_web_task_plan(request, control) {
         return response;
@@ -2768,6 +2793,106 @@ mod tests {
                 &alpha.control.join(".catdesk/web-context"),
                 &[&alpha.key, &beta.key]
             ) >= 2
+        );
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn cached_error_receipt_explains_invariant_without_exporting_values() {
+        let request: JsonRpcRequest = serde_json::from_value(json!({"jsonrpc":"2.0","id":7,
+            "method":"tools/call","params":{"name":"run_command","arguments":{
+                "command":"CATDESK_WEB_TASK={\"executionKey\":\"PRIVATE_SENTINEL\"}",
+                "PRIVATE_FIELD_NAME":"PRIVATE_VALUE"}}}))
+        .unwrap();
+        let response =
+            serde_json::to_value(handle_cached("not-an-admitted-workspace", &request).await)
+                .unwrap();
+        assert_eq!(
+            response["error"]["message"],
+            "WEB_TASK_CACHED_ARGUMENTS_INVALID"
+        );
+        assert_eq!(
+            response["error"]["data"]["invariant"],
+            "UNSUPPORTED_OUTER_FIELD"
+        );
+        assert_eq!(response["error"]["data"]["nativeExecutionAttempted"], false);
+        assert_eq!(response["error"]["data"]["retryAuthorized"], false);
+        assert!(!response.to_string().contains("PRIVATE_"));
+        assert!(!response.to_string().contains("executionKey"));
+    }
+
+    #[tokio::test]
+    async fn cached_refusal_categories_are_exact_and_do_not_admit_native_work() {
+        let normal = json!({"command":"CATDESK_WEB_TASK={}"});
+        let mut cases = vec![
+            (json!([]), "ARGUMENTS_NOT_OBJECT"),
+            (json!({}), "COMMAND_NOT_STRING"),
+            (json!({"command":false}), "COMMAND_NOT_STRING"),
+            (
+                json!({"command":"catdesk_web_task={}"}),
+                "RESERVED_PREFIX_INVALID",
+            ),
+            (
+                json!({"command":"CATDESK_WEB_TASK={invalid"}),
+                "PAYLOAD_JSON_INVALID",
+            ),
+            (
+                json!({"command":"CATDESK_WEB_TASK=[]"}),
+                "PAYLOAD_NOT_OBJECT",
+            ),
+            (
+                json!({"command":format!("CATDESK_WEB_TASK={}", "x".repeat(2*1024*1024))}),
+                "COMMAND_TOO_LARGE",
+            ),
+        ];
+        for (field, value, invariant) in [
+            (
+                "allow_without_plan",
+                json!("PRIVATE_FLAG"),
+                "PLAN_FLAG_NOT_BOOLEAN",
+            ),
+            ("dry_run", json!(true), "DRY_RUN_NOT_FALSE"),
+            ("include_full_output", json!(true), "FULL_OUTPUT_NOT_FALSE"),
+            ("cwd", json!("PRIVATE_WORKSPACE"), "CWD_OVERRIDE_FORBIDDEN"),
+            ("timeout", json!(1), "TIMEOUT_OVERRIDE_FORBIDDEN"),
+            (
+                "PRIVATE_FIELD",
+                json!("PRIVATE_VALUE"),
+                "UNSUPPORTED_OUTER_FIELD",
+            ),
+        ] {
+            let mut arguments = normal.clone();
+            arguments[field] = value;
+            cases.push((arguments, invariant));
+        }
+        for (arguments, invariant) in cases {
+            let request: JsonRpcRequest = serde_json::from_value(json!({"jsonrpc":"2.0",
+                "id":"synthetic-refusal","method":"tools/call",
+                "params":{"name":"run_command","arguments":arguments}}))
+            .unwrap();
+            let response = serde_json::to_value(
+                handle_cached("never-admitted-private-workspace", &request).await,
+            )
+            .unwrap();
+            assert_eq!(
+                response["error"]["message"],
+                "WEB_TASK_CACHED_ARGUMENTS_INVALID"
+            );
+            assert_eq!(
+                response["error"]["data"],
+                json!({
+                "phase":"CACHED_ENVELOPE_VALIDATION", "invariant":invariant,
+                "nativeExecutionAttempted":false, "retryAuthorized":false})
+            );
+            assert!(response.get("result").is_none());
+            assert!(!response.to_string().contains("PRIVATE_"));
+        }
+        let metadata = cached_transport_metadata();
+        assert_eq!(
+            metadata["outerArguments"]["mustBeAbsent"],
+            json!(["cwd", "timeout"])
+        );
+        assert_eq!(
+            metadata["outerArguments"]["falseOnly"],
+            json!(["dry_run", "include_full_output"])
         );
     }
 }

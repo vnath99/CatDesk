@@ -14,6 +14,51 @@ from unittest import mock
 
 
 class ReadinessProbeTests(unittest.TestCase):
+    def test_passive_response_modes_reject_incomplete_scope_and_action_flags(self):
+        with tempfile.TemporaryDirectory() as profile:
+            base=['probe','--conversation-url','https://chatgpt.com/c/fixture','--profile',profile,
+                '--read-only','--response-only','--task-diagnostics','--delivery-file','delivery.json',
+                '--delivery-sha256','b'*64,'--primitives','wake_bridge.py','--primitives-sha256','a'*64]
+            cases=[base+['--await-existing-response','--historical-response'],
+                base+['--await-existing-response','--source-review-diagnostics'],
+                base+['--source-review-diagnostics','--historical-response']]
+            for missing in ['--read-only','--response-only','--task-diagnostics']:
+                cases.append([v for v in base if v!=missing]+['--await-existing-response'])
+            for argv in cases:
+                with self.subTest(argv=argv),mock.patch.object(sys,'argv',argv), \
+                        mock.patch.object(self.probe,'load_observation_sink',return_value=mock.Mock()), \
+                        mock.patch.object(self.probe,'load_delivery_message') as loader:
+                    self.assertEqual(self.probe.main(),2)
+                    loader.assert_not_called()
+            for flag in ['--receipt-only','--inspect-app-menu','--inspect-response-trace','--inspect-historical-trace']:
+                with self.subTest(flag=flag),mock.patch.object(sys,'argv',base+[flag]), \
+                        contextlib.redirect_stderr(io.StringIO()),self.assertRaises(SystemExit) as failure:
+                    self.probe.main()
+                self.assertEqual(failure.exception.code,2)
+
+    def test_sent_response_reader_refuses_hash_route_phase_and_receipt_drift(self):
+        url='https://chatgpt.com/c/fixture';event_id='web-work-'+'a'*64;message='PRIVATE_FROZEN_USER'
+        message_digest=hashlib.sha256(message.encode()).hexdigest();target_digest=hashlib.sha256(url.encode()).hexdigest()
+        delivery=dict(phase='SENT',messageDigest=message_digest,
+            event=dict(eventId=event_id,projectId='alpha',eventType='engineering_attention',
+                targetGeneration=1,message=message,auditReferences=[]),
+            target=dict(generation=1,url=url,digest=target_digest),
+            receipt=dict(schemaVersion=1,eventId=event_id,targetGeneration=1,targetDigest=target_digest,
+                messageDigest=message_digest,sentUtc=1,evidence='EXACT_USER_MESSAGE_APPENDED'))
+        with tempfile.TemporaryDirectory() as root:
+            path=Path(root)/'deliveries'/(event_id+'.json');path.parent.mkdir()
+            def read(value,checksum=None,target=url):
+                path.write_text(json.dumps(value),encoding='utf-8')
+                digest=hashlib.sha256(path.read_bytes()).hexdigest()
+                return self.probe.load_delivery_message(path,checksum or digest,target,response_only=True)
+            self.assertEqual(read(delivery),delivery)
+            for value,kwargs in [(delivery,dict(checksum='0'*64)),(delivery,dict(target=url+'-foreign')),
+                    (delivery | {'phase':'SUBMITTING'},{}),(delivery | {'receipt':None},{}),
+                    (delivery | {'receipt':delivery['receipt'] | {'messageDigest':'0'*64}},{}),
+                    (delivery | {'target':delivery['target'] | {'generation':2}}, {})]:
+                with self.subTest(kwargs=kwargs),self.assertRaises((ValueError,KeyError)):
+                    read(value,**kwargs)
+
     def setUp(self):
         spec = importlib.util.spec_from_file_location(
             "readiness_probe", Path(__file__).resolve().parents[1] / "scripts/wake_readiness_visual_probe.py")
@@ -145,8 +190,12 @@ class ReadinessProbeTests(unittest.TestCase):
                 self.assertEqual(self.probe.main(), 0)
             self.assertEqual(calls, [{"uc": True, "user_data_dir": profile}, target, "closed"])
             rows = output.getvalue().splitlines()
-            self.assertTrue(rows[0].startswith("PROBE:TAB:"))
-            self.assertEqual(rows[1:], ["PROBE:TARGET_TAB_UNAVAILABLE", "PROBE:FINAL:EXACT_READY_IDLE"])
+            self.assertEqual([row for row in rows if row.startswith("PROBE:PHASE:")], [
+                "PROBE:PHASE:IMPORT_BROWSER", "PROBE:PHASE:BROWSER_START", "PROBE:PHASE:CDP_NAVIGATION",
+                "PROBE:PHASE:OBSERVING", "PROBE:PHASE:BROWSER_CLOSED"])
+            observations = [row for row in rows if not row.startswith("PROBE:PHASE:")]
+            self.assertTrue(observations[0].startswith("PROBE:TAB:"))
+            self.assertEqual(observations[1:], ["PROBE:TARGET_TAB_UNAVAILABLE", "PROBE:FINAL:EXACT_READY_IDLE"])
         self.assertEqual(self.probe.PROFILE, default)
 
     def test_home_recovery_requires_verified_empty_composer(self):
@@ -473,6 +522,260 @@ class ReadinessProbeTests(unittest.TestCase):
                         "https://other.example/c/readiness-fixture",
                         "https://chatgpt.com/c/other"]:
             self.assertFalse(self.probe.exact_url(current, target))
+
+
+    def test_sent_continuation_diagnostics_cannot_admit_unknown_or_unreceived_delivery(self):
+        url="https://chatgpt.com/c/fixture"
+        event_id="wake-intent-"+"b"*64
+        message="frozen continuation"
+        refs=['catdesk.wake.v1:'+k+':'+v for k,v in [('purpose','NEW_TASK'),('source-event','web-work-'+'a'*64),
+            ('source-turn','initial-context-'+'c'*64),('priority','0'),('expires-utc','100')]]
+        target=dict(generation=1,url=url,digest=hashlib.sha256(url.encode()).hexdigest())
+        digest=hashlib.sha256(message.encode()).hexdigest()
+        value=dict(phase='SENT',messageDigest=digest,target=target,event=dict(eventId=event_id,projectId='alpha',
+            eventType='engineering_attention',targetGeneration=1,message=message,auditReferences=refs),
+            receipt=dict(schemaVersion=1,eventId=event_id,targetGeneration=1,targetDigest=target['digest'],
+                messageDigest=digest,sentUtc=10,evidence='EXACT_USER_MESSAGE_APPENDED'))
+        with tempfile.TemporaryDirectory() as root:
+            path=Path(root)/'deliveries'/(event_id+'.json');path.parent.mkdir()
+            def read(item,**kw):
+                path.write_text(json.dumps(item));checksum=hashlib.sha256(path.read_bytes()).hexdigest()
+                return self.probe.load_delivery_message(path,checksum,url,response_only=True,**kw)
+            with self.assertRaises(ValueError):read(value)
+            self.assertEqual(read(value,sent_diagnostics=True),value)
+            for changed in [value | {'phase':'SUBMITTING'},value | {'receipt':None},
+                value | {'event':value['event'] | {'auditReferences':refs[:-1]}},
+                value | {'event':value['event'] | {'auditReferences':[v.replace('NEW_TASK','ROLLOVER') for v in refs]}}]:
+                with self.assertRaises((ValueError,KeyError)):read(changed,sent_diagnostics=True)
+
+
+    def test_source_review_delivery_is_passive_diagnostics_only_and_exact_receipt_bound(self):
+        url='https://chatgpt.com/c/fixture'
+        identity='web-work-'+'a'*64
+        message='frozen public source review'
+        digest=hashlib.sha256(message.encode()).hexdigest()
+        target=dict(url=url,digest=hashlib.sha256(url.encode()).hexdigest(),generation=1)
+        value=dict(phase='SENT',messageDigest=digest,target=target,
+            event=dict(eventId=identity,projectId='alpha',eventType='source_review',targetGeneration=1,
+                message=message,auditReferences=['catdesk-review-v1:original-frozen-grant']),
+            receipt=dict(schemaVersion=1,eventId=identity,targetGeneration=1,targetDigest=target['digest'],
+                messageDigest=digest,sentUtc=10,evidence='EXACT_USER_MESSAGE_APPENDED'))
+        with tempfile.TemporaryDirectory() as root:
+            path=Path(root)/'deliveries'/(identity+'.json');path.parent.mkdir()
+            def read(item,**flags):
+                path.write_text(json.dumps(item));checksum=hashlib.sha256(path.read_bytes()).hexdigest()
+                result=self.probe.load_delivery_message(path,checksum,url,**flags)
+                self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(),checksum)
+                return result
+            allowed=dict(response_only=True,sent_diagnostics=True,source_review_diagnostics=True)
+            self.assertEqual(read(value,**allowed),value)
+            for flags in [dict(),dict(response_only=True),dict(response_only=True,sent_diagnostics=True),
+                dict(response_only=True,source_review_diagnostics=True),dict(source_review_diagnostics=True),
+                allowed | dict(receipt_only=True)]:
+                with self.subTest(flags=flags),self.assertRaises((ValueError,KeyError)):
+                    read(value,**flags)
+            for changed in [value | dict(phase='SUBMITTING'),value | dict(receipt=None),
+                value | dict(event=value['event'] | dict(auditReferences=[])),
+                value | dict(event=value['event'] | dict(auditReferences=['catdesk-review-v1:a','catdesk-review-v1:b'])),
+                value | dict(event=value['event'] | dict(auditReferences=['catdesk-review-v1:'])),
+                value | dict(event=value['event'] | dict(auditReferences=['catdesk-review-v1:bad/grant'])),
+                value | dict(event=value['event'] | dict(auditReferences=['catdesk-review-v1:'+'a'*129])),
+                value | dict(event=value['event'] | dict(eventId='wake-intent-'+'a'*64)),
+                value | dict(event=value['event'] | dict(targetGeneration=2)),
+                value | dict(receipt=value['receipt'] | dict(evidence='UNVERIFIED')),
+                value | dict(receipt=value['receipt'] | dict(messageDigest='b'*64))]:
+                with self.subTest(changed=changed),self.assertRaises((ValueError,KeyError)):
+                    read(changed,**allowed)
+
+
+    def awaited_response(self, states, deadline=5, late_complete=False):
+        clock=[0.0];sleeps=[];observed=[]
+        delivery=dict(messageDigest='a'*64,event=dict(eventId='web-work-'+'b'*64,message='PRIVATE_USER'),
+            target=dict(generation=1,digest='c'*64))
+        sink=types.SimpleNamespace(response_observation_controls=None)
+        sequence=iter(states)
+        def observe(cdp,message,digest):
+            self.assertIs(cdp,controlled)
+            self.assertEqual((message,digest),('PRIVATE_USER','a'*64))
+            item=next(sequence);observed.append(item)
+            if isinstance(item,Exception):raise item
+            if isinstance(item,tuple):
+                state,reason=item[:2]
+                sink.response_observation_reason=reason
+                sink.response_observation_controls=dict(item[2]) if len(item)>2 else None
+            else:
+                state=item
+                sink.response_observation_reason='GENERATION_ACTIVE' if state=='RESPONSE_PENDING' else 'COMPLETE'
+                sink.response_observation_controls=None
+            if late_complete and state=='RESPONSE_COMPLETE':clock[0]=deadline+1
+            return state
+        sink.observe_cooperative_response=observe
+        def sleep(seconds):
+            self.assertGreater(seconds,0);self.assertLessEqual(seconds,1)
+            sleeps.append(seconds);clock[0]+=seconds
+        controlled=object();output=io.StringIO()
+        with contextlib.redirect_stdout(output):
+            completed=self.probe.report_sent_response(sink,controlled,delivery,sleep=sleep,
+                await_deadline=deadline,monotonic=lambda:clock[0])
+        self.assertNotIn('PRIVATE_',output.getvalue())
+        return completed,output.getvalue(),clock[0],sleeps,observed
+
+
+    def test_existing_response_wait_keeps_owner_until_two_fresh_completed_samples(self):
+        result,out,elapsed,sleeps,observed=self.awaited_response([
+            'RESPONSE_PENDING','RESPONSE_PENDING','RESPONSE_COMPLETE','RESPONSE_COMPLETE'])
+        self.assertTrue(result)
+        self.assertEqual(observed[-2:],['RESPONSE_COMPLETE','RESPONSE_COMPLETE'])
+        self.assertEqual(observed.count('RESPONSE_PENDING'),2)
+        self.assertEqual(elapsed,2.25)
+        self.assertEqual(json.loads(out.split('PROBE:RESPONSE:')[1])['stage'],'RESPONSE_COMPLETE')
+        # If generation resumes during the stability spacing, start a fresh pair.
+        result,_,_,_,observed=self.awaited_response([
+            'RESPONSE_PENDING','RESPONSE_COMPLETE','RESPONSE_PENDING','RESPONSE_COMPLETE','RESPONSE_COMPLETE'])
+        self.assertTrue(result)
+        self.assertEqual(observed[-2:],['RESPONSE_COMPLETE','RESPONSE_COMPLETE'])
+
+
+    def test_existing_response_wait_expires_without_renewing_budget_or_completing(self):
+        result,out,elapsed,sleeps,observed=self.awaited_response(['RESPONSE_PENDING']*3,deadline=2.5)
+        self.assertFalse(result)
+        self.assertEqual(elapsed,2.5)
+        self.assertEqual(sleeps,[1,1,.5])
+        self.assertEqual(len(observed),3)
+        value=json.loads(out.split('PROBE:RESPONSE:')[1])
+        self.assertEqual((value['stage'],value['diagnosticReason']),('RESPONSE_PENDING','GENERATION_ACTIVE'))
+        result,out,_,_,_=self.awaited_response(['RESPONSE_PENDING','RESPONSE_COMPLETE'],late_complete=True)
+        self.assertFalse(result)
+        self.assertEqual(out,'PROBE:RESPONSE_STATE:UNSTABLE\n')
+
+
+    def test_existing_response_wait_rechecks_scope_and_fails_closed_on_interruption(self):
+        for reason,expected in [('RESPONSE_TARGET_DRIFT','RESPONSE_TARGET_DRIFT'),
+                ('LOGIN_OR_PROFILE_REQUIRED','LOGIN_OR_PROFILE_REQUIRED'),
+                ('RESPONSE_NETWORK_ERROR','RESPONSE_NETWORK_ERROR'),
+                ('RESPONSE_EXPECTED_USER_DUPLICATED','RESPONSE_EXPECTED_USER_DUPLICATED'),
+                ('RESPONSE_SEQUENCE_DRIFT','RESPONSE_SEQUENCE_DRIFT'),('PRIVATE_CANCELLATION','UNPROVEN')]:
+            with self.subTest(reason=reason):
+                result,out,elapsed,sleeps,observed=self.awaited_response([
+                    'RESPONSE_PENDING',RuntimeError(reason)])
+                self.assertFalse(result)
+                self.assertEqual(out,'PROBE:RESPONSE_STATE:'+expected+'\n')
+                self.assertEqual((elapsed,sleeps,len(observed)),(1,[1],2))
+
+
+    def test_existing_response_wait_does_not_report_old_generation_after_unstable_completion(self):
+        result,out,elapsed,_,observed=self.awaited_response([
+            'RESPONSE_PENDING',
+            ('RESPONSE_COMPLETE','COMPLETE',self.completed_controls(1)),
+            ('RESPONSE_COMPLETE','COMPLETE',self.completed_controls(2)),
+        ],deadline=1.5)
+        self.assertFalse(result)
+        self.assertEqual(elapsed,1.5)
+        self.assertEqual(len(observed),3)
+        self.assertEqual(out,'PROBE:RESPONSE_STATE:UNSTABLE\n')
+
+
+    def test_existing_response_wait_settles_generation_mount_body_and_completion_controls(self):
+        states=[('RESPONSE_PENDING',reason) for reason in ['GENERATION_ACTIVE',
+            'ASSISTANT_NOT_MOUNTED','ASSISTANT_BODY_UNPROVEN','ASSISTANT_COMPLETION_ACTION_UNPROVEN']]
+        states+=['RESPONSE_COMPLETE','RESPONSE_COMPLETE']
+        result,out,elapsed,_,observed=self.awaited_response(states,deadline=6)
+        self.assertTrue(result)
+        self.assertEqual(observed,states)
+        self.assertEqual(elapsed,4.25)
+        self.assertEqual(json.loads(out.split('PROBE:RESPONSE:')[1])['stage'],'RESPONSE_COMPLETE')
+
+
+    @staticmethod
+    def completed_controls(buttons):
+        value={key:0 for key in ['semanticAssistantUnits','roleAssistantNodes','copyTestIdInTurn',
+            'copyLabelInTurn','copyResponseLabelInTurn','copyMessageLabelInTurn','copyTextInTurn',
+            'knownCopyInAssistant','knownCopyInBody','sharedCopyAfterAssistant','toolbarContainersInTurn',
+            'buttonsInTurn','copyTestIdInParent','copyLabelInParent','copyResponseLabelInParent',
+            'copyMessageLabelInParent']}
+        value.update(pairedTurn=True,assistantBodyPresent=True,completionActionFound=True,
+            assistantInsideSemanticUnit=True,buttonsInTurn=buttons)
+        return value
+
+
+    def test_existing_response_wait_restarts_pair_after_successful_completion_metadata_change(self):
+        a=('RESPONSE_COMPLETE','COMPLETE',self.completed_controls(1))
+        b=('RESPONSE_COMPLETE','COMPLETE',self.completed_controls(2))
+        result,out,elapsed,_,observed=self.awaited_response([a,b,b])
+        self.assertTrue(result)
+        self.assertEqual(observed,[a,b,b])
+        self.assertEqual(elapsed,.5)
+        value=json.loads(out.split('PROBE:RESPONSE:')[1])
+        self.assertEqual(value['completionControls']['buttonsInTurn'],2)
+
+
+    def test_existing_response_wait_keeps_stable_non_generation_pending_until_deadline(self):
+        for reason in ['ASSISTANT_NOT_MOUNTED','ASSISTANT_BODY_UNPROVEN',
+                'ASSISTANT_COMPLETION_ACTION_UNPROVEN']:
+            states=[('RESPONSE_PENDING',reason)]*3
+            with self.subTest(reason=reason):
+                result,out,elapsed,sleeps,observed=self.awaited_response(states,deadline=2.5)
+                self.assertFalse(result)
+                self.assertEqual((elapsed,sleeps,len(observed)),(2.5,[1,1,.5],3))
+                value=json.loads(out.split('PROBE:RESPONSE:')[1])
+                self.assertEqual((value['stage'],value['diagnosticReason']),('RESPONSE_PENDING',reason))
+
+
+    def test_existing_response_wait_never_promotes_unstable_completed_samples_at_deadline(self):
+        states=[('RESPONSE_COMPLETE','COMPLETE',self.completed_controls(i)) for i in range(4)]
+        result,out,elapsed,sleeps,observed=self.awaited_response(states,deadline=1)
+        self.assertFalse(result)
+        self.assertEqual(observed,states)
+        self.assertEqual((elapsed,sleeps),(1,[.25]*4))
+        self.assertEqual(out,'PROBE:RESPONSE_STATE:UNSTABLE\n')
+
+
+    def test_task_diagnostic_read_requires_two_identical_completed_samples_without_text(self):
+        delivery=dict(messageDigest='a'*64,event=dict(eventId='wake-intent-'+'b'*64,message='PRIVATE_USER'),target=dict(generation=1,digest='c'*64))
+        hints=dict(schemaVersion=1,basis='ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION',toolUnavailable=True,
+            contextUnavailable=False,approvalRequested=False,nativeDispatchMentioned=False,knownCodes=[])
+        tools=dict(schemaVersion=1,basis='VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT',scope='EXACT_USER_EXCHANGE',
+            selectorCoverage='KNOWN_MARKERS_ONLY',callMarkers=0,resultMarkers=0,errorMarkers=0,busyMarkers=0,countOverflow=False)
+        sink=mock.Mock();sink.response_observation_reason='COMPLETE';sink.response_observation_controls=None
+        sink.observe_cooperative_response.return_value='RESPONSE_COMPLETE'
+        def snapshot(*args,**kw):
+            kw['diagnostic'].update(reason='COMPLETE');kw['tool_diagnostic'].update(tools);kw['execution_diagnostic'].update(hints)
+            return (0,0,True,True)
+        sink.response_snapshot.side_effect=snapshot
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):self.probe.report_sent_response(sink,object(),delivery,sleep=lambda _:None,task_diagnostics=True)
+        self.assertIn('PROBE:TASK:',output.getvalue());self.assertNotIn('PRIVATE_',output.getvalue())
+        self.assertEqual(sink.response_snapshot.call_count,2)
+        sink.response_snapshot.side_effect=lambda *a,**k:(0,0,True,False)
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):self.probe.report_sent_response(sink,object(),delivery,sleep=lambda _:None,task_diagnostics=True)
+        self.assertEqual(output.getvalue(),'PROBE:RESPONSE_STATE:UNPROVEN\n')
+
+
+    def test_response_observer_is_receipt_bound_stable_and_never_retries(self):
+        delivery=dict(messageDigest="a"*64,event=dict(eventId="web-work-"+"b"*64,message="PRIVATE_USER"),target=dict(generation=1,digest="c"*64))
+        sink=types.SimpleNamespace(observe_cooperative_response=mock.Mock(return_value="RESPONSE_COMPLETE"),response_observation_reason="COMPLETE",response_observation_controls=None)
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):self.probe.report_sent_response(sink,object(),delivery,sleep=lambda _:None)
+        self.assertEqual(sink.observe_cooperative_response.call_count,2)
+        value=json.loads(output.getvalue().split("PROBE:RESPONSE:")[1]);self.assertEqual(value["stage"],"RESPONSE_COMPLETE")
+        self.assertNotIn("PRIVATE_USER",output.getvalue())
+        output=io.StringIO();sink.observe_cooperative_response.reset_mock()
+        with contextlib.redirect_stdout(output):self.probe.report_sent_response(sink,object(),delivery,sleep=lambda _:None,historical=True)
+        self.assertIn('PROBE:HISTORY_RESPONSE:',output.getvalue());self.assertNotIn('PROBE:RESPONSE:',output.getvalue())
+        self.assertTrue(all(call.kwargs=={'historical':True} for call in sink.observe_cooperative_response.call_args_list))
+        sink.observe_cooperative_response.side_effect=["RESPONSE_PENDING","RESPONSE_COMPLETE"]
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):self.probe.report_sent_response(sink,object(),delivery,sleep=lambda _:None)
+        self.assertEqual(output.getvalue(),"PROBE:RESPONSE_STATE:UNSTABLE\n")
+        for reason,expected in [("RESPONSE_LOAD_ERROR","RESPONSE_LOAD_ERROR"),
+                ("RESPONSE_EXPECTED_USER_NOT_FOUND","RESPONSE_EXPECTED_USER_NOT_FOUND"),
+                ("RESPONSE_USER_REPRESENTATION_MISMATCH","RESPONSE_USER_REPRESENTATION_MISMATCH"),
+                ("RESPONSE_SEQUENCE_QUERY_FAILED","RESPONSE_SEQUENCE_QUERY_FAILED"),("PRIVATE_ERROR_BODY","UNPROVEN")]:
+            sink.observe_cooperative_response.side_effect=RuntimeError(reason)
+            output=io.StringIO()
+            with contextlib.redirect_stdout(output):self.probe.report_sent_response(sink,object(),delivery,sleep=lambda _:None)
+            self.assertEqual(output.getvalue(),"PROBE:RESPONSE_STATE:"+expected+"\n")
 
 
 if __name__ == "__main__":

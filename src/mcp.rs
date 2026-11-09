@@ -208,13 +208,15 @@ pub struct JsonRpcResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<JsonRpcError>,
+    pub error: Option<Box<JsonRpcError>>,
 }
 
 #[derive(Serialize)]
 pub struct JsonRpcError {
     pub code: i64,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<Value>,
 }
 
 impl JsonRpcResponse {
@@ -231,7 +233,11 @@ impl JsonRpcResponse {
             jsonrpc: "2.0".into(),
             id,
             result: None,
-            error: Some(JsonRpcError { code, message }),
+            error: Some(Box::new(JsonRpcError {
+                code,
+                message,
+                data: None,
+            })),
         }
     }
 }
@@ -10912,6 +10918,21 @@ mod tests {
     use super::*;
     use std::ffi::OsString;
     use uuid::Uuid;
+
+    #[test]
+    fn optional_error_data_preserves_legacy_jsonrpc_wire_shape() {
+        let mut response = JsonRpcResponse::error(Some(json!(7)), -32602, "TEST_ERROR".into());
+        let legacy = json!({"jsonrpc":"2.0","id":7,
+            "error":{"code":-32602,"message":"TEST_ERROR"}});
+        assert_eq!(serde_json::to_value(&response).unwrap(), legacy);
+        response.error.as_mut().unwrap().data = Some(json!({"phase":"CACHED_ENVELOPE_VALIDATION",
+            "invariant":"PAYLOAD_NOT_OBJECT","nativeExecutionAttempted":false,"retryAuthorized":false}));
+        let current = serde_json::to_value(&response).unwrap();
+        assert_eq!(current["error"]["code"], legacy["error"]["code"]);
+        assert_eq!(current["error"]["message"], legacy["error"]["message"]);
+        assert_eq!(current["error"]["data"]["invariant"], "PAYLOAD_NOT_OBJECT");
+        assert!(current.get("result").is_none());
+    }
 
     fn active_delivery_fixture(
         project: &str,
