@@ -30,6 +30,13 @@ class ReadinessProbeTests(unittest.TestCase):
         output=io.StringIO()
         with contextlib.redirect_stdout(output):self.probe.report_response_trace(sink,cdp,delivery)
         self.assertEqual(output.getvalue(),'PROBE:TRACE_STATE:UNPROVEN\n')
+        sink.trace_failure=lambda:dict(schemaVersion=1,phase='READ',boundary='SNAPSHOT',reason='OBSERVER_EXCEPTION')
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):self.probe.report_response_trace(sink,cdp,delivery)
+        lines=output.getvalue().splitlines()
+        self.assertEqual(lines[0],'PROBE:TRACE_STATE:UNPROVEN')
+        self.assertEqual(json.loads(lines[1].split('PROBE:TRACE_FAILURE:')[1]),sink.trace_failure())
+        self.assertNotIn('PRIVATE_',output.getvalue())
 
     def test_menu_report_binds_only_existing_delivery_and_never_exports_private_errors(self):
         delivery=dict(messageDigest='a'*64,event=dict(message='PRIVATE_USER'))

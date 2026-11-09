@@ -1377,6 +1377,7 @@ class CurrentDomTests(unittest.TestCase):
         self.assertEqual(result['state'],'OPEN_OUTCOME_UNKNOWN');self.assertTrue(result['openOutcomeUnknown'])
         self.assertTrue(result['openAttempted']);self.assertEqual(cdp.mutations,1)
         self.assertEqual(result['knownCodes'],[]);self.assertNotIn('PRIVATE_',json.dumps(result))
+        self.assertEqual(self.sink.trace_failure(),dict(schemaVersion=1,phase='OPEN',boundary='SNAPSHOT',reason='RESPONSE_STATE_QUERY_FAILED'))
 
     def test_trace_loading_waits_without_reclick_and_never_classifies_an_unfinished_panel(self):
         import time
@@ -1389,9 +1390,28 @@ class CurrentDomTests(unittest.TestCase):
                         bridge.digest('exact wake message'),sleeper=lambda _:time.sleep(.01))
                     self.assertEqual(result['state'],expected);self.assertEqual(cdp.mutations,1)
                     self.assertTrue(bridge.valid_trace_inspection(result))
-                    if loading=='stuck':self.assertEqual(result['knownCodes'],[])
+                    if loading=='stuck':
+                        self.assertEqual(result['knownCodes'],[])
+                        self.assertEqual(self.sink.trace_failure(),dict(schemaVersion=1,phase='READ',
+                            boundary='PANEL_STABILITY',reason='TRACE_READ_WINDOW_EXPIRED'))
+                    else:self.assertIsNone(self.sink.trace_failure())
                     self.assertNotIn('PRIVATE_',json.dumps(result))
                 finally:cdp.close()
+
+    def test_trace_failure_classifies_boundary_without_private_exception_or_stale_cause(self):
+        with patch.object(self.sink,'observe_cooperative_response',side_effect=bridge.Attention('RESPONSE_TARGET_DRIFT')):
+            with self.assertRaises(bridge.Attention):
+                self.sink.inspect_response_trace(object(),'exact wake message',bridge.digest('exact wake message'))
+        value=self.sink.trace_failure()
+        self.assertEqual(value,dict(schemaVersion=1,phase='PREPARE',boundary='COOPERATIVE_RESPONSE',reason='RESPONSE_TARGET_DRIFT'))
+        for key,bad in [('reason','PRIVATE_ERROR'),('phase','PRIVATE_PHASE'),('boundary','PRIVATE_PATH'),('rawText','PRIVATE_CONTEXT')]:
+            self.assertFalse(bridge.valid_trace_failure(value|{key:bad}))
+        self.sink.trace_failure_diagnostic=value|{'reason':'PRIVATE_ERROR'}
+        self.assertIsNone(self.sink.trace_failure())
+        cdp=PersistentCurrentDom(observationEditor=True,traceInteractive=True,traceControls=[{'expanded':False,'type':'submit'}])
+        self.addCleanup(cdp.close)
+        result=self.sink.inspect_response_trace(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+        self.assertEqual(result['state'],'CONTROL_UNSUPPORTED');self.assertIsNone(self.sink.trace_failure())
 
     def test_trace_reads_only_linked_details_or_fresh_role_panels_and_reports_truncated_coverage(self):
         for control,options,kind in [({'expanded':False,'linked':True},{},'CONTROL_LINK'),

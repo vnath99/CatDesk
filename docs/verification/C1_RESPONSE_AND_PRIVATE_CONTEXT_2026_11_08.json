@@ -1899,8 +1899,8 @@
     }
   },
   "oneShotTaskTraceInspection": {
-    "observedUtc": "2026-11-09T02:55:24.746663+00:00",
-    "status": "SOURCE_PASS_LIVE_NOT_RUN",
+    "observedUtc": "2026-11-09T03:03:47.443150+00:00",
+    "status": "LIVE_AUTOMATIC_RESPONSE_PASS_TRACE_UNKNOWN",
     "durablePerEventFence": true,
     "maximumClicks": 1,
     "unknownClickRetried": false,
@@ -1912,8 +1912,8 @@
       "FRESH_ROLE"
     ],
     "broadDomTests": 102,
-    "focusedTraceTests": 8,
-    "nativeReadinessTests": 20,
+    "focusedTraceTests": 9,
+    "nativeReadinessTests": 21,
     "operatorCliTests": 46,
     "probeTests": 40,
     "rootAndWakeClippy": "PASS",
@@ -1923,6 +1923,53 @@
     "loadingMustStabilize": true,
     "maximumReadPolls": 8,
     "stuckLoading": "OPEN_OUTCOME_UNKNOWN",
-    "truncatedArgumentTypes": "NOT_EXTRACTED"
+    "truncatedArgumentTypes": "NOT_EXTRACTED",
+    "traceFailureProtocol": "SOURCE_PASS_LIVE_NOT_RUN",
+    "failedNewFixtureRunRetained": true,
+    "live": {
+      "sourceCommit": "99e1ba97a771df5473d55b3376b076338f6e3a41",
+      "controllerSha256": "05b4d275cd92de5f85bfddd7031c9561ee4074cdceaa9456cf82a87a110e78ce",
+      "startedUtc": "2026-11-09T02:57:05.262230+00:00",
+      "finishedUtc": "2026-11-09T02:57:44.207266+00:00",
+      "elapsedSeconds": 38.891,
+      "responseStage": "RESPONSE_COMPLETE",
+      "messagesSent": 0,
+      "maximumTraceClicks": 1,
+      "traceObservation": {
+        "argumentTypes": null,
+        "basis": "TASK_BOUND_TRACE_UI_NOT_NATIVE_RECEIPT",
+        "cachedInvariants": [],
+        "controlCount": 1,
+        "controlType": "BUTTON",
+        "expandedState": "CLOSED",
+        "knownCodes": [],
+        "mentionedTools": [],
+        "openAttempted": true,
+        "openOutcomeUnknown": true,
+        "openRequested": true,
+        "panelCount": 0,
+        "panelKind": "NONE",
+        "requestMatchCount": 0,
+        "scanTruncated": false,
+        "schemaVersion": 1,
+        "state": "OPEN_OUTCOME_UNKNOWN",
+        "unknownOuterFields": false
+      },
+      "preservationPins": 1086,
+      "preservationMismatches": 0,
+      "acceptedPins": 1088,
+      "installedProfileProcessMatches": 0,
+      "wakeHostProcessMatches": 0,
+      "port3200ListenerPresent": false,
+      "traceAttemptFenced": true,
+      "traceOutcomeRecorded": true,
+      "capturedAssistantHints": [
+        "INVALID_ARGUMENT"
+      ],
+      "taskAttributionVerified": true,
+      "freshNativeExecutionProved": false,
+      "operatorRelayUsed": false,
+      "installedAcceptance": "NOT_QUALIFIED"
+    }
   }
 }

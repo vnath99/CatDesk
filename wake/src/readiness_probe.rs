@@ -169,6 +169,63 @@ pub(crate) fn app_menu_observation(line: &str) -> Option<serde_json::Value> {
     Some(value)
 }
 
+pub(crate) fn trace_failure(line: &str) -> Option<serde_json::Value> {
+    let text = line.strip_prefix("PROBE:TRACE_FAILURE:")?;
+    if text.len() > 512 {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_str(text).ok()?;
+    if value.as_object()?.len() != 4
+        || value["schemaVersion"].as_u64() != Some(1)
+        || !matches!(value["phase"].as_str()?, "PREPARE" | "OPEN" | "READ")
+        || !matches!(
+            value["boundary"].as_str()?,
+            "COOPERATIVE_RESPONSE" | "SNAPSHOT" | "DOCUMENT" | "PANEL_STABILITY"
+        )
+        || !matches!(
+            value["reason"].as_str()?,
+            "RESPONSE_STATE_UNPROVEN"
+                | "RESPONSE_LOAD_ERROR"
+                | "RESPONSE_NETWORK_ERROR"
+                | "LOGIN_OR_PROFILE_REQUIRED"
+                | "RESPONSE_EXPECTED_USER_NOT_FOUND"
+                | "RESPONSE_EXPECTED_USER_DUPLICATED"
+                | "RESPONSE_SEQUENCE_DRIFT"
+                | "RESPONSE_TARGET_DRIFT"
+                | "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"
+                | "RESPONSE_STATE_QUERY_FAILED"
+                | "RESPONSE_COMPLETION_UNPROVEN"
+                | "RESPONSE_TIMEOUT_RETRY_REQUIRED"
+                | "TRACE_READ_WINDOW_EXPIRED"
+                | "TRACE_PROTOCOL_INVALID"
+                | "OBSERVER_EXCEPTION"
+        )
+    {
+        return None;
+    }
+    Some(value)
+}
+
+#[test]
+fn trace_failure_protocol_retains_only_closed_phase_boundary_and_reason() {
+    let value = serde_json::json!({"schemaVersion":1,"phase":"READ","boundary":"PANEL_STABILITY","reason":"TRACE_READ_WINDOW_EXPIRED"});
+    assert_eq!(
+        trace_failure(&format!("PROBE:TRACE_FAILURE:{value}")),
+        Some(value.clone())
+    );
+    for (field, bad) in [
+        ("phase", serde_json::json!("PRIVATE_PHASE")),
+        ("boundary", serde_json::json!("PRIVATE_TEXT")),
+        ("reason", serde_json::json!("PRIVATE_ERROR")),
+        ("rawText", serde_json::json!("PRIVATE_CONTEXT")),
+    ] {
+        let mut changed = value.clone();
+        changed[field] = bad;
+        assert!(trace_failure(&format!("PROBE:TRACE_FAILURE:{changed}")).is_none());
+        assert!(sanitized_rows(&format!("PROBE:TRACE_FAILURE:{changed}")).is_empty());
+    }
+}
+
 pub(crate) fn trace_observation(line: &str) -> Option<serde_json::Value> {
     let text = line.strip_prefix("PROBE:TRACE:")?;
     if text.len() > 4096 {
@@ -487,6 +544,9 @@ fn sanitized_rows(text: &str) -> Vec<String> {
             }
             if state.starts_with("TRACE_STATE:") {
                 return state == "TRACE_STATE:UNPROVEN";
+            }
+            if state.starts_with("TRACE_FAILURE:") {
+                return trace_failure(line).is_some();
             }
             if state.starts_with("APP_STATE:") {
                 return state == "APP_STATE:UNPROVEN";

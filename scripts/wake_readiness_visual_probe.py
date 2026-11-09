@@ -199,6 +199,12 @@ def report_response_trace(sink,cdp,delivery,report=print):
         value=sink.inspect_response_trace(cdp,delivery['event']['message'],delivery['messageDigest'])
         report('PROBE:TRACE:'+json.dumps(value,separators=(',',':'),sort_keys=True),flush=True)
     except Exception:report('PROBE:TRACE_STATE:UNPROVEN',flush=True)
+    finally:
+        # The existing sink validates its closed result; no exception or page text.
+        reader=getattr(sink,'trace_failure',None)
+        value=reader() if callable(reader) else None
+        if value is not None:
+            report('PROBE:TRACE_FAILURE:'+json.dumps(value,separators=(',',':'),sort_keys=True),flush=True)
 
 
 def surface_state(value):

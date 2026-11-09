@@ -2118,3 +2118,55 @@ persistent-DOM tests pass, including delayed/stuck loading and interrupted
 transport. Strict root/Wake Clippy is rerun against the matched primitive.
 This is source qualification; installed/live acceptance remains incomplete.
 No new USER send, native call, installation or binding change.
+
+
+### 2026-11-09T03:03:47.443150+00:00 — actual automatic response readback; trace outcome unknown
+
+A single 38.891-second bounded observation through the existing authenticated
+profile and qualified owner read the exact completed diagnostic exchange. It
+automatically captured INVALID_ARGUMENT as an assistant-text hint, associated
+with the original immutable task, message, SENT receipt and generation. No
+operator relay, USER send, assistant retry or native call was used. This is
+live qualification of a separately built controller, not the selected dev.84
+adapter or protected installation. Runtime source: 99e1ba97a771df5473d55b3376b076338f6e3a41;
+controller SHA-256: 05b4d275cd92de5f85bfddd7031c9561ee4074cdceaa9456cf82a87a110e78ce.
+
+One safe known trace control was addressed once. Its post-action result is
+OPEN_OUTCOME_UNKNOWN: no argument types, specific cached invariant or native
+receipt was established. The attempt and outcome are durably retained. Never
+delete/reset this event's fence or reopen it to repeat the click. The previous
+reader masked the underlying step exception, so its cause cannot be recovered
+retroactively from this result. Offline repair now retains only a closed phase,
+boundary and reason; it exports no raw exception, page text or private values.
+This additional failure protocol is source-tested and has not been exercised
+against another live task. No new probe message is justified by this result.
+
+All 1,086 prior preservation pins matched, including the original READY native
+job with no attempt/receipt/journal or code change. Two diagnostic journal files
+extend the accepted baseline to 1,088 pins. Test-owned browser and Wake counts
+are zero; no port-3200 listener remains. Backend, official-owner and WakeHost
+starts were zero. Project bindings, original key/grant/context, native sessions,
+release metadata and selected adapter were unchanged.
+
+Cached-argument investigation remains precise but incomplete: the retained
+source's WEB_TASK_CACHED_ARGUMENTS_INVALID is an outer-envelope refusal before
+native admission. Exact command-only empty envelopes pass that validator and
+reach WEB_TASK_ARGUMENTS_INVALID at the inner schema. The original Web call's
+rejected field was not recorded; optional nulls or another cause must not be
+assumed. Neither UI prose nor missing retained logs proves a fresh server call.
+Keep the original dispatch closed; do not rewrite arguments, replace the grant
+or retry it. Existing structured error-receipt improvements remain source only.
+
+Latest offline qualification: nine focused persistent-DOM tests, 21 native
+readiness/protocol tests and 40 probe tests pass, with formatting and strict
+root/Wake Clippy. A first new fixture run failed from a missing test import and
+an incorrect expected existing sanitized error; both fixture errors were fixed
+and the failed receipt retained. The broad 102-case DOM and 46 CLI runs remain
+earlier evidence, not fresh installed acceptance.
+
+Installed automatic readback remains blocked by the existing protected Wake
+installation broker/review authority, including WAKE_INSTALL_BROKER_UNPROVISIONED;
+no alternate installer or authority is introduced. The original cached Web
+call's precise envelope cause also remains unproved. No operator response relay,
+sign-in, new send or settings change is requested. C1 native coding, independent
+verification and result Wake are incomplete; C2 has not started.

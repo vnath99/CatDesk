@@ -213,6 +213,19 @@ TRACE_STATES = {"UNPROVEN", "CONTROL_READY", "CONTROL_ABSENT", "CONTROL_AMBIGUOU
                 "DRAFT_PRESENT", "GENERATION_ACTIVE", "PANEL_CONFLICT", "OPEN_REQUESTED", "OPEN_OUTCOME_UNKNOWN",
                 "CONTROL_CHANGED", "PANEL_UNPROVEN", "PANEL_AMBIGUOUS", "OBSERVED", "RESPONSE_CHANGED"}
 TRACE_ARGUMENT_FIELDS = ("command", "cwd", "timeout", "dry_run", "include_full_output", "allow_without_plan")
+TRACE_FAILURE_REASONS = frozenset({"RESPONSE_STATE_UNPROVEN", "RESPONSE_LOAD_ERROR", "RESPONSE_NETWORK_ERROR",
+    "LOGIN_OR_PROFILE_REQUIRED", "RESPONSE_EXPECTED_USER_NOT_FOUND", "RESPONSE_EXPECTED_USER_DUPLICATED",
+    "RESPONSE_SEQUENCE_DRIFT", "RESPONSE_TARGET_DRIFT", "RESPONSE_USER_DOCUMENT_NOT_HYDRATED",
+    "RESPONSE_STATE_QUERY_FAILED", "RESPONSE_COMPLETION_UNPROVEN", "RESPONSE_TIMEOUT_RETRY_REQUIRED",
+    "TRACE_READ_WINDOW_EXPIRED", "TRACE_PROTOCOL_INVALID", "OBSERVER_EXCEPTION"})
+
+
+def valid_trace_failure(value: Any) -> bool:
+    return (isinstance(value,dict) and set(value)=={'schemaVersion','phase','boundary','reason'}
+        and type(value['schemaVersion']) is int and value['schemaVersion']==1
+        and isinstance(value['phase'],str) and value['phase'] in {'PREPARE','OPEN','READ'}
+        and isinstance(value['boundary'],str) and value['boundary'] in {'COOPERATIVE_RESPONSE','SNAPSHOT','DOCUMENT','PANEL_STABILITY'}
+        and isinstance(value['reason'],str) and value['reason'] in TRACE_FAILURE_REASONS)
 
 
 def valid_trace_inspection(value: Any) -> bool:
@@ -1941,32 +1954,47 @@ class CdpSink:
                 sleeper(.25)
         raise PostSubmitUnknown(last_stage)
 
+    def trace_failure(self) -> dict[str,Any] | None:
+        value=getattr(self,'trace_failure_diagnostic',None)
+        return value.copy() if valid_trace_failure(value) else None
+
     def inspect_response_trace(self, cdp: Any, message: str, expected_digest: str, *, sleeper=time.sleep) -> dict[str, Any]:
         """One explicitly fenced trace open; unknown outcomes never repeat it."""
         nonce=os.urandom(16).hex()
+        self.trace_failure_diagnostic=None
+        phase,boundary='PREPARE','COOPERATIVE_RESPONSE'
+        def record_failure(error):
+            reason=str(error)
+            self.trace_failure_diagnostic=dict(schemaVersion=1,phase=phase,boundary=boundary,
+                reason=reason if reason in TRACE_FAILURE_REASONS else 'OBSERVER_EXCEPTION')
         def step(phase):
-            if self.observe_cooperative_response(cdp,message,expected_digest)!='RESPONSE_COMPLETE':
-                raise Attention('RESPONSE_STATE_UNPROVEN')
-            value={}
+            nonlocal boundary
+            boundary='COOPERATIVE_RESPONSE'
+            stage=self.observe_cooperative_response(cdp,message,expected_digest)
+            if stage!='RESPONSE_COMPLETE':raise Attention(stage if stage in TRACE_FAILURE_REASONS else 'RESPONSE_STATE_UNPROVEN')
+            boundary='SNAPSHOT';value={}
             self.response_snapshot(cdp,message,require_usable_body=True,diagnostic={},tool_diagnostic={},execution_diagnostic={},
                 trace_action=(phase,nonce),trace_observation=value)
-            self.require_response_document(cdp)
+            boundary='DOCUMENT';self.require_response_document(cdp)
             return value
-        prepared=step('PREPARE')
+        try:prepared=step('PREPARE')
+        except Exception as error:record_failure(error);raise
         if prepared['state']!='CONTROL_READY':return prepared
         opened=None
         try:
+            phase='OPEN'
             opened=step('OPEN')
             if opened['state']!='OPEN_REQUESTED':return opened
-            prior=None
+            prior=None;phase='READ'
             for _ in range(8):
                 sleeper(.25);current=step('READ');current.update(openAttempted=True,openRequested=True)
-                if not valid_trace_inspection(current):raise Attention('RESPONSE_STATE_UNPROVEN')
+                if not valid_trace_inspection(current):raise Attention('TRACE_PROTOCOL_INVALID')
                 if current['state']=='PANEL_UNPROVEN':prior=None;continue
                 if current['state']!='OBSERVED' or current==prior:return current
                 prior=current
-            raise Attention('RESPONSE_STATE_UNPROVEN')
-        except Exception:
+            boundary='PANEL_STABILITY';raise Attention('TRACE_READ_WINDOW_EXPIRED')
+        except Exception as error:
+            record_failure(error)
             value=prepared.copy();value.update(state='OPEN_OUTCOME_UNKNOWN',openAttempted=True,
                 openRequested=bool(opened and opened['openRequested']),openOutcomeUnknown=True)
             return value

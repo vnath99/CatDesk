@@ -562,6 +562,10 @@ fn inspect_readiness(
         .iter()
         .rev()
         .find_map(|row| crate::readiness_probe::trace_observation(row));
+    let trace_failure = rows
+        .iter()
+        .rev()
+        .find_map(|row| crate::readiness_probe::trace_failure(row));
     if mode == Mode::Trace {
         let path = store.root().join("logs").join(format!(
             "response-trace-{}.outcome.json",
@@ -576,7 +580,7 @@ fn inspect_readiness(
             .open(path)
             .map_err(|_| "READINESS_TRACE_OUTCOME_FAILED")?;
         let bytes = serde_json::to_vec(
-            &serde_json::json!({"schemaVersion":1,"ownedTreeExited":true,"traceObservation":trace,
+            &serde_json::json!({"schemaVersion":1,"ownedTreeExited":true,"traceObservation":trace,"traceFailure":trace_failure,
             "phase":phase,"finalState":final_state,"recordedUtc":now(),"sendAttempted":false}),
         )
         .map_err(|_| "READINESS_TRACE_OUTCOME_FAILED")?;
@@ -595,7 +599,7 @@ fn inspect_readiness(
         "advisory":!receipt_only,"browserReadOnly":!matches!(mode,Mode::AppMenu|Mode::Trace),"transientMenuInspection":mode==Mode::AppMenu,"transientTraceInspection":mode==Mode::Trace,"diagnosticJournalChanged":mode==Mode::Trace,"sendAttempted":false,
         "receiptCreated":false,"stateChanged":false,"retryAuthorized":false,"workResolved":false,
         "persistedReceipt":receipt,"receiptProofRequested":receipt_only,"responseObservation":response,
-        "taskDiagnostics":task_diagnostics,"appPresentation":app_observation,"traceObservation":trace,
+        "taskDiagnostics":task_diagnostics,"appPresentation":app_observation,"traceObservation":trace,"traceFailure":trace_failure,
         "appMenuObservation":rows.iter().rev().find_map(|row|crate::readiness_probe::app_menu_observation(row)),"reviewAuthorityGranted":false,
         "submissionOutcome":if receipt.is_some() {"PERSISTED_RECEIPT_PROVEN"} else {"NOT_ASSESSED"},"authenticationVerified":false,
         "ownedTreeExited":true,"hostStarted":false,"schedulerStarted":false}),
