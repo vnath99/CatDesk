@@ -9837,3 +9837,15 @@ After observed readiness and cleanup, the original reserved review must use its
 existing `retry-pre-submit` and `resume` transitions with unchanged identities.
 Neither first-send wrapper may be rerun. No message, production promotion or C1
 completion is established by this prerequisite check.
+
+
+### 2026-11-09T16:31:59.242675+00:00 — scoped readiness history TESTED_SOURCE
+
+Existing terminal LOGIN/CAPTCHA observations now reach the fixed metadata channel;
+scoped attempts persist them in the existing bounded event history. Validation,
+privacy, no-input refusals and the absolute scoped deadline are preserved. See the
+[source qualification record](docs/verification/SCOPED_READINESS_HISTORY_SOURCE_2026_11_09.json): 326 distinct tests, strict root/Wake
+all-target Clippy and formatting PASS. The selected DEV package and frozen main
+review stay unchanged. No new runtime package, installation or live test occurred;
+current genuine Web review is NOT_OBTAINED and C1 remains INCOMPLETE. This does not
+reconstruct the old route, establish authentication expiry or authorize replay.

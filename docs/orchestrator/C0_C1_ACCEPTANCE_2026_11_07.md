@@ -2359,3 +2359,20 @@ After observed readiness and cleanup, the original reserved review must use its
 existing `retry-pre-submit` and `resume` transitions with unchanged identities.
 Neither first-send wrapper may be rerun. No message, production promotion or C1
 completion is established by this prerequisite check.
+
+
+### 2026-11-09T16:31:59.242675+00:00 — readiness propagation source correction; live gate unchanged
+
+Terminal LOGIN/CAPTCHA refusal metadata is now emitted before the unchanged safety
+exception, and scoped attempts reuse the existing bounded event readiness history.
+Tests cover fixed metadata/privacy, observer failure, corrupt history, no input,
+independent synthetic sibling progress and unchanged absolute scoped deadlines.
+The [source qualification record](../verification/SCOPED_READINESS_HISTORY_SOURCE_2026_11_09.json) records the four current code-file
+hashes, 326 distinct passing tests, strict root/Wake all-target Clippy and formatting.
+
+This is TESTED_SOURCE only. The selected DEV package, frozen main source/review
+inputs, original task identities and unknown-outcome fences are unchanged. No new
+runtime package, installation, browser, native dispatch or replay occurred. The
+historical route is still unproved; authentication expiry is not inferred. Genuine
+current Web source review remains NOT_OBTAINED, installed/live qualification of
+this patch is NOT_RUN, and the full authorized C1 cycle remains INCOMPLETE.

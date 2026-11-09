@@ -3135,3 +3135,22 @@ After observed readiness and cleanup, the original reserved review must use its
 existing `retry-pre-submit` and `resume` transitions with unchanged identities.
 Neither first-send wrapper may be rerun. No message, production promotion or C1
 completion is established by this prerequisite check.
+
+
+### 2026-11-09T16:31:59.242675+00:00 — scoped readiness diagnostics retained in source
+
+Fixed a demonstrated diagnostic propagation gap using the existing browser owner
+and readiness journal. Terminal LOGIN/CAPTCHA now emits fixed route/reason metadata
+before the same refusal. Scoped attempts retain validated event-bound metadata
+instead of losing it with local status. No raw URL, selector, draft, private
+context or browser text is exported. Corrupt/untrusted metadata fails before
+input; bounded history, deduplication and the absolute scoped deadline remain.
+
+The [source qualification record](docs/verification/SCOPED_READINESS_HISTORY_SOURCE_2026_11_09.json) records current source-file hashes,
+326 distinct passing tests (136 DOM, 127 bridge, 63 deduplicated Rust), strict
+root/Wake all-target Clippy and formatting PASS. The source peer review is limited
+engineering evidence. The selected DEV package and frozen main review inputs are
+unchanged; no new runtime package, installation, browser, native action or retry
+occurred. Genuine current Web review remains NOT_OBTAINED and C1 INCOMPLETE. The
+historical failed browser route was not reconstructed, and authentication expiry
+is not inferred. Deploy/qualify this patch through existing procedures separately.
