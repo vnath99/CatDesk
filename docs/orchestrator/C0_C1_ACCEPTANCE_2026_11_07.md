@@ -1901,3 +1901,25 @@ The main EXE producer route can use genuine development-lane review/ACK/committe
 snapshot evidence without first completing the separate unfinished Wake broker.
 Historical INCONCLUSIVE text, this source review and debug build cannot supply that
 authority. No new operator action is requested by this diagnostic result.
+
+
+### 2026-11-09T12:18:41.403524+00:00 — original independent C1 reservation passes candidate-only admission
+
+The unchanged original BYOVD acceptance reservation passed the supported local
+queue preflight: CANDI2026-11-09T12:18:41.403524+00:00_ONLY, clean Git, valid tracked verification inputs,
+no candidate blockers, launchAuthorized=false (0.344s). Frozen assignment and
+registered worktree/thread/profile were matched; no grant, queue job, browser,
+message or native process was created. All1,090 protected pins and original task
+pins match. An initial local helper compared Windows namespace spellings rather
+than object identity and refused BEFORE invoking CatDesk; retained evidence proves
+both spellings refer to the same object. The corrected helper used the existing
+registry spelling, without rebinding or changing a product guard.
+
+This original reservation is independent of the Bug Bounty refusal, not a
+replacement task or recovery grant. Read-only chat seeds/assignment presence do
+not authorize execution. Next: qualify the existing serving/authentication layer,
+then deliver the still-never-submitted original invitation through its normal
+receipt-bound workflow; require genuine SENT/current-target evidence before
+context, READY queue selection and exact-task grant admission. Candidate success
+proves none of those later gates. No blind send while its required execution
+connection is known unavailable, no original Bug retry, no C2 acceptance claim.

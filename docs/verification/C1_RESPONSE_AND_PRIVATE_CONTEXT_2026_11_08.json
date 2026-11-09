@@ -2431,5 +2431,22 @@
     "productionAcceptance": "NOT_RUN",
     "c1": "INCOMPLETE",
     "releaseBuild": "DEFERRED_BEFORE_LAUNCH_EXISTING_MEMORY_ADMISSION"
+  },
+  "nov09IndependentOriginalCandidate": {
+    "sourceCommit": "00508b54e3c0e1898c95bf713fd3b31541bf5aeb",
+    "status": "CANDIDATE_ONLY",
+    "launchAuthorized": false,
+    "blockers": [],
+    "profileInputsValid": true,
+    "profileInputsTracked": true,
+    "gitClean": true,
+    "elapsedSeconds": 0.344,
+    "preservationPins": 1090,
+    "preservationMismatches": 0,
+    "originalTaskPinMismatches": 0,
+    "messagesSent": 0,
+    "nativeTasksStarted": 0,
+    "grantsCreated": 0,
+    "bindingsChanged": 0
   }
 }
