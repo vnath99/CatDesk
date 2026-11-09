@@ -2207,21 +2207,17 @@ fn cleanup_login_child(
     Ok(exit)
 }
 
-/// Inspect the existing registered development profile without interaction,
-/// message entry, queue mutation, a new profile, or production policy changes.
-pub fn inspect_readiness(workspace: &Path, target_url: &str) -> Result<Value> {
-    let prepared = login_preflight(workspace, target_url)?;
-    let marker = dev_dir(&canonical_workspace(workspace)?).join("login-active.json");
-    write_json_new(
-        &marker,
-        &json!({"schemaVersion":1,"purpose":"DEV_LOGIN_OWNED_BROWSER_V1",
-        "targetSha256":protocol::digest(target_url),"startedUtc":now()}),
-    )?;
+fn development_readiness_command(
+    prepared: &LoginPreflight,
+    target_url: &str,
+) -> Result<(Command, &'static [u8])> {
+    let program = include_bytes!("../../scripts/wake_readiness_visual_probe.py");
+    let loader = crate::readiness_probe::embedded_program_loader(program).map_err(str::to_owned)?;
     let mut command = Command::new(&prepared.python);
     command
         .arg("-I")
         .arg("-c")
-        .arg(include_str!("../../scripts/wake_readiness_visual_probe.py"))
+        .arg(loader)
         .arg("--await-start")
         .arg("--profile")
         .arg(&prepared.profile)
@@ -2235,14 +2231,36 @@ pub fn inspect_readiness(workspace: &Path, target_url: &str) -> Result<Value> {
         .arg("--seconds")
         .arg("20")
         .current_dir(&prepared.root);
-    let result = crate::readiness_probe::run_bounded(&mut command, Duration::from_secs(90));
+    Ok((command, program))
+}
+
+/// Inspect the existing registered development profile without interaction,
+/// message entry, queue mutation, a new profile, or production policy changes.
+pub fn inspect_readiness(workspace: &Path, target_url: &str) -> Result<Value> {
+    let prepared = login_preflight(workspace, target_url)?;
+    // Keep the compiled probe off Windows' bounded command line. The existing
+    // contained runner supplies its verified bytes and START only over stdin.
+    let (mut command, program) = development_readiness_command(&prepared, target_url)?;
+    let marker = dev_dir(&canonical_workspace(workspace)?).join("login-active.json");
+    write_json_new(
+        &marker,
+        &json!({"schemaVersion":1,"purpose":"DEV_LOGIN_OWNED_BROWSER_V1",
+        "targetSha256":protocol::digest(target_url),"startedUtc":now()}),
+    )?;
+    let mut rows = Vec::new();
+    let result = crate::readiness_probe::run_bounded_observed_program(
+        &mut command,
+        Duration::from_secs(90),
+        &mut rows,
+        program,
+    );
     if result.as_ref().err() == Some(&"PROBE_CLEANUP_UNVERIFIED") {
         // Reuse the existing sticky owner marker when cleanup is unproven.
         return Err("DEV_READINESS_CLEANUP_UNVERIFIED".into());
     }
     plain(&marker, false)?;
     fs::remove_file(&marker).map_err(|_| "DEV_READINESS_CLEANUP_UNVERIFIED")?;
-    let rows = result.map_err(str::to_owned)?;
+    result.map_err(str::to_owned)?;
     let final_state = rows
         .last()
         .and_then(|row| row.strip_prefix("PROBE:FINAL:"))
@@ -3910,6 +3928,63 @@ mod tests {
         assert!(!marker.exists());
         drop(input);
         drop(job);
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn development_readiness_uses_short_loader_for_the_actual_compiled_probe() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let target = "https://chatgpt.com/c/readiness-command-fixture";
+        Store::open(&root)
+            .unwrap()
+            .set_target("canary-project", 0, target)
+            .unwrap();
+        let prepared = login_preflight(&workspace, target).unwrap();
+        // This is the builder called by inspect_readiness, not a parallel test
+        // construction. Inspect arguments without launching Python or a browser.
+        let (command, program) = development_readiness_command(&prepared, target).unwrap();
+        let source = std::str::from_utf8(program).unwrap();
+        assert_eq!(
+            program,
+            include_bytes!("../../scripts/wake_readiness_visual_probe.py")
+        );
+        assert_eq!(command.get_program(), prepared.python.as_os_str());
+        assert_eq!(command.get_current_dir(), Some(prepared.root.as_path()));
+        let args: Vec<_> = command.get_args().collect();
+        assert_eq!(args[0], OsStr::new("-I"));
+        assert_eq!(args[1], OsStr::new("-c"));
+        let loader = args[2].to_str().unwrap();
+        assert!(loader.len() < 512);
+        assert!(loader.contains(&format!("{:x}", Sha256::digest(program))));
+        assert!(!args.iter().any(|arg| arg.to_str() == Some(source)));
+        assert_eq!(
+            &args[3..],
+            &[
+                OsStr::new("--await-start"),
+                OsStr::new("--profile"),
+                prepared.profile.as_os_str(),
+                OsStr::new("--conversation-url"),
+                OsStr::new(target),
+                OsStr::new("--primitives"),
+                prepared.primitives.as_os_str(),
+                OsStr::new("--primitives-sha256"),
+                OsStr::new(&prepared.primitives_sha256),
+                OsStr::new("--read-only"),
+                OsStr::new("--seconds"),
+                OsStr::new("20"),
+            ]
+        );
+        let command_units = command.get_program().encode_wide().count()
+            + args
+                .iter()
+                .map(|arg| arg.encode_wide().count() + 3)
+                .sum::<usize>();
+        assert!(command_units < 4096);
+        assert!(!dev_dir(&workspace).join("login-active.json").exists());
+        drop(command);
+        drop(prepared);
         cleanup(&parent);
     }
 
