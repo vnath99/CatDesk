@@ -1453,3 +1453,27 @@ rules or trusts a response. Native22 tests and strict root/Wake Clippy pass.
 No unchanged inspection retry is warranted; a matched layered controller may
 identify which boundary rejects the passive read. Installed and C1 acceptance
 remain incomplete.
+
+
+### 2026-11-09T03:39:16.898752+00:00 — bounded observer launch-size correction
+
+Historical receipt/timer admission passed; the next live result was
+RESPONSE_HISTORY_BROWSER_OWNER_OR_ADMISSION_REFUSED, with no response data.
+A bounded no-START Windows reproduction then established a concrete launch
+defect: embedding the 31,382-byte observer with its arguments produced 33,085
+UTF-16 command-line units and failed with WinError206 before a child started.
+Launching the same observer as a verified file used 914 units, started and exited
+2 naturally at the mandatory missing-START gate, with zero output/browser/send.
+These measurements explain a reproducible observer launch failure; the earlier
+opaque live records did not themselves retain the OS error.
+
+The existing readiness owner now launches a separately hash-verified observer
+file instead of a large -c argument. It reuses the bridge asset selection rule:
+source or the controller's browser-observer directory, exact compiled SHA-256,
+plain-file/directory checks, no fallback from a present bad/missing adjacent
+asset. A matched controller must carry both bridge and probe. START, native Job,
+deadline, profile, receipt, lease and privacy gates stay unchanged. No additional
+browser owner/service, auth/profile change, protected installation or send.
+Native22 and strict root/Wake Clippy pass, including missing/bad asset refusal.
+The no-START check is actual Windows process evidence, not live assistant or
+installed acceptance. A matched bounded historical read remains to qualify.

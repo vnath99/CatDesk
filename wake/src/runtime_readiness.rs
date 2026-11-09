@@ -133,10 +133,20 @@ pub fn inspect_sent_task_response_diagnostics(
 
 #[cfg(any(windows, test))]
 fn verified_primitives(source: &Path, adjacent: &Path, expected: &str) -> Result<PathBuf> {
+    verified_observer_asset(source, adjacent, "wake_bridge.py", expected)
+}
+
+#[cfg(any(windows, test))]
+fn verified_observer_asset(
+    source: &Path,
+    adjacent: &Path,
+    name: &str,
+    expected: &str,
+) -> Result<PathBuf> {
     let path = match std::fs::symlink_metadata(adjacent) {
         Ok(_) => {
             require_plain_install_directory(adjacent)?;
-            adjacent.join("wake_bridge.py")
+            adjacent.join(name)
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => source.to_path_buf(),
         Err(_) => return Err("READINESS_SOURCE_UNAVAILABLE".into()),
@@ -387,11 +397,24 @@ fn inspect_readiness(
         Sha256::digest(include_bytes!("../../scripts/wake_bridge.py"))
     );
     let primitives = verified_primitives(&source_primitives, &adjacent, &expected)?;
+    // Large -c programs exceed Windows' command-line limit before START.
+    // Use the same exact-hash source/adjacent asset policy as the primitive.
+    let probe_source = source_primitives.with_file_name("wake_readiness_visual_probe.py");
+    let probe = verified_observer_asset(
+        &probe_source,
+        &adjacent,
+        "wake_readiness_visual_probe.py",
+        &format!(
+            "{:x}",
+            Sha256::digest(include_bytes!(
+                "../../scripts/wake_readiness_visual_probe.py"
+            ))
+        ),
+    )?;
     let mut command = Command::new(python);
     command
         .arg("-I")
-        .arg("-c")
-        .arg(include_str!("../../scripts/wake_readiness_visual_probe.py"))
+        .arg(probe)
         .arg("--await-start")
         .arg("--profile")
         .arg(profile)
@@ -860,6 +883,42 @@ mod tests {
         std::fs::write(&retained, b"unreviewed").unwrap();
         assert_eq!(
             verified_primitives(&source, &adjacent, &expected).unwrap_err(),
+            "READINESS_SOURCE_HASH_MISMATCH"
+        );
+        let probe_source = root.join("wake_readiness_visual_probe.py");
+        std::fs::write(&probe_source, b"reviewed").unwrap();
+        // Once adjacent ownership is selected, missing/bad scripts cannot
+        // silently fall back to mutable source, even if that source matches.
+        assert!(
+            verified_observer_asset(
+                &probe_source,
+                &adjacent,
+                "wake_readiness_visual_probe.py",
+                &expected
+            )
+            .is_err()
+        );
+        let probe_adjacent = adjacent.join("wake_readiness_visual_probe.py");
+        std::fs::write(&probe_adjacent, b"reviewed").unwrap();
+        assert_eq!(
+            verified_observer_asset(
+                &probe_source,
+                &adjacent,
+                "wake_readiness_visual_probe.py",
+                &expected
+            )
+            .unwrap(),
+            probe_adjacent
+        );
+        std::fs::write(&probe_adjacent, b"unreviewed").unwrap();
+        assert_eq!(
+            verified_observer_asset(
+                &probe_source,
+                &adjacent,
+                "wake_readiness_visual_probe.py",
+                &expected
+            )
+            .unwrap_err(),
             "READINESS_SOURCE_HASH_MISMATCH"
         );
         std::fs::remove_dir_all(root).unwrap();

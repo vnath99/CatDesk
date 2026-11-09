@@ -2017,7 +2017,7 @@
       "port3200ListenerAfter": false
     },
     "fixedReadinessErrorCodes": "SOURCE_PASS_LIVE_NOT_RUN",
-    "refusalLayerDiagnostics": "SOURCE_PASS_LIVE_NOT_RUN",
+    "refusalLayerDiagnostics": "LIVE_RECEIPT_SCOPE_PASSED_OWNER_ADMISSION_REFUSED",
     "secondLive": {
       "sourceCommit": "21f30c2abae435c49e981c7f577d1d3e4a9b5f22",
       "errorCode": "WEB_OPERATION_REFUSED",
@@ -2027,6 +2027,25 @@
       "preservationMismatches": 0,
       "messagesSent": 0,
       "nativeCalls": 0
+    },
+    "verifiedScriptLaunch": {
+      "sourceStatus": "PASS",
+      "nativeTests": 22,
+      "clippy": "PASS",
+      "actualWindowsNoStart": {
+        "embeddedCommandLineUnits": 33085,
+        "embeddedWinError": 206,
+        "embeddedChildStarted": false,
+        "fileCommandLineUnits": 914,
+        "fileChildStarted": true,
+        "fileChildExitCode": 2,
+        "startHandshakeSent": false,
+        "browserStarts": 0,
+        "messagesSent": 0,
+        "preservationMismatches": 0
+      },
+      "fullHistoricalLive": "NOT_RUN",
+      "installedAcceptance": "NOT_QUALIFIED"
     }
   }
 }
