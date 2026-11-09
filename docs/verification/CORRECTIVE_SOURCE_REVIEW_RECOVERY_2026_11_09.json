@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordedUtc": "2026-11-09T23:22:20Z",
+  "recordedUtc": "2026-11-09T23:29:49Z",
   "classification": "LIVE_SELECTED_DEV_RECOVERY_AND_CORROBORATED_PARTIAL_REVIEW_NOT_C1",
   "publicIdentities": {
     "focusedMainSource": "ae3f81445dc543d236732060e8d02e54b8c3a978",
@@ -89,6 +89,7 @@
     "producerAuthority": false
   },
   "thirdCorrectivePartial": {
+    "scope": "ORIGINAL_FAILED_WINDOW_PRESERVED_SEE_SEPARATE_RECOVERY",
     "sendCommandsStarted": 1,
     "deliveryPhase": "SUBMITTING",
     "failure": "RESPONSE_USER_REPRESENTATION_MISMATCH",
@@ -134,8 +135,7 @@
     "receiptReconciliationOwnerSeconds": 90.807,
     "currentDeliveryPhase": "SENT",
     "receiptEvidence": "EXACT_USER_MESSAGE_APPENDED",
-    "responseState": "OBSERVING",
-    "completionOrReportQualified": false,
+    "responseStateAfterReceiptReconciliation": "OBSERVING",
     "queueArchivedThroughSupportedProcedure": true,
     "grantAndWorkLedgerUnchanged": true,
     "reconciliationPreservationPins": 1246,
@@ -144,8 +144,33 @@
     "messagesResent": 0,
     "backendOrTunnelStarts": 0,
     "ownedCleanupVerified": true,
-    "nextAction": "SEPARATE_BOUNDED_NO_SEND_COMPLETION_AND_RESPONSE_READ",
-    "laterGroupsHeld": true
+    "completionAndReadbackOwnerPassed": true,
+    "completionAndReadbackOwnerSeconds": 110.790,
+    "completedResponseState": "COMPLETE",
+    "exactResponseCapturedAutomatically": true,
+    "operatorMessageRelayRequired": false,
+    "completionReadbackPreservationPins": 1859,
+    "completionReadbackDevelopmentPins": 528,
+    "completionReadbackMismatchesOrUnexpectedFiles": 0,
+    "matchingFrozenCommandLogs": [1, 1, 1, 1, 1, 1, 1, 1],
+    "sourceAttributionWindowSeconds": 177.9324,
+    "sourceWindowExtendedToLaterReadback": false,
+    "privateRecoveryVerifierDataTestsPassed": 38,
+    "schemaQualifiedEvidence": "CORROBORATED_PARTIAL",
+    "reviewerVerdict": "REVIEWED_PARTIAL",
+    "assignedFragmentsInspected": 5,
+    "assignedFragmentsRequired": 5,
+    "findings": 0,
+    "contextNeedsRetainedPrivately": 5,
+    "communicationClosedThroughSupportedProcedure": true,
+    "closureOwnerSeconds": 7.932,
+    "closurePreservationPins": 1231,
+    "closurePreservationMismatches": 0,
+    "taskCompletionVerified": false,
+    "originalFailedOwnerReclassifiedHealthy": false,
+    "nextAction": "NEXT_ORIGINAL_FROZEN_REVIEW_ONLY_AFTER_VERIFIED_PREFIX",
+    "sourceAccepted": false,
+    "producerAuthority": false
   },
   "closureAndCleanup": {
     "supportedCommunicationClosure": "CLOSED",
@@ -164,9 +189,9 @@
     "recurringAutomationStarted": false
   },
   "acceptanceLimits": {
-    "qualifiedFreshPartialGroups": 2,
+    "qualifiedFreshPartialGroups": 3,
     "requiredFreshPartialGroups": 11,
-    "qualifiedSourceFragments": 9,
+    "qualifiedSourceFragments": 14,
     "requiredSourceFragments": 50,
     "requiredChangedCodePaths": 18,
     "genuineCumulativeReview": "NOT_OBTAINED",
