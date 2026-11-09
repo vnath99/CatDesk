@@ -1732,7 +1732,7 @@ class WakeBridgeTests(unittest.TestCase):
                 if script == "document.readyState": return "complete"
                 if "return composerText(visible[0])" in script: return self.composer
                 if "#prompt-textarea" in script: return ["ready", self.composer == ""]
-                if "const selectorTiers" in script:
+                if "const expected =" in script and "const selectorTiers" in script:
                     return ["ready", int(message in self.messages), 0]
                 if "data-message-author-role" in script: return list(self.messages)
                 if "const unique" in script: return ["missing", None]
@@ -1833,7 +1833,6 @@ class WakeBridgeTests(unittest.TestCase):
         digests = wake_bridge.CdpSink.user_message_digests(cdp)
         self.assertEqual([wake_bridge.digest("exact wake message")], digests)
         self.assertIn("[data-message-author-role='user']", cdp.script)
-        self.assertIn("article[data-turn='user']", cdp.script)
         self.assertIn("[data-testid^='conversation-turn-']", cdp.script)
         self.assertIn("article[id^='conversation-turn-']", cdp.script)
         self.assertIn("[data-turn='user']", cdp.script)
@@ -1870,7 +1869,8 @@ class WakeBridgeTests(unittest.TestCase):
         self.assertIn("for (const selector of selectorTiers)", anchor.script)
         self.assertIn("return isUserTurn !== isAssistantTurn;", anchor.script)
         self.assertIn("if (tierTurns.some(turn => classifyTurn(turn)[0]))", anchor.script)
-        self.assertIn("turns = tierTurns;", anchor.script)
+        self.assertIn("return tierTurns;", anchor.script)
+        self.assertIn("const turns = trustedTurns();", anchor.script)
         self.assertNotIn("const rawTurns =", anchor.script)
         self.assertIn("if (!isUserTurn || isAssistantTurn) return;", anchor.script)
         self.assertIn("normalize(userBodyText(content || turn))", anchor.script)
@@ -2602,7 +2602,7 @@ class WakeBridgeTests(unittest.TestCase):
                     return "INSERTED"
                 if "return composerText(visible[0])" in script: return getattr(self, "composer", "")
                 if "#prompt-textarea" in script: return ["ready", True]
-                if "const selectorTiers" in script:
+                if "const expected =" in script and "const selectorTiers" in script:
                     return ["ready", int(message in self.messages), 0]
                 if "data-message-author-role" in script: return list(self.messages)
                 if "const unique" in script: return ["missing", None]
@@ -2710,7 +2710,7 @@ class WakeBridgeTests(unittest.TestCase):
                     return "INSERTED"
                 if "return composerText(visible[0])" in script: return getattr(self, "composer", "")
                 if "#prompt-textarea" in script: return ["ready", True]
-                if "const selectorTiers" in script:
+                if "const expected =" in script and "const selectorTiers" in script:
                     return ["ready", int(message in self.messages), 0]
                 if "data-message-author-role" in script: return list(self.messages)
                 if "const unique" in script: return ["missing", None]
@@ -2898,7 +2898,7 @@ class WakeBridgeTests(unittest.TestCase):
                         for item in self.messages
                     )
                     return ["ready", matches, 0]
-                if "const containers = semanticUsers.length" in script:
+                if "const containers = trustedTurns()" in script:
                     return list(self.messages)
                 if "const composerText = root" in script:
                     return self.composer
@@ -2994,7 +2994,7 @@ class WakeBridgeTests(unittest.TestCase):
                     return "INSERTED"
                 if "return composerText(visible[0])" in script: return getattr(self, "composer", "")
                 if "#prompt-textarea" in script: return ["ready", True]
-                if "const selectorTiers" in script:
+                if "const expected =" in script and "const selectorTiers" in script:
                     return ["ready", int(message in self.messages), 0]
                 if "data-message-author-role" in script: return list(self.messages)
                 if "const unique" in script: return ["missing", None]

@@ -268,6 +268,18 @@ if (options.legacyTurns) {
       el('div', {class:'turn-action-controls'}, '', [el('button', {'data-testid':'copy-turn-action-button','aria-label':'Copy'}, 'Copy')])]),
   ];
 }
+if (options.userProjectionRows) {
+  // Different supported representations can coexist while history remounts.
+  // Omit semantic/role units so the actual fallback selectors are exercised.
+  const markers = {
+    bubble:{'data-user-message-bubble':'true'},
+    class:{class:'group/user-message'},
+    turn:{'data-turn':'user'},
+  };
+  document.children = options.userProjectionRows.map(row => el('div', markers[row.marker], '', [
+    el('p', {class:'whitespace-pre-wrap'}, row.text), button('PRIVATE_CONTROL_LABEL'),
+  ]));
+}
 if(options.laterExchange) {
   const later=paired.cloneNode(true);
   later.attrs['data-content-search-turn-key']='fallback-turn-1';
@@ -1026,6 +1038,43 @@ class CurrentDomTests(unittest.TestCase):
     def test_current_user_receipt_and_following_assistant_anchor(self):
         self.assertEqual(self.sink.user_message_digests(CurrentDom()), [bridge.digest("exact wake message")])
         self.assertEqual(self.sink.trusted_turn_anchor_state(CurrentDom(), "exact wake message"), (1, 1))
+
+    def test_mixed_bubble_and_class_users_share_one_receipt_and_anchor_projection(self):
+        for markers in (("bubble", "class"), ("class", "bubble")):
+            with self.subTest(markers=markers):
+                cdp = CurrentDom(userProjectionRows=[
+                    {"marker": markers[0], "text": "earlier user"},
+                    {"marker": markers[1], "text": "exact wake message"},
+                ], traceClicks=True)
+                self.assertEqual(self.sink.user_message_digests(cdp),
+                    [bridge.digest("earlier user"), bridge.digest("exact wake message")])
+                self.assertEqual(self.sink.trusted_turn_anchor_state(cdp, "exact wake message"), (1, 0))
+                self.assertEqual(cdp.mutations, 0)
+
+    def test_mixed_data_turn_and_bubble_users_keep_authoritative_tier_priority(self):
+        current = "exact wake message"
+        for rows, visible, anchor in (
+            ([{"marker": "bubble", "text": "earlier user"}, {"marker": "turn", "text": current}],
+             [current], (1, 0)),
+            ([{"marker": "turn", "text": "earlier user"}, {"marker": "bubble", "text": current}],
+             ["earlier user"], (0, 0)),
+        ):
+            with self.subTest(rows=rows):
+                cdp = CurrentDom(userProjectionRows=rows, traceClicks=True)
+                self.assertEqual(self.sink.user_message_digests(cdp), [bridge.digest(text) for text in visible])
+                self.assertEqual(self.sink.trusted_turn_anchor_state(cdp, current), anchor)
+                self.assertEqual(cdp.mutations, 0)
+
+    def test_mixed_user_representations_preserve_distinct_duplicate_refusal(self):
+        current = "exact wake message"
+        cdp = CurrentDom(userProjectionRows=[
+            {"marker": "bubble", "text": current}, {"marker": "class", "text": current},
+        ], traceClicks=True)
+        observed = self.sink.user_message_digests(cdp)
+        self.assertEqual(observed, [bridge.digest(current)] * 2)
+        self.assertEqual(self.sink.trusted_turn_anchor_state(cdp, current), (2, 0))
+        self.assertEqual(self.sink.receipt_stage([], observed, bridge.digest(current)), "SUBMIT_RECEIPT_SEQUENCE_DRIFT")
+        self.assertEqual(cdp.mutations, 0)
 
     def test_turn_anchor_uses_canonical_user_body_not_control_or_container_text(self):
         cdp = CurrentDom(userParagraphs=True, userControlsInsideBody=True)

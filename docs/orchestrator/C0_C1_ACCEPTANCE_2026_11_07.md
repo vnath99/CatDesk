@@ -2503,3 +2503,15 @@ next executable recovery step; no USER or native call will be replayed. The two
 qualified partials remain valid, but cumulative review, promotion and **C1 remain
 incomplete**. The matching installed pair requires the existing healthy-pair
 reviewed-build promotion route after genuine authority, not divergent-pair repair.
+
+At 23:22:20Z the original third delivery has a supported exact SENT receipt,
+obtained without resend after a separate stable read-only inspection. The
+72.798s diagnosis and 90.807s reconciliation passed preservation and cleanup;
+the timer remains OBSERVING and later groups remain held pending completed
+response verification. The original failed owner is preserved as failed.
+
+A separate source-only shared USER projection fixes a demonstrated mixed DOM
+tier inconsistency. Five old-reader negative subcases and 405 passing local
+tests support that narrow change; they do not prove the live failure cause or
+installation. See [source evidence](../verification/SHARED_USER_PROJECTION_SOURCE_2026_11_09.json).
+Selected DEV, focused MAIN review input and installed runtimes are unchanged.

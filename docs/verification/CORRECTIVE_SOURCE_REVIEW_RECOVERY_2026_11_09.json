@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordedUtc": "2026-11-09T23:10:49Z",
+  "recordedUtc": "2026-11-09T23:22:20Z",
   "classification": "LIVE_SELECTED_DEV_RECOVERY_AND_CORROBORATED_PARTIAL_REVIEW_NOT_C1",
   "publicIdentities": {
     "focusedMainSource": "ae3f81445dc543d236732060e8d02e54b8c3a978",
@@ -117,6 +117,35 @@
     "newCandidateMustBeGenuinelyReviewedAndAttested": true,
     "previousVerifiedVersionMustBeRetained": true,
     "productionActionPerformed": false
+  },
+  "thirdReviewNoSendRecovery": {
+    "originalFailedOwnerAndRecordsPreserved": true,
+    "readOnlyDiagnosisOwnerPassed": true,
+    "diagnosisOwnerSeconds": 72.798,
+    "stableExactExpectedUserCount": 1,
+    "stableTrustedAnchorCount": 1,
+    "expectedUserIsLatest": true,
+    "turnsAfterExpectedUser": 1,
+    "composerClass": "EMPTY",
+    "diagnosisChangedState": false,
+    "diagnosisPreservationPins": 1214,
+    "diagnosisPreservationMismatches": 0,
+    "supportedReceiptReconciliationOwnerPassed": true,
+    "receiptReconciliationOwnerSeconds": 90.807,
+    "currentDeliveryPhase": "SENT",
+    "receiptEvidence": "EXACT_USER_MESSAGE_APPENDED",
+    "responseState": "OBSERVING",
+    "completionOrReportQualified": false,
+    "queueArchivedThroughSupportedProcedure": true,
+    "grantAndWorkLedgerUnchanged": true,
+    "reconciliationPreservationPins": 1246,
+    "reconciliationDevelopmentPins": 526,
+    "reconciliationMismatchesOrUnexpectedFiles": 0,
+    "messagesResent": 0,
+    "backendOrTunnelStarts": 0,
+    "ownedCleanupVerified": true,
+    "nextAction": "SEPARATE_BOUNDED_NO_SEND_COMPLETION_AND_RESPONSE_READ",
+    "laterGroupsHeld": true
   },
   "closureAndCleanup": {
     "supportedCommunicationClosure": "CLOSED",

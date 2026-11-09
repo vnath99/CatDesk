@@ -56,6 +56,47 @@ const userBodyText = content => {
     return composerText(copy);
 };
 """
+# Receipts and response anchors must choose the same DOM representation. A
+# mixed bubble/class/data-turn surface must not hide a USER from one reader
+# while the other reader finds it. This is selection only, never text matching.
+TRUSTED_TURN_READER = r"""
+const classifyTurn = turn => {
+    const isUserTurn = Boolean(
+        turn.matches(
+            "[data-turn='user'], [data-message-author-role='user'], " +
+            "[data-user-message-bubble], [class~='group/user-message']"
+        ) ||
+        turn.querySelector(
+            "[data-turn='user'], [data-message-author-role='user'], " +
+            "[data-user-message-bubble], [class~='group/user-message']"
+        )
+    );
+    const isAssistantTurn = Boolean(
+        turn.matches("[data-turn='assistant'], [data-message-author-role='assistant']") ||
+        turn.querySelector("[data-turn='assistant'], [data-message-author-role='assistant'], h4[data-conversation-role='assistant']")
+    );
+    return [isUserTurn, isAssistantTurn];
+};
+const trustedTurns = () => {
+    // Pick one tier, never a semantic USER and its broader paired wrapper.
+    const selectorTiers = [
+        "[data-content-search-unit-key]",
+        "[data-message-author-role='user'], [data-message-author-role='assistant']",
+        "[data-turn='user'], [data-turn='assistant']",
+        "[data-user-message-bubble], [class~='group/user-message']",
+        "[data-testid^='conversation-turn-'], article[id^='conversation-turn-']",
+        "[data-content-search-turn-key]"
+    ];
+    for (const selector of selectorTiers) {
+        const tierTurns = Array.from(document.querySelectorAll(selector)).filter(turn => {
+            const [isUserTurn, isAssistantTurn] = classifyTurn(turn);
+            return isUserTurn !== isAssistantTurn;
+        });
+        if (tierTurns.some(turn => classifyTurn(turn)[0])) return tierTurns;
+    }
+    return [];
+};
+"""
 # One validator serves both native edit refusal and read-only diagnostics. Only
 # fixed categories and a bounded node count may leave the diagnostic reader.
 COMPOSER_STRUCTURE_READER = r"""
@@ -1590,33 +1631,8 @@ class CdpSink:
         # present so those controls cannot change the receipt digest.
         script = """(() => {
             __CATDESK_USER_BODY_READER__
-            const roleUsers = Array.from(document.querySelectorAll(\"[data-message-author-role='user'], article[data-turn='user']:not(:has([data-message-author-role='user']))\"));
-            const bubbles = Array.from(document.querySelectorAll('[data-user-message-bubble]'));
-            const classUsers = Array.from(document.querySelectorAll("[class~='group/user-message']"));
-            const semanticUsers = Array.from(document.querySelectorAll('[data-content-search-unit-key]'))
-                .filter(turn => {
-                    const user = "[data-message-author-role='user'], [data-turn='user'], " +
-                        "[data-user-message-bubble], [class~='group/user-message']";
-                    const assistant = "[data-message-author-role='assistant'], [data-turn='assistant'], " +
-                        "h4[data-conversation-role='assistant']";
-                    return (turn.matches(user) || turn.querySelector(user)) &&
-                        !turn.matches(assistant) && !turn.querySelector(assistant);
-                });
-            const turnContainers = Array.from(new Set([
-                ...document.querySelectorAll(\"[data-testid^='conversation-turn-']\"),
-                ...document.querySelectorAll(\"article[id^='conversation-turn-']\"),
-                ...document.querySelectorAll(\"[data-turn='user']\")
-            ]));
-            const fallbackUsers = turnContainers.filter(turn =>
-                Boolean(
-                    turn.matches(\"[data-turn=\'user\']\") ||
-                    turn.querySelector(\"[data-message-author-role=\'user\'], [data-message-content], .whitespace-pre-wrap\")
-                )
-            );
-            // Use one representation, matching the trusted-anchor reader.
-            // Never merge a semantic unit with its nested bubble/role node.
-            const containers = semanticUsers.length ? semanticUsers : roleUsers.length ? roleUsers :
-                bubbles.length ? bubbles : classUsers.length ? classUsers : fallbackUsers;
+            __CATDESK_TRUSTED_TURN_READER__
+            const containers = trustedTurns().filter(turn => classifyTurn(turn)[0]);
             return containers.map(container => {
             const contentSelector = "[data-message-content], [data-markdown-text-tone='user-message'], .whitespace-pre-wrap";
             const content = container.matches(contentSelector) ? container : container.querySelector(contentSelector);
@@ -1625,7 +1641,8 @@ class CdpSink:
             // from a clone; authored text and exact digest checks remain.
             return userBodyText(content || container);
             });
-        })()""".replace("__CATDESK_USER_BODY_READER__", USER_BODY_TEXT_READER)
+        })()""".replace("__CATDESK_USER_BODY_READER__", USER_BODY_TEXT_READER).replace(
+            "__CATDESK_TRUSTED_TURN_READER__", TRUSTED_TURN_READER)
         try:
             return CdpSink.bounded_cdp_strings(cdp.evaluate(script))
         except Exception as error:
@@ -1677,48 +1694,10 @@ class CdpSink:
         expected = normalize_message(message)
         script = f"""(() => {{
             __CATDESK_USER_BODY_READER__
+            __CATDESK_TRUSTED_TURN_READER__
             const expected = {json.dumps(expected)};
             const normalize = value => String(value || '').replace(/\\s+/g, ' ').trim();
-            const classifyTurn = turn => {{
-                const isUserTurn = Boolean(
-                    turn.matches(
-                        "[data-turn='user'], [data-message-author-role='user'], " +
-                        "[data-user-message-bubble], [class~='group/user-message']"
-                    ) ||
-                    turn.querySelector(
-                        "[data-turn='user'], [data-message-author-role='user'], " +
-                        "[data-user-message-bubble], [class~='group/user-message']"
-                    )
-                );
-                const isAssistantTurn = Boolean(
-                    turn.matches("[data-turn='assistant'], [data-message-author-role='assistant']") ||
-                    turn.querySelector("[data-turn='assistant'], [data-message-author-role='assistant'], h4[data-conversation-role='assistant']")
-                );
-                return [isUserTurn, isAssistantTurn];
-            }};
-            // Pick exactly one DOM representation tier. Mixing a semantic USER
-            // unit with its broader paired wrapper can double-count the same
-            // message before the assistant mounts, then erase it after the
-            // wrapper gains the assistant role.
-            const selectorTiers = [
-                "[data-content-search-unit-key]",
-                "[data-message-author-role='user'], [data-message-author-role='assistant']",
-                "[data-turn='user'], [data-turn='assistant']",
-                "[data-user-message-bubble], [class~='group/user-message']",
-                "[data-testid^='conversation-turn-'], article[id^='conversation-turn-']",
-                "[data-content-search-turn-key]"
-            ];
-            let turns = [];
-            for (const selector of selectorTiers) {{
-                const tierTurns = Array.from(document.querySelectorAll(selector)).filter(turn => {{
-                    const [isUserTurn, isAssistantTurn] = classifyTurn(turn);
-                    return isUserTurn !== isAssistantTurn;
-                }});
-                if (tierTurns.some(turn => classifyTurn(turn)[0])) {{
-                    turns = tierTurns;
-                    break;
-                }}
-            }}
+            const turns = trustedTurns();
             if (turns.length > 128) return ['invalid', 0, 0];
             const matches = [];
             turns.forEach((turn, index) => {{
@@ -1734,7 +1713,8 @@ class CdpSink:
             if (matches.length > 8) return ['invalid', 0, 0];
             if (matches.length !== 1) return ['ready', matches.length, 0];
             return ['ready', 1, turns.length - matches[0] - 1];
-        }})()""".replace("__CATDESK_USER_BODY_READER__", USER_BODY_TEXT_READER)
+        }})()""".replace("__CATDESK_USER_BODY_READER__", USER_BODY_TEXT_READER).replace(
+            "__CATDESK_TRUSTED_TURN_READER__", TRUSTED_TURN_READER)
         try:
             value = CdpSink.cdp_value(cdp.evaluate(script))
         except Exception as error:

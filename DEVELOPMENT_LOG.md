@@ -3320,3 +3320,26 @@ the current executable/fingerprint pair matches, so divergent-pair recovery is
 inapplicable. After genuine cumulative review, snapshot acknowledgment and build
 attestation, use the existing healthy-pair reviewed-build promotion preflight,
 confirmation and result procedure. No production action was performed.
+
+### 2026-11-09T23:22:20Z — no-send receipt recovery and tested reader consistency fix
+
+The original third delivery was reconciled through the existing guarded path,
+without resending. A 72.798s read-only diagnostic first established stable exact
+USER/latest/anchor identity and an empty composer. A separate 90.807s receipt
+reconciliation committed SENT with EXACT_USER_MESSAGE_APPENDED, archived only
+its queue event and left its timer OBSERVING. All 1,246 preservation and 526
+development pins matched; no unexpected files, grant/ledger changes or owned
+processes remained. The original failed records remain failed. Completion and
+the review report still require separate bounded observation.
+
+Source inspection independently demonstrated a generic mixed-selector defect:
+the digest reader could select only older bubble nodes while the trusted anchor
+selected a later class/data-turn USER. Both now reuse the existing trusted-turn
+projection. Exact body identity, duplicate refusal, target checks and unknown
+fences remain unchanged. Five layout subcases fail against the retained old
+reader and pass with the fix; 405 tests across five relevant local suites pass.
+Independent diff review found no actionable issue. See [source-only evidence](docs/verification/SHARED_USER_PROJECTION_SOURCE_2026_11_09.json).
+
+This is not a proven explanation for the live third-review failure. The focused
+MAIN review source, selected DEV package and installed runtimes are unchanged.
+No production authority or native coding acceptance follows; C1 is incomplete.
