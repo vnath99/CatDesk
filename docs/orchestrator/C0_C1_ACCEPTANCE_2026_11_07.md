@@ -2342,3 +2342,20 @@ browser profile through its supported owner, signing in only if prompted. The
 exact supported command is being diagnosed. After readiness is established,
 reconcile the preserved OPEN/reserved attempt through the existing guarded path;
 do not clear it, resend blindly, create another profile or replay prior tasks.
+
+
+### 2026-11-09T16:21:41.385017+00:00 — supported login owner qualified; awaiting availability
+
+A read-only terminal probe confirmed interactive input/output in the current
+qualified owner context. The existing selected controller can therefore use
+`operator web-dev-runtime login --project-id <registered-project>` in its existing
+control workspace, preserving the normal root, target and browser checks. No new
+launcher, profile or outside-terminal experiment is needed. The public login
+procedure has a 120-second interaction limit and retained owned-process cleanup.
+It has not been started; operator availability is requested. Sign in only if the
+browser prompts. Successful closure alone is not authentication proof.
+
+After observed readiness and cleanup, the original reserved review must use its
+existing `retry-pre-submit` and `resume` transitions with unchanged identities.
+Neither first-send wrapper may be rerun. No message, production promotion or C1
+completion is established by this prerequisite check.

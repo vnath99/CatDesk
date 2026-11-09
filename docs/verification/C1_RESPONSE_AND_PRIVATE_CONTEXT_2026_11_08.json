@@ -3185,5 +3185,24 @@
     "operatorAction": "Inspect the existing registered browser profile through its supported owner; sign in only if prompted.",
     "operatorCommandStatus": "SUPPORTED_COMMAND_DIAGNOSIS_PENDING",
     "next": "Restore observed browser readiness, then use the existing guarded reconciliation of the preserved OPEN/reserved attempt. Do not recreate profiles, reset reservations, infer authentication expiry, replay tasks or resend blindly."
+  },
+  "nov09SupportedDevelopmentLoginOwner": {
+    "observedUtc": "2026-11-09T16:21:41.385017+00:00",
+    "scope": "SUPPORTED_EXISTING_DEV_LOGIN_INTERACTIVE_TERMINAL_PREREQUISITE",
+    "actualTerminalProbe": {
+      "exitCode": 0,
+      "stdinIsTerminal": true,
+      "stdoutIsTerminal": true,
+      "browserStarts": 0
+    },
+    "publicCommand": "operator web-dev-runtime login --project-id <registered-project>",
+    "sameQualifiedOwnerRootRequired": true,
+    "interactionBoundSeconds": 120,
+    "operatorAvailabilityRequested": true,
+    "loginExecuted": false,
+    "sourceReviewMessageSent": false,
+    "productionPromoted": false,
+    "c1": "INCOMPLETE",
+    "next": "Use the existing login command only when the operator is available; after cleanup and observed readiness, apply original review retry-pre-submit then review resume guards. No original sender replay."
   }
 }
