@@ -1452,7 +1452,64 @@
       "existingFixedLabelsRetained": true,
       "internalControlIdentityRecheckedBeforeEveryAction": true,
       "rawIdentityExported": false,
-      "actualDomTests": 91
+      "actualDomTests": 91,
+      "firstLive": {
+        "observedUtc": "2026-11-09T00:02:50.409605+00:00",
+        "sourceCommit": "d4356ad4680d15b899a5dc2509c0da279d48a585",
+        "controllerSha256": "501dcb60750776d10b44dc2a06d5827bd4e008a30ade632f101ec7b61b77496e",
+        "elapsedSeconds": 36.328,
+        "observation": {
+          "appsItemCount": 0,
+          "basis": "TRANSIENT_MENU_ONLY_NOT_TOOL_CATALOG",
+          "closeAttempted": false,
+          "closedVerified": false,
+          "moreItemCount": 0,
+          "openAttempted": true,
+          "openOutcomeUnknown": false,
+          "openRequested": true,
+          "ownershipEvidence": "FRESH_MENU_TRANSITION",
+          "schemaVersion": 2,
+          "state": "MENU_UNPROVEN",
+          "v5DisabledCount": 0,
+          "v5ItemCount": 0
+        },
+        "responseStage": "RESPONSE_COMPLETE",
+        "taskReceiptAndGenerationAttributed": true,
+        "messagesSent": 0,
+        "nativeCalls": 0,
+        "itemSelections": 0,
+        "openActionsRequested": 1,
+        "closeActionsRequested": 0,
+        "preservationPins": 1076,
+        "preservationMismatches": 0,
+        "ownedTreeExited": true,
+        "ownedProfileAndWakeProcessesAfter": 0,
+        "port3200ListenerPresent": false
+      }
     }
+  },
+  "composerPopupFailureDiagnostics": {
+    "observedUtc": "2026-11-09T00:07:44.583808+00:00",
+    "status": "SOURCE_TESTED_LIVE_PENDING",
+    "schemaVersion": 3,
+    "legacySchemasAccepted": [
+      1,
+      2
+    ],
+    "counts": [
+      "menuCount",
+      "dialogCount",
+      "otherPopupCount"
+    ],
+    "controlState": [
+      "OPEN",
+      "CLOSED",
+      "UNKNOWN"
+    ],
+    "stableFailureStatePreserved": true,
+    "newUiActions": 0,
+    "rawContentExported": false,
+    "actualDomTests": 92,
+    "nativeReadinessTests": 19
   }
 }

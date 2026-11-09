@@ -230,7 +230,7 @@ if (options.appForm) {
     if(options.appControlsMetadata!==undefined) control.attrs['aria-controls']=options.appControlsMetadata;
   }
   if(options.appMenuTrace){
-    const menu=el('div',{role:'menu',id:'owned-app-menu',hidden:options.appExpanded!=='true'},'',[
+    const menu=el('div',{role:options.appPopupRole || 'menu',id:'owned-app-menu',hidden:options.appExpanded!=='true'},'',[
       el('div',{role:'menuitem','aria-disabled':options.v5Disabled?'true':'false'},'CatDesk-Local-Tunnel-v5'),
       el('div',{role:'menuitem'},'PRIVATE_OTHER_APP'),el('div',{role:'menuitem'},'Apps'),
     ]);
@@ -451,7 +451,7 @@ class CurrentDomTests(unittest.TestCase):
         cdp=CurrentDom(appForm=True,appMenuTrace=True,unlinkedMenuControl=True)
         value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
         self.assertEqual(value['state'],'OBSERVED')
-        self.assertEqual(value['schemaVersion'],2)
+        self.assertEqual(value['schemaVersion'],3)
         self.assertEqual(value['ownershipEvidence'],'FRESH_MENU_TRANSITION')
         self.assertTrue(value['closedVerified'])
         self.assertEqual(cdp.mutations,2)
@@ -494,9 +494,21 @@ class CurrentDomTests(unittest.TestCase):
         self.assertEqual(cdp.mutations,2)
         cdp=CurrentDom(appForm=True,appMenuTrace=True,unlinkedMenuControl=True,ambiguousMenuAfterOpen=True)
         value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
-        self.assertEqual(value['state'],'MENU_UNPROVEN')
+        self.assertEqual(value['state'],'MENU_AMBIGUOUS')
         self.assertFalse(value['closeAttempted'] or value['closedVerified'])
         self.assertEqual(cdp.mutations,1)
+
+    def test_stable_popup_shape_failure_preserves_closed_counts_without_selecting_or_retry(self):
+        for role,dialogs,other in [('dialog',1,0),('listbox',0,1),('presentation',0,0)]:
+            with self.subTest(role=role):
+                cdp=CurrentDom(appForm=True,appMenuTrace=True,unlinkedMenuControl=True,appPopupRole=role)
+                value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+                self.assertEqual(value['state'],'MENU_ABSENT')
+                self.assertEqual((value['menuCount'],value['dialogCount'],value['otherPopupCount']),(0,dialogs,other))
+                self.assertEqual(value['expandedState'],'OPEN')
+                self.assertFalse(value['closeAttempted'] or value['closedVerified'])
+                self.assertEqual(cdp.mutations,1)
+                self.assertNotIn('PRIVATE_',json.dumps(value))
 
     def test_app_menu_refuses_drafts_generation_foreign_turn_and_unsafe_controls(self):
         for options in [dict(appDraft='PRIVATE_DRAFT'),dict(observationStop=True),dict(appPlusCount=2),
@@ -546,7 +558,7 @@ class CurrentDomTests(unittest.TestCase):
         self.assertEqual(cdp.mutations,2)
         mismatch=CurrentDom(appForm=True,appMenuTrace=True,menuLinkMismatch=True)
         value=self.sink.inspect_composer_app_menu(mismatch,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
-        self.assertEqual(value['state'],'MENU_UNPROVEN')
+        self.assertEqual(value['state'],'CONTROL_LINK_UNPROVEN')
         self.assertFalse(value['closedVerified'] or value['closeAttempted'])
         self.assertEqual(mismatch.mutations,1)
         # A held/failed menu has no shared state that blocks an independent owner.

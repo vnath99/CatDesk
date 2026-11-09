@@ -72,13 +72,25 @@ pub(crate) fn app_menu_observation(line: &str) -> Option<serde_json::Value> {
         "closedVerified",
     ];
     let version = value["schemaVersion"].as_u64()?;
-    if !matches!(version, 1 | 2)
-        || value.as_object()?.len() != if version == 1 { 12 } else { 13 }
-        || (version == 2
+    if !matches!(version, 1..=3)
+        || value.as_object()?.len()
+            != match version {
+                1 => 12,
+                2 => 13,
+                _ => 17,
+            }
+        || (version >= 2
             && !matches!(
                 value["ownershipEvidence"].as_str()?,
                 "NONE" | "CONTROL_LINK" | "FRESH_MENU_TRANSITION"
             ))
+        || (version == 3
+            && (!matches!(
+                value["expandedState"].as_str()?,
+                "UNKNOWN" | "OPEN" | "CLOSED"
+            ) || !["menuCount", "dialogCount", "otherPopupCount"]
+                .iter()
+                .all(|key| value[*key].as_u64().is_some_and(|n| n <= 16))))
         || value["basis"] != "TRANSIENT_MENU_ONLY_NOT_TOOL_CATALOG"
         || !matches!(
             value["state"].as_str()?,
@@ -94,6 +106,11 @@ pub(crate) fn app_menu_observation(line: &str) -> Option<serde_json::Value> {
                 | "PRIOR_MENU_OPEN"
                 | "MENU_UNPROVEN"
                 | "CONTROL_READY"
+                | "CONTROL_STATE_UNPROVEN"
+                | "MENU_ABSENT"
+                | "MENU_AMBIGUOUS"
+                | "POPUP_CONFLICT"
+                | "CONTROL_LINK_UNPROVEN"
         )
         || !flags.iter().all(|key| value[*key].as_bool().is_some())
         || ![
@@ -113,6 +130,12 @@ pub(crate) fn app_menu_observation(line: &str) -> Option<serde_json::Value> {
                 && value["closedVerified"] == true
                 && value["openOutcomeUnknown"] == false
                 && (version == 1 || value["ownershipEvidence"] != "NONE")))
+        || (version == 3
+            && value["state"] == "OBSERVED"
+            && (value["menuCount"] != 1
+                || value["dialogCount"] != 0
+                || value["otherPopupCount"] != 0
+                || value["expandedState"] != "OPEN"))
     {
         return None;
     }
@@ -922,4 +945,24 @@ fn app_menu_protocol_requires_closed_counts_and_confirmed_close_for_observed_sta
     }
     current.as_object_mut().unwrap().remove("ownershipEvidence");
     assert!(app_menu_observation(&format!("PROBE:APP_MENU:{current}")).is_none());
+    current["schemaVersion"] = serde_json::json!(3);
+    current["ownershipEvidence"] = serde_json::json!("FRESH_MENU_TRANSITION");
+    current["menuCount"] = serde_json::json!(1);
+    current["dialogCount"] = serde_json::json!(0);
+    current["otherPopupCount"] = serde_json::json!(0);
+    current["expandedState"] = serde_json::json!("OPEN");
+    assert_eq!(
+        app_menu_observation(&format!("PROBE:APP_MENU:{current}")),
+        Some(current.clone())
+    );
+    for (key, bad) in [
+        ("menuCount", serde_json::json!(0)),
+        ("dialogCount", serde_json::json!(1)),
+        ("otherPopupCount", serde_json::json!(17)),
+        ("expandedState", serde_json::json!("PRIVATE_VALUE")),
+    ] {
+        let mut changed = current.clone();
+        changed[key] = bad;
+        assert!(app_menu_observation(&format!("PROBE:APP_MENU:{changed}")).is_none());
+    }
 }

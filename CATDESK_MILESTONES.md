@@ -8824,3 +8824,24 @@ send, native retry or release authority is added. The original task/grant/key
 and completed deliveries remain unchanged. Actual-DOM regression covers the
 semantic variant and identity drift before OPEN. A matched live test remains
 required; installed dev.84 and C1 native coding acceptance remain incomplete.
+
+
+## 2026-11-09T00:07:44.583808+00:00 — preserve exact popup failure instead of generic MENU_UNPROVEN
+
+The witnessed semantic-control live test opened the known composer control
+once, but ownership of the resulting popup was unproven. No item was selected
+and no close click was issued. The owned browser tree exited in
+36.328 seconds; all 1,076 pins matched and profile/Wake counts
+returned to zero. No USER/native call, setting, binding or runtime was changed.
+
+The inspector was discarding stable READ failure states and replacing them
+with MENU_UNPROVEN. It now preserves fixed layer-specific states:
+CONTROL_STATE_UNPROVEN, MENU_ABSENT, MENU_AMBIGUOUS, POPUP_CONFLICT and
+CONTROL_LINK_UNPROVEN. Schema 3 adds only bounded menu/dialog/other-popup
+counts and OPEN/CLOSED/UNKNOWN control state. Raw labels, IDs, draft text and
+conversation content remain excluded. Native validation retains schemas 1/2
+and refuses a schema-3 OBSERVED claim unless its counts and state agree.
+No new UI action, weaker ownership rule, alternate browser service or retry
+capability is added. Actual-DOM tests cover dialog, listbox and unclassified
+shape failures without selection/retry. A matched live diagnostic is pending;
+installed dev.84 and C1 native coding acceptance remain incomplete.
