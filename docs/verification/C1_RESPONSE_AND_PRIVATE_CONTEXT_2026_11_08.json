@@ -2498,5 +2498,141 @@
     "nativeExecution": "NOT_RUN",
     "preservationPins": 1101,
     "preservationMismatches": 0
+  },
+  "nov09OriginalByovdContextContinuationLive": {
+    "observedUtc": "2026-11-09T13:23:57.963201+00:00",
+    "action": "ORIGINAL_CONTEXT_CONTINUATION_AND_AUTOMATIC_REFUSAL_CLASSIFICATION",
+    "qualifiedDebugSource": "cbbc21a5b86e9c2f768583412341379724294b75",
+    "qualificationLevel": "ISOLATED_DEBUG_LIVE_NOT_INSTALLED",
+    "correctedResponseWait": {
+      "status": "PASS",
+      "elapsedSeconds": 30.782,
+      "exactTimersCompleted": 1,
+      "otherPinsUnchanged": 1100,
+      "messagesSent": 0
+    },
+    "privateContext": {
+      "phase": "SENT",
+      "sendCount": 1,
+      "elapsedSeconds": 148.328,
+      "exactReceiptVerified": true
+    },
+    "originalContinuation": {
+      "phase": "SENT",
+      "sendCount": 1,
+      "elapsedSeconds": 147.906,
+      "assistantTimer": "COMPLETE"
+    },
+    "automaticResponseClassification": {
+      "status": "PASS",
+      "elapsedSeconds": 32.718,
+      "immutableTaskAttributionVerified": true,
+      "humanRelayUsed": false,
+      "refusalCategories": [
+        "DISPATCH_REJECTED"
+      ],
+      "knownCodes": [],
+      "cachedInvariants": [],
+      "basis": "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION",
+      "preciseRefusal": "UNRESOLVED"
+    },
+    "traceInspection": {
+      "elapsedSeconds": 35.39,
+      "state": "OPEN_OUTCOME_UNKNOWN",
+      "failureReason": "TRACE_READ_WINDOW_EXPIRED",
+      "failurePhase": "READ",
+      "failureBoundary": "PANEL_STABILITY",
+      "retryAuthorized": false,
+      "unknownFencePreserved": true
+    },
+    "nativeExecution": "NOT_RUN",
+    "nativeQueueState": "READY",
+    "nativeAttemptPresent": false,
+    "nativeReceiptPresent": false,
+    "nativeJournalPresent": false,
+    "sourceEdit": "NOT_RUN",
+    "targetedVerification": "NOT_RUN",
+    "independentCodeVerification": "NOT_RUN",
+    "resultWake": "NOT_RUN",
+    "fullProfileVerification": "NOT_RUN",
+    "servingWindows": {
+      "localAuthMatrix": [
+        401,
+        401,
+        200
+      ],
+      "localCatalogTools": 102,
+      "webClientCatalogVerified": false,
+      "existingOwnerOnly": true,
+      "newTunnels": 0,
+      "authChanges": 0,
+      "recurringChanges": 0
+    },
+    "cleanup": {
+      "ownedProcessesExited": true,
+      "backendStopped": true,
+      "officialOwnerStopped": true,
+      "installedWakeHostStopped": true,
+      "officialProfilePreserved": true
+    },
+    "preservation": {
+      "servingPins": 1101,
+      "responseAndTracePins": 1103,
+      "unexpectedChanges": 0,
+      "originalBugUntouched": true
+    },
+    "installedReaderAcceptance": "NOT_RUN",
+    "productionPromotion": "NOT_RUN",
+    "protectedProducerAuthority": false,
+    "operatorActionRequired": false,
+    "c1": "INCOMPLETE"
+  },
+  "nov09RefusalCauseSource": {
+    "observedUtc": "2026-11-09T13:45:11.405717+00:00",
+    "action": "BOUNDED_REFUSAL_CAUSE_SOURCE_QUALIFICATION",
+    "sourceParent": "cbbc21a5b86e9c2f768583412341379724294b75",
+    "tests": {
+      "rustReadiness": 33,
+      "rustResponse": 5,
+      "pythonReadiness": 51,
+      "adapter": 47,
+      "currentDom": 121,
+      "bridge": 127
+    },
+    "totalDistinctTests": 384,
+    "rootClippy": "PASS",
+    "wakeClippy": "PASS",
+    "limitedSourceReview": "PASS",
+    "successfulOwnerAttempts": {
+      "readiness-tests": 1,
+      "response-tests": 1,
+      "python-tests": 2,
+      "adapter-tests": 2,
+      "dom-tests": 3,
+      "bridge-tests": 2,
+      "root-clippy": 1,
+      "wake-clippy": 1,
+      "fmt": 1
+    },
+    "reviewCorrections": [
+      "USER_AND_TOOL_ANCESTORS_EXCLUDED",
+      "NEGATED_MISMATCH_NOT_A_REFUSAL",
+      "UNREQUESTED_DIAGNOSTICS_DO_NOT_CHANGE_COMPLETION_DOM_REQUIREMENTS"
+    ],
+    "retainedFailures": [
+      "INITIAL_ADAPTER_FIXTURE_UNUSED_DIAGNOSTIC_CLONE",
+      "USER_WRAPPER_EXPECTED_EXISTING_FAIL_CLOSED",
+      "USABLE_COMPLETION_UNUSED_DIAGNOSTIC_CLOSEST"
+    ],
+    "fields": [
+      "CLOSED_V5_IDENTITY_ISSUES",
+      "CLOSED_ADVISORY_BODY_COVERAGE"
+    ],
+    "newMessages": 0,
+    "nativeDispatches": 0,
+    "installedChanges": 0,
+    "bindingsChanged": 0,
+    "newLiveQualification": "NOT_RUN",
+    "c1": "INCOMPLETE"
   }
 }

@@ -204,10 +204,17 @@ def valid_response_button_shape(value: Any) -> bool:
 def valid_response_control_diagnostics(value: Any) -> bool:
     """Closed, capped DOM-shape metadata; never text or action authority."""
     base = set(RESPONSE_CONTROL_COUNTS + RESPONSE_CONTROL_FLAGS)
-    return (isinstance(value, dict) and set(value) in (base, base | {"buttonShape"})
+    return (isinstance(value, dict) and base <= set(value) <= base | {"buttonShape", "bodyCoverage"}
             and all(type(value[key]) is int and 0 <= value[key] <= 64 for key in RESPONSE_CONTROL_COUNTS)
             and all(type(value[key]) is bool for key in RESPONSE_CONTROL_FLAGS)
-            and ("buttonShape" not in value or valid_response_button_shape(value["buttonShape"])))
+            and ("buttonShape" not in value or valid_response_button_shape(value["buttonShape"]))
+            and ("bodyCoverage" not in value or (isinstance(value["bodyCoverage"], dict)
+                and set(value["bodyCoverage"]) == {"selectedBlocks", "canonicalBody", "unselectedTextPresent"}
+                and type(value["bodyCoverage"]["selectedBlocks"]) is int
+                and 0 <= value["bodyCoverage"]["selectedBlocks"] <= 64
+                and value["bodyCoverage"]["canonicalBody"] in ("QUALIFIED", "UNPROVEN")
+                and (value["bodyCoverage"]["canonicalBody"] != "QUALIFIED" or value["bodyCoverage"]["selectedBlocks"] > 0)
+                and type(value["bodyCoverage"]["unselectedTextPresent"]) is bool)))
 
 
 TOOL_MARKER_COUNTS = ("callMarkers", "resultMarkers", "errorMarkers", "busyMarkers")
@@ -228,6 +235,10 @@ TASK_UNAVAILABLE_SUBJECTS = ("RUN_COMMAND", "CENTRAL_TASK_TOOL", "NATIVE_CALL",
 TASK_MENTIONED_TOOLS = ("RUN_COMMAND", "CENTRAL_TASK_TOOL", "NATIVE_DISPATCH", "NATIVE_STATUS")
 TASK_ARGUMENT_ISSUES = ("JSON_SYNTAX", "MISSING_REQUIRED_FIELD", "UNEXPECTED_FIELD",
                         "TYPE_MISMATCH", "TOOL_NAME_REJECTED", "CACHED_ENVELOPE_REJECTED")
+TASK_IDENTITY_ISSUES = tuple(domain + "_" + state
+    for domain in ("FULL_PRIVATE_CONTEXT", "ASSIGNMENT", "DELIVERED_USER_MESSAGE",
+                   "NATIVE_CALL", "EXECUTION_GRANT", "CONVERSATION_TARGET")
+    for state in ("MISSING", "MISMATCH", "UNVERIFIED"))
 TASK_CACHED_INVARIANTS = ("ARGUMENTS_NOT_OBJECT", "COMMAND_NOT_STRING", "PLAN_FLAG_NOT_BOOLEAN",
                           "DRY_RUN_NOT_FALSE", "FULL_OUTPUT_NOT_FALSE", "CWD_OVERRIDE_FORBIDDEN",
                           "TIMEOUT_OVERRIDE_FORBIDDEN", "UNSUPPORTED_OUTER_FIELD", "COMMAND_TOO_LARGE",
@@ -383,23 +394,25 @@ def valid_task_response_hints(value: Any) -> bool:
     """Closed assistant-text hints, never tool availability or execution proof."""
     flags = ("toolUnavailable", "contextUnavailable", "approvalRequested", "nativeDispatchMentioned")
     version = value.get("schemaVersion") if isinstance(value, dict) else None
-    fields = {"schemaVersion", "basis", "knownCodes"} | ({"refusalCategories", "scanTruncated"} if version in (2, 3, 4) else set())
-    if version in (3, 4):
+    fields = {"schemaVersion", "basis", "knownCodes"} | ({"refusalCategories", "scanTruncated"} if version in (2, 3, 4, 5) else set())
+    if version in (3, 4, 5):
         fields.add("unavailableSubjects")
     extra = {"mentionedTools":TASK_MENTIONED_TOOLS, "argumentIssues":TASK_ARGUMENT_ISSUES,
-             "cachedInvariants":TASK_CACHED_INVARIANTS} if version == 4 else {}
+             "cachedInvariants":TASK_CACHED_INVARIANTS} if version in (4, 5) else {}
+    if version == 5:
+        extra["identityIssues"] = TASK_IDENTITY_ISSUES
     fields.update(extra)
-    if version == 4 and "trace" in value:
+    if version in (4, 5) and "trace" in value:
         fields.add("trace")
     return (isinstance(value, dict) and set(value) == set(flags) | fields
-            and type(version) is int and version in {1, 2, 3, 4}
+            and type(version) is int and version in {1, 2, 3, 4, 5}
             and value["basis"] == "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION"
             and all(type(value[key]) is bool for key in flags)
             and isinstance(value["knownCodes"], list)
             and value["knownCodes"] == [code for code in TASK_RESPONSE_CODES if code in value["knownCodes"]]
             and (version == 1 or (type(value["scanTruncated"]) is bool and isinstance(value["refusalCategories"], list)
                  and value["refusalCategories"] == [kind for kind in TASK_REFUSAL_CATEGORIES if kind in value["refusalCategories"]]))
-            and (version not in (3, 4) or (isinstance(value["unavailableSubjects"], list)
+            and (version not in (3, 4, 5) or (isinstance(value["unavailableSubjects"], list)
                  and value["unavailableSubjects"] == [subject for subject in TASK_UNAVAILABLE_SUBJECTS if subject in value["unavailableSubjects"]]))
             and all(isinstance(value[field], list) and value[field] == [item for item in allowed if item in value[field]]
                     for field, allowed in extra.items())
@@ -2203,6 +2216,49 @@ class CdpSink:
                 assistantBodyText += ' ' + normalize(bodyCopy.textContent);
             }}
             assistantBodyText = normalize(assistantBodyText);
+            // Diagnostic text may include unlabelled text inside the exact
+            // assistant's unique selection-marked body. This never changes
+            // completion/bodyNodes/Copy authority or borrows whole-unit text.
+            let assistantDiagnosticText = '', bodyCoverage = null;
+            if (includeDiagnostic || includeExecutionDiagnostic) {{
+            const selectionSelector = '[data-chatgpt-selection-message-id]';
+            const toolSubtree = "[data-tool-call-id], [data-tool-call], [data-tool-response-id], " +
+                "[data-testid='tool-call'], [data-testid='mcp-tool-call'], [data-testid='tool-result'], [data-testid='mcp-tool-result']";
+            const selectionBodies = latestAssistant ? Array.from(new Set([
+                ...(latestAssistant.matches(selectionSelector) ? [latestAssistant] : []),
+                ...latestAssistant.querySelectorAll(selectionSelector)
+            ])) : [];
+            const canonicalBody = selectionBodies.length === 1 && visible(selectionBodies[0]) &&
+                !selectionBodies[0].closest(userNodeSelector + ', ' + toolSubtree) &&
+                !selectionBodies[0].querySelector(userNodeSelector + ', ' + toolSubtree +
+                    ', [data-content-search-unit-key], [data-message-author-role], article[data-turn]')
+                ? selectionBodies[0] : null;
+            const diagnosticCandidates = (canonicalBody ? [...bodyCandidates, canonicalBody] : bodyCandidates)
+                .filter(node => !node.closest(userNodeSelector + ', ' + toolSubtree));
+            const diagnosticNodes = Array.from(new Set(diagnosticCandidates)).filter(node => visible(node) &&
+                !node.closest(userNodeSelector + ', ' + toolSubtree) &&
+                !diagnosticCandidates.some(other => other !== node && other.contains(node)))
+                .sort((a,b) => a === b ? 0 : (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1);
+            if (diagnosticNodes.length > 64) return ['invalid', 0, 0, false, false];
+            const strippedText = node => {{
+                const copy = node.cloneNode(true);
+                copy.querySelectorAll('button, [role="button"], [role="toolbar"], [aria-hidden="true"], ' +
+                    'h4[data-conversation-role], ' + userNodeSelector + ', ' + toolSubtree)
+                    .forEach(control => control.remove());
+                return normalize(copy.textContent);
+            }};
+            assistantDiagnosticText = normalize(diagnosticNodes.map(strippedText).join(' '));
+            let unselectedTextPresent = false;
+            if (includeDiagnostic && latestAssistant && !diagnosticNodes.includes(latestAssistant)) {{
+                const remainder = latestAssistant.cloneNode(true);
+                remainder.querySelectorAll(contentSelector + (canonicalBody ? ', ' + selectionSelector : '') +
+                    ', button, [role="button"], [role="toolbar"], [aria-hidden="true"], h4[data-conversation-role], ' +
+                    userNodeSelector + ', ' + toolSubtree).forEach(node => node.remove());
+                unselectedTextPresent = normalize(remainder.textContent).length > 0;
+            }}
+            bodyCoverage = {{selectedBlocks:diagnosticNodes.length,
+                canonicalBody:canonicalBody ? 'QUALIFIED' : 'UNPROVEN',unselectedTextPresent}};
+            }}
             // ChatGPT can render an old assistant as a load-error placeholder
             // while retaining Copy/Regenerate controls. Those controls alone
             // are not evidence of a usable completed response.
@@ -2356,6 +2412,7 @@ class CdpSink:
                     assistantInsideSemanticUnit: Boolean(latestAssistant && pairedAssistantUnits.some(unit =>
                         unit === latestAssistant || unit.contains(latestAssistant))),
                     buttonShape,
+                    bodyCoverage,
                 }});
             }}
             if (includeToolDiagnostic) {{
@@ -2377,45 +2434,84 @@ class CdpSink:
                     countOverflow:[calls,results,errors,busy].some(items => items.length > 64)}});
             }}
             if (includeExecutionDiagnostic) {{
-                const text = assistantBodyText.slice(0,32768).toLowerCase().replace(/[‘’]/g, "'");
+                const text = assistantDiagnosticText.slice(0,32768).toLowerCase().replace(/[‘’]/g, "'");
                 // Hints from this exact assistant body only. Never return body
                 // text, unknown codes, credentials, labels or quoted payloads.
-                const unavailable = "(?:unavailable|not available|not exposed|not listed|missing|don't have|do not have|cannot access|can't access|no access)";
-                const toolUnavailable = new RegExp("(?:tool|run_command|catdesk).{{0,100}}"+unavailable+"|"+unavailable+".{{0,100}}(?:tool|run_command|catdesk)").test(text);
-                const contextUnavailable = new RegExp("(?:nativecall|private context|execution key).{{0,100}}"+unavailable+"|"+unavailable+".{{0,100}}(?:nativecall|private context|execution key)").test(text);
                 const known = {json.dumps(TASK_RESPONSE_CODES)};
                 const hasCode = code => code === 'HTTP_429' ? /(?:http|status|error)\\s*429/.test(text) :
                     new RegExp('\\\\b'+code.toLowerCase()+'\\\\b').test(text);
                 const approvalRequested = /(?:need|require|await|waiting for|please).{{0,60}}(?:approval|authorization|permission|approve)/.test(text);
-                const refusals = {{
-                    IDENTITY_MISMATCH:/(?:private.context|assignment|identity|digest|sha.?256).{{0,80}}(?:mismatch|does not match|did not match)/.test(text),
-                    TOOL_UNAVAILABLE:toolUnavailable, CONTEXT_UNAVAILABLE:contextUnavailable,
-                    AUTHORIZATION_REQUIRED:approvalRequested || hasCode('UNAUTHORIZED'),
-                    DISPATCH_REJECTED:hasCode('WEB_TASK_CACHED_ARGUMENTS_INVALID') || /(?:dispatch|tool call).{{0,60}}(?:blocked|rejected|refused)/.test(text)
-                }};
                 const subjects = [
                     ['RUN_COMMAND', /\\brun_command\\b/g],
                     ['CENTRAL_TASK_TOOL', /\\bcatdesk_web_task_tool\\b/g],
-                    ['NATIVE_CALL', /\\bnativecall\\b/g],
+                    ['NATIVE_CALL', /\\bnative[-_ ]?call\\b/g],
                     ['PRIVATE_CONTEXT', /\\b(?:private[- ]context|frozen[- ](?:context|capsule))\\b/g],
                     ['EXECUTION_KEY', /\\bexecution[-_ ]?key\\b/g],
                     ['CATDESK_APP', /\\bcatdesk(?:[- ]local[- ]tunnel[- ]v5| (?:app|plugin|connector))\\b/g],
                 ];
-                const missing = new RegExp(unavailable+'|not visible|not in (?:this|the) context|cannot reconstruct|cannot retrieve');
+                const identitySubjects = [
+                    ['FULL_PRIVATE_CONTEXT', /\\bfull[-_ ]?private[-_ ]?context[-_ ]?(?:sha[-_ ]?256|digest)\\b/g],
+                    ['ASSIGNMENT', /\\bassignment[-_ ]?(?:sha[-_ ]?256|digest)\\b/g],
+                    ['DELIVERED_USER_MESSAGE', /\\bdelivered[-_ ]?user[-_ ]?message[-_ ]?(?:sha[-_ ]?256|digest)\\b/g],
+                    ['NATIVE_CALL', /\\bnative[-_ ]?call\\b/g],
+                    ['EXECUTION_GRANT', /\\b(?:execution[-_ ]?)?grant\\b/g],
+                    ['CONVERSATION_TARGET', /\\b(?:(?:conversation|wake)[-_ ]?target|expected[-_ ]?target[-_ ]?(?:sha[-_ ]?256|generation|url)|target[-_ ](?:binding|generation|url|digest))\\b/g],
+                ];
+                const scrubNegated = part => part
+                    .replace(/\\b(?:not|never|no|no longer|isn't|aren't|wasn't|weren't)\\s+(?:missing|unavailable|absent|unverified|mismatched)\\b/g,' ')
+                    .replace(/\\b(?:no|without|not a)\\s+(?:a )?mismatch(?:es)?\\b/g,' ')
+                    .replace(/\\b(?:cannot|can't|did not|didn't) (?:find|identify|detect|observe) (?:a |any )?mismatch\\b/g,' ')
+                    .replace(/\\bmismatch(?: was| is| has been)? resolved\\b/g,' ');
+                const missing = part => /\\b(?:unavailable|missing|absent|not (?:available|exposed|listed|present|provided|supplied|included|visible)|don't have|do not have|no access|not in (?:this|the) context|(?:cannot|can't) (?:access|find|locate|reconstruct|retrieve))\\b/.test(scrubNegated(part));
+                const mismatch = part => /\\b(?:mismatch(?:es|ed)?|does not match|doesn't match|did not match|didn't match|do not match|don't match)\\b/.test(scrubNegated(part));
+                const unverified = part => /\\b(?:(?:cannot|can't|could not|couldn't|unable to) (?:independently )?verify|unverified|not (?:independently )?verified)\\b/.test(scrubNegated(part));
                 const unavailableSubjects = new Set();
+                const identityIssues = new Set();
+                let genericToolUnavailable = false, genericIdentityMismatch = false, contextUnverified = false;
                 // Keep each subject's predicate inside its own clause and
                 // before the next subject. A nearby missing nativeCall must
                 // not turn an available run_command into a missing tool.
                 for (const clause of text.split(/[.!?;\\n,]+|\\b(?:but|however|whereas)\\b/)) {{
-                    const spans = subjects.flatMap(([subject, pattern]) =>
-                        Array.from(clause.matchAll(pattern), m => ({{subject,start:m.index,end:m.index+m[0].length}})))
-                        .sort((a,b) => a.start-b.start);
+                    const found = [...subjects.flatMap(([subject,pattern]) =>
+                        Array.from(clause.matchAll(pattern),m=>({{subject,start:m.index,end:m.index+m[0].length}}))),
+                        ...identitySubjects.flatMap(([domain,pattern]) =>
+                        Array.from(clause.matchAll(pattern),m=>({{domain,start:m.index,end:m.index+m[0].length}}))),
+                        ...Array.from(clause.matchAll(/\\b(?:private[- ]context|assignment|identity|digest|sha[- ]?256)\\b/g),
+                            m=>({{identity:true,start:m.index,end:m.index+m[0].length}}))]
+                        .sort((a,b)=>a.start-b.start || b.end-a.end);
+                    const spans=[];
+                    for (const item of found) {{
+                        let span=spans[spans.length-1];
+                        if (!span || item.start >= span.end) {{span={{start:item.start,end:item.end,subjects:new Set(),domains:new Set(),identity:false}};spans.push(span);}}
+                        span.end=Math.max(span.end,item.end);
+                        if(item.subject)span.subjects.add(item.subject);
+                        if(item.domain)span.domains.add(item.domain);
+                        span.identity ||= Boolean(item.identity);
+                    }}
+                    if(!spans.length && /\\b(?:tools?|functions?)\\b/.test(clause) && missing(clause))genericToolUnavailable=true;
                     spans.forEach((span,index) => {{
                         const left = index === 0 ? clause.slice(Math.max(0,span.start-100),span.start) : '';
                         const right = clause.slice(span.end,Math.min(span.end+100,spans[index+1]?.start ?? clause.length));
-                        if (missing.test(left) || missing.test(right)) unavailableSubjects.add(span.subject);
+                        const absent=missing(left)||missing(right), differs=mismatch(left)||mismatch(right), uncertain=unverified(left)||unverified(right);
+                        if(absent)for(const subject of span.subjects)unavailableSubjects.add(subject);
+                        if(uncertain && ['NATIVE_CALL','PRIVATE_CONTEXT','EXECUTION_KEY'].some(subject=>span.subjects.has(subject)))contextUnverified=true;
+                        for(const domain of span.domains) {{
+                            if(absent)identityIssues.add(domain+'_MISSING');
+                            if(differs)identityIssues.add(domain+'_MISMATCH');
+                            if(uncertain)identityIssues.add(domain+'_UNVERIFIED');
+                        }}
+                        if(span.identity && differs)genericIdentityMismatch=true;
                     }});
                 }}
+                const toolUnavailable=genericToolUnavailable || ['RUN_COMMAND','CENTRAL_TASK_TOOL','CATDESK_APP'].some(subject=>unavailableSubjects.has(subject));
+                const contextUnavailable=contextUnverified || ['NATIVE_CALL','PRIVATE_CONTEXT','EXECUTION_KEY'].some(subject=>unavailableSubjects.has(subject)) ||
+                    Array.from(identityIssues).some(issue=>issue.endsWith('_MISSING')||issue.endsWith('_UNVERIFIED'));
+                const refusals = {{
+                    IDENTITY_MISMATCH:genericIdentityMismatch || Array.from(identityIssues).some(issue=>issue.endsWith('_MISMATCH')),
+                    TOOL_UNAVAILABLE:toolUnavailable, CONTEXT_UNAVAILABLE:contextUnavailable,
+                    AUTHORIZATION_REQUIRED:approvalRequested || hasCode('UNAUTHORIZED'),
+                    DISPATCH_REJECTED:hasCode('WEB_TASK_CACHED_ARGUMENTS_INVALID') || /(?:dispatch|tool call).{{0,60}}(?:blocked|rejected|refused)/.test(text)
+                }};
                 const mentionedTools = {{
                     RUN_COMMAND:/\\brun_command\\b/.test(text),
                     CENTRAL_TASK_TOOL:/\\bcatdesk_web_task_tool\\b/.test(text),
@@ -2454,15 +2550,16 @@ class CdpSink:
                     const panels=details ? [details] : (id && id.length<=256 ? Array.from(document.querySelectorAll('[id]')).filter(n => n.getAttribute('id')===id) : []);
                     if (panels.length===1) {{ traceLinked++; if (visible(panels[0]) && expanded==='true') traceVisible++; }}
                 }}
-                result.push({{schemaVersion:4,basis:'ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION',
+                result.push({{schemaVersion:5,basis:'ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION',
                     toolUnavailable,contextUnavailable,
                     approvalRequested,
                     nativeDispatchMentioned:text.includes('native.codex.dispatch'),
-                    scanTruncated:assistantBodyText.length > 32768,
+                    scanTruncated:assistantDiagnosticText.length > 32768,
                     unavailableSubjects:{json.dumps(TASK_UNAVAILABLE_SUBJECTS)}.filter(subject => unavailableSubjects.has(subject)),
                     mentionedTools:{json.dumps(TASK_MENTIONED_TOOLS)}.filter(tool => mentionedTools[tool]),
                     argumentIssues:{json.dumps(TASK_ARGUMENT_ISSUES)}.filter(issue => argumentIssues[issue]),
                     cachedInvariants:cachedInvariants.filter(hasCode),
+                    identityIssues:{json.dumps(TASK_IDENTITY_ISSUES)}.filter(issue=>identityIssues.has(issue)),
                     trace:{{schemaVersion:1,scope:'EXACT_USER_EXCHANGE',basis:'PRESENTATION_ONLY_NOT_TOOL_RECEIPT',
                         knownControls:Math.min(traceControls.length,64),expandedControls:traceExpanded,collapsedControls:traceCollapsed,
                         unprovenControls:traceUnknown,linkedPanels:traceLinked,visiblePanels:traceVisible}},

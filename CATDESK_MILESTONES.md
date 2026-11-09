@@ -9678,3 +9678,27 @@ BYOVD private context is PREPARED/undelivered, native job READY with its first e
 180s grant; no native turn or verified code/result Wake exists. Original Bug state
 is preserved. C1 remains INCOMPLETE; no operator action is required for the next
 bounded, receipt-bound read-only qualification.
+
+
+### 2026-11-09T13:23:57.963201+00:00 — live original context/continuation; C1 native execution still NOT_RUN
+
+The corrected isolated response wait passed in 30.782 seconds: one exact timer
+completed and 1,100 other pins stayed unchanged. The original private context was
+SENT once in 148.328 seconds; its original continuation was SENT once in 147.906
+seconds with a completed response timer. Automatic immutable-task-bound readback
+passed in 32.718 seconds and captured DISPATCH_REJECTED without a known code or
+precise cause; no human relay was used. One trace attempt ended with
+OPEN_OUTCOME_UNKNOWN / TRACE_READ_WINDOW_EXPIRED after 35.390 seconds and remains
+fenced. The native job is READY without an attempt, receipt or journal; code,
+tests and result Wake remain NOT_RUN. Cleanup, serving authentication and
+preservation checks passed. The unsigned debug reader is not installed; the
+original Bug state is untouched and full C1 is INCOMPLETE. No operator action
+is currently required. See the dated C0/C1 acceptance record.
+
+
+### 2026-11-09T13:45:11.813843+00:00 — exact-response refusal details TESTED_SOURCE
+
+Existing GUI observer gains closed identity-issue hints and diagnostic body coverage,
+with unchanged completion/send authority. Role-isolation and negation regressions
+address limited-review findings. Current task remains READY/no native turn; no
+installed promotion or C1 completion. Package/live qualification is next.

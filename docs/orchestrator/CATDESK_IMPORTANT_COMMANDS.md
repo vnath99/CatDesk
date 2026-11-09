@@ -7307,3 +7307,14 @@ are mandatory. `RESPONSE_STATE_UNSTABLE` means no stable completion was proved;
 it authorizes no new send, Retry or reload. Source tests pass; installed/live
 qualification is recorded separately. Never reuse an older pending sample after
 a later unstable completion.
+
+
+### 2026-11-09T13:45:11.813843+00:00 — response hints and body coverage
+
+Use the existing `operator web review inspect-response --project-id <project>
+--event-id <exact-sent-event>` with the qualified package. V5 `identityIssues`
+contains only fixed domain/cause categories. `completionControls.bodyCoverage`
+describes diagnostic selection, not execution or complete-context proof. An
+unselected-text gap stays uncertain. A hint cannot authorize a send, native retry,
+legacy clarification or protected promotion. Unknown trace-open outcomes remain
+closed. Installed parity must be independently qualified.

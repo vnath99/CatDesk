@@ -142,6 +142,20 @@ const assistant = el('div', {'data-content-search-unit-key':'fallback-turn-0:2:a
     ]),
   ]),
 ]);
+if (options.canonicalUnlabelledText)
+  append(assistant.children[1], el('p', {}, options.canonicalUnlabelledText));
+if (options.assistantOutsideText)
+  append(assistant, el('p', {}, options.assistantOutsideText));
+if (options.secondSelectionBody)
+  append(assistant, el('div', {'data-chatgpt-selection-message-id':'second-assistant-body'}, options.secondSelectionBody));
+if (options.selectionToolText)
+  append(assistant.children[1], el('div', {'data-testid':'mcp-tool-result'}, options.selectionToolText));
+if (options.selectionBodyWrapper) {
+  const markedBody=assistant.children[1];
+  const attrs=options.selectionBodyWrapper==='user' ? {'data-message-author-role':'user'} : {'data-testid':'mcp-tool-result'};
+  const wrapper=el('div',attrs,'',[markedBody]);
+  assistant.children[1]=wrapper;wrapper.parentElement=assistant;
+}
 for (const body of options.additionalAnswerBodies || [])
   append(assistant, el('div', {class:'markdown'}, body));
 if (options.timeoutCard) append(assistant, el('div', {role:'alert'}, '', [
@@ -1242,7 +1256,7 @@ class CurrentDomTests(unittest.TestCase):
         self.sink.response_snapshot(CurrentDom(answer=body), 'exact wake message',
             require_usable_body=True, diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
         self.assertTrue(bridge.valid_task_response_hints(hints))
-        self.assertEqual(hints['schemaVersion'], 4)
+        self.assertEqual(hints['schemaVersion'], 5)
         self.assertEqual(hints['knownCodes'], ['WEB_TASK_CACHED_ARGUMENTS_INVALID', 'INVALID_ARGUMENT'])
         self.assertEqual(hints['refusalCategories'], ['DISPATCH_REJECTED'])
         self.assertNotIn('PRIVATE_CONTEXT_MARKER', json.dumps(hints))
@@ -1269,8 +1283,126 @@ class CurrentDomTests(unittest.TestCase):
                 for bad in [['PRIVATE_KEY_MARKER'], ['NATIVE_CALL','NATIVE_CALL'],
                             ['EXECUTION_KEY','RUN_COMMAND'], 'NATIVE_CALL', None]:
                     self.assertFalse(bridge.valid_task_response_hints(hints | {'unavailableSubjects':bad}))
-                for bad in [{}, [], True, 5]:
+                for bad in [{}, [], True, 6]:
                     self.assertFalse(bridge.valid_task_response_hints(hints | {'schemaVersion':bad}))
+
+    def test_natural_refusals_identify_only_known_identity_domains_without_values(self):
+        hints={}
+        body=("run_command is available; nativeCall is not supplied. "
+            "fullPrivateContextSha256 is not provided. assignmentSha256 doesn’t match. "
+            "deliveredUserMessageSha256 does not match. Cannot verify execution grant. "
+            "The conversation target is unverified. Dispatch rejected. PRIVATE_VALUE="+'f'*64)
+        self.sink.response_snapshot(CurrentDom(answer=body),'exact wake message',
+            require_usable_body=True,diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+        self.assertTrue(bridge.valid_task_response_hints(hints))
+        self.assertEqual(hints['identityIssues'],['FULL_PRIVATE_CONTEXT_MISSING','ASSIGNMENT_MISMATCH',
+            'DELIVERED_USER_MESSAGE_MISMATCH','NATIVE_CALL_MISSING','EXECUTION_GRANT_UNVERIFIED',
+            'CONVERSATION_TARGET_UNVERIFIED'])
+        self.assertEqual(hints['unavailableSubjects'],['NATIVE_CALL'])
+        self.assertFalse(hints['toolUnavailable'])
+        self.assertTrue(hints['contextUnavailable'])
+        self.assertEqual(hints['refusalCategories'],['IDENTITY_MISMATCH','CONTEXT_UNAVAILABLE','DISPATCH_REJECTED'])
+        for value in ['PRIVATE_VALUE','f'*64,'fullPrivateContextSha256','assignmentSha256']:
+            self.assertNotIn(value,json.dumps(hints))
+        for bad in [['UNKNOWN_PRIVATE_FIELD'],hints['identityIssues']*2,
+                list(reversed(hints['identityIssues'])),True,{},None]:
+            self.assertFalse(bridge.valid_task_response_hints(hints | {'identityIssues':bad}))
+
+    def test_natural_missing_and_unverified_predicates_preserve_negations_and_clause_scope(self):
+        for body,subjects,issues in [
+            ('nativeCall is not present. fullPrivateContextSha256 is not included.',
+                ['NATIVE_CALL'],['FULL_PRIVATE_CONTEXT_MISSING','NATIVE_CALL_MISSING']),
+            ('Cannot find nativeCall. assignmentSha256 was not supplied.',
+                ['NATIVE_CALL'],['ASSIGNMENT_MISSING','NATIVE_CALL_MISSING']),
+            ('run_command is not provided. The nativeCall is present.', ['RUN_COMMAND'],[]),
+            ("run_command is available. nativeCall is not missing. fullPrivateContextSha256 is verified. "
+                "assignmentSha256 has no mismatch. deliveredUserMessageSha256 matches. "
+                "The execution grant is not unverified. Cannot find a mismatch in the conversation target.",[],[]),
+            ('assignmentSha256 is not mismatched.',[],[]),
+        ]:
+            with self.subTest(body=body):
+                hints={}
+                self.sink.response_snapshot(CurrentDom(answer=body),'exact wake message',
+                    diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+                self.assertEqual(hints['unavailableSubjects'],subjects)
+                self.assertEqual(hints['identityIssues'],issues)
+        hints={}
+        self.sink.response_snapshot(CurrentDom(answer='Cannot verify private context.'),'exact wake message',
+            diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+        self.assertTrue(hints['contextUnavailable'])
+        self.assertEqual(hints['identityIssues'],[])
+        self.assertNotIn('IDENTITY_MISMATCH',hints['refusalCategories'])
+
+    def test_canonical_marked_body_includes_unlabelled_diagnostic_text_without_completing_new_body(self):
+        hints={};diagnostic={}
+        result=self.sink.response_snapshot(CurrentDom(answer='Dispatch rejected.',
+            canonicalUnlabelledText='fullPrivateContextSha256 is not supplied. nativeCall is not supplied. PRIVATE_SECRET'),
+            'exact wake message',require_usable_body=True,diagnostic=diagnostic,tool_diagnostic={},execution_diagnostic=hints)
+        self.assertEqual(result,(0,0,True,True))
+        self.assertEqual(hints['identityIssues'],['FULL_PRIVATE_CONTEXT_MISSING','NATIVE_CALL_MISSING'])
+        self.assertEqual(diagnostic['controls']['bodyCoverage'],dict(selectedBlocks=1,
+            canonicalBody='QUALIFIED',unselectedTextPresent=False))
+        self.assertNotIn('PRIVATE_SECRET',json.dumps(hints))
+        result=self.sink.response_snapshot(CurrentDom(controlsOnly=True,
+            canonicalUnlabelledText='nativeCall is not supplied.'),'exact wake message',
+            require_usable_body=True,diagnostic=diagnostic,tool_diagnostic={},execution_diagnostic=hints)
+        self.assertFalse(result[3])
+        self.assertFalse(diagnostic['controls']['assistantBodyPresent'])
+
+    def test_canonical_diagnostic_body_preserves_known_blocks_and_discloses_outside_text(self):
+        for options,issues,outside,blocks in [
+            ({'assistantOutsideText':'assignmentSha256 does not match. PRIVATE_OUTSIDE'},[],True,1),
+            ({'additionalAnswerBodies':['assignmentSha256 does not match.']},['ASSIGNMENT_MISMATCH'],False,2),
+        ]:
+            hints={};diagnostic={}
+            self.sink.response_snapshot(CurrentDom(answer='Dispatch rejected.',**options),'exact wake message',
+                require_usable_body=True,diagnostic=diagnostic,tool_diagnostic={},execution_diagnostic=hints)
+            self.assertEqual(hints['identityIssues'],issues)
+            self.assertEqual(diagnostic['controls']['bodyCoverage'],dict(selectedBlocks=blocks,
+                canonicalBody='QUALIFIED',unselectedTextPresent=outside))
+            self.assertNotIn('PRIVATE_OUTSIDE',json.dumps(hints))
+
+    def test_ambiguous_or_tool_contaminated_marked_body_cannot_supply_diagnostic_context(self):
+        for options in [dict(secondSelectionBody='assignmentSha256 does not match. PRIVATE_SECOND'),
+                dict(selectionToolText='assignmentSha256 does not match. PRIVATE_TOOL')]:
+            hints={};diagnostic={}
+            self.sink.response_snapshot(CurrentDom(answer='Dispatch rejected.',**options),'exact wake message',
+                require_usable_body=True,diagnostic=diagnostic,tool_diagnostic={},execution_diagnostic=hints)
+            self.assertEqual(hints['identityIssues'],[])
+            self.assertEqual(diagnostic['controls']['bodyCoverage']['canonicalBody'],'UNPROVEN')
+            self.assertNotIn('PRIVATE_',json.dumps(hints))
+
+    def test_body_coverage_diagnostic_is_closed_and_preserves_legacy_metadata(self):
+        diagnostic={}
+        self.sink.response_snapshot(CurrentDom(),'exact wake message',require_usable_body=True,diagnostic=diagnostic)
+        controls=diagnostic['controls'];coverage=controls['bodyCoverage']
+        self.assertTrue(bridge.valid_response_control_diagnostics(controls))
+        for changed in [coverage | {'selectedBlocks':0},coverage | {'selectedBlocks':65},
+                coverage | {'selectedBlocks':True},coverage | {'canonicalBody':'PRIVATE_MARKER'},
+                coverage | {'unselectedTextPresent':'PRIVATE_TEXT'},coverage | {'text':'PRIVATE_BODY'}]:
+            self.assertFalse(bridge.valid_response_control_diagnostics(controls | {'bodyCoverage':changed}))
+        self.assertTrue(bridge.valid_response_control_diagnostics({k:v for k,v in controls.items() if k!='bodyCoverage'}))
+
+    def test_selection_body_nested_in_tool_or_user_wrapper_is_not_assistant_diagnostic_text(self):
+        for wrapper in ['tool','user']:
+            with self.subTest(wrapper=wrapper):
+                hints={};diagnostic={}
+                cdp=CurrentDom(answer='assignmentSha256 does not match. PRIVATE_WRAPPED',
+                    selectionBodyWrapper=wrapper)
+                if wrapper=='user':
+                    # Existing role admission rejects a USER-containing
+                    # assistant unit before any diagnostic text is classified.
+                    with self.assertRaisesRegex(bridge.PostSubmitUnknown,'^RESPONSE_STATE_QUERY_FAILED$'):
+                        self.sink.response_snapshot(cdp,'exact wake message',require_usable_body=True,
+                            diagnostic=diagnostic,tool_diagnostic={},execution_diagnostic=hints)
+                    self.assertEqual(hints,{})
+                    continue
+                self.sink.response_snapshot(cdp,'exact wake message',require_usable_body=True,
+                    diagnostic=diagnostic,tool_diagnostic={},execution_diagnostic=hints)
+                self.assertEqual(hints['identityIssues'],[])
+                self.assertEqual(diagnostic['controls']['bodyCoverage'],dict(selectedBlocks=0,
+                    canonicalBody='UNPROVEN',unselectedTextPresent=False))
+                self.assertNotIn('PRIVATE_WRAPPED',json.dumps(hints))
 
     def test_bounded_classifier_reports_incomplete_coverage_without_exporting_long_body(self):
         hints = {}
@@ -1307,8 +1439,10 @@ class CurrentDomTests(unittest.TestCase):
         for field in ['mentionedTools','argumentIssues','cachedInvariants']:
             self.assertEqual(hints[field],[])
         self.assertNotIn('retryAuthorized',hints)
-        for version in [1,2,3]:
-            legacy = {k:v for k,v in hints.items() if k not in ['mentionedTools','argumentIssues','cachedInvariants','trace']}
+        for version in [1,2,3,4]:
+            legacy = {k:v for k,v in hints.items() if k not in ['identityIssues']}
+            if version<4:
+                for key in ['mentionedTools','argumentIssues','cachedInvariants','trace']:legacy.pop(key)
             legacy['schemaVersion']=version
             if version<3:legacy.pop('unavailableSubjects')
             if version==1:

@@ -438,7 +438,7 @@ pub(crate) fn sent_response_observation(line: &str) -> Option<serde_json::Value>
 
 pub(crate) fn task_response_diagnostics(line: &str) -> Option<serde_json::Value> {
     let text = line.strip_prefix("PROBE:TASK:")?;
-    if text.len() > 2048 {
+    if text.len() > 4096 {
         return None;
     }
     crate::runtime::canonical_task_response_diagnostics(serde_json::from_str(text).ok()?)
@@ -1342,6 +1342,180 @@ fn composer_app_metadata_is_bounded_presentation_not_catalog_or_action_authority
     }
     current.as_object_mut().unwrap().remove("plusPopup");
     assert!(composer_app_observation(&format!("PROBE:APP:{current}")).is_none());
+}
+
+#[cfg(test)]
+fn identity_hint_fixture() -> serde_json::Value {
+    serde_json::json!({"toolDiagnostics":{"schemaVersion":1,
+        "basis":"VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT","scope":"EXACT_USER_EXCHANGE",
+        "selectorCoverage":"KNOWN_MARKERS_ONLY","callMarkers":0,"resultMarkers":0,
+        "errorMarkers":0,"busyMarkers":0,"countOverflow":false},
+        "assistantHints":{"schemaVersion":5,"basis":"ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION",
+            "toolUnavailable":false,"contextUnavailable":false,"approvalRequested":false,
+            "nativeDispatchMentioned":false,"knownCodes":[],"refusalCategories":["DISPATCH_REJECTED"],
+            "scanTruncated":false,"unavailableSubjects":[],"mentionedTools":[],"argumentIssues":[],
+            "cachedInvariants":[],"identityIssues":["FULL_PRIVATE_CONTEXT_UNVERIFIED"],
+            "trace":{"schemaVersion":1,"scope":"EXACT_USER_EXCHANGE",
+                "basis":"PRESENTATION_ONLY_NOT_TOOL_RECEIPT","knownControls":1,"expandedControls":0,
+                "collapsedControls":1,"unprovenControls":0,"linkedPanels":0,"visiblePanels":0}}})
+}
+
+#[test]
+fn body_coverage_is_closed_advisory_metadata_and_never_completion_authority() {
+    let mut controls = serde_json::json!({"pairedTurn":true,"assistantBodyPresent":true,
+        "completionActionFound":true,"assistantInsideSemanticUnit":true,
+        "bodyCoverage":{"selectedBlocks":1,"canonicalBody":"QUALIFIED","unselectedTextPresent":false}});
+    for name in [
+        "semanticAssistantUnits",
+        "roleAssistantNodes",
+        "copyTestIdInTurn",
+        "copyLabelInTurn",
+        "copyResponseLabelInTurn",
+        "copyMessageLabelInTurn",
+        "copyTextInTurn",
+        "knownCopyInAssistant",
+        "knownCopyInBody",
+        "sharedCopyAfterAssistant",
+        "toolbarContainersInTurn",
+        "buttonsInTurn",
+        "copyTestIdInParent",
+        "copyLabelInParent",
+        "copyResponseLabelInParent",
+        "copyMessageLabelInParent",
+    ] {
+        controls[name] = serde_json::json!(0);
+    }
+    let value = serde_json::json!({"eventId":format!("wake-intent-{}","a".repeat(64)),
+        "targetGeneration":1,"targetDigest":"b".repeat(64),"messageDigest":"c".repeat(64),
+        "stage":"RESPONSE_COMPLETE","diagnosticReason":"COMPLETE","completionControls":controls});
+    assert_eq!(
+        sent_response_observation(&format!("PROBE:RESPONSE:{value}")),
+        Some(value.clone())
+    );
+    for (field, invalid) in [
+        ("selectedBlocks", serde_json::json!(true)),
+        ("selectedBlocks", serde_json::json!(0)),
+        ("selectedBlocks", serde_json::json!(65)),
+        ("canonicalBody", serde_json::json!("PRIVATE_BODY")),
+        ("unselectedTextPresent", serde_json::json!("PRIVATE_VALUE")),
+        ("rawText", serde_json::json!("PRIVATE_RESPONSE")),
+    ] {
+        let mut bad = value.clone();
+        bad["completionControls"]["bodyCoverage"][field] = invalid;
+        assert!(sent_response_observation(&format!("PROBE:RESPONSE:{bad}")).is_none());
+    }
+    let mut unproven = value;
+    unproven["completionControls"]["completionActionFound"] = serde_json::json!(false);
+    assert!(sent_response_observation(&format!("PROBE:RESPONSE:{unproven}")).is_none());
+}
+
+#[test]
+fn identity_hints_accept_only_fixed_categories_and_preserve_old_wire_versions() {
+    let value = identity_hint_fixture();
+    assert_eq!(
+        task_response_diagnostics(&format!("PROBE:TASK:{value}")),
+        Some(value.clone())
+    );
+    let mut old = value.clone();
+    old["assistantHints"]["schemaVersion"] = serde_json::json!(4);
+    assert!(task_response_diagnostics(&format!("PROBE:TASK:{old}")).is_none());
+    old["assistantHints"]
+        .as_object_mut()
+        .unwrap()
+        .remove("identityIssues");
+    assert_eq!(
+        task_response_diagnostics(&format!("PROBE:TASK:{old}")),
+        Some(old)
+    );
+    for invalid in [
+        serde_json::json!(["PRIVATE_KEY_VALUE"]),
+        serde_json::json!([
+            "FULL_PRIVATE_CONTEXT_UNVERIFIED",
+            "FULL_PRIVATE_CONTEXT_UNVERIFIED"
+        ]),
+        serde_json::json!(["NATIVE_CALL_MISSING", "ASSIGNMENT_MISSING"]),
+        serde_json::json!(true),
+        serde_json::json!({"rawText":"PRIVATE_CONTEXT"}),
+    ] {
+        let mut bad = value.clone();
+        bad["assistantHints"]["identityIssues"] = invalid;
+        assert!(task_response_diagnostics(&format!("PROBE:TASK:{bad}")).is_none());
+        assert!(sanitized_rows(&format!("PROBE:TASK:{bad}")).is_empty());
+    }
+    for field in [
+        "identityIssues",
+        "mentionedTools",
+        "argumentIssues",
+        "cachedInvariants",
+    ] {
+        let mut bad = value.clone();
+        bad["assistantHints"].as_object_mut().unwrap().remove(field);
+        assert!(task_response_diagnostics(&format!("PROBE:TASK:{bad}")).is_none());
+    }
+    let mut bad = value;
+    bad["assistantHints"]["rawText"] = serde_json::json!("PRIVATE_BODY");
+    assert!(sanitized_rows(&format!("PROBE:TASK:{bad}")).is_empty());
+}
+
+#[test]
+fn full_identity_hint_vocabulary_fits_bounded_task_row_without_arbitrary_text() {
+    let mut value = identity_hint_fixture();
+    let issues: Vec<String> = [
+        "FULL_PRIVATE_CONTEXT",
+        "ASSIGNMENT",
+        "DELIVERED_USER_MESSAGE",
+        "NATIVE_CALL",
+        "EXECUTION_GRANT",
+        "CONVERSATION_TARGET",
+    ]
+    .iter()
+    .flat_map(|domain| {
+        ["MISSING", "MISMATCH", "UNVERIFIED"].map(|state| format!("{domain}_{state}"))
+    })
+    .collect();
+    value["assistantHints"]["identityIssues"] = serde_json::json!(issues);
+    value["assistantHints"]["knownCodes"] = serde_json::json!([
+        "HTTP_429",
+        "WEB_WORK_ROLLOVER_PENDING",
+        "WEB_ROLLOVER_PROJECT_BUSY",
+        "WEB_TASK_GRANT_SCOPE_MISMATCH",
+        "WEB_TASK_NATIVE_NOT_GRANTED",
+        "PROJECT_TASK_CALL_ALREADY_COMPLETED",
+        "PROJECT_TASK_RECOVERY_REQUIRED",
+        "WEB_TASK_CACHED_ARGUMENTS_INVALID",
+        "INVALID_ARGUMENT",
+        "UNAUTHORIZED",
+        "WEB_TASK_REQUEST_INVALID",
+        "WEB_TASK_BINDING_CHANGED",
+        "WEB_TASK_ARGUMENTS_INVALID",
+        "WEB_TASK_NATIVE_ARGUMENTS_INVALID",
+        "WEB_TASK_REQUEST_ID_REQUIRED",
+        "WEB_TASK_CENTRAL_MODE_REQUIRED",
+        "WEB_TASK_CENTRAL_AUTH_REQUIRED",
+        "PLAN_REQUIRED"
+    ]);
+    value["assistantHints"]["cachedInvariants"] = serde_json::json!([
+        "ARGUMENTS_NOT_OBJECT",
+        "COMMAND_NOT_STRING",
+        "PLAN_FLAG_NOT_BOOLEAN",
+        "DRY_RUN_NOT_FALSE",
+        "FULL_OUTPUT_NOT_FALSE",
+        "CWD_OVERRIDE_FORBIDDEN",
+        "TIMEOUT_OVERRIDE_FORBIDDEN",
+        "UNSUPPORTED_OUTER_FIELD",
+        "COMMAND_TOO_LARGE",
+        "RESERVED_PREFIX_INVALID",
+        "PAYLOAD_JSON_INVALID",
+        "PAYLOAD_NOT_OBJECT"
+    ]);
+    let text = value.to_string();
+    assert!(text.len() > 2048 && text.len() <= 4096);
+    assert_eq!(
+        task_response_diagnostics(&format!("PROBE:TASK:{text}")),
+        Some(value)
+    );
+    let oversized = format!("PROBE:TASK:{}", " ".repeat(4097));
+    assert!(task_response_diagnostics(&oversized).is_none());
 }
 
 #[test]

@@ -42,8 +42,13 @@ fn valid_completion_controls(value: &Value) -> bool {
         "assistantInsideSemanticUnit",
     ];
     let button_shape = value.get("buttonShape");
+    let body_coverage = value.get("bodyCoverage");
     value.as_object().is_some_and(|map| {
-        map.len() == COUNTS.len() + FLAGS.len() + usize::from(button_shape.is_some())
+        map.len()
+            == COUNTS.len()
+                + FLAGS.len()
+                + usize::from(button_shape.is_some())
+                + usize::from(body_coverage.is_some())
     }) && COUNTS.iter().all(|key| {
         value
             .get(key)
@@ -53,6 +58,17 @@ fn valid_completion_controls(value: &Value) -> bool {
         .iter()
         .all(|key| value.get(key).and_then(Value::as_bool).is_some())
         && button_shape.is_none_or(valid_button_shape)
+        && body_coverage.is_none_or(|coverage| {
+            coverage.as_object().is_some_and(|map| map.len() == 3)
+                && coverage["selectedBlocks"].as_u64().is_some_and(|n| n <= 64)
+                && matches!(
+                    coverage["canonicalBody"].as_str(),
+                    Some("QUALIFIED" | "UNPROVEN")
+                )
+                && (coverage["canonicalBody"] != "QUALIFIED"
+                    || coverage["selectedBlocks"].as_u64().is_some_and(|n| n > 0))
+                && coverage["unselectedTextPresent"].as_bool().is_some()
+        })
 }
 
 /// Fixed vocabulary and capped structural metadata only. These observations
@@ -300,7 +316,7 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
             ],
         ),
     ];
-    let valid_argument_hints = version != 4
+    let valid_argument_hints = version < 4
         || categories.iter().all(|(field, allowed)| {
             hints
                 .get(*field)
@@ -314,6 +330,38 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
                     *selected == canonical
                 })
         });
+    let identity_issues = [
+        "FULL_PRIVATE_CONTEXT_MISSING",
+        "FULL_PRIVATE_CONTEXT_MISMATCH",
+        "FULL_PRIVATE_CONTEXT_UNVERIFIED",
+        "ASSIGNMENT_MISSING",
+        "ASSIGNMENT_MISMATCH",
+        "ASSIGNMENT_UNVERIFIED",
+        "DELIVERED_USER_MESSAGE_MISSING",
+        "DELIVERED_USER_MESSAGE_MISMATCH",
+        "DELIVERED_USER_MESSAGE_UNVERIFIED",
+        "NATIVE_CALL_MISSING",
+        "NATIVE_CALL_MISMATCH",
+        "NATIVE_CALL_UNVERIFIED",
+        "EXECUTION_GRANT_MISSING",
+        "EXECUTION_GRANT_MISMATCH",
+        "EXECUTION_GRANT_UNVERIFIED",
+        "CONVERSATION_TARGET_MISSING",
+        "CONVERSATION_TARGET_MISMATCH",
+        "CONVERSATION_TARGET_UNVERIFIED",
+    ];
+    let valid_identity_hints = version != 5
+        || hints
+            .get("identityIssues")
+            .and_then(Value::as_array)
+            .is_some_and(|selected| {
+                let canonical: Vec<Value> = identity_issues
+                    .iter()
+                    .filter(|item| selected.contains(&json!(item)))
+                    .map(|item| json!(item))
+                    .collect();
+                *selected == canonical
+            });
     let trace = hints.get("trace");
     let valid_trace = trace.is_none_or(|trace| {
         let counts = [
@@ -324,7 +372,7 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
             "linkedPanels",
             "visiblePanels",
         ];
-        version == 4
+        matches!(version, 4 | 5)
             && trace
                 .as_object()
                 .is_some_and(|map| map.len() == counts.len() + 3)
@@ -351,7 +399,9 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
     if value.as_object()?.len() != 2
         || tools.as_object()?.len() != 9
         || hints.as_object()?.len()
-            != if version == 4 {
+            != if version == 5 {
+                14 + usize::from(trace.is_some())
+            } else if version == 4 {
                 13 + usize::from(trace.is_some())
             } else if version == 3 {
                 10
@@ -369,13 +419,14 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
         || !counts
             .iter()
             .all(|field| tools[*field].as_u64().is_some_and(|n| n <= 64))
-        || !matches!(version, 1..=4)
+        || !matches!(version, 1..=5)
         || hints["basis"] != "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION"
         || !flags.iter().all(|field| hints[*field].as_bool().is_some())
         || *selected != canonical
         || !valid_refusals
         || !valid_subjects
         || !valid_argument_hints
+        || !valid_identity_hints
         || !valid_trace
     {
         return None;

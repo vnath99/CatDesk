@@ -2000,3 +2000,81 @@ BYOVD private context is PREPARED/undelivered, native job READY with its first e
 180s grant; no native turn or verified code/result Wake exists. Original Bug state
 is preserved. C1 remains INCOMPLETE; no operator action is required for the next
 bounded, receipt-bound read-only qualification.
+
+
+### 2026-11-09T13:23:57.963201+00:00 — original BYOVD context and continuation delivered; native refusal classified automatically
+
+The corrected response observer from source `cbbc21a5b86e9c2f768583412341379724294b75`
+passed one bounded live wait in 30.782 seconds. It completed only
+the exact original invitation timer; the other 1,100 preservation pins stayed
+unchanged. No new message was sent by that observation. This is isolated debug
+qualification, distinct from the earlier settling refusal and from installation.
+
+The already-frozen original private context was then delivered once with an exact
+USER receipt and durable SENT state (148.328 seconds). The original
+assigned-task continuation was likewise delivered once with an exact USER receipt
+and completed response timer (147.906 seconds). No initial invitation,
+private context or previously completed continuation was replayed. The existing
+canonical serving and official-owner windows verified their retained serving
+identity, local 401/401/200 authentication matrix and 102-tool local catalog;
+these local checks do not by themselves establish the Web client's publication
+catalog. No authentication setting, new tunnel or recurring owner was introduced.
+
+Native execution remains **NOT_RUN**: the exact original native job stayed READY,
+without an attempt, native process receipt or native task journal. No source edit,
+targeted test, independent code verification or result Wake was produced. Neither
+a completed assistant turn nor successful message delivery establishes that code ran.
+
+The exact receipt-bound automatic response inspector passed in
+32.718 seconds, linked to the immutable project/task/assignment, message,
+target generation and delivery. It captured only the fixed **DISPATCH_REJECTED**
+assistant-text category. No known error code, cached-argument invariant or precise
+server refusal was recovered; the category is not an authenticated tool result or
+native execution receipt. No human response relay was used. A separate single
+permitted trace inspection ended after 35.390 seconds with
+**OPEN_OUTCOME_UNKNOWN / TRACE_READ_WINDOW_EXPIRED**, at the READ/PANEL_STABILITY
+boundary. Its retained unknown fence remains authoritative: no trace reopen,
+blind retry, new native call ID or request replay is permitted by these observations.
+
+All recorded windows cleaned up their owned processes. The canonical backend and
+existing official owner stopped through their supported lifecycle; installed
+WakeHost remained stopped, retained official profile matched, and preservation
+checks passed (1,101 pins for the serving windows and 1,103 for response/trace
+inspection). The context's intended durable SENT transition and new receipts are
+preserved. The unsigned, unselected debug reader is **not installed**, promoted or
+protected producer evidence. The original Bug Bounty task, grants, messages and
+unknown fences remain unchanged. Full-profile verification remains **NOT_RUN** and full C1 remains
+**INCOMPLETE**. Next resolve the specific refusal through supported,
+privacy-bounded evidence while preserving both original tasks; no operator action
+is required at this checkpoint. A new source-only refinement must obtain its own
+qualification and cannot inherit this package's live result.
+
+
+### 2026-11-09T13:45:11.813843+00:00 — bounded refusal details without a human response relay
+
+The original modern BYOVD continuation is delivered and its assistant is complete,
+but native execution remains NOT_RUN. The automatic reader recovered only the
+advisory DISPATCH_REJECTED category; no exact server refusal or cached invariant
+was proved. Existing legacy identity/transport clarification commands are not a
+generic retry path for this modern continuation. No such command was executed.
+The single trace-open outcome remains UNKNOWN. One distinct composer-menu
+observation returned MENU_ABSENT in35.469s; that is unverified presentation,
+not proof of the conversation's tool catalog or permission to change a connection.
+
+The existing read-only GUI observer now emits closed v5 identity-issue categories
+for known hash domains, nativeCall, grant and target uncertainty, with natural
+negations handled. It can classify unlabelled text inside a unique assistant
+selection-marked body. USER/tool ancestors and descendants are excluded. Original
+body/completion-control authority stays unchanged; this diagnostic text cannot
+complete an otherwise unproved body. Optional fixed bodyCoverage metadata exposes
+unknown text outside selected bodies. No body prose, hash values, keys, drafts or
+unknown labels leave this path. Native validators accept old v1–4 layouts and
+strictly validate v5;4096-byte TASK rows still use the closed vocabulary.
+
+Independent source review caught tool-ancestor contamination and a negated
+mismatch false positive; both were corrected with actual DOM regressions. The
+dated verification record carries exact local test results. This is SOURCE
+qualification; no installed adapter, protected producer, release or project
+binding changed. Next qualify a new unselected package and read the SAME completed
+receipt without sending, clicking the unknown trace, or replaying a native call.
+Full C1 code/independent verification/result Wake remains INCOMPLETE.
