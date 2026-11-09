@@ -1666,6 +1666,48 @@
     "rootClippy": "PASS",
     "failedFixtureRunRetained": true,
     "c1NativeCompletion": "NOT_RUN",
-    "operatorResponseRelayRequired": false
+    "operatorResponseRelayRequired": false,
+    "live": {
+      "observedUtc": "2026-11-09T01:26:44.926119+00:00",
+      "status": "LIVE_SOURCE_CONTROLLER_READBACK_PASS_INSTALLED_FEATURE_PENDING",
+      "sourceCommit": "784eda63035262a0cade9b7a4dcadbea372aacad",
+      "controllerSha256": "52f11211e210c0050919d897ca96a4472f1e3add6a2c5c00a811813f330516a8",
+      "elapsedSeconds": 212.188,
+      "selectedSender": "dev.84",
+      "newMessagesSent": 1,
+      "completedMessagesReplayed": 0,
+      "newTaskGrantOrKeyCreated": false,
+      "backendAuthMatrix": [
+        401,
+        401,
+        200
+      ],
+      "serverToolCount": 102,
+      "centralDispatcherListed": true,
+      "existingOfficialOwnerReady": true,
+      "exactSentReceipt": true,
+      "completedResponseObservedOnFreshDocument": true,
+      "automaticTaskAttribution": true,
+      "capturedErrorNames": [
+        "INVALID_ARGUMENT"
+      ],
+      "classificationBasis": "CURRENT_ASSISTANT_TEXT_HINT_NOT_NATIVE_OR_TOOL_RECEIPT",
+      "freshNativeCallProved": false,
+      "exactRejectedField": "UNPROVEN",
+      "nativeTaskState": "READY",
+      "nativeAttemptPresent": false,
+      "nativeReceiptPresent": false,
+      "codeChanges": 0,
+      "originalPreservationPins": 1076,
+      "originalPreservationMismatches": 0,
+      "acceptedPinsIncludingNewRecords": 1081,
+      "backendAndOfficialOwnerStopped": true,
+      "browserAndWakeProcessesAfter": 0,
+      "port3200ListenerAfter": false,
+      "operatorResponseRelayUsed": false,
+      "selectedPackageChanged": false,
+      "installedAutomaticReadbackAcceptance": "NOT_QUALIFIED",
+      "c1NativeCoding": "INCOMPLETE"
+    }
   }
 }

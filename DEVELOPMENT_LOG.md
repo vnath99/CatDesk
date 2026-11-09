@@ -1845,3 +1845,43 @@ within the test bound. The prior tool-unavailability cause and exact rejected
 outer field of WEB_TASK_CACHED_ARGUMENTS_INVALID remain unproved; do not infer
 them from popup markup. C1 and installed end-to-end response acceptance remain
 incomplete. No operator response relay is requested, and C2 is not started.
+
+
+## 2026-11-09T01:26:44.926119+00:00 — original-task send and automatic readback live result
+
+PASS for the bounded source-controller workflow: one new original-task serving
+continuation was delivered with an exact durable SENT receipt. The selected
+dev.84 sender exited before the same-profile qualified observer started; the
+fresh-document observation found the exact assistant exchange COMPLETE and
+automatically captured `INVALID_ARGUMENT`. Event/message digest, source delivery
+hash, project/task/assignment and target generation/digest were checked. No
+operator inspected or relayed the answer. No private response, key, draft or
+context was exported into this public record.
+
+LIMITATION: this is an assistant-text hint, not proof of a fresh tool rejection.
+Known UI tool markers were zero. The original native queue is still READY with
+no attempt or receipt, and its worktree remains unchanged. No new native call
+or exact rejected field is established; do not relabel this result as the earlier
+WEB_TASK_CACHED_ARGUMENTS_INVALID or a successful code execution. That earlier
+error is an outer cached-envelope pre-execution refusal in the retained source;
+its precise rejected field remains unrecorded. A completed assistant can also
+describe a historical error, so the reader deliberately keeps these evidence
+levels separate. No uncertain call or completed message may be retried blindly.
+
+The existing finite supervisor restored the matching installed backend; auth
+checks were 401/401/200 and its local catalog exposed 102 tools including the
+central dispatcher. The retained official tunnel owner was ready throughout
+delivery and readback. This does not prove the affected client's tool catalog.
+The entire monitored test took 212.188 seconds. Both serving owners
+stopped through their supported paths, with a fresh backend PID/creation check
+before stop. Browser/Wake counts are zero and port 3200 is closed. All 1,076
+original pins match, including the unattempted native job; five new immutable
+continuation records extend the private baseline. No binding, auth, profile,
+selected package, recurring registration or unrelated native session changed.
+
+Runtime source is 784eda63035262a0cade9b7a4dcadbea372aacad; the separate controller
+hash is 52f11211e210c0050919d897ca96a4472f1e3add6a2c5c00a811813f330516a8.
+This is live source-controller qualification with an installed sender, not an
+installed automatic-readback upgrade or full C1 acceptance. Existing protected
+package-promotion prerequisites remain unchanged. C1 coding and task-specific
+result Wake remain incomplete; C2 is not started. No operator relay is pending.
