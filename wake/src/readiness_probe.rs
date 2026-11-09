@@ -72,23 +72,31 @@ pub(crate) fn app_menu_observation(line: &str) -> Option<serde_json::Value> {
         "closedVerified",
     ];
     let version = value["schemaVersion"].as_u64()?;
-    if !matches!(version, 1..=3)
+    if !matches!(version, 1..=4)
         || value.as_object()?.len()
             != match version {
                 1 => 12,
                 2 => 13,
-                _ => 17,
+                3 => 17,
+                _ => 20,
             }
         || (version >= 2
             && !matches!(
                 value["ownershipEvidence"].as_str()?,
                 "NONE" | "CONTROL_LINK" | "FRESH_MENU_TRANSITION"
             ))
-        || (version == 3
+        || (version >= 3
             && (!matches!(
                 value["expandedState"].as_str()?,
                 "UNKNOWN" | "OPEN" | "CLOSED"
             ) || !["menuCount", "dialogCount", "otherPopupCount"]
+                .iter()
+                .all(|key| value[*key].as_u64().is_some_and(|n| n <= 16))))
+        || (version == 4
+            && (!matches!(
+                value["panelKind"].as_str()?,
+                "UNPROVEN" | "ROLE_MENU" | "HTML_POPOVER" | "KNOWN_PORTAL" | "INLINE_COMPOSER"
+            ) || !["panelCount", "panelActionCount"]
                 .iter()
                 .all(|key| value[*key].as_u64().is_some_and(|n| n <= 16))))
         || value["basis"] != "TRANSIENT_MENU_ONLY_NOT_TOOL_CATALOG"
@@ -111,6 +119,7 @@ pub(crate) fn app_menu_observation(line: &str) -> Option<serde_json::Value> {
                 | "MENU_AMBIGUOUS"
                 | "POPUP_CONFLICT"
                 | "CONTROL_LINK_UNPROVEN"
+                | "PANEL_AMBIGUOUS"
         )
         || !flags.iter().all(|key| value[*key].as_bool().is_some())
         || ![
@@ -136,6 +145,24 @@ pub(crate) fn app_menu_observation(line: &str) -> Option<serde_json::Value> {
                 || value["dialogCount"] != 0
                 || value["otherPopupCount"] != 0
                 || value["expandedState"] != "OPEN"))
+        || (version == 4
+            && value["state"] == "OBSERVED"
+            && (value["panelCount"] != 1
+                || value["dialogCount"] != 0
+                || value["otherPopupCount"] != 0
+                || value["expandedState"] != "OPEN"
+                || if value["panelKind"] == "ROLE_MENU" {
+                    value["menuCount"] != 1
+                } else {
+                    value["ownershipEvidence"] != "FRESH_MENU_TRANSITION"
+                        || value["menuCount"] != 0
+                        || !matches!(
+                            value["panelKind"].as_str()?,
+                            "HTML_POPOVER" | "KNOWN_PORTAL" | "INLINE_COMPOSER"
+                        )
+                        || (value["panelKind"] == "INLINE_COMPOSER"
+                            && value["panelActionCount"].as_u64()? == 0)
+                }))
     {
         return None;
     }
@@ -960,6 +987,26 @@ fn app_menu_protocol_requires_closed_counts_and_confirmed_close_for_observed_sta
         ("dialogCount", serde_json::json!(1)),
         ("otherPopupCount", serde_json::json!(17)),
         ("expandedState", serde_json::json!("PRIVATE_VALUE")),
+    ] {
+        let mut changed = current.clone();
+        changed[key] = bad;
+        assert!(app_menu_observation(&format!("PROBE:APP_MENU:{changed}")).is_none());
+    }
+    current["schemaVersion"] = serde_json::json!(4);
+    current["menuCount"] = serde_json::json!(0);
+    current["panelKind"] = serde_json::json!("INLINE_COMPOSER");
+    current["panelCount"] = serde_json::json!(1);
+    current["panelActionCount"] = serde_json::json!(1);
+    assert_eq!(
+        app_menu_observation(&format!("PROBE:APP_MENU:{current}")),
+        Some(current.clone())
+    );
+    for (key, bad) in [
+        ("panelCount", serde_json::json!(2)),
+        ("panelActionCount", serde_json::json!(0)),
+        ("panelKind", serde_json::json!("PRIVATE_LABEL")),
+        ("ownershipEvidence", serde_json::json!("CONTROL_LINK")),
+        ("rawPanel", serde_json::json!("PRIVATE_CONTEXT")),
     ] {
         let mut changed = current.clone();
         changed[key] = bad;

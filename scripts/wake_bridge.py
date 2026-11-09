@@ -969,25 +969,28 @@ class CdpSink:
         positive ownership through a control link or a witnessed fresh menu
         transition from the exact known composer control. No item is selected.
         """
-        result=dict(schemaVersion=3,basis='TRANSIENT_MENU_ONLY_NOT_TOOL_CATALOG',state='UNPROVEN',
+        result=dict(schemaVersion=4,basis='TRANSIENT_MENU_ONLY_NOT_TOOL_CATALOG',state='UNPROVEN',
             ownershipEvidence='NONE',
             menuCount=0,dialogCount=0,otherPopupCount=0,expandedState='UNKNOWN',
+            panelKind='UNPROVEN',panelCount=0,panelActionCount=0,
             openAttempted=False,openRequested=False,openOutcomeUnknown=False,closeAttempted=False,
             closedVerified=False,v5ItemCount=0,v5DisabledCount=0,appsItemCount=0,moreItemCount=0)
         states={'UNPROVEN','CONTROL_READY','OPEN_REQUESTED','CLOSE_REQUESTED','OBSERVED','CLOSED','DRAFT_PRESENT',
             'GENERATION_ACTIVE','CONTROL_UNPROVEN','UNSUPPORTED_MENU','PRIOR_MENU_OPEN','MENU_UNPROVEN',
-            'CONTROL_STATE_UNPROVEN','MENU_ABSENT','MENU_AMBIGUOUS','POPUP_CONFLICT','CONTROL_LINK_UNPROVEN'}
+            'CONTROL_STATE_UNPROVEN','MENU_ABSENT','MENU_AMBIGUOUS','POPUP_CONFLICT','CONTROL_LINK_UNPROVEN','PANEL_AMBIGUOUS'}
         prepared_ownership='NONE'
         prepared_control='NONE'
+        prepared_inline=[0]*12
         def step(action):
             if self.observe_cooperative_response(cdp,message,expected_digest)!='RESPONSE_COMPLETE':
                 raise Attention('RESPONSE_STATE_UNPROVEN')
             document_url=str(cdp.get_current_url())
             script=f"""(() => {{
-                const out={{state:'UNPROVEN',ownershipEvidence:'NONE',controlKind:'NONE',menuCount:0,dialogCount:0,otherPopupCount:0,expandedState:'UNKNOWN',v5ItemCount:0,v5DisabledCount:0,appsItemCount:0,moreItemCount:0}};
+                const out={{state:'UNPROVEN',ownershipEvidence:'NONE',controlKind:'NONE',inlineBaseline:Array(12).fill(0),menuCount:0,dialogCount:0,otherPopupCount:0,expandedState:'UNKNOWN',panelKind:'UNPROVEN',panelCount:0,panelActionCount:0,v5ItemCount:0,v5DisabledCount:0,appsItemCount:0,moreItemCount:0}};
                 const action={json.dumps(action)};
                 const preparedOwnership={json.dumps(prepared_ownership)};
                 const preparedControl={json.dumps(prepared_control)};
+                const preparedInline={json.dumps(prepared_inline)};
                 if(location.href!=={json.dumps(document_url)}||document.readyState!=='complete') return out;
                 let actual,expected;try{{actual=new URL(location.href);expected=new URL({json.dumps(self.url)});}}catch(_){{return out;}}
                 const route=actual.pathname.match(new RegExp('^/(?:c/([A-Za-z0-9_-]{{1,200}})|g/[A-Za-z0-9_-]{{1,200}}/c/([A-Za-z0-9_-]{{1,200}}))$'));
@@ -1036,38 +1039,66 @@ class CdpSink:
                 out.menuCount=Math.min(menus.length,16);
                 out.dialogCount=Math.min(popups.filter(node=>node.getAttribute('role')==='dialog').length,16);
                 out.otherPopupCount=Math.min(popups.filter(node=>!['menu','dialog'].includes(node.getAttribute('role'))).length,16);
+                const actions=root=>{{
+                    const items=Array.from(root.querySelectorAll("[role='menuitem'],[role='option'],button")).filter(node=>visible(node)&&node!==button&&!editor.contains(node));
+                    const named=names=>{{const matches=items.filter(node=>names.includes((node.getAttribute('aria-label')||node.innerText||node.textContent||'').trim()));return matches.filter(node=>!matches.some(parent=>parent!==node&&parent.contains(node)));}};
+                    const v5=named(['CatDesk-Local-Tunnel-v5','CatDesk Local Tunnel v5']);
+                    return {{v5ItemCount:Math.min(v5.length,16),v5DisabledCount:Math.min(v5.filter(node=>node.disabled||node.getAttribute('aria-disabled')==='true').length,16),appsItemCount:Math.min(named(['Apps','Use apps']).length,16),moreItemCount:Math.min(named(['More','More apps','View all apps']).length,16)}};
+                }};
+                const total=a=>a.v5ItemCount+a.appsItemCount+a.moreItemCount;
+                const history="[data-message-author-role],[data-content-search-turn-key],[data-testid^='conversation-turn-']";
+                const safeRoot=node=>!['BODY','MAIN','HTML'].includes(node.tagName.toUpperCase())&&!node.matches(history)&&!node.querySelector(history);
+                const outermost=nodes=>nodes.filter(node=>!nodes.some(parent=>parent!==node&&parent.contains(node)));
+                const html=Array.from(document.querySelectorAll('[popover]')).filter(node=>{{try{{return visible(node)&&safeRoot(node)&&node.matches(':popover-open');}}catch(_){{return false;}}}});
+                const portals=Array.from(document.querySelectorAll("[data-radix-popper-content-wrapper],[data-floating-ui-portal],[data-testid='composer-menu'],[data-testid='composer-plus-menu'],[data-testid='composer-popover']"))
+                    .filter(node=>visible(node)&&safeRoot(node)&&Array.from(node.querySelectorAll("button,input,[role='menuitem'],[role='option']")).some(visible));
+                const external=outermost([...new Set([...html,...portals])]);
+                let inline=null;
+                for(let candidate=form,depth=0;candidate&&depth<4;candidate=candidate.parentElement,depth++){{
+                    if(!safeRoot(candidate)) break;
+                    const a=actions(candidate),counts=[a.v5ItemCount,a.appsItemCount,a.moreItemCount];
+                    counts.forEach((n,i)=>out.inlineBaseline[depth*3+i]=n);
+                    if(!inline&&counts.some((n,i)=>n>preparedInline[depth*3+i])) inline=candidate;
+                }}
                 if(action==='PREPARE'||action==='OPEN'){{
-                    if(expanded!=='false'||popups.length) return fail('PRIOR_MENU_OPEN');
+                    if(expanded!=='false'||popups.length||external.length) return fail('PRIOR_MENU_OPEN');
                     if(action==='PREPARE') return fail('CONTROL_READY');
-                    if(preparedOwnership!==ownership||preparedControl!==control) return fail('CONTROL_UNPROVEN');
+                    if(preparedOwnership!==ownership||preparedControl!==control||JSON.stringify(preparedInline)!==JSON.stringify(out.inlineBaseline)) return fail('CONTROL_UNPROVEN');
                     button.click();return fail('OPEN_REQUESTED');
                 }}
                 if(preparedOwnership!==ownership||preparedControl!==control) return fail('CONTROL_UNPROVEN');
-                if(expanded==='false'&&!popups.length) return fail('CLOSED');
+                if(expanded==='false'&&!popups.length&&!external.length) return fail('CLOSED');
                 if(expanded!=='true') return fail('CONTROL_STATE_UNPROVEN');
-                if(menus.length===0) return fail('MENU_ABSENT');
-                if(menus.length!==1) return fail('MENU_AMBIGUOUS');
-                if(popups.length!==1) return fail('POPUP_CONFLICT');
-                const menu=menus[0];
-                if(ownership==='CONTROL_LINK'&&(typeof id!=='string'||!/^[A-Za-z0-9_:.-]{{1,128}}$/.test(id)||document.getElementById(id)!==menu)) return fail('CONTROL_LINK_UNPROVEN');
+                let menu=null;
+                if(menus.length){{
+                    if(menus.length!==1) return fail('MENU_AMBIGUOUS');
+                    if(popups.length!==1) return fail('POPUP_CONFLICT');
+                    menu=menus[0];out.panelKind='ROLE_MENU';out.panelCount=1;
+                    if(ownership==='CONTROL_LINK'&&(typeof id!=='string'||!/^[A-Za-z0-9_:.-]{{1,128}}$/.test(id)||document.getElementById(id)!==menu)) return fail('CONTROL_LINK_UNPROVEN');
+                }}else{{
+                    if(popups.length) return fail('MENU_ABSENT');
+                    if(ownership!=='FRESH_MENU_TRANSITION') return fail('CONTROL_LINK_UNPROVEN');
+                    const candidates=external.length?external:(inline?[inline]:[]);
+                    out.panelCount=Math.min(candidates.length,16);
+                    if(!candidates.length) return fail('MENU_ABSENT');
+                    if(candidates.length!==1) return fail('PANEL_AMBIGUOUS');
+                    menu=candidates[0];out.panelKind=html.includes(menu)?'HTML_POPOVER':portals.includes(menu)?'KNOWN_PORTAL':'INLINE_COMPOSER';
+                }}
+                const a=actions(menu);Object.assign(out,a);out.panelActionCount=Math.min(total(a),16);
                 if(action==='CLOSE'){{button.click();return fail('CLOSE_REQUESTED');}}
                 if(action!=='READ') return out;
-                const items=Array.from(menu.querySelectorAll("[role='menuitem']")).filter(visible);
-                const named=name=>items.filter(node=>(node.innerText||node.textContent||'').trim()===name);
-                const v5=[...named('CatDesk-Local-Tunnel-v5'),...named('CatDesk Local Tunnel v5')];
-                out.v5ItemCount=Math.min(v5.length,16);
-                out.v5DisabledCount=Math.min(v5.filter(node=>node.disabled||node.getAttribute('aria-disabled')==='true').length,16);
-                out.appsItemCount=Math.min(named('Apps').length+named('Use apps').length,16);
-                out.moreItemCount=Math.min(named('More').length,16);
                 return fail('OBSERVED');
             }})()"""
             value=self.cdp_value(cdp.evaluate(script));self.require_response_document(cdp)
-            if (not isinstance(value,dict) or set(value)!={'state','ownershipEvidence','controlKind','menuCount','dialogCount','otherPopupCount','expandedState','v5ItemCount','v5DisabledCount','appsItemCount','moreItemCount'}
+            if (not isinstance(value,dict) or set(value)!={'state','ownershipEvidence','controlKind','inlineBaseline','menuCount','dialogCount','otherPopupCount','expandedState','panelKind','panelCount','panelActionCount','v5ItemCount','v5DisabledCount','appsItemCount','moreItemCount'}
                     or not isinstance(value['state'],str) or value['state'] not in states
                     or value['ownershipEvidence'] not in {'NONE','CONTROL_LINK','FRESH_MENU_TRANSITION'}
                     or value['controlKind'] not in {'NONE','COMPOSER_TEST_ID','COMPOSER_ID','ADD_FILES_AND_MORE','ADD_FILES_AND_TOOLS','ADD_FILES_OR_TOOLS','OPEN_COMPOSER_MENU','TOOLS','APPS','USE_APPS'}
                     or value['expandedState'] not in {'UNKNOWN','OPEN','CLOSED'}
-                    or any(type(value[key]) is not int or not 0<=value[key]<=16 for key in value if key not in {'state','ownershipEvidence','controlKind','expandedState'})):
+                    or value['panelKind'] not in {'UNPROVEN','ROLE_MENU','HTML_POPOVER','KNOWN_PORTAL','INLINE_COMPOSER'}
+                    or not isinstance(value['inlineBaseline'],list) or len(value['inlineBaseline'])!=12
+                    or any(type(n) is not int or not 0<=n<=16 for n in value['inlineBaseline'])
+                    or any(type(value[key]) is not int or not 0<=value[key]<=16 for key in value if key not in {'state','ownershipEvidence','controlKind','inlineBaseline','expandedState','panelKind'})):
                 raise Attention('BROWSER_OBSERVATION_INVALID')
             return value
         try:
@@ -1076,6 +1107,7 @@ class CdpSink:
             if prepared['state']!='CONTROL_READY':return result
             prepared_ownership=prepared['ownershipEvidence']
             prepared_control=prepared['controlKind']
+            prepared_inline=prepared['inlineBaseline']
             result['ownershipEvidence']=prepared_ownership
             result['openAttempted']=True
             try:opened=step('OPEN')
@@ -1085,7 +1117,7 @@ class CdpSink:
             if opened['state']!='OPEN_REQUESTED':return result
             result['openRequested']=True
             sleeper(.25);first=step('READ');sleeper(.25);second=step('READ')
-            if first==second:result.update({key:value for key,value in second.items() if key!='controlKind'})
+            if first==second:result.update({key:value for key,value in second.items() if key not in {'controlKind','inlineBaseline'}})
             else:result['state']='MENU_UNPROVEN'
         except Exception:
             result['state']='UNPROVEN'

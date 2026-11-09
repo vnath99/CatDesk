@@ -6685,3 +6685,24 @@ No new UI action, weaker ownership rule, alternate browser service or retry
 capability is added. Actual-DOM tests cover dialog, listbox and unclassified
 shape failures without selection/retry. A matched live diagnostic is pending;
 installed dev.84 and C1 native coding acceptance remain incomplete.
+
+
+## 2026-11-09T00:35:39.887198+00:00 — qualify non-ARIA composer panels through the existing owner
+
+The existing bounded menu observer now distinguishes ROLE_MENU, standard
+open HTML_POPOVER, a known fresh popup portal, and INLINE_COMPOSER actions.
+HTML popovers require the browser's :popover-open state. Known portal roots
+require visible interactive descendants; historical/body/main/html roots are
+excluded. Inline proof requires fixed app-action counts to increase from the
+read-only pre-open baseline in at most four composer-only ancestors. Existing
+app chips cannot establish a newly opened panel. A changed baseline/control,
+competing panel, draft, generation or wrong task/document refuses the action.
+
+The same exclusive owner opens/closes at most once, with no item selection,
+text entry, USER submission, native call, settings or binding change. Schema 4
+adds only closed panel kind/count metadata; internal identities/baselines and
+unknown labels remain excluded. Native schemas 1–3 remain supported. Tests
+exercise all three non-ARIA variants, ambiguous portals, unchanged chips,
+privacy and exact task/route guards. Fixture visibility now respects hidden
+ancestors. Live qualification and installed acceptance remain separate; C1
+native coding has not executed and no completed message/call is replayed.

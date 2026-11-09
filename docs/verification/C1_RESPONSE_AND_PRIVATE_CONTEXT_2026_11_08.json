@@ -1548,5 +1548,52 @@
       "ownedProfileAndWakeProcessesAfter": 0,
       "port3200ListenerPresent": false
     }
+  },
+  "nonAriaComposerPanelQualification": {
+    "observedUtc": "2026-11-09T00:35:39.887198+00:00",
+    "status": "SOURCE_TESTED_LIVE_PENDING",
+    "schemaVersion": 4,
+    "legacySchemasAccepted": [
+      1,
+      2,
+      3
+    ],
+    "panelKinds": [
+      "ROLE_MENU",
+      "HTML_POPOVER",
+      "KNOWN_PORTAL",
+      "INLINE_COMPOSER"
+    ],
+    "inlineFreshBaselineRequired": true,
+    "knownPortalInteractiveDescendantsRequired": true,
+    "unknownLabelsOrInternalBaselineExported": false,
+    "maximumOpens": 1,
+    "maximumCloses": 1,
+    "itemSelections": 0,
+    "messagesSent": 0,
+    "nativeCalls": 0,
+    "actualDomTests": 94,
+    "nativeReadinessTests": 19,
+    "installedAcceptance": "NOT_RUN",
+    "retainedFixtureCorrection": "Historical assistant-root fixture is refused before UI action by the existing exact-response guard; corrected later-state/one-click expectations, preserving failed runs."
+  },
+  "originalTransportServingTimeline": {
+    "source": "PRESERVED_HISTORICAL_OWNER_RECORD",
+    "startedUtc": "2026-11-08T21:35:06.276572+00:00",
+    "finishedUtc": "2026-11-08T21:41:37.883169+00:00",
+    "backendReady": true,
+    "officialReady": true,
+    "authMatrix": [
+      401,
+      401,
+      200
+    ],
+    "serverToolCount": 102,
+    "centralTaskToolListed": true,
+    "backendStoppedAtWindowEnd": true,
+    "officialStoppedAtWindowEnd": true,
+    "assistantActualCompletionTimeEstablished": false,
+    "toolUnavailabilityCause": "NOT_ESTABLISHED",
+    "clientCatalogInferredFromServerOrUi": false
   }
 }

@@ -36,9 +36,10 @@ class Element {
   get disabled() { return this.attrs.disabled === true; }
   getAttribute(name) { return this.attrs[name] ?? null; }
   hasAttribute(name) { return Object.hasOwn(this.attrs, name); }
-  getClientRects() { return this.attrs.hidden ? [] : [1]; }
+  getClientRects() { for(let node=this;node;node=node.parentElement) if(node.attrs.hidden) return []; return [1]; }
   matches(selector) { return selector.split(',').some(raw => {
     const s = raw.trim();
+    if(s===':popover-open') return this.attrs.popoverOpen===true;
     const has = s.match(/^([^:]+):has\(([^()]+)\)$/);
     if (has) return this.matches(has[1]) && Boolean(this.querySelector(has[2]));
     if (s.includes(':')) return false;
@@ -218,7 +219,7 @@ if (options.observationStop) document.children.push(el('button', {'data-testid':
 if (options.observationLogin) document.children.push(el('a', {href:'/auth/login'}));
 if (options.observationCaptcha) document.children.push(el('iframe', {title:'captcha'}));
 if (options.observationNetwork) document.children.push(el('div', {id:'main-frame-error'}), el('div', {id:'error-code'}));
-let appMenuControl=null;
+let appMenuControl=null,appPanel=null;
 if (options.appForm) {
   const editor=el('div',{id:'prompt-textarea',contenteditable:'true'},options.appDraft || '');
   editor.isContentEditable=true;
@@ -234,7 +235,11 @@ if (options.appForm) {
       el('div',{role:'menuitem','aria-disabled':options.v5Disabled?'true':'false'},'CatDesk-Local-Tunnel-v5'),
       el('div',{role:'menuitem'},'PRIVATE_OTHER_APP'),el('div',{role:'menuitem'},'Apps'),
     ]);
-    append(document,menu);
+    appPanel=menu;
+    if(options.appHtmlPopover){menu.attrs.popover='auto';menu.attrs.popoverOpen=options.appExpanded==='true';}
+    if(options.appKnownPortal) menu.attrs['data-radix-popper-content-wrapper']='';
+    if(options.appPanelIsHistory) menu.attrs['data-message-author-role']='assistant';
+    if(!options.appInlinePanel) append(document,menu);
     document.getElementById=id=>document.querySelectorAll('[id]').find(node=>node.getAttribute('id')===id)||null;
     for(const control of controls){
       control.attrs['aria-haspopup']=options.appPopup || 'menu';
@@ -246,11 +251,13 @@ if (options.appForm) {
     if(options.priorMenuOpen) append(document,el('div',{role:'menu',id:'foreign-menu'},'PRIVATE_MENU'));
     if(options.priorDialogOpen) append(document,el('div',{role:'dialog'},'PRIVATE_DIALOG'));
     if(options.ambiguousMenuAfterOpen&&options.appExpanded==='true') append(document,el('div',{role:'menu'},'PRIVATE_MENU'));
+    if(options.ambiguousPortalAfterOpen&&options.appExpanded==='true') append(document,el('div',{'data-floating-ui-portal':''},'',[el('button',{},'PRIVATE_OTHER_PANEL')]));
   }
   if(options.appSemanticLabel) for(const control of controls){delete control.attrs['data-testid'];control.attrs['aria-label']=options.appSemanticLabel;}
   if(options.v5Chip) controls.push(el('button',{'data-testid':'app-chip','aria-label':'CatDesk-Local-Tunnel-v5'}));
   if(options.foreignChip) controls.push(el('button',{'data-testid':'app-chip','aria-label':'PRIVATE_OTHER_APP'}));
   const form=el('form',{},'',[editor,...(options.appControlOutsideForm?[]:controls)]);
+  if(options.appInlinePanel&&appPanel) append(form,appPanel);
   if(options.appFileInput){
     const input=el('input',{type:'file'});
     input.files=options.appUnknownFileList?null:{length:options.appSelectedFile?1:0};
@@ -451,7 +458,7 @@ class CurrentDomTests(unittest.TestCase):
         cdp=CurrentDom(appForm=True,appMenuTrace=True,unlinkedMenuControl=True)
         value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
         self.assertEqual(value['state'],'OBSERVED')
-        self.assertEqual(value['schemaVersion'],3)
+        self.assertEqual(value['schemaVersion'],4)
         self.assertEqual(value['ownershipEvidence'],'FRESH_MENU_TRANSITION')
         self.assertTrue(value['closedVerified'])
         self.assertEqual(cdp.mutations,2)
@@ -509,6 +516,45 @@ class CurrentDomTests(unittest.TestCase):
                 self.assertFalse(value['closeAttempted'] or value['closedVerified'])
                 self.assertEqual(cdp.mutations,1)
                 self.assertNotIn('PRIVATE_',json.dumps(value))
+
+    def test_non_aria_panels_require_fresh_qualified_structure_and_close_without_selection(self):
+        for option,kind in [('appHtmlPopover','HTML_POPOVER'),('appKnownPortal','KNOWN_PORTAL'),('appInlinePanel','INLINE_COMPOSER')]:
+            with self.subTest(option=option):
+                cdp=CurrentDom(appForm=True,appMenuTrace=True,unlinkedMenuControl=True,appSemanticLabel='Add files and more',appPopupRole='presentation',**{option:True})
+                value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+                self.assertEqual(value['state'],'OBSERVED')
+                self.assertEqual(value['panelKind'],kind)
+                self.assertEqual(value['panelCount'],1)
+                self.assertEqual(value['menuCount'],0)
+                self.assertTrue(value['closedVerified'])
+                self.assertEqual(value['v5ItemCount'],1)
+                self.assertEqual(cdp.mutations,2)
+                self.assertNotIn('PRIVATE_',json.dumps(value))
+                self.assertNotIn('inlineBaseline',value)
+
+    def test_non_aria_panel_ambiguity_or_unchanged_existing_chip_does_not_authorize_close(self):
+        cdp=CurrentDom(appForm=True,appMenuTrace=True,unlinkedMenuControl=True,appPopupRole='presentation',appKnownPortal=True,ambiguousPortalAfterOpen=True)
+        value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+        self.assertEqual(value['state'],'PANEL_AMBIGUOUS')
+        self.assertEqual(value['panelCount'],2)
+        self.assertFalse(value['closeAttempted'])
+        self.assertEqual(cdp.mutations,1)
+        cdp=CurrentDom(appForm=True,appMenuTrace=True,unlinkedMenuControl=True,appPopupRole='presentation',appKnownPortal=True,appPanelIsHistory=True)
+        value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+        # The extra assistant unit invalidates the exact-response witness
+        # before any UI action or narrower panel classification is permitted.
+        self.assertEqual(value['state'],'UNPROVEN')
+        self.assertEqual(value['panelCount'],0)
+        self.assertFalse(value['closeAttempted'])
+        self.assertFalse(value['openAttempted'] or value['openRequested'])
+        self.assertEqual(cdp.mutations,0)
+        # An existing selected chip must not become evidence of a fresh panel.
+        cdp=CurrentDom(appForm=True,appMenuTrace=True,unlinkedMenuControl=True,appPopupRole='presentation',v5Chip=True)
+        value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+        self.assertEqual(value['state'],'MENU_ABSENT')
+        self.assertEqual(value['panelCount'],0)
+        self.assertFalse(value['closeAttempted'])
+        self.assertEqual(cdp.mutations,1)
 
     def test_app_menu_refuses_drafts_generation_foreign_turn_and_unsafe_controls(self):
         for options in [dict(appDraft='PRIVATE_DRAFT'),dict(observationStop=True),dict(appPlusCount=2),
