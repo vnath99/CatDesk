@@ -2441,3 +2441,21 @@ No additional message was sent. Closure explicitly returns
 `taskCompletionVerified:false` and creates no source acceptance. The frozen final
 review still requires genuine complete partial reports; corroborated command logs
 cannot replace an incomplete reviewer judgment. Remaining review messages are held.
+
+### 2026-11-09T21:22:20Z — command-output identity source improvement
+
+The existing normal shell-result path now supplies UTF-8 byte counts and SHA-256
+of returned captured stdout/stderr, including terminal newlines. Hidden output
+has null identity metadata. Independent source review, formatting, 12 focused
+tests (four new) and strict root all-target Clippy passed; see [source evidence](../verification/CAPTURED_COMMAND_OUTPUT_IDENTITY_2026_11_09.json).
+No protected executable or serving package was changed. Original client failure,
+incomplete independent review, producer authority and native C1 acceptance remain
+unresolved; the historical INCONCLUSIVE report is preserved.
+
+At 21:23:02Z one fresh-status/CAS cancellation retired only the auxiliary
+inconclusive report claim (CANCELLED/inactive/version 5). The bounded local
+metadata owner passed in 102.688s with 4,767 native files checked, zero unrelated
+mismatches/additions, eight other active claims preserved, natural exit and closed
+readers/endpoint. Original C1 tasks and their grants were unchanged. The old queue
+label and accounting bytes remain retained; no accounting completion, source
+acceptance or producer authority follows from this administrative cleanup.

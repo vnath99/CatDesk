@@ -1950,25 +1950,57 @@ async fn handle_run_command(
     } else {
         render_command_summary_text(&summary, &log_path)
     };
-    let structured = json!({
-        "toolName": "run_command",
-        "command": effective_command,
-        "cwd": cwd.to_string_lossy().to_string(),
-        "stdout": if include_full_output { result.stdout } else { String::new() },
-        "stderr": if include_full_output { result.stderr } else { String::new() },
-        "success": result.success,
-        "exitCode": result.exit_code,
-        "elapsedMs": result.elapsed_ms,
-        "logPath": log_path,
-        "includeFullOutput": include_full_output,
-        "summary": command_summary_json(&summary),
-    });
+    let structured = build_run_command_structured(
+        &effective_command,
+        &cwd,
+        &result,
+        include_full_output,
+        &log_path,
+        &summary,
+    );
 
     if result.success {
         tool_success_response_with_structured(req, output, structured)
     } else {
         tool_error_response_with_structured(req, output, structured)
     }
+}
+
+fn build_run_command_structured(
+    command_text: &str,
+    cwd: &Path,
+    result: &command::CommandResult,
+    include_full_output: bool,
+    log_path: &str,
+    summary: &command::CommandSummary,
+) -> Value {
+    // Identity covers the exact captured UTF-8 text exposed below, including
+    // terminal newlines. Capture may already have replaced invalid UTF-8 or
+    // omitted oversized output; these are not hashes of original process bytes
+    // or of the separately redacted, line-normalized command log.
+    // Withheld output must not expose even its length or a guessable digest.
+    let output_identity = |text: &str| {
+        include_full_output.then(|| (text.len(), format!("{:x}", Sha256::digest(text.as_bytes()))))
+    };
+    let stdout_identity = output_identity(&result.stdout);
+    let stderr_identity = output_identity(&result.stderr);
+    json!({
+        "toolName": "run_command",
+        "command": command_text,
+        "cwd": cwd.to_string_lossy().to_string(),
+        "stdout": if include_full_output { result.stdout.as_str() } else { "" },
+        "stderr": if include_full_output { result.stderr.as_str() } else { "" },
+        "stdoutUtf8Bytes": stdout_identity.as_ref().map(|(bytes, _)| *bytes),
+        "stdoutSha256": stdout_identity.as_ref().map(|(_, digest)| digest),
+        "stderrUtf8Bytes": stderr_identity.as_ref().map(|(bytes, _)| *bytes),
+        "stderrSha256": stderr_identity.as_ref().map(|(_, digest)| digest),
+        "success": result.success,
+        "exitCode": result.exit_code,
+        "elapsedMs": result.elapsed_ms,
+        "logPath": log_path,
+        "includeFullOutput": include_full_output,
+        "summary": command_summary_json(summary),
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17070,6 +17102,146 @@ mod tests {
         let _ = std::fs::remove_dir_all(workspace_root);
     }
 
+    fn captured_output_fixture(
+        stdout: &str,
+        stderr: &str,
+        success: bool,
+    ) -> command::CommandResult {
+        command::CommandResult {
+            stdout: stdout.into(),
+            stderr: stderr.into(),
+            success,
+            exit_code: Some(if success { 0 } else { 7 }),
+            elapsed_ms: 12,
+        }
+    }
+
+    #[test]
+    fn run_command_captured_utf8_identity_preserves_unicode_and_newlines() {
+        for (stdout, expected_bytes, expected_sha256) in [
+            (
+                "α\r\n",
+                4,
+                "e44d74fd467a8e25324a9a861839e9283d40c4895aaa52ae761aaadefe7b8403",
+            ),
+            (
+                "α\n",
+                3,
+                "91bb11dcbf2e523dc5df43a5ec31662deab18be39b4b8897a106acf86a928214",
+            ),
+            (
+                "α",
+                2,
+                "3e32da9648c78feedcc821d56e483c126dcd270e9fe49973c528e3a88912d557",
+            ),
+            (
+                "",
+                0,
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            ),
+        ] {
+            let captured = captured_output_fixture(stdout, "", true);
+            let structured = build_run_command_structured(
+                "fixture",
+                Path::new("."),
+                &captured,
+                true,
+                "retained.log",
+                &command::summarize_result(&captured),
+            );
+            assert_eq!(structured["stdout"], stdout);
+            assert_eq!(structured["stdoutUtf8Bytes"], expected_bytes);
+            assert_eq!(structured["stdoutSha256"], expected_sha256);
+            assert_eq!(structured["stderrUtf8Bytes"], 0);
+            assert_eq!(
+                structured["stderrSha256"],
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            );
+        }
+    }
+
+    #[test]
+    fn run_command_captured_utf8_identity_keeps_error_streams_separate() {
+        let captured = captured_output_fixture("α\n", "échec\n", false);
+        let structured = build_run_command_structured(
+            "fixture",
+            Path::new("."),
+            &captured,
+            true,
+            "retained.log",
+            &command::summarize_result(&captured),
+        );
+        assert_eq!(structured["success"], false);
+        assert_eq!(structured["exitCode"], 7);
+        assert_eq!(structured["stdout"], "α\n");
+        assert_eq!(structured["stderr"], "échec\n");
+        assert_eq!(structured["stdoutUtf8Bytes"], 3);
+        assert_eq!(structured["stderrUtf8Bytes"], 7);
+        assert_eq!(
+            structured["stdoutSha256"],
+            "91bb11dcbf2e523dc5df43a5ec31662deab18be39b4b8897a106acf86a928214"
+        );
+        assert_eq!(
+            structured["stderrSha256"],
+            "92e33578c3788e4379042de27928686e83a61b7f2b6f8903e08b5d4655abd353"
+        );
+    }
+
+    #[test]
+    fn run_command_captured_utf8_identity_is_withheld_in_summary_mode() {
+        let captured = captured_output_fixture("private stdout\n", "private stderr\n", false);
+        let summary = command::summarize_result(&captured);
+        let structured = build_run_command_structured(
+            "fixture",
+            Path::new("."),
+            &captured,
+            false,
+            "retained.log",
+            &summary,
+        );
+        assert_eq!(structured["stdout"], "");
+        assert_eq!(structured["stderr"], "");
+        for field in [
+            "stdoutUtf8Bytes",
+            "stdoutSha256",
+            "stderrUtf8Bytes",
+            "stderrSha256",
+        ] {
+            assert!(
+                structured[field].is_null(),
+                "withheld output leaked {field}"
+            );
+        }
+        // The pre-existing summary policy is preserved, not reinterpreted by
+        // the new identity metadata.
+        assert_eq!(structured["summary"], command_summary_json(&summary));
+        assert_eq!(structured["includeFullOutput"], false);
+    }
+
+    #[test]
+    fn run_command_captured_utf8_identity_is_not_normalized_log_identity() {
+        let captured = captured_output_fixture("public\n", "", true);
+        let structured = build_run_command_structured(
+            "fixture",
+            Path::new("."),
+            &captured,
+            true,
+            "retained.log",
+            &command::summarize_result(&captured),
+        );
+        let log_output = redact_sensitive_lines(&command::format_result(&captured));
+        assert_eq!(log_output, "public");
+        assert_eq!(structured["stdoutUtf8Bytes"], 7);
+        assert_eq!(
+            structured["stdoutSha256"],
+            "cde1925e8f892f5ddaadebfecbdd060398f5d76d3d19224f60d08343d3bbde20"
+        );
+        assert_ne!(
+            structured["stdoutSha256"],
+            format!("{:x}", Sha256::digest(log_output.as_bytes()))
+        );
+    }
+
     #[tokio::test]
     async fn run_command_returns_exit_code_and_summary_for_failures() {
         let workspace_root =
@@ -17110,6 +17282,14 @@ mod tests {
             .and_then(|result| result.get("structuredContent"))
             .expect("missing structured content");
         assert!(structured.get("exitCode").and_then(Value::as_i64).is_some());
+        for field in [
+            "stdoutUtf8Bytes",
+            "stdoutSha256",
+            "stderrUtf8Bytes",
+            "stderrSha256",
+        ] {
+            assert!(structured[field].is_null());
+        }
         let summary = structured.get("summary").expect("missing summary");
         assert_eq!(
             summary.get("status").and_then(Value::as_str),

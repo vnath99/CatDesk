@@ -3230,3 +3230,34 @@ receipt/timer preserved, and no further message. `taskCompletionVerified` and
 source/producer authority remain false. The frozen final-review contract requires
 complete partial reports; local corroboration cannot substitute for the missing
 review judgment. Remaining messages are held while legitimate recovery is assessed.
+
+### 2026-11-09T21:22:20Z — captured command-output identity; source qualification only
+
+Existing full-output `run_command` results now report captured UTF-8 byte lengths
+and SHA-256 for stdout/stderr. Summary-only results return null metadata, retaining
+their privacy policy. The identity includes terminal newlines and describes the
+captured text after existing decoding/truncation, not original process bytes or
+normalized logs. Existing command execution, authentication and logging are unchanged.
+This removes the need for manual byte counting in future bounded source reviews;
+it does not reconstruct the old client response or change its INCONCLUSIVE verdict.
+
+Independent source review, formatting, all 12 focused command tests (four new),
+and strict root all-target Clippy passed. [Source evidence](docs/verification/CAPTURED_COMMAND_OUTPUT_IDENTITY_2026_11_09.json)
+distinguishes these checks from protected installation and live acceptance, neither
+of which occurred. Original frozen review and C1 tasks remain preserved.
+
+### 2026-11-09T21:23:02Z — auxiliary review claim cancelled through its normal CAS route
+
+After the completed communication closed, fresh authenticated status and contract
+checks permitted one normal cancellation of this auxiliary report-only claim.
+It is CANCELLED/inactive at version 5, without a fabricated final review artifact.
+The 102.688s bounded local-metadata workflow passed: 4,767 native files checked,
+zero unrelated native/pinned mismatches or added native files, and all eight other
+historical active claims preserved. No browser, tunnel or native provider started;
+the local owner exited naturally, readers closed and its endpoint refused connections.
+
+Original C1 tasks/grants, source and bindings remain untouched. The cancelled
+claim's old queue label is still WORKER_RUNNING and its accounting bytes are
+unchanged; accounting completion is not claimed. A corrective review must use the
+supported authorization workflow with new immutable identities, preserving the
+completed message, old grant and failed review evidence. The old lease is not renewed.
