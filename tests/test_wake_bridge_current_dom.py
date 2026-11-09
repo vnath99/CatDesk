@@ -243,6 +243,17 @@ if (options.legacyTurns) {
       el('div', {class:'turn-action-controls'}, '', [el('button', {'data-testid':'copy-turn-action-button','aria-label':'Copy'}, 'Copy')])]),
   ];
 }
+if(options.laterExchange) {
+  const later=paired.cloneNode(true);
+  later.attrs['data-content-search-turn-key']='fallback-turn-1';
+  const laterUser=later.querySelector('[data-user-message-bubble]');
+  const laterBody=laterUser.querySelector('[data-message-content], [data-markdown-text-tone="user-message"], .whitespace-pre-wrap');
+  (laterBody||laterUser).text=options.laterSameUser?'exact wake message':'foreign later request';
+  if(!options.laterSameUser)(laterBody||laterUser).children=[];
+  const laterAssistant=later.querySelector('.markdown');
+  if(laterAssistant)laterAssistant.text='PRIVATE_LATER_RESPONSE HTTP 429 WEB_TASK_NATIVE_ARGUMENTS_INVALID';
+  append(document,later);
+}
 if (options.retryOnlyOutside) document.children.push(button('Retry'));
 if (options.historicalLoadError) document.children.unshift(el('div', {'data-message-author-role':'assistant'}, 'This response couldn’t load'));
 if (options.historicalToolMarker) document.children.unshift(el('div', {'data-testid':'mcp-tool-call'}, 'PRIVATE_OLD_TOOL'));
@@ -452,6 +463,38 @@ reader.on('line', line=>{try {const value=eval(JSON.parse(line));
 
 @unittest.skipUnless(shutil.which("node"), "Node.js required for offline DOM probes")
 class CurrentDomTests(unittest.TestCase):
+    def test_historical_response_is_exact_bounded_and_cannot_change_latest_or_retry_rules(self):
+        for legacy in [False,True]:
+            with self.subTest(legacy=legacy):
+                cdp=CurrentDom(observationEditor=True,laterExchange=True,legacyTurns=legacy,traceClicks=True,
+                    answer='native.codex.dispatch returned WEB_TASK_CACHED_ARGUMENTS_INVALID.')
+                with self.assertRaises(bridge.Attention):
+                    self.sink.observe_cooperative_response(cdp,'exact wake message',bridge.digest('exact wake message'))
+                self.assertEqual(self.sink.observe_cooperative_response(cdp,'exact wake message',bridge.digest('exact wake message'),historical=True),'RESPONSE_COMPLETE')
+                diagnostic,tools,hints={},{},{}
+                self.sink.response_snapshot(cdp,'exact wake message',require_usable_body=True,diagnostic=diagnostic,
+                    tool_diagnostic=tools,execution_diagnostic=hints,historical=True)
+                self.assertEqual(hints['knownCodes'],['WEB_TASK_CACHED_ARGUMENTS_INVALID'])
+                self.assertEqual(hints['mentionedTools'],['NATIVE_DISPATCH'])
+                self.assertNotIn('PRIVATE_',json.dumps(hints))
+                with self.assertRaises(bridge.PostSubmitUnknown):self.sink.click_response_timeout_retry(cdp,'exact wake message')
+                with self.assertRaises(ValueError):self.sink.response_snapshot(cdp,'exact wake message',require_usable_body=True,
+                    diagnostic={},tool_diagnostic={},execution_diagnostic={},historical=True,trace_action=('OPEN','a'*32),trace_observation={})
+                self.assertEqual(cdp.mutations,0)
+
+    def test_historical_response_refuses_wrong_duplicate_expired_or_unfinished_exchange(self):
+        for options,expected in [({'laterSameUser':True},'RESPONSE_EXPECTED_USER_DUPLICATED'),
+                ({'userText':'foreign original'},None),({'observationLogin':True},'LOGIN_OR_PROFILE_REQUIRED'),
+                ({'observationNetwork':True},'RESPONSE_NETWORK_ERROR')]:
+            with self.subTest(options=options):
+                cdp=CurrentDom(observationEditor=True,laterExchange=True,**options)
+                with self.assertRaises(bridge.Attention) as failure:
+                    self.sink.observe_cooperative_response(cdp,'exact wake message',bridge.digest('exact wake message'),historical=True)
+                if expected:self.assertEqual(str(failure.exception),expected)
+        for options in [dict(observationStop=True),dict(answer=''),dict(toolbar=False)]:
+            self.assertEqual(self.sink.observe_cooperative_response(CurrentDom(observationEditor=True,laterExchange=True,**options),
+                'exact wake message',bridge.digest('exact wake message'),historical=True),'RESPONSE_PENDING')
+
     def test_passive_composer_popup_metadata_is_closed_and_never_returns_control_ids(self):
         for popup,expected in [(None,'ABSENT'),('menu','MENU'),('dialog','DIALOG'),('true','TRUE'),('false','FALSE'),('PRIVATE_VALUE','UNKNOWN')]:
             with self.subTest(popup=popup):

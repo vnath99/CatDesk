@@ -9309,3 +9309,13 @@ no alternate installer or authority is introduced. The original cached Web
 call's precise envelope cause also remains unproved. No operator response relay,
 sign-in, new send or settings change is requested. C1 native coding, independent
 verification and result Wake are incomplete; C2 has not started.
+
+
+### 2026-11-09T03:17:36.393876+00:00 — exact historical response inspection
+
+C1 diagnostic gap corrected in source: passive exact historical response
+inspection now uses the original task/receipt without latest-turn authority.
+127 bridge, 22 native, 46 CLI, 40 probe, 3 historical and 9 trace DOM tests pass.
+Source admission's exceeded 256 KiB size cap is corrected to a bounded 512 KiB
+read; exact hash trust remains mandatory. Historical live and installed
+qualification are NOT_RUN; native C1 coding remains incomplete.

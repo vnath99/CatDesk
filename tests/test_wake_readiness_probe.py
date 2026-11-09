@@ -165,11 +165,18 @@ class ReadinessProbeTests(unittest.TestCase):
         self.assertEqual(sink.observe_cooperative_response.call_count,2)
         value=json.loads(output.getvalue().split("PROBE:RESPONSE:")[1]);self.assertEqual(value["stage"],"RESPONSE_COMPLETE")
         self.assertNotIn("PRIVATE_USER",output.getvalue())
+        output=io.StringIO();sink.observe_cooperative_response.reset_mock()
+        with contextlib.redirect_stdout(output):self.probe.report_sent_response(sink,object(),delivery,sleep=lambda _:None,historical=True)
+        self.assertIn('PROBE:HISTORY_RESPONSE:',output.getvalue());self.assertNotIn('PROBE:RESPONSE:',output.getvalue())
+        self.assertTrue(all(call.kwargs=={'historical':True} for call in sink.observe_cooperative_response.call_args_list))
         sink.observe_cooperative_response.side_effect=["RESPONSE_PENDING","RESPONSE_COMPLETE"]
         output=io.StringIO()
         with contextlib.redirect_stdout(output):self.probe.report_sent_response(sink,object(),delivery,sleep=lambda _:None)
         self.assertEqual(output.getvalue(),"PROBE:RESPONSE_STATE:UNSTABLE\n")
-        for reason,expected in [("RESPONSE_LOAD_ERROR","RESPONSE_LOAD_ERROR"),("PRIVATE_ERROR_BODY","UNPROVEN")]:
+        for reason,expected in [("RESPONSE_LOAD_ERROR","RESPONSE_LOAD_ERROR"),
+                ("RESPONSE_EXPECTED_USER_NOT_FOUND","RESPONSE_EXPECTED_USER_NOT_FOUND"),
+                ("RESPONSE_USER_REPRESENTATION_MISMATCH","RESPONSE_USER_REPRESENTATION_MISMATCH"),
+                ("RESPONSE_SEQUENCE_QUERY_FAILED","RESPONSE_SEQUENCE_QUERY_FAILED"),("PRIVATE_ERROR_BODY","UNPROVEN")]:
             sink.observe_cooperative_response.side_effect=RuntimeError(reason)
             output=io.StringIO()
             with contextlib.redirect_stdout(output):self.probe.report_sent_response(sink,object(),delivery,sleep=lambda _:None)

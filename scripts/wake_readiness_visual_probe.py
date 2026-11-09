@@ -102,12 +102,13 @@ def load_delivery_message(path, expected_sha256, url, *, receipt_only=False, res
     return message
 
 
-def report_sent_response(sink, cdp, delivery, report=print, sleep=time.sleep, *, task_diagnostics=False):
+def report_sent_response(sink, cdp, delivery, report=print, sleep=time.sleep, *, task_diagnostics=False, historical=False):
     """Observe only the assistant paired with this exact durable USER receipt."""
     event, target = delivery["event"], delivery["target"]
     try:
         def sample():
-            stage = sink.observe_cooperative_response(cdp, event["message"], delivery["messageDigest"])
+            scope_args={'historical':True} if historical else {}
+            stage = sink.observe_cooperative_response(cdp, event["message"], delivery["messageDigest"],**scope_args)
             if stage not in {"RESPONSE_COMPLETE", "RESPONSE_PENDING"}:
                 raise ValueError("unsupported response state")
             value = dict(stage=stage, eventId=event["eventId"], targetGeneration=target["generation"],
@@ -122,7 +123,7 @@ def report_sent_response(sink, cdp, delivery, report=print, sleep=time.sleep, *,
             if task_diagnostics and stage == "RESPONSE_COMPLETE":
                 diagnostic, tools, hints = {}, {}, {}
                 state = sink.response_snapshot(cdp, event["message"], require_usable_body=True,
-                    diagnostic=diagnostic, tool_diagnostic=tools, execution_diagnostic=hints)
+                    diagnostic=diagnostic, tool_diagnostic=tools, execution_diagnostic=hints,**scope_args)
                 sink.require_response_document(cdp)
                 if state != (0, 0, True, True) or diagnostic.get("reason") != "COMPLETE":
                     raise ValueError("task response changed")
@@ -135,13 +136,15 @@ def report_sent_response(sink, cdp, delivery, report=print, sleep=time.sleep, *,
             report("PROBE:RESPONSE_STATE:UNSTABLE", flush=True)
             return False
         value, extra = current
-        report("PROBE:RESPONSE:" + json.dumps(value, separators=(",", ":"), sort_keys=True), flush=True)
+        prefix="PROBE:HISTORY_RESPONSE:" if historical else "PROBE:RESPONSE:"
+        report(prefix + json.dumps(value, separators=(",", ":"), sort_keys=True), flush=True)
         if extra is not None:
             report("PROBE:TASK:" + json.dumps(extra, separators=(",", ":"), sort_keys=True), flush=True)
         return value['stage']=='RESPONSE_COMPLETE'
     except Exception as error:
         reason = str(error)
         allowed = {"RESPONSE_LOAD_ERROR", "RESPONSE_NETWORK_ERROR", "LOGIN_OR_PROFILE_REQUIRED",
+                   "RESPONSE_EXPECTED_USER_NOT_FOUND", "RESPONSE_USER_REPRESENTATION_MISMATCH", "RESPONSE_SEQUENCE_QUERY_FAILED",
                    "RESPONSE_EXPECTED_USER_DUPLICATED", "RESPONSE_SEQUENCE_DRIFT", "RESPONSE_STATE_UNPROVEN",
                    "RESPONSE_TIMEOUT_RETRY_REQUIRED", "RESPONSE_TARGET_DRIFT", "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"}
         report("PROBE:RESPONSE_STATE:" + (reason if reason in allowed else "UNPROVEN"), flush=True)
@@ -458,6 +461,7 @@ def main():
     parser.add_argument("--delivery-sha256")
     parser.add_argument("--receipt-only", action="store_true")
     parser.add_argument("--response-only", action="store_true")
+    parser.add_argument("--historical-response", action="store_true")
     parser.add_argument("--task-diagnostics", action="store_true")
     parser.add_argument("--inspect-app-menu", action="store_true")
     parser.add_argument("--inspect-response-trace", action="store_true")
@@ -482,6 +486,8 @@ def main():
     message = None
     receipt_delivery = None
     response_delivery = None
+    if args.historical_response and (args.inspect_app_menu or args.inspect_response_trace or not (args.task_diagnostics and args.response_only and args.read_only and args.profile is not None and args.delivery_file is not None)):
+        return 2
     if (args.inspect_app_menu and args.inspect_response_trace) or ((args.inspect_app_menu or args.inspect_response_trace) and not (args.task_diagnostics and args.response_only and args.read_only and args.profile is not None and args.delivery_file is not None)):
         return 2
     if (args.task_diagnostics and not args.response_only) or (args.receipt_only and args.response_only) or ((args.receipt_only or args.response_only) and (not args.read_only or args.delivery_file is None)):
@@ -567,8 +573,8 @@ def main():
                 print("PROBE:RECEIPT_STATE:UNPROVEN", flush=True)
         if response_delivery is not None:
             if surface is not None and surface.get("route") == "EXACT" and surface.get("document") == "COMPLETE":
-                completed=report_sent_response(sink, cdp, response_delivery, task_diagnostics=args.task_diagnostics)
-                if args.task_diagnostics:
+                completed=report_sent_response(sink, cdp, response_delivery, task_diagnostics=args.task_diagnostics,historical=args.historical_response)
+                if args.task_diagnostics and not args.historical_response:
                     report_composer_apps(sink, cdp)
                 if args.inspect_app_menu and completed:
                     report_app_menu(sink,cdp,response_delivery)

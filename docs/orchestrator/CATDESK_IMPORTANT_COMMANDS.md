@@ -7101,3 +7101,15 @@ no alternate installer or authority is introduced. The original cached Web
 call's precise envelope cause also remains unproved. No operator response relay,
 sign-in, new send or settings change is requested. C1 native coding, independent
 verification and result Wake are incomplete; C2 has not started.
+
+
+### 2026-11-09T03:17:36.393876+00:00 — exact historical response inspection
+
+`operator web review inspect-history-response --project-id PROJECT --event-id EVENT`
+is an explicit passive historical task diagnostic through the existing stopped
+host/profile owner. Requires exact task/target/receipt and COMPLETE timer. Output
+uses historicalResponseObservation, leaves responseObservation null and creates
+no current-turn/retry/review authority. No selectors, URL overrides, send, scroll,
+refresh, trace open or reset options. Source tested; live/installed status must
+be read separately from the dated acceptance evidence. Do not reuse the fenced
+unknown trace action to inspect history.

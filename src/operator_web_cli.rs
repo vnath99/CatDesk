@@ -109,6 +109,10 @@ pub(crate) enum WebAction {
         project_id: String,
         event_id: String,
     },
+    ReviewInspectHistoryResponse {
+        project_id: String,
+        event_id: String,
+    },
     ReviewInspectAppMenu {
         project_id: String,
         event_id: String,
@@ -611,6 +615,7 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
             "review",
             "read"
             | "inspect-response"
+            | "inspect-history-response"
             | "inspect-app-menu"
             | "inspect-trace"
             | "inspect-submission"
@@ -627,6 +632,11 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
             }
             if verb == "inspect-response" {
                 Ok(WebAction::ReviewInspectResponse {
+                    project_id: project_id.into(),
+                    event_id: event_id.into(),
+                })
+            } else if verb == "inspect-history-response" {
+                Ok(WebAction::ReviewInspectHistoryResponse {
                     project_id: project_id.into(),
                     event_id: event_id.into(),
                 })
@@ -1192,6 +1202,7 @@ fn read_review(workspace: &Path, project: &str, event_id: &str) -> Result<Value,
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum TaskObservation {
     SentResponse,
+    HistoricalResponse,
     AppMenu,
     Trace,
     PendingSubmission,
@@ -1226,10 +1237,12 @@ fn inspect_review_response(
         .unwrap_or_else(|| delivery.event.event_id.clone());
     let task_record =
         crate::web_work_state::WorkLedger::record_for_event(workspace, project, &source_event)?;
-    if matches!(mode, TaskObservation::AppMenu | TaskObservation::Trace)
-        && task_record
-            .as_ref()
-            .is_none_or(|record| record.task_assignment.is_none())
+    if matches!(
+        mode,
+        TaskObservation::AppMenu | TaskObservation::Trace | TaskObservation::HistoricalResponse
+    ) && task_record
+        .as_ref()
+        .is_none_or(|record| record.task_assignment.is_none())
     {
         return Err("WEB_REVIEW_TASK_BINDING_REQUIRED".into());
     }
@@ -1262,7 +1275,11 @@ fn inspect_review_response(
         lease.check_target(&target)
     };
     guard()?;
-    let mut value = if mode == TaskObservation::Trace {
+    let mut value = if mode == TaskObservation::HistoricalResponse {
+        catdesk_wake::runtime::inspect_historical_task_response(
+            &wake, project, &target, event_id, &guard,
+        )?
+    } else if mode == TaskObservation::Trace {
         catdesk_wake::runtime::inspect_sent_task_trace(&wake, project, &target, event_id, &guard)?
     } else if mode == TaskObservation::AppMenu {
         catdesk_wake::runtime::inspect_sent_task_app_menu(
@@ -1338,7 +1355,9 @@ fn inspect_review_response(
             value["receiptCommitState"] = json!("UNPROVEN");
         }
     }
-    value["action"] = json!(if mode == TaskObservation::Trace {
+    value["action"] = json!(if mode == TaskObservation::HistoricalResponse {
+        "web_task_historical_response_inspect"
+    } else if mode == TaskObservation::Trace {
         "web_task_trace_inspect"
     } else if mode == TaskObservation::AppMenu {
         "web_task_app_menu_inspect"
@@ -1924,6 +1943,15 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             &project_id,
             &event_id,
             TaskObservation::SentResponse,
+        ),
+        WebAction::ReviewInspectHistoryResponse {
+            project_id,
+            event_id,
+        } => inspect_review_response(
+            &workspace,
+            &project_id,
+            &event_id,
+            TaskObservation::HistoricalResponse,
         ),
         WebAction::ReviewInspectSubmission {
             project_id,
@@ -2991,6 +3019,21 @@ mod tests {
             parse(&valid),
             Ok(WebAction::ReviewInspectResponse { .. })
         ));
+        let mut historical = valid.clone();
+        historical[3] = "inspect-history-response".into();
+        assert!(matches!(
+            parse(&historical),
+            Ok(WebAction::ReviewInspectHistoryResponse { .. })
+        ));
+        for extra in [
+            ["--submit", "true"],
+            ["--retry", "true"],
+            ["--conversation-url", "https://chatgpt.com/c/foreign"],
+        ] {
+            let mut changed = historical.clone();
+            changed.extend(args(&extra));
+            assert!(parse(&changed).is_err());
+        }
         for extra in [
             ["--submit", "true"],
             ["--conversation-url", "https://chatgpt.com/c/foreign"],

@@ -100,6 +100,17 @@ class WakeBridgeTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def test_reviewed_bridge_size_remains_bounded_and_hash_identity_is_not_substituted(self):
+        self.assertLessEqual(Path(wake_bridge.__file__).stat().st_size,wake_bridge.MAX_BRIDGE_BYTES)
+        path=self.root/'bounded-bridge.py'
+        data=b'x'*wake_bridge.MAX_BRIDGE_BYTES
+        path.write_bytes(data)
+        self.assertEqual(wake_bridge.bridge_sha256(path),wake_bridge.hashlib.sha256(data).hexdigest())
+        path.write_bytes(data+b'x')
+        with self.assertRaises(wake_bridge.Attention):wake_bridge.bridge_sha256(path)
+        path.write_bytes(b'changed')
+        self.assertNotEqual(wake_bridge.bridge_sha256(path),self.bridge_sha256)
+
     @property
     def state_path(self):
         return self.root / ".catdesk" / "wake-bridge" / "state.json"

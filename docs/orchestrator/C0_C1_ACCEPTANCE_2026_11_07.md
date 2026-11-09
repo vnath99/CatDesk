@@ -1409,3 +1409,15 @@ no alternate installer or authority is introduced. The original cached Web
 call's precise envelope cause also remains unproved. No operator response relay,
 sign-in, new send or settings change is requested. C1 native coding, independent
 verification and result Wake are incomplete; C2 has not started.
+
+
+### 2026-11-09T03:17:36.393876+00:00 — exact historical response inspection
+
+SOURCE PASS: exact historical task-response diagnostics, separate from current
+response/timer authority, with next-USER boundary and unchanged latest-only
+actions. Source admission now supports the actual reviewed bridge within a
+512 KiB bounded read, retaining hash validation and oversize refusal.
+Tests: bridge127, native22, CLI46, probe40, historical DOM3, trace DOM9; strict
+Clippy/formatting pass. Failed source-size and malformed-fixture runs retained.
+Historical LIVE NOT_RUN at this checkpoint. Installed dev.84 upgrade and real
+native C1 result remain incomplete; no new task, send, key or grant.

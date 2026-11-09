@@ -1971,5 +1971,36 @@
       "operatorRelayUsed": false,
       "installedAcceptance": "NOT_QUALIFIED"
     }
+  },
+  "historicalTaskResponseInspection": {
+    "observedUtc": "2026-11-09T03:17:36.393876+00:00",
+    "status": "SOURCE_PASS_LIVE_NOT_RUN",
+    "exactTaskAndSentReceiptRequired": true,
+    "completedTimerRequired": true,
+    "nextUserBoundary": true,
+    "latestActionRulesChanged": false,
+    "toolReceiptsInferred": false,
+    "rawBodyExported": false,
+    "browserActions": 0,
+    "newMessages": 0,
+    "nativeCalls": 0,
+    "bridgeTests": 127,
+    "nativeTests": 22,
+    "cliTests": 46,
+    "probeTests": 40,
+    "historicalDomTests": 3,
+    "traceDomTests": 9,
+    "clippy": "PASS",
+    "formatting": "PASS",
+    "sourceBridgeAdmission": {
+      "previousGitObjectBytes": 270436,
+      "previousLimitBytes": 262144,
+      "boundedReadBytes": 524288,
+      "exactHashStillRequired": true,
+      "oversizeAndIdentityTests": "PASS"
+    },
+    "initialFailuresRetained": true,
+    "installedAcceptance": "NOT_RUN",
+    "c1NativeCoding": "INCOMPLETE"
   }
 }

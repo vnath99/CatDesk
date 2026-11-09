@@ -18,7 +18,9 @@ SAFE_ID = re.compile(r"^[A-Za-z0-9_-]{1,200}$")
 CONVERSATION_ID = re.compile(r"^[A-Za-z0-9_-]{1,200}$")
 SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 MAX_DELIVERIES = 128
-MAX_BRIDGE_BYTES = 256 * 1024
+# Reviewed observer code now exceeds 256 KiB. This is a read-allocation bound,
+# not trust authority: every admitted revision still requires its exact hash.
+MAX_BRIDGE_BYTES = 512 * 1024
 MAX_OWNER_SELECTOR_BYTES = 1024
 MAX_USER_MESSAGES = 512
 MAX_USER_MESSAGE_CHARS = 16 * 1024
@@ -631,7 +633,9 @@ def bridge_sha256(path: Path) -> str:
     try:
         if not path.is_file() or path.stat().st_size > MAX_BRIDGE_BYTES:
             raise OSError("bridge is not a bounded regular file")
-        return hashlib.sha256(path.read_bytes()).hexdigest()
+        with path.open('rb') as stream:payload=stream.read(MAX_BRIDGE_BYTES+1)
+        if len(payload)>MAX_BRIDGE_BYTES:raise OSError('bridge grew beyond the bounded read')
+        return hashlib.sha256(payload).hexdigest()
     except OSError as error:
         raise Attention("UNTRUSTED_BRIDGE_REVISION") from error
 
@@ -2004,7 +2008,8 @@ class CdpSink:
                           tool_diagnostic: dict | None = None,
                           execution_diagnostic: dict | None = None,
                           trace_action: tuple[str,str] | None = None,
-                          trace_observation: dict | None = None) -> tuple[int, int, bool, bool]:
+                          trace_observation: dict | None = None,
+                          historical: bool = False) -> tuple[int, int, bool, bool]:
         """Return only bounded structural signals for the latest user turn.
 
         The timeout detector is intentionally exact-text and scoped strictly
@@ -2020,6 +2025,8 @@ class CdpSink:
             execution_diagnostic.clear()
             if diagnostic is None or tool_diagnostic is None:
                 raise ValueError("task hints require explicit response and tool diagnostics")
+        if type(historical) is not bool or (historical and (not require_usable_body or diagnostic is None or trace_action is not None or trace_observation is not None)):
+            raise ValueError('historical observation must be passive and explicit')
         trace_request=None
         trace_document=''
         if trace_action is not None:
@@ -2037,6 +2044,7 @@ class CdpSink:
             const retryLabel = {json.dumps("Retry")};
             const expectedWake = {json.dumps(normalize_message(message))};
             const requireUsableBody = {str(require_usable_body).lower()};
+            const historical = {str(historical).lower()};
             const includeDiagnostic = {str(diagnostic is not None).lower()};
             const includeToolDiagnostic = {str(tool_diagnostic is not None).lower()};
             const includeExecutionDiagnostic = {str(execution_diagnostic is not None).lower()};
@@ -2072,9 +2080,14 @@ class CdpSink:
             const followsLatestUser = element =>
                 Boolean(latestUser.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING);
             const pairedTurn = latestUser.matches("[data-content-search-turn-key]");
+            const followingTurns = turnContainers.filter(turn => followsLatestUser(turn));
+            const historicalUserSelector = "[data-message-author-role='user'], [data-turn='user'], [data-user-message-bubble], [class~='group/user-message']";
+            const nextUser = historical ? followingTurns.find(turn => turn.matches(historicalUserSelector) || turn.querySelector(historicalUserSelector)) : null;
+            const beforeNextUser = element => !nextUser || (element !== nextUser && !nextUser.contains(element) &&
+                Boolean(element.compareDocumentPosition(nextUser) & Node.DOCUMENT_POSITION_FOLLOWING));
             const inWakeExchange = element =>
-                Boolean(element && (latestUser.contains(element) || followsLatestUser(element)));
-            const turnsAfterWake = turnContainers.filter(turn => followsLatestUser(turn));
+                Boolean(element && (latestUser.contains(element) || (followsLatestUser(element) && beforeNextUser(element))));
+            const turnsAfterWake = followingTurns.filter(beforeNextUser);
             if (turnsAfterWake.length > 1)
                 return ['invalid', 0, 0, false, false];
             {RESPONSE_ASSISTANT_SCOPE}
@@ -2432,7 +2445,7 @@ class CdpSink:
         if not isinstance(current, str) or not self.exact(current):
             raise Attention("RESPONSE_TARGET_DRIFT")
 
-    def observe_cooperative_response(self, cdp: Any, message: str, expected_digest: str) -> str:
+    def observe_cooperative_response(self, cdp: Any, message: str, expected_digest: str, *, historical: bool = False) -> str:
         """One read-only check of a durably sent USER turn on a new document.
 
         The caller opens the exact target before this check. In particular,
@@ -2468,7 +2481,7 @@ class CdpSink:
             if count > 0:
                 raise Attention("RESPONSE_USER_REPRESENTATION_MISMATCH")
             raise Attention(self.missing_user_reason(cdp, message, users))
-        if users[-1] != expected_digest or count != 1 or turns_after > 1:
+        if count != 1 or (not historical and (users[-1] != expected_digest or turns_after > 1)):
             raise Attention("RESPONSE_SEQUENCE_DRIFT")
         if self.post_submit_visible_any(cdp, STOP):
             self.response_observation_reason = "GENERATION_ACTIVE"
@@ -2482,8 +2495,9 @@ class CdpSink:
             return "RESPONSE_PENDING"
         diagnostic = {}
         try:
+            scope_args={'historical':True} if historical else {}
             timeout_count, _retry_count, assistant_after_user, completed = self.response_snapshot(
-                cdp, message, require_usable_body=True, diagnostic=diagnostic
+                cdp, message, require_usable_body=True, diagnostic=diagnostic, **scope_args
             )
         except PostSubmitUnknown as error:
             self.require_response_document(cdp)

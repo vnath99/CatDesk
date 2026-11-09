@@ -405,6 +405,27 @@ pub(crate) fn persisted_receipt(line: &str) -> Option<crate::store::Receipt> {
     Some(receipt)
 }
 
+pub(crate) fn historical_response_observation(line: &str) -> Option<serde_json::Value> {
+    let text = line.strip_prefix("PROBE:HISTORY_RESPONSE:")?;
+    sent_response_observation(&format!("PROBE:RESPONSE:{text}"))
+}
+
+#[test]
+fn historical_response_protocol_is_separate_from_current_turn_and_rejects_text() {
+    let value = serde_json::json!({"stage":"RESPONSE_COMPLETE","eventId":format!("wake-intent-{}","c".repeat(64)),"targetGeneration":1,
+        "targetDigest":"a".repeat(64),"messageDigest":"b".repeat(64),"diagnosticReason":"COMPLETE"});
+    let row = format!("PROBE:HISTORY_RESPONSE:{value}");
+    assert_eq!(historical_response_observation(&row), Some(value.clone()));
+    assert!(sent_response_observation(&row).is_none());
+    assert_eq!(sanitized_rows(&row), [row]);
+    let mut unsafe_value = value;
+    unsafe_value["body"] = serde_json::json!("PRIVATE_CONTEXT");
+    assert!(
+        historical_response_observation(&format!("PROBE:HISTORY_RESPONSE:{unsafe_value}"))
+            .is_none()
+    );
+}
+
 pub(crate) fn sent_response_observation(line: &str) -> Option<serde_json::Value> {
     let text = line.strip_prefix("PROBE:RESPONSE:")?;
     if text.len() > 2048 {
@@ -566,6 +587,9 @@ fn sanitized_rows(text: &str) -> Vec<String> {
             if state.starts_with("RESPONSE:") {
                 return sent_response_observation(line).is_some();
             }
+            if state.starts_with("HISTORY_RESPONSE:") {
+                return historical_response_observation(line).is_some();
+            }
             if state.starts_with("TASK:") {
                 return task_response_diagnostics(line).is_some();
             }
@@ -578,6 +602,9 @@ fn sanitized_rows(text: &str) -> Vec<String> {
                         | "RESPONSE_NETWORK_ERROR"
                         | "LOGIN_OR_PROFILE_REQUIRED"
                         | "RESPONSE_EXPECTED_USER_DUPLICATED"
+                        | "RESPONSE_EXPECTED_USER_NOT_FOUND"
+                        | "RESPONSE_USER_REPRESENTATION_MISMATCH"
+                        | "RESPONSE_SEQUENCE_QUERY_FAILED"
                         | "RESPONSE_SEQUENCE_DRIFT"
                         | "RESPONSE_STATE_UNPROVEN"
                         | "RESPONSE_TIMEOUT_RETRY_REQUIRED"

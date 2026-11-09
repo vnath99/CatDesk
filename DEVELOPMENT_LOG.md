@@ -2170,3 +2170,32 @@ no alternate installer or authority is introduced. The original cached Web
 call's precise envelope cause also remains unproved. No operator response relay,
 sign-in, new send or settings change is requested. C1 native coding, independent
 verification and result Wake are incomplete; C2 has not started.
+
+
+### 2026-11-09T03:17:36.393876+00:00 — exact historical response inspection
+
+The original rejected dispatch is no longer the latest exchange. Added passive
+`operator web review inspect-history-response --project-id PROJECT --event-id EVENT`
+through the same qualified browser owner and response primitive. It requires the
+registered task, exact SENT receipt, COMPLETE timer, current target/lease and
+immutable assignment. Historical selection is unique, bounded before the next
+USER and cannot borrow later assistant errors. Latest-only sending/Retry/trace
+paths remain unchanged; the historical mode cannot click, send, refresh, change
+a timer or create execution/review authority. Its separate native protocol and
+historicalResponseObservation field cannot be mistaken for a current turn.
+Global generation, expired sessions, missing/duplicate USERs, absent bodies and
+unproved DOM fail closed. Fixed missing-USER/representation/query diagnostics
+are retained without arbitrary text. No scrolling or unknown effect recovery.
+
+The bridge regression suite found a real admission defect: the previous Git
+bridge object was 270,436 bytes, above its 262,144-byte allocation cap. This made
+123 tests fail in setup and would refuse normal source admission. Updated the
+bounded allocation cap to 512 KiB while retaining exact SHA-256 trust checks;
+the read itself now uses cap+1 and rejects growth/oversize. No fingerprint,
+selected package, authorization or release gate changed. New boundary/identity
+tests and all 127 bridge tests pass. The native fixture initially had a malformed
+event ID; corrected the fixture, retained the failure, and 22 native tests pass.
+Three historical DOM, nine trace DOM, 40 probe and 46 CLI tests also pass;
+formatting and strict root/Wake Clippy pass. All owned test processes exited.
+Source only at this checkpoint: separate matched build/live historical read is
+next, not installed acceptance. No original dispatch or trace action repeated.
