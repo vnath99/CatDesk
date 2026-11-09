@@ -2914,5 +2914,83 @@
     "bindingsChanged": 0,
     "newLiveQualification": "NOT_RUN",
     "c1": "INCOMPLETE"
+  },
+  "nov09RefusalReportLive": {
+    "observedUtc": "2026-11-09T14:39:36.436610+00:00",
+    "action": "V7_STRUCTURED_REFUSAL_REPORT_LIVE_QUALIFICATION",
+    "publishedSourceCommit": "bb7487c4e36fa53280b8d08c1d2f762131573639",
+    "publicationRecordedRemoteSha": "bb7487c4e36fa53280b8d08c1d2f762131573639",
+    "sourceTests": 269,
+    "rootClippy": "PASS",
+    "wakeClippy": "PASS",
+    "package": {
+      "packageId": "1.0.0-dev.85-0ee5011a18b1-d46ba6647d78",
+      "manifestSha256": "f0132eec6b29d79392e0ac8d6b9bf1a2823cda48a02b299bb9f1ed1d2bb07bcb",
+      "buildElapsedSeconds": 41.265,
+      "signed": false,
+      "selected": false,
+      "installed": false,
+      "protectedProducerAuthority": false
+    },
+    "artifactQualification": {
+      "checksums": "PASS",
+      "prestartRefusal": "PASS",
+      "exitCode": 2,
+      "errorCode": "WEB_USAGE"
+    },
+    "liveRead": {
+      "status": "PASS",
+      "elapsedSeconds": 34.234,
+      "sameOriginalResponse": true,
+      "immutableTaskAttributionVerified": true,
+      "humanRelayUsed": false,
+      "responseStage": "RESPONSE_COMPLETE",
+      "schemaVersion": 7,
+      "bodyCoverage": {
+        "canonicalBody": "QUALIFIED",
+        "selectedBlocks": 1,
+        "unselectedTextPresent": false
+      },
+      "refusalReport": {
+        "projectionOmitted": true,
+        "reasonFieldPresent": false,
+        "source": "NONE",
+        "state": "UNPROVEN"
+      },
+      "refusalTerms": [],
+      "refusalCategories": [
+        "DISPATCH_REJECTED"
+      ],
+      "knownCodes": [],
+      "cachedInvariants": [],
+      "identityIssues": [],
+      "preciseCause": "UNRESOLVED",
+      "nativeExecutionEvidence": false,
+      "noCallOrNoEffectProof": false,
+      "retryAuthorized": false
+    },
+    "preservationPins": 1103,
+    "preservationMismatches": 0,
+    "ownedTreeExited": true,
+    "additionalMessages": 0,
+    "newNativeAttempts": 0,
+    "nativeQueueState": "READY",
+    "nativeExecution": "NOT_RUN",
+    "verifiedCode": "NOT_RUN",
+    "resultWake": "NOT_RUN",
+    "installedWakeAdapter": "DEV_84_UNCHANGED",
+    "installedFullSnapshotPromotion": "NOT_RUN",
+    "originalBugFencesPreserved": true,
+    "unknownTraceFencePreserved": true,
+    "sourceTruth": {
+      "basis": "RECORDED_PRODUCER_PREPARATION_NOT_A_NEW_GIT_QUERY",
+      "canonicalCheckoutCommitPrefix": "313f6a31",
+      "installedExecutableSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+      "installedReviewedSourceCommit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+      "observerSourceCommit": "bb7487c4e36fa53280b8d08c1d2f762131573639",
+      "rolesInterchangeable": false
+    },
+    "operatorActionRequired": false,
+    "c1": "INCOMPLETE"
   }
 }

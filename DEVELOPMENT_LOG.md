@@ -2989,3 +2989,40 @@ be conflated. A fresh genuine current Web review can precede the existing guarde
 source-only fast-forward, finalization/snapshot/ACK and main reviewed-build/release
 chain. Neither a public commit nor this local review creates producer authority.
 The old Wake adapter and all project/native histories remain preserved.
+
+
+### 2026-11-09T14:39:36.436610+00:00 — published v7 read qualified; refusal report remains NONE/UNPROVEN
+
+Published source `bb7487c4e36fa53280b8d08c1d2f762131573639` has 269 passing targeted source tests
+and strict root/Wake Clippy PASS. Its unsigned, unselected debug package
+`1.0.0-dev.85-0ee5011a18b1-d46ba6647d78` built in 41.265 seconds, with manifest
+SHA-256 `f0132eec6b29d79392e0ac8d6b9bf1a2823cda48a02b299bb9f1ed1d2bb07bcb`. Artifact checksum and bounded
+pre-start WEB_USAGE refusal passed. This package is not an installed or protected
+reviewed-build release.
+
+One read of the SAME original completed response passed in 34.234 seconds
+with exact immutable task attribution and no human relay. Response state was
+COMPLETE; canonical body coverage was QUALIFIED with one selected block and no
+unselected-text gap. The v7 refusalReport was source=NONE, state=UNPROVEN,
+reasonFieldPresent=false and projectionOmitted=true. Refusal terms stayed empty;
+only DISPATCH_REJECTED was classified, with no known error, cached invariant or
+identity cause. The reader did not qualify a precise report reason. An omitted
+projection is not proof of no call, no effect, native execution or retry safety.
+It does not resolve either original task or the retained unknown trace outcome.
+
+The owned browser tree exited and all 1,103 preservation pins matched. No private
+binding, response body, session identifier, conversation URL or execution key was
+published. No additional message, native attempt, task replay, binding change,
+protected installation or recurring owner was introduced. The original native
+job remains READY without an attempt; code, independent verification and result
+Wake are still NOT_RUN. Installed dev.84/full-snapshot promotion remains unchanged,
+the original Bug fences are preserved and full C1 remains INCOMPLETE. No operator
+action is required by this diagnostic result.
+
+Source roles remain distinct: the recorded canonical checkout is `313f6a31`,
+while the installed executable beginning `0c19770e` retains reviewed-source
+lineage `9ea9e7be`. Earlier references to that reviewed source do not identify the
+current canonical checkout, and neither is the separately qualified v7 debug
+artifact. Source synchronization, genuine review/ACK/snapshot, protected producer
+and release acceptance must follow their existing procedures; this live read
+supplies none of their missing authority.
