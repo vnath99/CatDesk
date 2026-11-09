@@ -2199,6 +2199,56 @@
     "messagesSent": 0,
     "nativeDispatches": 0,
     "bindingChanges": 0,
-    "protectedInstallationChanges": 0
+    "protectedInstallationChanges": 0,
+    "qualification": {
+      "observedUtc": "2026-11-09T10:24:50.404589+00:00",
+      "sourceCommit": "6e159e3dbd6dc8b1033c1fcf0aa134bb2e977e73",
+      "packageId": "1.0.0-dev.85-483b3d96617c-66d89de60440",
+      "manifestSha256": "ed909580d847bd98250a075d26734f73d268ccd4d7dd925882ce2b10368a8224",
+      "artifacts": [
+        {
+          "name": "CatDeskWakeHost.exe",
+          "byteLength": 3871232,
+          "sha256": "483b3d96617cdd68461627a9bab8648ac57707c84ebbf73b93d31c41f75c67e1"
+        },
+        {
+          "name": "CatDeskBinagotchy.exe",
+          "byteLength": 76340736,
+          "sha256": "66d89de6044001eb920bbbe66dd0e90f848494a11a686e275cd16882bb8ddf75"
+        },
+        {
+          "name": "adapter.py",
+          "byteLength": 65103,
+          "sha256": "47ef6ae0a8c36ee0086b8f5652a583dd5983e63bb65b8429fb24b895270094b7"
+        },
+        {
+          "name": "wake_bridge.py",
+          "byteLength": 273269,
+          "sha256": "20f9e80576fcf8fd363cf8099ba88af2d9c4da1ca39ff800b205644ade4f33a9"
+        }
+      ],
+      "releaseBuild": "BOUNDED_TIMEOUT",
+      "developmentBuild": "PASS",
+      "lockedOffline": true,
+      "signedApproval": false,
+      "packagedHistoricalRead": "PASS",
+      "responseStage": "RESPONSE_COMPLETE",
+      "elapsedSeconds": 36.0,
+      "preservationPins": 1090,
+      "preservationMismatches": 0,
+      "ownedTreeExited": true,
+      "profileAndWakeMatches": 0,
+      "messagesSent": 0,
+      "traceClicks": 0,
+      "nativeDispatches": 0,
+      "installedPromotion": "NOT_RUN",
+      "sourceTests": {
+        "readiness": 28,
+        "cached": 6,
+        "cli": 46,
+        "pythonProbe": 40,
+        "strictRootAndWakeClippy": "PASS"
+      }
+    }
   }
 }

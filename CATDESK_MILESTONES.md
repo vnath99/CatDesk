@@ -9559,3 +9559,38 @@ blocked stdin deadline/drain, SHA mismatch, missing START with the real probe,
 and four-artifact primitive selection without source or probe files. These are
 source/real-process tests, not installed browser or native coding acceptance.
 No message, browser, service, tunnel, native task or binding change was needed.
+
+
+### 2026-11-09T10:24:50.404589+00:00 — four-artifact development build and passive reader qualification
+
+Development-profile GUI and WakeHost built offline/locked from exact published source
+`6e159e3dbd6dc8b1033c1fcf0aa134bb2e977e73` with unchanged lockfiles. The inert, unsigned package is
+`1.0.0-dev.85-483b3d96617c-66d89de60440`; canonical manifest SHA-256
+`ed909580d847bd98250a075d26734f73d268ccd4d7dd925882ce2b10368a8224`. Its existing four artifacts are listed below. This is
+development qualification, NOT a release candidate, signed broker approval or installed selection. The prior release-profile GUI attempt hit its 420-second bound, produced no qualified package and exited with verified owner cleanup; no compilation error was reported before timeout. That failed attempt is preserved separately.
+
+- `CatDeskWakeHost.exe`: 3871232 bytes, SHA-256 `483b3d96617cdd68461627a9bab8648ac57707c84ebbf73b93d31c41f75c67e1`.
+- `CatDeskBinagotchy.exe`: 76340736 bytes, SHA-256 `66d89de6044001eb920bbbe66dd0e90f848494a11a686e275cd16882bb8ddf75`.
+- `adapter.py`: 65103 bytes, SHA-256 `47ef6ae0a8c36ee0086b8f5652a583dd5983e63bb65b8429fb24b895270094b7`.
+- `wake_bridge.py`: 273269 bytes, SHA-256 `20f9e80576fcf8fd363cf8099ba88af2d9c4da1ca39ff800b205644ade4f33a9`.
+
+One passive historical-response observation ran from that four-artifact directory,
+without an external probe or browser-observer directory. It used the original
+registered project, exact SENT/COMPLETE delivery and immutable task attribution;
+the exact historical assistant response was classified RESPONSE_COMPLETE in
+36.0 seconds. This validates the packaged embedded-reader path,
+not installation and not the original native result. No new message, trace-open,
+assistant retry, native dispatch, service start or binding change occurred.
+All 1090 preservation pins matched; owned tree exited,
+profile/Wake process matches were zero and port3200 remained closed.
+
+28 readiness,6 cached-envelope,46 CLI and40 Python probe tests passed, as did
+strict root/Wake Clippy. Original cached rejected field remains unrecovered;
+both trace fences remain unchanged. Installed reader promotion is NOT_RUN:
+the existing broker still needs retained offline launch-quarantine proof,
+service/launcher transaction integration, independent exact-source release
+evidence and protected provisioning. No operator-only correction currently
+completes these source gates. Next executable engineering task is that existing
+offline migration integration; keep its holds until proof is independently
+established. C1 native coding, independent code verification and result Wake
+remain INCOMPLETE. No C2 work or unattended serving is enabled.
