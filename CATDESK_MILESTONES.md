@@ -9319,3 +9319,21 @@ inspection now uses the original task/receipt without latest-turn authority.
 Source admission's exceeded 256 KiB size cap is corrected to a bounded 512 KiB
 read; exact hash trust remains mandatory. Historical live and installed
 qualification are NOT_RUN; native C1 coding remains incomplete.
+
+
+### 2026-11-09T03:24:05.666621+00:00 — historical admission diagnostic clarity
+
+The first bounded original-dispatch historical read returned only
+WEB_OPERATION_REFUSED, with no response observation. All 1,088 preservation
+pins matched and cleanup passed. No send, retry, native task, backend/tunnel or
+Wake operation was requested. Retained the failed owner/result; no original
+trace action or message was replayed. Read-only pinned admission comparison
+confirms original delivery/target/message/metadata shapes, but does not prove
+which native gate refused the command.
+
+The CLI had omitted twelve fixed READINESS codes from its diagnostic allowlist.
+Added these exact existing codes (not a generic prefix or raw-error channel),
+including source hash, target, stopped-owner, receipt and trace fences. The
+bounded attention/error unit test and strict Clippy pass. All gates remain
+unchanged. A matched diagnostic controller may now establish the actual refusal;
+this is not successful historical readback or installed acceptance.

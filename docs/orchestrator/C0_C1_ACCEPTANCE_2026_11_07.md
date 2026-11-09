@@ -1421,3 +1421,21 @@ Tests: bridge127, native22, CLI46, probe40, historical DOM3, trace DOM9; strict
 Clippy/formatting pass. Failed source-size and malformed-fixture runs retained.
 Historical LIVE NOT_RUN at this checkpoint. Installed dev.84 upgrade and real
 native C1 result remain incomplete; no new task, send, key or grant.
+
+
+### 2026-11-09T03:24:05.666621+00:00 — historical admission diagnostic clarity
+
+The first bounded original-dispatch historical read returned only
+WEB_OPERATION_REFUSED, with no response observation. All 1,088 preservation
+pins matched and cleanup passed. No send, retry, native task, backend/tunnel or
+Wake operation was requested. Retained the failed owner/result; no original
+trace action or message was replayed. Read-only pinned admission comparison
+confirms original delivery/target/message/metadata shapes, but does not prove
+which native gate refused the command.
+
+The CLI had omitted twelve fixed READINESS codes from its diagnostic allowlist.
+Added these exact existing codes (not a generic prefix or raw-error channel),
+including source hash, target, stopped-owner, receipt and trace fences. The
+bounded attention/error unit test and strict Clippy pass. All gates remain
+unchanged. A matched diagnostic controller may now establish the actual refusal;
+this is not successful historical readback or installed acceptance.

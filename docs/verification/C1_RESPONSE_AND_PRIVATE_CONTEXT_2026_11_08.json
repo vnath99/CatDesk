@@ -1974,7 +1974,7 @@
   },
   "historicalTaskResponseInspection": {
     "observedUtc": "2026-11-09T03:17:36.393876+00:00",
-    "status": "SOURCE_PASS_LIVE_NOT_RUN",
+    "status": "SOURCE_PASS_FIRST_LIVE_REFUSED_BEFORE_OBSERVATION",
     "exactTaskAndSentReceiptRequired": true,
     "completedTimerRequired": true,
     "nextUserBoundary": true,
@@ -2000,7 +2000,22 @@
       "oversizeAndIdentityTests": "PASS"
     },
     "initialFailuresRetained": true,
-    "installedAcceptance": "NOT_RUN",
-    "c1NativeCoding": "INCOMPLETE"
+    "installedAcceptance": "NOT_QUALIFIED",
+    "c1NativeCoding": "INCOMPLETE",
+    "firstLive": {
+      "sourceCommit": "24d90b7827d37527e60aa2f3881c1329d59eda20",
+      "controllerSha256": "0efc2957462b26214e24a414cfb6c1692cb42399cc37695f6560cfd6a742b461",
+      "elapsedSeconds": 2.453,
+      "errorCode": "WEB_OPERATION_REFUSED",
+      "responseObserved": false,
+      "messagesSent": 0,
+      "nativeCalls": 0,
+      "preservationPins": 1088,
+      "preservationMismatches": 0,
+      "ownedProfileProcessesAfter": 0,
+      "wakeHostProcessesAfter": 0,
+      "port3200ListenerAfter": false
+    },
+    "fixedReadinessErrorCodes": "SOURCE_PASS_LIVE_NOT_RUN"
   }
 }
