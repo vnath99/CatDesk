@@ -287,7 +287,14 @@ pub(super) fn read_sent_response_observation(
             .rev()
             .find_map(|row| row.as_str()?.strip_prefix("PROBE:RESPONSE_STATE:"))
     });
-    Err(reason.unwrap_or("RESPONSE_PROBE_UNPROVEN").into())
+    // Keep the fixed native stability failure inside the CLI's already allowed
+    // RESPONSE_ vocabulary instead of redacting it to WEB_OPERATION_REFUSED.
+    Err(match reason {
+        Some("UNSTABLE") => "RESPONSE_STATE_UNSTABLE",
+        Some(reason) => reason,
+        None => "RESPONSE_PROBE_UNPROVEN",
+    }
+    .into())
 }
 
 fn require_receipt_selection(store: &Store, delivery: &crate::store::Delivery) -> Result<()> {

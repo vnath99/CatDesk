@@ -112,7 +112,7 @@ def load_delivery_message(path, expected_sha256, url, *, receipt_only=False, res
 
 def report_sent_response(sink, cdp, delivery, report=print, sleep=time.sleep, *, task_diagnostics=False,
                          historical=False, await_deadline=None, monotonic=time.monotonic):
-    """Observe one receipt; only its retained owner may await active generation.
+    """Observe one receipt; only its retained owner may await response settling.
 
     The optional deadline is the caller's existing observation deadline, never a
     renewed allowance. Every sample repeats the exact document/USER and failure
@@ -145,44 +145,41 @@ def report_sent_response(sink, cdp, delivery, report=print, sleep=time.sleep, *,
             return value, extra
         if await_deadline is not None and historical:
             raise ValueError("historical observation cannot await generation")
-        def generating(value):
-            return value[0]["stage"] == "RESPONSE_PENDING" and value[0].get("diagnosticReason") == "GENERATION_ACTIVE"
         first = sample()
-        while True:
-            if await_deadline is not None:
-                while generating(first):
-                    remaining = await_deadline - monotonic()
-                    if remaining <= 0:
-                        # Preserve the bounded pending witness. It grants no
-                        # completion, retry, send or renewal of the old timer.
-                        current = first
-                        break
-                    sleep(min(1.0, remaining))
-                    if monotonic() >= await_deadline:
-                        current = first
-                        break
-                    first = sample()
-                else:
-                    current = None
-                if current is not None:
-                    break
-                if await_deadline - monotonic() < .25:
-                    report("PROBE:RESPONSE_STATE:UNSTABLE", flush=True)
-                    return False
+        if await_deadline is None:
+            # Passive and historical diagnostics retain their single pair.
             sleep(.25)
             current = sample()
-            if first == current:
-                if await_deadline is not None and monotonic() > await_deadline:
+            if first != current:
+                report("PROBE:RESPONSE_STATE:UNSTABLE", flush=True)
+                return False
+        else:
+            if monotonic() > await_deadline:
+                report("PROBE:RESPONSE_STATE:UNSTABLE", flush=True)
+                return False
+            while True:
+                remaining = await_deadline - monotonic()
+                if remaining <= 0:
+                    current = None
+                else:
+                    # Await mounting/body/control readiness as well as Stop.
+                    # Successful changes reset the pair; errors never retry.
+                    sleep(min(.25 if first[0]["stage"] == "RESPONSE_COMPLETE" else 1.0, remaining))
+                    current = None if monotonic() >= await_deadline else sample()
+                if current is None:
+                    if first[0]["stage"] == "RESPONSE_PENDING":
+                        # Only the latest bounded sample can describe pending;
+                        # it cannot complete, retry or renew the original timer.
+                        current = first
+                        break
                     report("PROBE:RESPONSE_STATE:UNSTABLE", flush=True)
                     return False
-                break
-            if await_deadline is not None and generating(current):
-                # Generation can resume between the two completion samples.
-                # Hold the same owner and require two fresh stable samples.
+                if monotonic() > await_deadline:
+                    report("PROBE:RESPONSE_STATE:UNSTABLE", flush=True)
+                    return False
+                if current[0]["stage"] == "RESPONSE_COMPLETE" and first == current:
+                    break
                 first = current
-                continue
-            report("PROBE:RESPONSE_STATE:UNSTABLE", flush=True)
-            return False
         value, extra = current
         prefix="PROBE:HISTORY_RESPONSE:" if historical else "PROBE:RESPONSE:"
         report(prefix + json.dumps(value, separators=(",", ":"), sort_keys=True), flush=True)

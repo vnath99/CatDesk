@@ -1973,3 +1973,30 @@ review PASS. Initial resource-deferred checks preserved. New behavior is SOURCE 
 until separate package/live qualification. Full-profile verification remains separate
 from the original targeted-task contract and must never be inferred from a targeted
 pass or manual result Wake. C1 code/independent verification/result Wake is INCOMPLETE.
+
+
+### 2026-11-09T13:08:16.249348+00:00 — fix premature response-settling refusal
+
+The unselected source4793 observer was exercised against the original delivered
+BYOVD task while the canonical backend and existing tunnel were ready. Its local
+scoped native-status request authenticated successfully, without native execution.
+The response observation refused with UNSTABLE during successful DOM settling;
+cleanup passed and all1,101 preservation pins matched. This is a real failed live
+qualification, not an installed response-reader success. The status wrapper also
+expected nonexistent top-level project/task fields; that audit projection is not
+evidence of an authentication failure. No message or native dispatch was replayed.
+
+The correction waits through successful pending mount/body/control states and
+changed completion metadata within the SAME original deadline. Completion still
+requires two equal COMPLETE samples. Exceptions and identity/auth/network errors
+refuse immediately. At expiry only the latest sample may describe pending; stale
+generation evidence cannot hide later unstable completion. The fixed error name
+RESPONSE_STATE_UNSTABLE survives the existing CLI redactor. Passive/historical
+modes retain their original behavior. No click, reload, retry or send was added.
+
+Python51/Rust30 tests, formatting, strict root/Wake Clippy and limited independent
+source review PASS. New package/live qualification remains NOT_RUN. The original
+BYOVD private context is PREPARED/undelivered, native job READY with its first exact
+180s grant; no native turn or verified code/result Wake exists. Original Bug state
+is preserved. C1 remains INCOMPLETE; no operator action is required for the next
+bounded, receipt-bound read-only qualification.

@@ -223,9 +223,16 @@ class ReadinessProbeTests(unittest.TestCase):
         def observe(cdp,message,digest):
             self.assertIs(cdp,controlled)
             self.assertEqual((message,digest),('PRIVATE_USER','a'*64))
-            state=next(sequence);observed.append(state)
-            if isinstance(state,Exception):raise state
-            sink.response_observation_reason='GENERATION_ACTIVE' if state=='RESPONSE_PENDING' else 'COMPLETE'
+            item=next(sequence);observed.append(item)
+            if isinstance(item,Exception):raise item
+            if isinstance(item,tuple):
+                state,reason=item[:2]
+                sink.response_observation_reason=reason
+                sink.response_observation_controls=dict(item[2]) if len(item)>2 else None
+            else:
+                state=item
+                sink.response_observation_reason='GENERATION_ACTIVE' if state=='RESPONSE_PENDING' else 'COMPLETE'
+                sink.response_observation_controls=None
             if late_complete and state=='RESPONSE_COMPLETE':clock[0]=deadline+1
             return state
         sink.observe_cooperative_response=observe
@@ -277,6 +284,67 @@ class ReadinessProbeTests(unittest.TestCase):
                 self.assertFalse(result)
                 self.assertEqual(out,'PROBE:RESPONSE_STATE:'+expected+'\n')
                 self.assertEqual((elapsed,sleeps,len(observed)),(1,[1],2))
+
+    def test_existing_response_wait_does_not_report_old_generation_after_unstable_completion(self):
+        result,out,elapsed,_,observed=self.awaited_response([
+            'RESPONSE_PENDING',
+            ('RESPONSE_COMPLETE','COMPLETE',self.completed_controls(1)),
+            ('RESPONSE_COMPLETE','COMPLETE',self.completed_controls(2)),
+        ],deadline=1.5)
+        self.assertFalse(result)
+        self.assertEqual(elapsed,1.5)
+        self.assertEqual(len(observed),3)
+        self.assertEqual(out,'PROBE:RESPONSE_STATE:UNSTABLE\n')
+
+    def test_existing_response_wait_settles_generation_mount_body_and_completion_controls(self):
+        states=[('RESPONSE_PENDING',reason) for reason in ['GENERATION_ACTIVE',
+            'ASSISTANT_NOT_MOUNTED','ASSISTANT_BODY_UNPROVEN','ASSISTANT_COMPLETION_ACTION_UNPROVEN']]
+        states+=['RESPONSE_COMPLETE','RESPONSE_COMPLETE']
+        result,out,elapsed,_,observed=self.awaited_response(states,deadline=6)
+        self.assertTrue(result)
+        self.assertEqual(observed,states)
+        self.assertEqual(elapsed,4.25)
+        self.assertEqual(json.loads(out.split('PROBE:RESPONSE:')[1])['stage'],'RESPONSE_COMPLETE')
+
+    @staticmethod
+    def completed_controls(buttons):
+        value={key:0 for key in ['semanticAssistantUnits','roleAssistantNodes','copyTestIdInTurn',
+            'copyLabelInTurn','copyResponseLabelInTurn','copyMessageLabelInTurn','copyTextInTurn',
+            'knownCopyInAssistant','knownCopyInBody','sharedCopyAfterAssistant','toolbarContainersInTurn',
+            'buttonsInTurn','copyTestIdInParent','copyLabelInParent','copyResponseLabelInParent',
+            'copyMessageLabelInParent']}
+        value.update(pairedTurn=True,assistantBodyPresent=True,completionActionFound=True,
+            assistantInsideSemanticUnit=True,buttonsInTurn=buttons)
+        return value
+
+    def test_existing_response_wait_restarts_pair_after_successful_completion_metadata_change(self):
+        a=('RESPONSE_COMPLETE','COMPLETE',self.completed_controls(1))
+        b=('RESPONSE_COMPLETE','COMPLETE',self.completed_controls(2))
+        result,out,elapsed,_,observed=self.awaited_response([a,b,b])
+        self.assertTrue(result)
+        self.assertEqual(observed,[a,b,b])
+        self.assertEqual(elapsed,.5)
+        value=json.loads(out.split('PROBE:RESPONSE:')[1])
+        self.assertEqual(value['completionControls']['buttonsInTurn'],2)
+
+    def test_existing_response_wait_keeps_stable_non_generation_pending_until_deadline(self):
+        for reason in ['ASSISTANT_NOT_MOUNTED','ASSISTANT_BODY_UNPROVEN',
+                'ASSISTANT_COMPLETION_ACTION_UNPROVEN']:
+            states=[('RESPONSE_PENDING',reason)]*3
+            with self.subTest(reason=reason):
+                result,out,elapsed,sleeps,observed=self.awaited_response(states,deadline=2.5)
+                self.assertFalse(result)
+                self.assertEqual((elapsed,sleeps,len(observed)),(2.5,[1,1,.5],3))
+                value=json.loads(out.split('PROBE:RESPONSE:')[1])
+                self.assertEqual((value['stage'],value['diagnosticReason']),('RESPONSE_PENDING',reason))
+
+    def test_existing_response_wait_never_promotes_unstable_completed_samples_at_deadline(self):
+        states=[('RESPONSE_COMPLETE','COMPLETE',self.completed_controls(i)) for i in range(4)]
+        result,out,elapsed,sleeps,observed=self.awaited_response(states,deadline=1)
+        self.assertFalse(result)
+        self.assertEqual(observed,states)
+        self.assertEqual((elapsed,sleeps),(1,[.25]*4))
+        self.assertEqual(out,'PROBE:RESPONSE_STATE:UNSTABLE\n')
 
     def test_task_diagnostic_read_requires_two_identical_completed_samples_without_text(self):
         delivery=dict(messageDigest='a'*64,event=dict(eventId='wake-intent-'+'b'*64,message='PRIVATE_USER'),target=dict(generation=1,digest='c'*64))

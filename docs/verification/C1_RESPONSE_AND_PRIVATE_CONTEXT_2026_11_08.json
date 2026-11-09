@@ -2481,5 +2481,22 @@
     "wakeClippy": "PASS",
     "installedAcceptance": "NOT_RUN",
     "unrelatedPreservationChanges": 0
+  },
+  "nov09ResponseSettlingCorrection": {
+    "observedUtc": "2026-11-09T13:08:16.249348+00:00",
+    "action": "EXISTING_RESPONSE_SETTLING_CORRECTION",
+    "sourceParent": "4793ac9851ee1ca84d127f77748b5eab2c634674",
+    "pythonReadinessTests": 51,
+    "rustReadinessTests": 30,
+    "rootClippy": "PASS",
+    "wakeClippy": "PASS",
+    "limitedIndependentReview": "PASS",
+    "priorLiveResult": "FAIL_UNSTABLE",
+    "priorLiveSource": "4793ac9851ee1ca84d127f77748b5eab2c634674",
+    "fixedBehavior": "WAIT_SUCCESSFUL_PENDING_AND_SETTLING_WITHIN_SAME_DEADLINE",
+    "newLiveAcceptance": "NOT_RUN",
+    "nativeExecution": "NOT_RUN",
+    "preservationPins": 1101,
+    "preservationMismatches": 0
   }
 }

@@ -7297,3 +7297,13 @@ repeated guarded reads. No new USER/Retry/Regenerate/reload action is permitted.
 Expiry returns PENDING; no automatic replay. Two fresh stable samples are required
 for completion. Passive inspect-response/source-review/historical modes do not gain
 this wait or any UI action. Installed behavior remains distinct until qualified.
+
+
+### 2026-11-09T13:08:16.249348+00:00 — bounded response settling
+
+The existing `operator web work response` owner now waits through successful
+pending/settling snapshots using the same deadline. Two equal COMPLETE samples
+are mandatory. `RESPONSE_STATE_UNSTABLE` means no stable completion was proved;
+it authorizes no new send, Retry or reload. Source tests pass; installed/live
+qualification is recorded separately. Never reuse an older pending sample after
+a later unstable completion.
