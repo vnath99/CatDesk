@@ -1269,3 +1269,47 @@ run. The empty-envelope test proves inner-schema refusal before task/native
 admission. Tamper, incomplete predecessor, generation drift, native effects,
 unknown delivery, original grant preservation and lease handoff are covered.
 C1 coding and installed response-readback acceptance remain incomplete.
+
+
+## 2026-11-09T02:18:51.570397+00:00 — actual Web-caller no-effect probe, live
+
+PASS for delivery/readback; transport cause INCONCLUSIVE. The corrected reader
+first re-read the old completed response without sending and still found only
+INVALID_ARGUMENT. One new frozen empty-envelope diagnostic was then delivered
+through the selected dev.84 sender, with an exact SENT receipt and COMPLETE
+timer. A fresh-document source observer automatically attributed its completed
+assistant response to the original task, new message/receipt and generation.
+It captured INVALID_ARGUMENT, with no recognized tool name, argument category,
+cached invariant or known UI tool receipt. This does not prove a fresh MCP call,
+server refusal or exact failing field; do not claim that the reserved route ran.
+The expected server empty-schema refusal remains source/retained-connector
+evidence, not an observed result from this Web caller.
+
+New actionable DOM evidence: this diagnostic reply has ONE known completed-work
+trace control, collapsed with no linked panel. No trace control was clicked.
+Its identity/state qualifies investigation of a single bounded read-only
+expansion, not arbitrary clicking or reuse of a historical response. Implement
+the explicit guarded action in the existing qualified owner before attempting
+it: exact target/receipt/task, unique known control, safe button semantics,
+empty composer/idle generation, no existing ambiguous panel, fresh post-click
+state verification and no second click on an unknown outcome. Export only
+closed error/tool-status classifications from a proven associated panel; keep
+private arguments, keys, labels and text out. No new sender, service or scheduler.
+
+The monitored window took 190.938 seconds. Auth was 401/401/200, the
+matching canonical server exposed 102 tools, and the retained official owner
+was ready through response observation. Both serving owners stopped through
+their existing paths after fresh backend PID/creation validation. Browser/Wake
+counts are zero and port 3200 is closed. All 1,081 original pins match, including
+the original READY native job with no attempt/receipt/journal or worktree change.
+Five new immutable diagnostic records extend the baseline to 1,086 pins.
+No original dispatch or USER turn was replayed, no grant/task was replaced, and
+no profile/auth/binding/selected-package/recurring registration changed.
+
+Runtime source 184b7ea84130a348131bccabed980b5033a3e1ba; separate controller
+22df1320c009eae7e988352f42f84eff045f801822659d21772e5e7bb3c99f04;
+adjacent bridge 743b1572b0cc4e9f0e1fa6085a160eb4e30274e2f2180d1d1b326fb5bae7b9e4.
+C1 code/test/result-Wake and installed automatic-readback acceptance remain
+incomplete. No further probe send, private-context resend, argument rewrite,
+replacement task or manual response relay is authorized by this result. C2 is
+not started. Existing release authority remains unchanged.

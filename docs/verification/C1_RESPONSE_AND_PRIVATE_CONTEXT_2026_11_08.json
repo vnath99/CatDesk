@@ -1838,6 +1838,64 @@
     "initialFixtureCompileFailureRetained": true,
     "focusedTests": 239,
     "installedAcceptance": "NOT_RUN",
-    "c1NativeCompletion": "INCOMPLETE"
+    "c1NativeCompletion": "INCOMPLETE",
+    "live": {
+      "observedUtc": "2026-11-09T02:18:51.570397+00:00",
+      "status": "DELIVERY_AND_AUTOMATIC_READBACK_PASS_TRANSPORT_CAUSE_UNPROVEN",
+      "sourceCommit": "184b7ea84130a348131bccabed980b5033a3e1ba",
+      "controllerSha256": "22df1320c009eae7e988352f42f84eff045f801822659d21772e5e7bb3c99f04",
+      "elapsedSeconds": 190.938,
+      "newMessages": 1,
+      "completedMessagesReplayed": 0,
+      "nativeDispatchRequested": false,
+      "nativeAttempts": 0,
+      "newGrantOrTaskCreated": false,
+      "privateCapsuleOrKeyResent": false,
+      "exactSentReceipt": true,
+      "responseState": "COMPLETE",
+      "automaticTaskAttribution": true,
+      "capturedErrorNames": [
+        "INVALID_ARGUMENT"
+      ],
+      "assistantHintOnly": true,
+      "freshMcpCallProved": false,
+      "trace": {
+        "basis": "PRESENTATION_ONLY_NOT_TOOL_RECEIPT",
+        "collapsedControls": 1,
+        "expandedControls": 0,
+        "knownControls": 1,
+        "linkedPanels": 0,
+        "schemaVersion": 1,
+        "scope": "EXACT_USER_EXCHANGE",
+        "unprovenControls": 0,
+        "visiblePanels": 0
+      },
+      "traceClicks": 0,
+      "backendAuthMatrix": [
+        401,
+        401,
+        200
+      ],
+      "serverToolCount": 102,
+      "existingOfficialOwnerReady": true,
+      "originalPreservationPins": 1081,
+      "preservationMismatches": 0,
+      "acceptedPins": 1086,
+      "backendAndOfficialOwnerStopped": true,
+      "browserWakeProcessesAfter": 0,
+      "port3200ListenerAfter": false,
+      "operatorRelayUsed": false,
+      "installedReadbackAcceptance": "NOT_QUALIFIED",
+      "c1Coding": "INCOMPLETE"
+    },
+    "correctedPriorRead": {
+      "elapsedSeconds": 35.531,
+      "responseState": "COMPLETE",
+      "capturedErrorNames": [
+        "INVALID_ARGUMENT"
+      ],
+      "newMessages": 0,
+      "preservationMismatches": 0
+    }
   }
 }
