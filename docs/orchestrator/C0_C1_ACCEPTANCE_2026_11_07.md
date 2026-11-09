@@ -2400,3 +2400,44 @@ pending for the documented same-profile authentication flow, and no login owner
 remains running. Readiness must be re-observed before using the pending original
 review's supported pre-submit/resume transitions. Neither first-send wrapper,
 unknown submission nor native call may be replayed. **C1 remains INCOMPLETE.**
+
+
+### 2026-11-09T21:10:20Z — original review delivery and automatic response observation pass in selected DEV
+
+The existing supported pre-submit recovery resumed the original frozen review
+once after same-profile authentication and exact-target readiness. The monitored
+owner passed in 276.519s with exact SENT evidence, the unchanged single reservation,
+a COMPLETE timer, persisted-readback protocol and automatic same-event response
+capture. No operator response relay was needed. The [evidence record](../verification/FOCUSED_OBSERVER_REVIEW_RESUME_2026_11_09.json)
+separates this actual selected-DEV result from protected MAIN promotion and
+installed-reader acceptance, which remain unqualified.
+
+The 1,933-byte report is schema-valid INCONCLUSIVE and claims only three of four
+required fragments. All seven frozen source-read commands have one matching local
+server log each, with expected redaction and no missing or mismatched log. This is
+task-window corroboration, not independently authenticated caller origin or
+cumulative source acceptance. An input-byte validation issue is under
+investigation; no acknowledgment, snapshot or producer authority follows from
+this result, and the completed delivery must not be replayed.
+
+Local logging normalizes a final LF: one 7,626-byte public fragment has a
+7,625-byte logged body. The tool's full-output return is separate; actual failed
+client counts and raw received stdout are not retained. Neither transport loss
+nor a logging cause for the client's refusal is established. No additional
+authentication operator action is required for this checkpoint.
+
+The same event retained fixed `SAME_CONVERSATION/READY` metadata at 21:07:06Z in
+the existing bounded 64-entry journal, qualifying the scoped propagation fix in
+selected DEV. All 1,121 pins matched; existing backend/official owners stopped,
+endpoint refusal 10061 and zero remaining owned/profile processes were verified.
+Project bindings, original task fences, native ownership and protected installation
+are preserved. No native code edit, independent verification or result Wake has
+been established. **C1 remains INCOMPLETE.**
+
+At 21:14:52Z supported coordinator resolution closed this completed communication
+with the actual INCONCLUSIVE result. The 8.579s bounded owner passed; all 1,123
+pins, other work/grants/native claim, and the delivery/timer bytes were preserved.
+No additional message was sent. Closure explicitly returns
+`taskCompletionVerified:false` and creates no source acceptance. The frozen final
+review still requires genuine complete partial reports; corroborated command logs
+cannot replace an incomplete reviewer judgment. Remaining review messages are held.

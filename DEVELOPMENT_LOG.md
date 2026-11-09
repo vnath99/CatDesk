@@ -3189,3 +3189,44 @@ native dispatch, serving pipeline or recurring owner was started by inspection.
 Focused MAIN source `ae3f814`, its published inputs and frozen review remain
 unchanged. Protected promotion and installed-reader acceptance are not established;
 **C1 remains INCOMPLETE**.
+
+
+### 2026-11-09T21:10:20Z — original review resumed once; automatic response readback qualified in DEV
+
+After supported same-profile authentication and exact-target readiness, the
+original reserved review used the existing metadata-only `retry-pre-submit` and
+one `resume`. The 276.519s monitored owner passed: exact SENT receipt, one original
+reservation with its timestamp preserved, COMPLETE timer, persisted-readback
+protocol and automatic capture of the same 1,933-byte response without a human
+relay. The selected DEV controller remains GUI `671d526e…`; this does not qualify
+the protected MAIN or installed response reader. See the [dated evidence](docs/verification/FOCUSED_OBSERVER_REVIEW_RESUME_2026_11_09.json).
+
+The response is schema-valid **INCONCLUSIVE**, claiming three of four required
+fragments. All seven frozen source-read commands have one matching task-window
+server log each, with expected sensitive-line redaction and no missing or
+mismatched command log. This corroborates source reads; it does not authenticate
+caller origin independently, resolve the input-byte validation concern, supply
+cumulative acceptance or create producer authority. The input-byte issue remains
+under investigation; the completed message must not be replayed.
+
+One 7,626-byte public fragment has a 7,625-byte logged body because the existing
+logger joins lines without the final LF. Tool full output is a separate path;
+the client's failed count and raw received stdout were not retained. This does
+not establish transport loss or the cause of its validation refusal. No further
+authentication operator action is needed for this checkpoint.
+
+The scoped-readiness correction also has actual selected-DEV evidence: the
+original event retained `SAME_CONVERSATION/READY` at 21:07:06Z in the existing
+64-entry bounded journal. All 1,121 preservation pins matched. Existing serving
+owners stopped, actual endpoint refusal 10061 and zero remaining test-owned or
+exact-profile processes were verified. Protected installation, bindings and
+native ownership remain preserved; no recurring owner was enabled. Native code
+edit, independent verification and result Wake remain NOT_RUN; **C1 is INCOMPLETE**.
+
+At 21:14:52Z the normal `operator web work resolve` procedure closed only this
+completed communication, with its actual INCONCLUSIVE verdict. The 8.579s owner
+passed with 1,123 pins unchanged, other records/grants/native claim and original
+receipt/timer preserved, and no further message. `taskCompletionVerified` and
+source/producer authority remain false. The frozen final-review contract requires
+complete partial reports; local corroboration cannot substitute for the missing
+review judgment. Remaining messages are held while legitimate recovery is assessed.
