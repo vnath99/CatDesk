@@ -159,6 +159,28 @@ fn verified_primitives(source: &Path, adjacent: &Path, expected: &str) -> Result
 }
 
 #[cfg(any(windows, test))]
+fn verified_packaged_primitives(
+    source: &Path,
+    image_directory: &Path,
+    expected: &str,
+) -> Result<PathBuf> {
+    let sibling = image_directory.join("wake_bridge.py");
+    match std::fs::symlink_metadata(&sibling) {
+        Ok(_) => {
+            require_plain_install_file(&sibling)?;
+            if sha256_file(&sibling, "READINESS_SOURCE_UNAVAILABLE")? != expected {
+                return Err("READINESS_SOURCE_HASH_MISMATCH".into());
+            }
+            Ok(sibling)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            verified_primitives(source, &image_directory.join("browser-observer"), expected)
+        }
+        Err(_) => Err("READINESS_SOURCE_UNAVAILABLE".into()),
+    }
+}
+
+#[cfg(any(windows, test))]
 fn verified_observer_asset(
     source: &Path,
     adjacent: &Path,
@@ -410,34 +432,25 @@ fn inspect_readiness(
         .parent()
         .ok_or("READINESS_SOURCE_UNAVAILABLE")?
         .join("scripts/wake_bridge.py");
-    let adjacent = std::env::current_exe()
+    let image_directory = std::env::current_exe()
         .map_err(|_| "READINESS_SOURCE_UNAVAILABLE")?
         .parent()
         .ok_or("READINESS_SOURCE_UNAVAILABLE")?
-        .join("browser-observer");
+        .to_path_buf();
     let expected = format!(
         "{:x}",
         Sha256::digest(include_bytes!("../../scripts/wake_bridge.py"))
     );
-    let primitives = verified_primitives(&source_primitives, &adjacent, &expected)?;
-    // Large -c programs exceed Windows' command-line limit before START.
-    // Use the same exact-hash source/adjacent asset policy as the primitive.
-    let probe_source = source_primitives.with_file_name("wake_readiness_visual_probe.py");
-    let probe = verified_observer_asset(
-        &probe_source,
-        &adjacent,
-        "wake_readiness_visual_probe.py",
-        &format!(
-            "{:x}",
-            Sha256::digest(include_bytes!(
-                "../../scripts/wake_readiness_visual_probe.py"
-            ))
-        ),
-    )?;
+    let primitives = verified_packaged_primitives(&source_primitives, &image_directory, &expected)?;
+    // Existing four-artifact packages already cover this compiled program in
+    // the controller. No fifth unsigned probe file or source checkout is needed.
+    let program = include_bytes!("../../scripts/wake_readiness_visual_probe.py");
+    let loader = crate::readiness_probe::embedded_program_loader(program)?;
     let mut command = Command::new(python);
     command
         .arg("-I")
-        .arg(probe)
+        .arg("-c")
+        .arg(loader)
         .arg("--await-start")
         .arg("--profile")
         .arg(profile)
@@ -510,10 +523,11 @@ fn inspect_readiness(
                 .ok_or("READINESS_WORK_DELIVERY_CHANGED")?,
         )?;
     }
-    let result = crate::readiness_probe::run_bounded_observed(
+    let result = crate::readiness_probe::run_bounded_observed_program(
         &mut command,
         Duration::from_secs(90),
         &mut rows,
+        program,
     );
     // These errors positively follow Job-empty and output-reader exit. Other
     // failures retain their precise native error without claiming cleanup.
@@ -521,6 +535,7 @@ fn inspect_readiness(
         && !matches!(
             reason,
             "PROBE_PROCESS_TIMEOUT"
+                | "PROBE_PIPE_FAILED"
                 | "PROBE_FAILED"
                 | "PROBE_OUTPUT_FAILED"
                 | "PROBE_OUTPUT_TOO_LARGE"
@@ -886,6 +901,31 @@ mod tests {
         let mut foreign = sent.clone();
         foreign.message_digest = "b".repeat(64);
         assert!(require_delivery(&store, "alpha", &target, &foreign, true).is_err());
+    }
+
+    #[test]
+    fn four_artifact_layout_needs_only_matching_sibling_bridge_not_source_or_probe() {
+        let root = std::env::temp_dir().join(format!(
+            "wake-reader-package-{}-{}",
+            std::process::id(),
+            now()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        let source = root.join("absent-source/wake_bridge.py");
+        let bridge = root.join("wake_bridge.py");
+        std::fs::write(&bridge, b"reviewed").unwrap();
+        let expected = format!("{:x}", Sha256::digest(b"reviewed"));
+        assert_eq!(
+            verified_packaged_primitives(&source, &root, &expected).unwrap(),
+            bridge
+        );
+        assert!(!root.join("wake_readiness_visual_probe.py").exists());
+        std::fs::write(&bridge, b"changed").unwrap();
+        assert_eq!(
+            verified_packaged_primitives(&source, &root, &expected).unwrap_err(),
+            "READINESS_SOURCE_HASH_MISMATCH"
+        );
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

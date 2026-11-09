@@ -9503,3 +9503,59 @@ during these three audit turns. Documentation is a disposition, not progress.
 The full objective remains intact and incomplete. The blocked-status threshold
 is satisfied; use the goal's BLOCKED transition instead of an unchanged audit
 loop. A later explicit resume starts a fresh blocked audit.
+
+
+### 2026-11-09T10:11:14.388483+00:00 — resumed C1 recovery engineering; four-artifact reader closure
+
+The explicit recovery-development resume supersedes the earlier disposition
+that no independent product work remained. The original native task remains
+closed to replay; C1 native coding, independent verification and result Wake
+are still incomplete. No later milestone is opened.
+
+Original-source forensics: serving commit
+`9ea9e7beedf986db95cd5bea7b750544e452caa8` rejects cached outer arguments before
+task admission and returns the same generic error without invariant data.
+The unchanged frozen native call passes the canonical outer-envelope predicate;
+twelve distinct invalid synthetic shapes reproduce the generic refusal. The six
+inspected private capsule records do not retain actual outer RPC arguments.
+Therefore the original rejected field is NOT_RECOVERED. Current source has closed,
+value-free invariant diagnostics; it cannot retrospectively establish the old
+wire request. No grant, argument, journal, trace fence or retry state was changed.
+
+Installed-reader promotion has four separate prerequisites:
+
+1. Configuration/provisioning: a read-only fixed-path check found no registered
+   broker service, fixed image, protected root or protected policy.
+2. Technical implementation: normal `wake/install.ps1` and production
+   `require_install_mutation_broker` refuse unconditionally. The real service
+   entry admits a bounded frame but ends at
+   `WAKE_BROKER_TRANSACTION_GATES_UNAVAILABLE`; offline migration additionally
+   ends at `WAKE_OFFLINE_LAUNCH_QUARANTINE_UNVERIFIED`. Provisioning alone cannot
+   complete either transaction. Legacy dev.84 lacks the connected-owner protocol.
+3. Package compatibility: the developed reader required a fifth external probe
+   script, while signed broker manifests admit exactly four artifacts. This
+   demonstrated source defect is repaired: the reviewed GUI embeds the exact
+   probe bytes and sends them through the same contained Python owner after
+   Job assignment, with SHA-256, START, bounded input/output and cleanup. A short
+   loader avoids the Windows command-line limit. The matching sibling bridge
+   supplies existing primitives; present mismatched bytes refuse without fallback.
+4. Release evidence: independent approval and exact-source CI remain required
+   by existing policy. Its pinned release branch is
+   `orchestrator/chatgpt-codex-autonomous-loop`; a development-branch local pass
+   is not that evidence. No policy pin or release authority was weakened.
+
+Smallest supported sequence: qualify this unchanged four-artifact layout in an
+inert build; finish the existing offline migration's independently retained launch
+quarantine proof and service/launcher cutover integration; independently review
+and qualify exact-source release evidence; then separately provision the fixed
+protected broker/policy through the authorized administrator boundary and consume
+its signed approval. Use existing typed staging, publication, pointer and rollback
+records. Do not turn an unimplemented hold into a permissive check, install by
+copying files, or ask the operator to start a nonfunctional broker. There is no
+operator-only promotion command that resolves the current source gates.
+
+Native readiness tests: 28 PASS, including actual Windows large-program delivery,
+blocked stdin deadline/drain, SHA mismatch, missing START with the real probe,
+and four-artifact primitive selection without source or probe files. These are
+source/real-process tests, not installed browser or native coding acceptance.
+No message, browser, service, tunnel, native task or binding change was needed.

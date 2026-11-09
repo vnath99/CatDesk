@@ -456,7 +456,49 @@ pub fn run_bounded_observed(
     timeout: Duration,
     rows: &mut Vec<String>,
 ) -> Result<(), &'static str> {
+    run_bounded_observed_input(command, timeout, rows, b"START\n")
+}
+
+/// The program is compiled into the reviewed controller, not accepted from MCP
+/// or a caller-selected file. Only a short loader crosses the command line.
+pub(crate) fn embedded_program_loader(program: &[u8]) -> Result<String, &'static str> {
+    use sha2::{Digest, Sha256};
+    if program.is_empty() || program.len() > 64 * 1024 {
+        return Err("PROBE_PROGRAM_SIZE_INVALID");
+    }
+    let hash = format!("{:x}", Sha256::digest(program));
+    Ok(format!(
+        "import hashlib,sys;p=sys.stdin.buffer.read({});assert len(p)=={} and hashlib.sha256(p).hexdigest()=='{}';exec(compile(p,'<CatDeskWakeReadinessProbe>','exec'),{{'__name__':'__main__'}})",
+        program.len(),
+        program.len(),
+        hash
+    ))
+}
+
+pub(crate) fn run_bounded_observed_program(
+    command: &mut Command,
+    timeout: Duration,
+    rows: &mut Vec<String>,
+    program: &[u8],
+) -> Result<(), &'static str> {
     rows.clear();
+    embedded_program_loader(program)?;
+    let mut input = Vec::with_capacity(program.len() + 6);
+    input.extend_from_slice(program);
+    input.extend_from_slice(b"START\n");
+    run_bounded_observed_input(command, timeout, rows, &input)
+}
+
+fn run_bounded_observed_input(
+    command: &mut Command,
+    timeout: Duration,
+    rows: &mut Vec<String>,
+    input: &[u8],
+) -> Result<(), &'static str> {
+    rows.clear();
+    if input.len() > 64 * 1024 + 6 {
+        return Err("PROBE_PROGRAM_SIZE_INVALID");
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -504,14 +546,18 @@ pub fn run_bounded_observed(
         };
         let _ = tx.send(result);
     });
+    // A blocked stdin write is part of the same deadline. Drain it only after
+    // the existing Job proves all readers exited; never abandon a writer.
+    let deadline = Instant::now() + timeout;
+    let mut stdin = child.stdin.take().ok_or("PROBE_PIPE_FAILED")?;
+    let input = input.to_vec();
+    let (input_tx, input_rx) = std::sync::mpsc::sync_channel(1);
+    std::thread::spawn(move || {
+        let result = stdin.write_all(&input).map_err(|_| "PROBE_PIPE_FAILED");
+        drop(stdin);
+        let _ = input_tx.send(result);
+    });
     let result = (|| {
-        child
-            .stdin
-            .take()
-            .ok_or("PROBE_PIPE_FAILED")?
-            .write_all(b"START\n")
-            .map_err(|_| "PROBE_PIPE_FAILED")?;
-        let deadline = Instant::now() + timeout;
         loop {
             if let Some(status) = child.try_wait().map_err(|_| "PROBE_WAIT_FAILED")? {
                 return if status.success() {
@@ -531,6 +577,9 @@ pub fn run_bounded_observed(
     job.terminate_and_wait_empty(Duration::from_secs(5))
         .map_err(|_| "PROBE_CLEANUP_UNVERIFIED")?;
     child.wait().map_err(|_| "PROBE_CLEANUP_UNVERIFIED")?;
+    let input_result = input_rx
+        .recv_timeout(Duration::from_secs(5))
+        .map_err(|_| "PROBE_CLEANUP_UNVERIFIED")?;
     let bytes = rx
         .recv_timeout(Duration::from_secs(5))
         .map_err(|_| "PROBE_CLEANUP_UNVERIFIED")??;
@@ -539,7 +588,7 @@ pub fn run_bounded_observed(
     }
     let text = std::str::from_utf8(&bytes).map_err(|_| "PROBE_OUTPUT_INVALID")?;
     *rows = sanitized_rows(text);
-    result
+    result.and(input_result)
 }
 
 fn sanitized_rows(text: &str) -> Vec<String> {
@@ -792,6 +841,123 @@ mod tests {
         );
     }
     use super::*;
+
+    #[test]
+    fn embedded_program_is_bounded_and_loader_stays_short() {
+        assert!(embedded_program_loader(b"").is_err());
+        assert!(embedded_program_loader(&vec![b'x'; 65537]).is_err());
+        assert!(embedded_program_loader(&vec![b'x'; 65536]).unwrap().len() < 512);
+        let mut rows = vec!["PROBE:FINAL:EXACT_READY_IDLE".into()];
+        assert_eq!(
+            run_bounded_observed_program(
+                &mut Command::new("unused"),
+                Duration::from_secs(1),
+                &mut rows,
+                b""
+            ),
+            Err("PROBE_PROGRAM_SIZE_INVALID")
+        );
+        assert!(rows.is_empty());
+    }
+
+    #[cfg(windows)]
+    fn embedded_python(program: &[u8]) -> Command {
+        let image = std::env::var_os("CATDESK_TEST_ONLY_PYTHON").unwrap_or_else(|| "python".into());
+        let mut command = Command::new(image);
+        command
+            .arg("-I")
+            .arg("-c")
+            .arg(embedded_program_loader(program).unwrap());
+        command
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn large_embedded_program_runs_after_start_without_a_source_file() {
+        let program = format!(
+            "# {}\nimport sys\nassert sys.stdin.readline()=='START\\n'\nprint('PROBE:FINAL:EXACT_READY_IDLE')\n",
+            "x".repeat(40000)
+        );
+        let mut command = embedded_python(program.as_bytes());
+        let mut rows = Vec::new();
+        assert_eq!(
+            run_bounded_observed_program(
+                &mut command,
+                Duration::from_secs(10),
+                &mut rows,
+                program.as_bytes()
+            ),
+            Ok(())
+        );
+        assert_eq!(rows, ["PROBE:FINAL:EXACT_READY_IDLE"]);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn embedded_program_hash_drift_and_missing_start_fail_before_observation() {
+        let program=b"import sys\nassert sys.stdin.readline()=='START\\n'\nprint('PROBE:FINAL:EXACT_READY_IDLE')\n";
+        let mut drifted = program.to_vec();
+        drifted[0] = b'X';
+        let mut command = embedded_python(program);
+        let mut rows = Vec::new();
+        assert_eq!(
+            run_bounded_observed_program(
+                &mut command,
+                Duration::from_secs(10),
+                &mut rows,
+                &drifted
+            ),
+            Err("PROBE_FAILED")
+        );
+        assert!(rows.is_empty());
+        let mut command = embedded_python(program);
+        assert_eq!(
+            run_bounded_observed_input(&mut command, Duration::from_secs(10), &mut rows, program),
+            Err("PROBE_FAILED")
+        );
+        assert!(rows.is_empty());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn actual_embedded_reader_refuses_missing_start_before_loading_browser() {
+        let program = include_bytes!("../../scripts/wake_readiness_visual_probe.py");
+        let mut command = embedded_python(program);
+        command.args([
+            "--await-start",
+            "--conversation-url",
+            "https://chatgpt.com/c/00000000-0000-0000-0000-000000000000",
+        ]);
+        let mut rows = Vec::new();
+        assert_eq!(
+            run_bounded_observed_input(&mut command, Duration::from_secs(10), &mut rows, program),
+            Err("PROBE_FAILED")
+        );
+        // The real entry point returns before primitive loading, Selenium
+        // import or profile access; even a diagnostic row would violate this.
+        assert!(rows.is_empty());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn embedded_program_blocked_stdin_writer_is_bounded_and_drained() {
+        let image = std::env::var_os("CATDESK_TEST_ONLY_PYTHON").unwrap_or_else(|| "python".into());
+        let mut command = Command::new(image);
+        command.args(["-I", "-c", "import time;time.sleep(30)"]);
+        let start = Instant::now();
+        let mut rows = Vec::new();
+        assert_eq!(
+            run_bounded_observed_program(
+                &mut command,
+                Duration::from_millis(150),
+                &mut rows,
+                &vec![b'#'; 65536]
+            ),
+            Err("PROBE_PROCESS_TIMEOUT")
+        );
+        assert!(rows.is_empty());
+        assert!(start.elapsed() < Duration::from_secs(8));
+    }
     #[test]
     fn submission_rows_share_strict_metadata_validator_without_receipt_authority() {
         let value = serde_json::json!({"composerClass":"OTHER","composerBytes":4,

@@ -7237,3 +7237,20 @@ upgrade still needs existing protected broker/review authority; these separate
 controller results are not installed acceptance. C1 native coding, independent
 verification and result Wake remain incomplete; C2 not started. No operator
 response relay, sign-in, new diagnostic message or changed connection requested.
+
+
+### 2026-11-09T10:11:14.388483+00:00 — reader installation refusal is not a terminal/configuration fix
+
+`wake/install.ps1 -BuildOnly` remains an inert build operation, not promotion.
+All normal invocations retain `WAKE_INSTALL_BROKER_UNPROVISIONED`. A configured
+service alone is insufficient: current service execution stops at
+`WAKE_BROKER_TRANSACTION_GATES_UNAVAILABLE`, and offline migration lacks retained
+launch quarantine proof (`WAKE_OFFLINE_LAUNCH_QUARANTINE_UNVERIFIED`). Do not change
+these guards, copy binaries into the installed store or mint caller-supplied
+authority. No executable operator promotion command is currently qualified.
+
+The source reader now fits the existing four-artifact manifest: GUI-embedded probe,
+matching sibling `wake_bridge.py`, existing adapter and host. No fifth unsigned
+script or source checkout is required. Qualification remains separate from fixed
+broker provisioning, independent review/signature and pinned exact-source CI.
+See the dated C0/C1 acceptance entry for the implementation and migration gates.

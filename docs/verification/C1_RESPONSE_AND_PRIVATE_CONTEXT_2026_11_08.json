@@ -2174,5 +2174,31 @@
     "newBrowserOrNativeOrServingActions": 0,
     "operatorRelayRequested": false,
     "documentationIsProductProgress": false
+  },
+  "resumedPromotionRecovery": {
+    "observedUtc": "2026-11-09T10:11:14.388483+00:00",
+    "status": "SOURCE_IMPLEMENTED_RELEASE_PREPARATION",
+    "priorBlockedDispositionIsHistorical": true,
+    "cachedOriginalSource": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+    "canonicalFrozenCallPassesOriginalPredicate": true,
+    "originalRejectedField": null,
+    "outerWireArgumentsRetainedInInspectedCapsuleRecords": false,
+    "syntheticGenericRefusalShapes": 12,
+    "originalReplayAuthorized": false,
+    "fixedBrokerProvisioning": "ABSENT",
+    "serviceTransaction": "NOT_IMPLEMENTED",
+    "offlineLaunchQuarantineProof": "NOT_IMPLEMENTED",
+    "manifestArtifacts": 4,
+    "probeEmbeddedInReviewedGui": true,
+    "fifthScriptRequired": false,
+    "readinessTests": 28,
+    "installedReaderPromotion": "NOT_RUN",
+    "installedAcceptance": "NOT_QUALIFIED",
+    "c1NativeCoding": "INCOMPLETE",
+    "operatorOnlyFixAvailable": false,
+    "messagesSent": 0,
+    "nativeDispatches": 0,
+    "bindingChanges": 0,
+    "protectedInstallationChanges": 0
   }
 }
