@@ -1665,3 +1665,23 @@ explicit CONTROL_LINK proof remains; schema 2 records the fixed evidence kind
 while native validation retains schema 1 compatibility. No browser owner,
 scheduler, task, grant or release mechanism is introduced. Live qualification
 of this new variant is pending; installed and C1 acceptance remain incomplete.
+
+
+## 2026-11-08T23:59:21.760477+00:00 — retain recognized semantic control identity through menu observation
+
+The first fresh-transition live test completed in 36.25 seconds,
+returned UNSUPPORTED_MENU before clicking, preserved all 1,076 pins and cleaned
+up its owned tree. The actual passive selector recognized the unique composer
+control by a known accessible label; the new transition check admitted IDs
+only. This is an inspector identity mismatch, not proof that the app is absent.
+
+The existing transition path now carries a closed internal control identity
+from read-only PREPARE through OPEN, READ and CLOSE. The same fixed IDs or
+existing exact composer labels are recognized. If that identity changes, no
+new action is permitted. Only an empty idle composer with no prior popup and
+one fresh role=menu can qualify. The identity category stays internal and no
+raw label, ID, draft or private context is exported. No app selection, USER
+send, native retry or release authority is added. The original task/grant/key
+and completed deliveries remain unchanged. Actual-DOM regression covers the
+semantic variant and identity drift before OPEN. A matched live test remains
+required; installed dev.84 and C1 native coding acceptance remain incomplete.

@@ -1414,6 +1414,45 @@
     "nativeCalls": 0,
     "actualDomTests": 90,
     "nativeReadinessTests": 19,
-    "installedAcceptance": "NOT_RUN"
+    "installedAcceptance": "NOT_RUN",
+    "firstLive": {
+      "observedUtc": "2026-11-08T23:56:49.574275+00:00",
+      "sourceCommit": "47fb3f2d6d3b4c3e2bdb321753d9a7281d2b8e08",
+      "controllerSha256": "3312a3b289d61a79bf50a7c5f5f3abdb051c61ae3d38bbbf5b6106b7b137488b",
+      "elapsedSeconds": 36.25,
+      "observation": {
+        "appsItemCount": 0,
+        "basis": "TRANSIENT_MENU_ONLY_NOT_TOOL_CATALOG",
+        "closeAttempted": false,
+        "closedVerified": false,
+        "moreItemCount": 0,
+        "openAttempted": false,
+        "openOutcomeUnknown": false,
+        "openRequested": false,
+        "ownershipEvidence": "NONE",
+        "schemaVersion": 2,
+        "state": "UNSUPPORTED_MENU",
+        "v5DisabledCount": 0,
+        "v5ItemCount": 0
+      },
+      "responseStage": "RESPONSE_COMPLETE",
+      "taskReceiptAndGenerationAttributed": true,
+      "messagesSent": 0,
+      "nativeCalls": 0,
+      "uiActions": 0,
+      "preservationPins": 1076,
+      "preservationMismatches": 0,
+      "ownedTreeExited": true,
+      "ownedProfileAndWakeProcessesAfter": 0,
+      "port3200ListenerPresent": false
+    },
+    "semanticIdentityCorrection": {
+      "observedUtc": "2026-11-08T23:59:21.760477+00:00",
+      "status": "SOURCE_TESTED_MATCHED_LIVE_PENDING",
+      "existingFixedLabelsRetained": true,
+      "internalControlIdentityRecheckedBeforeEveryAction": true,
+      "rawIdentityExported": false,
+      "actualDomTests": 91
+    }
   }
 }

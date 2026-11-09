@@ -455,12 +455,31 @@ class CurrentDomTests(unittest.TestCase):
         self.assertEqual(value['ownershipEvidence'],'FRESH_MENU_TRANSITION')
         self.assertTrue(value['closedVerified'])
         self.assertEqual(cdp.mutations,2)
-        for options in [dict(priorMenuOpen=True),dict(priorDialogOpen=True),dict(appSemanticLabel='Add files and more'),dict(appExpanded='true')]:
+        for options in [dict(priorMenuOpen=True),dict(priorDialogOpen=True),dict(appExpanded='true')]:
             with self.subTest(options=options):
                 cdp=CurrentDom(appForm=True,appMenuTrace=True,unlinkedMenuControl=True,**options)
                 value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
                 self.assertFalse(value['openAttempted'] or value['openRequested'])
                 self.assertEqual(getattr(cdp,'mutations',0),0)
+
+    def test_unlinked_semantic_control_is_witnessed_and_changed_identity_never_clicks(self):
+        cdp=CurrentDom(appForm=True,appMenuTrace=True,unlinkedMenuControl=True,appSemanticLabel='Add files and more')
+        value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+        self.assertEqual(value['state'],'OBSERVED')
+        self.assertEqual(value['ownershipEvidence'],'FRESH_MENU_TRANSITION')
+        self.assertTrue(value['closedVerified'])
+        self.assertEqual(cdp.mutations,2)
+        self.assertNotIn('controlKind',value)
+        class ChangedControl(CurrentDom):
+            def evaluate(self,script):
+                value=super().evaluate(script)
+                if 'const action="PREPARE"' in script:self.options['appSemanticLabel']='Apps'
+                return value
+        cdp=ChangedControl(appForm=True,appMenuTrace=True,unlinkedMenuControl=True,appSemanticLabel='Add files and more')
+        value=self.sink.inspect_composer_app_menu(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+        self.assertEqual(value['state'],'CONTROL_UNPROVEN')
+        self.assertFalse(value['openRequested'])
+        self.assertEqual(cdp.mutations,0)
 
     def test_unlinked_menu_lost_open_is_not_repeated_and_ambiguity_never_closes_foreign_popup(self):
         class LostOpen(CurrentDom):
