@@ -196,6 +196,88 @@ class ReadinessProbeTests(unittest.TestCase):
                     self.assertEqual(self.probe.main(),2)
                     loader.assert_not_called()
 
+    def test_existing_response_wait_flag_is_owner_scope_only_without_ui_actions(self):
+        with tempfile.TemporaryDirectory() as profile:
+            required=['--read-only','--profile',profile,'--delivery-file','delivery.json',
+                '--response-only','--task-diagnostics','--await-existing-response']
+            cases=[required+[flag] for flag in ['--receipt-only','--historical-response',
+                '--source-review-diagnostics','--inspect-app-menu','--inspect-response-trace',
+                '--inspect-historical-trace']]
+            for remove in ['--read-only','--response-only','--task-diagnostics']:
+                cases.append([item for item in required if item!=remove])
+            for flags in cases:
+                argv=['probe','--conversation-url','https://chatgpt.com/c/fixture',
+                    '--primitives','wake_bridge.py','--primitives-sha256','a'*64]+flags
+                with self.subTest(flags=flags),mock.patch.object(sys,'argv',argv), \
+                    mock.patch.object(self.probe,'load_observation_sink',return_value=mock.Mock()), \
+                    mock.patch.object(self.probe,'load_delivery_message') as loader:
+                    self.assertEqual(self.probe.main(),2)
+                    loader.assert_not_called()
+
+    def awaited_response(self, states, deadline=5, late_complete=False):
+        clock=[0.0];sleeps=[];observed=[]
+        delivery=dict(messageDigest='a'*64,event=dict(eventId='web-work-'+'b'*64,message='PRIVATE_USER'),
+            target=dict(generation=1,digest='c'*64))
+        sink=types.SimpleNamespace(response_observation_controls=None)
+        sequence=iter(states)
+        def observe(cdp,message,digest):
+            self.assertIs(cdp,controlled)
+            self.assertEqual((message,digest),('PRIVATE_USER','a'*64))
+            state=next(sequence);observed.append(state)
+            if isinstance(state,Exception):raise state
+            sink.response_observation_reason='GENERATION_ACTIVE' if state=='RESPONSE_PENDING' else 'COMPLETE'
+            if late_complete and state=='RESPONSE_COMPLETE':clock[0]=deadline+1
+            return state
+        sink.observe_cooperative_response=observe
+        def sleep(seconds):
+            self.assertGreater(seconds,0);self.assertLessEqual(seconds,1)
+            sleeps.append(seconds);clock[0]+=seconds
+        controlled=object();output=io.StringIO()
+        with contextlib.redirect_stdout(output):
+            completed=self.probe.report_sent_response(sink,controlled,delivery,sleep=sleep,
+                await_deadline=deadline,monotonic=lambda:clock[0])
+        self.assertNotIn('PRIVATE_',output.getvalue())
+        return completed,output.getvalue(),clock[0],sleeps,observed
+
+    def test_existing_response_wait_keeps_owner_until_two_fresh_completed_samples(self):
+        result,out,elapsed,sleeps,observed=self.awaited_response([
+            'RESPONSE_PENDING','RESPONSE_PENDING','RESPONSE_COMPLETE','RESPONSE_COMPLETE'])
+        self.assertTrue(result)
+        self.assertEqual(observed[-2:],['RESPONSE_COMPLETE','RESPONSE_COMPLETE'])
+        self.assertEqual(observed.count('RESPONSE_PENDING'),2)
+        self.assertEqual(elapsed,2.25)
+        self.assertEqual(json.loads(out.split('PROBE:RESPONSE:')[1])['stage'],'RESPONSE_COMPLETE')
+        # If generation resumes during the stability spacing, start a fresh pair.
+        result,_,_,_,observed=self.awaited_response([
+            'RESPONSE_PENDING','RESPONSE_COMPLETE','RESPONSE_PENDING','RESPONSE_COMPLETE','RESPONSE_COMPLETE'])
+        self.assertTrue(result)
+        self.assertEqual(observed[-2:],['RESPONSE_COMPLETE','RESPONSE_COMPLETE'])
+
+    def test_existing_response_wait_expires_without_renewing_budget_or_completing(self):
+        result,out,elapsed,sleeps,observed=self.awaited_response(['RESPONSE_PENDING']*3,deadline=2.5)
+        self.assertFalse(result)
+        self.assertEqual(elapsed,2.5)
+        self.assertEqual(sleeps,[1,1,.5])
+        self.assertEqual(len(observed),3)
+        value=json.loads(out.split('PROBE:RESPONSE:')[1])
+        self.assertEqual((value['stage'],value['diagnosticReason']),('RESPONSE_PENDING','GENERATION_ACTIVE'))
+        result,out,_,_,_=self.awaited_response(['RESPONSE_PENDING','RESPONSE_COMPLETE'],late_complete=True)
+        self.assertFalse(result)
+        self.assertEqual(out,'PROBE:RESPONSE_STATE:UNSTABLE\n')
+
+    def test_existing_response_wait_rechecks_scope_and_fails_closed_on_interruption(self):
+        for reason,expected in [('RESPONSE_TARGET_DRIFT','RESPONSE_TARGET_DRIFT'),
+                ('LOGIN_OR_PROFILE_REQUIRED','LOGIN_OR_PROFILE_REQUIRED'),
+                ('RESPONSE_NETWORK_ERROR','RESPONSE_NETWORK_ERROR'),
+                ('RESPONSE_EXPECTED_USER_DUPLICATED','RESPONSE_EXPECTED_USER_DUPLICATED'),
+                ('RESPONSE_SEQUENCE_DRIFT','RESPONSE_SEQUENCE_DRIFT'),('PRIVATE_CANCELLATION','UNPROVEN')]:
+            with self.subTest(reason=reason):
+                result,out,elapsed,sleeps,observed=self.awaited_response([
+                    'RESPONSE_PENDING',RuntimeError(reason)])
+                self.assertFalse(result)
+                self.assertEqual(out,'PROBE:RESPONSE_STATE:'+expected+'\n')
+                self.assertEqual((elapsed,sleeps,len(observed)),(1,[1],2))
+
     def test_task_diagnostic_read_requires_two_identical_completed_samples_without_text(self):
         delivery=dict(messageDigest='a'*64,event=dict(eventId='wake-intent-'+'b'*64,message='PRIVATE_USER'),target=dict(generation=1,digest='c'*64))
         hints=dict(schemaVersion=1,basis='ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION',toolUnavailable=True,

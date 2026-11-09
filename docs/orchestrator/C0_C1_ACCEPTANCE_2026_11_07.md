@@ -1906,7 +1906,7 @@ authority. No new operator action is requested by this diagnostic result.
 ### 2026-11-09T12:18:41.403524+00:00 — original independent C1 reservation passes candidate-only admission
 
 The unchanged original BYOVD acceptance reservation passed the supported local
-queue preflight: CANDI2026-11-09T12:18:41.403524+00:00_ONLY, clean Git, valid tracked verification inputs,
+queue preflight: CANDIDATE_ONLY, clean Git, valid tracked verification inputs,
 no candidate blockers, launchAuthorized=false (0.344s). Frozen assignment and
 registered worktree/thread/profile were matched; no grant, queue job, browser,
 message or native process was created. All1,090 protected pins and original task
@@ -1923,3 +1923,53 @@ receipt-bound workflow; require genuine SENT/current-target evidence before
 context, READY queue selection and exact-task grant admission. Candidate success
 proves none of those later gates. No blind send while its required execution
 connection is known unavailable, no original Bug retry, no C2 acceptance claim.
+
+
+### 2026-11-09T12:48:24.065096+00:00 — authenticated serving restored; original C1 delivery reconciled
+
+The existing installed canonical executable/fingerprint pair was restored through
+its existing finite supervisor and existing Secure MCP owner in a bounded no-send
+window. Local auth401/401/200, catalog102 including the central dispatcher, serving
+hash parity and actual v5 structured response PASS. No HTTP429 occurred in the one
+connector check. Backend and tunnel stopped cleanly after47.562s; profile unchanged,
+all1,090 preservation pins matched. Transport self-status remains CONFIGURED_UNVERIFIED
+because remote self-check is disabled; independent successful RPC evidence is
+recorded separately. Full raw connector-response persistence was refused by tool
+policy; only an approved redacted summary was retained. No retry of that call.
+
+The apparent Wake version mismatch was historical status, not a different store:
+selected package dev.84, persisted status dev.59. Exact root object/path/config/current/
+status hashes and the original target/ledger pairing match. No root override or
+rebinding was needed. The stopped state after these latest windows is deliberate
+bounded cleanup, not evidence of why the original October backend stopped.
+
+The ORIGINAL BYOVD invitation was attempted once. It crossed SUBMITTING and timed
+out (SCOPED_REVIEW_TIMEOUT), with no receipt. One supported read-only reconciliation
+then proved EXACT_USER_MESSAGE_APPENDED and committed SENT in32.687s, without another
+send. The only changed prior pin is its pending-queue removal: archived bytes match
+the original queued bytes exactly; all1,089 other pins match. The private outer audit
+initially treated this legitimate archive as a preservation failure; that failed
+receipt is retained and superseded by this exact transition validation. A default
+zero message counter in the timed-out window does not establish non-delivery.
+
+Current native CLI authentication PASS; recorded gate has no blockers but does NOT
+prove an OS writer lock. Through the normal workflow, the original resume is
+PREPARED_ONLY, original prompt admitted READY, and FIRST exact grant freezes180s,
+Sol/medium and the existing result-Wake capability. No worker or native journal was
+started. Private context is PREPARED, no submission fence/attempt/receipt, and its
+key has not been sent to Web. The original Bug task/key/grant/fences remain unchanged.
+The first original BYOVD response observation returned PENDING/GENERATION_ACTIVE;
+no further message is authorised by that observation.
+
+Source now lets ONLY the retained ordinary response owner await an existing active
+assistant within its existing90s native containment. Its60s observation budget covers
+readiness and <=1s polling; no timer-budget renewal. Every sample repeats exact
+URL/USER and failure checks. Completion needs two fresh stable samples, including
+a fresh pair after generation restarts. Deadline expiry stays PENDING; late COMPLETE
+refuses. No reload, retry, click, new send or source-review mode expansion. Existing
+fresh-document receipt observation remains separate from refresh authorisation.
+Python46/Rust30 tests and strict root/Wake Clippy PASS; independent limited source
+review PASS. Initial resource-deferred checks preserved. New behavior is SOURCE ONLY
+until separate package/live qualification. Full-profile verification remains separate
+from the original targeted-task contract and must never be inferred from a targeted
+pass or manual result Wake. C1 code/independent verification/result Wake is INCOMPLETE.

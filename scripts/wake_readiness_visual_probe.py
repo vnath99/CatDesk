@@ -110,8 +110,14 @@ def load_delivery_message(path, expected_sha256, url, *, receipt_only=False, res
     return message
 
 
-def report_sent_response(sink, cdp, delivery, report=print, sleep=time.sleep, *, task_diagnostics=False, historical=False):
-    """Observe only the assistant paired with this exact durable USER receipt."""
+def report_sent_response(sink, cdp, delivery, report=print, sleep=time.sleep, *, task_diagnostics=False,
+                         historical=False, await_deadline=None, monotonic=time.monotonic):
+    """Observe one receipt; only its retained owner may await active generation.
+
+    The optional deadline is the caller's existing observation deadline, never a
+    renewed allowance. Every sample repeats the exact document/USER and failure
+    guards. Waiting neither reloads the page nor retries/submits anything.
+    """
     event, target = delivery["event"], delivery["target"]
     try:
         def sample():
@@ -137,10 +143,44 @@ def report_sent_response(sink, cdp, delivery, report=print, sleep=time.sleep, *,
                     raise ValueError("task response changed")
                 extra = dict(toolDiagnostics=tools, assistantHints=hints)
             return value, extra
+        if await_deadline is not None and historical:
+            raise ValueError("historical observation cannot await generation")
+        def generating(value):
+            return value[0]["stage"] == "RESPONSE_PENDING" and value[0].get("diagnosticReason") == "GENERATION_ACTIVE"
         first = sample()
-        sleep(.25)
-        current = sample()
-        if first != current:
+        while True:
+            if await_deadline is not None:
+                while generating(first):
+                    remaining = await_deadline - monotonic()
+                    if remaining <= 0:
+                        # Preserve the bounded pending witness. It grants no
+                        # completion, retry, send or renewal of the old timer.
+                        current = first
+                        break
+                    sleep(min(1.0, remaining))
+                    if monotonic() >= await_deadline:
+                        current = first
+                        break
+                    first = sample()
+                else:
+                    current = None
+                if current is not None:
+                    break
+                if await_deadline - monotonic() < .25:
+                    report("PROBE:RESPONSE_STATE:UNSTABLE", flush=True)
+                    return False
+            sleep(.25)
+            current = sample()
+            if first == current:
+                if await_deadline is not None and monotonic() > await_deadline:
+                    report("PROBE:RESPONSE_STATE:UNSTABLE", flush=True)
+                    return False
+                break
+            if await_deadline is not None and generating(current):
+                # Generation can resume between the two completion samples.
+                # Hold the same owner and require two fresh stable samples.
+                first = current
+                continue
             report("PROBE:RESPONSE_STATE:UNSTABLE", flush=True)
             return False
         value, extra = current
@@ -473,6 +513,7 @@ def main():
     parser.add_argument("--historical-response", action="store_true")
     parser.add_argument("--task-diagnostics", action="store_true")
     parser.add_argument("--source-review-diagnostics", action="store_true")
+    parser.add_argument("--await-existing-response", action="store_true")
     parser.add_argument("--inspect-app-menu", action="store_true")
     parser.add_argument("--inspect-response-trace", action="store_true")
     parser.add_argument("--inspect-historical-trace", action="store_true")
@@ -497,6 +538,11 @@ def main():
     message = None
     receipt_delivery = None
     response_delivery = None
+    if args.await_existing_response and (not (args.task_diagnostics and args.response_only and args.read_only
+            and args.profile is not None and args.delivery_file is not None) or args.receipt_only
+            or args.historical_response or args.source_review_diagnostics or args.inspect_app_menu
+            or args.inspect_response_trace or args.inspect_historical_trace):
+        return 2
     if args.source_review_diagnostics and (not (args.task_diagnostics and args.response_only and args.read_only
             and args.profile is not None and args.delivery_file is not None) or args.receipt_only
             or args.historical_response or args.inspect_app_menu or args.inspect_response_trace or args.inspect_historical_trace):
@@ -569,6 +615,11 @@ def main():
             if surface is not None and surface != last_surface:
                 print("PROBE:SURFACE:" + json.dumps(surface, separators=(",", ":"), sort_keys=True), flush=True)
                 last_surface = surface
+            if (args.await_existing_response and response_delivery is not None and surface is not None
+                    and surface.get("route") == "EXACT" and surface.get("document") == "COMPLETE"):
+                # Do not consume the response budget merely sampling a ready
+                # surface. The same deadline covers both readiness and waiting.
+                break
             if not args.read_only and args.profile is not None and state == "HOME" and not recovery_attempted and time.monotonic() >= recover_after:
                 recovery_attempted = True
                 print("PROBE:HOME_CHECK:" + recover_empty_home(cdp, url), flush=True)
@@ -590,7 +641,9 @@ def main():
                 print("PROBE:RECEIPT_STATE:UNPROVEN", flush=True)
         if response_delivery is not None:
             if surface is not None and surface.get("route") == "EXACT" and surface.get("document") == "COMPLETE":
-                completed=report_sent_response(sink, cdp, response_delivery, task_diagnostics=args.task_diagnostics,historical=args.historical_response)
+                completed=report_sent_response(sink, cdp, response_delivery, task_diagnostics=args.task_diagnostics,
+                    historical=args.historical_response,await_deadline=deadline if args.await_existing_response else None,
+                    sleep=time.sleep,monotonic=time.monotonic)
                 if args.task_diagnostics and not args.historical_response:
                     report_composer_apps(sink, cdp)
                 if args.inspect_app_menu and completed:

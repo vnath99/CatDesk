@@ -2448,5 +2448,38 @@
     "nativeTasksStarted": 0,
     "grantsCreated": 0,
     "bindingsChanged": 0
+  },
+  "nov09ServingAndOriginalAdmission": {
+    "installedServing": "PASS",
+    "localAuthentication": [
+      401,
+      401,
+      200
+    ],
+    "serverCatalogTools": 102,
+    "actualV5RPC": "PASS",
+    "http429Observed": false,
+    "transportSelfStatus": "CONFIGURED_UNVERIFIED",
+    "originalInvitationAttemptedOnce": true,
+    "invitationDelivery": "SENT_READONLY_RECONCILED",
+    "archiveMatchesOriginalBytes": true,
+    "unexpectedPriorPinChanges": 0,
+    "nativeQueue": "READY",
+    "firstGrantTurnSeconds": 180,
+    "privateContext": "PREPARED_NOT_SENT",
+    "nativeExecution": "NOT_RUN",
+    "fullProfileVerification": "NOT_RUN",
+    "c1": "INCOMPLETE"
+  },
+  "nov09ExistingResponseWait": {
+    "observedUtc": "2026-11-09T12:48:24.065096+00:00",
+    "action": "BOUNDED_EXISTING_RESPONSE_WAIT_SOURCE_QUALIFICATION",
+    "sourceParent": "a272b760c8520d53fa59fbfbccde95ce541c4b27",
+    "pythonReadinessTests": 46,
+    "rustReadinessTests": 30,
+    "rootClippy": "PASS",
+    "wakeClippy": "PASS",
+    "installedAcceptance": "NOT_RUN",
+    "unrelatedPreservationChanges": 0
   }
 }

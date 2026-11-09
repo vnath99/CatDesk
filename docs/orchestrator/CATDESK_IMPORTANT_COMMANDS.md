@@ -7286,3 +7286,14 @@ button observations; unknown values are redacted. It never grants Retry/Regenera
 a new USER send, trace click, timer completion or producer authority. Other source-
 review modes remain refused. Use the exact qualified package; installed parity and
 live observation are NOT_RUN until separately recorded.
+
+
+### 2026-11-09T12:48:57.066535+00:00 — existing response wait (updated source)
+
+`operator web work response --project-id <registered-project> --request-id <sent-request>`
+uses its existing exact receipt/target owner to await active generation within the
+unchanged90s native bound. The updated internal60s budget includes readiness and
+repeated guarded reads. No new USER/Retry/Regenerate/reload action is permitted.
+Expiry returns PENDING; no automatic replay. Two fresh stable samples are required
+for completion. Passive inspect-response/source-review/historical modes do not gain
+this wait or any UI action. Installed behavior remains distinct until qualified.

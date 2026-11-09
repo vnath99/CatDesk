@@ -487,8 +487,17 @@ fn inspect_readiness(
         .arg(expected)
         .arg("--read-only")
         .arg("--seconds")
-        .arg("20")
+        // Only the retained response owner waits for an already-delivered
+        // assistant turn. Keep the same 90-second native containment ceiling.
+        .arg(if mode == Mode::ResponseOwnerHeld {
+            "60"
+        } else {
+            "20"
+        })
         .current_dir(store.root());
+    if mode == Mode::ResponseOwnerHeld {
+        command.arg("--await-existing-response");
+    }
     let delivery_hash = if let Some(delivery) = delivery {
         let path = store
             .root()

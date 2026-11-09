@@ -9642,3 +9642,12 @@ Source00508b54 unselected debug package performed one receipt-bound diagnostic
 in53.313s. All four controls classified USER; assistant completion still unproved.
 No selector widened or timer completed. Cleanup/preservation PASS. Installed reader
 promotion, native C1 code/verify/result Wake remain incomplete.
+
+
+### 2026-11-09T12:48:24.065096+00:00 — real C1 admission advances without replay
+
+Canonical backend/auth/catalog and actual v5 RPC PASS in bounded window. Original
+invitation timeout resolved by exact read-only receipt CAS; no second send. Original
+BYOVD job READY, first180s grant, private context PREPARED/undelivered; no native turn.
+Bounded existing-response wait source76tests and strictClippy PASS, live NOT_RUN.
+C1 actual code/independent targeted verification/result Wake remains incomplete.
