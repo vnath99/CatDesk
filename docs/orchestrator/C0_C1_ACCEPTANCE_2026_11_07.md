@@ -2523,3 +2523,10 @@ source window. The failed original owner remains failed. Normal closure passed
 in 7.932s with no task-completion claim. Three of eleven partials and 14 of 50
 fragments now qualify. This is selected-DEV same-message recovery, not protected
 MAIN promotion or native C1 acceptance; the unfinished coding loop remains held.
+
+At 23:39:10Z groups four and five also passed bounded single-delivery,
+automatic completion/readback, source corroboration and cleanup. Five of eleven
+partials and 23 of 50 fragments qualify, with no reported findings. Their
+communication closures preserve `taskCompletionVerified:false`; context needs
+remain unresolved until the final review. No cumulative acceptance or promotion
+is inferred, and C1 remains incomplete.

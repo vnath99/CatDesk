@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordedUtc": "2026-11-09T23:29:49Z",
+  "recordedUtc": "2026-11-09T23:39:10Z",
   "classification": "LIVE_SELECTED_DEV_RECOVERY_AND_CORROBORATED_PARTIAL_REVIEW_NOT_C1",
   "publicIdentities": {
     "focusedMainSource": "ae3f81445dc543d236732060e8d02e54b8c3a978",
@@ -172,6 +172,44 @@
     "sourceAccepted": false,
     "producerAuthority": false
   },
+  "subsequentQualifiedPartials": [
+    {
+      "group": 4,
+      "sameRegisteredGrant": true,
+      "messagesDelivered": 1,
+      "exactReceiptAndCompletedPersistedReadbackVerified": true,
+      "ownerSeconds": 232.045,
+      "assignedFragmentsInspected": 4,
+      "matchingReadCommandCounts": [1, 1, 1, 1, 1, 1, 1],
+      "findings": 0,
+      "contextNeedsRetainedPrivately": 5,
+      "preservationPins": 1233,
+      "preservationMismatches": 0,
+      "communicationClosureOwnerSeconds": 8.726,
+      "closurePreservationPins": 1235,
+      "closurePreservationMismatches": 0,
+      "ownedCleanupAndEndpointRefusalVerified": true,
+      "taskCompletionVerified": false
+    },
+    {
+      "group": 5,
+      "sameRegisteredGrant": true,
+      "messagesDelivered": 1,
+      "exactReceiptAndCompletedPersistedReadbackVerified": true,
+      "ownerSeconds": 228.006,
+      "assignedFragmentsInspected": 5,
+      "matchingReadCommandCounts": [1, 1, 1, 1, 1, 1, 1, 1],
+      "findings": 0,
+      "contextNeedsRetainedPrivately": 5,
+      "preservationPins": 1242,
+      "preservationMismatches": 0,
+      "communicationClosureOwnerSeconds": 8.099,
+      "closurePreservationPins": 1244,
+      "closurePreservationMismatches": 0,
+      "ownedCleanupAndEndpointRefusalVerified": true,
+      "taskCompletionVerified": false
+    }
+  ],
   "closureAndCleanup": {
     "supportedCommunicationClosure": "CLOSED",
     "closureOwnerPassed": true,
@@ -189,9 +227,9 @@
     "recurringAutomationStarted": false
   },
   "acceptanceLimits": {
-    "qualifiedFreshPartialGroups": 3,
+    "qualifiedFreshPartialGroups": 5,
     "requiredFreshPartialGroups": 11,
-    "qualifiedSourceFragments": 14,
+    "qualifiedSourceFragments": 23,
     "requiredSourceFragments": 50,
     "requiredChangedCodePaths": 18,
     "genuineCumulativeReview": "NOT_OBTAINED",
