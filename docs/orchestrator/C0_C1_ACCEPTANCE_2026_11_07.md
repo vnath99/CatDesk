@@ -1740,3 +1740,56 @@ independent verification and result Wake remain INCOMPLETE. Next integrate
 independently reviewed launcher/token/store closure with these existing physical
 pins before replacing the unconditional quarantine hold; then wire the fixed
 service transaction and qualify release/installation through existing authority.
+
+
+### 2026-11-09T10:55:41.007335+00:00 — exact-source release artifacts built and reader qualified, unselected
+
+Local release-profile GUI and WakeHost build PASS from published source
+`5c553eaec4c29c8ce4b7b1101abb38f472c629ed` with locked/offline Cargo and unchanged lockfiles. GUI
+compiled in7m58s; full build/package elapsed509.109s under the
+existing monitored process owner. The larger fixed bound followed the separately
+preserved420s timeout; no compilation error was reported by that earlier attempt.
+New package `1.0.0-dev.85-1069c4396bc8-e87aea1db3ac` has canonical manifest SHA-256
+`9d73d59a08587075a74e3a29ca0abb92a92ae9e7fd009f5e6a47a4aaf84cbdc3` and exactly these four artifacts:
+
+- `CatDeskWakeHost.exe`: 2302976 bytes; SHA-256 `1069c4396bc88f50e06a32af8d276ea48f00b84119449606b9109bd600f428ed`.
+- `CatDeskBinagotchy.exe`: 39301632 bytes; SHA-256 `e87aea1db3ac8129466ee5937fdd7a2c6355c483d076574388ec6d32b1a5830f`.
+- `adapter.py`: 65103 bytes; SHA-256 `47ef6ae0a8c36ee0086b8f5652a583dd5983e63bb65b8429fb24b895270094b7`.
+- `wake_bridge.py`: 273269 bytes; SHA-256 `20f9e80576fcf8fd363cf8099ba88af2d9c4da1ca39ff800b205644ade4f33a9`.
+
+Separate checksum comparison against the local manifest PASS. One incomplete
+operator invocation of the unselected release GUI exited2 / WEB_USAGE in
+0.281s, before workspace/AppState/Store/browser/listener startup.
+This is pre-start argument rejection, NOT backend/runtime health. WakeHost was
+not started. No protected producer attestation, signature or install authority
+is created by this ordinary build or test.
+
+The NEW release GUI then performed one passive historical-response observation
+through the same registered profile/lease and exact original delivery/task binding.
+In35.86s it classified RESPONSE_COMPLETE and retained only closed
+assistant hints INVALID_ARGUMENT / DISPATCH_REJECTED. These remain hints, NOT a
+native receipt, recovered cached invariant or evidence of executed code. No USER
+message, trace expansion, assistant retry or original native dispatch occurred.
+Owned browser tree exited; profile/Wake matches0, port3200closed, all1090pins match.
+This qualifies the unselected release artifact's reader, not installeddev.84.
+
+A separate bounded OS-mechanism fixture held a disposable byte file exclusively
+in an owned Python child: concurrent read refused with Win32 error32, then read
+succeeded after terminating and waiting for that exact retained child. Cleanup
+PASS;0.109s. This checks process-death handle release, not Rust
+transaction recovery, complete launcher quarantine or production promotion.
+The67 source tests and strict root/Wake Clippy from this source increment remain
+the relevant source evidence. Microsoft documents the sharing contract in
+[CreateFile sharing modes](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew).
+
+All test/build owners are terminal. No production/current selection, credentials,
+profiles, project binding, task grant, native journal or unknown trace fence was
+changed. Original cached outer field remains unrecovered; original task closed
+to replay. Installed promotion and production health/rollback are NOT_RUN. The
+fixed broker still lacks retained complete launcher/token/store closure and
+service/launcher cutover integration, protected provisioning and independently
+signed exact-source release evidence. Local testing does not satisfy its pinned
+release-branch CI policy. Complete those EXISTING gates before consuming this
+artifact; do not copy it over installed bytes or rewrite fingerprints. C1 native
+code, independent verification and result Wake remain INCOMPLETE. No later gate
+is opened and no recurring automation is enabled.

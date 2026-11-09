@@ -2285,6 +2285,60 @@
     "messagesSent": 0,
     "nativeDispatches": 0,
     "serviceChanges": 0,
-    "bindingChanges": 0
+    "bindingChanges": 0,
+    "releaseArtifactQualification": {
+      "observedUtc": "2026-11-09T10:55:41.007335+00:00",
+      "sourceCommit": "5c553eaec4c29c8ce4b7b1101abb38f472c629ed",
+      "releaseBuild": "PASS",
+      "buildElapsedSeconds": 509.109,
+      "packageId": "1.0.0-dev.85-1069c4396bc8-e87aea1db3ac",
+      "manifestSha256": "9d73d59a08587075a74e3a29ca0abb92a92ae9e7fd009f5e6a47a4aaf84cbdc3",
+      "artifacts": [
+        {
+          "name": "CatDeskWakeHost.exe",
+          "byteLength": 2302976,
+          "sha256": "1069c4396bc88f50e06a32af8d276ea48f00b84119449606b9109bd600f428ed"
+        },
+        {
+          "name": "CatDeskBinagotchy.exe",
+          "byteLength": 39301632,
+          "sha256": "e87aea1db3ac8129466ee5937fdd7a2c6355c483d076574388ec6d32b1a5830f"
+        },
+        {
+          "name": "adapter.py",
+          "byteLength": 65103,
+          "sha256": "47ef6ae0a8c36ee0086b8f5652a583dd5983e63bb65b8429fb24b895270094b7"
+        },
+        {
+          "name": "wake_bridge.py",
+          "byteLength": 273269,
+          "sha256": "20f9e80576fcf8fd363cf8099ba88af2d9c4da1ca39ff800b205644ade4f33a9"
+        }
+      ],
+      "lockedOffline": true,
+      "checksums": "PASS",
+      "prestartRefusal": "WEB_USAGE",
+      "releaseHistoricalReader": "PASS",
+      "readerElapsedSeconds": 35.86,
+      "assistantHints": [
+        "INVALID_ARGUMENT",
+        "DISPATCH_REJECTED"
+      ],
+      "nativeReceiptRecovered": false,
+      "ownedTreeExited": true,
+      "profileAndWakeMatches": 0,
+      "preservationPins": 1090,
+      "preservationMismatches": 0,
+      "osHandleReleaseAfterChildDeath": "PASS",
+      "osProbeElapsedSeconds": 0.109,
+      "selected": false,
+      "signedApproval": false,
+      "protectedBuildAttestation": false,
+      "installedPromotion": "NOT_RUN",
+      "productionHealth": "NOT_RUN",
+      "productionRollback": "NOT_RUN",
+      "c1NativeCoding": "INCOMPLETE",
+      "originalNativeReplayAuthorized": false
+    }
   }
 }
