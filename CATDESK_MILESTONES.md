@@ -9375,3 +9375,40 @@ browser owner/service, auth/profile change, protected installation or send.
 Native22 and strict root/Wake Clippy pass, including missing/bad asset refusal.
 The no-START check is actual Windows process evidence, not live assistant or
 installed acceptance. A matched bounded historical read remains to qualify.
+
+
+### 2026-11-09T03:43:03.329349+00:00 — original historical response readback, live
+
+LIVE PASS for passive exact historical response classification through the
+qualified separate controller, NOT installed acceptance. The 35.844-second run
+observed the original dispatch-response exchange, bounded before its next USER.
+It automatically captured INVALID_ARGUMENT and DISPATCH_REJECTED, with a native
+dispatch mention, linked to the original immutable task, assignment, message,
+SENT receipt, exact target and generation. The normal responseObservation field
+remained null; only historicalResponseObservation was returned, so no current
+turn/timer or review authority was advanced. No operator message relay.
+
+The source is 8a57482c2c9c31c4b0e7496c418d88a35f101bda; controller SHA-256
+572eec5ec47552e03de3467199b4716f4489a855ca43db68400acee9c95a4169.
+The adjacent bridge/probe matched their compiled source hashes. The corrected
+verified-file launch worked after the no-START WinError206 reproduction; retain
+all earlier failed diagnostic runs rather than relabeling them successful.
+
+Important limit: captured labels are assistant-response hints. No known UI tool
+receipt marker, cached invariant, argument category or original rejected field
+was established. The original WEB_TASK_CACHED_ARGUMENTS_INVALID was separately
+operator-reported; this read does not independently reproduce that exact code
+or authorize an original native retry. Keep its frozen task/key/grant unchanged.
+No USER messages, native calls, assistant retries, trace clicks, backend/tunnel/
+Wake starts, binding changes or installed changes were performed. The unknown
+trace fence from the separate later diagnostic remains intact. All 1,088 state
+pins match; native job stays READY with no attempt/receipt/journal/code diff.
+Owned tree exited; profile/Wake counts zero and port3200closed afterward.
+
+C0 remains reconciled. C1's native coding, independent verification and result
+Wake are incomplete. The selected dev.84 lacks installed readback; protected
+broker/review authority is still required for promotion. Do not claim the
+qualified separate controller as an installed upgrade, request an operator
+response relay, resend a completed task, or start C2. Next eligible C1 work is
+evidence-based cached-envelope recovery and legitimate reader qualification/
+promotion; no unchanged browser inspection retry or new diagnostic send.

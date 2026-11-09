@@ -1974,7 +1974,7 @@
   },
   "historicalTaskResponseInspection": {
     "observedUtc": "2026-11-09T03:17:36.393876+00:00",
-    "status": "SOURCE_PASS_FIRST_LIVE_REFUSED_BEFORE_OBSERVATION",
+    "status": "LIVE_PASS_HISTORICAL_CLASSIFICATION_INSTALLED_NOT_QUALIFIED",
     "exactTaskAndSentReceiptRequired": true,
     "completedTimerRequired": true,
     "nextUserBoundary": true,
@@ -2044,7 +2044,43 @@
         "messagesSent": 0,
         "preservationMismatches": 0
       },
-      "fullHistoricalLive": "NOT_RUN",
+      "fullHistoricalLive": "PASS_SEPARATE_CONTROLLER",
+      "installedAcceptance": "NOT_QUALIFIED"
+    },
+    "live": {
+      "sourceCommit": "8a57482c2c9c31c4b0e7496c418d88a35f101bda",
+      "controllerSha256": "572eec5ec47552e03de3467199b4716f4489a855ca43db68400acee9c95a4169",
+      "startedUtc": "2026-11-09T03:40:56.624204+00:00",
+      "finishedUtc": "2026-11-09T03:41:32.510652+00:00",
+      "elapsedSeconds": 35.844,
+      "responseStage": "RESPONSE_COMPLETE",
+      "messagesSent": 0,
+      "assistantRetries": 0,
+      "nativeTasksExecuted": 0,
+      "backendStarts": 0,
+      "officialOwnerStarts": 0,
+      "wakeStarts": 0,
+      "bindingChanges": 0,
+      "preservationPins": 1088,
+      "preservationMismatches": 0,
+      "installedProfileProcessMatches": 0,
+      "wakeHostProcessMatches": 0,
+      "port3200ListenerPresent": false,
+      "ownedTreeExited": true,
+      "knownAssistantCodes": [
+        "INVALID_ARGUMENT"
+      ],
+      "refusalCategories": [
+        "DISPATCH_REJECTED"
+      ],
+      "nativeDispatchMentioned": true,
+      "toolReceiptProved": false,
+      "cachedInvariantProved": false,
+      "originalRejectedFieldProved": false,
+      "operatorRelayUsed": false,
+      "exactHistoricalAttribution": true,
+      "currentTimerChanged": false,
+      "traceClicks": 0,
       "installedAcceptance": "NOT_QUALIFIED"
     }
   }
