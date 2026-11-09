@@ -327,6 +327,10 @@ struct OfflineObjectPinV2 {
 
 impl OfflineObjectPinV2 {
     fn open(path: &Path, directory: bool) -> Result<Self> {
+        Self::open_with_sharing(path, directory, FILE_SHARE_READ)
+    }
+
+    fn open_with_sharing(path: &Path, directory: bool, sharing: u32) -> Result<Self> {
         if !path.is_absolute()
             || path
                 .components()
@@ -337,7 +341,7 @@ impl OfflineObjectPinV2 {
         }
         let file = OpenOptions::new()
             .read(true)
-            .share_mode(FILE_SHARE_READ)
+            .share_mode(sharing)
             .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
             .open(path)
             .map_err(|_| "WAKE_OFFLINE_PIN_OPEN_FAILED")?;
@@ -347,6 +351,31 @@ impl OfflineObjectPinV2 {
             identity,
             directory,
         })
+    }
+
+    /// Retain a no-read/write/delete-share open on the exact selected image.
+    /// This prevents new normal image opens while this handle lives. It does
+    /// not prove that an existing process exited, paths cannot drift, or the
+    /// supplied selection exhausts historical launchers or token-specific roots.
+    fn exclude_new_image_opens(self, path: &Path) -> Result<Self> {
+        if self.directory {
+            return Err("WAKE_OFFLINE_LAUNCH_IMAGE_ROLE_INVALID".into());
+        }
+        let expected = self.identity.clone();
+        self.matches(&expected)?;
+        // The diagnostic read pin would conflict with our own exclusive open.
+        // Recheck the complete identity after reacquisition; content is still
+        // checked against independently approved bytes before admission.
+        drop(self);
+        let held = Self::open_with_sharing(path, false, 0).map_err(|error| {
+            if error == "WAKE_OFFLINE_PIN_OPEN_FAILED" {
+                "WAKE_OFFLINE_LAUNCH_IMAGE_UNAVAILABLE".into()
+            } else {
+                error
+            }
+        })?;
+        held.matches(&expected)?;
+        Ok(held)
     }
 
     fn matches(&self, expected: &OfflineObjectIdentityV2) -> Result<()> {
@@ -774,8 +803,11 @@ impl OfflineMigrationPinsV2 {
 
     /// Called only by fixed policy while the matching ledger guard is held.
     /// The fresh auxiliary target-path readback is replaced before admission;
-    /// the fixed policy's no-delete root pin remains live throughout. All
-    /// predecessor/config/policy/image pins keep their diagnostic share modes.
+    /// the fixed policy's no-delete root pin remains live throughout.
+    /// The predecessor image additionally excludes new normal execution opens.
+    /// This selected-image hold is not complete launch quarantine: the separate
+    /// production admission hold still requires independently retained closure.
+    /// All other predecessor/config/policy pins retain diagnostic share modes.
     pub(crate) fn open_for_transaction(
         paths: &OfflineMigrationObjectPathsV2<'_>,
         fixed_root: &OwnedHandle,
@@ -793,6 +825,7 @@ impl OfflineMigrationPinsV2 {
             broker_service_image,
             ..
         } = Self::open_read_only(paths)?;
+        let old_host_image = old_host_image.exclude_new_image_opens(paths.old_host_image)?;
         target_protected_root.matches(expected_root)?;
         drop(target_protected_root);
         let writer = Arc::new(RetainedDirectoryWriterV2::acquire(
@@ -884,6 +917,96 @@ mod tests {
         ));
         fs::create_dir(&root).expect("fixture root");
         root
+    }
+
+    fn no_test_command(image: &Path) -> std::process::Command {
+        let mut command = std::process::Command::new(image);
+        command.args(["--list", "--exact", "__catdesk_no_test__"]);
+        command
+    }
+
+    fn require_test_image_can_start(image: &Path) {
+        let mut rows = Vec::new();
+        crate::readiness_probe::run_bounded_observed(
+            &mut no_test_command(image),
+            std::time::Duration::from_secs(5),
+            &mut rows,
+        )
+        .expect("bounded disposable image entry and exit");
+        assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn selected_image_hold_denies_actual_windows_launch_and_releases() {
+        use std::os::windows::process::CommandExt;
+        let root = fixture_root();
+        let image = root.join("WakeImageProbe.exe");
+        fs::copy(std::env::current_exe().unwrap(), &image).unwrap();
+        require_test_image_can_start(&image);
+        let diagnostic = OfflineObjectPinV2::open(&image, false).unwrap();
+        // The old diagnostic share mode is not execution exclusion.
+        require_test_image_can_start(&image);
+        let held = diagnostic.exclude_new_image_opens(&image).unwrap();
+        held.matches(&held.identity).unwrap();
+        assert!(
+            !hash_pinned_file(&held, MAX_HOST_IMAGE_BYTES)
+                .unwrap()
+                .is_empty()
+        );
+        let mut command = no_test_command(&image);
+        command.creation_flags(0x0800_0000);
+        command
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        let error = match command.spawn() {
+            Err(error) => error,
+            Ok(mut unexpected) => {
+                // Failure evidence must not leave even an unexpected child.
+                let _ = unexpected.kill();
+                unexpected.wait().unwrap();
+                panic!("selected image was executable while held");
+            }
+        };
+        assert_eq!(error.raw_os_error(), Some(32), "exact sharing refusal");
+        assert!(fs::remove_file(&image).is_err());
+        assert!(OpenOptions::new().write(true).open(&image).is_err());
+        drop(held);
+        require_test_image_can_start(&image);
+        fs::remove_file(image).unwrap();
+        fs::remove_dir(root).unwrap();
+    }
+
+    #[test]
+    fn image_hold_refuses_conflicting_reader_and_wrong_object_without_leaking() {
+        let root = fixture_root();
+        let first = root.join("first-image");
+        let second = root.join("second-image");
+        fs::write(&first, b"identical").unwrap();
+        fs::write(&second, b"identical").unwrap();
+        let reader = OfflineObjectPinV2::open(&first, false).unwrap();
+        let pin = OfflineObjectPinV2::open(&first, false).unwrap();
+        assert_eq!(
+            pin.exclude_new_image_opens(&first).err().unwrap(),
+            "WAKE_OFFLINE_LAUNCH_IMAGE_UNAVAILABLE"
+        );
+        drop(reader);
+        // A failure released our diagnostic pin and any partial exclusive pin.
+        let pin = OfflineObjectPinV2::open(&first, false).unwrap();
+        assert_eq!(
+            pin.exclude_new_image_opens(&second).err().unwrap(),
+            "WAKE_OFFLINE_PIN_OBSERVATION_MISMATCH"
+        );
+        assert!(OpenOptions::new().write(true).open(&first).is_ok());
+        assert!(OpenOptions::new().write(true).open(&second).is_ok());
+        let directory = OfflineObjectPinV2::open(&root, true).unwrap();
+        assert_eq!(
+            directory.exclude_new_image_opens(&root).err().unwrap(),
+            "WAKE_OFFLINE_LAUNCH_IMAGE_ROLE_INVALID"
+        );
+        fs::remove_file(first).unwrap();
+        fs::remove_file(second).unwrap();
+        fs::remove_dir(root).unwrap();
     }
 
     #[test]

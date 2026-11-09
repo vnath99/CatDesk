@@ -2250,5 +2250,41 @@
         "strictRootAndWakeClippy": "PASS"
       }
     }
+  },
+  "offlineSelectedImageHold": {
+    "observedUtc": "2026-11-09T10:37:37.646811+00:00",
+    "action": "OFFLINE_SELECTED_IMAGE_HOLD_SOURCE_QUALIFICATION",
+    "scope": "TEMPORARY_WINDOWS_FIXTURES_ONLY_NOT_INSTALL_AUTHORITY",
+    "actualWindowsLaunchDeniedWithError": 32,
+    "actualWindowsLaunchBeforeAndAfterHold": "PASS",
+    "selectedImageHoldConsumedByExistingTransactionPins": true,
+    "completeLaunchInventoryProved": false,
+    "productionQuarantineHoldRemoved": false,
+    "tests": {
+      "physicalPins": 11,
+      "policy": 19,
+      "offlineAdmissionRecoveryPointer": 37,
+      "rootClippy": "PASS",
+      "wakeClippy": "PASS"
+    },
+    "originalServerLogging": {
+      "sourceCommit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+      "requestSummarySha256": "6df43ee056f2f44c627de179d234e22c7d15e716fb99e2c841aff934b6518559",
+      "responseSummarySha256": "e0a2e9c6ace71b64ddb2b40edf1274d467f3d2df8474d6896ed29b907706ebb5",
+      "rawOuterArgumentsLogged": false,
+      "invariantErrorDataLogged": false,
+      "uiLogPersistedByLogFunction": false,
+      "maximumUiRows": 500
+    },
+    "originalRejectedFieldRecovered": false,
+    "originalNativeReplayAuthorized": false,
+    "preservationPins": 1090,
+    "preservationMismatches": 0,
+    "installedChanges": 0,
+    "browserStarts": 0,
+    "messagesSent": 0,
+    "nativeDispatches": 0,
+    "serviceChanges": 0,
+    "bindingChanges": 0
   }
 }

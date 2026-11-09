@@ -9594,3 +9594,14 @@ completes these source gates. Next executable engineering task is that existing
 offline migration integration; keep its holds until proof is independently
 established. C1 native coding, independent code verification and result Wake
 remain INCOMPLETE. No C2 work or unattended serving is enabled.
+
+
+### 2026-11-09T10:37:37.646811+00:00 — offline selected-image prerequisite, C1 still incomplete
+
+Existing transaction role pins now retain no-sharing on the exact selected old
+image. Actual disposable Windows launch denied with error32 while held and
+worked after release;67 relevant tests and strict root/Wake Clippy PASS.
+This does not close the launcher/token/store inventory or establish owner exit.
+Quarantine/service/install holds and original no-replay fences remain unchanged.
+No installed promotion or original native dispatch occurred;1090 pins match.
+See the dated C0/C1 record for exact scope, test-launcher failures and next gate.

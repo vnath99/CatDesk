@@ -1091,6 +1091,14 @@ pub(crate) mod tests {
         let pins = policy
             .open_offline_transaction_pins(&guard, &paths)
             .unwrap();
+        assert!(
+            std::fs::File::open(&image).is_err(),
+            "selected image excludes new read/execute opens"
+        );
+        assert!(
+            std::fs::File::open(&pointer).is_ok(),
+            "ordinary role read sharing remains available"
+        );
         let writer = pins.transaction_root_writer().unwrap();
         policy
             .revalidate()
@@ -1164,6 +1172,10 @@ pub(crate) mod tests {
         }
         drop(writer);
         drop(pins);
+        assert!(
+            std::fs::File::open(&image).is_ok(),
+            "transaction image hold released"
+        );
         drop(guard);
         drop(policy);
         for path in [&pointer, &config, &lock, &image, &registry, &service] {

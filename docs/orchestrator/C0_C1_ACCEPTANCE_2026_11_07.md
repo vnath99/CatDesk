@@ -1696,3 +1696,47 @@ completes these source gates. Next executable engineering task is that existing
 offline migration integration; keep its holds until proof is independently
 established. C1 native coding, independent code verification and result Wake
 remain INCOMPLETE. No C2 work or unattended serving is enabled.
+
+
+### 2026-11-09T10:37:37.646811+00:00 — retained selected-image execution exclusion, source qualified
+
+The existing offline transaction now reacquires its exact predecessor image with
+no read/write/delete sharing and retains that handle with its role pins. Full
+file identity is compared across reacquisition, and existing independently
+approved byte hashing remains required before admission. Diagnostics keep their
+prior read sharing. A conflicting reader, a different same-byte object or a
+directory role refuses; failed acquisition releases partial holds. No new broker,
+installer, privilege path, journal, schema or external command was introduced.
+
+Actual Windows process qualification used only a disposable copy of the test
+executable: normal and diagnostic-pinned execution succeeded, held-image launch
+was refused with exact Win32 error32, and execution succeeded after release.
+The existing protected-policy fixture verifies transaction consumption, unchanged
+read sharing of other roles and release on drop.11 physical-pin,19 policy and37
+offline admission/pointer/recovery tests PASS; strict root/Wake Clippy PASS.
+One private launcher attempt mistakenly invoked Python for a Cargo stage and
+failed before tests; another filter ran zero tests. Both are preserved and NOT
+counted. The corrected explicit module runs above provide the claimed coverage.
+
+This is a selected-image prerequisite, NOT proof of complete launcher/token/store
+inventory, old-owner exit, absence of a pre-opened image section, pathname closure
+or installation authority. The production quarantine and service transaction
+holds remain unchanged; the existing admission regression still refuses before
+INTENT when quarantine is missing. No protected/current image was opened
+exclusively and no existing native session was stopped. All1090 state pins match.
+No browser, USER message, original native dispatch, service or binding change.
+
+Additional original-source forensics confirm the old HTTP request summary records
+only tool name/id, its response summary omits error.data, and the UI log helper
+keeps at most500 in-memory rows without a file write. These paths cannot supply
+the missing original outer arguments or invariant. This is scoped source evidence,
+not a claim that upstream independently retained wire evidence cannot exist.
+The original task/grant/arguments and both unknown trace fences remain closed.
+
+Prior packaged response-reader live evidence remains tied to source6e159e3;
+it is not inherited by this later source increment. Installeddev.84, production
+and the unsigned unselected development bundle remain unchanged. C1 native code,
+independent verification and result Wake remain INCOMPLETE. Next integrate
+independently reviewed launcher/token/store closure with these existing physical
+pins before replacing the unconditional quarantine hold; then wire the fixed
+service transaction and qualify release/installation through existing authority.
