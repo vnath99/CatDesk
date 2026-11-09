@@ -1899,7 +1899,7 @@
     }
   },
   "oneShotTaskTraceInspection": {
-    "observedUtc": "2026-11-09T02:47:36.956264+00:00",
+    "observedUtc": "2026-11-09T02:55:24.746663+00:00",
     "status": "SOURCE_PASS_LIVE_NOT_RUN",
     "durablePerEventFence": true,
     "maximumClicks": 1,
@@ -1912,13 +1912,17 @@
       "FRESH_ROLE"
     ],
     "broadDomTests": 102,
-    "focusedTraceTests": 7,
+    "focusedTraceTests": 8,
     "nativeReadinessTests": 20,
     "operatorCliTests": 46,
     "probeTests": 40,
     "rootAndWakeClippy": "PASS",
     "failedLongFixtureRunRetained": true,
     "installedAcceptance": "NOT_RUN",
-    "c1NativeCoding": "INCOMPLETE"
+    "c1NativeCoding": "INCOMPLETE",
+    "loadingMustStabilize": true,
+    "maximumReadPolls": 8,
+    "stuckLoading": "OPEN_OUTCOME_UNKNOWN",
+    "truncatedArgumentTypes": "NOT_EXTRACTED"
   }
 }

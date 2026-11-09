@@ -170,6 +170,10 @@ for (const [index, trace] of (options.traceControls || []).entries()) {
     const wrapper=el('section',{},'', options.traceRolePanel ? [control] : [control,panel]);node=wrapper;
     control.click=()=>{
       mutations++;control.attrs['aria-expanded']='true';panel.attrs.hidden=false;
+      if(options.traceLoading) {
+        const finalText=panel.text;panel.text='Loading details…';panel.attrs['aria-busy']='true';
+        if(options.traceLoading==='delayed')setTimeout(()=>{panel.text=finalText;panel.attrs['aria-busy']='false';},20);
+      }
       if(options.traceRolePanel){panel.attrs.role='complementary';append(document,panel);}
       if(options.traceClickThrows)throw Error('test click outcome unknown');
       if(options.traceChangedControl)append(wrapper,el('button',{type:'button','aria-expanded':'true'},'Worked for 20s'));
@@ -1373,6 +1377,21 @@ class CurrentDomTests(unittest.TestCase):
         self.assertEqual(result['state'],'OPEN_OUTCOME_UNKNOWN');self.assertTrue(result['openOutcomeUnknown'])
         self.assertTrue(result['openAttempted']);self.assertEqual(cdp.mutations,1)
         self.assertEqual(result['knownCodes'],[]);self.assertNotIn('PRIVATE_',json.dumps(result))
+
+    def test_trace_loading_waits_without_reclick_and_never_classifies_an_unfinished_panel(self):
+        import time
+        for loading,expected in [('delayed','OBSERVED'),('stuck','OPEN_OUTCOME_UNKNOWN')]:
+            with self.subTest(loading=loading):
+                cdp=PersistentCurrentDom(observationEditor=True,traceInteractive=True,
+                    traceControls=[{'expanded':False}],traceLoading=loading)
+                try:
+                    result=self.sink.inspect_response_trace(cdp,'exact wake message',
+                        bridge.digest('exact wake message'),sleeper=lambda _:time.sleep(.01))
+                    self.assertEqual(result['state'],expected);self.assertEqual(cdp.mutations,1)
+                    self.assertTrue(bridge.valid_trace_inspection(result))
+                    if loading=='stuck':self.assertEqual(result['knownCodes'],[])
+                    self.assertNotIn('PRIVATE_',json.dumps(result))
+                finally:cdp.close()
 
     def test_trace_reads_only_linked_details_or_fresh_role_panels_and_reports_truncated_coverage(self):
         for control,options,kind in [({'expanded':False,'linked':True},{},'CONTROL_LINK'),

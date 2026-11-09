@@ -9245,3 +9245,15 @@ fence. A large-text fixture hit Windows' command-line limit; retained that faile
 run, moved the test driver into a checked temporary directory, and reran the
 focused cases successfully. No product workaround or installation change.
 C1 native coding and installed automatic-readback acceptance remain incomplete.
+
+
+### 2026-11-09T02:55:24.746663+00:00 — bounded trace-loading qualification
+
+The one-shot task-bound trace observer waits for nonempty, non-busy panel
+content to stabilize before exporting closed diagnostic labels. Eight bounded
+read polls never repeat the click. A panel that stays loading is unknown;
+truncated content cannot establish displayed argument types. Eight focused
+persistent-DOM tests pass, including delayed/stuck loading and interrupted
+transport. Strict root/Wake Clippy is rerun against the matched primitive.
+This is source qualification; installed/live acceptance remains incomplete.
+No new USER send, native call, installation or binding change.

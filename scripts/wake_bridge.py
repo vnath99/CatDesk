@@ -302,12 +302,17 @@ TRACE_ACTION_JS = r"""
  const panel=panels[0],copy=panel.cloneNode(true);
  copy.querySelectorAll('button, summary, [role="button"], [role="toolbar"], [aria-hidden="true"]').forEach(n=>n.remove());
  const raw=copy.textContent||'',text=raw.slice(0,32768).toLowerCase();out.scanTruncated=raw.length>32768;
+ if(!raw.trim() || /^(?:loading|loading details)[.\s…]*$/i.test(raw.trim()) || panel.getAttribute('aria-busy')==='true' ||
+    Array.from(panel.querySelectorAll('[role="progressbar"]')).some(visible)) return fail('PANEL_UNPROVEN');
+ const sample=String(raw.length)+':'+raw.slice(0,32768);
+ if(cache.panel!==panel || cache.panelSample!==sample) {cache.panel=panel;cache.panelSample=sample;cache.panelStable=1;return fail('PANEL_UNPROVEN');}
+ cache.panelStable++;if(cache.panelStable<2)return fail('PANEL_UNPROVEN');
  const hasCode=code=>code==='HTTP_429'?/(?:http|status|error)\s*429/.test(text):new RegExp('\\b'+code.toLowerCase()+'\\b').test(text);
  out.knownCodes=traceConfig.codes.filter(hasCode);out.cachedInvariants=traceConfig.invariants.filter(hasCode);
  const tools={RUN_COMMAND:/\brun_command\b/.test(text),CENTRAL_TASK_TOOL:/\bcatdesk_web_task_tool\b/.test(text),NATIVE_DISPATCH:/\bnative\.codex\.dispatch\b/.test(text),NATIVE_STATUS:/\bnative\.codex\.status\b/.test(text)};
  out.mentionedTools=traceConfig.tools.filter(n=>tools[n]);
  const jsonNodes=[...(panel.matches('pre, code')?[panel]:[]),...panel.querySelectorAll('pre, code')].filter(visible).slice(0,32),matches=[];
- for(const node of jsonNodes) {
+ for(const node of out.scanTruncated?[]:jsonNodes) {
   const value=node.textContent||'';if(value.length>8192) continue;
   try {let obj=JSON.parse(value);if(obj&&obj.name==='run_command')obj=obj.arguments;
    if(obj&&typeof obj==='object'&&!Array.isArray(obj)&&obj.command==='CATDESK_WEB_TASK={}'&&!matches.some(v=>JSON.stringify(v)===JSON.stringify(obj))) matches.push(obj);
@@ -1953,12 +1958,14 @@ class CdpSink:
         try:
             opened=step('OPEN')
             if opened['state']!='OPEN_REQUESTED':return opened
-            sleeper(.25)
-            current=step('READ');sleeper(.25);again=step('READ')
-            for value in (current,again):value.update(openAttempted=True,openRequested=True)
-            if current!=again:raise Attention('RESPONSE_STATE_UNPROVEN')
-            if not valid_trace_inspection(current):raise Attention('RESPONSE_STATE_UNPROVEN')
-            return current
+            prior=None
+            for _ in range(8):
+                sleeper(.25);current=step('READ');current.update(openAttempted=True,openRequested=True)
+                if not valid_trace_inspection(current):raise Attention('RESPONSE_STATE_UNPROVEN')
+                if current['state']=='PANEL_UNPROVEN':prior=None;continue
+                if current['state']!='OBSERVED' or current==prior:return current
+                prior=current
+            raise Attention('RESPONSE_STATE_UNPROVEN')
         except Exception:
             value=prepared.copy();value.update(state='OPEN_OUTCOME_UNKNOWN',openAttempted=True,
                 openRequested=bool(opened and opened['openRequested']),openOutcomeUnknown=True)
