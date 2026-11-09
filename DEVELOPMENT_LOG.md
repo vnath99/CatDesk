@@ -3261,3 +3261,42 @@ claim's old queue label is still WORKER_RUNNING and its accounting bytes are
 unchanged; accounting completion is not claimed. A corrective review must use the
 supported authorization workflow with new immutable identities, preserving the
 completed message, old grant and failed review evidence. The old lease is not renewed.
+
+### 2026-11-09T22:54:20Z — disk recovery, reconciled claim and first corrective partial
+
+After the operator restored disk space, read-only reconciliation passed in
+83.888s with two status/validation calls. It verified the committed report-only
+claim without replay, preserving all 4,767 prior native metadata files, eight
+own claim files, one attributed accounting row and the original failed empty
+receipt. Automated cache deletion did not occur. See the [sanitized recovery
+record](docs/verification/CORRECTIVE_SOURCE_REVIEW_RECOVERY_2026_11_09.json).
+
+One fresh corrective review was delivered once and read back automatically in
+the selected DEV runtime. Its 233.900s owner passed with exact SENT evidence,
+COMPLETE/persisted-page readback, a 2,579-byte JSON report and 1,192 unchanged
+preservation pins. The report genuinely inspected all four assigned fragments
+and returned REVIEWED_PARTIAL with no findings. All seven expected public read
+commands have one matching log each; their declared redaction/normalization does
+not establish raw client bytes or independent caller authentication.
+
+The first corroborator incorrectly required an empty context-needs list for a
+partial. The immutable partial schema permits such needs; the corrected verifier
+retains all four verbatim for the final review. Nine file-only regression checks
+passed. The original audit, response and schemas remain preserved. Only a genuine
+cumulative PASS can satisfy the stricter final requirement for resolved context.
+
+Normal communication closure passed in 8.395s with 1,194 pins unchanged and
+`taskCompletionVerified:false`. Test-owned processes and endpoints closed; Wake
+hosts stayed stopped. This is one of eleven required fresh partials, not source
+acceptance or producer authority. Protected MAIN and installed dev.84 were not
+upgraded; the captured-output metadata change remains source-only. Native code
+diff, verification and result Wake remain NOT_RUN; **C1 is INCOMPLETE**.
+
+At 23:00:14Z the second frozen review was also qualified and closed under the
+same registered bounded grant, without another discretionary operator decision.
+Its 240.808s owner verified one exact delivery, completion/persisted readback and
+automatic response capture; all five assigned fragments and eight public reads
+were corroborated, with zero findings and 1,201 preservation pins unchanged.
+Closure passed in 8.811s with 1,203 pins unchanged. Both groups retain their
+context needs for final resolution. Nine of 50 fragments and two of eleven
+partial groups are qualified; cumulative review and native C1 remain incomplete.

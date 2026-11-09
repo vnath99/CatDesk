@@ -2459,3 +2459,38 @@ mismatches/additions, eight other active claims preserved, natural exit and clos
 readers/endpoint. Original C1 tasks and their grants were unchanged. The old queue
 label and accounting bytes remain retained; no accounting completion, source
 acceptance or producer authority follows from this administrative cleanup.
+
+### 2026-11-09T22:54:20Z — qualified DEV recovery and first genuine corrective partial
+
+Read-only reconciliation after operator disk recovery passed in 83.888s: two
+status/validation calls, no claim replay, all 4,767 prior native metadata files
+preserved, eight own claim files and one attributed report accounting row. The
+failed empty owner receipt remains failed. Automated cache deletion did not occur.
+
+The first fresh corrective review then passed its 233.900s bounded owner with
+exact one-message SENT evidence, COMPLETE/persisted-page readback and automatic
+capture of a 2,579-byte report. It inspected four of four assigned fragments and
+returned REVIEWED_PARTIAL with zero findings; seven expected read-command logs
+matched once each. See the [dated recovery evidence](../verification/CORRECTIVE_SOURCE_REVIEW_RECOVERY_2026_11_09.json).
+
+A private corroborator's extra requirement for no partial context needs was
+corrected against the unchanged immutable schema. All four needs are retained
+for final resolution; nine file-only regression checks passed. The prior audit
+and response are preserved. The final PASS requirement for complete coverage and
+resolved context remains mandatory. Communication closure passed in 8.395s,
+preserving 1,194 pins and returning `taskCompletionVerified:false`.
+
+This qualifies one fresh partial and selected-DEV recovery/readback. It does not
+qualify cumulative review, protected MAIN promotion, an installed dev.84 upgrade,
+or source-only captured-output metadata as live. All test-owned processes and
+endpoints closed; Wake hosts remain stopped. The required native code diff,
+independent verification and result Wake remain NOT_RUN. **C1 is INCOMPLETE**.
+
+At 23:00:14Z a second frozen review completed under the same bounded grant,
+with one exact delivery, automatic completed/persisted response observation,
+five assigned fragments and eight read-command logs qualified, and zero findings.
+The 240.808s owner and 8.811s closure passed with 1,201/1,203 pins unchanged.
+Two of eleven partials and nine of 50 fragments are now qualified. Context
+obligations remain preserved for the final review. This demonstrates two routine
+reviews within one registered authorization; it does not establish native coding,
+cumulative source acceptance, protected promotion or normal unattended operation.
