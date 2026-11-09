@@ -9634,3 +9634,11 @@ Existing owner now supports exact SENT source-review diagnostics without admitti
 send, retry, trace, timer mutation or release authority. Fixed redacted button shape
 is bounded and advisory. 238 tests and strict root/Wake Clippy pass. Package/live
 qualification remains separate; C1 is incomplete. See the dated C0/C1 record.
+
+
+### 2026-11-09T12:12:57.698936+00:00 — isolated source-review control-shape LIVE PASS
+
+Source00508b54 unselected debug package performed one receipt-bound diagnostic
+in53.313s. All four controls classified USER; assistant completion still unproved.
+No selector widened or timer completed. Cleanup/preservation PASS. Installed reader
+promotion, native C1 code/verify/result Wake remain incomplete.

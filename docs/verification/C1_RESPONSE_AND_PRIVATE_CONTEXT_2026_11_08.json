@@ -2398,5 +2398,38 @@
     "preservationMismatches": 0,
     "originalCachedInvariant": "NOT_RECOVERED",
     "c1": "INCOMPLETE"
+  },
+  "nov09SourceReviewControlShapeLive": {
+    "observedUtc": "2026-11-09T12:12:57.698936+00:00",
+    "action": "SOURCE_REVIEW_CONTROL_SHAPE_LIVE_QUALIFICATION",
+    "productSource": "00508b54e3c0e1898c95bf713fd3b31541bf5aeb",
+    "debugPackageId": "1.0.0-dev.85-83ba517307ed-69b7219084af",
+    "debugManifestSha256": "e15006f3d01a4d74656679bb081e38e5a9e834d66adae32b49d815cf8cdd3c14",
+    "lockedOfflineBuild": true,
+    "buildElapsedSeconds": 58.734,
+    "artifactChecksumAndPrestartRefusal": "PASS",
+    "profileObservation": "PASS",
+    "observationElapsedSeconds": 53.313,
+    "buttonCount": 4,
+    "buttonLocations": [
+      "USER"
+    ],
+    "assistantCompletionActionProven": false,
+    "diagnosticReason": "ASSISTANT_COMPLETION_ACTION_UNPROVEN",
+    "responseStage": "RESPONSE_PENDING",
+    "preservationPins": 1090,
+    "developmentPins": 346,
+    "preservationMismatches": 0,
+    "developmentMismatches": 0,
+    "ownedTreeExited": true,
+    "messagesSent": 0,
+    "nativeDispatches": 0,
+    "installedChanges": 0,
+    "bindingChanges": 0,
+    "selected": false,
+    "protectedProducerAuthority": false,
+    "productionAcceptance": "NOT_RUN",
+    "c1": "INCOMPLETE",
+    "releaseBuild": "DEFERRED_BEFORE_LAUNCH_EXISTING_MEMORY_ADMISSION"
   }
 }

@@ -1868,3 +1868,36 @@ observation are next; no installed/live acceptance is claimed here. No USER send
 native dispatch, project binding, protected installation or recurring-owner change.
 All 1,090 protected pins match. Original cached RPC field remains unrecovered;
 C1 still requires the original authorized native code/verification/result-Wake loop.
+
+
+### 2026-11-09T12:12:57.698936+00:00 — qualified isolated control-shape read changes the next diagnosis
+
+Exact source `00508b54e3c0e1898c95bf713fd3b31541bf5aeb` was built locked/offline
+as a separate **unselected debug observation package**, preserving the existing
+four-artifact layout. Build58.734s; package `1.0.0-dev.85-83ba517307ed-69b7219084af`,
+manifestSHA `e15006f3d01a4d74656679bb081e38e5a9e834d66adae32b49d815cf8cdd3c14`.
+Checksums and bounded pre-start refusal PASS. This is neither a protected producer
+attestation nor an installed release. The release build did not launch because its
+existing 6 GiB headroom admission failed; its guard was retained. The ordinary
+isolated debug build used its existing 4 GiB development admission, with no LTO
+release operation or installation. No release-resource safeguard was lowered.
+
+One live exact-receipt source-review inspection through the existing authenticated
+development profile PASS53.313s. The fixed shape classified **all four observed
+buttons as USER-area controls**, preceding the assistant; the sole Copy message
+belongs there. There was no proved assistant completion action. This explains
+why accepting the visible Copy message would be unsafe, but does not yet establish
+why the assistant footer is unavailable. The response remains PENDING with
+`ASSISTANT_COMPLETION_ACTION_UNPROVEN`; no timer or OPEN work was forced closed.
+Next observation must distinguish exact assistant/viewport/footer mounting before
+changing selectors. Do not repeat unchanged observations or borrow a USER control.
+
+Owner cleanup PASS; all1,090 protected and346 development pins match, no USER sends,
+native dispatches, bindings, selection, installed bytes, services or recurring owners
+changed. Final relevant profile/test image matches0; port3200closed. This qualifies
+the isolated package's passive diagnostic, not installed parity or C1 coding.
+The original cached outer field remains unrecovered and its dispatch stays closed.
+The main EXE producer route can use genuine development-lane review/ACK/committed
+snapshot evidence without first completing the separate unfinished Wake broker.
+Historical INCONCLUSIVE text, this source review and debug build cannot supply that
+authority. No new operator action is requested by this diagnostic result.
