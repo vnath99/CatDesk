@@ -7318,3 +7318,14 @@ describes diagnostic selection, not execution or complete-context proof. An
 unselected-text gap stays uncertain. A hint cannot authorize a send, native retry,
 legacy clarification or protected promotion. Unknown trace-open outcomes remain
 closed. Installed parity must be independently qualified.
+
+
+### 2026-11-09T14:02:22.146981+00:00 — refusal diagnostic terms
+
+The qualified `operator web review inspect-response` owner can return v6
+`assistantHints.refusalTerms`: at most32 fixed diagnostic words, with all other
+tokens REDACTED. These are bounded assistant-text hints, never a tool receipt,
+new grant, native retry or source-promotion authority. An empty or redacted
+projection remains inconclusive. The original exact event/receipt/task/target
+checks and existing unknown fences remain mandatory. Qualify the exact package;
+this source entry does not establish installed parity.

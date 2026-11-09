@@ -350,7 +350,7 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
         "CONVERSATION_TARGET_MISMATCH",
         "CONVERSATION_TARGET_UNVERIFIED",
     ];
-    let valid_identity_hints = version != 5
+    let valid_identity_hints = version < 5
         || hints
             .get("identityIssues")
             .and_then(Value::as_array)
@@ -362,6 +362,105 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
                     .collect();
                 *selected == canonical
             });
+    // Ordered diagnostic words are a closed projection, never a body excerpt
+    // or a value. Repetitions preserve negation; unknown words stay REDACTED.
+    let refusal_terms = [
+        "REDACTED",
+        "DISPATCH",
+        "BLOCKED",
+        "REJECTED",
+        "REFUSED",
+        "REQUIRED",
+        "PROVIDED",
+        "SUPPLIED",
+        "INCLUDED",
+        "NOT",
+        "CANNOT",
+        "BECAUSE",
+        "CONTEXT",
+        "PRIVATE",
+        "FROZEN",
+        "CAPSULE",
+        "ASSIGNMENT",
+        "DIGEST",
+        "HASH",
+        "MATCH",
+        "MISMATCH",
+        "GRANT",
+        "TASK",
+        "REQUEST",
+        "MESSAGE",
+        "NATIVECALL",
+        "TOOL",
+        "TOOLS",
+        "RUN_COMMAND",
+        "CATDESK_WEB_TASK_TOOL",
+        "NATIVE",
+        "CODEX",
+        "EXECUTION",
+        "KEY",
+        "ARGUMENTS",
+        "PAYLOAD",
+        "SCOPE",
+        "WORKSPACE",
+        "RECEIPT",
+        "AUTHORIZATION",
+        "AUTHENTICATION",
+        "PERMISSION",
+        "APPROVAL",
+        "POLICY",
+        "UNTRUSTED",
+        "INSTRUCTION",
+        "SOURCE",
+        "MISSING",
+        "AVAILABLE",
+        "UNAVAILABLE",
+        "ENABLED",
+        "DISABLED",
+        "CONNECTED",
+        "VERIFIED",
+        "UNVERIFIED",
+        "IDENTITY",
+        "SCHEMA",
+        "INVALID",
+        "ERROR",
+        "FAILED",
+        "EXPIRED",
+        "DUPLICATE",
+        "UNKNOWN",
+        "ACCESS",
+        "READ",
+        "WRITE",
+        "ONLY",
+        "NO",
+        "IS",
+        "WAS",
+        "THE",
+        "A",
+        "AN",
+        "TO",
+        "FROM",
+        "WITH",
+        "WITHOUT",
+        "THIS",
+        "THAT",
+        "CURRENT",
+        "ORIGINAL",
+    ];
+    let valid_refusal_terms = version != 6
+        || hints
+            .get("refusalTerms")
+            .and_then(Value::as_array)
+            .is_some_and(|terms| {
+                terms.len() <= 32
+                    && terms.iter().all(|term| {
+                        term.as_str()
+                            .is_some_and(|term| refusal_terms.contains(&term))
+                    })
+                    && terms
+                        .windows(2)
+                        .all(|pair| pair[0] != "REDACTED" || pair[1] != "REDACTED")
+            });
     let trace = hints.get("trace");
     let valid_trace = trace.is_none_or(|trace| {
         let counts = [
@@ -372,7 +471,7 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
             "linkedPanels",
             "visiblePanels",
         ];
-        matches!(version, 4 | 5)
+        matches!(version, 4..=6)
             && trace
                 .as_object()
                 .is_some_and(|map| map.len() == counts.len() + 3)
@@ -399,7 +498,9 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
     if value.as_object()?.len() != 2
         || tools.as_object()?.len() != 9
         || hints.as_object()?.len()
-            != if version == 5 {
+            != if version == 6 {
+                15 + usize::from(trace.is_some())
+            } else if version == 5 {
                 14 + usize::from(trace.is_some())
             } else if version == 4 {
                 13 + usize::from(trace.is_some())
@@ -419,7 +520,7 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
         || !counts
             .iter()
             .all(|field| tools[*field].as_u64().is_some_and(|n| n <= 64))
-        || !matches!(version, 1..=5)
+        || !matches!(version, 1..=6)
         || hints["basis"] != "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION"
         || !flags.iter().all(|field| hints[*field].as_bool().is_some())
         || *selected != canonical
@@ -427,6 +528,7 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
         || !valid_subjects
         || !valid_argument_hints
         || !valid_identity_hints
+        || !valid_refusal_terms
         || !valid_trace
     {
         return None;

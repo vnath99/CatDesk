@@ -144,6 +144,8 @@ const assistant = el('div', {'data-content-search-unit-key':'fallback-turn-0:2:a
 ]);
 if (options.canonicalUnlabelledText)
   append(assistant.children[1], el('p', {}, options.canonicalUnlabelledText));
+if (options.quotedAnswerTag)
+  append(assistant.children[1], el(options.quotedAnswerTag, {}, options.quotedAnswerText || ''));
 if (options.assistantOutsideText)
   append(assistant, el('p', {}, options.assistantOutsideText));
 if (options.secondSelectionBody)
@@ -1256,7 +1258,7 @@ class CurrentDomTests(unittest.TestCase):
         self.sink.response_snapshot(CurrentDom(answer=body), 'exact wake message',
             require_usable_body=True, diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
         self.assertTrue(bridge.valid_task_response_hints(hints))
-        self.assertEqual(hints['schemaVersion'], 5)
+        self.assertEqual(hints['schemaVersion'], 6)
         self.assertEqual(hints['knownCodes'], ['WEB_TASK_CACHED_ARGUMENTS_INVALID', 'INVALID_ARGUMENT'])
         self.assertEqual(hints['refusalCategories'], ['DISPATCH_REJECTED'])
         self.assertNotIn('PRIVATE_CONTEXT_MARKER', json.dumps(hints))
@@ -1283,7 +1285,7 @@ class CurrentDomTests(unittest.TestCase):
                 for bad in [['PRIVATE_KEY_MARKER'], ['NATIVE_CALL','NATIVE_CALL'],
                             ['EXECUTION_KEY','RUN_COMMAND'], 'NATIVE_CALL', None]:
                     self.assertFalse(bridge.valid_task_response_hints(hints | {'unavailableSubjects':bad}))
-                for bad in [{}, [], True, 6]:
+                for bad in [{}, [], True, 7]:
                     self.assertFalse(bridge.valid_task_response_hints(hints | {'schemaVersion':bad}))
 
     def test_natural_refusals_identify_only_known_identity_domains_without_values(self):
@@ -1413,6 +1415,93 @@ class CurrentDomTests(unittest.TestCase):
         self.assertEqual(hints['knownCodes'], [])
         self.assertLess(len(json.dumps(hints)), 1100)
 
+    def test_refusal_terms_are_ordered_fixed_words_from_only_the_current_assistant(self):
+        hints={}
+        self.sink.response_snapshot(CurrentDom(answer='Dispatch rejected because nativeCall is not provided. '
+            'Original assignment digest is missing.',observationEditor=True,
+            observationDraft='Dispatch blocked because approval is required. PRIVATE_DRAFT'),
+            'exact wake message',diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+        self.assertEqual(hints['refusalTerms'],['DISPATCH','REJECTED','BECAUSE','NATIVECALL','IS','NOT',
+            'PROVIDED','ORIGINAL','ASSIGNMENT','DIGEST','IS','MISSING'])
+        self.assertTrue(bridge.valid_task_response_hints(hints))
+        self.assertNotIn('APPROVAL',hints['refusalTerms'])
+        self.assertNotIn('PRIVATE_DRAFT',json.dumps(hints))
+
+    def test_refusal_terms_redact_values_quotes_urls_paths_numbers_and_unknown_identifiers(self):
+        hints={}
+        body=('Dispatch rejected because "context grant key" https://source.example/context '
+            r'C:\private\source.txt '
+            'executionKey=source 123 ' + 'source'*8 + ' unknownprivateword private_otherword; '
+            'context missing. PRIVATE_FROZEN_VALUE')
+        self.sink.response_snapshot(CurrentDom(answer=body),'exact wake message',
+            diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+        self.assertEqual(hints['refusalTerms'],['DISPATCH','REJECTED','BECAUSE','REDACTED',
+            'CONTEXT','MISSING','REDACTED'])
+        self.assertTrue(bridge.valid_task_response_hints(hints))
+        for private in ['context grant key','source.example',r'C:\private','executionKey','123',
+                'source'*8,'unknownprivateword','PRIVATE_FROZEN_VALUE']:
+            self.assertNotIn(private,json.dumps(hints['refusalTerms']))
+
+    def test_refusal_terms_require_a_literal_refusal_anchor_and_never_read_outside_480_characters(self):
+        for body in ['A useful answer. Native dispatch was not attempted.',
+                'Dispatch is available. Context is missing.',
+                'Dispatch rejected. ' + 'x'*480 + ' approval required.']:
+            with self.subTest(body=body[:50]):
+                hints={}
+                self.sink.response_snapshot(CurrentDom(answer=body),'exact wake message',
+                    diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+                expected=['DISPATCH','REJECTED','REDACTED'] if body.startswith('Dispatch rejected.') else []
+                self.assertEqual(hints['refusalTerms'],expected)
+
+    def test_refusal_anchor_cannot_start_inside_quoted_code_or_value_spans(self):
+        for body in ['"Dispatch rejected because context grant key"',
+                '“Dispatch rejected because context grant key”',
+                '`Dispatch rejected because context grant key`',
+                '```Dispatch rejected because context grant key```',
+                "'prefix can't Dispatch rejected because context grant key'",
+                '‘prefix can’t Dispatch rejected because context grant key’',
+                r'payload="before \"Dispatch rejected because context grant key\" after"',
+                '"unclosed prior value Dispatch rejected because context grant key',
+                '“unclosed prior value Dispatch rejected because context grant key',
+                'payload=Dispatch rejected because context grant key']:
+            with self.subTest(body=body):
+                hints={}
+                self.sink.response_snapshot(CurrentDom(answer=body),'exact wake message',
+                    diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+                self.assertEqual(hints['refusalTerms'],[])
+        for body in ['Prior "Dispatch rejected because context grant key". '
+                'Dispatch blocked because scope is missing.',
+                "The caller can't proceed. Dispatch blocked because scope is missing."]:
+            with self.subTest(body=body):
+                hints={}
+                self.sink.response_snapshot(CurrentDom(answer=body),'exact wake message',
+                    diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+                self.assertEqual(hints['refusalTerms'],['DISPATCH','BLOCKED','BECAUSE','SCOPE','IS','MISSING'])
+
+    def test_refusal_terms_allow_repetition_but_bound_output_and_validate_closed_vocabulary(self):
+        hints={}
+        self.sink.response_snapshot(CurrentDom(answer='Dispatch blocked because '+'context '*100),
+            'exact wake message',diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+        self.assertEqual(hints['refusalTerms'],['DISPATCH','BLOCKED','BECAUSE']+['CONTEXT']*29)
+        self.assertTrue(bridge.valid_task_response_hints(hints))
+        for bad in [['PRIVATE_TEXT'],['REDACTED','REDACTED'],['CONTEXT']*33,[123],True,{},None]:
+            self.assertFalse(bridge.valid_task_response_hints(hints | {'refusalTerms':bad}))
+        self.assertTrue(bridge.valid_task_response_hints(hints | {'refusalTerms':[]}))
+
+    def test_refusal_terms_exclude_rendered_code_and_blockquotes_without_changing_other_hints(self):
+        for tag in ['pre','code','blockquote']:
+            with self.subTest(tag=tag):
+                hints={}
+                self.sink.response_snapshot(CurrentDom(answer='A useful answer. ',quotedAnswerTag=tag,
+                    quotedAnswerText='Dispatch rejected because context grant key. WEB_TASK_CACHED_ARGUMENTS_INVALID'),
+                    'exact wake message',diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+                self.assertEqual(hints['refusalTerms'],[])
+                self.assertIn('WEB_TASK_CACHED_ARGUMENTS_INVALID',hints['knownCodes'])
+                self.sink.response_snapshot(CurrentDom(answer='Dispatch blocked because scope is missing. ',
+                    quotedAnswerTag=tag,quotedAnswerText='Dispatch rejected because context grant key.'),
+                    'exact wake message',diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+                self.assertEqual(hints['refusalTerms'],['DISPATCH','BLOCKED','BECAUSE','SCOPE','IS','MISSING'])
+
     def test_argument_hints_report_only_closed_tools_causes_and_invariants(self):
         hints = {}
         body = ('run_command returned INVALID_ARGUMENT: invalid JSON, missing required field. '
@@ -1439,8 +1528,9 @@ class CurrentDomTests(unittest.TestCase):
         for field in ['mentionedTools','argumentIssues','cachedInvariants']:
             self.assertEqual(hints[field],[])
         self.assertNotIn('retryAuthorized',hints)
-        for version in [1,2,3,4]:
-            legacy = {k:v for k,v in hints.items() if k not in ['identityIssues']}
+        for version in [1,2,3,4,5]:
+            legacy = {k:v for k,v in hints.items() if k!='refusalTerms'}
+            if version<5:legacy.pop('identityIssues')
             if version<4:
                 for key in ['mentionedTools','argumentIssues','cachedInvariants','trace']:legacy.pop(key)
             legacy['schemaVersion']=version

@@ -2856,3 +2856,66 @@ qualification; no installed adapter, protected producer, release or project
 binding changed. Next qualify a new unselected package and read the SAME completed
 receipt without sending, clicking the unknown trace, or replaying a native call.
 Full C1 code/independent verification/result Wake remains INCOMPLETE.
+
+
+### 2026-11-09T13:50:19.666103+00:00 — v5 refusal reader live-qualified; precise cause remains unresolved
+
+Source `2da7b956af7179d7701fc94511262f8511921f11` has 384 passing source tests
+and strict root/Wake Clippy PASS. Its locked, offline debug build completed in
+57.766 seconds as unsigned, unselected package
+`1.0.0-dev.85-8f64a4f4d39f-36cc272c1050` with manifest SHA-256
+`c0aca8a5811617604501175c3adebc2e8e6e4a20b6091b41a05e6714e45da3cf`. Artifact checksums and bounded pre-start
+WEB_USAGE refusal passed. None of this creates protected producer, installation
+or release authority.
+
+One read of the SAME original completed continuation receipt passed in
+33.297 seconds with immutable task attribution and no human relay.
+The v5 body coverage was canonicalBody=QUALIFIED, selectedBlocks=1 and
+unselectedTextPresent=false. The advisory output still contains only
+DISPATCH_REJECTED: no known error code, cached-argument invariant or identity
+cause was recovered. Missing canonical-body selection is therefore not the
+current explanation for the empty cause fields; the next source gap is the
+fixed refusal vocabulary. Read/classification qualification PASS does not mean
+that the underlying refusal has been resolved or that a native tool call ran.
+
+The native job remains READY without an attempt; native execution, verified code
+and result Wake remain NOT_RUN. All 1,103 preservation pins matched and the owned
+browser tree exited. The existing backend and tunnel are stopped after normal
+cleanup; no additional message, native retry, connection change or recurring
+owner was introduced. The original Bug task and unknown trace fence stay intact.
+The installed dev.84 adapter and full-snapshot capability have not been promoted;
+the qualified debug reader is not installed and full C1 remains INCOMPLETE.
+
+A minimal redacted fixed-word v6 cause list is a separate SOURCE_ONLY follow-up.
+Its tests, package and live behavior are NOT_RUN in this v5 qualification and must
+be recorded independently. No arbitrary assistant body export, unknown-label
+export or retry is authorized by the new diagnostic work. No operator action is
+required at this checkpoint.
+
+
+### 2026-11-09T14:02:22.146981+00:00 — closed refusal projection after a qualified but nonspecific read
+
+The v5 live reader proved complete diagnostic body coverage for the original
+receipt but recovered no more specific cause than DISPATCH_REJECTED. Native
+execution is still unconfirmed and its queue has no attempt. A bounded audit of
+the retained serving window found three forwarding records, without method,
+arguments, tool result or invariant. Daemon summaries were memory-only and that
+daemon has exited. This partial telemetry is not a no-call or no-effect proof;
+the original dispatch remains closed.
+
+V6 adds only refusalTerms to the existing hint projection: at most32 ordered
+terms from a fixed81-word dictionary, with other tokens replaced by REDACTED.
+It scans at most480 code units of filtered text from a literal refusal anchor in the
+exact receipt-bound assistant body. Quoted/value/URL/path spans are masked BEFORE
+anchor selection; escaped, smart and unclosed quotes fail closed. Apostrophes
+inside words do not end quoted spans. Rendered code and blockquotes are excluded
+only from this projection. Existing error hints, body/completion checks, grants,
+native journals and action authority are unchanged. No arbitrary response body,
+unknown identifier, value, key, draft or private URL is returned.
+
+Source/privacy review and actual JavaScript regressions cover these boundaries.
+The verification record gives the current targeted checks separately from the
+previous commit's legacy bridge baseline. This is source qualification only;
+one unselected package and same-response no-send read must be qualified next.
+It does not authorize a retry, unknown trace reopen, legacy clarification or
+protected promotion. C1 code/verification/result Wake is still INCOMPLETE.

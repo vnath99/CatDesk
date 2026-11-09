@@ -2634,5 +2634,126 @@
     "bindingsChanged": 0,
     "newLiveQualification": "NOT_RUN",
     "c1": "INCOMPLETE"
+  },
+  "nov09RefusalCauseLive": {
+    "observedUtc": "2026-11-09T13:50:19.666103+00:00",
+    "action": "V5_REFUSAL_READER_LIVE_QUALIFICATION",
+    "sourceCommit": "2da7b956af7179d7701fc94511262f8511921f11",
+    "sourceTests": 384,
+    "rootClippy": "PASS",
+    "wakeClippy": "PASS",
+    "package": {
+      "packageId": "1.0.0-dev.85-8f64a4f4d39f-36cc272c1050",
+      "manifestSha256": "c0aca8a5811617604501175c3adebc2e8e6e4a20b6091b41a05e6714e45da3cf",
+      "buildElapsedSeconds": 57.766,
+      "lockedOffline": true,
+      "signed": false,
+      "selected": false,
+      "installed": false,
+      "protectedProducerAuthority": false
+    },
+    "artifactQualification": {
+      "checksums": "PASS",
+      "prestartRefusal": "PASS",
+      "exitCode": 2,
+      "errorCode": "WEB_USAGE"
+    },
+    "liveRead": {
+      "status": "PASS",
+      "elapsedSeconds": 33.297,
+      "sameOriginalReceipt": true,
+      "immutableTaskAttributionVerified": true,
+      "humanRelayUsed": false,
+      "schemaVersion": 5,
+      "bodyCoverage": {
+        "canonicalBody": "QUALIFIED",
+        "selectedBlocks": 1,
+        "unselectedTextPresent": false
+      },
+      "refusalCategories": [
+        "DISPATCH_REJECTED"
+      ],
+      "knownCodes": [],
+      "cachedInvariants": [],
+      "identityIssues": [],
+      "preciseCause": "UNRESOLVED",
+      "canonicalBodyGapIsCurrentCause": false,
+      "nextGap": "FIXED_REFUSAL_VOCABULARY",
+      "basis": "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION"
+    },
+    "nativeQueueState": "READY",
+    "nativeAttemptPresent": false,
+    "nativeExecution": "NOT_RUN",
+    "verifiedCode": "NOT_RUN",
+    "resultWake": "NOT_RUN",
+    "preservationPins": 1103,
+    "preservationMismatches": 0,
+    "ownedTreeExited": true,
+    "backendAndExistingTunnel": "STOPPED_AFTER_NORMAL_CLEANUP",
+    "additionalMessages": 0,
+    "nativeRetries": 0,
+    "originalBugUntouched": true,
+    "unknownTraceFencePreserved": true,
+    "installedWakeAdapter": "DEV_84_UNCHANGED",
+    "installedFullSnapshotPromotion": "NOT_RUN",
+    "v6Followup": {
+      "status": "SOURCE_ONLY_NOT_YET_TESTED_AT_THIS_CHECKPOINT",
+      "tests": "NOT_RUN_HERE",
+      "package": "NOT_RUN_HERE",
+      "liveQualification": "NOT_RUN",
+      "inheritsV5Qualification": false,
+      "arbitraryBodyExportAllowed": false
+    },
+    "operatorActionRequired": false,
+    "c1": "INCOMPLETE"
+  },
+  "nov09RefusalTermsSource": {
+    "observedUtc": "2026-11-09T14:02:21.690925+00:00",
+    "action": "BOUNDED_REFUSAL_TERMS_SOURCE_QUALIFICATION",
+    "sourceParent": "2da7b956af7179d7701fc94511262f8511921f11",
+    "tests": {
+      "rustReadiness": 34,
+      "rustResponse": 5,
+      "pythonReadiness": 51,
+      "adapter": 47,
+      "currentDom": 127
+    },
+    "totalDistinctTests": 264,
+    "legacyBridgeBaseline": {
+      "source": "2da7b956af7179d7701fc94511262f8511921f11",
+      "tests": 127,
+      "scope": "PREVIOUS_COMMIT_BASELINE_NOT_CURRENT_TEST_TOTAL"
+    },
+    "rootClippy": "PASS",
+    "wakeClippy": "PASS",
+    "limitedSourceReview": "PASS",
+    "successfulOwnerAttempts": {
+      "readiness-tests": 1,
+      "response-tests": 1,
+      "python-tests": 2,
+      "adapter-tests": 2,
+      "dom-tests": 3,
+      "refusal-terms-dom-tests": 3,
+      "root-clippy": 1,
+      "wake-clippy": 1,
+      "fmt": 1
+    },
+    "fixedVocabularyWords": 81,
+    "maximumTerms": 32,
+    "maximumFilteredWindowCodeUnits": 480,
+    "crossLanguageVocabularyMatches": true,
+    "reviewCorrections": [
+      "MASK_EXCLUDED_SPANS_BEFORE_ANCHOR_SELECTION",
+      "ESCAPED_UNCLOSED_SMART_QUOTES_FAIL_CLOSED",
+      "INTRAWORD_APOSTROPHES_DO_NOT_END_QUOTES",
+      "RENDERED_CODE_AND_BLOCKQUOTES_EXCLUDED_ONLY_FROM_TERMS"
+    ],
+    "partialForwardingEvidence": "THREE_FORWARDS_NO_METHOD_OR_RESULT_NOT_NO_EFFECT_PROOF",
+    "newMessages": 0,
+    "nativeDispatches": 0,
+    "installedChanges": 0,
+    "bindingsChanged": 0,
+    "newLiveQualification": "NOT_RUN",
+    "c1": "INCOMPLETE"
   }
 }

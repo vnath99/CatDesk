@@ -1519,6 +1519,55 @@ fn full_identity_hint_vocabulary_fits_bounded_task_row_without_arbitrary_text() 
 }
 
 #[test]
+fn ordered_refusal_terms_are_fixed_bounded_redactions_not_response_content_or_authority() {
+    let mut value = identity_hint_fixture();
+    value["assistantHints"]["schemaVersion"] = serde_json::json!(6);
+    value["assistantHints"]["refusalTerms"] = serde_json::json!([
+        "DISPATCH", "BLOCKED", "REDACTED", "CONTEXT", "IS", "NOT", "VERIFIED"
+    ]);
+    assert_eq!(
+        task_response_diagnostics(&format!("PROBE:TASK:{value}")),
+        Some(value.clone())
+    );
+    for bad in [
+        serde_json::json!(["PRIVATE_VALUE"]),
+        serde_json::json!(["execution-key"]),
+        serde_json::json!(["REDACTED", "REDACTED"]),
+        serde_json::json!(["https://example.invalid/c/private"]),
+        serde_json::json!(["a".repeat(64)]),
+        serde_json::json!(true),
+        serde_json::json!([1]),
+        serde_json::json!(vec!["REDACTED"; 33]),
+    ] {
+        let mut invalid = value.clone();
+        invalid["assistantHints"]["refusalTerms"] = bad;
+        assert!(sanitized_rows(&format!("PROBE:TASK:{invalid}")).is_empty());
+    }
+    let mut repeated = value.clone();
+    repeated["assistantHints"]["refusalTerms"] = serde_json::json!(["NOT", "NOT", "VERIFIED"]);
+    assert_eq!(
+        task_response_diagnostics(&format!("PROBE:TASK:{repeated}")),
+        Some(repeated)
+    );
+    let mut old = value.clone();
+    old["assistantHints"]["schemaVersion"] = serde_json::json!(5);
+    assert!(task_response_diagnostics(&format!("PROBE:TASK:{old}")).is_none());
+    old["assistantHints"]
+        .as_object_mut()
+        .unwrap()
+        .remove("refusalTerms");
+    assert_eq!(
+        task_response_diagnostics(&format!("PROBE:TASK:{old}")),
+        Some(old)
+    );
+    value["assistantHints"]
+        .as_object_mut()
+        .unwrap()
+        .remove("refusalTerms");
+    assert!(task_response_diagnostics(&format!("PROBE:TASK:{value}")).is_none());
+}
+
+#[test]
 #[cfg(test)]
 fn app_menu_protocol_requires_closed_counts_and_confirmed_close_for_observed_state() {
     let value = serde_json::json!({"schemaVersion":1,"basis":"TRANSIENT_MENU_ONLY_NOT_TOOL_CATALOG","state":"OBSERVED",

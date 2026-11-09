@@ -9702,3 +9702,26 @@ Existing GUI observer gains closed identity-issue hints and diagnostic body cove
 with unchanged completion/send authority. Role-isolation and negation regressions
 address limited-review findings. Current task remains READY/no native turn; no
 installed promotion or C1 completion. Package/live qualification is next.
+
+
+### 2026-11-09T13:50:19.666103+00:00 — v5 refusal read PASS; native C1 still incomplete
+
+Source `2da7b956` passed 384 tests and strict root/Wake Clippy. Its unsigned,
+unselected debug package built in 57.766 seconds; checksums and pre-start refusal
+passed. The same original receipt was read in 33.297 seconds with exact task
+attribution. Canonical-body coverage is QUALIFIED with one selected block and no
+unselected text, but only DISPATCH_REJECTED was classified; precise cause remains
+UNRESOLVED. The native job is READY without an attempt. All 1,103 pins matched;
+owned cleanup passed and backend/tunnel remain stopped. No new message or retry.
+The v6 fixed-word cause refinement is source-only and untested in this checkpoint;
+no qualification transfers from v5. The debug reader is not installed, dev.84
+full snapshots are not promoted, original Bug state is preserved, and C1 remains
+INCOMPLETE. No operator action is currently required.
+
+
+### 2026-11-09T14:02:22.146981+00:00 — bounded refusal terms TESTED_SOURCE
+
+Existing exact-response owner adds a fixed-vocabulary redacted refusal projection.
+Quote/code/value and role boundaries tested; action authority unchanged. Partial
+forwarding telemetry recovers no exact tool receipt. Native C1 remains closed and
+incomplete; new package/live and installed qualification remain separate.

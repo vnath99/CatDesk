@@ -239,6 +239,15 @@ TASK_IDENTITY_ISSUES = tuple(domain + "_" + state
     for domain in ("FULL_PRIVATE_CONTEXT", "ASSIGNMENT", "DELIVERED_USER_MESSAGE",
                    "NATIVE_CALL", "EXECUTION_GRANT", "CONVERSATION_TARGET")
     for state in ("MISSING", "MISMATCH", "UNVERIFIED"))
+TASK_REFUSAL_TERMS = ("REDACTED", "DISPATCH", "BLOCKED", "REJECTED", "REFUSED", "REQUIRED", "PROVIDED",
+    "SUPPLIED", "INCLUDED", "NOT", "CANNOT", "BECAUSE", "CONTEXT", "PRIVATE", "FROZEN", "CAPSULE",
+    "ASSIGNMENT", "DIGEST", "HASH", "MATCH", "MISMATCH", "GRANT", "TASK", "REQUEST", "MESSAGE",
+    "NATIVECALL", "TOOL", "TOOLS", "RUN_COMMAND", "CATDESK_WEB_TASK_TOOL", "NATIVE", "CODEX", "EXECUTION",
+    "KEY", "ARGUMENTS", "PAYLOAD", "SCOPE", "WORKSPACE", "RECEIPT", "AUTHORIZATION", "AUTHENTICATION",
+    "PERMISSION", "APPROVAL", "POLICY", "UNTRUSTED", "INSTRUCTION", "SOURCE", "MISSING", "AVAILABLE",
+    "UNAVAILABLE", "ENABLED", "DISABLED", "CONNECTED", "VERIFIED", "UNVERIFIED", "IDENTITY", "SCHEMA",
+    "INVALID", "ERROR", "FAILED", "EXPIRED", "DUPLICATE", "UNKNOWN", "ACCESS", "READ", "WRITE", "ONLY",
+    "NO", "IS", "WAS", "THE", "A", "AN", "TO", "FROM", "WITH", "WITHOUT", "THIS", "THAT", "CURRENT", "ORIGINAL")
 TASK_CACHED_INVARIANTS = ("ARGUMENTS_NOT_OBJECT", "COMMAND_NOT_STRING", "PLAN_FLAG_NOT_BOOLEAN",
                           "DRY_RUN_NOT_FALSE", "FULL_OUTPUT_NOT_FALSE", "CWD_OVERRIDE_FORBIDDEN",
                           "TIMEOUT_OVERRIDE_FORBIDDEN", "UNSUPPORTED_OUTER_FIELD", "COMMAND_TOO_LARGE",
@@ -394,28 +403,33 @@ def valid_task_response_hints(value: Any) -> bool:
     """Closed assistant-text hints, never tool availability or execution proof."""
     flags = ("toolUnavailable", "contextUnavailable", "approvalRequested", "nativeDispatchMentioned")
     version = value.get("schemaVersion") if isinstance(value, dict) else None
-    fields = {"schemaVersion", "basis", "knownCodes"} | ({"refusalCategories", "scanTruncated"} if version in (2, 3, 4, 5) else set())
-    if version in (3, 4, 5):
+    fields = {"schemaVersion", "basis", "knownCodes"} | ({"refusalCategories", "scanTruncated"} if version in (2, 3, 4, 5, 6) else set())
+    if version in (3, 4, 5, 6):
         fields.add("unavailableSubjects")
     extra = {"mentionedTools":TASK_MENTIONED_TOOLS, "argumentIssues":TASK_ARGUMENT_ISSUES,
-             "cachedInvariants":TASK_CACHED_INVARIANTS} if version in (4, 5) else {}
-    if version == 5:
+             "cachedInvariants":TASK_CACHED_INVARIANTS} if version in (4, 5, 6) else {}
+    if version in (5, 6):
         extra["identityIssues"] = TASK_IDENTITY_ISSUES
     fields.update(extra)
-    if version in (4, 5) and "trace" in value:
+    if version == 6:
+        fields.add("refusalTerms")
+    if version in (4, 5, 6) and "trace" in value:
         fields.add("trace")
     return (isinstance(value, dict) and set(value) == set(flags) | fields
-            and type(version) is int and version in {1, 2, 3, 4, 5}
+            and type(version) is int and version in {1, 2, 3, 4, 5, 6}
             and value["basis"] == "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION"
             and all(type(value[key]) is bool for key in flags)
             and isinstance(value["knownCodes"], list)
             and value["knownCodes"] == [code for code in TASK_RESPONSE_CODES if code in value["knownCodes"]]
             and (version == 1 or (type(value["scanTruncated"]) is bool and isinstance(value["refusalCategories"], list)
                  and value["refusalCategories"] == [kind for kind in TASK_REFUSAL_CATEGORIES if kind in value["refusalCategories"]]))
-            and (version not in (3, 4, 5) or (isinstance(value["unavailableSubjects"], list)
+            and (version not in (3, 4, 5, 6) or (isinstance(value["unavailableSubjects"], list)
                  and value["unavailableSubjects"] == [subject for subject in TASK_UNAVAILABLE_SUBJECTS if subject in value["unavailableSubjects"]]))
             and all(isinstance(value[field], list) and value[field] == [item for item in allowed if item in value[field]]
                     for field, allowed in extra.items())
+            and (version != 6 or (isinstance(value["refusalTerms"], list) and len(value["refusalTerms"]) <= 32
+                 and all(isinstance(term, str) and term in TASK_REFUSAL_TERMS for term in value["refusalTerms"])
+                 and all(a != "REDACTED" or b != "REDACTED" for a, b in zip(value["refusalTerms"], value["refusalTerms"][1:]))))
             and ("trace" not in value or valid_task_trace_metadata(value["trace"])))
 
 
@@ -2219,7 +2233,7 @@ class CdpSink:
             // Diagnostic text may include unlabelled text inside the exact
             // assistant's unique selection-marked body. This never changes
             // completion/bodyNodes/Copy authority or borrows whole-unit text.
-            let assistantDiagnosticText = '', bodyCoverage = null;
+            let assistantDiagnosticText = '', assistantRefusalText = '', bodyCoverage = null;
             if (includeDiagnostic || includeExecutionDiagnostic) {{
             const selectionSelector = '[data-chatgpt-selection-message-id]';
             const toolSubtree = "[data-tool-call-id], [data-tool-call], [data-tool-response-id], " +
@@ -2240,14 +2254,17 @@ class CdpSink:
                 !diagnosticCandidates.some(other => other !== node && other.contains(node)))
                 .sort((a,b) => a === b ? 0 : (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1);
             if (diagnosticNodes.length > 64) return ['invalid', 0, 0, false, false];
-            const strippedText = node => {{
+            const strippedText = (node, maskQuotedCode=false) => {{
+                if(maskQuotedCode && node.closest('pre, code, blockquote'))return '';
                 const copy = node.cloneNode(true);
                 copy.querySelectorAll('button, [role="button"], [role="toolbar"], [aria-hidden="true"], ' +
                     'h4[data-conversation-role], ' + userNodeSelector + ', ' + toolSubtree)
                     .forEach(control => control.remove());
+                if(maskQuotedCode)copy.querySelectorAll('pre, code, blockquote').forEach(quoted => quoted.remove());
                 return normalize(copy.textContent);
             }};
-            assistantDiagnosticText = normalize(diagnosticNodes.map(strippedText).join(' '));
+            assistantDiagnosticText = normalize(diagnosticNodes.map(node=>strippedText(node)).join(' '));
+            assistantRefusalText = normalize(diagnosticNodes.map(node=>strippedText(node,true)).join(' '));
             let unselectedTextPresent = false;
             if (includeDiagnostic && latestAssistant && !diagnosticNodes.includes(latestAssistant)) {{
                 const remainder = latestAssistant.cloneNode(true);
@@ -2550,7 +2567,52 @@ class CdpSink:
                     const panels=details ? [details] : (id && id.length<=256 ? Array.from(document.querySelectorAll('[id]')).filter(n => n.getAttribute('id')===id) : []);
                     if (panels.length===1) {{ traceLinked++; if (visible(panels[0]) && expanded==='true') traceVisible++; }}
                 }}
-                result.push({{schemaVersion:5,basis:'ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION',
+                // A short fixed-vocabulary projection can explain a natural
+                // refusal which has no known error code. It is never raw text
+                // or execution/retry authority. Unknown/value spans collapse
+                // to one marker; quoted content, paths, URLs, identifiers and
+                // every numeric token are deliberately excluded.
+                const refusalTerms = [], refusalVocabulary = new Set({json.dumps(TASK_REFUSAL_TERMS)});
+                // Mask on the full bounded scan before locating an anchor.
+                // Otherwise a window beginning inside a quoted prior value
+                // would lose its opening quote and misclassify that value.
+                const maskRefusalValues = input => {{
+                    const masked=input.split('');
+                    const mark=(start,end)=>{{masked[start]='\\u0000';for(let p=start+1;p<end;p++)masked[p]=' ';}};
+                    for(let i=0;i<input.length;i++) {{
+                        const opening=input[i];
+                        if(opening==="'" && /[a-z0-9]/.test(input[i-1]||'') && /[a-z0-9]/.test(input[i+1]||''))continue;
+                        if(!['"',"'",'`','“','”'].includes(opening))continue;
+                        const delimiter=opening==='`' && input.startsWith('```',i) ? '```' : opening;
+                        const closing=opening==='“' ? '”' : opening==='”' ? '“' : delimiter;
+                        let end=input.length;
+                        for(let p=i+delimiter.length;p<input.length;p++) {{
+                            if(input[p]===String.fromCharCode(92)){{p++;continue;}}
+                            if(closing==="'" && input[p]==="'" && /[a-z0-9]/.test(input[p-1]||'') && /[a-z0-9]/.test(input[p+1]||''))continue;
+                            if(input.startsWith(closing,p)){{end=p+closing.length;break;}}
+                        }}
+                        mark(i,end);i=end-1;
+                    }}
+                    const mask=part=>'\\u0000'+' '.repeat(part.length-1);
+                    return masked.join('')
+                        .replace(/(?:https?:\\/\\/|file:\\/\\/|[a-z]:[\\\\/]|\\\\\\\\)[^\\s]*/g,mask)
+                        .replace(/\\b[a-z_][a-z0-9_]*\\s*=\\s*[^\\s,;]+/g,mask)
+                        .replace(/\\b(?:executionkey|key|token|password|secret|context|payload|arguments|capsule)\\s*:\\s*[^\\s,;]+/g,mask);
+                }};
+                const refusalText=maskRefusalValues(assistantRefusalText.slice(0,32768).toLowerCase().replace(/[‘’]/g,"'"));
+                const refusalAnchor = /\\b(?:dispatch|tool[- ]call)\\s+(?:(?:is|was)\\s+)?(?:blocked|rejected|refused)\\b/.exec(refusalText);
+                if (refusalAnchor) {{
+                    const redacted = refusalText.slice(refusalAnchor.index,refusalAnchor.index+480);
+                    for (const chunk of redacted.split(/\\s+/)) {{
+                        if (!chunk || (!/[a-z0-9_]/.test(chunk) && !chunk.includes('\\u0000'))) continue;
+                        const word = chunk.replace(/^[^a-z0-9_]+|[^a-z0-9_]+$/g,'').toUpperCase();
+                        const term = chunk.length < 24 && /^[A-Z_]+$/.test(word) && refusalVocabulary.has(word)
+                            ? word : 'REDACTED';
+                        if (term !== 'REDACTED' || refusalTerms[refusalTerms.length-1] !== 'REDACTED') refusalTerms.push(term);
+                        if (refusalTerms.length === 32) break;
+                    }}
+                }}
+                result.push({{schemaVersion:6,basis:'ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION',
                     toolUnavailable,contextUnavailable,
                     approvalRequested,
                     nativeDispatchMentioned:text.includes('native.codex.dispatch'),
@@ -2560,6 +2622,7 @@ class CdpSink:
                     argumentIssues:{json.dumps(TASK_ARGUMENT_ISSUES)}.filter(issue => argumentIssues[issue]),
                     cachedInvariants:cachedInvariants.filter(hasCode),
                     identityIssues:{json.dumps(TASK_IDENTITY_ISSUES)}.filter(issue=>identityIssues.has(issue)),
+                    refusalTerms,
                     trace:{{schemaVersion:1,scope:'EXACT_USER_EXCHANGE',basis:'PRESENTATION_ONLY_NOT_TOOL_RECEIPT',
                         knownControls:Math.min(traceControls.length,64),expandedControls:traceExpanded,collapsedControls:traceCollapsed,
                         unprovenControls:traceUnknown,linkedPanels:traceLinked,visiblePanels:traceVisible}},
