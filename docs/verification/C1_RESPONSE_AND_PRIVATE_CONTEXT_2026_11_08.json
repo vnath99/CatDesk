@@ -2374,5 +2374,29 @@
     "preservationMismatches": 0,
     "newDiagnosticInstalledAcceptance": "NOT_RUN",
     "c1": "INCOMPLETE"
+  },
+  "nov09SourceReviewControlShape": {
+    "observedUtc": "2026-11-09T12:06:53.820463+00:00",
+    "action": "SOURCE_REVIEW_PASSIVE_CONTROL_SHAPE",
+    "parentSource": "c58f5de35e50e9d0255cdd64e60a1c158030dcaa",
+    "tests": {
+      "dom-tests": 114,
+      "python-tests": 42,
+      "readiness-tests": 30,
+      "response-tests": 5,
+      "adapter-tests": 47
+    },
+    "totalRelevantTests": 238,
+    "rootClippy": "PASS",
+    "wakeClippy": "PASS",
+    "messagesSent": 0,
+    "nativeDispatches": 0,
+    "installedChanges": 0,
+    "bindingChanges": 0,
+    "browserQualification": "NOT_RUN",
+    "preservationPins": 1090,
+    "preservationMismatches": 0,
+    "originalCachedInvariant": "NOT_RECOVERED",
+    "c1": "INCOMPLETE"
   }
 }

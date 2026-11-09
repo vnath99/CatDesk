@@ -2616,3 +2616,33 @@ the existing bounded owner, then finish the original review disposition before
 using that lane again; qualify current-source independent review through an eligible
 registered lane. No operator action is requested for this checkpoint. C1 remains
 INCOMPLETE; no new build/install/production acceptance is claimed.
+
+
+### 2026-11-09T12:06:53.820463+00:00 — passive source-review completion-control inspection
+
+Extended the EXISTING GUI-owned response inspector to accept an exact SENT
+`source_review` only in passive SentDiagnostics mode. Admission retains the exact
+receipt, timer, project, generation, digest, message hash and durable delivery
+checks; it requires one valid review audit reference and canonical event identity.
+Receipt recovery, re-observation, AppMenu, Trace, Historical and pre-submit paths
+still refuse source reviews. No alternate browser owner or transport was added.
+
+The bridge reports an optional, closed `buttonShape`: at most eight buttons,
+fixed label/role-location categories, bounded SVG counts and booleans. Unknown
+labels/IDs/attributes become OTHER; no arbitrary content or SVG paths leave the
+observer. It cannot add a completion selector, mark a timer COMPLETE or grant an
+action. Legacy metadata remains accepted. Only the response-frame limit grows
+from 2 KiB to 4 KiB for these bounded rows; closed validation remains mandatory.
+
+Tests PASS: actual bridge DOM114, Python readiness42, Rust readiness/protocol30,
+Rust response5, adapter47 (238 total); strict root and Wake Clippy PASS. Independent
+source review found an inherited-property categorization bug; own-property lookup
+and prototype-name tests resolve it. An adapter fixture failure reproduced on the
+unchanged parent; its querySelectorAll body model was corrected without changing
+production completion logic. Original failed/deferred receipts are retained.
+
+This is TESTED_SOURCE. Separate package build and one bounded existing-profile
+observation are next; no installed/live acceptance is claimed here. No USER send,
+native dispatch, project binding, protected installation or recurring-owner change.
+All 1,090 protected pins match. Original cached RPC field remains unrecovered;
+C1 still requires the original authorized native code/verification/result-Wake loop.

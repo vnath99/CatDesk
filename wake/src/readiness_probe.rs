@@ -428,7 +428,9 @@ fn historical_response_protocol_is_separate_from_current_turn_and_rejects_text()
 
 pub(crate) fn sent_response_observation(line: &str) -> Option<serde_json::Value> {
     let text = line.strip_prefix("PROBE:RESPONSE:")?;
-    if text.len() > 2048 {
+    // The optional closed eight-button shape can exceed the legacy 2 KiB.
+    // Only this response frame grows; its metadata validator stays mandatory.
+    if text.len() > 4096 {
         return None;
     }
     crate::runtime::canonical_response_observation(serde_json::from_str(text).ok()?)
@@ -776,6 +778,59 @@ fn sanitized_rows(text: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn response_protocol_accepts_capped_button_shape_without_accepting_arbitrary_large_rows() {
+        let row = serde_json::json!({"aria":"COPY_MESSAGE","title":"COPY_RESPONSE","tooltip":"READ_ALOUD",
+            "testId":"OTHER","dataState":"CLOSED","location":"AUXILIARY","toolbar":"ACTION",
+            "visible":true,"afterAssistant":true,"svgCount":4});
+        let mut controls = serde_json::json!({"buttonShape":{"schemaVersion":1,"countOverflow":true,
+            "buttons":vec![row;8]}});
+        for name in [
+            "semanticAssistantUnits",
+            "roleAssistantNodes",
+            "copyTestIdInTurn",
+            "copyLabelInTurn",
+            "copyResponseLabelInTurn",
+            "copyMessageLabelInTurn",
+            "copyTextInTurn",
+            "knownCopyInAssistant",
+            "knownCopyInBody",
+            "sharedCopyAfterAssistant",
+            "toolbarContainersInTurn",
+            "buttonsInTurn",
+            "copyTestIdInParent",
+            "copyLabelInParent",
+            "copyResponseLabelInParent",
+            "copyMessageLabelInParent",
+        ] {
+            controls[name] = serde_json::json!(0);
+        }
+        for name in [
+            "pairedTurn",
+            "assistantBodyPresent",
+            "completionActionFound",
+            "assistantInsideSemanticUnit",
+        ] {
+            controls[name] = serde_json::json!(false);
+        }
+        let value = serde_json::json!({"stage":"RESPONSE_PENDING","eventId":format!("web-work-{}","a".repeat(64)),
+            "targetGeneration":1,"targetDigest":"a".repeat(64),"messageDigest":"b".repeat(64),
+            "diagnosticReason":"ASSISTANT_COMPLETION_ACTION_UNPROVEN","completionControls":controls});
+        assert!(value.to_string().len() > 2048 && value.to_string().len() <= 4096);
+        assert_eq!(
+            super::sent_response_observation(&format!("PROBE:RESPONSE:{value}")),
+            Some(value.clone())
+        );
+        let mut private = value;
+        private["completionControls"]["buttonShape"]["buttons"][0]["title"] =
+            serde_json::json!("PRIVATE_LABEL");
+        assert!(super::sent_response_observation(&format!("PROBE:RESPONSE:{private}")).is_none());
+        assert!(
+            super::sent_response_observation(&format!("PROBE:RESPONSE:{}", " ".repeat(4097)))
+                .is_none()
+        );
+    }
+
     #[test]
     fn response_protocol_reuses_closed_validator_and_rejects_content_or_foreign_shapes() {
         let value = serde_json::json!({"stage":"RESPONSE_COMPLETE","eventId":format!("web-work-{}","a".repeat(64)),"targetGeneration":1,"targetDigest":"a".repeat(64),"messageDigest":"b".repeat(64),"diagnosticReason":"COMPLETE"});

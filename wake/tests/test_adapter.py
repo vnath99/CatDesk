@@ -1184,7 +1184,10 @@ class AdapterTests(unittest.TestCase):
                 getAttribute: name => name === 'data-message-author-role' ? 'assistant' : null,
                 matches: () => false,
                 closest: selector => selector === '[data-content-search-turn-key]' ? turn : null,
-                querySelectorAll: selector => selector === "button[data-testid='copy-turn-action-button']" &&
+                // The reader collects all body blocks, not just querySelector's
+                // first block. Model that real DOM API for the positive case.
+                querySelectorAll: selector => selector.includes('data-message-content') && withBody ? [body] :
+                    selector === "button[data-testid='copy-turn-action-button']" &&
                     withAssistantAction ? [{}] : [],
                 querySelector: selector => selector.includes('data-message-content') && withBody ? body :
                     selector === '[data-chatgpt-selection-message-id]' && withBody ?

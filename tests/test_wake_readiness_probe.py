@@ -141,6 +141,61 @@ class ReadinessProbeTests(unittest.TestCase):
                 value | {'event':value['event'] | {'auditReferences':[v.replace('NEW_TASK','ROLLOVER') for v in refs]}}]:
                 with self.assertRaises((ValueError,KeyError)):read(changed,sent_diagnostics=True)
 
+    def test_source_review_delivery_is_passive_diagnostics_only_and_exact_receipt_bound(self):
+        url='https://chatgpt.com/c/fixture'
+        identity='web-work-'+'a'*64
+        message='frozen public source review'
+        digest=hashlib.sha256(message.encode()).hexdigest()
+        target=dict(url=url,digest=hashlib.sha256(url.encode()).hexdigest(),generation=1)
+        value=dict(phase='SENT',messageDigest=digest,target=target,
+            event=dict(eventId=identity,projectId='alpha',eventType='source_review',targetGeneration=1,
+                message=message,auditReferences=['catdesk-review-v1:original-frozen-grant']),
+            receipt=dict(schemaVersion=1,eventId=identity,targetGeneration=1,targetDigest=target['digest'],
+                messageDigest=digest,sentUtc=10,evidence='EXACT_USER_MESSAGE_APPENDED'))
+        with tempfile.TemporaryDirectory() as root:
+            path=Path(root)/'deliveries'/(identity+'.json');path.parent.mkdir()
+            def read(item,**flags):
+                path.write_text(json.dumps(item));checksum=hashlib.sha256(path.read_bytes()).hexdigest()
+                result=self.probe.load_delivery_message(path,checksum,url,**flags)
+                self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(),checksum)
+                return result
+            allowed=dict(response_only=True,sent_diagnostics=True,source_review_diagnostics=True)
+            self.assertEqual(read(value,**allowed),value)
+            for flags in [dict(),dict(response_only=True),dict(response_only=True,sent_diagnostics=True),
+                dict(response_only=True,source_review_diagnostics=True),dict(source_review_diagnostics=True),
+                allowed | dict(receipt_only=True)]:
+                with self.subTest(flags=flags),self.assertRaises((ValueError,KeyError)):
+                    read(value,**flags)
+            for changed in [value | dict(phase='SUBMITTING'),value | dict(receipt=None),
+                value | dict(event=value['event'] | dict(auditReferences=[])),
+                value | dict(event=value['event'] | dict(auditReferences=['catdesk-review-v1:a','catdesk-review-v1:b'])),
+                value | dict(event=value['event'] | dict(auditReferences=['catdesk-review-v1:'])),
+                value | dict(event=value['event'] | dict(auditReferences=['catdesk-review-v1:bad/grant'])),
+                value | dict(event=value['event'] | dict(auditReferences=['catdesk-review-v1:'+'a'*129])),
+                value | dict(event=value['event'] | dict(eventId='wake-intent-'+'a'*64)),
+                value | dict(event=value['event'] | dict(targetGeneration=2)),
+                value | dict(receipt=value['receipt'] | dict(evidence='UNVERIFIED')),
+                value | dict(receipt=value['receipt'] | dict(messageDigest='b'*64))]:
+                with self.subTest(changed=changed),self.assertRaises((ValueError,KeyError)):
+                    read(changed,**allowed)
+
+    def test_source_review_diagnostic_flag_cannot_select_ui_actions_or_incomplete_scope(self):
+        with tempfile.TemporaryDirectory() as profile:
+            required=['--read-only','--profile',profile,'--delivery-file','delivery.json',
+                '--response-only','--task-diagnostics','--source-review-diagnostics']
+            cases=[required+[flag] for flag in ['--receipt-only','--historical-response',
+                '--inspect-app-menu','--inspect-response-trace','--inspect-historical-trace']]
+            for remove in ['--read-only','--response-only','--task-diagnostics']:
+                cases.append([item for item in required if item!=remove])
+            for flags in cases:
+                argv=['probe','--conversation-url','https://chatgpt.com/c/fixture',
+                    '--primitives','wake_bridge.py','--primitives-sha256','a'*64]+flags
+                with self.subTest(flags=flags),mock.patch.object(sys,'argv',argv), \
+                    mock.patch.object(self.probe,'load_observation_sink',return_value=mock.Mock()), \
+                    mock.patch.object(self.probe,'load_delivery_message') as loader:
+                    self.assertEqual(self.probe.main(),2)
+                    loader.assert_not_called()
+
     def test_task_diagnostic_read_requires_two_identical_completed_samples_without_text(self):
         delivery=dict(messageDigest='a'*64,event=dict(eventId='wake-intent-'+'b'*64,message='PRIVATE_USER'),target=dict(generation=1,digest='c'*64))
         hints=dict(schemaVersion=1,basis='ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION',toolUnavailable=True,

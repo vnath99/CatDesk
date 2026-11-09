@@ -7274,3 +7274,15 @@ development adapter already supports source-review snapshots; the protected
 installed dev.84 adapter lacks them. Keep the two roots and their qualification
 records distinct. No new authentication/profile/connection setup is required by
 this source diagnostic change.
+
+
+### 2026-11-09T12:06:53.820463+00:00 — exact SENT source-review control diagnostics (updated source)
+
+`operator web review inspect-response --project-id <registered-project> --event-id <sent-event>`
+now admits exact SENT source-review receipts through the same stopped-host, bounded
+GUI-owned observer. Readable text alone remains insufficient to complete its timer.
+Optional `completionControls.buttonShape` contains at most eight fixed-category
+button observations; unknown values are redacted. It never grants Retry/Regenerate,
+a new USER send, trace click, timer completion or producer authority. Other source-
+review modes remain refused. Use the exact qualified package; installed parity and
+live observation are NOT_RUN until separately recorded.

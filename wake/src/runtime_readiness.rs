@@ -312,8 +312,17 @@ fn require_delivery(
     project: &str,
     target: &Target,
     delivery: &crate::store::Delivery,
-    response_only: bool,
+    mode: Mode,
 ) -> Result<()> {
+    let response_only = matches!(
+        mode,
+        Mode::ResponseOwnerHeld
+            | Mode::SentDiagnostics
+            | Mode::HistoricalDiagnostics
+            | Mode::HistoricalTrace
+            | Mode::AppMenu
+            | Mode::Trace
+    );
     delivery.event.validate()?;
     let phase_valid = if response_only {
         store
@@ -349,6 +358,23 @@ fn require_delivery(
                     .is_some_and(exact_hash)
                 && delivery.event.audit_references.len() == 5
         });
+    // A source review can use only the passive current-response inspector.
+    // Receipt recovery, retained-owner completion and all transient UI modes
+    // keep their original ordinary/continuation-only admission.
+    let source_review = mode == Mode::SentDiagnostics
+        && delivery.event.event_type == "source_review"
+        && delivery
+            .event
+            .event_id
+            .strip_prefix("web-work-")
+            .is_some_and(exact_hash)
+        && delivery.event.audit_references.len() == 1
+        && delivery.event.audit_references[0]
+            .strip_prefix("catdesk-review-v1:")
+            .is_some_and(|grant| grant.len() <= 128 && crate::protocol::valid_id(grant));
+    let admitted_type = (delivery.event.event_type == "engineering_attention"
+        && (ordinary || continuation))
+        || source_review;
     if !phase_valid
         || !matches!(
             delivery.phase,
@@ -357,8 +383,7 @@ fn require_delivery(
         || delivery.target != *target
         || delivery.event.project_id != project
         || delivery.event.target_generation != target.generation
-        || delivery.event.event_type != "engineering_attention"
-        || !(ordinary || continuation)
+        || !admitted_type
         || delivery.message_digest != crate::protocol::digest(&delivery.event.message)
         || store.delivery(&delivery.event.event_id)?.as_ref() != Some(delivery)
     {
@@ -408,7 +433,7 @@ fn inspect_readiness(
     require_selection(store, project, target)?;
     keep_current()?;
     if let Some(delivery) = delivery {
-        require_delivery(store, project, target, delivery, response_only)?;
+        require_delivery(store, project, target, delivery, mode)?;
         if receipt_only {
             require_receipt_selection(store, delivery)?;
         }
@@ -482,6 +507,9 @@ fn inspect_readiness(
         if response_only {
             command.arg("--response-only");
         }
+        if mode == Mode::SentDiagnostics && delivery.event.event_type == "source_review" {
+            command.arg("--source-review-diagnostics");
+        }
         // Retained-owner reobservation admits the same receipt-bound task
         // continuations as explicit diagnostics. Both are content-free and
         // require the Python reader's matching semantic-response flag.
@@ -547,7 +575,7 @@ fn inspect_readiness(
     require_selection(store, project, target)?;
     keep_current()?;
     if let Some(delivery) = delivery {
-        require_delivery(store, project, target, delivery, response_only)?;
+        require_delivery(store, project, target, delivery, mode)?;
         let path = store
             .root()
             .join("deliveries")
@@ -758,8 +786,10 @@ mod tests {
             )
             .unwrap();
         let claimed = store.claim(&event, &lease).unwrap();
-        assert!(require_delivery(&store, "alpha", &target, &claimed, true).is_err());
-        require_delivery(&store, "alpha", &target, &claimed, false).unwrap();
+        assert!(
+            require_delivery(&store, "alpha", &target, &claimed, Mode::SentDiagnostics).is_err()
+        );
+        require_delivery(&store, "alpha", &target, &claimed, Mode::Advisory).unwrap();
         let submitting = store
             .transition(
                 &event.event_id,
@@ -769,8 +799,8 @@ mod tests {
                 None,
             )
             .unwrap();
-        require_delivery(&store, "alpha", &target, &submitting, false).unwrap();
-        assert!(require_delivery(&store, "beta", &target, &submitting, false).is_err());
+        require_delivery(&store, "alpha", &target, &submitting, Mode::Advisory).unwrap();
+        assert!(require_delivery(&store, "beta", &target, &submitting, Mode::Advisory).is_err());
         let receipt = Receipt {
             schema_version: 1,
             event_id: event.event_id.clone(),
@@ -797,18 +827,20 @@ mod tests {
             .join("deliveries")
             .join(format!("{}.json", event.event_id));
         let before = std::fs::read(&path).unwrap();
-        require_delivery(&store, "alpha", &target, &sent, true).unwrap();
+        require_delivery(&store, "alpha", &target, &sent, Mode::SentDiagnostics).unwrap();
         assert_eq!(
             inspect_sent_task_app_menu(&store, "alpha", &target, &event.event_id, &|| Ok(()))
                 .unwrap_err(),
             "READINESS_COMPLETED_RESPONSE_REQUIRED"
         );
-        assert!(require_delivery(&store, "alpha", &target, &sent, false).is_err());
-        assert!(require_delivery(&store, "beta", &target, &sent, true).is_err());
+        assert!(require_delivery(&store, "alpha", &target, &sent, Mode::Advisory).is_err());
+        assert!(require_delivery(&store, "beta", &target, &sent, Mode::SentDiagnostics).is_err());
         let mut unknown = sent.clone();
         unknown.phase = Phase::Submitting;
         unknown.receipt = None;
-        assert!(require_delivery(&store, "alpha", &target, &unknown, true).is_err());
+        assert!(
+            require_delivery(&store, "alpha", &target, &unknown, Mode::SentDiagnostics).is_err()
+        );
         assert_eq!(std::fs::read(&path).unwrap(), before);
         assert_eq!(
             inspect_sent_task_trace(&store, "alpha", &target, &event.event_id, &|| Ok(()))
@@ -895,12 +927,136 @@ mod tests {
             )
             .unwrap();
         drop(host);
-        require_delivery(&store, "alpha", &target, &sent, true).unwrap();
-        assert!(require_delivery(&store, "alpha", &target, &sent, false).is_err());
-        assert!(require_delivery(&store, "beta", &target, &sent, true).is_err());
+        require_delivery(&store, "alpha", &target, &sent, Mode::SentDiagnostics).unwrap();
+        assert!(require_delivery(&store, "alpha", &target, &sent, Mode::Advisory).is_err());
+        assert!(require_delivery(&store, "beta", &target, &sent, Mode::SentDiagnostics).is_err());
         let mut foreign = sent.clone();
         foreign.message_digest = "b".repeat(64);
-        assert!(require_delivery(&store, "alpha", &target, &foreign, true).is_err());
+        assert!(
+            require_delivery(&store, "alpha", &target, &foreign, Mode::SentDiagnostics).is_err()
+        );
+    }
+
+    #[test]
+    fn source_review_is_readonly_diagnostics_only_with_exact_sent_receipt_and_timer() {
+        let (store, lease) = super::super::scheduler::tests::fixture("review-response-scope");
+        let target = store.config().unwrap().targets["alpha"].clone();
+        let event = store
+            .produce_expected_with_audit(
+                &format!("web-work-{}", "a".repeat(64)),
+                "alpha",
+                "source_review",
+                "frozen public review",
+                &target,
+                &["catdesk-review-v1:original-grant".into()],
+            )
+            .unwrap();
+        let claimed = store.claim(&event, &lease).unwrap();
+        assert!(
+            require_delivery(&store, "alpha", &target, &claimed, Mode::SentDiagnostics).is_err()
+        );
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: event.event_id.clone(),
+            target_generation: target.generation,
+            target_digest: target.digest.clone(),
+            message_digest: crate::protocol::digest(&event.message),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        store
+            .record_exact_receipt_timer(&event.event_id, &receipt)
+            .unwrap();
+        let sent = store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Sent,
+                Some(receipt),
+                None,
+            )
+            .unwrap();
+        let path = store
+            .root()
+            .join(format!("deliveries/{}.json", event.event_id));
+        let timer = store.root().join(format!("turns/{}.json", event.event_id));
+        let before = std::fs::read(&path).unwrap();
+        let timer_before = std::fs::read(&timer).unwrap();
+        require_delivery(&store, "alpha", &target, &sent, Mode::SentDiagnostics).unwrap();
+        for mode in [
+            Mode::Advisory,
+            Mode::Receipt,
+            Mode::ResponseOwnerHeld,
+            Mode::AppMenu,
+            Mode::Trace,
+            Mode::HistoricalDiagnostics,
+            Mode::HistoricalTrace,
+        ] {
+            assert!(require_delivery(&store, "alpha", &target, &sent, mode).is_err());
+        }
+        assert!(require_delivery(&store, "beta", &target, &sent, Mode::SentDiagnostics).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(std::fs::read(&timer).unwrap(), timer_before);
+        for case in [
+            "missing-ref",
+            "extra-ref",
+            "empty-grant",
+            "invalid-grant",
+            "long-grant",
+            "event-id",
+            "unknown",
+            "digest",
+            "generation",
+            "receipt",
+        ] {
+            let mut changed = sent.clone();
+            match case {
+                "missing-ref" => changed.event.audit_references.clear(),
+                "extra-ref" => changed
+                    .event
+                    .audit_references
+                    .push("catdesk-review-v1:other".into()),
+                "empty-grant" => changed.event.audit_references[0] = "catdesk-review-v1:".into(),
+                "invalid-grant" => {
+                    changed.event.audit_references[0] = "catdesk-review-v1:bad/grant".into()
+                }
+                "long-grant" => {
+                    changed.event.audit_references[0] =
+                        format!("catdesk-review-v1:{}", "a".repeat(129))
+                }
+                "event-id" => changed.event.event_id = format!("wake-intent-{}", "a".repeat(64)),
+                "unknown" => {
+                    changed.phase = Phase::Submitting;
+                    changed.receipt = None;
+                }
+                "digest" => changed.message_digest = "b".repeat(64),
+                "generation" => changed.event.target_generation += 1,
+                _ => changed.receipt.as_mut().unwrap().evidence = "UNVERIFIED".into(),
+            }
+            crate::store::atomic(&path, &changed).unwrap();
+            let changed_bytes = std::fs::read(&path).unwrap();
+            assert!(
+                require_delivery(&store, "alpha", &target, &changed, Mode::SentDiagnostics)
+                    .is_err(),
+                "{case}"
+            );
+            assert_eq!(std::fs::read(&path).unwrap(), changed_bytes);
+            assert_eq!(std::fs::read(&timer).unwrap(), timer_before);
+        }
+        crate::store::atomic(&path, &sent).unwrap();
+        std::fs::remove_file(&timer).unwrap();
+        assert!(require_delivery(&store, "alpha", &target, &sent, Mode::SentDiagnostics).is_err());
+        assert!(!timer.exists());
+        assert_eq!(std::fs::read(path).unwrap(), before);
     }
 
     #[test]
@@ -1045,7 +1201,7 @@ mod tests {
                 .join("deliveries")
                 .join(format!("{}.json", event.event_id));
             let before = std::fs::read(&path).unwrap();
-            require_delivery(&store, "alpha", &target, &delivery, false).unwrap();
+            require_delivery(&store, "alpha", &target, &delivery, Mode::Advisory).unwrap();
             for field in ["project", "digest", "message", "phase", "event", "target"] {
                 let mut changed = delivery.clone();
                 match field {
@@ -1056,7 +1212,9 @@ mod tests {
                     "event" => changed.event.event_id = format!("web-work-{}", "b".repeat(64)),
                     _ => changed.target = Target::new(2, target.url.clone()).unwrap(),
                 }
-                assert!(require_delivery(&store, "alpha", &target, &changed, false).is_err());
+                assert!(
+                    require_delivery(&store, "alpha", &target, &changed, Mode::Advisory).is_err()
+                );
             }
             #[cfg(windows)]
             assert_eq!(

@@ -224,7 +224,11 @@ for (const control of options.submitControls || []) children.push(el('button', {
 if (options.extraAssistant) children.push(el('div', {'data-content-search-unit-key':'assistant-2'}, '', [
   el('h4', {'data-conversation-role':'assistant'}, 'ChatGPT said:'),
 ]));
-if (options.toolbar !== false) children.push(el('div', {class:'turn-action-controls'}, '', [button(options.assistantCopyLabel || 'Copy')]));
+if (options.toolbar !== false) {
+  const action = button(options.assistantCopyLabel || 'Copy');
+  if (options.diagnosticActionAttributes) Object.assign(action.attrs, options.diagnosticActionAttributes);
+  children.push(el('div', {class:'turn-action-controls'}, '', [action]));
+}
 if (options.duplicateToolbar) children.push(el('div', {class:'turn-action-controls'}, '', [button(options.assistantCopyLabel || 'Copy')]));
 const paired = el('div', {'data-content-search-turn-key':'fallback-turn-0'}, '', children);
 if (options.bareUser) {
@@ -1574,7 +1578,7 @@ class CurrentDomTests(unittest.TestCase):
                 self.assertEqual(controls["completionActionFound"], complete)
                 self.assertEqual(result[3], complete)
                 self.assertNotIn("PRIVATE_", json.dumps(diagnostic))
-                self.assertLess(len(json.dumps(diagnostic)), 1500)
+                self.assertLess(len(json.dumps(diagnostic)), 4096)
         self.sink.observe_cooperative_response(CurrentDom(observationEditor=True),
             "exact wake message", bridge.digest("exact wake message"))
         self.assertIsNotNone(self.sink.response_observation_controls)
@@ -1598,6 +1602,63 @@ class CurrentDomTests(unittest.TestCase):
                 ("extra", "PRIVATE_DRAFT")]:
             with self.subTest(field=field, bad=bad):
                 self.assertFalse(bridge.valid_response_control_diagnostics(valid | {field:bad}))
+
+    def test_button_shape_classifies_structure_without_exporting_attributes_or_qualifying_copy(self):
+        diagnostic = {}
+        self.sink.response_snapshot(CurrentDom(assistantCopyLabel='PRIVATE_LABEL',
+            diagnosticActionAttributes={'title':'Copy response','data-state':'closed',
+                'data-tooltip-content':'PRIVATE_TOOLTIP','data-testid':'PRIVATE_ID'}),
+            'exact wake message',require_usable_body=True,diagnostic=diagnostic)
+        shape = diagnostic['controls']['buttonShape']
+        self.assertTrue(bridge.valid_response_button_shape(shape))
+        shared = [row for row in shape['buttons'] if row['location']=='SHARED']
+        self.assertEqual(len(shared),1)
+        self.assertEqual(shared[0]['aria'],'OTHER')
+        self.assertEqual(shared[0]['title'],'COPY_RESPONSE')
+        self.assertEqual(shared[0]['tooltip'],'OTHER')
+        self.assertEqual(shared[0]['testId'],'OTHER')
+        self.assertEqual(shared[0]['dataState'],'CLOSED')
+        self.assertEqual(shared[0]['toolbar'],'ACTION')
+        self.assertFalse(diagnostic['controls']['completionActionFound'])
+        self.assertNotIn('PRIVATE_',json.dumps(diagnostic))
+        self.assertTrue(any(row['location']=='USER' for row in shape['buttons']))
+        self.assertTrue(any(row['location']=='BODY' for row in shape['buttons']))
+        self.sink.response_snapshot(CurrentDom(diagnosticExtraButtons=100,
+            diagnosticButtonLabel='PRIVATE_EXTRA'), 'exact wake message',
+            require_usable_body=True,diagnostic=diagnostic)
+        shape = diagnostic['controls']['buttonShape']
+        self.assertTrue(shape['countOverflow'])
+        self.assertEqual(len(shape['buttons']),8)
+        self.assertNotIn('PRIVATE_',json.dumps(shape))
+
+    def test_button_shape_schema_refuses_arbitrary_text_and_accepts_legacy_controls(self):
+        diagnostic = {}
+        self.sink.response_snapshot(CurrentDom(), 'exact wake message',
+            require_usable_body=True,diagnostic=diagnostic)
+        controls = diagnostic['controls']
+        legacy = {key:value for key,value in controls.items() if key!='buttonShape'}
+        self.assertTrue(bridge.valid_response_control_diagnostics(legacy))
+        shape = controls['buttonShape']
+        for extra in [{'rawText':'PRIVATE_DRAFT'},{'schemaVersion':True},
+                      {'buttons':shape['buttons']*8},{'countOverflow':True}]:
+            self.assertFalse(bridge.valid_response_button_shape(shape | extra))
+        for field in shape['buttons'][0]:
+            for bad in ['PRIVATE_TOKEN',None,{},[]]:
+                rows=[shape['buttons'][0] | {field:bad}]
+                self.assertFalse(bridge.valid_response_button_shape(shape | {'buttons':rows}))
+
+    def test_button_shape_redacts_object_prototype_names_as_unknown_labels(self):
+        for label in ['constructor','__proto__','toString']:
+            diagnostic = {}
+            self.sink.response_snapshot(CurrentDom(assistantCopyLabel=label,
+                diagnosticActionAttributes={'title':label,'data-tooltip-content':label}),
+                'exact wake message',require_usable_body=True,diagnostic=diagnostic)
+            shape = diagnostic['controls']['buttonShape']
+            self.assertTrue(bridge.valid_response_button_shape(shape))
+            row = next(row for row in shape['buttons'] if row['location']=='SHARED')
+            for key in ['aria','title','tooltip']:
+                self.assertEqual(row[key],'OTHER')
+            self.assertFalse(diagnostic['controls']['completionActionFound'])
 
     def test_auxiliary_search_unit_is_neither_assistant_nor_completion_authority(self):
         for where in ['before', 'after']:

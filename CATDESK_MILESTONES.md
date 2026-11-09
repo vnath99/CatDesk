@@ -9626,3 +9626,11 @@ closure stayed refused and one guarded re-observation preserved its pending time
 Independent project observation passed. Six diagnostic regression tests and strict
 root Clippy pass; new completion-state fields are source-only. Installed upgrade,
 original native recovery and full C1 remain incomplete. See the dated C0/C1 record.
+
+
+### 2026-11-09T12:06:53.820463+00:00 — source-review passive inspector TESTED_SOURCE
+
+Existing owner now supports exact SENT source-review diagnostics without admitting
+send, retry, trace, timer mutation or release authority. Fixed redacted button shape
+is bounded and advisory. 238 tests and strict root/Wake Clippy pass. Package/live
+qualification remains separate; C1 is incomplete. See the dated C0/C1 record.

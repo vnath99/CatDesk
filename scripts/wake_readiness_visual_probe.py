@@ -51,7 +51,7 @@ def load_observation_sink(path, expected_sha256, profile, url):
     return sink
 
 
-def load_delivery_message(path, expected_sha256, url, *, receipt_only=False, response_only=False, sent_diagnostics=False):
+def load_delivery_message(path, expected_sha256, url, *, receipt_only=False, response_only=False, sent_diagnostics=False, source_review_diagnostics=False):
     """Read only the exact native-selected durable delivery, never caller text."""
     if (path is None or path.parent.name != "deliveries" or not path.is_file()
             or path.is_symlink() or getattr(path, "is_junction", lambda: False)()
@@ -76,9 +76,17 @@ def load_delivery_message(path, expected_sha256, url, *, receipt_only=False, res
                         and re.fullmatch(r"initial-context-[0-9a-f]{64}", fields.get("source-turn", ""))
                         and fields.get("priority", "").isdigit() and 0 <= int(fields["priority"]) <= 255
                         and fields.get("expires-utc", "").isdigit() and int(fields["expires-utc"]) > 0)
+    refs = event["auditReferences"]
+    source_review = (source_review_diagnostics is True and sent_diagnostics is True
+        and response_only is True and receipt_only is False
+        and event["eventType"] == "source_review"
+        and re.fullmatch(r"web-work-[0-9a-f]{64}", event["eventId"])
+        and isinstance(refs, list) and len(refs) == 1 and isinstance(refs[0], str)
+        and re.fullmatch(r"catdesk-review-v1:[A-Za-z0-9_-]{1,128}", refs[0]))
+    admitted_type = (event["eventType"] == "engineering_attention" and (ordinary or continuation)) or source_review
     if (delivery["phase"] not in ({"SENT"} if response_only else {"CLAIMED", "SUBMITTING", "ATTENTION"})
             or (not response_only and delivery.get("receipt") is not None)
-            or event["eventType"] != "engineering_attention" or not (ordinary or continuation)
+            or not admitted_type or (source_review_diagnostics and not source_review)
             or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", event["projectId"])
             or path.name != event["eventId"] + ".json"
             or type(target["generation"]) is not int or target["generation"] <= 0
@@ -464,6 +472,7 @@ def main():
     parser.add_argument("--response-only", action="store_true")
     parser.add_argument("--historical-response", action="store_true")
     parser.add_argument("--task-diagnostics", action="store_true")
+    parser.add_argument("--source-review-diagnostics", action="store_true")
     parser.add_argument("--inspect-app-menu", action="store_true")
     parser.add_argument("--inspect-response-trace", action="store_true")
     parser.add_argument("--inspect-historical-trace", action="store_true")
@@ -488,6 +497,10 @@ def main():
     message = None
     receipt_delivery = None
     response_delivery = None
+    if args.source_review_diagnostics and (not (args.task_diagnostics and args.response_only and args.read_only
+            and args.profile is not None and args.delivery_file is not None) or args.receipt_only
+            or args.historical_response or args.inspect_app_menu or args.inspect_response_trace or args.inspect_historical_trace):
+        return 2
     if args.historical_response and (args.inspect_app_menu or args.inspect_response_trace or not (args.task_diagnostics and args.response_only and args.read_only and args.profile is not None and args.delivery_file is not None)):
         return 2
     if args.inspect_historical_trace and (not args.historical_response or args.inspect_app_menu or args.inspect_response_trace):
@@ -501,7 +514,7 @@ def main():
             if sink is None or not args.read_only:
                 raise ValueError("read-only primitives required")
             if args.response_only:
-                response_delivery = load_delivery_message(args.delivery_file, args.delivery_sha256, url, response_only=True, sent_diagnostics=args.task_diagnostics)
+                response_delivery = load_delivery_message(args.delivery_file, args.delivery_sha256, url, response_only=True, sent_diagnostics=args.task_diagnostics, source_review_diagnostics=args.source_review_diagnostics)
             elif args.receipt_only:
                 receipt_delivery = load_delivery_message(args.delivery_file, args.delivery_sha256, url, receipt_only=True)
             else:

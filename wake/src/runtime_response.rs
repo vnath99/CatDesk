@@ -41,18 +41,76 @@ fn valid_completion_controls(value: &Value) -> bool {
         "completionActionFound",
         "assistantInsideSemanticUnit",
     ];
-    value
-        .as_object()
-        .is_some_and(|map| map.len() == COUNTS.len() + FLAGS.len())
-        && COUNTS.iter().all(|key| {
-            value
-                .get(key)
-                .and_then(Value::as_u64)
-                .is_some_and(|n| n <= 64)
+    let button_shape = value.get("buttonShape");
+    value.as_object().is_some_and(|map| {
+        map.len() == COUNTS.len() + FLAGS.len() + usize::from(button_shape.is_some())
+    }) && COUNTS.iter().all(|key| {
+        value
+            .get(key)
+            .and_then(Value::as_u64)
+            .is_some_and(|n| n <= 64)
+    }) && FLAGS
+        .iter()
+        .all(|key| value.get(key).and_then(Value::as_bool).is_some())
+        && button_shape.is_none_or(valid_button_shape)
+}
+
+/// Fixed vocabulary and capped structural metadata only. These observations
+/// must never qualify an assistant completion action or grant an interaction.
+fn valid_button_shape(value: &Value) -> bool {
+    const LABELS: &[&str] = &[
+        "ABSENT",
+        "OTHER",
+        "COPY",
+        "COPY_MESSAGE",
+        "COPY_RESPONSE",
+        "GOOD_RESPONSE",
+        "BAD_RESPONSE",
+        "READ_ALOUD",
+        "MORE",
+        "RETRY",
+        "SHARE",
+        "REGENERATE",
+    ];
+    let Some(map) = value.as_object() else {
+        return false;
+    };
+    let Some(buttons) = value.get("buttons").and_then(Value::as_array) else {
+        return false;
+    };
+    let Some(overflow) = value.get("countOverflow").and_then(Value::as_bool) else {
+        return false;
+    };
+    let member = |row: &Value, key: &str, allowed: &[&str]| {
+        row.get(key)
+            .and_then(Value::as_str)
+            .is_some_and(|text| allowed.contains(&text))
+    };
+    map.len() == 3
+        && value.get("schemaVersion").and_then(Value::as_u64) == Some(1)
+        && buttons.len() <= 8
+        && (!overflow || buttons.len() == 8)
+        && buttons.iter().all(|row| {
+            row.as_object().is_some_and(|map| map.len() == 10)
+                && ["aria", "title", "tooltip"]
+                    .iter()
+                    .all(|key| member(row, key, LABELS))
+                && member(row, "testId", &["ABSENT", "OTHER", "COPY"])
+                && member(row, "dataState", &["ABSENT", "OTHER", "OPEN", "CLOSED"])
+                && member(
+                    row,
+                    "location",
+                    &["USER", "BODY", "ASSISTANT", "SHARED", "AUXILIARY", "OTHER"],
+                )
+                && member(row, "toolbar", &["ACTION", "ROLE", "NONE"])
+                && ["visible", "afterAssistant"]
+                    .iter()
+                    .all(|key| row.get(key).and_then(Value::as_bool).is_some())
+                && row
+                    .get("svgCount")
+                    .and_then(Value::as_u64)
+                    .is_some_and(|n| n <= 4)
         })
-        && FLAGS
-            .iter()
-            .all(|key| value.get(key).and_then(Value::as_bool).is_some())
 }
 
 fn valid_observation_metadata(value: &Value) -> bool {
@@ -715,6 +773,64 @@ mod tests {
         value["diagnosticReason"] = json!("ASSISTANT_COMPLETION_ACTION_UNPROVEN");
         value["completionControls"] = controls.clone();
         assert!(!apply_observation(&store, &delivery, &value).unwrap());
+        let button = json!({"aria":"OTHER","title":"ABSENT","tooltip":"COPY",
+            "testId":"ABSENT","dataState":"CLOSED","location":"SHARED",
+            "toolbar":"ACTION","visible":true,"afterAssistant":true,"svgCount":1});
+        let shape = json!({"schemaVersion":1,"countOverflow":false,"buttons":[button.clone()]});
+        let mut shaped = value.clone();
+        shaped["completionControls"]["buttonShape"] = shape.clone();
+        assert!(!apply_observation(&store, &delivery, &shaped).unwrap());
+        // Fixed copy-looking structural metadata cannot turn an unproved
+        // assistant completion action into a completed response.
+        shaped["stage"] = json!("RESPONSE_COMPLETE");
+        shaped["diagnosticReason"] = json!("COMPLETE");
+        assert_eq!(
+            apply_observation(&store, &delivery, &shaped).unwrap_err(),
+            "RESPONSE_PROBE_SCOPE_INVALID"
+        );
+        for invalid_shape in [
+            Value::Null,
+            json!({}),
+            json!({"schemaVersion":true,"countOverflow":false,"buttons":[]}),
+            json!({"schemaVersion":2,"countOverflow":false,"buttons":[]}),
+            json!({"schemaVersion":1,"countOverflow":false,"buttons":[],"private":"draft"}),
+            json!({"schemaVersion":1,"countOverflow":true,"buttons":[button.clone()]}),
+            json!({"schemaVersion":1,"countOverflow":false,"buttons":vec![button.clone();9]}),
+        ] {
+            let mut invalid = value.clone();
+            invalid["completionControls"]["buttonShape"] = invalid_shape;
+            assert_eq!(
+                apply_observation(&store, &delivery, &invalid).unwrap_err(),
+                "RESPONSE_PROBE_SCOPE_INVALID"
+            );
+        }
+        for (key, bad) in [
+            ("aria", json!("PRIVATE_LABEL")),
+            ("title", json!("PRIVATE_TITLE")),
+            ("tooltip", json!("PRIVATE_TOOLTIP")),
+            ("testId", json!("PRIVATE_ID")),
+            ("dataState", json!("expanded")),
+            ("location", json!("PRIVATE_PATH")),
+            ("toolbar", json!("PRIVATE_CLASS")),
+            ("visible", json!(1)),
+            ("afterAssistant", Value::Null),
+            ("svgCount", json!(5)),
+            ("svgCount", json!(true)),
+            ("svgCount", json!(-1)),
+            ("extra", json!("PRIVATE_DRAFT")),
+        ] {
+            let mut invalid = value.clone();
+            invalid["completionControls"]["buttonShape"] = shape.clone();
+            invalid["completionControls"]["buttonShape"]["buttons"][0][key] = bad;
+            assert_eq!(
+                apply_observation(&store, &delivery, &invalid).unwrap_err(),
+                "RESPONSE_PROBE_SCOPE_INVALID"
+            );
+        }
+        let mut capped = value.clone();
+        capped["completionControls"]["buttonShape"] = json!({"schemaVersion":1,
+            "countOverflow":true,"buttons":vec![button;8]});
+        assert!(!apply_observation(&store, &delivery, &capped).unwrap());
         for (field, bad) in [
             ("copyLabelInTurn", json!(65)),
             ("copyLabelInTurn", json!(-1)),

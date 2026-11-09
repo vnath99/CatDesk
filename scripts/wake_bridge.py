@@ -178,13 +178,36 @@ RESPONSE_CONTROL_COUNTS = (
 RESPONSE_CONTROL_FLAGS = (
     "pairedTurn", "assistantBodyPresent", "completionActionFound", "assistantInsideSemanticUnit",
 )
+RESPONSE_BUTTON_LABELS = frozenset({"ABSENT", "OTHER", "COPY", "COPY_MESSAGE", "COPY_RESPONSE",
+    "GOOD_RESPONSE", "BAD_RESPONSE", "READ_ALOUD", "MORE", "RETRY", "SHARE", "REGENERATE"})
+
+
+def valid_response_button_shape(value: Any) -> bool:
+    """Fixed structural categories only, including unknown-label redaction."""
+    fields = {"aria", "title", "tooltip", "testId", "dataState", "location", "toolbar",
+              "visible", "afterAssistant", "svgCount"}
+    return (isinstance(value, dict) and set(value) == {"schemaVersion", "countOverflow", "buttons"}
+        and type(value["schemaVersion"]) is int and value["schemaVersion"] == 1
+        and type(value["countOverflow"]) is bool and isinstance(value["buttons"], list)
+        and len(value["buttons"]) <= 8 and (not value["countOverflow"] or len(value["buttons"]) == 8)
+        and all(isinstance(row, dict) and set(row) == fields
+            and all(isinstance(row[key], str) and row[key] in RESPONSE_BUTTON_LABELS for key in ("aria", "title", "tooltip"))
+            and row["testId"] in ("ABSENT", "OTHER", "COPY")
+            and row["dataState"] in ("ABSENT", "OTHER", "OPEN", "CLOSED")
+            and row["location"] in ("USER", "BODY", "ASSISTANT", "SHARED", "AUXILIARY", "OTHER")
+            and row["toolbar"] in ("ACTION", "ROLE", "NONE")
+            and type(row["visible"]) is bool and type(row["afterAssistant"]) is bool
+            and type(row["svgCount"]) is int and 0 <= row["svgCount"] <= 4
+            for row in value["buttons"]))
 
 
 def valid_response_control_diagnostics(value: Any) -> bool:
     """Closed, capped DOM-shape metadata; never text or action authority."""
-    return (isinstance(value, dict) and set(value) == set(RESPONSE_CONTROL_COUNTS + RESPONSE_CONTROL_FLAGS)
+    base = set(RESPONSE_CONTROL_COUNTS + RESPONSE_CONTROL_FLAGS)
+    return (isinstance(value, dict) and set(value) in (base, base | {"buttonShape"})
             and all(type(value[key]) is int and 0 <= value[key] <= 64 for key in RESPONSE_CONTROL_COUNTS)
-            and all(type(value[key]) is bool for key in RESPONSE_CONTROL_FLAGS))
+            and all(type(value[key]) is bool for key in RESPONSE_CONTROL_FLAGS)
+            and ("buttonShape" not in value or valid_response_button_shape(value["buttonShape"])))
 
 
 TOOL_MARKER_COUNTS = ("callMarkers", "resultMarkers", "errorMarkers", "busyMarkers")
@@ -2270,6 +2293,39 @@ class CdpSink:
                 const knownCopySelector = "button[data-testid='copy-turn-action-button'], .turn-action-controls button[aria-label='Copy'], .turn-action-controls button[aria-label='Copy message']";
                 const turn = pairedTurn ? latestUser : latestAssistantTurn;
                 const parent = turn && turn.parentElement;
+                // Diagnostic categories cannot introduce a completion selector.
+                // Never export raw labels, attributes, DOM IDs, SVG paths or text.
+                const labelCategory = raw => {{
+                    const label = normalize(raw).toLowerCase();
+                    const labels = {{'copy':'COPY','copy message':'COPY_MESSAGE','copy response':'COPY_RESPONSE',
+                        'good response':'GOOD_RESPONSE','bad response':'BAD_RESPONSE','read aloud':'READ_ALOUD',
+                        'more':'MORE','retry':'RETRY','share':'SHARE','regenerate':'REGENERATE'}};
+                    return Object.hasOwn(labels,label) ? labels[label] : (label ? 'OTHER' : 'ABSENT');
+                }};
+                const turnButtons = turn ? Array.from(turn.querySelectorAll('button')) : [];
+                const buttonShape = {{schemaVersion:1, countOverflow:turnButtons.length > 8,
+                    buttons:turnButtons.slice(0,8).map(button => {{
+                        const followsAssistant = Boolean(latestAssistant &&
+                            (latestAssistant.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING));
+                        const testId = button.getAttribute('data-testid');
+                        const dataState = normalize(button.getAttribute('data-state')).toLowerCase();
+                        return {{aria:labelCategory(button.getAttribute('aria-label')),
+                            title:labelCategory(button.getAttribute('title')),
+                            tooltip:labelCategory(button.getAttribute('data-tooltip-content') ||
+                                button.querySelector('svg title')?.textContent),
+                            testId:!testId ? 'ABSENT' : testId === 'copy-turn-action-button' ? 'COPY' : 'OTHER',
+                            dataState:!dataState ? 'ABSENT' : dataState === 'open' ? 'OPEN' :
+                                dataState === 'closed' ? 'CLOSED' : 'OTHER',
+                            location:button.closest(userNodeSelector) ? 'USER' :
+                                bodyNodes.some(body => body.contains(button)) ? 'BODY' :
+                                latestAssistant?.contains(button) ? 'ASSISTANT' :
+                                button.closest('[data-content-search-unit-key]') ? 'AUXILIARY' :
+                                followsAssistant ? 'SHARED' : 'OTHER',
+                            toolbar:button.closest('.turn-action-controls') ? 'ACTION' :
+                                button.closest('[role="toolbar"]') ? 'ROLE' : 'NONE',
+                            visible:visible(button),afterAssistant:followsAssistant,
+                            svgCount:Math.min(button.querySelectorAll('svg').length,4)}};
+                    }})}};
                 const shared = turn && latestAssistant ? Array.from(turn.querySelectorAll(
                     ".turn-action-controls button[aria-label='Copy'], " +
                     ".turn-action-controls button[aria-label='Copy message']"
@@ -2299,6 +2355,7 @@ class CdpSink:
                     completionActionFound: Boolean(assistantCompletionAction),
                     assistantInsideSemanticUnit: Boolean(latestAssistant && pairedAssistantUnits.some(unit =>
                         unit === latestAssistant || unit.contains(latestAssistant))),
+                    buttonShape,
                 }});
             }}
             if (includeToolDiagnostic) {{
