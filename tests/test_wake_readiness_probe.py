@@ -37,6 +37,11 @@ class ReadinessProbeTests(unittest.TestCase):
         self.assertEqual(lines[0],'PROBE:TRACE_STATE:UNPROVEN')
         self.assertEqual(json.loads(lines[1].split('PROBE:TRACE_FAILURE:')[1]),sink.trace_failure())
         self.assertNotIn('PRIVATE_',output.getvalue())
+        sink.inspect_historical_response_trace=mock.Mock(return_value=value)
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):self.probe.report_response_trace(sink,cdp,delivery,historical=True)
+        sink.inspect_historical_response_trace.assert_called_once_with(cdp,'PRIVATE_USER','a'*64)
+        self.assertNotIn('PRIVATE_',output.getvalue())
 
     def test_menu_report_binds_only_existing_delivery_and_never_exports_private_errors(self):
         delivery=dict(messageDigest='a'*64,event=dict(message='PRIVATE_USER'))

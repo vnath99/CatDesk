@@ -10,6 +10,7 @@ enum Mode {
     ResponseOwnerHeld,
     SentDiagnostics,
     HistoricalDiagnostics,
+    HistoricalTrace,
     AppMenu,
     Trace,
 }
@@ -37,6 +38,27 @@ pub fn inspect_historical_task_response(
         keep_current,
     )
     .map_err(|_| "RESPONSE_HISTORY_BROWSER_OWNER_OR_ADMISSION_REFUSED".into())
+}
+
+pub fn inspect_historical_task_trace(
+    store: &Store,
+    project: &str,
+    target: &Target,
+    event: &str,
+    keep_current: &dyn Fn() -> Result<()>,
+) -> Result<serde_json::Value> {
+    let (delivery, timer) = store.sent_response_scope(project, target, event)?;
+    if timer.response_state != ResponseState::Complete {
+        return Err("READINESS_COMPLETED_RESPONSE_REQUIRED".into());
+    }
+    inspect_readiness(
+        store,
+        project,
+        target,
+        Some(&delivery),
+        Mode::HistoricalTrace,
+        keep_current,
+    )
 }
 
 pub fn inspect_sent_task_trace(
@@ -348,6 +370,7 @@ fn inspect_readiness(
             | Mode::AppMenu
             | Mode::Trace
             | Mode::HistoricalDiagnostics
+            | Mode::HistoricalTrace
     );
     if !crate::protocol::valid_id(project) {
         return Err("READINESS_PROJECT_INVALID".into());
@@ -456,6 +479,7 @@ fn inspect_readiness(
                 | Mode::AppMenu
                 | Mode::Trace
                 | Mode::HistoricalDiagnostics
+                | Mode::HistoricalTrace
         ) {
             command.arg("--task-diagnostics");
         }
@@ -465,15 +489,18 @@ fn inspect_readiness(
         if mode == Mode::Trace {
             command.arg("--inspect-response-trace");
         }
-        if mode == Mode::HistoricalDiagnostics {
+        if matches!(mode, Mode::HistoricalDiagnostics | Mode::HistoricalTrace) {
             command.arg("--historical-response");
+        }
+        if mode == Mode::HistoricalTrace {
+            command.arg("--inspect-historical-trace");
         }
         Some(hash)
     } else {
         None
     };
     let mut rows = Vec::new();
-    if mode == Mode::Trace {
+    if matches!(mode, Mode::Trace | Mode::HistoricalTrace) {
         keep_current()?;
         fence_trace_attempt(
             store,
@@ -587,7 +614,7 @@ fn inspect_readiness(
         let values: Vec<_> = rows
             .iter()
             .filter_map(|row| {
-                if mode == Mode::HistoricalDiagnostics {
+                if matches!(mode, Mode::HistoricalDiagnostics | Mode::HistoricalTrace) {
                     crate::readiness_probe::historical_response_observation(row)
                 } else {
                     crate::readiness_probe::sent_response_observation(row)
@@ -616,7 +643,11 @@ fn inspect_readiness(
         .find_map(|row| crate::readiness_probe::composer_app_observation(row));
     let task_diagnostics = if matches!(
         mode,
-        Mode::SentDiagnostics | Mode::AppMenu | Mode::Trace | Mode::HistoricalDiagnostics
+        Mode::SentDiagnostics
+            | Mode::AppMenu
+            | Mode::Trace
+            | Mode::HistoricalDiagnostics
+            | Mode::HistoricalTrace
     ) && response
         .as_ref()
         .is_some_and(|v| v["stage"] == "RESPONSE_COMPLETE")
@@ -634,7 +665,7 @@ fn inspect_readiness(
         .iter()
         .rev()
         .find_map(|row| crate::readiness_probe::trace_failure(row));
-    if mode == Mode::Trace {
+    if matches!(mode, Mode::Trace | Mode::HistoricalTrace) {
         let path = store.root().join("logs").join(format!(
             "response-trace-{}.outcome.json",
             delivery
@@ -664,11 +695,11 @@ fn inspect_readiness(
         "targetGeneration":target.generation,"targetDigest":target.digest,
         "eventId":delivery.map(|d| &d.event.event_id),"sourceDeliverySha256":delivery_hash,
         "submissionObservation":submission,"submissionObservationState":submission_state,
-        "advisory":!receipt_only,"browserReadOnly":!matches!(mode,Mode::AppMenu|Mode::Trace),"transientMenuInspection":mode==Mode::AppMenu,"transientTraceInspection":mode==Mode::Trace,"diagnosticJournalChanged":mode==Mode::Trace,"sendAttempted":false,
+        "advisory":!receipt_only,"browserReadOnly":!matches!(mode,Mode::AppMenu|Mode::Trace|Mode::HistoricalTrace),"transientMenuInspection":mode==Mode::AppMenu,"transientTraceInspection":matches!(mode,Mode::Trace|Mode::HistoricalTrace),"diagnosticJournalChanged":matches!(mode,Mode::Trace|Mode::HistoricalTrace),"sendAttempted":false,
         "receiptCreated":false,"stateChanged":false,"retryAuthorized":false,"workResolved":false,
         "persistedReceipt":receipt,"receiptProofRequested":receipt_only,
-        "responseObservation":if mode==Mode::HistoricalDiagnostics {None} else {response.clone()},
-        "historicalResponseObservation":if mode==Mode::HistoricalDiagnostics {response} else {None},
+        "responseObservation":if matches!(mode,Mode::HistoricalDiagnostics|Mode::HistoricalTrace) {None} else {response.clone()},
+        "historicalResponseObservation":if matches!(mode,Mode::HistoricalDiagnostics|Mode::HistoricalTrace) {response} else {None},
         "historicalReadOnly":mode==Mode::HistoricalDiagnostics,
         "taskDiagnostics":task_diagnostics,"appPresentation":app_observation,"traceObservation":trace,"traceFailure":trace_failure,
         "appMenuObservation":rows.iter().rev().find_map(|row|crate::readiness_probe::app_menu_observation(row)),"reviewAuthorityGranted":false,
@@ -766,6 +797,11 @@ mod tests {
         assert_eq!(std::fs::read(&path).unwrap(), before);
         assert_eq!(
             inspect_sent_task_trace(&store, "alpha", &target, &event.event_id, &|| Ok(()))
+                .unwrap_err(),
+            "READINESS_COMPLETED_RESPONSE_REQUIRED"
+        );
+        assert_eq!(
+            inspect_historical_task_trace(&store, "alpha", &target, &event.event_id, &|| Ok(()))
                 .unwrap_err(),
             "READINESS_COMPLETED_RESPONSE_REQUIRED"
         );

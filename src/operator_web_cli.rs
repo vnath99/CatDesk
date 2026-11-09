@@ -113,6 +113,10 @@ pub(crate) enum WebAction {
         project_id: String,
         event_id: String,
     },
+    ReviewInspectHistoryTrace {
+        project_id: String,
+        event_id: String,
+    },
     ReviewInspectAppMenu {
         project_id: String,
         event_id: String,
@@ -616,6 +620,7 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
             "read"
             | "inspect-response"
             | "inspect-history-response"
+            | "inspect-history-trace"
             | "inspect-app-menu"
             | "inspect-trace"
             | "inspect-submission"
@@ -637,6 +642,11 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                 })
             } else if verb == "inspect-history-response" {
                 Ok(WebAction::ReviewInspectHistoryResponse {
+                    project_id: project_id.into(),
+                    event_id: event_id.into(),
+                })
+            } else if verb == "inspect-history-trace" {
+                Ok(WebAction::ReviewInspectHistoryTrace {
                     project_id: project_id.into(),
                     event_id: event_id.into(),
                 })
@@ -1203,6 +1213,7 @@ fn read_review(workspace: &Path, project: &str, event_id: &str) -> Result<Value,
 enum TaskObservation {
     SentResponse,
     HistoricalResponse,
+    HistoricalTrace,
     AppMenu,
     Trace,
     PendingSubmission,
@@ -1239,7 +1250,10 @@ fn inspect_review_response(
         crate::web_work_state::WorkLedger::record_for_event(workspace, project, &source_event)?;
     if matches!(
         mode,
-        TaskObservation::AppMenu | TaskObservation::Trace | TaskObservation::HistoricalResponse
+        TaskObservation::AppMenu
+            | TaskObservation::Trace
+            | TaskObservation::HistoricalResponse
+            | TaskObservation::HistoricalTrace
     ) && task_record
         .as_ref()
         .is_none_or(|record| record.task_assignment.is_none())
@@ -1275,7 +1289,11 @@ fn inspect_review_response(
         lease.check_target(&target)
     };
     guard()?;
-    let mut value = if mode == TaskObservation::HistoricalResponse {
+    let mut value = if mode == TaskObservation::HistoricalTrace {
+        catdesk_wake::runtime::inspect_historical_task_trace(
+            &wake, project, &target, event_id, &guard,
+        )?
+    } else if mode == TaskObservation::HistoricalResponse {
         catdesk_wake::runtime::inspect_historical_task_response(
             &wake, project, &target, event_id, &guard,
         )?
@@ -1355,7 +1373,9 @@ fn inspect_review_response(
             value["receiptCommitState"] = json!("UNPROVEN");
         }
     }
-    value["action"] = json!(if mode == TaskObservation::HistoricalResponse {
+    value["action"] = json!(if mode == TaskObservation::HistoricalTrace {
+        "web_task_historical_trace_inspect"
+    } else if mode == TaskObservation::HistoricalResponse {
         "web_task_historical_response_inspect"
     } else if mode == TaskObservation::Trace {
         "web_task_trace_inspect"
@@ -1943,6 +1963,15 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             &project_id,
             &event_id,
             TaskObservation::SentResponse,
+        ),
+        WebAction::ReviewInspectHistoryTrace {
+            project_id,
+            event_id,
+        } => inspect_review_response(
+            &workspace,
+            &project_id,
+            &event_id,
+            TaskObservation::HistoricalTrace,
         ),
         WebAction::ReviewInspectHistoryResponse {
             project_id,
@@ -3094,6 +3123,12 @@ mod tests {
             parse(&valid),
             Ok(WebAction::ReviewInspectTrace { .. })
         ));
+        let mut history = valid.clone();
+        history[3] = "inspect-history-trace".into();
+        assert!(matches!(
+            parse(&history),
+            Ok(WebAction::ReviewInspectHistoryTrace { .. })
+        ));
         for key in [
             "--selector",
             "--url",
@@ -3106,6 +3141,9 @@ mod tests {
             let mut changed = valid.clone();
             changed.extend(args(&[key, "foreign"]));
             assert!(parse(&changed).is_err());
+            let mut historical = history.clone();
+            historical.extend(args(&[key, "foreign"]));
+            assert!(parse(&historical).is_err());
         }
         assert!(parse(&valid[..6]).is_err());
     }

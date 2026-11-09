@@ -28,9 +28,9 @@ mod review_reconcile;
 #[path = "runtime_scoped_review.rs"]
 mod scoped_review;
 pub use readiness::{
-    inspect_historical_task_response, inspect_registered_delivery_readiness,
-    inspect_registered_readiness, inspect_sent_task_app_menu,
-    inspect_sent_task_response_diagnostics, inspect_sent_task_trace,
+    inspect_historical_task_response, inspect_historical_task_trace,
+    inspect_registered_delivery_readiness, inspect_registered_readiness,
+    inspect_sent_task_app_menu, inspect_sent_task_response_diagnostics, inspect_sent_task_trace,
     read_registered_delivery_receipt,
 };
 pub(crate) use response::canonical_observation as canonical_response_observation;

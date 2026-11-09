@@ -1406,6 +1406,39 @@ class CurrentDomTests(unittest.TestCase):
                     self.assertTrue(bridge.valid_trace_inspection(result));self.assertNotIn('PRIVATE_',json.dumps(result))
                 finally:cdp.close()
 
+    def test_trace_historical_action_is_explicit_and_cannot_borrow_later_controls_or_errors(self):
+        cdp=PersistentCurrentDom(observationEditor=True,traceInteractive=True,laterExchange=True,
+            traceControls=[{'expanded':False}],answer='Original rejected dispatch.')
+        self.addCleanup(cdp.close)
+        with self.assertRaises(bridge.Attention):
+            self.sink.inspect_response_trace(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+        self.assertEqual(cdp.mutations,0)
+        result=self.sink.inspect_historical_response_trace(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+        self.assertEqual(result['state'],'OBSERVED');self.assertEqual(cdp.mutations,1)
+        self.assertIn('WEB_TASK_CACHED_ARGUMENTS_INVALID',result['knownCodes'])
+        self.assertNotIn('WEB_TASK_NATIVE_ARGUMENTS_INVALID',result['knownCodes'])
+        self.assertNotIn('HTTP_429',result['knownCodes']);self.assertNotIn('PRIVATE_',json.dumps(result))
+        self.assertTrue(bridge.valid_trace_inspection(result))
+        self.assertIsNone(result['argumentTypes'])
+
+    def test_trace_historical_action_refuses_duplicate_draft_generation_and_unknown_click(self):
+        for options in [{'laterSameUser':True},{'observationDraft':'PRIVATE_DRAFT'},{'observationStop':True},
+                {'observationLogin':True},{'traceControls':[{'expanded':False,'type':'submit'}]},
+                {'traceClickThrows':True}]:
+            with self.subTest(options=options):
+                cdp=PersistentCurrentDom(**({'observationEditor':True,'traceInteractive':True,'laterExchange':True,
+                    'traceControls':[{'expanded':False}]}|options))
+                try:
+                    try:result=self.sink.inspect_historical_response_trace(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+                    except (bridge.Attention,bridge.PostSubmitUnknown):result=None
+                    if options.get('traceClickThrows'):
+                        self.assertEqual(result['state'],'OPEN_OUTCOME_UNKNOWN');self.assertEqual(cdp.mutations,1)
+                        self.assertEqual(result['knownCodes'],[])
+                    else:
+                        self.assertEqual(cdp.mutations,0)
+                        if result:self.assertNotEqual(result['state'],'OBSERVED')
+                finally:cdp.close()
+
     def test_trace_interrupted_transport_after_click_remains_unknown_without_a_second_click(self):
         class Interrupted(PersistentCurrentDom):
             def evaluate(self,script):

@@ -1963,6 +1963,12 @@ class CdpSink:
         return value.copy() if valid_trace_failure(value) else None
 
     def inspect_response_trace(self, cdp: Any, message: str, expected_digest: str, *, sleeper=time.sleep) -> dict[str, Any]:
+        return self._inspect_response_trace(cdp,message,expected_digest,sleeper=sleeper,historical=False)
+
+    def inspect_historical_response_trace(self, cdp: Any, message: str, expected_digest: str, *, sleeper=time.sleep) -> dict[str, Any]:
+        return self._inspect_response_trace(cdp,message,expected_digest,sleeper=sleeper,historical=True)
+
+    def _inspect_response_trace(self, cdp: Any, message: str, expected_digest: str, *, sleeper, historical:bool) -> dict[str, Any]:
         """One explicitly fenced trace open; unknown outcomes never repeat it."""
         nonce=os.urandom(16).hex()
         self.trace_failure_diagnostic=None
@@ -1974,11 +1980,13 @@ class CdpSink:
         def step(phase):
             nonlocal boundary
             boundary='COOPERATIVE_RESPONSE'
-            stage=self.observe_cooperative_response(cdp,message,expected_digest)
+            scope_args={'historical':True} if historical else {}
+            stage=self.observe_cooperative_response(cdp,message,expected_digest,**scope_args)
             if stage!='RESPONSE_COMPLETE':raise Attention(stage if stage in TRACE_FAILURE_REASONS else 'RESPONSE_STATE_UNPROVEN')
             boundary='SNAPSHOT';value={}
             self.response_snapshot(cdp,message,require_usable_body=True,diagnostic={},tool_diagnostic={},execution_diagnostic={},
-                trace_action=(phase,nonce),trace_observation=value)
+                trace_action=(phase,nonce),trace_observation=value,
+                **({'historical':True,'historical_trace':True} if historical else {}))
             boundary='DOCUMENT';self.require_response_document(cdp)
             return value
         try:prepared=step('PREPARE')
@@ -2009,7 +2017,8 @@ class CdpSink:
                           execution_diagnostic: dict | None = None,
                           trace_action: tuple[str,str] | None = None,
                           trace_observation: dict | None = None,
-                          historical: bool = False) -> tuple[int, int, bool, bool]:
+                          historical: bool = False,
+                          historical_trace: bool = False) -> tuple[int, int, bool, bool]:
         """Return only bounded structural signals for the latest user turn.
 
         The timeout detector is intentionally exact-text and scoped strictly
@@ -2025,7 +2034,10 @@ class CdpSink:
             execution_diagnostic.clear()
             if diagnostic is None or tool_diagnostic is None:
                 raise ValueError("task hints require explicit response and tool diagnostics")
-        if type(historical) is not bool or (historical and (not require_usable_body or diagnostic is None or trace_action is not None or trace_observation is not None)):
+        if (type(historical) is not bool or type(historical_trace) is not bool
+                or (historical_trace and (not historical or trace_action is None or trace_observation is None))
+                or (historical and (not require_usable_body or diagnostic is None or
+                    ((trace_action is not None or trace_observation is not None) and not historical_trace)))):
             raise ValueError('historical observation must be passive and explicit')
         trace_request=None
         trace_document=''

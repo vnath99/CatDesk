@@ -2083,5 +2083,23 @@
       "traceClicks": 0,
       "installedAcceptance": "NOT_QUALIFIED"
     }
+  },
+  "originalHistoricalTaskTrace": {
+    "observedUtc": "2026-11-09T03:54:22.574752+00:00",
+    "status": "SOURCE_PASS_LIVE_NOT_RUN",
+    "samePerEventFence": true,
+    "maximumClicks": 1,
+    "latestSendAndRetryRulesChanged": false,
+    "rawPayloadExport": false,
+    "passiveHistoryMayClick": false,
+    "currentTimerChanges": false,
+    "traceDomTests": 11,
+    "probeTests": 40,
+    "nativeTests": 22,
+    "cliTests": 46,
+    "formatting": "PASS",
+    "rootAndWakeClippy": "PASS",
+    "installedAcceptance": "NOT_RUN",
+    "c1NativeCoding": "INCOMPLETE"
   }
 }

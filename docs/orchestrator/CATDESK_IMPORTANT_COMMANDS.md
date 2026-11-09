@@ -7174,3 +7174,29 @@ qualified separate controller as an installed upgrade, request an operator
 response relay, resend a completed task, or start C2. Next eligible C1 work is
 evidence-based cached-envelope recovery and legitimate reader qualification/
 promotion; no unchanged browser inspection retry or new diagnostic send.
+
+
+### 2026-11-09T03:54:22.574752+00:00 — explicitly fenced historical trace inspection
+
+The original completed historical exchange has its own known collapsed work
+trace, separate from the later diagnostic's unknown fenced trace. Added explicit
+`operator web review inspect-history-trace --project-id PROJECT --event-id EVENT`
+to the same owner and primitive. It requires the original task, SENT receipt,
+COMPLETE timer, current binding/lease, and shared browser lock. The same durable
+per-event trace fence precedes launch; no event can acquire a second attempt.
+
+The historical action selects only the exact exchange before the next USER,
+requires one safe known control, idle generation/empty composer, and verified
+post-click association and stable panel samples. It exports the existing closed
+error/tool classifications only; non-public native payloads/keys are never
+returned. Unknown outcomes remain fenced. Passive history cannot click; normal
+send, assistant Retry and current-trace behavior stay latest-only. Historical
+observations remain separate from current-turn/timer and execution authority.
+No native call, USER send, new owner, scheduler, profile or binding change.
+
+Source validation: 11 trace DOM, 40 probe, 22 native and 46 CLI tests pass;
+formatting and strict root/Wake Clippy pass. Cases include historical boundaries,
+no borrowed later controls/errors, duplicate messages, drafts, generation,
+expired session, unsafe control and unknown click. Live historical-trace and
+installed acceptance are NOT_RUN at this checkpoint. Preserve the separate
+already-unknown trace and all original native state.
