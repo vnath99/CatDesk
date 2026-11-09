@@ -487,6 +487,101 @@ reader.on('line', line=>{try {const value=eval(JSON.parse(line));
         self.fixture_directory.cleanup()
 
 
+class TerminalReadinessObservationTests(unittest.TestCase):
+    """Exercise real readiness gates without a browser, navigation or wall wait."""
+
+    class Cdp:
+        def __init__(self, url, visible=()):
+            self.url, self.visible = url, set(visible)
+            self.actions = []
+
+        def get_current_url(self):
+            return self.url
+
+        def is_element_visible(self, selector):
+            return selector in self.visible
+
+        def reload(self, **kwargs):
+            self.actions.append("reload")
+            raise AssertionError("terminal readiness must not recover")
+
+        def get(self, url):
+            self.actions.append("navigate")
+            raise AssertionError("terminal readiness must not navigate")
+
+    def setUp(self):
+        self.sink = bridge.CdpSink("https://chatgpt.com/c/current-dom", ROOT, 1, 1)
+
+    def fail_if_sleep(self, seconds):
+        self.fail("terminal readiness must not wait")
+
+    def test_auth_route_emits_closed_route_and_reason_before_terminal_refusal(self):
+        cdp = self.Cdp("https://chatgpt.com/auth/login?PRIVATE_CREDENTIAL_QUERY")
+        observed = []
+        with self.assertRaisesRegex(bridge.Attention, "^LOGIN_OR_PROFILE_REQUIRED$"):
+            self.sink.wait_for_page_readiness(object(), cdp,
+                observer=lambda route, reason: observed.append((route, reason)),
+                monotonic=lambda: 0, sleeper=self.fail_if_sleep)
+        self.assertEqual(observed, [("AUTH", "LOGIN_OR_PROFILE_REQUIRED")])
+        self.assertNotIn("PRIVATE", json.dumps(observed))
+        self.assertEqual(cdp.actions, [])
+
+    def test_captcha_emits_same_conversation_without_selector_or_page_text(self):
+        cdp = self.Cdp(self.sink.url, [bridge.CAPTCHA[0]])
+        observed = []
+        with self.assertRaisesRegex(bridge.Attention, "^CAPTCHA_OR_SECURITY_CHECK$"):
+            self.sink.wait_for_page_readiness(object(), cdp,
+                observer=lambda route, reason: observed.append((route, reason)),
+                monotonic=lambda: 0, sleeper=self.fail_if_sleep)
+        self.assertEqual(observed, [("SAME_CONVERSATION", "CAPTCHA_OR_SECURITY_CHECK")])
+        self.assertNotIn(bridge.CAPTCHA[0], json.dumps(observed))
+        self.assertEqual(cdp.actions, [])
+
+    def test_exact_target_login_control_keeps_existing_bounded_observation(self):
+        cdp = self.Cdp(self.sink.url, [bridge.LOGIN[0]])
+        observed, clock = [], [0.0]
+        def sleep(seconds):
+            clock[0] += seconds
+        with patch.object(bridge, "READINESS_ATTEMPTS", 1), patch.object(
+                bridge, "READINESS_WINDOW_SECONDS", .1):
+            with self.assertRaisesRegex(bridge.Attention, "^LOGIN_OR_PROFILE_REQUIRED$"):
+                self.sink.wait_for_page_readiness(object(), cdp,
+                    observer=lambda route, reason: observed.append((route, reason)),
+                    monotonic=lambda: clock[0], sleeper=sleep)
+        self.assertEqual(observed, [("SAME_CONVERSATION", "LOGIN_OR_PROFILE_REQUIRED")])
+        self.assertLessEqual(clock[0], .1)
+        self.assertEqual(cdp.actions, [])
+
+    def test_observer_failure_preserves_same_terminal_exception_and_no_actions(self):
+        cdp = self.Cdp("https://chatgpt.com/auth/login")
+        terminal = bridge.Attention("LOGIN_OR_PROFILE_REQUIRED")
+        observed = []
+        def broken_observer(route, reason):
+            observed.append((route, reason))
+            raise RuntimeError("PRIVATE_OBSERVER_DETAIL")
+        with patch.object(self.sink, "readiness_reason", side_effect=terminal):
+            with self.assertRaises(bridge.Attention) as refusal:
+                self.sink.wait_for_page_readiness(object(), cdp,
+                    observer=broken_observer, monotonic=lambda: 0, sleeper=self.fail_if_sleep)
+        self.assertIs(refusal.exception, terminal)
+        self.assertEqual(str(refusal.exception), "LOGIN_OR_PROFILE_REQUIRED")
+        self.assertEqual(observed, [("AUTH", "LOGIN_OR_PROFILE_REQUIRED")])
+        self.assertEqual(cdp.actions, [])
+
+    def test_unlisted_attention_is_not_exported_through_readiness_observer(self):
+        cdp = self.Cdp(self.sink.url)
+        terminal = bridge.Attention("PRIVATE_UNLISTED_REASON")
+        observed = []
+        with patch.object(self.sink, "readiness_reason", side_effect=terminal):
+            with self.assertRaises(bridge.Attention) as refusal:
+                self.sink.wait_for_page_readiness(object(), cdp,
+                    observer=lambda *value: observed.append(value),
+                    monotonic=lambda: 0, sleeper=self.fail_if_sleep)
+        self.assertIs(refusal.exception, terminal)
+        self.assertEqual(observed, [])
+        self.assertEqual(cdp.actions, [])
+
+
 @unittest.skipUnless(shutil.which("node"), "Node.js required for offline DOM probes")
 class CurrentDomTests(unittest.TestCase):
     def test_historical_response_is_exact_bounded_and_cannot_change_latest_or_retry_rules(self):

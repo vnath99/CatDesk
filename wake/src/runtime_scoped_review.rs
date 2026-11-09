@@ -634,6 +634,132 @@ mod tests {
     }
 
     #[test]
+    fn scoped_readiness_failure_is_retained_for_its_event_without_blocking_a_sibling() {
+        let (store, event, target) = fixture("scoped-readiness-failure");
+        let beta_target = store.config().unwrap().targets["beta"].clone();
+        let beta = work_event(&store, "beta", &beta_target);
+        let control = std::fs::read(store.root().join("control.json")).unwrap();
+        let status_before = std::fs::read(store.root().join("status.json")).ok();
+        let mut fake = adapter(&event, &target);
+        let ack = fake.ack_count.clone();
+        fake.frames = VecDeque::from([
+            json!({"stage":"READINESS_OBSERVED","route":"AUTH","reason":"LOGIN_OR_PROFILE_REQUIRED"}),
+            json!({"stage":"ATTENTION","reason":"LOGIN_OR_PROFILE_REQUIRED"}),
+        ]);
+        assert_eq!(
+            run_selected_with_adapter(
+                &store,
+                &event.event_id,
+                120,
+                Selection::Review,
+                &mut |_, _| panic!("readiness failure cannot authorize input"),
+                &|| Ok(()),
+                |_, _| Ok(fake),
+            )
+            .unwrap_err(),
+            "LOGIN_OR_PROFILE_REQUIRED"
+        );
+        assert_eq!(ack.get(), 0);
+        let delivery = store.delivery(&event.event_id).unwrap().unwrap();
+        assert_eq!(delivery.phase, Phase::Attention);
+        assert_eq!(delivery.target, target);
+        assert_eq!(delivery.event, event);
+        assert!(delivery.receipt.is_none());
+        assert!(store.timer(&event.event_id).unwrap().is_none());
+        let history = readiness_history(&store).unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(
+            history[0].event_id.as_deref(),
+            Some(event.event_id.as_str())
+        );
+        assert_eq!(history[0].route, "AUTH");
+        assert_eq!(history[0].reason, "LOGIN_OR_PROFILE_REQUIRED");
+
+        let mut sibling = adapter(&beta, &beta_target);
+        let admitted = sibling.admitted.clone();
+        sibling
+            .frames
+            .push_front(json!({"stage":"READINESS_OBSERVED",
+            "route":"SAME_CONVERSATION","reason":"READY"}));
+        assert_eq!(
+            run_selected_with_adapter(
+                &store,
+                &beta.event_id,
+                120,
+                Selection::WorkRequest(&beta, &beta_target),
+                &mut |_, _| {
+                    admitted.set(true);
+                    Ok(())
+                },
+                &|| Ok(()),
+                |_, _| Ok(sibling),
+            )
+            .unwrap()["phase"],
+            "SENT"
+        );
+        let history = readiness_history(&store).unwrap();
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[1].event_id.as_deref(), Some(beta.event_id.as_str()));
+        assert_eq!(history[1].route, "SAME_CONVERSATION");
+        assert_eq!(history[1].reason, "READY");
+        assert_eq!(store.delivery(&event.event_id).unwrap().unwrap(), delivery);
+        assert_eq!(
+            std::fs::read(store.root().join("control.json")).unwrap(),
+            control
+        );
+        assert_eq!(
+            std::fs::read(store.root().join("status.json")).ok(),
+            status_before
+        );
+        let bytes = std::fs::read_to_string(readiness_history_path(&store)).unwrap();
+        assert!(!bytes.contains(&event.message));
+        assert!(!bytes.contains(&target.url));
+    }
+
+    #[test]
+    fn scoped_readiness_rejects_untrusted_or_corrupt_history_before_input() {
+        for corrupt in [false, true] {
+            let (store, event, target) = fixture("scoped-readiness-invalid");
+            let mut fake = adapter(&event, &target);
+            let ack = fake.ack_count.clone();
+            if corrupt {
+                std::fs::write(readiness_history_path(&store), b"preserved invalid journal")
+                    .unwrap();
+            }
+            let old_history = std::fs::read(readiness_history_path(&store)).ok();
+            fake.frames = VecDeque::from([json!({"stage":"READINESS_OBSERVED",
+                "route":if corrupt {"AUTH"} else {"https://private.example/route"},
+                "reason":"LOGIN_OR_PROFILE_REQUIRED"})]);
+            assert!(
+                run_selected_with_adapter(
+                    &store,
+                    &event.event_id,
+                    120,
+                    Selection::Review,
+                    &mut |_, _| panic!("untrusted readiness cannot authorize input"),
+                    &|| Ok(()),
+                    |_, _| Ok(fake),
+                )
+                .is_err()
+            );
+            assert_eq!(ack.get(), 0);
+            assert_eq!(
+                std::fs::read(readiness_history_path(&store)).ok(),
+                old_history
+            );
+            assert!(
+                store
+                    .delivery(&event.event_id)
+                    .unwrap()
+                    .unwrap()
+                    .receipt
+                    .is_none()
+            );
+            assert!(store.timer(&event.event_id).unwrap().is_none());
+        }
+    }
+
+    #[test]
     fn scoped_work_request_unknown_alpha_does_not_block_beta_and_never_replays() {
         let (store, review, alpha) = fixture("work-independent");
         let beta = store.config().unwrap().targets["beta"].clone();

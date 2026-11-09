@@ -3507,7 +3507,23 @@ class CdpSink:
                     current = str(cdp.get_current_url())
                 except Exception:
                     current = ""
-                reason = self.readiness_reason(cdp, current) if current else "EDITOR_SELECTOR"
+                try:
+                    reason = self.readiness_reason(cdp, current) if current else "EDITOR_SELECTOR"
+                except Attention as error:
+                    terminal = str(error)
+                    if observer is not None and terminal in {
+                        "LOGIN_OR_PROFILE_REQUIRED", "CAPTCHA_OR_SECURITY_CHECK"
+                    }:
+                        # Terminal gates otherwise bypass the ordinary observation
+                        # below. Emit only existing closed categories, then retain
+                        # the same refusal and immediate no-action boundary. An
+                        # observer failure must not replace it with arbitrary text
+                        # or send this attempt into navigation/recovery.
+                        try:
+                            observer(bounded_route_class(current, self.url), terminal)
+                        except Exception:
+                            pass
+                    raise
                 route = bounded_route_class(current, self.url) if current else "INVALID_ROUTE"
                 observation = (route, "READY" if reason is None else reason)
                 if observer is not None and observation != last_observation:

@@ -7687,11 +7687,11 @@ fn attempt_inner<A: SubmissionAdapter>(
         match adapter.receive(Duration::from_millis(250)) {
             Ok(Ok(value)) => match value.get("stage").and_then(|v| v.as_str()) {
                 Some("READINESS_OBSERVED") => {
-                    let (route, reason) = if scoped.is_some() {
-                        readiness_observation(&value)?
-                    } else {
-                        record_readiness_observation(store, status, &value)?
-                    };
+                    // Scoped status stays local, but its fixed diagnostic
+                    // observations must survive this finite owner exiting.
+                    // The existing bounded journal retains only the event ID
+                    // and closed route/reason codes, never browser content.
+                    let (route, reason) = record_readiness_observation(store, status, &value)?;
                     if scoped.is_none() {
                         deadline = Instant::now() + Duration::from_secs(180);
                     }
