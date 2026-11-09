@@ -1822,5 +1822,22 @@
       "installedAcceptance": "NOT_QUALIFIED",
       "c1NativeCompletion": "INCOMPLETE"
     }
+  },
+  "actualWebCallerRouteProbe": {
+    "observedUtc": "2026-11-09T02:08:25.774687+00:00",
+    "status": "SOURCE_PASS_LIVE_NOT_RUN",
+    "originalTaskGrantAndCallPreserved": true,
+    "emptyEnvelopeOnly": true,
+    "nativeExecutionRequested": false,
+    "privateContextOrKeyResent": false,
+    "stableIntent": true,
+    "priorServingSentAndCompleteRequired": true,
+    "unknownSubmissionRetried": false,
+    "priorReadBeforeSendRequired": true,
+    "correctedErrorName": "WEB_TASK_ARGUMENTS_INVALID",
+    "initialFixtureCompileFailureRetained": true,
+    "focusedTests": 239,
+    "installedAcceptance": "NOT_RUN",
+    "c1NativeCompletion": "INCOMPLETE"
   }
 }

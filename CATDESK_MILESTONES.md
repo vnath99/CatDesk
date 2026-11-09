@@ -9137,3 +9137,35 @@ transition is NOT IMPLEMENTED and no probe was queued or sent. Assess the exact
 existing guards and add only missing integration/tests before attempting it.
 No operator response relay or discretionary approval is pending. Do not expand
 unqualified traces, add more speculative selectors or bypass release authority.
+
+
+## 2026-11-09T02:08:25.774687+00:00 — original-task no-effect Web-caller probe
+
+SOURCE PASS; LIVE NOT RUN. Existing task-context commands now include
+`context-prepare-route-probe` and `context-deliver-route-probe`, using the same
+`--project-id PROJECT --input-file PINS` interface. Preparation queues one stable
+WakeIntent under the original OPEN task, after exact prior serving SENT+COMPLETE
+proof and fresh original capsule/grant/target/native READY/no-effect checks.
+Delivery uses the selected installed sender and existing submit/lease fences.
+The frozen advisory permits only run_command with the literal empty reserved
+envelope CATDESK_WEB_TASK={}; it contains no private capsule, execution key or
+native call, and requests no native execution. No project/task/grant replacement,
+source argument rewrite, production action or arbitrary message input is added.
+Unknown/SENT outcomes preserve the same event and remain unreplayed.
+
+A demonstrated readback gap is corrected: the dispatcher emits
+WEB_TASK_ARGUMENTS_INVALID, not WEB_TASK_REQUEST_INVALID, for an empty inner
+schema. The existing closed classifier now recognizes that actual name plus
+native-argument, missing-request-ID, central-mode/auth and plan-policy refusals.
+Only verified public error names were added; legacy records remain supported.
+Before any new send, inspect the already completed response with the corrected
+reader. If it supplies the needed cause, do not send the diagnostic probe.
+
+239 focused tests pass: 9 context identity, 6 cached-route, 45 CLI, 6 Web-work,
+16 private-context, 99 DOM, 39 probe and 19 native readiness. Root/Wake formatting
+and strict Clippy pass. The initial fixture failed to compile because a borrowed
+JSON value was passed by value; corrected with a clone and retained the failed
+run. The empty-envelope test proves inner-schema refusal before task/native
+admission. Tamper, incomplete predecessor, generation drift, native effects,
+unknown delivery, original grant preservation and lease handoff are covered.
+C1 coding and installed response-readback acceptance remain incomplete.

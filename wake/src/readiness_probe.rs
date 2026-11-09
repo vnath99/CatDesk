@@ -848,6 +848,19 @@ fn task_diagnostics_are_closed_content_free_and_cannot_be_execution_receipts() {
         task_response_diagnostics(&format!("PROBE:TASK:{classified}")),
         Some(classified.clone())
     );
+    let mut admission_codes = classified.clone();
+    admission_codes["assistantHints"]["knownCodes"] = serde_json::json!([
+        "WEB_TASK_ARGUMENTS_INVALID",
+        "WEB_TASK_NATIVE_ARGUMENTS_INVALID",
+        "WEB_TASK_REQUEST_ID_REQUIRED",
+        "WEB_TASK_CENTRAL_MODE_REQUIRED",
+        "WEB_TASK_CENTRAL_AUTH_REQUIRED",
+        "PLAN_REQUIRED"
+    ]);
+    assert_eq!(
+        task_response_diagnostics(&format!("PROBE:TASK:{admission_codes}")),
+        Some(admission_codes)
+    );
     for replacement in [
         serde_json::json!(["PRIVATE_BODY"]),
         serde_json::json!(["DISPATCH_REJECTED", "DISPATCH_REJECTED"]),

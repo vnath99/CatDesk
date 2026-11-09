@@ -475,6 +475,150 @@ fn serving_bytes(value: &ServingRecovery) -> Result<Vec<u8>, String> {
     serde_json::to_vec(value).map_err(|_| "WEB_TASK_CONTEXT_INVALID".into())
 }
 
+/// One diagnostic in the original journal, never a substitute task/grant.
+#[derive(Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CachedRouteProbe {
+    schema_version: u32,
+    purpose: String,
+    serving: ServingRecovery,
+    prior_serving_receipt: Receipt,
+    diagnostic_command: String,
+}
+
+fn route_probe_proof(
+    scope: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    target: &Target,
+    store: &catdesk_wake::store::Store,
+) -> Result<(CachedRouteProbe, PathBuf), String> {
+    // This rechecks the original READY/no-attempt/no-receipt/no-journal state,
+    // capsule, grant, canonical envelope and every predecessor receipt.
+    let (serving, root) = serving_proof(scope, record, target, store)?;
+    let encoded = serving_bytes(&serving)?;
+    if read_assignment_bytes(&root.join("serving-recovery.json"))? != encoded {
+        return Err("WEB_TASK_CONTEXT_SERVING_CHANGED".into());
+    }
+    let turn = format!(
+        "initial-context-{}",
+        digest(std::str::from_utf8(&encoded).map_err(|_| "WEB_TASK_CONTEXT_INVALID")?)
+    );
+    let id = catdesk_wake::store::WakeIntent {
+        purpose: catdesk_wake::protocol::WakePurpose::NewTask,
+        source_event_id: &record.event_id,
+        source_turn_id: &turn,
+        priority: 0,
+        ttl_seconds: 600,
+    }
+    .event_id(&scope.project.project_id)?;
+    let prior = store
+        .delivery(&id)?
+        .ok_or("WEB_TASK_CONTEXT_ROUTE_PROBE_PRIOR_REQUIRED")?;
+    let receipt = prior
+        .receipt
+        .clone()
+        .ok_or("WEB_TASK_CONTEXT_ROUTE_PROBE_PRIOR_REQUIRED")?;
+    let metadata = prior
+        .event
+        .wake_metadata()?
+        .ok_or("WEB_TASK_CONTEXT_ROUTE_PROBE_PRIOR_REQUIRED")?;
+    if prior.phase != catdesk_wake::store::Phase::Sent
+        || prior.target != *target
+        || prior.event.event_id != id
+        || prior.event.project_id != scope.project.project_id
+        || prior.event.target_generation != target.generation
+        || prior.event.message != serving_message(&serving)
+        || metadata.purpose != catdesk_wake::protocol::WakePurpose::NewTask
+        || metadata.source_event_id != record.event_id
+        || metadata.source_turn_id != turn
+        || receipt.schema_version != 1
+        || receipt.event_id != id
+        || receipt.target_generation != target.generation
+        || receipt.target_digest != target.digest
+        || receipt.message_digest != digest(&prior.event.message)
+        || receipt.evidence != "EXACT_USER_MESSAGE_APPENDED"
+        || receipt.sent_utc == 0
+        || store.timer(&id)?.is_none_or(|timer| {
+            timer.response_state != catdesk_wake::store::ResponseState::Complete
+                || timer.event_id != id
+                || timer.project_id != scope.project.project_id
+                || timer.target_generation != target.generation
+                || timer.target_digest != target.digest
+        })
+    {
+        return Err("WEB_TASK_CONTEXT_ROUTE_PROBE_PRIOR_REQUIRED".into());
+    }
+    Ok((
+        CachedRouteProbe {
+            schema_version: 1,
+            purpose: "ORIGINAL_TASK_CACHED_ROUTE_NO_EFFECT_PROBE".into(),
+            serving,
+            prior_serving_receipt: receipt,
+            diagnostic_command: "CATDESK_WEB_TASK={}".into(),
+        },
+        root,
+    ))
+}
+
+fn route_probe_bytes(value: &CachedRouteProbe) -> Result<Vec<u8>, String> {
+    serde_json::to_vec(value).map_err(|_| "WEB_TASK_CONTEXT_INVALID".into())
+}
+
+pub(super) fn validate_route_probe(
+    scope: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    target: &Target,
+    store: &catdesk_wake::store::Store,
+) -> Result<(), String> {
+    let (value, root) = route_probe_proof(scope, record, target, store)?;
+    if read_assignment_bytes(&root.join("cached-route-probe.json"))? != route_probe_bytes(&value)? {
+        return Err("WEB_TASK_CONTEXT_ROUTE_PROBE_CHANGED".into());
+    }
+    Ok(())
+}
+
+fn route_probe_message(value: &CachedRouteProbe) -> String {
+    let r = &value.serving.transport.identity.reference;
+    format!(
+        "CatDesk bounded no-effect transport diagnostic for original task {}/{}. Prior completed serving USER digest={}. This is NOT permission to resume or retry native work. Preserve the original task, grant, key and all sessions. Use the registered CatDesk v5 run_command tool exactly ONCE with the entire arguments object {{\"command\":\"CATDESK_WEB_TASK={{}}\"}}. Omit every optional outer argument. This intentionally empty reserved envelope has no grant or native call and must be refused before execution; never run a shell command or JavaScript. Do not use the original capsule, nativeCall, execution key, central dispatcher or any other tool. If run_command is unavailable or the platform refuses this exact call, stop. Report only actual tool name, success/error status, returned error names and invariant if supplied; distinguish client refusal from a server response and do not infer which layer failed. No retries, code edits, tests, bindings or production changes. Keep private context and credentials out of the answer.",
+        r.project_id, r.request_id, value.prior_serving_receipt.message_digest
+    )
+}
+
+pub(super) fn queue_route_probe(
+    scope: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    target: &Target,
+    store: &catdesk_wake::store::Store,
+) -> Result<Value, String> {
+    let (value, root) = route_probe_proof(scope, record, target, store)?;
+    let encoded = route_probe_bytes(&value)?;
+    exact_file(&root.join("cached-route-probe.json"), &encoded)?;
+    let proof_sha = digest(std::str::from_utf8(&encoded).map_err(|_| "WEB_TASK_CONTEXT_INVALID")?);
+    let turn = format!("initial-context-{proof_sha}");
+    let event = store.produce_expected_wake(
+        &scope.project.project_id,
+        &route_probe_message(&value),
+        target,
+        catdesk_wake::store::WakeIntent {
+            purpose: catdesk_wake::protocol::WakePurpose::NewTask,
+            source_event_id: &record.event_id,
+            source_turn_id: &turn,
+            priority: 0,
+            ttl_seconds: 600,
+        },
+    )?;
+    let delivery = store.delivery(&event.event_id)?;
+    Ok(
+        json!({"status":if delivery.is_some(){"TASK_ROUTE_PROBE_ALREADY_RECORDED"}else{"TASK_ROUTE_PROBE_QUEUED"},
+        "projectId":scope.project.project_id,"requestId":record.request_id,"taskId":value.serving.transport.identity.reference.assignment.task_id,
+        "eventId":event.event_id,"messageSha256":digest(&event.message),"probeSha256":proof_sha,
+        "priorServingEventId":value.prior_serving_receipt.event_id,"targetGeneration":target.generation,"targetSha256":target.digest,
+        "deliveryPhase":delivery.as_ref().map(|v|&v.phase),"queueOnly":true,"servingReadinessAssessed":false,
+        "newGrantCreated":false,"nativeDispatchRequested":false,"nativeSessionAction":"NONE","taskCompleted":false,"executionKeyDisclosed":false}),
+    )
+}
+
 pub(super) fn validate_serving(
     scope: &ResolvedProjectScopeV1,
     record: &crate::web_work_state::WorkRecord,
@@ -542,6 +686,217 @@ mod tests {
 
     fn sent_event(store: &Store, event: &catdesk_wake::protocol::Event) {
         sent_event_with_completion(store, event, true);
+    }
+
+    fn finish_queued(store: &Store, value: Value, complete: bool) -> catdesk_wake::protocol::Event {
+        let event = catdesk_wake::store::read(
+            &store
+                .root()
+                .join("queue")
+                .join(format!("{}.json", value["eventId"].as_str().unwrap())),
+        )
+        .unwrap();
+        sent_event_with_completion(store, &event, complete);
+        event
+    }
+
+    #[test]
+    fn route_probe_is_one_empty_envelope_and_preserves_original_grant_through_unknown_and_sent() {
+        crate::web_task_dispatch::tests::with_native_context_fixture(|control, pins| {
+            let scope =
+                crate::delegated::autonomy_projects::resolve_registered_project_from_control_root(
+                    control, "alpha",
+                )
+                .unwrap();
+            let store = Store::open(
+                &crate::wake_protocol_client::wake_root_for_workspace(control).unwrap(),
+            )
+            .unwrap();
+            let record = crate::web_work_state::WorkLedger::open(control, "alpha")
+                .unwrap()
+                .record("request-a")
+                .unwrap()
+                .unwrap();
+            let (_, payload, root) = delivered(&scope, &record, &store);
+            finish_queued(
+                &store,
+                queue(&scope, &record, &record.target, &store).unwrap(),
+                true,
+            );
+            finish_queued(
+                &store,
+                queue_transport(&scope, &record, &record.target, &store).unwrap(),
+                true,
+            );
+            let prior = finish_queued(
+                &store,
+                queue_serving(&scope, &record, &record.target, &store).unwrap(),
+                true,
+            );
+            let task_dir = super::super::super::task_directory(
+                &scope,
+                &record.task_assignment.as_ref().unwrap().task_id,
+                false,
+            )
+            .unwrap();
+            let paths = [
+                root.join("initial-payload.json"),
+                root.join("initial-delivery.json"),
+                root.join("identity-clarification.json"),
+                root.join("transport-clarification.json"),
+                root.join("serving-recovery.json"),
+                task_dir.join("execution-grant.json"),
+            ];
+            let before: Vec<_> = paths.iter().map(|p| fs::read(p).unwrap()).collect();
+            let prepared = crate::web_work::context_action(
+                control,
+                pins.clone(),
+                "context-prepare-route-probe",
+            )
+            .unwrap();
+            assert_eq!(prepared["status"], "TASK_ROUTE_PROBE_QUEUED");
+            assert_eq!(prepared["priorServingEventId"], prior.event_id);
+            assert_eq!(prepared["nativeDispatchRequested"], false);
+            assert_eq!(prepared["newGrantCreated"], false);
+            assert_eq!(
+                prepared,
+                queue_route_probe(&scope, &record, &record.target, &store).unwrap()
+            );
+            let id = prepared["eventId"].as_str().unwrap();
+            let event: catdesk_wake::protocol::Event =
+                catdesk_wake::store::read(&store.root().join("queue").join(format!("{id}.json")))
+                    .unwrap();
+            assert_ne!(id, prior.event_id);
+            assert!(event.message.len() <= 2048);
+            assert!(
+                event
+                    .message
+                    .contains(r#"{"command":"CATDESK_WEB_TASK={}"}"#)
+            );
+            assert!(
+                !event
+                    .message
+                    .contains(payload.context["executionKey"].as_str().unwrap())
+            );
+            assert!(!event.message.contains("native-dispatch-1"));
+            assert!(!event.message.contains("native.codex.dispatch"));
+            validate_route_probe(&scope, &record, &record.target, &store).unwrap();
+            let path = store.root().join("deliveries").join(format!("{id}.json"));
+            {
+                let host = store.host_lock().unwrap();
+                store.claim(&event, &host).unwrap();
+                store
+                    .transition(id, host.owner(), Phase::Submitting, None, None)
+                    .unwrap();
+                let unknown = fs::read(&path).unwrap();
+                let same = queue_route_probe(&scope, &record, &record.target, &store).unwrap();
+                assert_eq!(same["status"], "TASK_ROUTE_PROBE_ALREADY_RECORDED");
+                assert_eq!(same["eventId"], id);
+                assert_eq!(fs::read(&path).unwrap(), unknown);
+                let receipt = Receipt {
+                    schema_version: 1,
+                    event_id: id.into(),
+                    target_generation: record.target.generation,
+                    target_digest: record.target.digest.clone(),
+                    message_digest: digest(&event.message),
+                    sent_utc: now(),
+                    evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+                };
+                store.record_exact_receipt_timer(id, &receipt).unwrap();
+                store
+                    .transition(id, host.owner(), Phase::Sent, Some(receipt), None)
+                    .unwrap();
+                store.complete_timer(id).unwrap();
+            }
+            let sent = fs::read(&path).unwrap();
+            assert_eq!(
+                queue_route_probe(&scope, &record, &record.target, &store).unwrap()["eventId"],
+                id
+            );
+            assert_eq!(fs::read(path).unwrap(), sent);
+            for (path, bytes) in paths.iter().zip(before) {
+                assert_eq!(fs::read(path).unwrap(), bytes);
+            }
+            assert!(!task_dir.join("journal").exists());
+        });
+    }
+
+    #[test]
+    fn route_probe_requires_completed_serving_and_refuses_tamper_target_or_native_effect() {
+        crate::web_task_dispatch::tests::with_native_context_fixture(|control, _| {
+            let scope =
+                crate::delegated::autonomy_projects::resolve_registered_project_from_control_root(
+                    control, "alpha",
+                )
+                .unwrap();
+            let store = Store::open(
+                &crate::wake_protocol_client::wake_root_for_workspace(control).unwrap(),
+            )
+            .unwrap();
+            let record = crate::web_work_state::WorkLedger::open(control, "alpha")
+                .unwrap()
+                .record("request-a")
+                .unwrap()
+                .unwrap();
+            let (_, _, root) = delivered(&scope, &record, &store);
+            assert!(queue_route_probe(&scope, &record, &record.target, &store).is_err());
+            finish_queued(
+                &store,
+                queue(&scope, &record, &record.target, &store).unwrap(),
+                true,
+            );
+            finish_queued(
+                &store,
+                queue_transport(&scope, &record, &record.target, &store).unwrap(),
+                true,
+            );
+            let queued = queue_serving(&scope, &record, &record.target, &store).unwrap();
+            assert_eq!(
+                queue_route_probe(&scope, &record, &record.target, &store).unwrap_err(),
+                "WEB_TASK_CONTEXT_ROUTE_PROBE_PRIOR_REQUIRED"
+            );
+            let prior = finish_queued(&store, queued, false);
+            assert_eq!(
+                queue_route_probe(&scope, &record, &record.target, &store).unwrap_err(),
+                "WEB_TASK_CONTEXT_ROUTE_PROBE_PRIOR_REQUIRED"
+            );
+            let path = root.join("cached-route-probe.json");
+            assert!(!path.exists());
+            store.complete_timer(&prior.event_id).unwrap();
+            let queued = queue_route_probe(&scope, &record, &record.target, &store).unwrap();
+            let bytes = fs::read(&path).unwrap();
+            let mut changed: Value = serde_json::from_slice(&bytes).unwrap();
+            changed["diagnosticCommand"] = json!("ANOTHER_COMMAND");
+            let tampered = serde_json::to_vec(&changed).unwrap();
+            fs::write(&path, &tampered).unwrap();
+            assert_eq!(
+                validate_route_probe(&scope, &record, &record.target, &store).unwrap_err(),
+                "WEB_TASK_CONTEXT_ROUTE_PROBE_CHANGED"
+            );
+            assert!(queue_route_probe(&scope, &record, &record.target, &store).is_err());
+            assert_eq!(fs::read(&path).unwrap(), tampered);
+            fs::write(&path, bytes).unwrap();
+            let wrong =
+                Target::new(record.target.generation + 1, record.target.url.clone()).unwrap();
+            assert!(queue_route_probe(&scope, &record, &wrong, &store).is_err());
+            let task_dir = super::super::super::task_directory(
+                &scope,
+                &record.task_assignment.as_ref().unwrap().task_id,
+                false,
+            )
+            .unwrap();
+            fs::create_dir(task_dir.join("journal")).unwrap();
+            assert_eq!(
+                queue_route_probe(&scope, &record, &record.target, &store).unwrap_err(),
+                "WEB_TASK_CONTEXT_NATIVE_EFFECT_UNPROVEN"
+            );
+            assert!(
+                store
+                    .delivery(queued["eventId"].as_str().unwrap())
+                    .unwrap()
+                    .is_none()
+            );
+        });
     }
 
     fn sent_event_with_completion(

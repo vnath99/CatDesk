@@ -1210,6 +1210,19 @@ class CurrentDomTests(unittest.TestCase):
                 legacy.pop('refusalCategories');legacy.pop('scanTruncated')
             self.assertTrue(bridge.valid_task_response_hints(legacy))
 
+    def test_actual_dispatch_schema_and_admission_error_names_are_recognized_without_values(self):
+        hints={}
+        self.sink.response_snapshot(CurrentDom(answer='INVALID_ARGUMENT: WEB_TASK_ARGUMENTS_INVALID '
+            'WEB_TASK_NATIVE_ARGUMENTS_INVALID WEB_TASK_REQUEST_ID_REQUIRED '
+            'WEB_TASK_CENTRAL_MODE_REQUIRED WEB_TASK_CENTRAL_AUTH_REQUIRED PLAN_REQUIRED '
+            'PRIVATE_CONTEXT='+ 'b'*64), 'exact wake message',
+            diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+        self.assertEqual(hints['knownCodes'],['INVALID_ARGUMENT','WEB_TASK_ARGUMENTS_INVALID',
+            'WEB_TASK_NATIVE_ARGUMENTS_INVALID','WEB_TASK_REQUEST_ID_REQUIRED',
+            'WEB_TASK_CENTRAL_MODE_REQUIRED','WEB_TASK_CENTRAL_AUTH_REQUIRED','PLAN_REQUIRED'])
+        self.assertTrue(bridge.valid_task_response_hints(hints))
+        self.assertNotIn('PRIVATE_CONTEXT',json.dumps(hints));self.assertNotIn('b'*64,json.dumps(hints))
+
     def test_trace_metadata_is_task_bound_passive_and_exports_no_labels_or_panels(self):
         for options, expected in [
             ([{'expanded':False,'linked':True}],(1,0,1,0,1,0)),

@@ -2357,6 +2357,25 @@ pub(crate) mod tests {
         assert!(!response.to_string().contains("executionKey"));
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn cached_empty_probe_is_refused_by_inner_schema_before_task_or_native_admission() {
+        let f = fixture("alpha");
+        let request:JsonRpcRequest=serde_json::from_value(json!({"jsonrpc":"2.0","id":"no-effect-probe",
+            "method":"tools/call","params":{"name":"run_command","arguments":{"command":"CATDESK_WEB_TASK={}"}}})).unwrap();
+        assert!(is_cached_call(&request));
+        let adapted = cached_request(&request).unwrap();
+        assert_eq!(adapted.params["arguments"], json!({}));
+        let journal = f
+            .control
+            .join(".catdesk/project-mcp-tasks/alpha/task-fixture/journal");
+        assert!(!journal.exists());
+        let response = handle_cached(f.control.to_str().unwrap(), &request).await;
+        let error = response.error.unwrap();
+        assert_eq!(error.code, -32602);
+        assert_eq!(error.message, "WEB_TASK_ARGUMENTS_INVALID");
+        assert!(!journal.exists());
+    }
+
     #[test]
     fn cached_canonical_envelope_checks_representation_without_native_admission() {
         let call = json!({"projectId":"alpha","requestId":"fixture","sourceEventId":"source",

@@ -156,6 +156,12 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
         "UNAUTHORIZED",
         "WEB_TASK_REQUEST_INVALID",
         "WEB_TASK_BINDING_CHANGED",
+        "WEB_TASK_ARGUMENTS_INVALID",
+        "WEB_TASK_NATIVE_ARGUMENTS_INVALID",
+        "WEB_TASK_REQUEST_ID_REQUIRED",
+        "WEB_TASK_CENTRAL_MODE_REQUIRED",
+        "WEB_TASK_CENTRAL_AUTH_REQUIRED",
+        "PLAN_REQUIRED",
     ];
     let version = hints["schemaVersion"].as_u64()?;
     let refusals = [

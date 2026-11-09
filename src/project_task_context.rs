@@ -21,6 +21,8 @@ pub(crate) enum InitialContextAction {
     DeliverTransportClarification,
     ResumeServing,
     DeliverServingRecovery,
+    PrepareRouteProbe,
+    DeliverRouteProbe,
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -668,16 +670,23 @@ pub(crate) fn run_initial_context_handoff(
         action,
         InitialContextAction::ResumeServing | InitialContextAction::DeliverServingRecovery
     );
+    let route_probe = matches!(
+        action,
+        InitialContextAction::PrepareRouteProbe | InitialContextAction::DeliverRouteProbe
+    );
     if clarification
         || transport
         || serving
+        || route_probe
         || matches!(
             action,
             InitialContextAction::Continue | InitialContextAction::DeliverContinuation
         )
     {
         keep_running()?;
-        let queued = if serving {
+        let queued = if route_probe {
+            identity::queue_route_probe(scope, record, target, &store)?
+        } else if serving {
             identity::queue_serving(scope, record, target, &store)?
         } else if transport {
             identity::queue_transport(scope, record, target, &store)?
@@ -692,6 +701,7 @@ pub(crate) fn run_initial_context_handoff(
                 | InitialContextAction::ClarifyIdentity
                 | InitialContextAction::ClarifyTransport
                 | InitialContextAction::ResumeServing
+                | InitialContextAction::PrepareRouteProbe
         ) {
             return Ok(queued);
         }
@@ -719,6 +729,9 @@ pub(crate) fn run_initial_context_handoff(
             if serving {
                 identity::validate_serving(scope, record, target, &store)?;
             }
+            if route_probe {
+                identity::validate_route_probe(scope, record, target, &store)?;
+            }
             if actual != &event || actual_target != target {
                 return Err("WEB_TASK_CONTEXT_CONTINUATION_CHANGED".into());
             }
@@ -741,6 +754,9 @@ pub(crate) fn run_initial_context_handoff(
             }
             if serving {
                 identity::validate_serving(scope, record, target, &store)?;
+            }
+            if route_probe {
+                identity::validate_route_probe(scope, record, target, &store)?;
             }
             after_fence(actual, actual_target)
         };
