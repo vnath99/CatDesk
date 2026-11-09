@@ -427,6 +427,8 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
             | "context-deliver-clarification"
             | "context-clarify-transport"
             | "context-deliver-transport-clarification"
+            | "context-resume-serving"
+            | "context-deliver-serving-recovery"
             | "context-retry-prepare"
             | "execution-revoke",
         ) => {
@@ -472,6 +474,8 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                     | "context-deliver-clarification"
                     | "context-clarify-transport"
                     | "context-deliver-transport-clarification"
+                    | "context-resume-serving"
+                    | "context-deliver-serving-recovery"
                     | "context-retry-prepare"
             ) {
                 Ok(WebAction::WorkContext {
@@ -3182,6 +3186,8 @@ mod tests {
             "context-deliver-clarification",
             "context-clarify-transport",
             "context-deliver-transport-clarification",
+            "context-resume-serving",
+            "context-deliver-serving-recovery",
             "context-retry-prepare",
         ] {
             let command = args(&[

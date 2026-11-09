@@ -1648,5 +1648,24 @@
     "responseSnapshotOperationAvailable": false,
     "currentDomInstalledCompletionQualification": "NOT_ESTABLISHED",
     "installedArtifactsChanged": false
+  },
+  "originalTaskServingRecovery": {
+    "observedUtc": "2026-11-09T01:17:46.034145+00:00",
+    "status": "SOURCE_VERIFIED_LIVE_NOT_RUN",
+    "stableIntent": true,
+    "requiresPriorSentAndComplete": true,
+    "requiresNativeReadyNoAttemptReceiptOrJournal": true,
+    "originalGrantAndCallPreserved": true,
+    "privateContextResent": false,
+    "unknownSubmissionResent": false,
+    "installedPackageChanged": false,
+    "identityTests": 7,
+    "operatorCliTests": 45,
+    "privateContextTests": 16,
+    "webWorkTests": "PASS",
+    "rootClippy": "PASS",
+    "failedFixtureRunRetained": true,
+    "c1NativeCompletion": "NOT_RUN",
+    "operatorResponseRelayRequired": false
   }
 }

@@ -6751,3 +6751,40 @@ Runtime source 78a44ac4e5522e9d538cb4285fba61b29e06c247, separate controller SHA
 f2faf0495c9e844361956d16cbeb22029719102ed21bda732d90f96d9a8b818c. 94 DOM tests, 19 native tests,
 formatting and strict root/Wake Clippy pass. Prior failed fixture expectations
 are retained; the existing guard correctly refused before clicking.
+
+
+## 2026-11-09T01:17:46.034145+00:00 — guarded original-task serving recovery
+
+SOURCE VERIFIED; LIVE NOT RUN for this transition. The existing private-context
+continuation now supports one later serving-window advisory after its transport
+clarification has an exact SENT receipt and COMPLETE timer. It recomputes the
+original assignment, grant, frozen envelope and target proof, requires fresh
+native READY with no attempt, receipt or task journal, and retains the original
+call identity. The advisory contains no execution key or private capsule.
+
+`operator web work context-resume-serving --project-id PROJECT --input-file PINS`
+queues one stable intent in the existing store; it does not assess serving
+readiness or send. `context-deliver-serving-recovery` with those same arguments
+uses the existing selected installed sender and before/after-submit fences.
+Neither command accepts an arbitrary message, destination, root, key or grant.
+Previously SUBMITTING/SENT events remain the same event; unknown outcomes require
+receipt reconciliation, never another send. Binding/proof/native-state drift
+refuses before delivery. No replacement task, transport or local dispatch route
+is introduced. These commands are source-controller capabilities, not claims of
+an installed package upgrade or successful C1 coding.
+
+Validation: 7 identity, 45 operator CLI and 16 private-context tests pass; the
+Web-work suite, formatting and strict root Clippy pass. One initial fixture
+incorrectly edited a COMPLETE timer into an invalid pending record; the store
+correctly refused it. The test now creates a valid pending timer through the
+existing receipt API; the failed run is retained. Existing no-replay, lease and
+native-route regression coverage includes this new transition.
+
+Next live step is one bounded existing-owner serving window, with authenticated
+backend and existing tunnel ready before queueing, automatic task-bound response
+observation, native receipt checks and verified cleanup. Do not replay completed
+clarifications. Keep serving available through observed native/assistant outcome
+within the test bound. The prior tool-unavailability cause and exact rejected
+outer field of WEB_TASK_CACHED_ARGUMENTS_INVALID remain unproved; do not infer
+them from popup markup. C1 and installed end-to-end response acceptance remain
+incomplete. No operator response relay is requested, and C2 is not started.

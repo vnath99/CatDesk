@@ -131,6 +131,10 @@ fn context_action_using(
         "context-deliver-transport-clarification" => {
             crate::project_mcp_task::InitialContextAction::DeliverTransportClarification
         }
+        "context-resume-serving" => crate::project_mcp_task::InitialContextAction::ResumeServing,
+        "context-deliver-serving-recovery" => {
+            crate::project_mcp_task::InitialContextAction::DeliverServingRecovery
+        }
         _ => return Err("WEB_TASK_CONTEXT_OPERATION_INVALID".into()),
     };
     let request = AssignmentRequest::parse(args)?;
@@ -209,6 +213,7 @@ fn context_action_using(
             crate::project_mcp_task::InitialContextAction::DeliverContinuation
                 | crate::project_mcp_task::InitialContextAction::DeliverClarification
                 | crate::project_mcp_task::InitialContextAction::DeliverTransportClarification
+                | crate::project_mcp_task::InitialContextAction::DeliverServingRecovery
         ) {
             return Err("WEB_TASK_CONTEXT_HANDOFF_INVALID".into());
         }
@@ -1558,6 +1563,7 @@ pub(crate) mod tests {
             "context-deliver-continuation",
             "context-deliver-clarification",
             "context-deliver-transport-clarification",
+            "context-deliver-serving-recovery",
         ] {
             verify_continuation_handoff(operation);
         }

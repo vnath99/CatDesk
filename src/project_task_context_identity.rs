@@ -388,12 +388,167 @@ pub(super) fn queue_transport(
     )
 }
 
+/// One later continuation, never another identity or transport correction.
+/// Its stable identity is the unchanged task proof plus the completed prior
+/// transport receipt; runtime timestamps cannot create another send.
+#[derive(Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ServingRecovery {
+    schema_version: u32,
+    purpose: String,
+    transport: TransportClarification,
+    prior_transport_receipt: Receipt,
+}
+
+fn serving_proof(
+    scope: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    target: &Target,
+    store: &catdesk_wake::store::Store,
+) -> Result<(ServingRecovery, PathBuf), String> {
+    let (transport, root) = transport_proof(scope, record, target, store)?;
+    let encoded = transport_bytes(&transport)?;
+    if read_assignment_bytes(&root.join("transport-clarification.json"))? != encoded {
+        return Err("WEB_TASK_CONTEXT_TRANSPORT_CHANGED".into());
+    }
+    let turn = format!(
+        "initial-context-{}",
+        digest(std::str::from_utf8(&encoded).map_err(|_| "WEB_TASK_CONTEXT_INVALID")?)
+    );
+    let id = catdesk_wake::store::WakeIntent {
+        purpose: catdesk_wake::protocol::WakePurpose::NewTask,
+        source_event_id: &record.event_id,
+        source_turn_id: &turn,
+        priority: 0,
+        ttl_seconds: 600,
+    }
+    .event_id(&scope.project.project_id)?;
+    let prior = store
+        .delivery(&id)?
+        .ok_or("WEB_TASK_CONTEXT_SERVING_PRIOR_REQUIRED")?;
+    let receipt = prior
+        .receipt
+        .clone()
+        .ok_or("WEB_TASK_CONTEXT_SERVING_PRIOR_REQUIRED")?;
+    let metadata = prior
+        .event
+        .wake_metadata()?
+        .ok_or("WEB_TASK_CONTEXT_SERVING_PRIOR_REQUIRED")?;
+    if prior.phase != catdesk_wake::store::Phase::Sent
+        || prior.target != *target
+        || prior.event.event_id != id
+        || prior.event.project_id != scope.project.project_id
+        || prior.event.target_generation != target.generation
+        || prior.event.message != transport_message(&transport)
+        || metadata.purpose != catdesk_wake::protocol::WakePurpose::NewTask
+        || metadata.source_event_id != record.event_id
+        || metadata.source_turn_id != turn
+        || receipt.schema_version != 1
+        || receipt.event_id != id
+        || receipt.target_generation != target.generation
+        || receipt.target_digest != target.digest
+        || receipt.message_digest != digest(&prior.event.message)
+        || receipt.evidence != "EXACT_USER_MESSAGE_APPENDED"
+        || receipt.sent_utc == 0
+        || store.timer(&id)?.is_none_or(|timer| {
+            timer.response_state != catdesk_wake::store::ResponseState::Complete
+                || timer.event_id != id
+                || timer.project_id != scope.project.project_id
+                || timer.target_generation != target.generation
+                || timer.target_digest != target.digest
+        })
+    {
+        return Err("WEB_TASK_CONTEXT_SERVING_PRIOR_REQUIRED".into());
+    }
+    Ok((
+        ServingRecovery {
+            schema_version: 1,
+            purpose: "ORIGINAL_NATIVE_TASK_SERVING_RECOVERY".into(),
+            transport,
+            prior_transport_receipt: receipt,
+        },
+        root,
+    ))
+}
+
+fn serving_bytes(value: &ServingRecovery) -> Result<Vec<u8>, String> {
+    serde_json::to_vec(value).map_err(|_| "WEB_TASK_CONTEXT_INVALID".into())
+}
+
+pub(super) fn validate_serving(
+    scope: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    target: &Target,
+    store: &catdesk_wake::store::Store,
+) -> Result<(), String> {
+    let (value, root) = serving_proof(scope, record, target, store)?;
+    if read_assignment_bytes(&root.join("serving-recovery.json"))? != serving_bytes(&value)? {
+        return Err("WEB_TASK_CONTEXT_SERVING_CHANGED".into());
+    }
+    Ok(())
+}
+
+fn serving_message(value: &ServingRecovery) -> String {
+    let identity = &value.transport.identity;
+    let r = &identity.reference;
+    format!(
+        "CatDesk original-task serving-window continuation for {}/{}. This is the same unfinished task, not a new assignment. Original fullPrivateContextSha256={} and assignmentSha256={} are unchanged. Prior completed transport-clarification USER digest={}; never resend that turn. Fresh local pre-admission proves the original native task READY with no attempt, receipt or task journal, and the canonical cached envelope still matches. Use the original capsule's exact nativeCall (native-dispatch-1, native.codex.dispatch, arguments {{}}) ONCE through registered CatDesk v5 tools. Prefer catdesk_web_task_tool if available; otherwise invoke run_command with ONLY command: literal CATDESK_WEB_TASK= immediately followed by the unchanged nativeCall JSON serialization. Omit every optional outer argument; do not use a placeholder, JavaScript or a shell command. Do not invent or replace the task, grant, key, call ID, root or native session. If any original identity/context/tool is unavailable or any native effect is uncertain, stop and report the exact bounded error/refusal. Keep the execution key private. Await the frozen native result and report actual edits, tests and blockers; do not substitute local-only execution or browser completion for task completion.",
+        r.project_id,
+        r.request_id,
+        identity.full_private_context_sha256,
+        r.assignment.assignment_sha256,
+        value.prior_transport_receipt.message_digest
+    )
+}
+
+pub(super) fn queue_serving(
+    scope: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    target: &Target,
+    store: &catdesk_wake::store::Store,
+) -> Result<Value, String> {
+    let (value, root) = serving_proof(scope, record, target, store)?;
+    let encoded = serving_bytes(&value)?;
+    exact_file(&root.join("serving-recovery.json"), &encoded)?;
+    let proof_sha = digest(std::str::from_utf8(&encoded).map_err(|_| "WEB_TASK_CONTEXT_INVALID")?);
+    let turn = format!("initial-context-{proof_sha}");
+    let event = store.produce_expected_wake(
+        &scope.project.project_id,
+        &serving_message(&value),
+        target,
+        catdesk_wake::store::WakeIntent {
+            purpose: catdesk_wake::protocol::WakePurpose::NewTask,
+            source_event_id: &record.event_id,
+            source_turn_id: &turn,
+            priority: 0,
+            ttl_seconds: 600,
+        },
+    )?;
+    let delivery = store.delivery(&event.event_id)?;
+    Ok(
+        json!({"status":if delivery.is_some(){"TASK_SERVING_RECOVERY_ALREADY_RECORDED"}else{"TASK_SERVING_RECOVERY_QUEUED"},
+        "projectId":scope.project.project_id,"requestId":record.request_id,"taskId":value.transport.identity.reference.assignment.task_id,
+        "eventId":event.event_id,"messageSha256":digest(&event.message),"servingRecoverySha256":proof_sha,
+        "priorTransportEventId":value.prior_transport_receipt.event_id,"targetGeneration":target.generation,"targetSha256":target.digest,
+        "deliveryPhase":delivery.as_ref().map(|v|&v.phase),"queueOnly":true,"servingReadinessAssessed":false,
+        "newGrantCreated":false,"nativeSessionAction":"NONE","taskCompleted":false,"executionKeyDisclosed":false}),
+    )
+}
+
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
     use catdesk_wake::store::{Phase, Store, now};
 
     fn sent_event(store: &Store, event: &catdesk_wake::protocol::Event) {
+        sent_event_with_completion(store, event, true);
+    }
+
+    fn sent_event_with_completion(
+        store: &Store,
+        event: &catdesk_wake::protocol::Event,
+        complete: bool,
+    ) {
         let host = store.host_lock().unwrap();
         let claimed = store.claim(event, &host).unwrap();
         store
@@ -420,7 +575,9 @@ mod tests {
                 None,
             )
             .unwrap();
-        store.complete_timer(&event.event_id).unwrap();
+        if complete {
+            store.complete_timer(&event.event_id).unwrap();
+        }
     }
 
     fn delivered(
@@ -733,6 +890,207 @@ mod tests {
                 "WEB_TASK_CONTEXT_TRANSPORT_CHANGED"
             );
             assert!(queue_transport(&scope, &record, &record.target, &store).is_err());
+        });
+    }
+
+    #[test]
+    fn serving_recovery_keeps_original_identity_and_one_intent_through_unknown_and_sent() {
+        crate::web_task_dispatch::tests::with_native_context_fixture(|control, pins| {
+            let scope =
+                crate::delegated::autonomy_projects::resolve_registered_project_from_control_root(
+                    control, "alpha",
+                )
+                .unwrap();
+            let store = Store::open(
+                &crate::wake_protocol_client::wake_root_for_workspace(control).unwrap(),
+            )
+            .unwrap();
+            let record = crate::web_work_state::WorkLedger::open(control, "alpha")
+                .unwrap()
+                .record("request-a")
+                .unwrap()
+                .unwrap();
+            let (_, payload, root) = delivered(&scope, &record, &store);
+            let identity = queue(&scope, &record, &record.target, &store).unwrap();
+            let identity_event = catdesk_wake::store::read(
+                &store
+                    .root()
+                    .join("queue")
+                    .join(format!("{}.json", identity["eventId"].as_str().unwrap())),
+            )
+            .unwrap();
+            sent_event(&store, &identity_event);
+            let transport = queue_transport(&scope, &record, &record.target, &store).unwrap();
+            let transport_event = catdesk_wake::store::read(
+                &store
+                    .root()
+                    .join("queue")
+                    .join(format!("{}.json", transport["eventId"].as_str().unwrap())),
+            )
+            .unwrap();
+            sent_event(&store, &transport_event);
+            let grant = super::super::super::task_directory(
+                &scope,
+                &record.task_assignment.as_ref().unwrap().task_id,
+                false,
+            )
+            .unwrap()
+            .join("execution-grant.json");
+            let paths = [
+                root.join("initial-payload.json"),
+                root.join("initial-delivery.json"),
+                root.join("identity-clarification.json"),
+                root.join("transport-clarification.json"),
+                grant,
+            ];
+            let before: Vec<_> = paths.iter().map(|p| fs::read(p).unwrap()).collect();
+            let queued =
+                crate::web_work::context_action(control, pins.clone(), "context-resume-serving")
+                    .unwrap();
+            assert_eq!(queued["status"], "TASK_SERVING_RECOVERY_QUEUED");
+            assert_eq!(queued["requestId"], record.request_id);
+            assert_eq!(queued["newGrantCreated"], false);
+            assert_eq!(queued["servingReadinessAssessed"], false);
+            assert_eq!(
+                queued,
+                queue_serving(&scope, &record, &record.target, &store).unwrap()
+            );
+            let id = queued["eventId"].as_str().unwrap();
+            assert_ne!(id, transport_event.event_id);
+            let event: catdesk_wake::protocol::Event =
+                catdesk_wake::store::read(&store.root().join("queue").join(format!("{id}.json")))
+                    .unwrap();
+            assert!(event.message.len() <= 2048);
+            assert!(event.message.contains("native-dispatch-1"));
+            assert!(
+                !event
+                    .message
+                    .contains(payload.context["executionKey"].as_str().unwrap())
+            );
+            validate_serving(&scope, &record, &record.target, &store).unwrap();
+            {
+                let host = store.host_lock().unwrap();
+                store.claim(&event, &host).unwrap();
+                store
+                    .transition(id, host.owner(), Phase::Submitting, None, None)
+                    .unwrap();
+                let path = store.root().join("deliveries").join(format!("{id}.json"));
+                let unknown = fs::read(&path).unwrap();
+                let same = queue_serving(&scope, &record, &record.target, &store).unwrap();
+                assert_eq!(same["eventId"], id);
+                assert_eq!(same["status"], "TASK_SERVING_RECOVERY_ALREADY_RECORDED");
+                assert_eq!(
+                    same["deliveryPhase"],
+                    serde_json::to_value(Phase::Submitting).unwrap()
+                );
+                assert_eq!(fs::read(&path).unwrap(), unknown);
+                let receipt = Receipt {
+                    schema_version: 1,
+                    event_id: id.into(),
+                    target_generation: record.target.generation,
+                    target_digest: record.target.digest.clone(),
+                    message_digest: digest(&event.message),
+                    sent_utc: now(),
+                    evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+                };
+                store.record_exact_receipt_timer(id, &receipt).unwrap();
+                store
+                    .transition(id, host.owner(), Phase::Sent, Some(receipt), None)
+                    .unwrap();
+                store.complete_timer(id).unwrap();
+            }
+            let path = store.root().join("deliveries").join(format!("{id}.json"));
+            let sent = fs::read(&path).unwrap();
+            let same = queue_serving(&scope, &record, &record.target, &store).unwrap();
+            assert_eq!(same["eventId"], id);
+            assert_eq!(
+                same["deliveryPhase"],
+                serde_json::to_value(Phase::Sent).unwrap()
+            );
+            assert_eq!(fs::read(path).unwrap(), sent);
+            for (path, bytes) in paths.iter().zip(before) {
+                assert_eq!(fs::read(path).unwrap(), bytes);
+            }
+            let directory = super::super::super::task_directory(
+                &scope,
+                &record.task_assignment.as_ref().unwrap().task_id,
+                false,
+            )
+            .unwrap();
+            fs::create_dir(directory.join("journal")).unwrap();
+            assert_eq!(
+                queue_serving(&scope, &record, &record.target, &store).unwrap_err(),
+                "WEB_TASK_CONTEXT_NATIVE_EFFECT_UNPROVEN"
+            );
+        });
+    }
+
+    #[test]
+    fn serving_recovery_requires_completed_transport_and_refuses_proof_or_target_drift() {
+        crate::web_task_dispatch::tests::with_native_context_fixture(|control, _| {
+            let scope =
+                crate::delegated::autonomy_projects::resolve_registered_project_from_control_root(
+                    control, "alpha",
+                )
+                .unwrap();
+            let store = Store::open(
+                &crate::wake_protocol_client::wake_root_for_workspace(control).unwrap(),
+            )
+            .unwrap();
+            let record = crate::web_work_state::WorkLedger::open(control, "alpha")
+                .unwrap()
+                .record("request-a")
+                .unwrap()
+                .unwrap();
+            let (_, _, root) = delivered(&scope, &record, &store);
+            assert!(queue_serving(&scope, &record, &record.target, &store).is_err());
+            assert!(!root.join("serving-recovery.json").exists());
+            let identity = queue(&scope, &record, &record.target, &store).unwrap();
+            let event = catdesk_wake::store::read(
+                &store
+                    .root()
+                    .join("queue")
+                    .join(format!("{}.json", identity["eventId"].as_str().unwrap())),
+            )
+            .unwrap();
+            sent_event(&store, &event);
+            let transport = queue_transport(&scope, &record, &record.target, &store).unwrap();
+            assert_eq!(
+                queue_serving(&scope, &record, &record.target, &store).unwrap_err(),
+                "WEB_TASK_CONTEXT_SERVING_PRIOR_REQUIRED"
+            );
+            assert!(!root.join("serving-recovery.json").exists());
+            let event = catdesk_wake::store::read(
+                &store
+                    .root()
+                    .join("queue")
+                    .join(format!("{}.json", transport["eventId"].as_str().unwrap())),
+            )
+            .unwrap();
+            sent_event_with_completion(&store, &event, false);
+            assert_eq!(
+                queue_serving(&scope, &record, &record.target, &store).unwrap_err(),
+                "WEB_TASK_CONTEXT_SERVING_PRIOR_REQUIRED"
+            );
+            assert!(!root.join("serving-recovery.json").exists());
+            store.complete_timer(&event.event_id).unwrap();
+            queue_serving(&scope, &record, &record.target, &store).unwrap();
+            let path = root.join("serving-recovery.json");
+            let original = fs::read(&path).unwrap();
+            let mut changed: Value = serde_json::from_slice(&original).unwrap();
+            changed["purpose"] = json!("ANOTHER_TASK");
+            let tampered = serde_json::to_vec(&changed).unwrap();
+            fs::write(&path, &tampered).unwrap();
+            assert_eq!(
+                validate_serving(&scope, &record, &record.target, &store).unwrap_err(),
+                "WEB_TASK_CONTEXT_SERVING_CHANGED"
+            );
+            assert!(queue_serving(&scope, &record, &record.target, &store).is_err());
+            assert_eq!(fs::read(&path).unwrap(), tampered);
+            fs::write(&path, original).unwrap();
+            let wrong =
+                Target::new(record.target.generation + 1, record.target.url.clone()).unwrap();
+            assert!(queue_serving(&scope, &record, &wrong, &store).is_err());
         });
     }
 
