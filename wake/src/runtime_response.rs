@@ -250,6 +250,34 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
                     *selected == canonical
                 })
         });
+    let trace = hints.get("trace");
+    let valid_trace = trace.is_none_or(|trace| {
+        let counts = [
+            "knownControls",
+            "expandedControls",
+            "collapsedControls",
+            "unprovenControls",
+            "linkedPanels",
+            "visiblePanels",
+        ];
+        version == 4
+            && trace
+                .as_object()
+                .is_some_and(|map| map.len() == counts.len() + 3)
+            && trace["schemaVersion"].as_u64() == Some(1)
+            && trace["scope"] == "EXACT_USER_EXCHANGE"
+            && trace["basis"] == "PRESENTATION_ONLY_NOT_TOOL_RECEIPT"
+            && counts
+                .iter()
+                .all(|field| trace[*field].as_u64().is_some_and(|n| n <= 64))
+            && trace["expandedControls"].as_u64().unwrap_or(0)
+                + trace["collapsedControls"].as_u64().unwrap_or(0)
+                + trace["unprovenControls"].as_u64().unwrap_or(0)
+                == trace["knownControls"].as_u64().unwrap_or(0)
+            && trace["visiblePanels"].as_u64() <= trace["linkedPanels"].as_u64()
+            && trace["visiblePanels"].as_u64() <= trace["expandedControls"].as_u64()
+            && trace["linkedPanels"].as_u64() <= trace["knownControls"].as_u64()
+    });
     let selected = hints.get("knownCodes")?.as_array()?;
     let canonical: Vec<Value> = codes
         .iter()
@@ -260,7 +288,7 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
         || tools.as_object()?.len() != 9
         || hints.as_object()?.len()
             != if version == 4 {
-                13
+                13 + usize::from(trace.is_some())
             } else if version == 3 {
                 10
             } else if version == 2 {
@@ -284,6 +312,7 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
         || !valid_refusals
         || !valid_subjects
         || !valid_argument_hints
+        || !valid_trace
     {
         return None;
     }

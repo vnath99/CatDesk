@@ -153,6 +153,19 @@ if (options.userTimeoutQuote) {
   append(user.children[0], button('Retry'));
 }
 const children = options.userOnly ? [user] : [user, assistant];
+for (const [index, trace] of (options.traceControls || []).entries()) {
+  const id='PRIVATE_TRACE_PANEL_'+index;
+  const control=el(trace.summary ? 'summary' : 'button', trace.summary ? {} : {
+    ...(trace.expanded===undefined ? {} : {'aria-expanded':String(trace.expanded)}),
+    ...(trace.linked ? {'aria-controls':id} : {})
+  }, trace.label || 'Worked for 46s');
+  const panel=el('div',{id,hidden:trace.expanded!==true},'PRIVATE_TRACE_ARGUMENTS');
+  const node=trace.summary ? el('details',trace.expanded ? {open:''} : {},'', [control,panel]) : control;
+  if(trace.placement==='user')append(user.children[0],node);
+  else if(trace.placement==='code')append(assistant.children[1].children[0],el('pre',{},'',[node]));
+  else children.splice(1,0,node);
+  if(!trace.summary && trace.linked)children.splice(1,0,panel);
+}
 if (options.unmountedLoadError) {
   for (let i = 0; i < (options.unmountedErrorCount || 1); i++) {
     const card = el('div', {}, '', [el('p', {}, 'This response couldn’t load')]);
@@ -1190,12 +1203,43 @@ class CurrentDomTests(unittest.TestCase):
             self.assertEqual(hints[field],[])
         self.assertNotIn('retryAuthorized',hints)
         for version in [1,2,3]:
-            legacy = {k:v for k,v in hints.items() if k not in ['mentionedTools','argumentIssues','cachedInvariants']}
+            legacy = {k:v for k,v in hints.items() if k not in ['mentionedTools','argumentIssues','cachedInvariants','trace']}
             legacy['schemaVersion']=version
             if version<3:legacy.pop('unavailableSubjects')
             if version==1:
                 legacy.pop('refusalCategories');legacy.pop('scanTruncated')
             self.assertTrue(bridge.valid_task_response_hints(legacy))
+
+    def test_trace_metadata_is_task_bound_passive_and_exports_no_labels_or_panels(self):
+        for options, expected in [
+            ([{'expanded':False,'linked':True}],(1,0,1,0,1,0)),
+            ([{'expanded':True,'linked':True}],(1,1,0,0,1,1)),
+            ([{}],(1,0,0,1,0,0)),
+            ([{'summary':True,'expanded':False}],(1,0,1,0,1,0)),
+            ([{'summary':True,'expanded':True}],(1,1,0,0,1,1)),
+            ([{'placement':'user'},{'placement':'code'},{'label':'PRIVATE_UNKNOWN_LABEL'}],(0,0,0,0,0,0)),
+        ]:
+            with self.subTest(options=options):
+                hints={}
+                cdp=CurrentDom(traceControls=options,traceClicks=True)
+                self.sink.response_snapshot(cdp,'exact wake message',diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+                trace=hints['trace']
+                self.assertTrue(bridge.valid_task_response_hints(hints))
+                self.assertEqual(tuple(trace[k] for k in bridge.TASK_TRACE_COUNTS),expected)
+                self.assertEqual(cdp.mutations,0)
+                for private in ['PRIVATE_TRACE_PANEL','PRIVATE_TRACE_ARGUMENTS','PRIVATE_UNKNOWN_LABEL','Worked for']:
+                    self.assertNotIn(private,json.dumps(hints))
+                for field, bad in [('knownControls',True),('knownControls',65),('knownControls',-1),
+                        ('knownControls',2),('scope','OTHER_EXCHANGE'),('rawText','PRIVATE_CONTEXT')]:
+                    self.assertFalse(bridge.valid_task_trace_metadata(trace | {field:bad}))
+
+    def test_trace_metadata_cannot_escape_foreign_or_duplicate_exchange(self):
+        for options in [{'duplicateUser':True},{'userText':'another request'}]:
+            hints={'trace':'PRIVATE_STALE_TRACE'}
+            with self.assertRaises(bridge.PostSubmitUnknown):
+                self.sink.response_snapshot(CurrentDom(traceControls=[{'expanded':True,'linked':True}],**options),
+                    'exact wake message',diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
+            self.assertEqual(hints,{})
 
     def test_identity_refusal_and_exact_code_boundaries_are_closed(self):
         hints = {}

@@ -9084,3 +9084,22 @@ ambiguous controls remain untouched. Do not add speculative argument changes,
 new continuation messages, broad clicking or another observer service. Preserve
 the original call/grant and existing release gates. C1 remains incomplete;
 C2 is not started and no operator response relay is requested.
+
+
+## 2026-11-09T01:48:32.721600+00:00 — passive completed-work trace identity
+
+SOURCE PASS; LIVE NOT RUN. The existing response observer now reports optional
+closed trace metadata in schema-4 task hints: known completed-work control count,
+expanded/collapsed/unproved state, unique panel links and visible panel count.
+Only the exact receipt-bound exchange is inspected; user/prose/code controls
+and unrecognized labels are excluded. No label, panel ID/content, key or argument
+is exported. This performs zero clicks and grants no expansion or retry authority.
+Legacy hints and prior schema-4 records without this optional field remain valid;
+unknown content, inconsistent counts and foreign/duplicate exchanges fail closed.
+
+98 DOM, 39 probe and 19 native readiness tests pass, as do formatting and strict
+root/Wake Clippy. Fixtures exercise native details/summary and linked buttons,
+unknown state, user/code exclusions, privacy, zero mutations and changed message
+identity. Next is one bounded read-only observation of the completed original
+serving continuation; no sender, backend, tunnel or Wake start is required.
+C1 remains incomplete; no original native call or USER message is replayed.

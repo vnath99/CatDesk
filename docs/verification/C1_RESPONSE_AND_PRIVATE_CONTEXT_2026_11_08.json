@@ -1773,5 +1773,20 @@
       "historicalTaskAttributedRequestRecovered": false,
       "causeInferredFromUsageCounters": false
     }
+  },
+  "completedWorkTraceMetadata": {
+    "observedUtc": "2026-11-09T01:48:32.721600+00:00",
+    "status": "SOURCE_PASS_LIVE_NOT_RUN",
+    "schemaVersion": 1,
+    "scope": "EXACT_USER_EXCHANGE",
+    "containingHintsSchema": 4,
+    "optionalForLegacyReaders": true,
+    "clicks": 0,
+    "rawLabelsIdsOrPanelsExported": false,
+    "domTests": 98,
+    "probeTests": 39,
+    "nativeReadinessTests": 19,
+    "strictRootAndWakeClippy": "PASS",
+    "installedAcceptance": "NOT_RUN"
   }
 }

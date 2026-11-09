@@ -897,6 +897,26 @@ fn task_diagnostics_are_closed_content_free_and_cannot_be_execution_receipts() {
             assert!(sanitized_rows(&format!("PROBE:TASK:{bad}")).is_empty());
         }
     }
+    let mut traced = expanded.clone();
+    traced["assistantHints"]["trace"] = serde_json::json!({"schemaVersion":1,"scope":"EXACT_USER_EXCHANGE",
+        "basis":"PRESENTATION_ONLY_NOT_TOOL_RECEIPT","knownControls":1,"expandedControls":0,
+        "collapsedControls":1,"unprovenControls":0,"linkedPanels":1,"visiblePanels":0});
+    assert_eq!(
+        task_response_diagnostics(&format!("PROBE:TASK:{traced}")),
+        Some(traced.clone())
+    );
+    for (field, invalid) in [
+        ("knownControls", serde_json::json!(true)),
+        ("knownControls", serde_json::json!(65)),
+        ("knownControls", serde_json::json!(2)),
+        ("visiblePanels", serde_json::json!(1)),
+        ("rawLabel", serde_json::json!("PRIVATE_TRACE")),
+        ("scope", serde_json::json!("OTHER_EXCHANGE")),
+    ] {
+        let mut bad = traced.clone();
+        bad["assistantHints"]["trace"][field] = invalid;
+        assert!(sanitized_rows(&format!("PROBE:TASK:{bad}")).is_empty());
+    }
     let mut bad = expanded;
     bad["assistantHints"]["argumentValues"] = serde_json::json!("PRIVATE_CONTEXT");
     assert!(sanitized_rows(&format!("PROBE:TASK:{bad}")).is_empty());

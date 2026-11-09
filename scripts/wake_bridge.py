@@ -205,6 +205,20 @@ TASK_CACHED_INVARIANTS = ("ARGUMENTS_NOT_OBJECT", "COMMAND_NOT_STRING", "PLAN_FL
                           "DRY_RUN_NOT_FALSE", "FULL_OUTPUT_NOT_FALSE", "CWD_OVERRIDE_FORBIDDEN",
                           "TIMEOUT_OVERRIDE_FORBIDDEN", "UNSUPPORTED_OUTER_FIELD", "COMMAND_TOO_LARGE",
                           "RESERVED_PREFIX_INVALID", "PAYLOAD_JSON_INVALID", "PAYLOAD_NOT_OBJECT")
+TASK_TRACE_COUNTS = ("knownControls", "expandedControls", "collapsedControls", "unprovenControls",
+                     "linkedPanels", "visiblePanels")
+
+
+def valid_task_trace_metadata(value: Any) -> bool:
+    """Presentation metadata only; never panel text, identifiers or click authority."""
+    return (isinstance(value, dict) and set(value) == set(TASK_TRACE_COUNTS) | {"schemaVersion", "scope", "basis"}
+            and type(value["schemaVersion"]) is int and value["schemaVersion"] == 1
+            and value["scope"] == "EXACT_USER_EXCHANGE"
+            and value["basis"] == "PRESENTATION_ONLY_NOT_TOOL_RECEIPT"
+            and all(type(value[key]) is int and 0 <= value[key] <= 64 for key in TASK_TRACE_COUNTS)
+            and value['expandedControls'] + value['collapsedControls'] + value['unprovenControls'] == value['knownControls']
+            and value['visiblePanels'] <= min(value['linkedPanels'],value['expandedControls'])
+            and value['linkedPanels'] <= value['knownControls'])
 
 
 def valid_task_response_hints(value: Any) -> bool:
@@ -217,6 +231,8 @@ def valid_task_response_hints(value: Any) -> bool:
     extra = {"mentionedTools":TASK_MENTIONED_TOOLS, "argumentIssues":TASK_ARGUMENT_ISSUES,
              "cachedInvariants":TASK_CACHED_INVARIANTS} if version == 4 else {}
     fields.update(extra)
+    if version == 4 and "trace" in value:
+        fields.add("trace")
     return (isinstance(value, dict) and set(value) == set(flags) | fields
             and type(version) is int and version in {1, 2, 3, 4}
             and value["basis"] == "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION"
@@ -228,7 +244,8 @@ def valid_task_response_hints(value: Any) -> bool:
             and (version not in (3, 4) or (isinstance(value["unavailableSubjects"], list)
                  and value["unavailableSubjects"] == [subject for subject in TASK_UNAVAILABLE_SUBJECTS if subject in value["unavailableSubjects"]]))
             and all(isinstance(value[field], list) and value[field] == [item for item in allowed if item in value[field]]
-                    for field, allowed in extra.items()))
+                    for field, allowed in extra.items())
+            and ("trace" not in value or valid_task_trace_metadata(value["trace"])))
 
 
 def valid_tool_marker_diagnostics(value: Any) -> bool:
@@ -2138,6 +2155,25 @@ class CdpSink:
                     CACHED_ENVELOPE_REJECTED:hasCode('WEB_TASK_CACHED_ARGUMENTS_INVALID')
                 }};
                 const cachedInvariants = {json.dumps(TASK_CACHED_INVARIANTS)};
+                // Only known completed-work trace labels outside user/prose/code
+                // can identify candidates. Observe, never click or export labels.
+                const traceScope = pairedTurn ? latestUser : responseBoundary;
+                const traceExcluded = "pre, code, [data-markdown-text-style='assistant-message'], .markdown, [class~='prose']";
+                const traceControls = Array.from(traceScope ? traceScope.querySelectorAll('button, [role="button"], summary') : [])
+                    .filter(node => visible(node) && !node.closest(userNodeSelector) && !node.closest(traceExcluded))
+                    .filter(node => /^(?:worked|thought) for \\d+(?:\\.\\d+)?(?:ms|s|m|h)(?: \\d+(?:\\.\\d+)?(?:ms|s|m|h))?(?:\\s*[>›])?$/i.test(
+                        normalize(node.innerText || node.textContent || node.getAttribute('aria-label') || '')));
+                let traceExpanded=0,traceCollapsed=0,traceUnknown=0,traceLinked=0,traceVisible=0;
+                for (const control of traceControls.slice(0,64)) {{
+                    const details = control.tagName.toLowerCase()==='summary' ? control.closest('details') : null;
+                    const expanded = details ? (details.hasAttribute('open') ? 'true' : 'false') : control.getAttribute('aria-expanded');
+                    if (expanded==='true') traceExpanded++;
+                    else if (expanded==='false') traceCollapsed++;
+                    else traceUnknown++;
+                    const id=control.getAttribute('aria-controls');
+                    const panels=details ? [details] : (id && id.length<=256 ? Array.from(document.querySelectorAll('[id]')).filter(n => n.getAttribute('id')===id) : []);
+                    if (panels.length===1) {{ traceLinked++; if (visible(panels[0]) && expanded==='true') traceVisible++; }}
+                }}
                 result.push({{schemaVersion:4,basis:'ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION',
                     toolUnavailable,contextUnavailable,
                     approvalRequested,
@@ -2147,6 +2183,9 @@ class CdpSink:
                     mentionedTools:{json.dumps(TASK_MENTIONED_TOOLS)}.filter(tool => mentionedTools[tool]),
                     argumentIssues:{json.dumps(TASK_ARGUMENT_ISSUES)}.filter(issue => argumentIssues[issue]),
                     cachedInvariants:cachedInvariants.filter(hasCode),
+                    trace:{{schemaVersion:1,scope:'EXACT_USER_EXCHANGE',basis:'PRESENTATION_ONLY_NOT_TOOL_RECEIPT',
+                        knownControls:Math.min(traceControls.length,64),expandedControls:traceExpanded,collapsedControls:traceCollapsed,
+                        unprovenControls:traceUnknown,linkedPanels:traceLinked,visiblePanels:traceVisible}},
                     knownCodes:known.filter(hasCode),
                     refusalCategories:{json.dumps(TASK_REFUSAL_CATEGORIES)}.filter(kind => refusals[kind])}});
             }}
