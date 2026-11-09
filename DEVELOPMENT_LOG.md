@@ -2217,3 +2217,17 @@ including source hash, target, stopped-owner, receipt and trace fences. The
 bounded attention/error unit test and strict Clippy pass. All gates remain
 unchanged. A matched diagnostic controller may now establish the actual refusal;
 this is not successful historical readback or installed acceptance.
+
+
+### 2026-11-09T03:31:35.470864+00:00 — distinguish historical admission layers
+
+The diagnostic-only follow-up still returned WEB_OPERATION_REFUSED with no
+response observation. Thus none of the twelve newly exposed readiness codes
+establishes its cause. Preservation1088 and cleanup pass; no USER/native/trace
+action occurred. The new historical path now distinguishes its receipt/timer
+admission refusal from its browser-owner/admission refusal using closed RESPONSE
+codes, suppressing underlying arbitrary errors. Neither branch changes admission
+rules or trusts a response. Native22 tests and strict root/Wake Clippy pass.
+No unchanged inspection retry is warranted; a matched layered controller may
+identify which boundary rejects the passive read. Installed and C1 acceptance
+remain incomplete.

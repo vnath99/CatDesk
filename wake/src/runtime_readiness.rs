@@ -22,7 +22,9 @@ pub fn inspect_historical_task_response(
     event: &str,
     keep_current: &dyn Fn() -> Result<()>,
 ) -> Result<serde_json::Value> {
-    let (delivery, timer) = store.sent_response_scope(project, target, event)?;
+    let (delivery, timer) = store
+        .sent_response_scope(project, target, event)
+        .map_err(|_| "RESPONSE_HISTORY_RECEIPT_OR_TIMER_REFUSED")?;
     if timer.response_state != ResponseState::Complete {
         return Err("READINESS_COMPLETED_RESPONSE_REQUIRED".into());
     }
@@ -34,6 +36,7 @@ pub fn inspect_historical_task_response(
         Mode::HistoricalDiagnostics,
         keep_current,
     )
+    .map_err(|_| "RESPONSE_HISTORY_BROWSER_OWNER_OR_ADMISSION_REFUSED".into())
 }
 
 pub fn inspect_sent_task_trace(
@@ -747,6 +750,11 @@ mod tests {
             inspect_historical_task_response(&store, "alpha", &target, &event.event_id, &|| Ok(()))
                 .unwrap_err(),
             "READINESS_COMPLETED_RESPONSE_REQUIRED"
+        );
+        assert_eq!(
+            inspect_historical_task_response(&store, "alpha", &target, "missing-event", &|| Ok(()))
+                .unwrap_err(),
+            "RESPONSE_HISTORY_RECEIPT_OR_TIMER_REFUSED"
         );
         store.complete_timer(&event.event_id).unwrap();
         let hash = sha256_file(&path, "fixture").unwrap();
