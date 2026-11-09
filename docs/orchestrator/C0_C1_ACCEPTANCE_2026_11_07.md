@@ -2494,3 +2494,12 @@ Two of eleven partials and nine of 50 fragments are now qualified. Context
 obligations remain preserved for the final review. This demonstrates two routine
 reviews within one registered authorization; it does not establish native coding,
 cumulative source acceptance, protected promotion or normal unattended operation.
+
+At 23:10:49Z the third frozen review is held UNKNOWN after
+`RESPONSE_USER_REPRESENTATION_MISMATCH`: SUBMITTING, no receipt, ATTENTION timer.
+Its 192.511s owner failed without timeout; all 1,210 pins and owned cleanup were
+verified. Later groups are held. The existing read-only review diagnostic is the
+next executable recovery step; no USER or native call will be replayed. The two
+qualified partials remain valid, but cumulative review, promotion and **C1 remain
+incomplete**. The matching installed pair requires the existing healthy-pair
+reviewed-build promotion route after genuine authority, not divergent-pair repair.

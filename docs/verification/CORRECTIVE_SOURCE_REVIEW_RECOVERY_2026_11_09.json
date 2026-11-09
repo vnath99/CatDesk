@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordedUtc": "2026-11-09T23:00:14Z",
+  "recordedUtc": "2026-11-09T23:10:49Z",
   "classification": "LIVE_SELECTED_DEV_RECOVERY_AND_CORROBORATED_PARTIAL_REVIEW_NOT_C1",
   "publicIdentities": {
     "focusedMainSource": "ae3f81445dc543d236732060e8d02e54b8c3a978",
@@ -87,6 +87,36 @@
     "ownedCleanupAndEndpointRefusalVerified": true,
     "sourceAccepted": false,
     "producerAuthority": false
+  },
+  "thirdCorrectivePartial": {
+    "sendCommandsStarted": 1,
+    "deliveryPhase": "SUBMITTING",
+    "failure": "RESPONSE_USER_REPRESENTATION_MISMATCH",
+    "exactDeliveryReceiptPresent": false,
+    "messageOutcome": "UNKNOWN",
+    "responseState": "ATTENTION",
+    "completedResponseVerified": false,
+    "resendAuthorized": false,
+    "laterGroupsHeld": true,
+    "boundedOwnerPassed": false,
+    "boundedOwnerExitCode": 1,
+    "boundedOwnerTimedOut": false,
+    "boundedOwnerSeconds": 192.511,
+    "preservationPins": 1210,
+    "preservationMismatches": 0,
+    "ownedCleanupAndEndpointRefusalVerified": true,
+    "nextAction": "EXISTING_BOUNDED_READ_ONLY_REVIEW_DIAGNOSE_FOR_ORIGINAL_EVENT",
+    "sourceAccepted": false,
+    "producerAuthority": false
+  },
+  "healthyPairPromotionRoute": {
+    "investigation": "READ_ONLY_SOURCE_AND_HISTORICAL_PROCEDURE",
+    "canonicalExecutableAndFingerprintMatch": true,
+    "releasePairRecoveryRequiresActualDivergence": true,
+    "supportedHealthyPairRoute": "EXISTING_REVIEWED_BUILD_PROMOTION_PREFLIGHT_CONFIRM_RESULT",
+    "newCandidateMustBeGenuinelyReviewedAndAttested": true,
+    "previousVerifiedVersionMustBeRetained": true,
+    "productionActionPerformed": false
   },
   "closureAndCleanup": {
     "supportedCommunicationClosure": "CLOSED",
