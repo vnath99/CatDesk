@@ -1,0 +1,104 @@
+ 
+     def test_user_timeout_quote_is_not_an_assistant_timeout_card(self):
+         cdp = CurrentDom(userTimeoutQuote=True)
+         self.assertEqual(self.sink.response_snapshot(cdp, "exact wake message")[:2], (0, 0))
+ 
+ 
++    def test_historical_response_is_exact_bounded_and_cannot_change_latest_or_retry_rules(self):
++        for legacy in [False,True]:
++            with self.subTest(legacy=legacy):
++                cdp=CurrentDom(observationEditor=True,laterExchange=True,legacyTurns=legacy,traceClicks=True,
++                    answer='native.codex.dispatch returned WEB_TASK_CACHED_ARGUMENTS_INVALID.')
++                with self.assertRaises(bridge.Attention):
++                    self.sink.observe_cooperative_response(cdp,'exact wake message',bridge.digest('exact wake message'))
++                self.assertEqual(self.sink.observe_cooperative_response(cdp,'exact wake message',bridge.digest('exact wake message'),historical=True),'RESPONSE_COMPLETE')
++                diagnostic,tools,hints={},{},{}
++                self.sink.response_snapshot(cdp,'exact wake message',require_usable_body=True,diagnostic=diagnostic,
++                    tool_diagnostic=tools,execution_diagnostic=hints,historical=True)
++                self.assertEqual(hints['knownCodes'],['WEB_TASK_CACHED_ARGUMENTS_INVALID'])
++                self.assertEqual(hints['mentionedTools'],['NATIVE_DISPATCH'])
++                self.assertNotIn('PRIVATE_',json.dumps(hints))
++                with self.assertRaises(bridge.PostSubmitUnknown):self.sink.click_response_timeout_retry(cdp,'exact wake message')
++                with self.assertRaises(TypeError):self.sink.response_snapshot(cdp,'exact wake message',require_usable_body=True,
++                    diagnostic={},tool_diagnostic={},execution_diagnostic={},historical=True,trace_action=('OPEN','a'*32),trace_observation={})
++                self.assertEqual(cdp.mutations,0)
++
++
++    def test_historical_response_refuses_wrong_duplicate_expired_or_unfinished_exchange(self):
++        for options,expected in [({'laterSameUser':True},'RESPONSE_EXPECTED_USER_DUPLICATED'),
++                ({'userText':'foreign original'},None),({'observationLogin':True},'LOGIN_OR_PROFILE_REQUIRED'),
++                ({'observationNetwork':True},'RESPONSE_NETWORK_ERROR')]:
++            with self.subTest(options=options):
++                cdp=CurrentDom(observationEditor=True,laterExchange=True,**options)
++                with self.assertRaises(bridge.Attention) as failure:
++                    self.sink.observe_cooperative_response(cdp,'exact wake message',bridge.digest('exact wake message'),historical=True)
++                if expected:self.assertEqual(str(failure.exception),expected)
++        for options in [dict(observationStop=True),dict(answer=''),dict(toolbar=False)]:
++            self.assertEqual(self.sink.observe_cooperative_response(CurrentDom(observationEditor=True,laterExchange=True,**options),
++                'exact wake message',bridge.digest('exact wake message'),historical=True),'RESPONSE_PENDING')
++
++
++    def test_exact_assistant_task_hints_are_closed_and_not_execution_authority(self):
++        hints, tools = {}, {}
++        answer = "PRIVATE_KEY_MARKER. The run_command tool is not exposed. Private context is missing. Please approve. native.codex.dispatch HTTP 429 WEB_ROLLOVER_PROJECT_BUSY UNKNOWN_PRIVATE_CODE"
++        result = self.sink.response_snapshot(CurrentDom(answer=answer), "exact wake message",
++            require_usable_body=True, diagnostic={}, tool_diagnostic=tools, execution_diagnostic=hints)
++        self.assertEqual(result, (0,0,True,True))
++        self.assertTrue(bridge.valid_task_response_hints(hints))
++        self.assertEqual([hints[key] for key in ("toolUnavailable","contextUnavailable","approvalRequested","nativeDispatchMentioned")],[True]*4)
++        self.assertEqual(hints['knownCodes'],['HTTP_429','WEB_ROLLOVER_PROJECT_BUSY'])
++        self.assertNotIn('PRIVATE_KEY_MARKER',json.dumps(hints))
++        self.assertEqual(hints['unavailableSubjects'], ['RUN_COMMAND', 'PRIVATE_CONTEXT'])
++        for key,value in [('knownCodes',['UNKNOWN_PRIVATE_CODE']),('knownCodes',['HTTP_429','HTTP_429']),
++                          ('toolUnavailable',1),('schemaVersion',True),('text',answer)]:
++            self.assertFalse(bridge.valid_task_response_hints(hints | {key:value}))
++        self.sink.response_snapshot(CurrentDom(answer="A usable answer."), "exact wake message",
++            diagnostic={}, tool_diagnostic=tools, execution_diagnostic=hints)
++        self.assertFalse(any(hints[key] for key in ('toolUnavailable','contextUnavailable','approvalRequested','nativeDispatchMentioned')))
++        self.assertEqual(hints['knownCodes'],[])
++
++
++    def test_task_hints_refuse_foreign_or_duplicate_exchange_and_reset_previous_hints(self):
++        for options in ({'duplicateUser':True},{'userText':'different request'}):
++            hints={'PRIVATE_STALE_HINT':True}
++            with self.assertRaises(bridge.PostSubmitUnknown):
++                self.sink.response_snapshot(CurrentDom(**options),"exact wake message",
++                    diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
++            self.assertEqual(hints,{})
++
++
++    def test_cached_tool_rejection_is_classified_without_exporting_request_or_keys(self):
++        hints = {}
++        body = ('native.codex.dispatch returned INVALID_ARGUMENT: McpServerError: '
++                'WEB_TASK_CACHED_ARGUMENTS_INVALID. Dispatch rejected. '
++                'PRIVATE_CONTEXT_MARKER executionKey=' + 'f' * 64)
++        self.sink.response_snapshot(CurrentDom(answer=body), 'exact wake message',
++            require_usable_body=True, diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
++        self.assertTrue(bridge.valid_task_response_hints(hints))
++        self.assertEqual(hints['schemaVersion'], 7)
++        self.assertEqual(hints['knownCodes'], ['WEB_TASK_CACHED_ARGUMENTS_INVALID', 'INVALID_ARGUMENT'])
++        self.assertEqual(hints['refusalCategories'], ['DISPATCH_REJECTED'])
++        self.assertNotIn('PRIVATE_CONTEXT_MARKER', json.dumps(hints))
++        self.assertNotIn('f' * 64, json.dumps(hints))
++        self.assertNotIn('executionKey', json.dumps(hints))
++        self.assertFalse(hints['scanTruncated'])
++
++
++    def test_missing_call_does_not_claim_an_available_tool_is_missing(self):
++        for answer, expected in [
++            ("run_command is available, but nativeCall is not visible.", ['NATIVE_CALL']),
++            ("I don't have nativeCall. run_command is available.", ['NATIVE_CALL']),
++            ("The run_command tool is not exposed. The executionKey is missing.", ['RUN_COMMAND', 'EXECUTION_KEY']),
++            ("I have run_command and nativeCall is not available.", ['NATIVE_CALL']),
++            ("CatDesk-Local-Tunnel-v5 is unavailable. Frozen capsule is not visible.", ['PRIVATE_CONTEXT','CATDESK_APP']),
++            ("All tools and the original context are available.", []),
++        ]:
++            with self.subTest(answer=answer):
++                hints = {}
++                self.sink.response_snapshot(CurrentDom(answer=answer), 'exact wake message',
++                    require_usable_body=True, diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
++                self.assertEqual(hints['unavailableSubjects'], expected)
++                self.assertTrue(bridge.valid_task_response_hints(hints))
++                self.assertNotIn(answer, json.dumps(hints))
++                for bad in [['PRIVATE_KEY_MARKER'], ['NATIVE_CALL','NATIVE_CALL'],
++                            ['EXECUTION_KEY','RUN_COMMAND'], 'NATIVE_CALL', None]:

@@ -1,0 +1,101 @@
+diff --git a/src/mcp.rs b/src/mcp.rs
+index 495f67951806e23f86fc82a6fcb53d53f6c74f11..4f1a5252f7e083614d172c90e6ff43890db2aff7 100644
+--- a/src/mcp.rs
++++ b/src/mcp.rs
+@@ -199,48 +199,54 @@ pub struct JsonRpcRequest {
+     #[serde(default)]
+     pub params: Value,
+ }
+ 
+ #[derive(Serialize)]
+ pub struct JsonRpcResponse {
+     pub jsonrpc: String,
+     #[serde(skip_serializing_if = "Option::is_none")]
+     pub id: Option<Value>,
+     #[serde(skip_serializing_if = "Option::is_none")]
+     pub result: Option<Value>,
+     #[serde(skip_serializing_if = "Option::is_none")]
+-    pub error: Option<JsonRpcError>,
++    pub error: Option<Box<JsonRpcError>>,
+ }
+ 
+ #[derive(Serialize)]
+ pub struct JsonRpcError {
+     pub code: i64,
+     pub message: String,
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub data: Option<Value>,
+ }
+ 
+ impl JsonRpcResponse {
+     pub fn success(id: Option<Value>, result: Value) -> Self {
+         Self {
+             jsonrpc: "2.0".into(),
+             id,
+             result: Some(result),
+             error: None,
+         }
+     }
+     pub fn error(id: Option<Value>, code: i64, message: String) -> Self {
+         Self {
+             jsonrpc: "2.0".into(),
+             id,
+             result: None,
+-            error: Some(JsonRpcError { code, message }),
++            error: Some(Box::new(JsonRpcError {
++                code,
++                message,
++                data: None,
++            })),
+         }
+     }
+ }
+ 
+ #[derive(Clone, Default)]
+ struct TokenUsage {
+     input_tokens: u64,
+     output_tokens: u64,
+     total_tokens: u64,
+ }
+ 
+ impl TokenUsage {
+@@ -10904,24 +10910,39 @@ fn validate_generic_file_tool_target(
+             "code: PROTECTED_PATH\nmessage: {operation} cannot target .catdesk control files; use dedicated CatDesk tools"
+         ));
+     }
+     Ok(())
+ }
+ 
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+     use std::ffi::OsString;
+     use uuid::Uuid;
+ 
++    #[test]
++    fn optional_error_data_preserves_legacy_jsonrpc_wire_shape() {
++        let mut response = JsonRpcResponse::error(Some(json!(7)), -32602, "TEST_ERROR".into());
++        let legacy = json!({"jsonrpc":"2.0","id":7,
++            "error":{"code":-32602,"message":"TEST_ERROR"}});
++        assert_eq!(serde_json::to_value(&response).unwrap(), legacy);
++        response.error.as_mut().unwrap().data = Some(json!({"phase":"CACHED_ENVELOPE_VALIDATION",
++            "invariant":"PAYLOAD_NOT_OBJECT","nativeExecutionAttempted":false,"retryAuthorized":false}));
++        let current = serde_json::to_value(&response).unwrap();
++        assert_eq!(current["error"]["code"], legacy["error"]["code"]);
++        assert_eq!(current["error"]["message"], legacy["error"]["message"]);
++        assert_eq!(current["error"]["data"]["invariant"], "PAYLOAD_NOT_OBJECT");
++        assert!(current.get("result").is_none());
++    }
++
+     fn active_delivery_fixture(
+         project: &str,
+     ) -> (Value, ProjectWebTargetV1, catdesk_wake::store::Delivery) {
+         use catdesk_wake::{
+             protocol::{Event, Target, digest},
+             store::{Delivery, Phase},
+         };
+         let target = Target::new(3, format!("https://chatgpt.com/c/{project}-fixture")).unwrap();
+         let event = Event {
+             schema_version: catdesk_wake::PROTOCOL_VERSION,
+             event_id: format!("web-work-{}", digest(&format!("{project}\0request"))),
+             project_id: project.into(),

@@ -1,0 +1,110 @@
++
++
++    def test_button_shape_schema_refuses_arbitrary_text_and_accepts_legacy_controls(self):
++        diagnostic = {}
++        self.sink.response_snapshot(CurrentDom(), 'exact wake message',
++            require_usable_body=True,diagnostic=diagnostic)
++        controls = diagnostic['controls']
++        legacy = {key:value for key,value in controls.items() if key!='buttonShape'}
++        self.assertTrue(bridge.valid_response_control_diagnostics(legacy))
++        shape = controls['buttonShape']
++        for extra in [{'rawText':'PRIVATE_DRAFT'},{'schemaVersion':True},
++                      {'buttons':shape['buttons']*8},{'countOverflow':True}]:
++            self.assertFalse(bridge.valid_response_button_shape(shape | extra))
++        for field in shape['buttons'][0]:
++            for bad in ['PRIVATE_TOKEN',None,{},[]]:
++                rows=[shape['buttons'][0] | {field:bad}]
++                self.assertFalse(bridge.valid_response_button_shape(shape | {'buttons':rows}))
++
++
++    def test_button_shape_redacts_object_prototype_names_as_unknown_labels(self):
++        for label in ['constructor','__proto__','toString']:
++            diagnostic = {}
++            self.sink.response_snapshot(CurrentDom(assistantCopyLabel=label,
++                diagnosticActionAttributes={'title':label,'data-tooltip-content':label}),
++                'exact wake message',require_usable_body=True,diagnostic=diagnostic)
++            shape = diagnostic['controls']['buttonShape']
++            self.assertTrue(bridge.valid_response_button_shape(shape))
++            row = next(row for row in shape['buttons'] if row['location']=='SHARED')
++            for key in ['aria','title','tooltip']:
++                self.assertEqual(row[key],'OTHER')
++            self.assertFalse(diagnostic['controls']['completionActionFound'])
++
++
++    def test_unmounted_current_error_card_is_diagnosed_without_any_mutation(self):
++        cdp = CurrentDom(userOnly=True, unmountedLoadError=True,
++                         observationEditor=True, traceClicks=True)
++        self.assertEqual(self.sink.trusted_turn_anchor_state(cdp, 'exact wake message'), (1, 0))
++        with self.assertRaisesRegex(bridge.Attention, '^RESPONSE_LOAD_ERROR$'):
++            self.sink.observe_cooperative_response(cdp, 'exact wake message', bridge.digest('exact wake message'))
++        self.assertEqual(cdp.mutations, 0)
++
++
++    def test_unmounted_error_detection_excludes_quotes_tools_history_and_ambiguity(self):
++        for options in [
++            *[{'unmountedLoadError': True, 'unmountedPlacement': where}
++              for where in ['user', 'code', 'tool', 'unit', 'quote', 'control', 'before']],
++            {'unmountedLoadError': True, 'unmountedErrorCount': 2},
++            {'historicalLoadError': True}, {},
++        ]:
++            with self.subTest(options=options):
++                cdp = CurrentDom(userOnly=True, observationEditor=True, traceClicks=True, **options)
++                self.assertEqual(self.sink.observe_cooperative_response(
++                    cdp, 'exact wake message', bridge.digest('exact wake message')), 'RESPONSE_PENDING')
++                self.assertEqual(self.sink.response_observation_reason, 'ASSISTANT_NOT_MOUNTED')
++                self.assertEqual(cdp.mutations, 0)
++
++
++    def test_unmounted_error_does_not_override_active_generation_or_duplicate_user(self):
++        cdp = CurrentDom(userOnly=True, unmountedLoadError=True,
++                         observationEditor=True, observationStop=True)
++        self.assertEqual(self.sink.observe_cooperative_response(
++            cdp, 'exact wake message', bridge.digest('exact wake message')), 'RESPONSE_PENDING')
++        self.assertEqual(self.sink.response_observation_reason, 'GENERATION_ACTIVE')
++        with self.assertRaisesRegex(bridge.Attention, '^RESPONSE_EXPECTED_USER_DUPLICATED$'):
++            self.sink.observe_cooperative_response(
++                CurrentDom(userOnly=True, unmountedLoadError=True, duplicateUser=True, observationEditor=True),
++                'exact wake message', bridge.digest('exact wake message'))
++
++
++    def test_completion_uses_actual_document_even_if_driver_metadata_is_stale(self):
++        cdp = CurrentDom(metadataLocation='https://chatgpt.com/', observationEditor=True)
++        self.assertEqual(self.sink.observe_cooperative_response(
++            cdp, 'exact wake message', bridge.digest('exact wake message')), 'RESPONSE_COMPLETE')
++
++
++    def test_completion_refuses_foreign_document_despite_expected_driver_metadata(self):
++        cdp = CurrentDom(location='https://chatgpt.com/c/foreign', metadataLocation=self.sink.url,
++                         observationEditor=True, traceClicks=True)
++        with self.assertRaisesRegex(bridge.Attention, '^RESPONSE_TARGET_DRIFT$'):
++            self.sink.observe_cooperative_response(cdp, 'exact wake message', bridge.digest('exact wake message'))
++        self.assertEqual(getattr(cdp, 'mutations', 0), 0)
++
++
++    def test_completion_rechecks_document_after_reading_exact_response(self):
++        cdp = CurrentDom(observationEditor=True)
++        original = self.sink.response_snapshot
++        def drift(*args, **kwargs):
++            result = original(*args, **kwargs)
++            cdp.options['location'] = 'https://chatgpt.com/c/foreign'
++            return result
++        with patch.object(self.sink, 'response_snapshot', side_effect=drift), \
++                self.assertRaisesRegex(bridge.Attention, '^RESPONSE_TARGET_DRIFT$'):
++            self.sink.observe_cooperative_response(cdp, 'exact wake message', bridge.digest('exact wake message'))
++
++
++    def test_completion_requires_readable_document_route_without_private_failure_text(self):
++        for value in [None, {}, 17]:
++            class InvalidDocument:
++                def evaluate(self, _): return value
++                def get_current_url(self): raise AssertionError('driver metadata is not document authority')
++            with self.assertRaisesRegex(bridge.Attention, '^RESPONSE_TARGET_DRIFT$'):
++                self.sink.require_response_document(InvalidDocument())
++        class Unavailable:
++            def evaluate(self, _): raise RuntimeError('PRIVATE_BROWSER_DETAILS')
++        with self.assertRaisesRegex(bridge.Attention, '^RESPONSE_TARGET_QUERY_FAILED$'):
++            self.sink.require_response_document(Unavailable())
++
++
+ if __name__ == "__main__":
+     unittest.main()

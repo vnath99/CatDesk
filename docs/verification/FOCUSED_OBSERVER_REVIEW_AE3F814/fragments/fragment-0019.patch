@@ -1,0 +1,120 @@
++                self.assertFalse(bridge.valid_task_response_hints(hints | {field:bad}))
++
++
++    def test_argument_hints_preserve_uncertainty_and_exact_code_boundaries(self):
++        hints = {}
++        self.sink.response_snapshot(CurrentDom(answer='INVALID_ARGUMENT. '
++            'NOT_CWD_OVERRIDE_FORBIDDEN_OTHER PRIVATE_TOOL_NAME.'), 'exact wake message',
++            diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
++        self.assertEqual(hints['knownCodes'], ['INVALID_ARGUMENT'])
++        for field in ['mentionedTools','argumentIssues','cachedInvariants']:
++            self.assertEqual(hints[field],[])
++        self.assertNotIn('retryAuthorized',hints)
++        for version in [1,2,3,4,5,6]:
++            legacy = {k:v for k,v in hints.items() if k!='refusalReport'}
++            if version<6:legacy.pop('refusalTerms')
++            if version<5:legacy.pop('identityIssues')
++            if version<4:
++                for key in ['mentionedTools','argumentIssues','cachedInvariants','trace']:legacy.pop(key)
++            legacy['schemaVersion']=version
++            if version<3:legacy.pop('unavailableSubjects')
++            if version==1:
++                legacy.pop('refusalCategories');legacy.pop('scanTruncated')
++            self.assertTrue(bridge.valid_task_response_hints(legacy))
++
++
++    def test_actual_dispatch_schema_and_admission_error_names_are_recognized_without_values(self):
++        hints={}
++        self.sink.response_snapshot(CurrentDom(answer='INVALID_ARGUMENT: WEB_TASK_ARGUMENTS_INVALID '
++            'WEB_TASK_NATIVE_ARGUMENTS_INVALID WEB_TASK_REQUEST_ID_REQUIRED '
++            'WEB_TASK_CENTRAL_MODE_REQUIRED WEB_TASK_CENTRAL_AUTH_REQUIRED PLAN_REQUIRED '
++            'PRIVATE_CONTEXT='+ 'b'*64), 'exact wake message',
++            diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
++        self.assertEqual(hints['knownCodes'],['INVALID_ARGUMENT','WEB_TASK_ARGUMENTS_INVALID',
++            'WEB_TASK_NATIVE_ARGUMENTS_INVALID','WEB_TASK_REQUEST_ID_REQUIRED',
++            'WEB_TASK_CENTRAL_MODE_REQUIRED','WEB_TASK_CENTRAL_AUTH_REQUIRED','PLAN_REQUIRED'])
++        self.assertTrue(bridge.valid_task_response_hints(hints))
++        self.assertNotIn('PRIVATE_CONTEXT',json.dumps(hints));self.assertNotIn('b'*64,json.dumps(hints))
++
++
++    def test_trace_metadata_is_task_bound_passive_and_exports_no_labels_or_panels(self):
++        for options, expected in [
++            ([{'expanded':False,'linked':True}],(1,0,1,0,1,0)),
++            ([{'expanded':True,'linked':True}],(1,1,0,0,1,1)),
++            ([{}],(1,0,0,1,0,0)),
++            ([{'summary':True,'expanded':False}],(1,0,1,0,1,0)),
++            ([{'summary':True,'expanded':True}],(1,1,0,0,1,1)),
++            ([{'placement':'user'},{'placement':'code'},{'label':'PRIVATE_UNKNOWN_LABEL'}],(0,0,0,0,0,0)),
++        ]:
++            with self.subTest(options=options):
++                hints={}
++                cdp=CurrentDom(traceControls=options,traceClicks=True)
++                self.sink.response_snapshot(cdp,'exact wake message',diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
++                trace=hints['trace']
++                self.assertTrue(bridge.valid_task_response_hints(hints))
++                self.assertEqual(tuple(trace[k] for k in bridge.TASK_TRACE_COUNTS),expected)
++                self.assertEqual(cdp.mutations,0)
++                for private in ['PRIVATE_TRACE_PANEL','PRIVATE_TRACE_ARGUMENTS','PRIVATE_UNKNOWN_LABEL','Worked for']:
++                    self.assertNotIn(private,json.dumps(hints))
++                for field, bad in [('knownControls',True),('knownControls',65),('knownControls',-1),
++                        ('knownControls',2),('scope','OTHER_EXCHANGE'),('rawText','PRIVATE_CONTEXT')]:
++                    self.assertFalse(bridge.valid_task_trace_metadata(trace | {field:bad}))
++
++
++    def test_trace_metadata_cannot_escape_foreign_or_duplicate_exchange(self):
++        for options in [{'duplicateUser':True},{'userText':'another request'}]:
++            hints={'trace':'PRIVATE_STALE_TRACE'}
++            with self.assertRaises(bridge.PostSubmitUnknown):
++                self.sink.response_snapshot(CurrentDom(traceControls=[{'expanded':True,'linked':True}],**options),
++                    'exact wake message',diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
++            self.assertEqual(hints,{})
++
++
++    def test_identity_refusal_and_exact_code_boundaries_are_closed(self):
++        hints = {}
++        self.sink.response_snapshot(CurrentDom(answer='Dispatch blocked: private-context SHA-256 mismatch. '
++            'NOT_WEB_TASK_CACHED_ARGUMENTS_INVALID_OTHER PRIVATE_UNKNOWN_CODE'), 'exact wake message',
++            require_usable_body=True, diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
++        self.assertEqual(hints['knownCodes'], [])
++        self.assertEqual(hints['refusalCategories'], ['IDENTITY_MISMATCH', 'DISPATCH_REJECTED'])
++        for replacement in (['PRIVATE_UNKNOWN_CODE'], ['IDENTITY_MISMATCH', 'IDENTITY_MISMATCH'], 'IDENTITY_MISMATCH'):
++            self.assertFalse(bridge.valid_task_response_hints(hints | {'refusalCategories':replacement}))
++
++
++    def test_rejection_in_later_answer_block_is_not_silently_discarded(self):
++        hints = {}
++        self.sink.response_snapshot(CurrentDom(answer='native.codex.dispatch returned INVALID_ARGUMENT.',
++            additionalAnswerBodies=['McpServerError: WEB_TASK_CACHED_ARGUMENTS_INVALID.', 'PRIVATE_KEY_MARKER']),
++            'exact wake message', require_usable_body=True, diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
++        self.assertEqual(hints['knownCodes'], ['WEB_TASK_CACHED_ARGUMENTS_INVALID','INVALID_ARGUMENT'])
++        self.assertEqual(hints['refusalCategories'], ['DISPATCH_REJECTED'])
++        self.assertNotIn('PRIVATE_KEY_MARKER', json.dumps(hints))
++
++
++    def test_button_shape_classifies_structure_without_exporting_attributes_or_qualifying_copy(self):
++        diagnostic = {}
++        self.sink.response_snapshot(CurrentDom(assistantCopyLabel='PRIVATE_LABEL',
++            diagnosticActionAttributes={'title':'Copy response','data-state':'closed',
++                'data-tooltip-content':'PRIVATE_TOOLTIP','data-testid':'PRIVATE_ID'}),
++            'exact wake message',require_usable_body=True,diagnostic=diagnostic)
++        shape = diagnostic['controls']['buttonShape']
++        self.assertTrue(bridge.valid_response_button_shape(shape))
++        shared = [row for row in shape['buttons'] if row['location']=='SHARED']
++        self.assertEqual(len(shared),1)
++        self.assertEqual(shared[0]['aria'],'OTHER')
++        self.assertEqual(shared[0]['title'],'COPY_RESPONSE')
++        self.assertEqual(shared[0]['tooltip'],'OTHER')
++        self.assertEqual(shared[0]['testId'],'OTHER')
++        self.assertEqual(shared[0]['dataState'],'CLOSED')
++        self.assertEqual(shared[0]['toolbar'],'ACTION')
++        self.assertFalse(diagnostic['controls']['completionActionFound'])
++        self.assertNotIn('PRIVATE_',json.dumps(diagnostic))
++        self.assertTrue(any(row['location']=='USER' for row in shape['buttons']))
++        self.assertTrue(any(row['location']=='BODY' for row in shape['buttons']))
++        self.sink.response_snapshot(CurrentDom(diagnosticExtraButtons=100,
++            diagnosticButtonLabel='PRIVATE_EXTRA'), 'exact wake message',
++            require_usable_body=True,diagnostic=diagnostic)
++        shape = diagnostic['controls']['buttonShape']
++        self.assertTrue(shape['countOverflow'])
++        self.assertEqual(len(shape['buttons']),8)
++        self.assertNotIn('PRIVATE_',json.dumps(shape))

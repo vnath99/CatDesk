@@ -1,0 +1,157 @@
++        "workResolved":false,"reviewAuthorityGranted":false,"authenticationVerified":false,
++        "responseObservation":if mode == Mode::HistoricalDiagnostics {None} else {response.clone()},
++        "historicalResponseObservation":if mode == Mode::HistoricalDiagnostics {response} else {None},
++        "historicalReadOnly":mode==Mode::HistoricalDiagnostics,"taskDiagnostics":task_diagnostics,
++        "ownedTreeExited":true,"hostStarted":false,"schedulerStarted":false}),
++    )
++}
++
++#[cfg(not(windows))]
++fn inspect_readiness(
++    _: &Store,
++    _: &str,
++    _: &Target,
++    _: Option<&crate::store::Delivery>,
++    _: Mode,
++    _: &dyn Fn() -> Result<()>,
++) -> Result<serde_json::Value> {
++    Err("READINESS_PLATFORM_UNSUPPORTED".into())
++}
++
++#[cfg(test)]
++mod tests {
++    use super::super::scheduler::tests::{fixture, sent};
++    use super::*;
++
++    fn ordinary(label: &str) -> (Store, crate::store::Delivery) {
++        let (store, lease) = fixture(label);
++        let id = format!("web-work-{}", "c".repeat(64));
++        store
++            .produce(&id, "alpha", "engineering_attention", "bounded task")
++            .unwrap();
++        let delivery = sent(&store, &lease, &id);
++        drop(lease);
++        (store, delivery)
++    }
++
++    #[test]
++    fn passive_scope_requires_original_sent_receipt_and_exact_project_target() {
++        let (store, delivery) = ordinary("passive-response-scope");
++        let before = std::fs::read(
++            store
++                .root()
++                .join("deliveries")
++                .join(format!("{}.json", delivery.event.event_id)),
++        )
++        .unwrap();
++        require_delivery(
++            &store,
++            "alpha",
++            &delivery.target,
++            &delivery,
++            Mode::SentDiagnostics,
++        )
++        .unwrap();
++        assert!(
++            require_delivery(
++                &store,
++                "beta",
++                &delivery.target,
++                &delivery,
++                Mode::SentDiagnostics
++            )
++            .is_err()
++        );
++        let mut changed = delivery.clone();
++        changed.message_digest = "a".repeat(64);
++        assert!(
++            require_delivery(
++                &store,
++                "alpha",
++                &delivery.target,
++                &changed,
++                Mode::SentDiagnostics
++            )
++            .is_err()
++        );
++        assert_eq!(
++            before,
++            std::fs::read(
++                store
++                    .root()
++                    .join("deliveries")
++                    .join(format!("{}.json", delivery.event.event_id))
++            )
++            .unwrap()
++        );
++    }
++
++    #[test]
++    fn historical_reader_requires_durable_complete_timer_before_browser_admission() {
++        let (store, delivery) = ordinary("passive-historical-complete");
++        assert_eq!(
++            inspect_historical_task_response(
++                &store,
++                "alpha",
++                &delivery.target,
++                &delivery.event.event_id,
++                &|| Ok(())
++            )
++            .unwrap_err(),
++            "READINESS_COMPLETED_RESPONSE_REQUIRED"
++        );
++    }
++
++    #[test]
++    fn passive_source_review_cannot_become_retained_completion_owner() {
++        let (store, lease) = fixture("passive-review-scope");
++        let id = format!("web-work-{}", "d".repeat(64));
++        let target = store.config().unwrap().targets["alpha"].clone();
++        store
++            .produce_expected_with_audit(
++                &id,
++                "alpha",
++                "source_review",
++                "public source review",
++                &target,
++                &["catdesk-review-v1:valid-review".into()],
++            )
++            .unwrap();
++        let delivery = sent(&store, &lease, &id);
++        require_delivery(&store, "alpha", &target, &delivery, Mode::SentDiagnostics).unwrap();
++        assert!(
++            require_delivery(&store, "alpha", &target, &delivery, Mode::ResponseOwnerHeld).is_err()
++        );
++        assert!(
++            require_delivery(
++                &store,
++                "alpha",
++                &target,
++                &delivery,
++                Mode::HistoricalDiagnostics
++            )
++            .is_err()
++        );
++    }
++
++    #[test]
++    fn bad_adjacent_observer_bytes_never_fall_back_to_source() {
++        let (store, _lease) = fixture("passive-observer-assets");
++        let root = store.root().join("assets-test");
++        std::fs::create_dir(&root).unwrap();
++        let source = root.join("source.py");
++        std::fs::write(&source, b"good").unwrap();
++        let image = root.join("image");
++        std::fs::create_dir(&image).unwrap();
++        let expected = format!("{:x}", Sha256::digest(b"good"));
++        assert_eq!(
++            verified_packaged_primitives(&source, &image, &expected).unwrap(),
++            source
++        );
++        std::fs::write(image.join("wake_bridge.py"), b"bad").unwrap();
++        assert_eq!(
++            verified_packaged_primitives(&source, &image, &expected).unwrap_err(),
++            "READINESS_SOURCE_HASH_MISMATCH"
++        );
++    }
++}

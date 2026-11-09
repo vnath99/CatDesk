@@ -1,0 +1,139 @@
++                report("PROBE:RESPONSE_STATE:UNSTABLE", flush=True)
++                return False
++        else:
++            if monotonic() > await_deadline:
++                report("PROBE:RESPONSE_STATE:UNSTABLE", flush=True)
++                return False
++            while True:
++                remaining = await_deadline - monotonic()
++                if remaining <= 0:
++                    current = None
++                else:
++                    # Await mounting/body/control readiness as well as Stop.
++                    # Successful changes reset the pair; errors never retry.
++                    sleep(min(.25 if first[0]["stage"] == "RESPONSE_COMPLETE" else 1.0, remaining))
++                    current = None if monotonic() >= await_deadline else sample()
++                if current is None:
++                    if first[0]["stage"] == "RESPONSE_PENDING":
++                        # Only the latest bounded sample can describe pending;
++                        # it cannot complete, retry or renew the original timer.
++                        current = first
++                        break
++                    report("PROBE:RESPONSE_STATE:UNSTABLE", flush=True)
++                    return False
++                if monotonic() > await_deadline:
++                    report("PROBE:RESPONSE_STATE:UNSTABLE", flush=True)
++                    return False
++                if current[0]["stage"] == "RESPONSE_COMPLETE" and first == current:
++                    break
++                first = current
++        value, extra = current
++        prefix="PROBE:HISTORY_RESPONSE:" if historical else "PROBE:RESPONSE:"
++        report(prefix + json.dumps(value, separators=(",", ":"), sort_keys=True), flush=True)
++        if extra is not None:
++            report("PROBE:TASK:" + json.dumps(extra, separators=(",", ":"), sort_keys=True), flush=True)
++        return value['stage']=='RESPONSE_COMPLETE'
++    except Exception as error:
++        reason = str(error)
++        allowed = {"RESPONSE_LOAD_ERROR", "RESPONSE_NETWORK_ERROR", "LOGIN_OR_PROFILE_REQUIRED",
++                   "RESPONSE_EXPECTED_USER_NOT_FOUND", "RESPONSE_USER_REPRESENTATION_MISMATCH", "RESPONSE_SEQUENCE_QUERY_FAILED",
++                   "RESPONSE_EXPECTED_USER_DUPLICATED", "RESPONSE_SEQUENCE_DRIFT", "RESPONSE_STATE_UNPROVEN",
++                   "RESPONSE_TIMEOUT_RETRY_REQUIRED", "RESPONSE_TARGET_DRIFT", "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"}
++        report("PROBE:RESPONSE_STATE:" + (reason if reason in allowed else "UNPROVEN"), flush=True)
++        return False
++
++
+ def surface_state(value):
+     route = value["route"]
+     if route != "EXACT":
+         return {"HOME": "HOME", "AUTH_REQUIRED": "LOGIN_VISIBLE", "SECURITY_CHECK": "CAPTCHA_VISIBLE",
+                 "NETWORK_ERROR": "CHROME_ERROR", "TARGET_DRIFT": "TARGET_DRIFT"}.get(route, "OBSERVATION_UNAVAILABLE")
+     if value["document"] == "LOADING":
+         return "EXACT_DOCUMENT_LOADING"
+     if value["document"] != "COMPLETE":
+         return "OBSERVATION_UNAVAILABLE"
+     if value["editor"] != "READY":
+         return "EXACT_EDITOR_AMBIGUOUS" if value["editor"] == "AMBIGUOUS" else "EXACT_NO_EDITOR"
+     if value["generation"] == "ACTIVE":
+@@ -289,56 +434,88 @@ def recover_empty_home(cdp, url):
+ 
+ def main():
+     parser = argparse.ArgumentParser(description="Read-only CatDesk Wake profile readiness probe")
+     parser.add_argument("--conversation-url", required=True)
+     parser.add_argument("--seconds", type=float, default=45.0)
+     parser.add_argument("--await-start", action="store_true")
+     # Internal development owner supplies only its independently validated
+     # selected profile. The legacy production probe retains its fixed default.
+     parser.add_argument("--profile", type=Path)
+     parser.add_argument("--primitives", type=Path)
+     parser.add_argument("--primitives-sha256")
+     parser.add_argument("--read-only", action="store_true")
++    parser.add_argument("--delivery-file", type=Path)
++    parser.add_argument("--delivery-sha256")
++    parser.add_argument("--response-only", action="store_true")
++    parser.add_argument("--historical-response", action="store_true")
++    parser.add_argument("--task-diagnostics", action="store_true")
++    parser.add_argument("--source-review-diagnostics", action="store_true")
++    parser.add_argument("--await-existing-response", action="store_true")
+     args = parser.parse_args()
+     if args.await_start and sys.stdin.readline() != "START\n":
+         return 2
+     url = args.conversation_url
+     if conversation_id(url) is None:
+         print("PROBE:BAD_URL", flush=True); return 2
+     if not 5 <= args.seconds <= 120:
+         print("PROBE:BAD_DURATION", flush=True); return 2
+     profile = args.profile if args.profile is not None else PROFILE
+     if not profile.is_dir():
+         print("PROBE:PROFILE_NOT_FOUND", flush=True); return 2
+     sink = None
+     if args.primitives is not None or args.primitives_sha256 is not None:
+         try:
+             sink = load_observation_sink(args.primitives, args.primitives_sha256, profile, url)
+         except Exception:
+             print("PROBE:FINAL:OBSERVATION_UNAVAILABLE", flush=True)
+             return 0
++    response_delivery = None
++    scoped_response = (args.response_only and args.read_only and args.profile is not None
++                       and args.delivery_file is not None and args.delivery_sha256 is not None)
++    if ((args.task_diagnostics and not scoped_response)
++            or (args.response_only and not scoped_response)
++            or (args.historical_response and not (scoped_response and args.task_diagnostics))
++            or (args.source_review_diagnostics and not (scoped_response and args.task_diagnostics))
++            or (args.source_review_diagnostics and args.historical_response)
++            or (args.await_existing_response and (not (scoped_response and args.task_diagnostics)
++                or args.historical_response or args.source_review_diagnostics))):
++        return 2
++    if args.delivery_file is not None or args.delivery_sha256 is not None:
++        try:
++            if sink is None or not scoped_response:
++                raise ValueError("read-only response primitives required")
++            response_delivery = load_delivery_message(args.delivery_file, args.delivery_sha256, url,
++                response_only=True, sent_diagnostics=args.task_diagnostics,
++                source_review_diagnostics=args.source_review_diagnostics)
++        except Exception:
++            print("PROBE:FINAL:OBSERVATION_UNAVAILABLE", flush=True)
++            return 0
+     def observation(cdp):
+         if sink is None:
+             return classify(cdp, url), None
+         try:
+             value = sink.browser_surface_observation(cdp)
+             return surface_state(value), value
+         except Exception:
+             return "OBSERVATION_UNAVAILABLE", None
++    print("PROBE:PHASE:IMPORT_BROWSER", flush=True)
+     from seleniumbase import SB
+     def report_tab(facts):
+         print("PROBE:TAB:" + json.dumps(facts, separators=(",", ":"), sort_keys=True), flush=True)
++    print("PROBE:PHASE:BROWSER_START", flush=True)
+     with SB(uc=True, user_data_dir=str(profile)) as sb:
++        print("PROBE:PHASE:CDP_NAVIGATION", flush=True)
+         sb.activate_cdp_mode(url)
+         cdp = sb.cdp
++        print("PROBE:PHASE:OBSERVING", flush=True)
+         if args.profile is not None:
+             print("PROBE:" + select_registered_target_tab(cdp, url, report_tab), flush=True)
+         last = None
+         last_surface = None
+         deadline = time.monotonic() + args.seconds

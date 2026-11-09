@@ -1,0 +1,80 @@
+diff --git a/src/main.rs b/src/main.rs
+index 05818ed036809885808ee03933bab9c63af1dec3..7e1f909b139c14de926d02aecc2169af6ae6a476 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -2710,24 +2710,37 @@ fn operator_web_error_code(error: &str) -> &str {
+             | "SCOPED_RECONCILE_DELIVERY_MISSING"
+             | "SCOPED_RECONCILE_FRAME_INVALID"
+             | "SCOPED_RECONCILE_HOST_NOT_STOPPED"
+             | "SCOPED_RECONCILE_PACKAGE_UNSUPPORTED"
+             | "SCOPED_RECONCILE_RECEIPT_INVALID"
+             | "SCOPED_RECONCILE_RECEIPT_UNPROVEN"
+             | "SCOPED_RECONCILE_SCOPE_CHANGED"
+             | "SCOPED_RECONCILE_TIMEOUT"
+             | "SCOPED_DIAGNOSE_FRAME_INVALID"
+             | "SCOPED_DIAGNOSE_PACKAGE_UNSUPPORTED"
+             | "SCOPED_DIAGNOSE_TIMEOUT"
+             | "SCOPED_DIAGNOSE_UNAVAILABLE"
++            | "READINESS_COMPLETED_RESPONSE_REQUIRED"
++            | "READINESS_PROJECT_INVALID"
++            | "READINESS_REQUIRES_STOPPED_WAKE"
++            | "READINESS_REGISTERED_TARGET_CHANGED"
++            | "READINESS_SOURCE_UNAVAILABLE"
++            | "READINESS_SOURCE_HASH_MISMATCH"
++            | "READINESS_WORK_DELIVERY_CHANGED"
++            | "READINESS_PLATFORM_UNSUPPORTED"
++            | "PROBE_LAUNCH_FAILED"
++            | "PROBE_CONTAINMENT_FAILED"
++            | "PROBE_CLEANUP_UNVERIFIED"
++            | "PROBE_WAIT_FAILED"
++            | "PROBE_PROGRAM_SIZE_INVALID"
+     ) {
+         return code;
+     }
+     if code.len() < 5
+         || code.len() > 64
+         || !code.contains('_')
+         || !code
+             .bytes()
+             .next()
+             .is_some_and(|byte| byte.is_ascii_uppercase())
+         || !code
+             .bytes()
+@@ -4032,24 +4045,37 @@ mod tests {
+             "SCOPED_RECONCILE_DELIVERY_MISSING",
+             "SCOPED_RECONCILE_FRAME_INVALID",
+             "SCOPED_RECONCILE_HOST_NOT_STOPPED",
+             "SCOPED_RECONCILE_PACKAGE_UNSUPPORTED",
+             "SCOPED_RECONCILE_RECEIPT_INVALID",
+             "SCOPED_RECONCILE_RECEIPT_UNPROVEN",
+             "SCOPED_RECONCILE_SCOPE_CHANGED",
+             "SCOPED_RECONCILE_TIMEOUT",
+             "SCOPED_DIAGNOSE_FRAME_INVALID",
+             "SCOPED_DIAGNOSE_PACKAGE_UNSUPPORTED",
+             "SCOPED_DIAGNOSE_TIMEOUT",
+             "SCOPED_DIAGNOSE_UNAVAILABLE",
++            "READINESS_COMPLETED_RESPONSE_REQUIRED",
++            "READINESS_PROJECT_INVALID",
++            "READINESS_REQUIRES_STOPPED_WAKE",
++            "READINESS_REGISTERED_TARGET_CHANGED",
++            "READINESS_SOURCE_UNAVAILABLE",
++            "READINESS_SOURCE_HASH_MISMATCH",
++            "READINESS_WORK_DELIVERY_CHANGED",
++            "READINESS_PLATFORM_UNSUPPORTED",
++            "PROBE_LAUNCH_FAILED",
++            "PROBE_CONTAINMENT_FAILED",
++            "PROBE_CLEANUP_UNVERIFIED",
++            "PROBE_WAIT_FAILED",
++            "PROBE_PROGRAM_SIZE_INVALID",
+         ] {
+             assert_eq!(operator_web_error_code(code), code);
+             assert_eq!(
+                 operator_web_error_code(&format!("{code}: C:\\private\\profile")),
+                 code
+             );
+         }
+         for untrusted in [
+             "C:\\private\\token.txt",
+             "raw task text with a secret",
+             "SECRET_VALUE: private token",
+             "WEB_USAGE raw task text",

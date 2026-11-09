@@ -1,0 +1,191 @@
++        ("unselectedTextPresent", serde_json::json!("PRIVATE_VALUE")),
++        ("rawText", serde_json::json!("PRIVATE_RESPONSE")),
++    ] {
++        let mut bad = value.clone();
++        bad["completionControls"]["bodyCoverage"][field] = invalid;
++        assert!(sent_response_observation(&format!("PROBE:RESPONSE:{bad}")).is_none());
++    }
++    let mut unproven = value;
++    unproven["completionControls"]["completionActionFound"] = serde_json::json!(false);
++    assert!(sent_response_observation(&format!("PROBE:RESPONSE:{unproven}")).is_none());
++}
++
++#[test]
++fn identity_hints_accept_only_fixed_categories_and_preserve_old_wire_versions() {
++    let value = identity_hint_fixture();
++    assert_eq!(
++        task_response_diagnostics(&format!("PROBE:TASK:{value}")),
++        Some(value.clone())
++    );
++    let mut old = value.clone();
++    old["assistantHints"]["schemaVersion"] = serde_json::json!(4);
++    assert!(task_response_diagnostics(&format!("PROBE:TASK:{old}")).is_none());
++    old["assistantHints"]
++        .as_object_mut()
++        .unwrap()
++        .remove("identityIssues");
++    assert_eq!(
++        task_response_diagnostics(&format!("PROBE:TASK:{old}")),
++        Some(old)
++    );
++    for invalid in [
++        serde_json::json!(["PRIVATE_KEY_VALUE"]),
++        serde_json::json!([
++            "FULL_PRIVATE_CONTEXT_UNVERIFIED",
++            "FULL_PRIVATE_CONTEXT_UNVERIFIED"
++        ]),
++        serde_json::json!(["NATIVE_CALL_MISSING", "ASSIGNMENT_MISSING"]),
++        serde_json::json!(true),
++        serde_json::json!({"rawText":"PRIVATE_CONTEXT"}),
++    ] {
++        let mut bad = value.clone();
++        bad["assistantHints"]["identityIssues"] = invalid;
++        assert!(task_response_diagnostics(&format!("PROBE:TASK:{bad}")).is_none());
++        assert!(sanitized_rows(&format!("PROBE:TASK:{bad}")).is_empty());
++    }
++    for field in [
++        "identityIssues",
++        "mentionedTools",
++        "argumentIssues",
++        "cachedInvariants",
++    ] {
++        let mut bad = value.clone();
++        bad["assistantHints"].as_object_mut().unwrap().remove(field);
++        assert!(task_response_diagnostics(&format!("PROBE:TASK:{bad}")).is_none());
++    }
++    let mut bad = value;
++    bad["assistantHints"]["rawText"] = serde_json::json!("PRIVATE_BODY");
++    assert!(sanitized_rows(&format!("PROBE:TASK:{bad}")).is_empty());
++}
++
++#[test]
++fn full_identity_hint_vocabulary_fits_bounded_task_row_without_arbitrary_text() {
++    let mut value = identity_hint_fixture();
++    let issues: Vec<String> = [
++        "FULL_PRIVATE_CONTEXT",
++        "ASSIGNMENT",
++        "DELIVERED_USER_MESSAGE",
++        "NATIVE_CALL",
++        "EXECUTION_GRANT",
++        "CONVERSATION_TARGET",
++    ]
++    .iter()
++    .flat_map(|domain| {
++        ["MISSING", "MISMATCH", "UNVERIFIED"].map(|state| format!("{domain}_{state}"))
++    })
++    .collect();
++    value["assistantHints"]["identityIssues"] = serde_json::json!(issues);
++    value["assistantHints"]["knownCodes"] = serde_json::json!([
++        "HTTP_429",
++        "WEB_WORK_ROLLOVER_PENDING",
++        "WEB_ROLLOVER_PROJECT_BUSY",
++        "WEB_TASK_GRANT_SCOPE_MISMATCH",
++        "WEB_TASK_NATIVE_NOT_GRANTED",
++        "PROJECT_TASK_CALL_ALREADY_COMPLETED",
++        "PROJECT_TASK_RECOVERY_REQUIRED",
++        "WEB_TASK_CACHED_ARGUMENTS_INVALID",
++        "INVALID_ARGUMENT",
++        "UNAUTHORIZED",
++        "WEB_TASK_REQUEST_INVALID",
++        "WEB_TASK_BINDING_CHANGED",
++        "WEB_TASK_ARGUMENTS_INVALID",
++        "WEB_TASK_NATIVE_ARGUMENTS_INVALID",
++        "WEB_TASK_REQUEST_ID_REQUIRED",
++        "WEB_TASK_CENTRAL_MODE_REQUIRED",
++        "WEB_TASK_CENTRAL_AUTH_REQUIRED",
++        "PLAN_REQUIRED"
++    ]);
++    value["assistantHints"]["cachedInvariants"] = serde_json::json!([
++        "ARGUMENTS_NOT_OBJECT",
++        "COMMAND_NOT_STRING",
++        "PLAN_FLAG_NOT_BOOLEAN",
++        "DRY_RUN_NOT_FALSE",
++        "FULL_OUTPUT_NOT_FALSE",
++        "CWD_OVERRIDE_FORBIDDEN",
++        "TIMEOUT_OVERRIDE_FORBIDDEN",
++        "UNSUPPORTED_OUTER_FIELD",
++        "COMMAND_TOO_LARGE",
++        "RESERVED_PREFIX_INVALID",
++        "PAYLOAD_JSON_INVALID",
++        "PAYLOAD_NOT_OBJECT"
++    ]);
++    let text = value.to_string();
++    assert!(text.len() > 2048 && text.len() <= 4096);
++    assert_eq!(
++        task_response_diagnostics(&format!("PROBE:TASK:{text}")),
++        Some(value)
++    );
++    let oversized = format!("PROBE:TASK:{}", " ".repeat(4097));
++    assert!(task_response_diagnostics(&oversized).is_none());
++}
++
++#[test]
++fn ordered_refusal_terms_are_fixed_bounded_redactions_not_response_content_or_authority() {
++    let mut value = identity_hint_fixture();
++    value["assistantHints"]["schemaVersion"] = serde_json::json!(6);
++    value["assistantHints"]["refusalTerms"] = serde_json::json!([
++        "DISPATCH", "BLOCKED", "REDACTED", "CONTEXT", "IS", "NOT", "VERIFIED"
++    ]);
++    assert_eq!(
++        task_response_diagnostics(&format!("PROBE:TASK:{value}")),
++        Some(value.clone())
++    );
++    for bad in [
++        serde_json::json!(["PRIVATE_VALUE"]),
++        serde_json::json!(["execution-key"]),
++        serde_json::json!(["REDACTED", "REDACTED"]),
++        serde_json::json!(["https://example.invalid/c/private"]),
++        serde_json::json!(["a".repeat(64)]),
++        serde_json::json!(true),
++        serde_json::json!([1]),
++        serde_json::json!(vec!["REDACTED"; 33]),
++    ] {
++        let mut invalid = value.clone();
++        invalid["assistantHints"]["refusalTerms"] = bad;
++        assert!(sanitized_rows(&format!("PROBE:TASK:{invalid}")).is_empty());
++    }
++    let mut repeated = value.clone();
++    repeated["assistantHints"]["refusalTerms"] = serde_json::json!(["NOT", "NOT", "VERIFIED"]);
++    assert_eq!(
++        task_response_diagnostics(&format!("PROBE:TASK:{repeated}")),
++        Some(repeated)
++    );
++    let mut old = value.clone();
++    old["assistantHints"]["schemaVersion"] = serde_json::json!(5);
++    assert!(task_response_diagnostics(&format!("PROBE:TASK:{old}")).is_none());
++    old["assistantHints"]
++        .as_object_mut()
++        .unwrap()
++        .remove("refusalTerms");
++    assert_eq!(
++        task_response_diagnostics(&format!("PROBE:TASK:{old}")),
++        Some(old)
++    );
++    value["assistantHints"]
++        .as_object_mut()
++        .unwrap()
++        .remove("refusalTerms");
++    assert!(task_response_diagnostics(&format!("PROBE:TASK:{value}")).is_none());
++}
++
++#[test]
++fn refusal_report_provenance_is_closed_consistent_and_not_native_evidence() {
++    let mut value = identity_hint_fixture();
++    value["assistantHints"]["schemaVersion"] = serde_json::json!(7);
++    value["assistantHints"]["refusalTerms"] = serde_json::json!(["BLOCKED", "CONTEXT", "MISSING"]);
++    value["assistantHints"]["refusalReport"] = serde_json::json!({"source":"STRUCTURED","state":"BLOCKED","reasonFieldPresent":true,"projectionOmitted":false});
++    assert_eq!(
++        task_response_diagnostics(&format!("PROBE:TASK:{value}")),
++        Some(value.clone())
++    );
++    for (field, replacement) in [
++        ("source", serde_json::json!("PRIVATE_BODY")),
++        ("state", serde_json::json!("CODEX_PRIVATE_ERROR")),
++        ("reasonFieldPresent", serde_json::json!(1)),
++        ("projectionOmitted", serde_json::json!(true)),
++        ("rawText", serde_json::json!("PRIVATE_SECRET")),
++        ("source", serde_json::json!("NONE")),
++        ("state", serde_json::json!("UNPROVEN")),
++    ] {
++        let mut invalid = value.clone();
++        invalid["assistantHints"]["refusalReport"][field] = replacement;

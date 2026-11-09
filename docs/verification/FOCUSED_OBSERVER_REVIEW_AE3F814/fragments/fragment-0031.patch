@@ -1,0 +1,128 @@
+diff --git a/wake/src/runtime.rs b/wake/src/runtime.rs
+index ec9709a82aac889e09e6bb5eda41dfdf736b8d80..f8fd82931d89d2fb053023c622acff23d041df32 100644
+--- a/wake/src/runtime.rs
++++ b/wake/src/runtime.rs
+@@ -7,34 +7,41 @@ use serde::{Deserialize, Serialize};
+ use sha2::{Digest, Sha256};
+ use std::{
+     collections::BTreeMap,
+     fs::{File, OpenOptions},
+     io::{BufRead, BufReader, Read, Write},
+     path::{Path, PathBuf},
+     process::{Child, ChildStdin, Command, Stdio},
+     sync::mpsc::{self, Receiver},
+     thread,
+     time::{Duration, Instant},
+ };
+ 
++#[path = "runtime_readiness.rs"]
++mod readiness;
++pub use readiness::{inspect_historical_task_response, inspect_sent_task_response_diagnostics};
+ #[path = "runtime_reobserve.rs"]
+ mod reobserve;
+ #[path = "runtime_response.rs"]
+ mod response;
+ pub use reobserve::reobserve_sent_response_guarded;
+ #[path = "runtime_review_reconcile.rs"]
+ mod review_reconcile;
+ #[path = "runtime_scoped_review.rs"]
+ mod scoped_review;
+-pub(crate) use response::validate_observation as validate_response_observation;
++pub(crate) use response::{
++    canonical_observation as canonical_response_observation,
++    canonical_task_diagnostics as canonical_task_response_diagnostics,
++    validate_observation as validate_response_observation,
++};
+ pub use review_reconcile::{diagnose_scoped_review_guarded, reconcile_scoped_review_guarded};
+ pub use scoped_review::{
+     run_scoped_review, run_scoped_rollover_continuation, run_scoped_rollover_handoff,
+     run_scoped_task_continuation,
+ };
+ #[path = "runtime_task_context.rs"]
+ mod task_context;
+ pub use task_context::{TaskContextOperation, TaskContextSubmission, run_private_task_context};
+ #[path = "runtime_snapshot.rs"]
+ mod snapshot;
+ pub use snapshot::{
+     SnapshotDiagnostic, SnapshotReadPhase, SnapshotReadReport, diagnosed_sent_snapshot,
+@@ -2043,43 +2050,50 @@ pub fn compose_bootstrap_message(
+ pub fn bootstrap_message_digest(
+     project_id: &str,
+     intent_id: &str,
+     source: &Target,
+     handoff: &str,
+ ) -> Result<String> {
+     let message = compose_bootstrap_message(project_id, intent_id, source, handoff)?;
+     Ok(crate::protocol::digest(
+         &message.split_whitespace().collect::<Vec<_>>().join(" "),
+     ))
+ }
+ 
+-fn installed_bootstrap_directory(store: &Store) -> Result<PathBuf> {
++fn installed_browser_directory(store: &Store) -> Result<PathBuf> {
+     let pointer: serde_json::Value = read(&store.root().join("current.json"))?;
+     require_plain_install_directory(&store.root().join("versions"))?;
+     let directory = store.root().join("versions").join(install_id(&pointer)?);
+     require_plain_install_directory(&directory)?;
+     let host = directory.join("CatDeskWakeHost.exe");
+     require_plain_install_file(&host)?;
+     let host_hash = sha256_file(&host, "HOST_EXECUTABLE_UNAVAILABLE")?;
+     if !host_hash.eq_ignore_ascii_case(pointer_hash(&pointer, "hostSha256")?) {
+         return Err("HOST_EXECUTABLE_HASH_MISMATCH".into());
+     }
+     let (adapter, bridge) = verify_installed_browser_artifacts(store.root(), &directory)?;
+     require_plain_install_file(&adapter)?;
+     require_plain_install_file(&bridge)?;
++    Ok(directory)
++}
++
++fn installed_bootstrap_directory(store: &Store) -> Result<PathBuf> {
++    let directory = installed_browser_directory(store)?;
+     // The pointer and manifest hashes above authorize these installed bytes.
+     // Old reviewed packages have no bootstrap protocol and must be rejected
+     // before a browser launches or a handoff draft is typed.
+-    let adapter_bytes = std::fs::read(adapter).map_err(|_| "BROWSER_ADAPTER_UNAVAILABLE")?;
+-    let bridge_bytes = std::fs::read(bridge).map_err(|_| "BROWSER_PRIMITIVES_UNAVAILABLE")?;
++    let adapter_bytes =
++        std::fs::read(directory.join("adapter.py")).map_err(|_| "BROWSER_ADAPTER_UNAVAILABLE")?;
++    let bridge_bytes = std::fs::read(directory.join("wake_bridge.py"))
++        .map_err(|_| "BROWSER_PRIMITIVES_UNAVAILABLE")?;
+     if !adapter_bytes
+         .windows(b"def bootstrap_attempt(".len())
+         .any(|part| part == b"def bootstrap_attempt(")
+         || !bridge_bytes
+             .windows(b"class NewConversationSink(".len())
+             .any(|part| part == b"class NewConversationSink(")
+     {
+         return Err("BOOTSTRAP_INSTALLED_PACKAGE_UNSUPPORTED".into());
+     }
+     Ok(directory)
+ }
+ 
+@@ -4012,25 +4026,25 @@ mod bootstrap_runtime_tests {
+             message,
+             "CatDesk project rollover bootstrap.\nProject: project-one\nIntent: rollover-1\nPredecessor: https://chatgpt.com/c/source-123\n\nbody\nline"
+         );
+         let expected = crate::protocol::digest(
+             "CatDesk project rollover bootstrap. Project: project-one Intent: rollover-1 Predecessor: https://chatgpt.com/c/source-123 body line",
+         );
+         assert_eq!(
+             bootstrap_message_digest("project-one", "rollover-1", &source(), "body\nline")
+                 .expect("digest"),
+             expected
+         );
+         assert_eq!(
+-            compose_bootstrap_message("project-one", "rollover-1", &source(), &"é".repeat(9000))
++            compose_bootstrap_message("project-one", "rollover-1", &source(), &"Ã©".repeat(9000))
+                 .unwrap_err(),
+             "BOOTSTRAP_MESSAGE_TOO_LONG"
+         );
+     }
+ 
+     #[test]
+     fn receipt_requires_new_issued_url_and_exact_identity() {
+         let message_digest =
+             bootstrap_message_digest("project-one", "rollover-1", &source(), "body")
+                 .expect("digest");
+         let issued = "https://chatgpt.com/c/issued-456";
+         let mut receipt = BootstrapReceipt {

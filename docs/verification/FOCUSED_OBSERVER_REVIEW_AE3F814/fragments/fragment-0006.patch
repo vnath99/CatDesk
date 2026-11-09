@@ -1,0 +1,83 @@
+                     Array.from(card.querySelectorAll(selector)).some(node => visible(node) && !node.closest(excluded)));
+                 const errors = flagged("[data-status='error'], [role='alert']");
+                 const busy = flagged("[aria-busy='true']");
+                 result.push({{schemaVersion:1, basis:'VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT',
+                     scope:'EXACT_USER_EXCHANGE', selectorCoverage:'KNOWN_MARKERS_ONLY',
+                     callMarkers:Math.min(calls.length,64),resultMarkers:Math.min(results.length,64),
+                     errorMarkers:Math.min(errors.length,64),busyMarkers:Math.min(busy.length,64),
+                     countOverflow:[calls,results,errors,busy].some(items => items.length > 64)}});
+             }}
++            if (includeExecutionDiagnostic) {{
++                const text = assistantDiagnosticText.slice(0,32768).toLowerCase().replace(/[‘’]/g, "'");
++                // Hints from this exact assistant body only. Never return body
++                // text, unknown codes, credentials, labels or quoted payloads.
++                const known = {json.dumps(TASK_RESPONSE_CODES)};
++                const hasCode = code => code === 'HTTP_429' ? /(?:http|status|error)\\s*429/.test(text) :
++                    new RegExp('\\\\b'+code.toLowerCase()+'\\\\b').test(text);
++                const approvalRequested = /(?:need|require|await|waiting for|please).{{0,60}}(?:approval|authorization|permission|approve)/.test(text);
++                const subjects = [
++                    ['RUN_COMMAND', /\\brun_command\\b/g],
++                    ['CENTRAL_TASK_TOOL', /\\bcatdesk_web_task_tool\\b/g],
++                    ['NATIVE_CALL', /\\bnative[-_ ]?call\\b/g],
++                    ['PRIVATE_CONTEXT', /\\b(?:private[- ]context|frozen[- ](?:context|capsule))\\b/g],
++                    ['EXECUTION_KEY', /\\bexecution[-_ ]?key\\b/g],
++                    ['CATDESK_APP', /\\bcatdesk(?:[- ]local[- ]tunnel[- ]v5| (?:app|plugin|connector))\\b/g],
++                ];
++                const identitySubjects = [
++                    ['FULL_PRIVATE_CONTEXT', /\\bfull[-_ ]?private[-_ ]?context[-_ ]?(?:sha[-_ ]?256|digest)\\b/g],
++                    ['ASSIGNMENT', /\\bassignment[-_ ]?(?:sha[-_ ]?256|digest)\\b/g],
++                    ['DELIVERED_USER_MESSAGE', /\\bdelivered[-_ ]?user[-_ ]?message[-_ ]?(?:sha[-_ ]?256|digest)\\b/g],
++                    ['NATIVE_CALL', /\\bnative[-_ ]?call\\b/g],
++                    ['EXECUTION_GRANT', /\\b(?:execution[-_ ]?)?grant\\b/g],
++                    ['CONVERSATION_TARGET', /\\b(?:(?:conversation|wake)[-_ ]?target|expected[-_ ]?target[-_ ]?(?:sha[-_ ]?256|generation|url)|target[-_ ](?:binding|generation|url|digest))\\b/g],
++                ];
++                const scrubNegated = part => part
++                    .replace(/\\b(?:not|never|no|no longer|isn't|aren't|wasn't|weren't)\\s+(?:missing|unavailable|absent|unverified|mismatched)\\b/g,' ')
++                    .replace(/\\b(?:no|without|not a)\\s+(?:a )?mismatch(?:es)?\\b/g,' ')
++                    .replace(/\\b(?:cannot|can't|did not|didn't) (?:find|identify|detect|observe) (?:a |any )?mismatch\\b/g,' ')
++                    .replace(/\\bmismatch(?: was| is| has been)? resolved\\b/g,' ');
++                const missing = part => /\\b(?:unavailable|missing|absent|not (?:available|exposed|listed|present|provided|supplied|included|visible)|don't have|do not have|no access|not in (?:this|the) context|(?:cannot|can't) (?:access|find|locate|reconstruct|retrieve))\\b/.test(scrubNegated(part));
++                const mismatch = part => /\\b(?:mismatch(?:es|ed)?|does not match|doesn't match|did not match|didn't match|do not match|don't match)\\b/.test(scrubNegated(part));
++                const unverified = part => /\\b(?:(?:cannot|can't|could not|couldn't|unable to) (?:independently )?verify|unverified|not (?:independently )?verified)\\b/.test(scrubNegated(part));
++                const unavailableSubjects = new Set();
++                const identityIssues = new Set();
++                let genericToolUnavailable = false, genericIdentityMismatch = false, contextUnverified = false;
++                // Keep each subject's predicate inside its own clause and
++                // before the next subject. A nearby missing nativeCall must
++                // not turn an available run_command into a missing tool.
++                for (const clause of text.split(/[.!?;\\n,]+|\\b(?:but|however|whereas)\\b/)) {{
++                    const found = [...subjects.flatMap(([subject,pattern]) =>
++                        Array.from(clause.matchAll(pattern),m=>({{subject,start:m.index,end:m.index+m[0].length}}))),
++                        ...identitySubjects.flatMap(([domain,pattern]) =>
++                        Array.from(clause.matchAll(pattern),m=>({{domain,start:m.index,end:m.index+m[0].length}}))),
++                        ...Array.from(clause.matchAll(/\\b(?:private[- ]context|assignment|identity|digest|sha[- ]?256)\\b/g),
++                            m=>({{identity:true,start:m.index,end:m.index+m[0].length}}))]
++                        .sort((a,b)=>a.start-b.start || b.end-a.end);
++                    const spans=[];
++                    for (const item of found) {{
++                        let span=spans[spans.length-1];
++                        if (!span || item.start >= span.end) {{span={{start:item.start,end:item.end,subjects:new Set(),domains:new Set(),identity:false}};spans.push(span);}}
++                        span.end=Math.max(span.end,item.end);
++                        if(item.subject)span.subjects.add(item.subject);
++                        if(item.domain)span.domains.add(item.domain);
++                        span.identity ||= Boolean(item.identity);
++                    }}
++                    if(!spans.length && /\\b(?:tools?|functions?)\\b/.test(clause) && missing(clause))genericToolUnavailable=true;
++                    spans.forEach((span,index) => {{
++                        const left = index === 0 ? clause.slice(Math.max(0,span.start-100),span.start) : '';
++                        const right = clause.slice(span.end,Math.min(span.end+100,spans[index+1]?.start ?? clause.length));
++                        const absent=missing(left)||missing(right), differs=mismatch(left)||mismatch(right), uncertain=unverified(left)||unverified(right);
++                        if(absent)for(const subject of span.subjects)unavailableSubjects.add(subject);
++                        if(uncertain && ['NATIVE_CALL','PRIVATE_CONTEXT','EXECUTION_KEY'].some(subject=>span.subjects.has(subject)))contextUnverified=true;
++                        for(const domain of span.domains) {{
++                            if(absent)identityIssues.add(domain+'_MISSING');
++                            if(differs)identityIssues.add(domain+'_MISMATCH');
++                            if(uncertain)identityIssues.add(domain+'_UNVERIFIED');
++                        }}
++                        if(span.identity && differs)genericIdentityMismatch=true;
++                    }});
++                }}
++                const toolUnavailable=genericToolUnavailable || ['RUN_COMMAND','CENTRAL_TASK_TOOL','CATDESK_APP'].some(subject=>unavailableSubjects.has(subject));
++                const contextUnavailable=contextUnverified || ['NATIVE_CALL','PRIVATE_CONTEXT','EXECUTION_KEY'].some(subject=>unavailableSubjects.has(subject)) ||
++                    Array.from(identityIssues).some(issue=>issue.endsWith('_MISSING')||issue.endsWith('_UNVERIFIED'));
++                const refusals = {{

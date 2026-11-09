@@ -1,0 +1,157 @@
++        assert!(sanitized_rows(&row).is_empty());
++    }
++    let mut classified = value.clone();
++    classified["assistantHints"]["schemaVersion"] = serde_json::json!(2);
++    classified["assistantHints"]["scanTruncated"] = serde_json::json!(false);
++    classified["assistantHints"]["knownCodes"] =
++        serde_json::json!(["WEB_TASK_CACHED_ARGUMENTS_INVALID", "INVALID_ARGUMENT"]);
++    classified["assistantHints"]["refusalCategories"] = serde_json::json!(["DISPATCH_REJECTED"]);
++    assert_eq!(
++        task_response_diagnostics(&format!("PROBE:TASK:{classified}")),
++        Some(classified.clone())
++    );
++    let mut admission_codes = classified.clone();
++    admission_codes["assistantHints"]["knownCodes"] = serde_json::json!([
++        "WEB_TASK_ARGUMENTS_INVALID",
++        "WEB_TASK_NATIVE_ARGUMENTS_INVALID",
++        "WEB_TASK_REQUEST_ID_REQUIRED",
++        "WEB_TASK_CENTRAL_MODE_REQUIRED",
++        "WEB_TASK_CENTRAL_AUTH_REQUIRED",
++        "PLAN_REQUIRED"
++    ]);
++    assert_eq!(
++        task_response_diagnostics(&format!("PROBE:TASK:{admission_codes}")),
++        Some(admission_codes)
++    );
++    for replacement in [
++        serde_json::json!(["PRIVATE_BODY"]),
++        serde_json::json!(["DISPATCH_REJECTED", "DISPATCH_REJECTED"]),
++        serde_json::json!("DISPATCH_REJECTED"),
++    ] {
++        let mut invalid = classified.clone();
++        invalid["assistantHints"]["refusalCategories"] = replacement;
++        assert!(sanitized_rows(&format!("PROBE:TASK:{invalid}")).is_empty());
++    }
++    let mut changed = value;
++    let mut scoped = classified.clone();
++    scoped["assistantHints"]["schemaVersion"] = serde_json::json!(3);
++    scoped["assistantHints"]["unavailableSubjects"] =
++        serde_json::json!(["NATIVE_CALL", "EXECUTION_KEY"]);
++    assert_eq!(
++        task_response_diagnostics(&format!("PROBE:TASK:{scoped}")),
++        Some(scoped.clone())
++    );
++    for invalid in [
++        serde_json::json!(["PRIVATE_VALUE"]),
++        serde_json::json!(["NATIVE_CALL", "NATIVE_CALL"]),
++        serde_json::json!(["EXECUTION_KEY", "RUN_COMMAND"]),
++        serde_json::json!(true),
++    ] {
++        let mut bad = scoped.clone();
++        bad["assistantHints"]["unavailableSubjects"] = invalid;
++        assert!(sanitized_rows(&format!("PROBE:TASK:{bad}")).is_empty());
++    }
++    let mut expanded = scoped.clone();
++    expanded["assistantHints"]["schemaVersion"] = serde_json::json!(4);
++    expanded["assistantHints"]["mentionedTools"] =
++        serde_json::json!(["RUN_COMMAND", "NATIVE_DISPATCH"]);
++    expanded["assistantHints"]["argumentIssues"] = serde_json::json!(["JSON_SYNTAX"]);
++    expanded["assistantHints"]["cachedInvariants"] = serde_json::json!(["PAYLOAD_JSON_INVALID"]);
++    assert_eq!(
++        task_response_diagnostics(&format!("PROBE:TASK:{expanded}")),
++        Some(expanded.clone())
++    );
++    for field in ["mentionedTools", "argumentIssues", "cachedInvariants"] {
++        for invalid in [
++            serde_json::json!(["PRIVATE_VALUE"]),
++            serde_json::json!(true),
++            serde_json::json!(["JSON_SYNTAX", "JSON_SYNTAX"]),
++        ] {
++            let mut bad = expanded.clone();
++            bad["assistantHints"][field] = invalid;
++            assert!(sanitized_rows(&format!("PROBE:TASK:{bad}")).is_empty());
++        }
++    }
++    let mut traced = expanded.clone();
++    traced["assistantHints"]["trace"] = serde_json::json!({"schemaVersion":1,"scope":"EXACT_USER_EXCHANGE",
++        "basis":"PRESENTATION_ONLY_NOT_TOOL_RECEIPT","knownControls":1,"expandedControls":0,
++        "collapsedControls":1,"unprovenControls":0,"linkedPanels":1,"visiblePanels":0});
++    assert_eq!(
++        task_response_diagnostics(&format!("PROBE:TASK:{traced}")),
++        Some(traced.clone())
++    );
++    for (field, invalid) in [
++        ("knownControls", serde_json::json!(true)),
++        ("knownControls", serde_json::json!(65)),
++        ("knownControls", serde_json::json!(2)),
++        ("visiblePanels", serde_json::json!(1)),
++        ("rawLabel", serde_json::json!("PRIVATE_TRACE")),
++        ("scope", serde_json::json!("OTHER_EXCHANGE")),
++    ] {
++        let mut bad = traced.clone();
++        bad["assistantHints"]["trace"][field] = invalid;
++        assert!(sanitized_rows(&format!("PROBE:TASK:{bad}")).is_empty());
++    }
++    let mut bad = expanded;
++    bad["assistantHints"]["argumentValues"] = serde_json::json!("PRIVATE_CONTEXT");
++    assert!(sanitized_rows(&format!("PROBE:TASK:{bad}")).is_empty());
++    let mut bad = scoped;
++    bad["assistantHints"]["rawText"] = serde_json::json!("PRIVATE_BODY");
++    assert!(sanitized_rows(&format!("PROBE:TASK:{bad}")).is_empty());
++    changed["toolDiagnostics"]["callMarkers"] = serde_json::json!(65);
++    assert!(task_response_diagnostics(&format!("PROBE:TASK:{changed}")).is_none());
++}
++
++#[cfg(test)]
++fn identity_hint_fixture() -> serde_json::Value {
++    serde_json::json!({"toolDiagnostics":{"schemaVersion":1,
++        "basis":"VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT","scope":"EXACT_USER_EXCHANGE",
++        "selectorCoverage":"KNOWN_MARKERS_ONLY","callMarkers":0,"resultMarkers":0,
++        "errorMarkers":0,"busyMarkers":0,"countOverflow":false},
++        "assistantHints":{"schemaVersion":5,"basis":"ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION",
++            "toolUnavailable":false,"contextUnavailable":false,"approvalRequested":false,
++            "nativeDispatchMentioned":false,"knownCodes":[],"refusalCategories":["DISPATCH_REJECTED"],
++            "scanTruncated":false,"unavailableSubjects":[],"mentionedTools":[],"argumentIssues":[],
++            "cachedInvariants":[],"identityIssues":["FULL_PRIVATE_CONTEXT_UNVERIFIED"],
++            "trace":{"schemaVersion":1,"scope":"EXACT_USER_EXCHANGE",
++                "basis":"PRESENTATION_ONLY_NOT_TOOL_RECEIPT","knownControls":1,"expandedControls":0,
++                "collapsedControls":1,"unprovenControls":0,"linkedPanels":0,"visiblePanels":0}}})
++}
++
++#[test]
++fn body_coverage_is_closed_advisory_metadata_and_never_completion_authority() {
++    let mut controls = serde_json::json!({"pairedTurn":true,"assistantBodyPresent":true,
++        "completionActionFound":true,"assistantInsideSemanticUnit":true,
++        "bodyCoverage":{"selectedBlocks":1,"canonicalBody":"QUALIFIED","unselectedTextPresent":false}});
++    for name in [
++        "semanticAssistantUnits",
++        "roleAssistantNodes",
++        "copyTestIdInTurn",
++        "copyLabelInTurn",
++        "copyResponseLabelInTurn",
++        "copyMessageLabelInTurn",
++        "copyTextInTurn",
++        "knownCopyInAssistant",
++        "knownCopyInBody",
++        "sharedCopyAfterAssistant",
++        "toolbarContainersInTurn",
++        "buttonsInTurn",
++        "copyTestIdInParent",
++        "copyLabelInParent",
++        "copyResponseLabelInParent",
++        "copyMessageLabelInParent",
++    ] {
++        controls[name] = serde_json::json!(0);
++    }
++    let value = serde_json::json!({"eventId":format!("wake-intent-{}","a".repeat(64)),
++        "targetGeneration":1,"targetDigest":"b".repeat(64),"messageDigest":"c".repeat(64),
++        "stage":"RESPONSE_COMPLETE","diagnosticReason":"COMPLETE","completionControls":controls});
++    assert_eq!(
++        sent_response_observation(&format!("PROBE:RESPONSE:{value}")),
++        Some(value.clone())
++    );
++    for (field, invalid) in [
++        ("selectedBlocks", serde_json::json!(true)),
++        ("selectedBlocks", serde_json::json!(0)),
++        ("selectedBlocks", serde_json::json!(65)),
++        ("canonicalBody", serde_json::json!("PRIVATE_BODY")),

@@ -1,0 +1,202 @@
+diff --git a/wake/src/runtime_response.rs b/wake/src/runtime_response.rs
+index b722756e940a9db077fca9f5d9e8919d0a1f875e..39fe19fed835aeac30aabddacff6589cfae81fc1 100644
+--- a/wake/src/runtime_response.rs
++++ b/wake/src/runtime_response.rs
+@@ -32,43 +32,113 @@ fn valid_completion_controls(value: &Value) -> bool {
+         "buttonsInTurn",
+         "copyTestIdInParent",
+         "copyLabelInParent",
+         "copyResponseLabelInParent",
+         "copyMessageLabelInParent",
+     ];
+     const FLAGS: &[&str] = &[
+         "pairedTurn",
+         "assistantBodyPresent",
+         "completionActionFound",
+         "assistantInsideSemanticUnit",
+     ];
+-    value
+-        .as_object()
+-        .is_some_and(|map| map.len() == COUNTS.len() + FLAGS.len())
+-        && COUNTS.iter().all(|key| {
+-            value
+-                .get(key)
+-                .and_then(Value::as_u64)
+-                .is_some_and(|n| n <= 64)
++    let button_shape = value.get("buttonShape");
++    let body_coverage = value.get("bodyCoverage");
++    value.as_object().is_some_and(|map| {
++        map.len()
++            == COUNTS.len()
++                + FLAGS.len()
++                + usize::from(button_shape.is_some())
++                + usize::from(body_coverage.is_some())
++    }) && COUNTS.iter().all(|key| {
++        value
++            .get(key)
++            .and_then(Value::as_u64)
++            .is_some_and(|n| n <= 64)
++    }) && FLAGS
++        .iter()
++        .all(|key| value.get(key).and_then(Value::as_bool).is_some())
++        && button_shape.is_none_or(valid_button_shape)
++        && body_coverage.is_none_or(|coverage| {
++            coverage.as_object().is_some_and(|map| map.len() == 3)
++                && coverage["selectedBlocks"].as_u64().is_some_and(|n| n <= 64)
++                && matches!(
++                    coverage["canonicalBody"].as_str(),
++                    Some("QUALIFIED" | "UNPROVEN")
++                )
++                && (coverage["canonicalBody"] != "QUALIFIED"
++                    || coverage["selectedBlocks"].as_u64().is_some_and(|n| n > 0))
++                && coverage["unselectedTextPresent"].as_bool().is_some()
+         })
+-        && FLAGS
+-            .iter()
+-            .all(|key| value.get(key).and_then(Value::as_bool).is_some())
+ }
+ 
+-pub(crate) fn validate_observation(delivery: &Delivery, value: &Value) -> Result<bool> {
+-    let receipt = delivery
+-        .receipt
+-        .as_ref()
+-        .ok_or("RESPONSE_PROBE_RECEIPT_REQUIRED")?;
++/// Fixed vocabulary and capped structural metadata only. These observations
++/// must never qualify an assistant completion action or grant an interaction.
++fn valid_button_shape(value: &Value) -> bool {
++    const LABELS: &[&str] = &[
++        "ABSENT",
++        "OTHER",
++        "COPY",
++        "COPY_MESSAGE",
++        "COPY_RESPONSE",
++        "GOOD_RESPONSE",
++        "BAD_RESPONSE",
++        "READ_ALOUD",
++        "MORE",
++        "RETRY",
++        "SHARE",
++        "REGENERATE",
++    ];
++    let Some(map) = value.as_object() else {
++        return false;
++    };
++    let Some(buttons) = value.get("buttons").and_then(Value::as_array) else {
++        return false;
++    };
++    let Some(overflow) = value.get("countOverflow").and_then(Value::as_bool) else {
++        return false;
++    };
++    let member = |row: &Value, key: &str, allowed: &[&str]| {
++        row.get(key)
++            .and_then(Value::as_str)
++            .is_some_and(|text| allowed.contains(&text))
++    };
++    map.len() == 3
++        && value.get("schemaVersion").and_then(Value::as_u64) == Some(1)
++        && buttons.len() <= 8
++        && (!overflow || buttons.len() == 8)
++        && buttons.iter().all(|row| {
++            row.as_object().is_some_and(|map| map.len() == 10)
++                && ["aria", "title", "tooltip"]
++                    .iter()
++                    .all(|key| member(row, key, LABELS))
++                && member(row, "testId", &["ABSENT", "OTHER", "COPY"])
++                && member(row, "dataState", &["ABSENT", "OTHER", "OPEN", "CLOSED"])
++                && member(
++                    row,
++                    "location",
++                    &["USER", "BODY", "ASSISTANT", "SHARED", "AUXILIARY", "OTHER"],
++                )
++                && member(row, "toolbar", &["ACTION", "ROLE", "NONE"])
++                && ["visible", "afterAssistant"]
++                    .iter()
++                    .all(|key| row.get(key).and_then(Value::as_bool).is_some())
++                && row
++                    .get("svgCount")
++                    .and_then(Value::as_u64)
++                    .is_some_and(|n| n <= 4)
++        })
++}
++
++fn valid_observation_metadata(value: &Value) -> bool {
+     let stage = value.get("stage").and_then(Value::as_str);
+     let controls_valid = value.get("completionControls").is_none_or(|controls| {
+         value.get("diagnosticReason").is_some()
+             && valid_completion_controls(controls)
+             && (stage != Some("RESPONSE_COMPLETE")
+                 || (controls
+                     .get("assistantBodyPresent")
+                     .and_then(Value::as_bool)
+                     == Some(true)
+                     && controls
+                         .get("completionActionFound")
+                         .and_then(Value::as_bool)
+@@ -91,28 +161,421 @@ pub(crate) fn validate_observation(delivery: &Delivery, value: &Value) -> Result
+                             "DOCUMENT_LOADING"
+                                 | "GENERATION_ACTIVE"
+                                 | "EDITOR_NOT_READY"
+                                 | "ASSISTANT_NOT_MOUNTED"
+                                 | "ASSISTANT_BODY_UNPROVEN"
+                                 | "ASSISTANT_COMPLETION_ACTION_UNPROVEN"
+                         )
+                     ),
+                     _ => false,
+                 }
+         }
+     };
++    matches!(stage, Some("RESPONSE_PENDING" | "RESPONSE_COMPLETE"))
++        && diagnostic_valid
++        && controls_valid
++}
++
++pub(crate) fn canonical_observation(value: Value) -> Option<Value> {
++    let hex = |v: &Value| {
++        v.as_str().is_some_and(|s| {
++            s.len() == 64
++                && s.bytes()
++                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
++        })
++    };
++    if !valid_observation_metadata(&value)
++        || !value["eventId"].as_str().is_some_and(|id| {
++            id.strip_prefix("web-work-")
++                .or_else(|| id.strip_prefix("wake-intent-"))
++                .is_some_and(|v| {
++                    v.len() == 64
++                        && v.bytes()
++                            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
++                })
++        })
++        || !value["targetGeneration"].as_u64().is_some_and(|n| n > 0)
++        || !hex(&value["targetDigest"])
++        || !hex(&value["messageDigest"])
++    {
++        return None;
++    }
++    Some(value)
++}
++
++pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
++    let tools = value.get("toolDiagnostics")?;
++    let hints = value.get("assistantHints")?;
++    let counts = [
++        "callMarkers",
++        "resultMarkers",
++        "errorMarkers",
++        "busyMarkers",
++    ];
++    let flags = [
++        "toolUnavailable",
++        "contextUnavailable",
++        "approvalRequested",
++        "nativeDispatchMentioned",
++    ];
++    let codes = [
++        "HTTP_429",
++        "WEB_WORK_ROLLOVER_PENDING",
++        "WEB_ROLLOVER_PROJECT_BUSY",
++        "WEB_TASK_GRANT_SCOPE_MISMATCH",
++        "WEB_TASK_NATIVE_NOT_GRANTED",
++        "PROJECT_TASK_CALL_ALREADY_COMPLETED",
++        "PROJECT_TASK_RECOVERY_REQUIRED",

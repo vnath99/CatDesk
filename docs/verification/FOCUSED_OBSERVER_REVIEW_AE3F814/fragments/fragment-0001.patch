@@ -1,0 +1,124 @@
+diff --git a/scripts/wake_bridge.py b/scripts/wake_bridge.py
+index 0a27834153a6dd03fac005f06396572c77052f3e..c8e26d4ba3ea760cb92e23aa8f1791260e4fafef 100644
+--- a/scripts/wake_bridge.py
++++ b/scripts/wake_bridge.py
+@@ -103,31 +103,174 @@ RESPONSE_CONTROL_COUNTS = (
+     "copyTextInTurn", "knownCopyInAssistant", "knownCopyInBody",
+     "sharedCopyAfterAssistant", "toolbarContainersInTurn", "buttonsInTurn",
+     "copyTestIdInParent", "copyLabelInParent", "copyResponseLabelInParent",
+     "copyMessageLabelInParent",
+ )
+ RESPONSE_CONTROL_FLAGS = (
+     "pairedTurn", "assistantBodyPresent", "completionActionFound", "assistantInsideSemanticUnit",
+ )
+ 
+ 
+ def valid_response_control_diagnostics(value: Any) -> bool:
+     """Closed, capped DOM-shape metadata; never text or action authority."""
+-    return (isinstance(value, dict) and set(value) == set(RESPONSE_CONTROL_COUNTS + RESPONSE_CONTROL_FLAGS)
++    base = set(RESPONSE_CONTROL_COUNTS + RESPONSE_CONTROL_FLAGS)
++    return (isinstance(value, dict) and base <= set(value) <= base | {"buttonShape", "bodyCoverage"}
+             and all(type(value[key]) is int and 0 <= value[key] <= 64 for key in RESPONSE_CONTROL_COUNTS)
+-            and all(type(value[key]) is bool for key in RESPONSE_CONTROL_FLAGS))
++            and all(type(value[key]) is bool for key in RESPONSE_CONTROL_FLAGS)
++            and ("buttonShape" not in value or valid_response_button_shape(value["buttonShape"]))
++            and ("bodyCoverage" not in value or (isinstance(value["bodyCoverage"], dict)
++                and set(value["bodyCoverage"]) == {"selectedBlocks", "canonicalBody", "unselectedTextPresent"}
++                and type(value["bodyCoverage"]["selectedBlocks"]) is int
++                and 0 <= value["bodyCoverage"]["selectedBlocks"] <= 64
++                and value["bodyCoverage"]["canonicalBody"] in ("QUALIFIED", "UNPROVEN")
++                and (value["bodyCoverage"]["canonicalBody"] != "QUALIFIED" or value["bodyCoverage"]["selectedBlocks"] > 0)
++                and type(value["bodyCoverage"]["unselectedTextPresent"]) is bool)))
+ 
+ 
+ TOOL_MARKER_COUNTS = ("callMarkers", "resultMarkers", "errorMarkers", "busyMarkers")
+ 
++RESPONSE_BUTTON_LABELS = frozenset({"ABSENT", "OTHER", "COPY", "COPY_MESSAGE", "COPY_RESPONSE",
++    "GOOD_RESPONSE", "BAD_RESPONSE", "READ_ALOUD", "MORE", "RETRY", "SHARE", "REGENERATE"})
++
++
++TASK_RESPONSE_CODES = (
++    "HTTP_429", "WEB_WORK_ROLLOVER_PENDING", "WEB_ROLLOVER_PROJECT_BUSY",
++    "WEB_TASK_GRANT_SCOPE_MISMATCH", "WEB_TASK_NATIVE_NOT_GRANTED",
++    "PROJECT_TASK_CALL_ALREADY_COMPLETED", "PROJECT_TASK_RECOVERY_REQUIRED",
++    "WEB_TASK_CACHED_ARGUMENTS_INVALID", "INVALID_ARGUMENT", "UNAUTHORIZED",
++    "WEB_TASK_REQUEST_INVALID", "WEB_TASK_BINDING_CHANGED",
++    "WEB_TASK_ARGUMENTS_INVALID", "WEB_TASK_NATIVE_ARGUMENTS_INVALID", "WEB_TASK_REQUEST_ID_REQUIRED",
++    "WEB_TASK_CENTRAL_MODE_REQUIRED", "WEB_TASK_CENTRAL_AUTH_REQUIRED", "PLAN_REQUIRED",
++)
++
++
++TASK_REFUSAL_CATEGORIES = ("IDENTITY_MISMATCH", "TOOL_UNAVAILABLE", "CONTEXT_UNAVAILABLE",
++                           "AUTHORIZATION_REQUIRED", "DISPATCH_REJECTED")
++
++
++TASK_UNAVAILABLE_SUBJECTS = ("RUN_COMMAND", "CENTRAL_TASK_TOOL", "NATIVE_CALL",
++                             "PRIVATE_CONTEXT", "EXECUTION_KEY", "CATDESK_APP")
++
++
++TASK_MENTIONED_TOOLS = ("RUN_COMMAND", "CENTRAL_TASK_TOOL", "NATIVE_DISPATCH", "NATIVE_STATUS")
++
++
++TASK_ARGUMENT_ISSUES = ("JSON_SYNTAX", "MISSING_REQUIRED_FIELD", "UNEXPECTED_FIELD",
++                        "TYPE_MISMATCH", "TOOL_NAME_REJECTED", "CACHED_ENVELOPE_REJECTED")
++
++
++TASK_IDENTITY_ISSUES = tuple(domain + "_" + state
++    for domain in ("FULL_PRIVATE_CONTEXT", "ASSIGNMENT", "DELIVERED_USER_MESSAGE",
++                   "NATIVE_CALL", "EXECUTION_GRANT", "CONVERSATION_TARGET")
++    for state in ("MISSING", "MISMATCH", "UNVERIFIED"))
++
++
++TASK_REFUSAL_TERMS = ("REDACTED", "DISPATCH", "BLOCKED", "REJECTED", "REFUSED", "REQUIRED", "PROVIDED",
++    "SUPPLIED", "INCLUDED", "NOT", "CANNOT", "BECAUSE", "CONTEXT", "PRIVATE", "FROZEN", "CAPSULE",
++    "ASSIGNMENT", "DIGEST", "HASH", "MATCH", "MISMATCH", "GRANT", "TASK", "REQUEST", "MESSAGE",
++    "NATIVECALL", "TOOL", "TOOLS", "RUN_COMMAND", "CATDESK_WEB_TASK_TOOL", "NATIVE", "CODEX", "EXECUTION",
++    "KEY", "ARGUMENTS", "PAYLOAD", "SCOPE", "WORKSPACE", "RECEIPT", "AUTHORIZATION", "AUTHENTICATION",
++    "PERMISSION", "APPROVAL", "POLICY", "UNTRUSTED", "INSTRUCTION", "SOURCE", "MISSING", "AVAILABLE",
++    "UNAVAILABLE", "ENABLED", "DISABLED", "CONNECTED", "VERIFIED", "UNVERIFIED", "IDENTITY", "SCHEMA",
++    "INVALID", "ERROR", "FAILED", "EXPIRED", "DUPLICATE", "UNKNOWN", "ACCESS", "READ", "WRITE", "ONLY",
++    "NO", "IS", "WAS", "THE", "A", "AN", "TO", "FROM", "WITH", "WITHOUT", "THIS", "THAT", "CURRENT", "ORIGINAL")
++
++
++TASK_CACHED_INVARIANTS = ("ARGUMENTS_NOT_OBJECT", "COMMAND_NOT_STRING", "PLAN_FLAG_NOT_BOOLEAN",
++                          "DRY_RUN_NOT_FALSE", "FULL_OUTPUT_NOT_FALSE", "CWD_OVERRIDE_FORBIDDEN",
++                          "TIMEOUT_OVERRIDE_FORBIDDEN", "UNSUPPORTED_OUTER_FIELD", "COMMAND_TOO_LARGE",
++                          "RESERVED_PREFIX_INVALID", "PAYLOAD_JSON_INVALID", "PAYLOAD_NOT_OBJECT")
++
++
++TASK_TRACE_COUNTS = ("knownControls", "expandedControls", "collapsedControls", "unprovenControls",
++                     "linkedPanels", "visiblePanels")
++
++
++def valid_response_button_shape(value: Any) -> bool:
++    """Fixed structural categories only, including unknown-label redaction."""
++    fields = {"aria", "title", "tooltip", "testId", "dataState", "location", "toolbar",
++              "visible", "afterAssistant", "svgCount"}
++    return (isinstance(value, dict) and set(value) == {"schemaVersion", "countOverflow", "buttons"}
++        and type(value["schemaVersion"]) is int and value["schemaVersion"] == 1
++        and type(value["countOverflow"]) is bool and isinstance(value["buttons"], list)
++        and len(value["buttons"]) <= 8 and (not value["countOverflow"] or len(value["buttons"]) == 8)
++        and all(isinstance(row, dict) and set(row) == fields
++            and all(isinstance(row[key], str) and row[key] in RESPONSE_BUTTON_LABELS for key in ("aria", "title", "tooltip"))
++            and row["testId"] in ("ABSENT", "OTHER", "COPY")
++            and row["dataState"] in ("ABSENT", "OTHER", "OPEN", "CLOSED")
++            and row["location"] in ("USER", "BODY", "ASSISTANT", "SHARED", "AUXILIARY", "OTHER")
++            and row["toolbar"] in ("ACTION", "ROLE", "NONE")
++            and type(row["visible"]) is bool and type(row["afterAssistant"]) is bool
++            and type(row["svgCount"]) is int and 0 <= row["svgCount"] <= 4
++            for row in value["buttons"]))
++
++
++def valid_task_trace_metadata(value: Any) -> bool:
++    """Presentation metadata only; never panel text, identifiers or click authority."""
++    return (isinstance(value, dict) and set(value) == set(TASK_TRACE_COUNTS) | {"schemaVersion", "scope", "basis"}
++            and type(value["schemaVersion"]) is int and value["schemaVersion"] == 1
++            and value["scope"] == "EXACT_USER_EXCHANGE"
++            and value["basis"] == "PRESENTATION_ONLY_NOT_TOOL_RECEIPT"
++            and all(type(value[key]) is int and 0 <= value[key] <= 64 for key in TASK_TRACE_COUNTS)
++            and value['expandedControls'] + value['collapsedControls'] + value['unprovenControls'] == value['knownControls']
++            and value['visiblePanels'] <= min(value['linkedPanels'],value['expandedControls'])
++            and value['linkedPanels'] <= value['knownControls'])
++
++
++def valid_task_response_hints(value: Any) -> bool:

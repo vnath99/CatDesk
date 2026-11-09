@@ -1,0 +1,18 @@
++                web::WebAction::ReviewReobserve { .. }
++            )))
++        ));
++    }
++
++    #[test]
+     fn web_development_requires_explicit_fixed_actions() {
+         let parsed = parse_operator_action(
+             [
+                 "operator",
+                 "web-dev-runtime",
+                 "prepare",
+                 "--package",
+                 "C:/dev/package",
+                 "--python-runtime",
+                 "C:/dev/python",
+             ]
+             .map(str::to_string),

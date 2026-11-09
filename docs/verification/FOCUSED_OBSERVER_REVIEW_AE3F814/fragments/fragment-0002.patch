@@ -1,0 +1,108 @@
++    """Closed assistant-text hints, never tool availability or execution proof."""
++    flags = ("toolUnavailable", "contextUnavailable", "approvalRequested", "nativeDispatchMentioned")
++    version = value.get("schemaVersion") if isinstance(value, dict) else None
++    fields = {"schemaVersion", "basis", "knownCodes"} | ({"refusalCategories", "scanTruncated"} if version in (2, 3, 4, 5, 6, 7) else set())
++    if version in (3, 4, 5, 6, 7):
++        fields.add("unavailableSubjects")
++    extra = {"mentionedTools":TASK_MENTIONED_TOOLS, "argumentIssues":TASK_ARGUMENT_ISSUES,
++             "cachedInvariants":TASK_CACHED_INVARIANTS} if version in (4, 5, 6, 7) else {}
++    if version in (5, 6, 7):
++        extra["identityIssues"] = TASK_IDENTITY_ISSUES
++    fields.update(extra)
++    if version in (6, 7):
++        fields.add("refusalTerms")
++    if version == 7:
++        fields.add("refusalReport")
++    if version in (4, 5, 6, 7) and "trace" in value:
++        fields.add("trace")
++    return (isinstance(value, dict) and set(value) == set(flags) | fields
++            and type(version) is int and version in {1, 2, 3, 4, 5, 6, 7}
++            and value["basis"] == "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION"
++            and all(type(value[key]) is bool for key in flags)
++            and isinstance(value["knownCodes"], list)
++            and value["knownCodes"] == [code for code in TASK_RESPONSE_CODES if code in value["knownCodes"]]
++            and (version == 1 or (type(value["scanTruncated"]) is bool and isinstance(value["refusalCategories"], list)
++                 and value["refusalCategories"] == [kind for kind in TASK_REFUSAL_CATEGORIES if kind in value["refusalCategories"]]))
++            and (version not in (3, 4, 5, 6, 7) or (isinstance(value["unavailableSubjects"], list)
++                 and value["unavailableSubjects"] == [subject for subject in TASK_UNAVAILABLE_SUBJECTS if subject in value["unavailableSubjects"]]))
++            and all(isinstance(value[field], list) and value[field] == [item for item in allowed if item in value[field]]
++                    for field, allowed in extra.items())
++            and (version not in (6, 7) or (isinstance(value["refusalTerms"], list) and len(value["refusalTerms"]) <= 32
++                 and all(isinstance(term, str) and term in TASK_REFUSAL_TERMS for term in value["refusalTerms"])
++                 and all(a != "REDACTED" or b != "REDACTED" for a, b in zip(value["refusalTerms"], value["refusalTerms"][1:]))))
++            and (version != 7 or (isinstance(value['refusalReport'], dict)
++                 and set(value['refusalReport']) == {'source', 'state', 'reasonFieldPresent', 'projectionOmitted'}
++                 and value['refusalReport']['source'] in ('PROSE', 'STRUCTURED', 'NONE')
++                 and value['refusalReport']['state'] in ('BLOCKED', 'REJECTED', 'REFUSED', 'UNPROVEN')
++                 and type(value['refusalReport']['reasonFieldPresent']) is bool
++                 and type(value['refusalReport']['projectionOmitted']) is bool
++                 and ((value['refusalReport']['source'] == 'NONE') == (value['refusalReport']['state'] == 'UNPROVEN'))
++                 and (value['refusalReport']['source'] != 'NONE' or not value['refusalTerms'])
++                 and (value['refusalReport']['source'] == 'STRUCTURED' or not value['refusalReport']['reasonFieldPresent'])
++                 and value['refusalReport']['projectionOmitted'] == (not value['refusalTerms'])))
++            and ("trace" not in value or valid_task_trace_metadata(value["trace"])))
++
++
+ 
+ def valid_tool_marker_diagnostics(value: Any) -> bool:
+     """Visible, known UI markers only; never tool arguments or execution proof."""
+     if isinstance(value, dict) and value == {
+             "status": "UNAVAILABLE", "reason": "UI_MARKERS_UNPROVEN",
+             "basis": "VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT"}:
+         return True
+     return (isinstance(value, dict) and set(value) == set(TOOL_MARKER_COUNTS) | {
+                 "schemaVersion", "basis", "scope", "selectorCoverage", "countOverflow"}
+             and type(value["schemaVersion"]) is int and value["schemaVersion"] == 1
+             and value["basis"] == "VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT"
+             and value["scope"] == "EXACT_USER_EXCHANGE"
+@@ -144,24 +287,47 @@ const assistantLoadError = element => {
+         copy.querySelectorAll('button, [role="button"], [role="toolbar"], [aria-hidden="true"], h4[data-conversation-role]')
+             .forEach(control => control.remove());
+         return String(copy.textContent || '').replace(/[‘’]/g, "'").replace(/\\s+/g, ' ').trim().toLowerCase().replace(/\\.$/, '');
+     };
+     const marker = "this response couldn't load";
+     const bodySelector = '[data-message-content], .markdown, [class~="prose"], [data-markdown-text-style="assistant-message"]';
+     const body = element.matches(bodySelector) ? element : element.querySelector(bodySelector);
+     // A normal answer discussing the error is not the UI error placeholder.
+     if (body && clean(body) && clean(body) !== marker) return false;
+     return [element, ...element.querySelectorAll('div, p, span')]
+         .some(node => visible(node) && clean(node) === marker);
+ };
++// Some failed replies have no ASSISTANT role/header at all. This is only a
++// failure observation, never response completion or permission to click Retry.
++const unmountedExchangeLoadError = (boundary, userSelector) => {
++    if (!boundary) return false;
++    const users = Array.from(boundary.querySelectorAll(userSelector));
++    if (!users.length || users.length > 128) return false;
++    const excluded = userSelector + ', pre, code, blockquote, button, input, textarea, [contenteditable], [data-content-search-unit-key], ' +
++        '[data-message-content], .markdown, [class~="prose"], ' +
++        '[data-markdown-text-style="assistant-message"], ' +
++        '[data-testid="mcp-tool-call"], [data-testid="mcp-tool-result"], ' +
++        '[data-tool-call-id], [data-mcp-tool-call-id], [role="button"], ' +
++        '[role="toolbar"], [aria-hidden="true"]';
++    const nodes = Array.from(boundary.querySelectorAll('div, p, span'));
++    if (nodes.length > 2048) return false;
++    const candidates = nodes.filter(node =>
++        visible(node) && !node.closest(excluded) &&
++        users.every(user => Boolean(user.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)) &&
++        assistantLoadError(node));
++    // A parent and its child can describe one card; two separate cards are
++    // ambiguous and remain unverified instead of borrowing historical UI.
++    const leaves = candidates.filter(node => !candidates.some(other => other !== node && node.contains(other)));
++    return leaves.length === 1;
++};
+ """
+ # Shared by observation and the sole qualified assistant Retry action. Never
+ # climb out of the wake's assistant/exchange boundary or borrow USER controls.
+ RESPONSE_WAKE_USER_MATCHER = USER_BODY_TEXT_READER + r"""
+ const wakeTurnMatches = turn => {
+     if (!expectedWake) return false;
+     const selector = "[data-message-author-role='user'], [data-turn='user'], " +
+         "[data-user-message-bubble], [class~='group/user-message']";
+     const raw = [turn, ...turn.querySelectorAll(selector)].filter(node => node.matches(selector));
+     // Multiple nested markers describe one USER; distinct sibling USER nodes
+     // remain ambiguous even inside the same paired exchange container.
+     if (raw.length > 128) return false;
+@@ -1280,43 +1446,53 @@ class CdpSink:
+                 stable_observations, first_stable_at = 0, None
+             else:

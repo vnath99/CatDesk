@@ -1,0 +1,111 @@
+ for (let i = 0; i < (options.toolMarkerCount || 0); i++) {
+   const card = el('div', {'data-testid':'mcp-tool-call', 'data-tool-call-id':'PRIVATE_CALL_ID',
+     'aria-busy':options.toolBusy ? 'true' : 'false', hidden:options.toolHidden || false},
+     'PRIVATE_TOOL_ARGUMENTS', options.toolError ? [el('div', {role:'alert'}, 'PRIVATE_POLICY_TEXT')] : []);
+   if (options.toolPlacement === 'user') append(user.children[0], card);
+   else if (options.toolPlacement === 'code') append(assistant.children[1].children[0], el('pre', {}, '', [card]));
+   else children.splice(1,0,card);
+ }
+ if (options.toolResult) children.splice(1,0,el('div', {'data-testid':'mcp-tool-result'}, 'PRIVATE_TOOL_RESULT'));
+ for (let i = 0; i < (options.diagnosticExtraButtons || 0); i++)
+   children.push(button(options.diagnosticButtonLabel || 'Unrelated control'));
+ if (options.auxiliaryUnit) {
+@@ -166,45 +235,61 @@ if (options.auxiliaryUnit) {
+     el('div', {'data-markdown-text-style':'assistant-message'}, 'Tool status only'),
+     el('div', {class:'turn-action-controls'}, '', [button(options.auxiliaryCopyLabel || 'Copy')]),
+   ]);
+   children.splice(options.auxiliaryUnit === 'before' ? 1 : children.length, 0, auxiliary);
+ }
+ if (options.duplicateUser) children.splice(1, 0, user.cloneNode());
+ for (const control of options.submitControls || []) children.push(el('button', {
+   'aria-label':control.label, type:control.type, disabled:control.disabled || false
+ }));
+ if (options.extraAssistant) children.push(el('div', {'data-content-search-unit-key':'assistant-2'}, '', [
+   el('h4', {'data-conversation-role':'assistant'}, 'ChatGPT said:'),
+ ]));
+-if (options.toolbar !== false) children.push(el('div', {class:'turn-action-controls'}, '', [button(options.assistantCopyLabel || 'Copy')]));
++if (options.toolbar !== false) {
++  const action = button(options.assistantCopyLabel || 'Copy');
++  if (options.diagnosticActionAttributes) Object.assign(action.attrs, options.diagnosticActionAttributes);
++  children.push(el('div', {class:'turn-action-controls'}, '', [action]));
++}
+ if (options.duplicateToolbar) children.push(el('div', {class:'turn-action-controls'}, '', [button(options.assistantCopyLabel || 'Copy')]));
+ const paired = el('div', {'data-content-search-turn-key':'fallback-turn-0'}, '', children);
+ if (options.bareUser) {
+   delete user.attrs['data-content-search-unit-key'];
+   delete paired.attrs['data-content-search-turn-key'];
+ }
+ global.document = el('document', {}, '', [paired]);
+ if (options.legacyTurns) {
+   delete user.attrs['data-content-search-unit-key'];
+   delete assistant.attrs['data-content-search-unit-key'];
+   user.attrs['data-message-author-role'] = 'user';
+   assistant.attrs['data-message-author-role'] = 'assistant';
+   document.children = [
+     el('div', {'data-testid':'conversation-turn-0'}, '', [user]),
+     el('div', {'data-testid':'conversation-turn-1'}, '', [assistant,
+       el('div', {class:'turn-action-controls'}, '', [el('button', {'data-testid':'copy-turn-action-button','aria-label':'Copy'}, 'Copy')])]),
+   ];
+ }
++if(options.laterExchange) {
++  const later=paired.cloneNode(true);
++  later.attrs['data-content-search-turn-key']='fallback-turn-1';
++  const laterUser=later.querySelector('[data-user-message-bubble]');
++  const laterBody=laterUser.querySelector('[data-message-content], [data-markdown-text-tone="user-message"], .whitespace-pre-wrap');
++  (laterBody||laterUser).text=options.laterSameUser?'exact wake message':'foreign later request';
++  if(!options.laterSameUser)(laterBody||laterUser).children=[];
++  const laterAssistant=later.querySelector('.markdown');
++  if(laterAssistant)laterAssistant.text='PRIVATE_LATER_RESPONSE HTTP 429 WEB_TASK_NATIVE_ARGUMENTS_INVALID';
++  append(document,later);
++}
+ if (options.retryOnlyOutside) document.children.push(button('Retry'));
+ if (options.historicalLoadError) document.children.unshift(el('div', {'data-message-author-role':'assistant'}, 'This response couldn’t load'));
++if (options.historicalRefusalReport) document.children.unshift(el('div', {'data-message-author-role':'assistant'}, options.historicalRefusalReport));
+ if (options.historicalToolMarker) document.children.unshift(el('div', {'data-testid':'mcp-tool-call'}, 'PRIVATE_OLD_TOOL'));
+ document.readyState = options.documentState || 'complete';
+ if (options.observationEditor) document.children.push(el('div', {id:'prompt-textarea'}, options.observationDraft || ''));
+ if (options.observationStop) document.children.push(el('button', {'data-testid':'stop-button'}));
+ if (options.observationLogin) document.children.push(el('a', {href:'/auth/login'}));
+ if (options.observationCaptcha) document.children.push(el('iframe', {title:'captcha'}));
+ if (options.observationNetwork) document.children.push(el('div', {id:'main-frame-error'}), el('div', {id:'error-code'}));
+ global.window = {getComputedStyle: () => ({visibility:'visible', display:'block'})};
+ global.location = {href:options.location || 'https://chatgpt.com/c/current-dom'};
+ if (options.composerCount !== undefined) {
+   document.children = [];
+   for (let i = 0; i < options.composerCount; i++) {
+@@ -788,25 +873,27 @@ class CurrentDomTests(unittest.TestCase):
+                 diagnostic = {}
+                 result = self.sink.response_snapshot(CurrentDom(answer="PRIVATE_ANSWER_MARKER", **options),
+                     "exact wake message", require_usable_body=True, diagnostic=diagnostic)
+                 controls = diagnostic["controls"]
+                 self.assertTrue(bridge.valid_response_control_diagnostics(controls))
+                 self.assertEqual(controls["semanticAssistantUnits"], 1)
+                 self.assertEqual(controls["knownCopyInBody"], 1)
+                 self.assertEqual(controls["sharedCopyAfterAssistant"], shared)
+                 self.assertEqual(controls["assistantBodyPresent"], True)
+                 self.assertEqual(controls["completionActionFound"], complete)
+                 self.assertEqual(result[3], complete)
+                 self.assertNotIn("PRIVATE_", json.dumps(diagnostic))
+-                self.assertLess(len(json.dumps(diagnostic)), 1500)
++                # Fixed button shape and body coverage share the existing
++                # 4096-byte native response-frame bound; no text is admitted.
++                self.assertLess(len(json.dumps(diagnostic).encode('utf-8')), 4096)
+         self.sink.observe_cooperative_response(CurrentDom(observationEditor=True),
+             "exact wake message", bridge.digest("exact wake message"))
+         self.assertIsNotNone(self.sink.response_observation_controls)
+         self.sink.observe_cooperative_response(CurrentDom(observationEditor=True, observationStop=True),
+             "exact wake message", bridge.digest("exact wake message"))
+         self.assertIsNone(self.sink.response_observation_controls)
+         diagnostic = {}
+         self.sink.response_snapshot(CurrentDom(diagnosticExtraButtons=100,
+             diagnosticButtonLabel='PRIVATE_CONTROL_LABEL'), 'exact wake message',
+             require_usable_body=True, diagnostic=diagnostic)
+         self.assertEqual(diagnostic['controls']['buttonsInTurn'], 64)
+         self.assertNotIn('PRIVATE_CONTROL_LABEL', json.dumps(diagnostic))
+@@ -976,14 +1063,667 @@ class CurrentDomTests(unittest.TestCase):
+         ]:
+             with self.subTest(options=options):
+                 cdp = CurrentDom(observationEditor=True, traceClicks=True, **options)
+                 with self.assertRaisesRegex(bridge.PostSubmitUnknown, reason):
+                     self.sink.click_response_timeout_retry(cdp, "exact wake message")
+                 self.assertEqual(getattr(cdp, "mutations", 0), 0)

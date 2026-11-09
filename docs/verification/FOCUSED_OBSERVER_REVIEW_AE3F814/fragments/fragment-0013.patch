@@ -1,0 +1,122 @@
+diff --git a/tests/test_wake_bridge_current_dom.py b/tests/test_wake_bridge_current_dom.py
+index dc614d93223e049a8eee8ec7234ed63f53990893..5bd019073ce1a8d25dc0c68565d8c9f628ee1fd0 100644
+--- a/tests/test_wake_bridge_current_dom.py
++++ b/tests/test_wake_bridge_current_dom.py
+@@ -27,25 +27,25 @@ class Element {
+   constructor(tag, attrs = {}, text = '', children = []) {
+     this.tagName = tag; this.attrs = attrs; this.text = text;
+     this.children = children; this.parentElement = null;
+     for (const child of children) child.parentElement = this;
+   }
+   get textContent() { return this.text + this.children.map(c => c.textContent).join(''); }
+   get innerText() { return (options.generatedLink && this.attrs['text-link-href'] ? '\n' : '') + this.text + this.children.map(c => c.innerText).join(''); }
+   get nodeType() { return 1; }
+   get childNodes() { return [{nodeType:3, nodeValue:this.text}, ...this.children]; }
+   get disabled() { return this.attrs.disabled === true; }
+   getAttribute(name) { return this.attrs[name] ?? null; }
+   hasAttribute(name) { return Object.hasOwn(this.attrs, name); }
+-  getClientRects() { return this.attrs.hidden ? [] : [1]; }
++  getClientRects() { for(let node=this;node;node=node.parentElement) if(node.attrs.hidden) return []; return [1]; }
+   matches(selector) { return selector.split(',').some(raw => {
+     const s = raw.trim();
+     const has = s.match(/^([^:]+):has\(([^()]+)\)$/);
+     if (has) return this.matches(has[1]) && Boolean(this.querySelector(has[2]));
+     if (s.includes(':')) return false;
+     const parts = s.split(/\s+(?![^\[]*\])/);
+     if (parts.length > 1) {
+       if (!this.matches(parts.pop())) return false;
+       return !!this.parentElement?.closest(parts.join(' '));
+     }
+     const tag = s.match(/^[a-z][a-z0-9-]*/i);
+     if (tag && tag[0].toLowerCase() !== this.tagName.toLowerCase()) return false;
+@@ -132,33 +132,102 @@ if (options.userBodyIsUnit) {
+   user.children = [user.children[0].children[1]];
+   user.children[0].parentElement = user;
+ }
+ const answer = options.loadError ? "This response couldn’t load" : (options.answer ?? 'A useful answer');
+ const assistant = el('div', {'data-content-search-unit-key':'fallback-turn-0:2:assistant'}, '', [
+   el('h4', {'data-conversation-role':'assistant'}, 'ChatGPT said:'),
+   el('div', {'data-chatgpt-selection-message-id':'assistant-id'}, '', options.controlsOnly ? [] : [
+     el('div', {'data-markdown-text-style':'assistant-message'}, answer, [
+       el('div', {class:'turn-action-controls'}, '', [button(options.bodyCopyLabel || 'Copy')]),
+     ]),
+   ]),
+ ]);
++if (options.canonicalUnlabelledText)
++  append(assistant.children[1], el('p', {}, options.canonicalUnlabelledText));
++if (options.quotedAnswerTag)
++  append(assistant.children[1], el(options.quotedAnswerTag, {}, options.quotedAnswerText || ''));
++if (options.bodyQuoteWrapper) {
++  const body=assistant.children[1].children[0];
++  const quote=el('blockquote',{},'',[body]);
++  assistant.children[1].children[0]=quote;quote.parentElement=assistant.children[1];
++}
++if (options.assistantOutsideText)
++  append(assistant, el('p', {}, options.assistantOutsideText));
++if (options.secondSelectionBody)
++  append(assistant, el('div', {'data-chatgpt-selection-message-id':'second-assistant-body'}, options.secondSelectionBody));
++if (options.selectionToolText)
++  append(assistant.children[1], el('div', {'data-testid':'mcp-tool-result'}, options.selectionToolText));
++if (options.selectionBodyWrapper) {
++  const markedBody=assistant.children[1];
++  const attrs=options.selectionBodyWrapper==='user' ? {'data-message-author-role':'user'} : {'data-testid':'mcp-tool-result'};
++  const wrapper=el('div',attrs,'',[markedBody]);
++  assistant.children[1]=wrapper;wrapper.parentElement=assistant;
++}
++for (const body of options.additionalAnswerBodies || [])
++  append(assistant, el('div', {class:'markdown'}, body));
+ if (options.timeoutCard) append(assistant, el('div', {role:'alert'}, '', [
+   el('p', {}, 'Message delivery timed out. Please try again.'),
+   ...Array.from({length:options.retryOnlyOutside ? 0 : (options.retryCount ?? 1)}, () => button(options.retryLabel || 'Retry')),
+ ]));
+ if (options.userTimeoutQuote) {
+   append(user.children[0], el('p', {}, 'Message delivery timed out. Please try again.'));
+   append(user.children[0], button('Retry'));
+ }
+ const children = options.userOnly ? [user] : [user, assistant];
++for (const [index, trace] of (options.traceControls || []).entries()) {
++  const id='PRIVATE_TRACE_PANEL_'+index;
++  const control=el(trace.summary ? 'summary' : 'button', trace.summary ? {} : {
++    ...(options.traceInteractive ? {type:trace.type || 'button'} : {}),
++    ...(trace.expanded===undefined ? {} : {'aria-expanded':String(trace.expanded)}),
++    ...(trace.linked ? {'aria-controls':id} : {})
++  }, trace.label || 'Worked for 46s');
++  const panel=el('div',{id,hidden:trace.expanded!==true},'PRIVATE_TRACE_ARGUMENTS');
++  if(options.traceInteractive) {
++    panel.text=options.tracePanelText || 'run_command INVALID_ARGUMENT WEB_TASK_CACHED_ARGUMENTS_INVALID CWD_OVERRIDE_FORBIDDEN PRIVATE_TRACE_VALUE';
++    if(options.traceJson)append(panel,el('pre',{},options.traceJson));
++  }
++  let node=trace.summary ? el('details',trace.expanded ? {open:''} : {},'', [control,panel]) : control;
++  if(options.traceInteractive && !trace.summary) {
++    const wrapper=el('section',{},'', options.traceRolePanel ? [control] : [control,panel]);node=wrapper;
++    control.click=()=>{
++      mutations++;control.attrs['aria-expanded']='true';panel.attrs.hidden=false;
++      if(options.traceLoading) {
++        const finalText=panel.text;panel.text='Loading details…';panel.attrs['aria-busy']='true';
++        if(options.traceLoading==='delayed')setTimeout(()=>{panel.text=finalText;panel.attrs['aria-busy']='false';},20);
++      }
++      if(options.traceRolePanel){panel.attrs.role='complementary';append(document,panel);}
++      if(options.traceClickThrows)throw Error('test click outcome unknown');
++      if(options.traceChangedControl)append(wrapper,el('button',{type:'button','aria-expanded':'true'},'Worked for 20s'));
++      if(options.traceAmbiguousPanels)append(wrapper,el('div',{},'PRIVATE_SECOND_PANEL'));
++    };
++  }
++  if(options.traceInteractive && trace.summary)control.click=()=>{mutations++;node.attrs.open='';panel.attrs.hidden=false;};
++  if(trace.placement==='user')append(user.children[0],node);
++  else if(trace.placement==='code')append(assistant.children[1].children[0],el('pre',{},'',[node]));
++  else children.splice(1,0,node);
++  if(!trace.summary && trace.linked && !options.traceInteractive)children.splice(1,0,panel);
++}
++if (options.unmountedLoadError) {
++  for (let i = 0; i < (options.unmountedErrorCount || 1); i++) {
++    const card = el('div', {}, '', [el('p', {}, 'This response couldn’t load')]);
++    if (options.unmountedPlacement === 'user') append(user.children[0], card);
++    else if (options.unmountedPlacement === 'code') children.push(el('pre', {}, '', [card]));
++    else if (options.unmountedPlacement === 'tool') children.push(el('div', {'data-testid':'mcp-tool-result'}, '', [card]));
++    else if (options.unmountedPlacement === 'unit') children.push(el('div', {'data-content-search-unit-key':'unknown-tool'}, '', [card]));
++    else if (options.unmountedPlacement === 'quote') children.push(el('blockquote', {}, '', [card]));
++    else if (options.unmountedPlacement === 'control') children.push(el('button', {}, '', [card]));
++    else if (options.unmountedPlacement === 'before') children.unshift(card);
++    else children.push(card);
++  }
++}

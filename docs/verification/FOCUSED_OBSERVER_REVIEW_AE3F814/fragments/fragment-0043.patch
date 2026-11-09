@@ -1,0 +1,188 @@
+diff --git a/src/operator_facade.rs b/src/operator_facade.rs
+index 2fcb4abdeab0ab7084153b7fd43fcb4ad4eb6120..6db1e1c996d50dbbfca01829586ab55847e1120d 100644
+--- a/src/operator_facade.rs
++++ b/src/operator_facade.rs
+@@ -7,24 +7,27 @@ use std::path::{Path, PathBuf};
+ use std::process::{Command, Stdio};
+ use std::thread;
+ use std::time::{Duration, Instant};
+ 
+ use serde_json::json;
+ 
+ use crate::command::{self, CommandResult};
+ use crate::mcp;
+ 
+ #[path = "operator_web_cli.rs"]
+ mod web;
+ 
++#[path = "operator_web_existing.rs"]
++mod existing_web;
++
+ #[path = "operator_development_backend.rs"]
+ mod development_backend;
+ 
+ #[path = "operator_installed_backend.rs"]
+ mod installed_backend;
+ pub(crate) use installed_backend::diagnostic_error_code as installed_backend_error_code;
+ 
+ #[cfg(windows)]
+ pub(crate) use installed_backend::{
+     backend_command as promotion_source_command, verify_mcp_at as verify_promotion_source_mcp,
+ };
+ 
+@@ -109,24 +112,25 @@ pub(crate) fn acquire_web_work_lease(
+     web::acquire_web_work_lease(workspace, project)
+ }
+ 
+ const REPAIR_TIMEOUT_MS: u64 = 10 * 60 * 1000;
+ const MAX_REPAIR_SCRIPT_BYTES: u64 = 128 * 1024;
+ const REPAIR_SUCCESS_MARKER: &str = "WAKE_BRIDGE_ENV_REPAIRED";
+ const MAX_REPAIR_OUTPUT_BYTES: usize = 64 * 1024;
+ 
+ #[derive(Debug, Clone, PartialEq, Eq)]
+ pub(crate) enum OperatorAction {
+     Codex(crate::operator_codex_cli::OperatorCodexAction),
+     Web(web::WebAction),
++    WebExisting(existing_web::ExistingResponseAction),
+     WebDevelopment(WebDevelopmentAction),
+     InstalledBackend {
+         maximum_seconds: u64,
+     },
+     InstalledProject(installed_backend::ProjectOptions),
+     InstalledCentral(installed_backend::CentralOptions),
+     SetWakeTarget {
+         conversation_url: String,
+         expected_current_target_sha256: Option<String>,
+     },
+     SetDesignatedChatTarget {
+         conversation_url: String,
+@@ -288,25 +292,28 @@ pub(crate) fn parse_operator_action(
+                 return Err("installed-backend requires run --max-runtime-seconds <1..180>".into());
+             }
+             let maximum_seconds = args[4]
+                 .parse::<u64>()
+                 .ok()
+                 .filter(|value| (1..=180).contains(value))
+                 .ok_or("installed-backend requires run --max-runtime-seconds <1..180>")?;
+             Ok(Some(OperatorAction::InstalledBackend { maximum_seconds }))
+         }
+         Some("web-dev-runtime") => parse_web_development_action(&args)
+             .map(OperatorAction::WebDevelopment)
+             .map(Some),
+-        Some("web") => web::parse(&args).map(OperatorAction::Web).map(Some),
++        Some("web") => match existing_web::parse(&args)? {
++            Some(action) => Ok(Some(OperatorAction::WebExisting(action))),
++            None => web::parse(&args).map(OperatorAction::Web).map(Some),
++        },
+         Some("codex") => crate::operator_codex_cli::parse_action(&args)
+             .map(OperatorAction::Codex)
+             .map(Some),
+         Some("supervisor") => crate::supervisor_lifecycle::parse_supervisor_operator_action(&args)
+             .map(OperatorAction::Supervisor)
+             .map(Some),
+         Some("core-acceptance") => parse_core_host_acceptance_action(&args),
+         Some("wake-target") => parse_wake_target_action(&args),
+         Some("designated-chat-target") => parse_designated_chat_target_action(&args),
+         Some("reviewed-build") => parse_reviewed_build_action(&args),
+         Some("release-pair") => parse_release_pair_action(&args),
+         Some("repair-wake-bridge-environment") if args.len() == 2 => {
+@@ -1033,24 +1040,25 @@ fn parse_designated_chat_target_action(args: &[String]) -> Result<Option<Operato
+ 
+ pub(crate) async fn execute_operator_action(
+     action: OperatorAction,
+     workspace: &Path,
+ ) -> Result<serde_json::Value, String> {
+     // A development control workspace cannot accidentally operate the
+     // installed supervisor, release slots, or legacy global Wake controls.
+     if !matches!(&action, OperatorAction::WebDevelopment(_))
+         && catdesk_wake::development_runtime::root_for_workspace(workspace)?.is_some()
+         && !matches!(
+             &action,
+             OperatorAction::Web(_)
++                | OperatorAction::WebExisting(_)
+                 | OperatorAction::Codex(_)
+                 | OperatorAction::ProjectControl { .. }
+         )
+     {
+         return Err("WEB_DEVELOPMENT_INSTALLED_OPERATION_UNAVAILABLE".into());
+     }
+     match action {
+         OperatorAction::WebDevelopment(action) => {
+             use catdesk_wake::development_runtime;
+             match action {
+                 WebDevelopmentAction::Prepare {
+                     package,
+@@ -1094,24 +1102,25 @@ pub(crate) async fn execute_operator_action(
+                 WebDevelopmentAction::RunBounded { maximum_seconds } => {
+                     development_runtime::run_foreground_bounded(workspace, maximum_seconds)
+                 }
+                 WebDevelopmentAction::RunBackend { maximum_seconds } => {
+                     development_backend::run(workspace, maximum_seconds).await
+                 }
+                 WebDevelopmentAction::RunProjectBackend(options) => {
+                     development_backend::run_project(workspace, options).await
+                 }
+             }
+         }
+         OperatorAction::Web(action) => web::execute(action, workspace).await,
++        OperatorAction::WebExisting(action) => existing_web::execute(action, workspace),
+         OperatorAction::InstalledBackend { maximum_seconds } => {
+             installed_backend::run(workspace, maximum_seconds).await
+         }
+         OperatorAction::InstalledProject(options) => {
+             installed_backend::run_project(workspace, options).await
+         }
+         OperatorAction::InstalledCentral(options) => {
+             installed_backend::run_central(workspace, options).await
+         }
+         OperatorAction::Codex(action) => {
+             crate::operator_codex_cli::execute_action(action, workspace).await
+         }
+@@ -2461,24 +2470,65 @@ mod tests {
+             parse_operator_action(args(&[
+                 "operator",
+                 "release-pair",
+                 "result-stopped",
+                 "--workspace",
+                 "other"
+             ]))
+             .is_err()
+         );
+     }
+ 
+     #[test]
++    fn existing_response_observation_uses_only_read_only_cli_route() {
++        for verb in ["inspect-response", "inspect-history-response"] {
++            let args = [
++                "operator",
++                "web",
++                "review",
++                verb,
++                "--project-id",
++                "alpha",
++                "--event-id",
++                "event-one",
++            ];
++            assert!(matches!(
++                parse_operator_action(args.map(str::to_owned)),
++                Ok(Some(OperatorAction::WebExisting(_)))
++            ));
++            let mut invalid: Vec<String> = args.map(str::to_owned).into();
++            invalid.extend(["--retry".into(), "true".into()]);
++            assert!(parse_operator_action(invalid).is_err());
++        }
++        assert!(matches!(
++            parse_operator_action(
++                [
++                    "operator",
++                    "web",
++                    "review",
++                    "reobserve",
++                    "--project-id",
++                    "alpha",
++                    "--event-id",
++                    "event-one",
++                ]
++                .map(str::to_owned)
++            ),
++            Ok(Some(OperatorAction::Web(

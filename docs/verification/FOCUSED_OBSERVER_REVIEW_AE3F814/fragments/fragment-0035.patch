@@ -1,0 +1,194 @@
+diff --git a/wake/src/runtime_reobserve.rs b/wake/src/runtime_reobserve.rs
+index e6018abf836d0b11cc2eb1ac8ec3e169200f69cd..256a2c01a259f1b97be3de1c9d5f543a004aff28 100644
+--- a/wake/src/runtime_reobserve.rs
++++ b/wake/src/runtime_reobserve.rs
+@@ -1,38 +1,74 @@
+ //! Explicit one-shot recovery of a SENT turn; never a sender or scheduler.
+ use super::*;
+ use serde_json::{Value, json};
+ 
++fn uses_readiness_reader(event: &crate::protocol::Event) -> Result<bool> {
++    let exact_hash = |value: &str| {
++        value.len() == 64
++            && value
++                .bytes()
++                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
++    };
++    let ordinary = event.audit_references.is_empty()
++        && event
++            .event_id
++            .strip_prefix("web-work-")
++            .is_some_and(exact_hash);
++    let continuation = event
++        .event_id
++        .strip_prefix("wake-intent-")
++        .is_some_and(exact_hash)
++        && event.audit_references.len() == 5
++        && event.wake_metadata()?.is_some_and(|metadata| {
++            metadata.purpose == crate::protocol::WakePurpose::NewTask
++                && metadata
++                    .source_event_id
++                    .strip_prefix("web-work-")
++                    .is_some_and(exact_hash)
++                && metadata
++                    .source_turn_id
++                    .strip_prefix("initial-context-")
++                    .is_some_and(exact_hash)
++        });
++    Ok(event.event_type == "engineering_attention" && (ordinary || continuation))
++}
++
+ /// Re-observe one exact receipt under stopped-host ownership. The caller's
+ /// commit guard holds the project registry lock only for the final Wake CAS.
+ /// An old timer's automatic observation budget is deliberately not renewed.
+ pub fn reobserve_sent_response_guarded<F>(
+     store: &Store,
+     project: &str,
+     target: &Target,
+     event: &str,
+     keep_running: &dyn Fn() -> Result<()>,
+     commit_guard: F,
+ ) -> Result<Value>
+ where
+     F: FnOnce(&mut dyn FnMut() -> Result<bool>) -> Result<bool>,
+ {
+     reobserve_with_observer(
+         store,
+         project,
+         target,
+         event,
+         keep_running,
+         commit_guard,
+         |delivery, deadline, guard| {
++            if uses_readiness_reader(&delivery.event)? {
++                return readiness::read_sent_response_observation(
++                    store, project, target, delivery, guard,
++                );
++            }
+             let installed = installed_bootstrap_directory(store)?;
+             let mut adapter = Adapter::spawn_from_installed_guarded(
+                 store.root(),
+                 &installed,
+                 deadline.saturating_duration_since(Instant::now()),
+                 guard,
+             )?;
+             let result =
+                 response::read_sent_response(store, &mut adapter, delivery, deadline, &mut || {
+                     guard()
+                 });
+             let _ = adapter.allow_graceful_exit(
+@@ -107,47 +143,189 @@ where
+         // A failed outcome append never changes the timer; an existing outcome
+         // after a partial commit is preserved rather than overwritten.
+         let _ = store.fail_response_reobservation(&attempt, reason);
+     }
+     result
+ }
+ 
+ #[cfg(test)]
+ mod tests {
+     use super::super::scheduler::tests::{fixture, sent};
+     use super::*;
+ 
++    #[test]
++    fn semantic_task_completion_uses_same_readonly_owner_without_promoting_other_events() {
++        let (store, _lease) = fixture("task-reobserve-reader");
++        let target = store.config().unwrap().targets["alpha"].clone();
++        let event = store
++            .produce_expected_wake(
++                "alpha",
++                "task continuation",
++                &target,
++                crate::store::WakeIntent {
++                    purpose: crate::protocol::WakePurpose::NewTask,
++                    source_event_id: &format!("web-work-{}", "a".repeat(64)),
++                    source_turn_id: &format!("initial-context-{}", "b".repeat(64)),
++                    priority: 0,
++                    ttl_seconds: 600,
++                },
++            )
++            .unwrap();
++        assert!(uses_readiness_reader(&event).unwrap());
++        for (from, to) in [
++            ("NEW_TASK", "ROLLOVER"),
++            ("web-work-", "foreign-"),
++            ("initial-context-", "foreign-"),
++        ] {
++            let mut changed = event.clone();
++            for field in &mut changed.audit_references {
++                *field = field.replace(from, to);
++            }
++            assert!(!uses_readiness_reader(&changed).unwrap());
++        }
++        let mut changed = event.clone();
++        changed.event_type = "source_review".into();
++        assert!(!uses_readiness_reader(&changed).unwrap());
++        changed = event;
++        changed.event_id = "wake-intent-unknown".into();
++        assert!(!uses_readiness_reader(&changed).unwrap());
++    }
++
+     fn witness(delivery: &crate::store::Delivery, stage: &str) -> Value {
+         json!({"stage":stage,"eventId":delivery.event.event_id,
+             "targetGeneration":delivery.target.generation,"targetDigest":delivery.target.digest,
+             "messageDigest":delivery.message_digest})
+     }
+ 
+     fn timer_bytes(store: &Store) -> Vec<u8> {
+         std::fs::read(store.root().join("turns/alpha-1.json")).unwrap()
+     }
+ 
+     fn log_count(store: &Store) -> usize {
+         std::fs::read_dir(store.root().join("logs"))
+             .unwrap()
+             .filter_map(|entry| entry.ok())
+             .filter(|entry| {
+                 entry
+                     .file_name()
+                     .to_string_lossy()
+                     .starts_with("response-reobserve-")
+             })
+             .count()
+     }
+ 
++    fn reconciled_acceptance_fixture(label: &str) -> (Store, crate::store::Delivery) {
++        let (store, lease) = fixture(label);
++        let event = store
++            .events()
++            .unwrap()
++            .into_iter()
++            .find(|event| event.event_id == "alpha-1")
++            .unwrap();
++        let claimed = store.claim(&event, &lease).unwrap();
++        store
++            .transition("alpha-1", lease.owner(), Phase::Submitting, None, None)
++            .unwrap();
++        store.start_submission_timer("alpha-1").unwrap();
++        let started = store.timer("alpha-1").unwrap().unwrap().started_utc;
++        let receipt = crate::store::Receipt {
++            schema_version: crate::PROTOCOL_VERSION,
++            event_id: event.event_id.clone(),
++            target_generation: claimed.target.generation,
++            target_digest: claimed.target.digest.clone(),
++            message_digest: claimed.message_digest,
++            // A later persistence witness must not rewrite acceptance time.
++            sent_utc: started + 10,
++            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
++        };
++        store
++            .record_exact_receipt_timer("alpha-1", &receipt)
++            .unwrap();
++        let delivery = store.reconcile_submitting_sent("alpha-1", receipt).unwrap();
++        assert_eq!(
++            store.timer("alpha-1").unwrap().unwrap().started_utc,
++            started
++        );
++        drop(lease);
++        (store, delivery)
++    }
++
++    #[test]
++    fn reobserve_reconciled_receipt_preserves_earlier_bound_acceptance_timer() {
++        let (store, delivery) = reconciled_acceptance_fixture("reobserve-reconciled-acceptance");
++        let timer = store.timer("alpha-1").unwrap().unwrap();
++        let receipt = delivery.receipt.as_ref().unwrap();

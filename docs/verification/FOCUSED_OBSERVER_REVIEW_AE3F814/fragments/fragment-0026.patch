@@ -1,0 +1,193 @@
+diff --git a/wake/src/readiness_probe.rs b/wake/src/readiness_probe.rs
+index fb83b1d5a795a34b759d1b5819dae8207c876d9a..3467570cbd6bb2ba893b89430065accbfacdd7b7 100644
+--- a/wake/src/readiness_probe.rs
++++ b/wake/src/readiness_probe.rs
+@@ -95,25 +95,104 @@ pub(crate) fn tab_observation(line: &str) -> Option<serde_json::Value> {
+         if !valid {
+             return None;
+         }
+     }
+     let count = value["tabCount"].as_i64()?;
+     let examined = value["metadataMatches"].as_u64()? + value["unreadableMetadata"].as_u64()?;
+     if count >= 0 && examined > count as u64 || count < 0 && examined != 0 {
+         return None;
+     }
+     Some(value)
+ }
+ 
++pub(crate) fn historical_response_observation(line: &str) -> Option<serde_json::Value> {
++    let text = line.strip_prefix("PROBE:HISTORY_RESPONSE:")?;
++    sent_response_observation(&format!("PROBE:RESPONSE:{text}"))
++}
++
++pub(crate) fn sent_response_observation(line: &str) -> Option<serde_json::Value> {
++    let text = line.strip_prefix("PROBE:RESPONSE:")?;
++    // The optional closed eight-button shape can exceed the legacy 2 KiB.
++    // Only this response frame grows; its metadata validator stays mandatory.
++    if text.len() > 4096 {
++        return None;
++    }
++    crate::runtime::canonical_response_observation(serde_json::from_str(text).ok()?)
++}
++
++pub(crate) fn task_response_diagnostics(line: &str) -> Option<serde_json::Value> {
++    let text = line.strip_prefix("PROBE:TASK:")?;
++    if text.len() > 4096 {
++        return None;
++    }
++    crate::runtime::canonical_task_response_diagnostics(serde_json::from_str(text).ok()?)
++}
++
+ pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<String>, &'static str> {
++    let mut rows = Vec::new();
++    run_bounded_observed(command, timeout, &mut rows)?;
++    Ok(rows)
++}
++
++/// Retain only whitelisted partial observations after a failed bounded helper.
++/// Rows are exposed only after the exact owned Job and output reader exit.
++/// A timeout is never a final page state or proof about message submission.
++pub fn run_bounded_observed(
++    command: &mut Command,
++    timeout: Duration,
++    rows: &mut Vec<String>,
++) -> Result<(), &'static str> {
++    run_bounded_observed_input(command, timeout, rows, b"START\n")
++}
++
++/// The program is compiled into the reviewed controller, not accepted from MCP
++/// or a caller-selected file. Only a short loader crosses the command line.
++pub(crate) fn embedded_program_loader(program: &[u8]) -> Result<String, &'static str> {
++    use sha2::{Digest, Sha256};
++    if program.is_empty() || program.len() > 64 * 1024 {
++        return Err("PROBE_PROGRAM_SIZE_INVALID");
++    }
++    let hash = format!("{:x}", Sha256::digest(program));
++    Ok(format!(
++        "import hashlib,sys;p=sys.stdin.buffer.read({});assert len(p)=={} and hashlib.sha256(p).hexdigest()=='{}';exec(compile(p,'<CatDeskWakeReadinessProbe>','exec'),{{'__name__':'__main__'}})",
++        program.len(),
++        program.len(),
++        hash
++    ))
++}
++
++pub(crate) fn run_bounded_observed_program(
++    command: &mut Command,
++    timeout: Duration,
++    rows: &mut Vec<String>,
++    program: &[u8],
++) -> Result<(), &'static str> {
++    rows.clear();
++    embedded_program_loader(program)?;
++    let mut input = Vec::with_capacity(program.len() + 6);
++    input.extend_from_slice(program);
++    input.extend_from_slice(b"START\n");
++    run_bounded_observed_input(command, timeout, rows, &input)
++}
++
++fn run_bounded_observed_input(
++    command: &mut Command,
++    timeout: Duration,
++    rows: &mut Vec<String>,
++    input: &[u8],
++) -> Result<(), &'static str> {
++    rows.clear();
++    if input.len() > 64 * 1024 + 6 {
++        return Err("PROBE_PROGRAM_SIZE_INVALID");
++    }
+     #[cfg(windows)]
+     {
+         use std::os::windows::process::CommandExt;
+         command.creation_flags(0x0800_0000);
+     }
+     let mut child = command
+         .stdin(Stdio::piped())
+         .stdout(Stdio::piped())
+         .stderr(Stdio::null())
+         .spawn()
+         .map_err(|_| "PROBE_LAUNCH_FAILED")?;
+     let job = match crate::process_job::Job::assign(&child) {
+@@ -122,76 +201,140 @@ pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<Strin
+             drop(child.stdin.take());
+             let _ = child.kill();
+             let deadline = Instant::now() + Duration::from_secs(5);
+             loop {
+                 match child.try_wait() {
+                     Ok(Some(_)) => return Err("PROBE_CONTAINMENT_FAILED"),
+                     _ if Instant::now() >= deadline => return Err("PROBE_CLEANUP_UNVERIFIED"),
+                     _ => std::thread::sleep(Duration::from_millis(25)),
+                 }
+             }
+         }
+     };
++    // Drain while the helper runs: waiting before reading can fill the Windows
++    // pipe and turn a healthy observer into a misleading process timeout.
++    // Memory stays bounded even if library output exceeds the protocol budget.
++    let output = child.stdout.take().ok_or("PROBE_PIPE_FAILED")?;
++    let (tx, rx) = std::sync::mpsc::sync_channel(1);
++    std::thread::spawn(move || {
++        let mut output = output;
++        let mut bytes = Vec::new();
++        let mut buffer = [0u8; 4096];
++        let result = loop {
++            match output.read(&mut buffer) {
++                Ok(0) => break Ok(bytes),
++                Ok(n) => {
++                    let keep = n.min(16_385usize.saturating_sub(bytes.len()));
++                    bytes.extend_from_slice(&buffer[..keep]);
++                }
++                Err(_) => break Err("PROBE_OUTPUT_FAILED"),
++            }
++        };
++        let _ = tx.send(result);
++    });
++    // A blocked stdin write is part of the same deadline. Drain it only after
++    // the existing Job proves all readers exited; never abandon a writer.
++    let deadline = Instant::now() + timeout;
++    let mut stdin = child.stdin.take().ok_or("PROBE_PIPE_FAILED")?;
++    let input = input.to_vec();
++    let (input_tx, input_rx) = std::sync::mpsc::sync_channel(1);
++    std::thread::spawn(move || {
++        let result = stdin.write_all(&input).map_err(|_| "PROBE_PIPE_FAILED");
++        drop(stdin);
++        let _ = input_tx.send(result);
++    });
+     let result = (|| {
+-        child
+-            .stdin
+-            .take()
+-            .ok_or("PROBE_PIPE_FAILED")?
+-            .write_all(b"START\n")
+-            .map_err(|_| "PROBE_PIPE_FAILED")?;
+-        let deadline = Instant::now() + timeout;
+         loop {
+             if let Some(status) = child.try_wait().map_err(|_| "PROBE_WAIT_FAILED")? {
+                 return if status.success() {
+                     Ok(())
+                 } else {
+                     Err("PROBE_FAILED")
+                 };
+             }
+             if Instant::now() >= deadline {
+                 return Err("PROBE_PROCESS_TIMEOUT");
+             }
+             std::thread::sleep(Duration::from_millis(25));
+         }
+     })();
+     // A normal helper exit is insufficient: retained descendants may still own
+     // Chrome/profile resources or the output pipe. Prove the exact Job empty.
+     job.terminate_and_wait_empty(Duration::from_secs(5))
+         .map_err(|_| "PROBE_CLEANUP_UNVERIFIED")?;
+     child.wait().map_err(|_| "PROBE_CLEANUP_UNVERIFIED")?;
+-    result?;
+-    let mut bytes = Vec::new();
+-    child
+-        .stdout
+-        .take()
+-        .ok_or("PROBE_PIPE_FAILED")?
+-        .take(16_385)
+-        .read_to_end(&mut bytes)
+-        .map_err(|_| "PROBE_OUTPUT_FAILED")?;
++    let input_result = input_rx
++        .recv_timeout(Duration::from_secs(5))
++        .map_err(|_| "PROBE_CLEANUP_UNVERIFIED")?;

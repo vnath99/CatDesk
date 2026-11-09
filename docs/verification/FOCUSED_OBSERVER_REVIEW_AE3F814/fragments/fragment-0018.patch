@@ -1,0 +1,101 @@
++                    'exact wake message',diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
++                self.assertEqual(hints['refusalTerms'],[])
++                self.assertIn('WEB_TASK_CACHED_ARGUMENTS_INVALID',hints['knownCodes'])
++                self.sink.response_snapshot(CurrentDom(answer='Dispatch blocked because scope is missing. ',
++                    quotedAnswerTag=tag,quotedAnswerText='Dispatch rejected because context grant key.'),
++                    'exact wake message',diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
++                self.assertEqual(hints['refusalTerms'],['DISPATCH','BLOCKED','BECAUSE','SCOPE','IS','MISSING'])
++
++
++    def test_structured_refusal_report_uses_only_root_state_and_one_known_reason(self):
++        for report in [
++                {'status':'DISPATCH_BLOCKED','reason':'nativeCall is not provided.','payload':{'context':'PRIVATE_NESTED_CONTEXT'}},
++                {'state':'REJECTED','error':{'message':'nativeCall is not provided.','secret':'PRIVATE_NESTED_CONTEXT'}},
++                {'outcome':'TOOL_CALL_REFUSED','detail':'nativeCall is not provided.'}]:
++            for fenced in [False,True]:
++                with self.subTest(report=report,fenced=fenced):
++                    body=json.dumps(report)
++                    if fenced:body='```json\n'+body+'\n```'
++                    hints={}
++                    self.sink.response_snapshot(CurrentDom(answer=body),'exact wake message',
++                        diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
++                    self.assertEqual(hints['refusalTerms'],['NATIVECALL','IS','NOT','PROVIDED'])
++                    self.assertEqual(hints['refusalReport'],dict(source='STRUCTURED',
++                        state='BLOCKED' if 'status' in report else 'REJECTED' if 'state' in report else 'REFUSED',
++                        reasonFieldPresent=True,projectionOmitted=False))
++                    self.assertTrue(bridge.valid_task_response_hints(hints))
++                    self.assertNotIn('PRIVATE_NESTED_CONTEXT',json.dumps(hints))
++
++
++    def test_structured_refusal_reason_preserves_value_redaction_and_reports_omission(self):
++        for report,terms,present in [
++                ({'status':'BLOCKED','message':'nativeCall is not provided. "context grant key" '
++                    'executionKey=source 123 https://private.example/source'},['NATIVECALL','IS','NOT','PROVIDED','REDACTED'],True),
++                ({'status':'BLOCKED','payload':{'reason':'PRIVATE_NESTED_REASON'}},[],False),
++                ({'status':'BLOCKED','error':{'cause':{'message':'PRIVATE_NESTED_REASON'}}},[],False),
++                ({'status':'BLOCKED','reason':'context missing','message':'grant expired'},[],False)]:
++            with self.subTest(report=report):
++                hints={}
++                self.sink.response_snapshot(CurrentDom(answer=json.dumps(report)),'exact wake message',
++                    diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
++                self.assertEqual(hints['refusalTerms'],terms)
++                self.assertEqual(hints['refusalReport'],dict(source='STRUCTURED',state='BLOCKED',
++                    reasonFieldPresent=present,projectionOmitted=not terms))
++                for private in ['PRIVATE_NESTED_REASON','private.example','executionKey','123']:
++                    self.assertNotIn(private,json.dumps(hints['refusalTerms']))
++
++
++    def test_structured_refusal_report_refuses_capsules_examples_conflicts_and_oversize(self):
++        capsule=json.dumps({'capsule':{'status':'BLOCKED','reason':'context missing'},'privateContext':'PRIVATE_CONTEXT'})
++        for body,options in [
++                (capsule,{}),
++                (json.dumps({'status':'COMPLETE','reason':'Dispatch rejected because context missing'}),{}),
++                (json.dumps({'status':'BLOCKED','state':'REFUSED','reason':'context missing'}),{}),
++                (json.dumps({'status':'BLOCKED','reason':'context missing','payload':'x'*8192}),{}),
++                (json.dumps({'status':'BLOCKED','reason':'context missing'}),{'bodyQuoteWrapper':True}),
++                ('Example report: ',{'quotedAnswerTag':'pre','quotedAnswerText':json.dumps({'status':'BLOCKED','reason':'context missing'})}),
++                ('A useful answer.',{'historicalRefusalReport':json.dumps({'status':'BLOCKED','reason':'context missing'})}),
++                ('A useful answer.',{'selectionToolText':json.dumps({'status':'BLOCKED','reason':'context missing'})})]:
++            with self.subTest(body=body[:60],options=options):
++                hints={}
++                self.sink.response_snapshot(CurrentDom(answer=body,**options),'exact wake message',
++                    diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
++                self.assertEqual(hints['refusalTerms'],[])
++                self.assertEqual(hints['refusalReport'],dict(source='NONE',state='UNPROVEN',
++                    reasonFieldPresent=False,projectionOmitted=True))
++        hints={}
++        self.sink.response_snapshot(CurrentDom(answer='A useful answer.',userText=capsule),capsule,
++            diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
++        self.assertEqual(hints['refusalReport']['source'],'NONE')
++
++
++    def test_prose_refusal_report_supports_bounded_adverbs_and_validates_closed_provenance(self):
++        hints={}
++        self.sink.response_snapshot(CurrentDom(answer='Dispatch operation was blocked because context is missing.'),
++            'exact wake message',diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
++        report=hints['refusalReport']
++        self.assertEqual(report,dict(source='PROSE',state='BLOCKED',reasonFieldPresent=False,projectionOmitted=False))
++        self.assertEqual(hints['refusalTerms'],['DISPATCH','REDACTED','WAS','BLOCKED','BECAUSE','CONTEXT','IS','MISSING'])
++        for changed in [report | {'source':'PRIVATE_SOURCE'},report | {'state':'PRIVATE_STATE'},
++                report | {'reasonFieldPresent':'PRIVATE_VALUE'},report | {'projectionOmitted':1},
++                report | {'text':'PRIVATE_TEXT'},report | {'source':'NONE'},report | {'reasonFieldPresent':True},
++                report | {'source':'NONE','state':'UNPROVEN'},
++                report | {'projectionOmitted':True}]:
++            self.assertFalse(bridge.valid_task_response_hints(hints | {'refusalReport':changed}))
++
++
++    def test_argument_hints_report_only_closed_tools_causes_and_invariants(self):
++        hints = {}
++        body = ('run_command returned INVALID_ARGUMENT: invalid JSON, missing required field. '
++                'native.codex.dispatch was not attempted. CWD_OVERRIDE_FORBIDDEN '
++                'PAYLOAD_JSON_INVALID PRIVATE_FIELD=PRIVATE_VALUE executionKey=' + 'e'*64)
++        self.sink.response_snapshot(CurrentDom(answer=body), 'exact wake message',
++            diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
++        self.assertTrue(bridge.valid_task_response_hints(hints))
++        self.assertEqual(hints['mentionedTools'], ['RUN_COMMAND','NATIVE_DISPATCH'])
++        self.assertEqual(hints['argumentIssues'], ['JSON_SYNTAX','MISSING_REQUIRED_FIELD'])
++        self.assertEqual(hints['cachedInvariants'], ['CWD_OVERRIDE_FORBIDDEN','PAYLOAD_JSON_INVALID'])
++        for private in ['PRIVATE_FIELD','PRIVATE_VALUE','executionKey','e'*64]:
++            self.assertNotIn(private,json.dumps(hints))
++        for field in ['mentionedTools','argumentIssues','cachedInvariants']:
++            for bad in [['PRIVATE_VALUE'], hints[field]*2, True, {}, None]:

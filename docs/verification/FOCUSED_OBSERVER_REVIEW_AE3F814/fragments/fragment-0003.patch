@@ -1,0 +1,111 @@
+                 last_stage = "SUBMIT_COMPOSER_CHANGED"
+                 stable_observations, first_stable_at = 0, None
+             if stop_seen_at is not None and now < stop_seen_at + POST_STOP_HOLD_SECONDS:
+                 sleeper(min(.25, max(0.0, stop_seen_at + POST_STOP_HOLD_SECONDS - now)))
+             else:
+                 sleeper(.25)
+         raise PostSubmitUnknown(last_stage)
+ 
+     def response_snapshot(self, cdp: Any, message: str, *, require_usable_body: bool = False,
+                           diagnostic: dict | None = None,
+-                          tool_diagnostic: dict | None = None) -> tuple[int, int, bool, bool]:
++                          tool_diagnostic: dict | None = None,
++                          execution_diagnostic: dict | None = None,
++                          historical: bool = False) -> tuple[int, int, bool, bool]:
+         """Return only bounded structural signals for the latest user turn.
+ 
+         The timeout detector is intentionally exact-text and scoped strictly
+         after the latest user-authored message.  It never returns page text.
+         Retry is considered actionable only when exactly one visible Retry
+         control can be associated with the exact timeout card.
+         """
+         if tool_diagnostic is not None:
+             tool_diagnostic.clear()
+             if diagnostic is None:
+                 raise ValueError("tool diagnostics require an explicit diagnostic read")
++        if execution_diagnostic is not None:
++            execution_diagnostic.clear()
++            if diagnostic is None or tool_diagnostic is None:
++                raise ValueError("task hints require explicit response and tool diagnostics")
++        if type(historical) is not bool or (historical and (not require_usable_body or diagnostic is None)):
++            raise ValueError('historical observation must be passive and explicit')
+         script = f"""(() => {{
+             const timeoutText = {json.dumps("Message delivery timed out. Please try again.")};
+             const retryLabel = {json.dumps("Retry")};
+             const expectedWake = {json.dumps(normalize_message(message))};
+             const requireUsableBody = {str(require_usable_body).lower()};
++            const historical = {str(historical).lower()};
+             const includeDiagnostic = {str(diagnostic is not None).lower()};
+             const includeToolDiagnostic = {str(tool_diagnostic is not None).lower()};
++            const includeExecutionDiagnostic = {str(execution_diagnostic is not None).lower()};
+             const normalize = value => String(value || '').replace(/\\s+/g, ' ').trim();
+             const visible = element => {{
+                 if (!element) return false;
+                 const style = window.getComputedStyle(element);
+                 return element.getClientRects().length > 0 &&
+                     style.visibility !== 'hidden' && style.display !== 'none';
+             }};
+             const turnCandidates = Array.from(document.querySelectorAll(
+                 "[data-content-search-turn-key], " +
+                 "[data-testid^='conversation-turn-'], article[id^='conversation-turn-'], " +
+                 "[data-turn='user'], [data-turn='assistant'], " +
+                 "[data-message-author-role='user'], [data-message-author-role='assistant'], " +
+@@ -1331,27 +1507,32 @@ class CdpSink:
+                     "[class~='group/user-message']"
+                 ) || candidate;
+                 if (!turnContainers.includes(container)) turnContainers.push(container);
+             }});
+             {RESPONSE_WAKE_USER_MATCHER}
+             const wakeTurns = turnContainers.filter(wakeTurnMatches);
+             if (wakeTurns.length !== 1)
+                 return [wakeTurns.length === 0 ? 'missing-user' : 'invalid', 0, 0, false, false];
+             const latestUser = wakeTurns[0];
+             const followsLatestUser = element =>
+                 Boolean(latestUser.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING);
+             const pairedTurn = latestUser.matches("[data-content-search-turn-key]");
++            const followingTurns = turnContainers.filter(turn => followsLatestUser(turn));
++            const historicalUserSelector = "[data-message-author-role='user'], [data-turn='user'], [data-user-message-bubble], [class~='group/user-message']";
++            const nextUser = historical ? followingTurns.find(turn => turn.matches(historicalUserSelector) || turn.querySelector(historicalUserSelector)) : null;
++            const beforeNextUser = element => !nextUser || (element !== nextUser && !nextUser.contains(element) &&
++                Boolean(element.compareDocumentPosition(nextUser) & Node.DOCUMENT_POSITION_FOLLOWING));
+             const inWakeExchange = element =>
+-                Boolean(element && (latestUser.contains(element) || followsLatestUser(element)));
+-            const turnsAfterWake = turnContainers.filter(turn => followsLatestUser(turn));
++                Boolean(element && (latestUser.contains(element) || (followsLatestUser(element) && beforeNextUser(element))));
++            const turnsAfterWake = followingTurns.filter(beforeNextUser);
+             if (turnsAfterWake.length > 1)
+                 return ['invalid', 0, 0, false, false];
+             {RESPONSE_ASSISTANT_SCOPE}
+             const rawTimeouts = Array.from(document.querySelectorAll('div, span, p'))
+                 .filter(element => visible(element) && assistantResponseNode(element) &&
+                     normalize(element.innerText || element.textContent) === timeoutText);
+             const timeouts = rawTimeouts.filter(element =>
+                 !Array.from(element.children).some(child =>
+                     visible(child) && normalize(child.innerText || child.textContent) === timeoutText));
+             const retryButtons = [];
+             for (const timeout of timeouts) {{
+                 let scope = timeout;
+@@ -1388,66 +1569,125 @@ class CdpSink:
+             const assistants = roleAssistants.length ? roleAssistants : fallbackAssistants;
+             const latestAssistant = assistants.length ? assistants[assistants.length - 1] : null;
+             const assistantRawText = latestAssistant
+                 ? normalize(latestAssistant.innerText || latestAssistant.textContent)
+                     .replace(/[‘’]/g, "'")
+                 : '';
+             // A mounted assistant shell may contain only Copy/Regenerate
+             // controls. Read a dedicated answer body and remove controls from
+             // that body before treating it as a usable response. If the current
+             // UI offers no known body node, cooperative observation stays
+             // pending instead of inferring an answer from button labels.
+             const contentSelector = '[data-message-content], .markdown, [class~="prose"], [data-markdown-text-style="assistant-message"]';
+-            const bodyNode = latestAssistant
+-                ? (latestAssistant.matches(contentSelector) ? latestAssistant :
+-                   latestAssistant.querySelector(contentSelector))
+-                : null;
++            const bodyCandidates = latestAssistant ? Array.from(new Set([
++                ...(latestAssistant.matches(contentSelector) ? [latestAssistant] : []),
++                ...latestAssistant.querySelectorAll(contentSelector)
++            ])) : [];
++            if (bodyCandidates.length > 64) return ['invalid', 0, 0, false, false];
++            // A final answer may have several markdown/body blocks. Selecting
++            // only the first silently loses later tool-error details. Retain

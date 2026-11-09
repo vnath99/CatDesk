@@ -1,0 +1,109 @@
++                && report["projectionOmitted"].as_bool().is_some()
++                && (report["source"] == "NONE") == (report["state"] == "UNPROVEN")
++                && (report["reasonFieldPresent"] == false || report["source"] == "STRUCTURED")
++                && hints["refusalTerms"].as_array().is_some_and(|terms| {
++                    report["projectionOmitted"] == terms.is_empty()
++                        && (report["source"] != "NONE" || terms.is_empty())
++                })
++        });
++    let trace = hints.get("trace");
++    let valid_trace = trace.is_none_or(|trace| {
++        let counts = [
++            "knownControls",
++            "expandedControls",
++            "collapsedControls",
++            "unprovenControls",
++            "linkedPanels",
++            "visiblePanels",
++        ];
++        matches!(version, 4..=7)
++            && trace
++                .as_object()
++                .is_some_and(|map| map.len() == counts.len() + 3)
++            && trace["schemaVersion"].as_u64() == Some(1)
++            && trace["scope"] == "EXACT_USER_EXCHANGE"
++            && trace["basis"] == "PRESENTATION_ONLY_NOT_TOOL_RECEIPT"
++            && counts
++                .iter()
++                .all(|field| trace[*field].as_u64().is_some_and(|n| n <= 64))
++            && trace["expandedControls"].as_u64().unwrap_or(0)
++                + trace["collapsedControls"].as_u64().unwrap_or(0)
++                + trace["unprovenControls"].as_u64().unwrap_or(0)
++                == trace["knownControls"].as_u64().unwrap_or(0)
++            && trace["visiblePanels"].as_u64() <= trace["linkedPanels"].as_u64()
++            && trace["visiblePanels"].as_u64() <= trace["expandedControls"].as_u64()
++            && trace["linkedPanels"].as_u64() <= trace["knownControls"].as_u64()
++    });
++    let selected = hints.get("knownCodes")?.as_array()?;
++    let canonical: Vec<Value> = codes
++        .iter()
++        .filter(|code| selected.contains(&json!(code)))
++        .map(|code| json!(code))
++        .collect();
++    if value.as_object()?.len() != 2
++        || tools.as_object()?.len() != 9
++        || hints.as_object()?.len()
++            != if version == 7 {
++                16 + usize::from(trace.is_some())
++            } else if version == 6 {
++                15 + usize::from(trace.is_some())
++            } else if version == 5 {
++                14 + usize::from(trace.is_some())
++            } else if version == 4 {
++                13 + usize::from(trace.is_some())
++            } else if version == 3 {
++                10
++            } else if version == 2 {
++                9
++            } else {
++                7
++            }
++        || (version >= 2 && hints["scanTruncated"].as_bool().is_none())
++        || tools["schemaVersion"].as_u64() != Some(1)
++        || tools["basis"] != "VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT"
++        || tools["scope"] != "EXACT_USER_EXCHANGE"
++        || tools["selectorCoverage"] != "KNOWN_MARKERS_ONLY"
++        || tools["countOverflow"].as_bool().is_none()
++        || !counts
++            .iter()
++            .all(|field| tools[*field].as_u64().is_some_and(|n| n <= 64))
++        || !matches!(version, 1..=7)
++        || hints["basis"] != "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION"
++        || !flags.iter().all(|field| hints[*field].as_bool().is_some())
++        || *selected != canonical
++        || !valid_refusals
++        || !valid_subjects
++        || !valid_argument_hints
++        || !valid_identity_hints
++        || !valid_refusal_terms
++        || !valid_refusal_report
++        || !valid_trace
++    {
++        return None;
++    }
++    Some(value)
++}
++
++pub(crate) fn validate_observation(delivery: &Delivery, value: &Value) -> Result<bool> {
++    let receipt = delivery
++        .receipt
++        .as_ref()
++        .ok_or("RESPONSE_PROBE_RECEIPT_REQUIRED")?;
++    let stage = value.get("stage").and_then(Value::as_str);
+     if delivery.phase != Phase::Sent
+-        || !matches!(stage, Some("RESPONSE_PENDING" | "RESPONSE_COMPLETE"))
+-        || !diagnostic_valid
+-        || !controls_valid
++        || !valid_observation_metadata(value)
+         || value.get("eventId").and_then(Value::as_str) != Some(delivery.event.event_id.as_str())
+         || value.get("targetGeneration").and_then(Value::as_u64) != Some(delivery.target.generation)
+         || value.get("targetDigest").and_then(Value::as_str)
+             != Some(delivery.target.digest.as_str())
+         || value.get("messageDigest").and_then(Value::as_str)
+             != Some(receipt.message_digest.as_str())
+     {
+         return Err("RESPONSE_PROBE_SCOPE_INVALID".into());
+     }
+     Ok(stage == Some("RESPONSE_COMPLETE"))
+ }
+ 

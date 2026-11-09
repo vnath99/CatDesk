@@ -1,0 +1,44 @@
+         recover_after = time.monotonic() + min(5.0, args.seconds / 2)
+         recovery_attempted = False
+         # A returned tab can still be loading when the initial independent
+         # document check runs. Reinspect existing tabs within the same budget;
+         # select only the same unique, independently exact registered target.
+         selection_attempts = 1
+         select_after = recover_after
+@@ -349,24 +526,35 @@ def main():
+                 selection_attempts += 1
+                 selected = select_registered_target_tab(cdp, url, report_tab)
+                 print("PROBE:" + selected, flush=True)
+                 state, surface = observation(cdp)
+                 select_after = time.monotonic() + 5.0
+             if state != last:
+                 print("PROBE:" + state, flush=True); last = state
+                 if state == "CHROME_ERROR":
+                     print("PROBE:NETWORK:" + chrome_error_detail(cdp), flush=True)
+             if surface is not None and surface != last_surface:
+                 print("PROBE:SURFACE:" + json.dumps(surface, separators=(",", ":"), sort_keys=True), flush=True)
+                 last_surface = surface
++            if (args.await_existing_response and response_delivery is not None and surface is not None
++                    and surface.get("route") == "EXACT" and surface.get("document") == "COMPLETE"):
++                break
+             if not args.read_only and args.profile is not None and state == "HOME" and not recovery_attempted and time.monotonic() >= recover_after:
+                 recovery_attempted = True
+                 print("PROBE:HOME_CHECK:" + recover_empty_home(cdp, url), flush=True)
+             time.sleep(1)
+         final, surface = observation(cdp)
+         if surface is not None:
+             print("PROBE:SURFACE:" + json.dumps(surface, separators=(",", ":"), sort_keys=True), flush=True)
+         if final == "CHROME_ERROR" and last != final:
+             print("PROBE:NETWORK:" + chrome_error_detail(cdp), flush=True)
+-        print("PROBE:FINAL:" + final, flush=True)
++        if response_delivery is not None:
++            if surface is not None and surface.get("route") == "EXACT" and surface.get("document") == "COMPLETE":
++                report_sent_response(sink, cdp, response_delivery, task_diagnostics=args.task_diagnostics,
++                    historical=args.historical_response, await_deadline=deadline if args.await_existing_response else None,
++                    sleep=time.sleep, monotonic=time.monotonic)
++            else:
++                print("PROBE:RESPONSE_STATE:UNPROVEN", flush=True)
++    print("PROBE:PHASE:BROWSER_CLOSED", flush=True)
++    print("PROBE:FINAL:" + final, flush=True)
+     return 0
+ if __name__ == "__main__": raise SystemExit(main())

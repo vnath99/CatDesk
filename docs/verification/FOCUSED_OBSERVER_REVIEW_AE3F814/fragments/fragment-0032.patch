@@ -1,0 +1,214 @@
+diff --git a/wake/src/runtime_readiness.rs b/wake/src/runtime_readiness.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..11656500994f0aa9c23d9d3733fdca0cfebdba18
+--- /dev/null
++++ b/wake/src/runtime_readiness.rs
+@@ -0,0 +1,573 @@
++//! Receipt-bound passive response observation through the existing stopped-host owner.
++//! This module cannot type, submit, retry, open menus/traces, rebind a target or
++//! install an adapter. Diagnostic hints never establish native execution authority.
++use super::*;
++
++#[derive(Clone, Copy, PartialEq, Eq)]
++enum Mode {
++    ResponseOwnerHeld,
++    SentDiagnostics,
++    HistoricalDiagnostics,
++}
++
++pub fn inspect_historical_task_response(
++    store: &Store,
++    project: &str,
++    target: &Target,
++    event: &str,
++    keep_current: &dyn Fn() -> Result<()>,
++) -> Result<serde_json::Value> {
++    let (delivery, timer) = store
++        .sent_response_scope(project, target, event)
++        .map_err(|_| "RESPONSE_HISTORY_RECEIPT_OR_TIMER_REFUSED")?;
++    if timer.response_state != ResponseState::Complete {
++        return Err("READINESS_COMPLETED_RESPONSE_REQUIRED".into());
++    }
++    inspect_readiness(
++        store,
++        project,
++        target,
++        Some(&delivery),
++        Mode::HistoricalDiagnostics,
++        keep_current,
++    )
++    .map_err(|_| "RESPONSE_HISTORY_BROWSER_OWNER_OR_ADMISSION_REFUSED".into())
++}
++
++pub fn inspect_sent_task_response_diagnostics(
++    store: &Store,
++    project: &str,
++    target: &Target,
++    event: &str,
++    keep_current: &dyn Fn() -> Result<()>,
++) -> Result<serde_json::Value> {
++    let (delivery, _) = store.sent_response_scope(project, target, event)?;
++    inspect_readiness(
++        store,
++        project,
++        target,
++        Some(&delivery),
++        Mode::SentDiagnostics,
++        keep_current,
++    )
++}
++
++#[cfg(any(windows, test))]
++fn verified_primitives(source: &Path, adjacent: &Path, expected: &str) -> Result<PathBuf> {
++    verified_observer_asset(source, adjacent, "wake_bridge.py", expected)
++}
++
++#[cfg(any(windows, test))]
++fn verified_packaged_primitives(
++    source: &Path,
++    image_directory: &Path,
++    expected: &str,
++) -> Result<PathBuf> {
++    let sibling = image_directory.join("wake_bridge.py");
++    match std::fs::symlink_metadata(&sibling) {
++        Ok(_) => {
++            require_plain_install_file(&sibling)?;
++            if sha256_file(&sibling, "READINESS_SOURCE_UNAVAILABLE")? != expected {
++                return Err("READINESS_SOURCE_HASH_MISMATCH".into());
++            }
++            Ok(sibling)
++        }
++        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
++            verified_primitives(source, &image_directory.join("browser-observer"), expected)
++        }
++        Err(_) => Err("READINESS_SOURCE_UNAVAILABLE".into()),
++    }
++}
++
++#[cfg(any(windows, test))]
++fn verified_observer_asset(
++    source: &Path,
++    adjacent: &Path,
++    name: &str,
++    expected: &str,
++) -> Result<PathBuf> {
++    let path = match std::fs::symlink_metadata(adjacent) {
++        Ok(_) => {
++            require_plain_install_directory(adjacent)?;
++            adjacent.join(name)
++        }
++        Err(error) if error.kind() == std::io::ErrorKind::NotFound => source.to_path_buf(),
++        Err(_) => return Err("READINESS_SOURCE_UNAVAILABLE".into()),
++    };
++    require_plain_install_file(&path)?;
++    if sha256_file(&path, "READINESS_SOURCE_UNAVAILABLE")? != expected {
++        return Err("READINESS_SOURCE_HASH_MISMATCH".into());
++    }
++    Ok(path)
++}
++
++#[cfg(any(windows, test))]
++fn require_selection(store: &Store, project: &str, target: &Target) -> Result<()> {
++    target.validate()?;
++    let control: Control = read(&store.root().join("control.json"))?;
++    if control.schema_version != 1 || control.desired != "STOPPED" {
++        return Err("READINESS_REQUIRES_STOPPED_WAKE".into());
++    }
++    if store.config()?.targets.get(project) != Some(target) {
++        return Err("READINESS_REGISTERED_TARGET_CHANGED".into());
++    }
++    Ok(())
++}
++
++/// A caller must hold its project lease and recheck the paired registration.
++/// Only the shared browser portion is serialized; no metadata lock spans it.
++pub(super) fn read_sent_response_observation(
++    store: &Store,
++    project: &str,
++    target: &Target,
++    delivery: &crate::store::Delivery,
++    keep_current: &dyn Fn() -> Result<()>,
++) -> Result<serde_json::Value> {
++    let observed = inspect_readiness(
++        store,
++        project,
++        target,
++        Some(delivery),
++        Mode::ResponseOwnerHeld,
++        keep_current,
++    )?;
++    if let Some(value) = observed.get("responseObservation").filter(|v| !v.is_null()) {
++        return Ok(value.clone());
++    }
++    let reason = observed["observations"].as_array().and_then(|rows| {
++        rows.iter()
++            .rev()
++            .find_map(|row| row.as_str()?.strip_prefix("PROBE:RESPONSE_STATE:"))
++    });
++    // Keep the fixed native stability failure inside the CLI's already allowed
++    // RESPONSE_ vocabulary instead of redacting it to WEB_OPERATION_REFUSED.
++    Err(match reason {
++        Some("UNSTABLE") => "RESPONSE_STATE_UNSTABLE",
++        Some(reason) => reason,
++        None => "RESPONSE_PROBE_UNPROVEN",
++    }
++    .into())
++}
++
++#[cfg(any(windows, test))]
++fn require_delivery(
++    store: &Store,
++    project: &str,
++    target: &Target,
++    delivery: &crate::store::Delivery,
++    mode: Mode,
++) -> Result<()> {
++    delivery.event.validate()?;
++    let phase_valid = store
++        .sent_response_scope(project, target, &delivery.event.event_id)?
++        .0
++        == *delivery;
++    let ordinary = delivery.event.audit_references.is_empty()
++        && delivery
++            .event
++            .event_id
++            .strip_prefix("web-work-")
++            .is_some_and(exact_hash);
++    let continuation = delivery
++        .event
++        .event_id
++        .strip_prefix("wake-intent-")
++        .is_some_and(exact_hash)
++        && delivery.event.audit_references.len() == 5
++        && delivery.event.wake_metadata()?.is_some_and(|metadata| {
++            metadata.purpose == crate::protocol::WakePurpose::NewTask
++                && metadata
++                    .source_event_id
++                    .strip_prefix("web-work-")
++                    .is_some_and(exact_hash)
++                && metadata
++                    .source_turn_id
++                    .strip_prefix("initial-context-")
++                    .is_some_and(exact_hash)
++        });
++    // An exact source review may use only the passive current inspector. It
++    // cannot obtain retained-owner completion or historical task authority.
++    let source_review = mode == Mode::SentDiagnostics
++        && delivery.event.event_type == "source_review"
++        && delivery
++            .event
++            .event_id
++            .strip_prefix("web-work-")
++            .is_some_and(exact_hash)
++        && delivery.event.audit_references.len() == 1
++        && delivery.event.audit_references[0]
++            .strip_prefix("catdesk-review-v1:")
++            .is_some_and(|grant| grant.len() <= 128 && crate::protocol::valid_id(grant));
++    if !phase_valid
++        || delivery.phase != Phase::Sent
++        || delivery.target != *target
++        || delivery.event.project_id != project
++        || delivery.event.target_generation != target.generation
++        || !((delivery.event.event_type == "engineering_attention" && (ordinary || continuation))
++            || source_review)
++        || delivery.message_digest != crate::protocol::digest(&delivery.event.message)

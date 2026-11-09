@@ -1,0 +1,116 @@
+diff --git a/tests/test_wake_readiness_probe.py b/tests/test_wake_readiness_probe.py
+index 4be25881565108803062140f2f909fa57ca436fc..fe970234fc124a2682f51f9c80c6f701ce7b5d96 100644
+--- a/tests/test_wake_readiness_probe.py
++++ b/tests/test_wake_readiness_probe.py
+@@ -5,24 +5,69 @@ import importlib.util
+ import io
+ import json
+ import os
+ from pathlib import Path
+ import sys
+ import tempfile
+ import types
+ import unittest
+ from unittest import mock
+ 
+ 
+ class ReadinessProbeTests(unittest.TestCase):
++    def test_passive_response_modes_reject_incomplete_scope_and_action_flags(self):
++        with tempfile.TemporaryDirectory() as profile:
++            base=['probe','--conversation-url','https://chatgpt.com/c/fixture','--profile',profile,
++                '--read-only','--response-only','--task-diagnostics','--delivery-file','delivery.json',
++                '--delivery-sha256','b'*64,'--primitives','wake_bridge.py','--primitives-sha256','a'*64]
++            cases=[base+['--await-existing-response','--historical-response'],
++                base+['--await-existing-response','--source-review-diagnostics'],
++                base+['--source-review-diagnostics','--historical-response']]
++            for missing in ['--read-only','--response-only','--task-diagnostics']:
++                cases.append([v for v in base if v!=missing]+['--await-existing-response'])
++            for argv in cases:
++                with self.subTest(argv=argv),mock.patch.object(sys,'argv',argv), \
++                        mock.patch.object(self.probe,'load_observation_sink',return_value=mock.Mock()), \
++                        mock.patch.object(self.probe,'load_delivery_message') as loader:
++                    self.assertEqual(self.probe.main(),2)
++                    loader.assert_not_called()
++            for flag in ['--receipt-only','--inspect-app-menu','--inspect-response-trace','--inspect-historical-trace']:
++                with self.subTest(flag=flag),mock.patch.object(sys,'argv',base+[flag]), \
++                        contextlib.redirect_stderr(io.StringIO()),self.assertRaises(SystemExit) as failure:
++                    self.probe.main()
++                self.assertEqual(failure.exception.code,2)
++
++    def test_sent_response_reader_refuses_hash_route_phase_and_receipt_drift(self):
++        url='https://chatgpt.com/c/fixture';event_id='web-work-'+'a'*64;message='PRIVATE_FROZEN_USER'
++        message_digest=hashlib.sha256(message.encode()).hexdigest();target_digest=hashlib.sha256(url.encode()).hexdigest()
++        delivery=dict(phase='SENT',messageDigest=message_digest,
++            event=dict(eventId=event_id,projectId='alpha',eventType='engineering_attention',
++                targetGeneration=1,message=message,auditReferences=[]),
++            target=dict(generation=1,url=url,digest=target_digest),
++            receipt=dict(schemaVersion=1,eventId=event_id,targetGeneration=1,targetDigest=target_digest,
++                messageDigest=message_digest,sentUtc=1,evidence='EXACT_USER_MESSAGE_APPENDED'))
++        with tempfile.TemporaryDirectory() as root:
++            path=Path(root)/'deliveries'/(event_id+'.json');path.parent.mkdir()
++            def read(value,checksum=None,target=url):
++                path.write_text(json.dumps(value),encoding='utf-8')
++                digest=hashlib.sha256(path.read_bytes()).hexdigest()
++                return self.probe.load_delivery_message(path,checksum or digest,target,response_only=True)
++            self.assertEqual(read(delivery),delivery)
++            for value,kwargs in [(delivery,dict(checksum='0'*64)),(delivery,dict(target=url+'-foreign')),
++                    (delivery | {'phase':'SUBMITTING'},{}),(delivery | {'receipt':None},{}),
++                    (delivery | {'receipt':delivery['receipt'] | {'messageDigest':'0'*64}},{}),
++                    (delivery | {'target':delivery['target'] | {'generation':2}}, {})]:
++                with self.subTest(kwargs=kwargs),self.assertRaises((ValueError,KeyError)):
++                    read(value,**kwargs)
++
+     def setUp(self):
+         spec = importlib.util.spec_from_file_location(
+             "readiness_probe", Path(__file__).resolve().parents[1] / "scripts/wake_readiness_visual_probe.py")
+         self.probe = importlib.util.module_from_spec(spec)
+         with mock.patch.dict(os.environ, {"LOCALAPPDATA": tempfile.gettempdir()}):
+             spec.loader.exec_module(self.probe)
+ 
+     def test_inspection_reports_fixed_readiness_classes(self):
+         target = "https://chatgpt.com/c/readiness-fixture"
+         for current, visible, expected in [
+             (target, {"#prompt-textarea"}, "EXACT_READY_IDLE"),
+             (target, {"#prompt-textarea", "button[data-testid='stop-button']"}, "EXACT_READY_BUSY"),
+@@ -136,26 +181,30 @@ class ReadinessProbeTests(unittest.TestCase):
+ 
+         with tempfile.TemporaryDirectory() as profile:
+             argv = ["probe", "--await-start", "--profile", profile,
+                     "--conversation-url", target, "--seconds", "5"]
+             output = io.StringIO()
+             with mock.patch.object(sys, "argv", argv), mock.patch.object(sys, "stdin", io.StringIO("START\n")), \
+                     mock.patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=factory)}), \
+                     mock.patch.object(self.probe.time, "monotonic", side_effect=[0, 0, 10]), \
+                     contextlib.redirect_stdout(output):
+                 self.assertEqual(self.probe.main(), 0)
+             self.assertEqual(calls, [{"uc": True, "user_data_dir": profile}, target, "closed"])
+             rows = output.getvalue().splitlines()
+-            self.assertTrue(rows[0].startswith("PROBE:TAB:"))
+-            self.assertEqual(rows[1:], ["PROBE:TARGET_TAB_UNAVAILABLE", "PROBE:FINAL:EXACT_READY_IDLE"])
++            self.assertEqual([row for row in rows if row.startswith("PROBE:PHASE:")], [
++                "PROBE:PHASE:IMPORT_BROWSER", "PROBE:PHASE:BROWSER_START", "PROBE:PHASE:CDP_NAVIGATION",
++                "PROBE:PHASE:OBSERVING", "PROBE:PHASE:BROWSER_CLOSED"])
++            observations = [row for row in rows if not row.startswith("PROBE:PHASE:")]
++            self.assertTrue(observations[0].startswith("PROBE:TAB:"))
++            self.assertEqual(observations[1:], ["PROBE:TARGET_TAB_UNAVAILABLE", "PROBE:FINAL:EXACT_READY_IDLE"])
+         self.assertEqual(self.probe.PROFILE, default)
+ 
+     def test_home_recovery_requires_verified_empty_composer(self):
+         target = "https://chatgpt.com/c/readiness-fixture"
+         for empty in ["EMPTY", True, False, None, "true", {"value": "EMPTY"}, "EMPTY private"]:
+             with self.subTest(empty=empty):
+                 cdp = mock.Mock()
+                 cdp.get_current_url.return_value = "https://chatgpt.com/"
+                 cdp.is_element_visible.return_value = False
+                 cdp.evaluate.return_value = empty
+                 self.probe.recover_empty_home(cdp, target)
+                 self.assertEqual(cdp.get.call_args_list, [mock.call(target)] if empty == "EMPTY" else [])
+@@ -466,14 +515,268 @@ class ReadinessProbeTests(unittest.TestCase):
+         cdp.switch_to_tab.assert_not_called()
+ 
+     def test_target_comparison_refuses_credentials_ports_and_other_projects(self):
+         target = "https://chatgpt.com/c/readiness-fixture"
+         for current in ["http://chatgpt.com/c/readiness-fixture", target + "?query=1",
+                         target + "#fragment", "https://user@chatgpt.com/c/readiness-fixture",
+                         "https://chatgpt.com:443/c/readiness-fixture",
+                         "https://other.example/c/readiness-fixture",

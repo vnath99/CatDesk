@@ -1,0 +1,63 @@
++        assert!(sanitized_rows(&format!("PROBE:TASK:{invalid}")).is_empty());
++    }
++    let mut prose = value.clone();
++    prose["assistantHints"]["refusalReport"]["source"] = serde_json::json!("PROSE");
++    assert!(task_response_diagnostics(&format!("PROBE:TASK:{prose}")).is_none());
++    prose["assistantHints"]["refusalReport"]["reasonFieldPresent"] = serde_json::json!(false);
++    assert_eq!(
++        task_response_diagnostics(&format!("PROBE:TASK:{prose}")),
++        Some(prose)
++    );
++    let mut none = value.clone();
++    none["assistantHints"]["refusalTerms"] = serde_json::json!([]);
++    none["assistantHints"]["refusalReport"] = serde_json::json!({"source":"NONE","state":"UNPROVEN","reasonFieldPresent":false,"projectionOmitted":true});
++    assert_eq!(
++        task_response_diagnostics(&format!("PROBE:TASK:{none}")),
++        Some(none)
++    );
++    value["assistantHints"]
++        .as_object_mut()
++        .unwrap()
++        .remove("refusalReport");
++    assert!(task_response_diagnostics(&format!("PROBE:TASK:{value}")).is_none());
++    value["assistantHints"]["schemaVersion"] = serde_json::json!(6);
++    assert_eq!(
++        task_response_diagnostics(&format!("PROBE:TASK:{value}")),
++        Some(value)
++    );
++}
++
++#[test]
++fn passive_rows_never_return_duplicate_key_private_values_or_action_frames() {
++    let value = identity_hint_fixture();
++    let encoded = value.to_string();
++    // Prefix one duplicate field explicitly; do not assume serde object key
++    // order or the fixture's current assistant-hint schema version.
++    let duplicate = format!(
++        "{{\"assistantHints\":\"PRIVATE_SENTINEL\",{}",
++        encoded
++            .strip_prefix('{')
++            .expect("task fixture is an object")
++    );
++    assert_ne!(duplicate, encoded);
++    assert!(duplicate.contains(r#""assistantHints":"PRIVATE_SENTINEL"#));
++    assert_eq!(duplicate.matches(r#""assistantHints":"#).count(), 2);
++    let rows = sanitized_rows(&format!("PROBE:TASK:{duplicate}"));
++    assert_eq!(rows, [format!("PROBE:TASK:{value}")]);
++    assert!(!rows[0].contains("PRIVATE_SENTINEL"));
++    for row in [
++        "PROBE:APP:{}",
++        "PROBE:TRACE:{}",
++        "PROBE:RECEIPT:{}",
++        "PROBE:SUBMISSION:{}",
++    ] {
++        assert!(sanitized_rows(row).is_empty());
++    }
++    assert!(embedded_program_loader(b"").is_err());
++    assert!(embedded_program_loader(&vec![b'x'; 65537]).is_err());
++    assert!(
++        embedded_program_loader(b"print('PROBE:FINAL:HOME')")
++            .unwrap()
++            .contains("hashlib.sha256")
++    );
++}

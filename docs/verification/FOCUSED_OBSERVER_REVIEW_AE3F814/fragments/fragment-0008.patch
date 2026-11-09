@@ -1,0 +1,107 @@
++                const structuredCandidate=reportBody.startsWith('{{') || reportBody.startsWith('[') || reportBody.startsWith('```');
++                if(structuredCandidate && !structuredReportQuoted && reportBody.length<=8192 && completionActionReady && assistantBodyText.length>0) {{
++                    let parsed=null,reportJson=reportBody;
++                    const fence=/^```(?:json)?\\s*([\\s\\S]*?)\\s*```$/i.exec(reportBody);
++                    if(fence)reportJson=fence[1];
++                    try{{parsed=JSON.parse(reportJson);}}catch(_){{}}
++                    if(parsed && typeof parsed==='object' && !Array.isArray(parsed)) {{
++                        const states=['status','state','outcome','dispatch'].flatMap(field=>{{
++                            if(!Object.hasOwn(parsed,field)||typeof parsed[field]!=='string')return [];
++                            const state=/^(?:(?:DISPATCH|TOOL_CALL)_)?(BLOCKED|REJECTED|REFUSED)$/.exec(parsed[field].trim().toUpperCase().replace(/[ -]+/g,'_'));
++                            return state ? [state[1]] : [];
++                        }});
++                        if(states.length && new Set(states).size===1) {{
++                            refusalReport.source='STRUCTURED';refusalReport.state=states[0];
++                            const reasons=['reason','error','detail','message'].flatMap(field=>{{
++                                if(!Object.hasOwn(parsed,field))return [];
++                                const value=parsed[field];
++                                if(typeof value==='string' && value.trim())return [value];
++                                if(field==='error' && value && typeof value==='object' && !Array.isArray(value) &&
++                                    Object.hasOwn(value,'message') && typeof value.message==='string' && value.message.trim())return [value.message];
++                                return [];
++                            }});
++                            const uniqueReasons=Array.from(new Set(reasons));
++                            if(uniqueReasons.length===1) {{
++                                refusalReport.reasonFieldPresent=true;
++                                projectRefusalTerms(maskRefusalValues(uniqueReasons[0].toLowerCase().replace(/[‘’]/g,"'")).slice(0,480));
++                            }}
++                        }}
++                    }}
++                }} else if(!structuredCandidate) {{
++                    const refusalText=maskRefusalValues(assistantRefusalText.slice(0,32768).toLowerCase().replace(/[‘’]/g,"'"));
++                    const refusalAnchor=/\\b(?:dispatch|tool[- ]call).{{0,60}}?\\b(blocked|rejected|refused)\\b/.exec(refusalText);
++                    if(refusalAnchor && !/\\b(?:not|never|no longer)\\s+(?:blocked|rejected|refused)\\b/.test(refusalAnchor[0])) {{
++                        refusalReport.source='PROSE';refusalReport.state=refusalAnchor[1].toUpperCase();
++                        projectRefusalTerms(refusalText.slice(refusalAnchor.index,refusalAnchor.index+480));
++                    }}
++                }}
++                refusalReport.projectionOmitted=refusalTerms.length===0;
++                result.push({{schemaVersion:7,basis:'ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION',
++                    toolUnavailable,contextUnavailable,
++                    approvalRequested,
++                    nativeDispatchMentioned:text.includes('native.codex.dispatch'),
++                    scanTruncated:assistantDiagnosticText.length > 32768,
++                    unavailableSubjects:{json.dumps(TASK_UNAVAILABLE_SUBJECTS)}.filter(subject => unavailableSubjects.has(subject)),
++                    mentionedTools:{json.dumps(TASK_MENTIONED_TOOLS)}.filter(tool => mentionedTools[tool]),
++                    argumentIssues:{json.dumps(TASK_ARGUMENT_ISSUES)}.filter(issue => argumentIssues[issue]),
++                    cachedInvariants:cachedInvariants.filter(hasCode),
++                    identityIssues:{json.dumps(TASK_IDENTITY_ISSUES)}.filter(issue=>identityIssues.has(issue)),
++                    refusalTerms,
++                    refusalReport,
++                    trace:{{schemaVersion:1,scope:'EXACT_USER_EXCHANGE',basis:'PRESENTATION_ONLY_NOT_TOOL_RECEIPT',
++                        knownControls:Math.min(traceControls.length,64),expandedControls:traceExpanded,collapsedControls:traceCollapsed,
++                        unprovenControls:traceUnknown,linkedPanels:traceLinked,visiblePanels:traceVisible}},
++                    knownCodes:known.filter(hasCode),
++                    refusalCategories:{json.dumps(TASK_REFUSAL_CATEGORIES)}.filter(kind => refusals[kind])}});
++            }}
+             return result;
+         }})()"""
+         try:
+             value = self.cdp_value(cdp.evaluate(script))
+         except Exception as error:
+             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED") from error
+-        if (not isinstance(value, list) or len(value) not in {5, 7, 8} or
++        if (not isinstance(value, list) or len(value) not in {5, 7, 8, 9} or
+                 value[0] not in {"ready", "missing-user", "invalid", "load-error"} or
+                 not isinstance(value[1], int) or isinstance(value[1], bool) or
+                 not isinstance(value[2], int) or isinstance(value[2], bool) or
+                 not isinstance(value[3], bool) or
+                 not isinstance(value[4], bool)):
+             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
+         if value[0] == "load-error":
+             raise PostSubmitUnknown("RESPONSE_LOAD_ERROR")
+         if value[0] != "ready":
+             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
+         if diagnostic is not None:
+             allowed = {"ASSISTANT_NOT_MOUNTED", "ASSISTANT_BODY_UNPROVEN",
+                        "ASSISTANT_COMPLETION_ACTION_UNPROVEN", "COMPLETE"}
+-            if (len(value) != (8 if tool_diagnostic is not None else 7) or
++            if (len(value) != (9 if execution_diagnostic is not None else 8 if tool_diagnostic is not None else 7) or
+                     not isinstance(value[5], str) or value[5] not in allowed or
+                     not valid_response_control_diagnostics(value[6])):
+                 raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
+             if tool_diagnostic is not None:
+                 if not valid_tool_marker_diagnostics(value[7]):
+                     raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
+                 tool_diagnostic.update(value[7])
++            if execution_diagnostic is not None:
++                if not valid_task_response_hints(value[8]):
++                    raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
++                execution_diagnostic.update(value[8])
+             diagnostic["reason"] = value[5]
+             diagnostic["controls"] = value[6]
+         elif len(value) != 5:
+             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
+         return value[1], value[2], value[3], value[4]
+ 
+-    def observe_cooperative_response(self, cdp: Any, message: str, expected_digest: str) -> str:
++    def require_response_document(self, cdp: Any) -> None:
++        """Bind observation to the evaluated document, not driver metadata."""
++        try:
++            current = self.cdp_value(cdp.evaluate("location.href"))
++        except Exception as error:
++            raise Attention("RESPONSE_TARGET_QUERY_FAILED") from error
++        if not isinstance(current, str) or not self.exact(current):
++            raise Attention("RESPONSE_TARGET_DRIFT")
++
++

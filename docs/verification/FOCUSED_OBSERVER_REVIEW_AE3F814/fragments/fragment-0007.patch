@@ -1,0 +1,87 @@
++                    IDENTITY_MISMATCH:genericIdentityMismatch || Array.from(identityIssues).some(issue=>issue.endsWith('_MISMATCH')),
++                    TOOL_UNAVAILABLE:toolUnavailable, CONTEXT_UNAVAILABLE:contextUnavailable,
++                    AUTHORIZATION_REQUIRED:approvalRequested || hasCode('UNAUTHORIZED'),
++                    DISPATCH_REJECTED:hasCode('WEB_TASK_CACHED_ARGUMENTS_INVALID') || /(?:dispatch|tool call).{{0,60}}(?:blocked|rejected|refused)/.test(text)
++                }};
++                const mentionedTools = {{
++                    RUN_COMMAND:/\\brun_command\\b/.test(text),
++                    CENTRAL_TASK_TOOL:/\\bcatdesk_web_task_tool\\b/.test(text),
++                    NATIVE_DISPATCH:/\\bnative\\.codex\\.dispatch\\b/.test(text),
++                    NATIVE_STATUS:/\\bnative\\.codex\\.status\\b/.test(text)
++                }};
++                // Fixed classifications only. No unknown field name, value,
++                // provider excerpt, parsed envelope or arbitrary code leaves
++                // the browser. A reported cause remains an assistant hint;
++                // it cannot establish a fresh call or authorize a retry.
++                const argumentIssues = {{
++                    JSON_SYNTAX:/(?:invalid|malformed|parse|parsing|syntax).{{0,50}}json|json.{{0,50}}(?:invalid|malformed|parse|parsing|syntax)|unexpected token|unterminated (?:string|object)/.test(text),
++                    MISSING_REQUIRED_FIELD:/(?:missing|required).{{0,45}}(?:field|argument|parameter)|(?:field|argument|parameter).{{0,45}}(?:missing|required)/.test(text),
++                    UNEXPECTED_FIELD:/(?:unknown|unexpected|unrecognized|unsupported|extra).{{0,35}}(?:field|argument|parameter|property)|additional properties (?:are )?not allowed/.test(text),
++                    TYPE_MISMATCH:/(?:invalid|incorrect|wrong|unexpected).{{0,25}}type|(?:expected|must be|must have).{{0,30}}(?:object|string|boolean|integer|array)/.test(text),
++                    TOOL_NAME_REJECTED:/(?:unknown|unrecognized|unsupported|invalid|no such).{{0,20}}(?:tool|function)|(?:tool|function).{{0,35}}(?:not found|does not exist)/.test(text),
++                    CACHED_ENVELOPE_REJECTED:hasCode('WEB_TASK_CACHED_ARGUMENTS_INVALID')
++                }};
++                const cachedInvariants = {json.dumps(TASK_CACHED_INVARIANTS)};
++                // Only known completed-work trace labels outside user/prose/code
++                // can identify candidates. Observe, never click or export labels.
++                const traceScope = pairedTurn ? latestUser : responseBoundary;
++                const traceExcluded = "pre, code, [data-markdown-text-style='assistant-message'], .markdown, [class~='prose']";
++                const traceControls = Array.from(traceScope ? traceScope.querySelectorAll('button, [role="button"], summary') : [])
++                    .filter(node => visible(node) && !node.closest(userNodeSelector) && !node.closest(traceExcluded))
++                    .filter(node => /^(?:worked|thought) for \\d+(?:\\.\\d+)?(?:ms|s|m|h)(?: \\d+(?:\\.\\d+)?(?:ms|s|m|h))?(?:\\s*[>›])?$/i.test(
++                        normalize(node.innerText || node.textContent || node.getAttribute('aria-label') || '')));
++                let traceExpanded=0,traceCollapsed=0,traceUnknown=0,traceLinked=0,traceVisible=0;
++                for (const control of traceControls.slice(0,64)) {{
++                    const details = control.tagName.toLowerCase()==='summary' ? control.closest('details') : null;
++                    const expanded = details ? (details.hasAttribute('open') ? 'true' : 'false') : control.getAttribute('aria-expanded');
++                    if (expanded==='true') traceExpanded++;
++                    else if (expanded==='false') traceCollapsed++;
++                    else traceUnknown++;
++                    const id=control.getAttribute('aria-controls');
++                    const panels=details ? [details] : (id && id.length<=256 ? Array.from(document.querySelectorAll('[id]')).filter(n => n.getAttribute('id')===id) : []);
++                    if (panels.length===1) {{ traceLinked++; if (visible(panels[0]) && expanded==='true') traceVisible++; }}
++                }}
++                // A short fixed-vocabulary projection can explain a natural
++                // refusal which has no known error code. It is never raw text
++                // or execution/retry authority. Unknown/value spans collapse
++                // to one marker; quoted content, paths, URLs, identifiers and
++                // every numeric token are deliberately excluded.
++                const refusalTerms = [], refusalVocabulary = new Set({json.dumps(TASK_REFUSAL_TERMS)});
++                // Mask on the full bounded scan before locating an anchor.
++                // Otherwise a window beginning inside a quoted prior value
++                // would lose its opening quote and misclassify that value.
++                const maskRefusalValues = input => {{
++                    const masked=input.split('');
++                    const mark=(start,end)=>{{masked[start]='\\u0000';for(let p=start+1;p<end;p++)masked[p]=' ';}};
++                    for(let i=0;i<input.length;i++) {{
++                        const opening=input[i];
++                        if(opening==="'" && /[a-z0-9]/.test(input[i-1]||'') && /[a-z0-9]/.test(input[i+1]||''))continue;
++                        if(!['"',"'",'`','“','”'].includes(opening))continue;
++                        const delimiter=opening==='`' && input.startsWith('```',i) ? '```' : opening;
++                        const closing=opening==='“' ? '”' : opening==='”' ? '“' : delimiter;
++                        let end=input.length;
++                        for(let p=i+delimiter.length;p<input.length;p++) {{
++                            if(input[p]===String.fromCharCode(92)){{p++;continue;}}
++                            if(closing==="'" && input[p]==="'" && /[a-z0-9]/.test(input[p-1]||'') && /[a-z0-9]/.test(input[p+1]||''))continue;
++                            if(input.startsWith(closing,p)){{end=p+closing.length;break;}}
++                        }}
++                        mark(i,end);i=end-1;
++                    }}
++                    const mask=part=>'\\u0000'+' '.repeat(part.length-1);
++                    return masked.join('')
++                        .replace(/(?:https?:\\/\\/|file:\\/\\/|[a-z]:[\\\\/]|\\\\\\\\)[^\\s]*/g,mask)
++                        .replace(/\\b[a-z_][a-z0-9_]*\\s*=\\s*[^\\s,;]+/g,mask)
++                        .replace(/\\b(?:executionkey|key|token|password|secret|context|payload|arguments|capsule)\\s*:\\s*[^\\s,;]+/g,mask);
++                }};
++                const projectRefusalTerms = redacted => {{
++                    for (const chunk of redacted.split(/\\s+/)) {{
++                        if (!chunk || (!/[a-z0-9_]/.test(chunk) && !chunk.includes('\\u0000'))) continue;
++                        const word = chunk.replace(/^[^a-z0-9_]+|[^a-z0-9_]+$/g,'').toUpperCase();
++                        const term = chunk.length < 24 && /^[A-Z_]+$/.test(word) && refusalVocabulary.has(word)
++                            ? word : 'REDACTED';
++                        if (term !== 'REDACTED' || refusalTerms[refusalTerms.length-1] !== 'REDACTED') refusalTerms.push(term);
++                        if (refusalTerms.length === 32) break;
++                    }}
++                }};
++                const refusalReport={{source:'NONE',state:'UNPROVEN',reasonFieldPresent:false,projectionOmitted:true}};
++                const reportBody=assistantDiagnosticText.trim();

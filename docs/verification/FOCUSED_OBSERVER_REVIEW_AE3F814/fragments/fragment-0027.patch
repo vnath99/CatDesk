@@ -1,0 +1,164 @@
++    let bytes = rx
++        .recv_timeout(Duration::from_secs(5))
++        .map_err(|_| "PROBE_CLEANUP_UNVERIFIED")??;
+     if bytes.len() > 16_384 {
+         return Err("PROBE_OUTPUT_TOO_LARGE");
+     }
+     let text = std::str::from_utf8(&bytes).map_err(|_| "PROBE_OUTPUT_INVALID")?;
+-    Ok(text
+-        .lines()
++    *rows = sanitized_rows(text);
++    result.and(input_result)
++}
++
++fn sanitized_rows(text: &str) -> Vec<String> {
++    text.lines()
+         .filter(|line| {
+             let Some(state) = line.strip_prefix("PROBE:") else {
+                 return false;
+             };
+             if state.starts_with("SURFACE:") {
+                 return surface_observation(line).is_some();
+             }
+             if state.starts_with("TAB:") {
+                 return tab_observation(line).is_some();
+             }
++            if state.starts_with("RESPONSE:") {
++                return sent_response_observation(line).is_some();
++            }
++            if state.starts_with("HISTORY_RESPONSE:") {
++                return historical_response_observation(line).is_some();
++            }
++            if state.starts_with("TASK:") {
++                return task_response_diagnostics(line).is_some();
++            }
++            if let Some(reason) = state.strip_prefix("RESPONSE_STATE:") {
++                return matches!(
++                    reason,
++                    "UNPROVEN"
++                        | "UNSTABLE"
++                        | "RESPONSE_LOAD_ERROR"
++                        | "RESPONSE_NETWORK_ERROR"
++                        | "LOGIN_OR_PROFILE_REQUIRED"
++                        | "RESPONSE_EXPECTED_USER_DUPLICATED"
++                        | "RESPONSE_EXPECTED_USER_NOT_FOUND"
++                        | "RESPONSE_USER_REPRESENTATION_MISMATCH"
++                        | "RESPONSE_SEQUENCE_QUERY_FAILED"
++                        | "RESPONSE_SEQUENCE_DRIFT"
++                        | "RESPONSE_STATE_UNPROVEN"
++                        | "RESPONSE_TIMEOUT_RETRY_REQUIRED"
++                        | "RESPONSE_TARGET_DRIFT"
++                        | "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"
++                );
++            }
++            if let Some(phase) = state.strip_prefix("PHASE:") {
++                return matches!(
++                    phase,
++                    "IMPORT_BROWSER"
++                        | "BROWSER_START"
++                        | "CDP_NAVIGATION"
++                        | "OBSERVING"
++                        | "BROWSER_CLOSED"
++                );
++            }
+             if let Some(reason) = state.strip_prefix("HOME_CHECK:") {
+                 return matches!(
+                     reason,
+                     "EMPTY"
+                         | "NOT_HOME"
+                         | "BUSY"
+                         | "DOCUMENT_LOADING"
+                         | "EDITOR_MISSING"
+                         | "EDITOR_AMBIGUOUS"
+                         | "EDITOR_UNSUPPORTED"
+                         | "DRAFT_PRESENT"
+                         | "EDITOR_MEDIA_PRESENT"
+@@ -262,29 +405,35 @@ pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<Strin
+                     | "URL_UNAVAILABLE"
+                     | "URL_INVALID"
+             )
+         })
+         .take(64)
+         .map(|line| {
+             // Return canonical whitelisted values, never raw JSON containing
+             // duplicate-key values or formatting from an untrusted helper.
+             if let Some(value) = surface_observation(line) {
+                 format!("PROBE:SURFACE:{value}")
+             } else if let Some(value) = tab_observation(line) {
+                 format!("PROBE:TAB:{value}")
++            } else if let Some(value) = sent_response_observation(line) {
++                format!("PROBE:RESPONSE:{value}")
++            } else if let Some(value) = historical_response_observation(line) {
++                format!("PROBE:HISTORY_RESPONSE:{value}")
++            } else if let Some(value) = task_response_diagnostics(line) {
++                format!("PROBE:TASK:{value}")
+             } else {
+                 line.to_owned()
+             }
+         })
+-        .collect())
++        .collect()
+ }
+ 
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+     fn surface() -> serde_json::Value {
+         serde_json::json!({"route":"EXACT","document":"COMPLETE","history":"PRESENT",
+             "editor":"READY","composer":"EMPTY","generation":"IDLE","assistant":"LOAD_ERROR",
+             "exchange":"UNATTRIBUTED","recovery":"OBSERVATION_ONLY"})
+     }
+     fn tab() -> serde_json::Value {
+         serde_json::json!({"schemaVersion":1,"tabCount":2,"metadataMatches":1,
+@@ -363,12 +512,462 @@ mod tests {
+             "if([Console]::In.ReadLine() -cne 'START'){{exit 2}}; for($i=0;$i -lt 90;$i++){{[Console]::Out.WriteLine(('x'*150))}}; [Console]::Out.WriteLine('PROBE:SURFACE:{row}'); [Console]::Out.WriteLine('PROBE:TAB:{tab_row}'); [Console]::Out.WriteLine('PROBE:FINAL:EXACT_READY_RESPONSE_LOAD_ERROR')"
+         );
+         command.args(["-NoProfile", "-NonInteractive", "-Command", &script]);
+         let rows = run_bounded(&mut command, Duration::from_secs(5)).unwrap();
+         assert_eq!(rows.len(), 3);
+         assert_eq!(surface_observation(&rows[0]), Some(surface()));
+         assert_eq!(tab_observation(&rows[1]), Some(tab()));
+         assert_eq!(rows[2], "PROBE:FINAL:EXACT_READY_RESPONSE_LOAD_ERROR");
+         assert!(!rows.join(" ").contains("PRIVATE_SENTINEL"));
+         assert!(!rows.join(" ").contains("PRIVATE_TAB_SENTINEL"));
+     }
+ }
++
++#[test]
++fn historical_response_protocol_is_separate_from_current_turn_and_rejects_text() {
++    let value = serde_json::json!({"stage":"RESPONSE_COMPLETE","eventId":format!("wake-intent-{}","c".repeat(64)),"targetGeneration":1,
++        "targetDigest":"a".repeat(64),"messageDigest":"b".repeat(64),"diagnosticReason":"COMPLETE"});
++    let row = format!("PROBE:HISTORY_RESPONSE:{value}");
++    assert_eq!(historical_response_observation(&row), Some(value.clone()));
++    assert!(sent_response_observation(&row).is_none());
++    assert_eq!(sanitized_rows(&row), [row]);
++    let mut unsafe_value = value;
++    unsafe_value["body"] = serde_json::json!("PRIVATE_CONTEXT");
++    assert!(
++        historical_response_observation(&format!("PROBE:HISTORY_RESPONSE:{unsafe_value}"))
++            .is_none()
++    );
++}
++
++#[test]
++fn task_diagnostics_are_closed_content_free_and_cannot_be_execution_receipts() {
++    let value = serde_json::json!({"toolDiagnostics":{"schemaVersion":1,
++            "basis":"VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT","scope":"EXACT_USER_EXCHANGE",
++            "selectorCoverage":"KNOWN_MARKERS_ONLY","callMarkers":0,"resultMarkers":0,
++            "errorMarkers":0,"busyMarkers":0,"countOverflow":false},"assistantHints":{"schemaVersion":1,
++            "basis":"ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION","toolUnavailable":true,
++            "contextUnavailable":false,"approvalRequested":false,"nativeDispatchMentioned":false,"knownCodes":["HTTP_429"]}});
++    assert_eq!(
++        task_response_diagnostics(&format!("PROBE:TASK:{value}")),
++        Some(value.clone())
++    );
++    for (field, replacement) in [
++        ("knownCodes", serde_json::json!(["PRIVATE_BODY"])),
++        ("knownCodes", serde_json::json!(["HTTP_429", "HTTP_429"])),
++        ("toolUnavailable", serde_json::json!(1)),
++        ("text", serde_json::json!("PRIVATE_KEY")),
++    ] {
++        let mut changed = value.clone();
++        changed["assistantHints"][field] = replacement;
++        let row = format!("PROBE:TASK:{changed}");
++        assert!(task_response_diagnostics(&row).is_none());

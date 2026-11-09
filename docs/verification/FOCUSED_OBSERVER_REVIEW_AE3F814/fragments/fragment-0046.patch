@@ -1,0 +1,75 @@
++            assert!(parse(&args(verb)).unwrap().is_none());
++        }
++        for extra in [
++            vec!["--event-id", "other"],
++            vec!["--conversation-url", "https://chatgpt.com/c/other"],
++            vec!["--retry"],
++        ] {
++            let mut invalid = args("inspect-response");
++            invalid.extend(extra.into_iter().map(String::from));
++            assert!(parse(&invalid).is_err());
++        }
++        let mut invalid = args("inspect-response");
++        invalid[5] = "../other".into();
++        assert!(parse(&invalid).is_err());
++        invalid = args("inspect-response");
++        invalid[7] = "../event".into();
++        assert!(parse(&invalid).is_err());
++    }
++
++    fn record() -> WorkRecord {
++        WorkRecord {
++            request_id: "request-one".into(),
++            event_id: "source-one".into(),
++            message_sha256: "a".repeat(64),
++            target: catdesk_wake::protocol::Target::new(1, "https://chatgpt.com/c/fixture".into())
++                .unwrap(),
++            phase: "OPEN".into(),
++            outcome: None,
++            summary_sha256: None,
++            task_assignment: Some(WorkTaskAssignment {
++                task_id: "task-one".into(),
++                assignment_sha256: "b".repeat(64),
++                scope_sha256: "c".repeat(64),
++            }),
++            reported_status: None,
++        }
++    }
++
++    #[test]
++    fn historical_observation_requires_exact_current_assignment_and_generation() {
++        let mut original = record();
++        assert!(
++            validate_attribution(ResponseKind::Historical, Some(&original), &original.target)
++                .is_ok()
++        );
++        assert_eq!(
++            validate_attribution(ResponseKind::Historical, None, &original.target).unwrap_err(),
++            "WEB_REVIEW_TASK_BINDING_REQUIRED"
++        );
++        let changed = catdesk_wake::protocol::Target::new(2, original.target.url.clone()).unwrap();
++        assert_eq!(
++            validate_attribution(ResponseKind::Historical, Some(&original), &changed).unwrap_err(),
++            "WEB_REVIEW_TASK_BINDING_CHANGED"
++        );
++        original.task_assignment = None;
++        assert_eq!(
++            validate_attribution(ResponseKind::Historical, Some(&original), &original.target)
++                .unwrap_err(),
++            "WEB_REVIEW_TASK_BINDING_REQUIRED"
++        );
++        assert!(validate_attribution(ResponseKind::Sent, None, &original.target).is_ok());
++    }
++
++    #[test]
++    fn attribution_never_exports_message_or_execution_authority() {
++        let attribution = task_attribution("alpha", Some(record()));
++        assert_eq!(attribution["taskId"], "task-one");
++        assert_eq!(attribution["sourceEventId"], "source-one");
++        assert_eq!(attribution["executionVerified"], false);
++        assert!(attribution.get("messageSha256").is_none());
++        assert!(attribution.get("target").is_none());
++        assert!(attribution.get("reportedStatus").is_none());
++        assert!(task_attribution("alpha", None).is_null());
++    }
++}

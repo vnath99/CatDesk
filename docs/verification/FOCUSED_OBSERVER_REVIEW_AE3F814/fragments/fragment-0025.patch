@@ -1,0 +1,31 @@
+diff --git a/wake/src/development_runtime.rs b/wake/src/development_runtime.rs
+index 47831a330f54c7aaedb71a9c508509c5608f0413..eb1915dd85eb9f978bd19fe090f245276769db4c 100644
+--- a/wake/src/development_runtime.rs
++++ b/wake/src/development_runtime.rs
+@@ -2015,25 +2015,25 @@ pub fn run_foreground_host(workspace: &Path) -> Result<()> {
+ 
+ struct LoginPreflight {
+     root: PathBuf,
+     python: PathBuf,
+     profile: PathBuf,
+     primitives: PathBuf,
+     primitives_sha256: String,
+     target_generation: u64,
+     _host: crate::store::HostLease,
+     _browser: File,
+ }
+ 
+-fn browser_child_path(path: &Path, directory: bool) -> Result<PathBuf> {
++pub(crate) fn browser_child_path(path: &Path, directory: bool) -> Result<PathBuf> {
+     let compatible = runtime::browser_process_root(path)?;
+     // Normal spelling must still resolve to the same approved object. A
+     // packaged-process root-view difference is a refusal, never a rebind.
+     if identity(&compatible, directory)? != identity(path, directory)? {
+         return Err("DEV_LOGIN_BROWSER_PATH_IDENTITY_MISMATCH".into());
+     }
+     Ok(compatible)
+ }
+ 
+ fn require_login_target(store: &Store, url: &str) -> Result<()> {
+     let config = store.config()?;
+     let matched = config

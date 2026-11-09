@@ -1,0 +1,99 @@
++            // document order and discard nested duplicates, never borrow a
++            // neighbouring tool/user/historical unit as an answer body.
++            const bodyNodes = bodyCandidates.filter(node => visible(node) &&
++                !bodyCandidates.some(other => other !== node && other.contains(node)));
++            const bodyNode = bodyNodes.length ? bodyNodes[0] : null;
+             let assistantBodyText = '';
+-            if (bodyNode && visible(bodyNode)) {{
+-                const bodyCopy = bodyNode.cloneNode(true);
+-                bodyCopy.querySelectorAll('button, [role="button"], [role="toolbar"], [aria-hidden="true"]')
++            for (const body of bodyNodes) {{
++                const bodyCopy = body.cloneNode(true);
++                bodyCopy.querySelectorAll('button, [role="button"], [role="toolbar"], [aria-hidden="true"], ' + userNodeSelector)
++                    .forEach(control => control.remove());
++                assistantBodyText += ' ' + normalize(bodyCopy.textContent);
++            }}
++            assistantBodyText = normalize(assistantBodyText);
++            // Diagnostic text may include unlabelled text inside the exact
++            // assistant's unique selection-marked body. This never changes
++            // completion/bodyNodes/Copy authority or borrows whole-unit text.
++            let assistantDiagnosticText = '', assistantRefusalText = '', structuredReportQuoted = false, bodyCoverage = null;
++            if (includeDiagnostic || includeExecutionDiagnostic) {{
++            const selectionSelector = '[data-chatgpt-selection-message-id]';
++            const toolSubtree = "[data-tool-call-id], [data-tool-call], [data-tool-response-id], " +
++                "[data-testid='tool-call'], [data-testid='mcp-tool-call'], [data-testid='tool-result'], [data-testid='mcp-tool-result']";
++            const selectionBodies = latestAssistant ? Array.from(new Set([
++                ...(latestAssistant.matches(selectionSelector) ? [latestAssistant] : []),
++                ...latestAssistant.querySelectorAll(selectionSelector)
++            ])) : [];
++            const canonicalBody = selectionBodies.length === 1 && visible(selectionBodies[0]) &&
++                !selectionBodies[0].closest(userNodeSelector + ', ' + toolSubtree) &&
++                !selectionBodies[0].querySelector(userNodeSelector + ', ' + toolSubtree +
++                    ', [data-content-search-unit-key], [data-message-author-role], article[data-turn]')
++                ? selectionBodies[0] : null;
++            const diagnosticCandidates = (canonicalBody ? [...bodyCandidates, canonicalBody] : bodyCandidates)
++                .filter(node => !node.closest(userNodeSelector + ', ' + toolSubtree));
++            const diagnosticNodes = Array.from(new Set(diagnosticCandidates)).filter(node => visible(node) &&
++                !node.closest(userNodeSelector + ', ' + toolSubtree) &&
++                !diagnosticCandidates.some(other => other !== node && other.contains(node)))
++                .sort((a,b) => a === b ? 0 : (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1);
++            if (diagnosticNodes.length > 64) return ['invalid', 0, 0, false, false];
++            const strippedText = (node, maskQuotedCode=false) => {{
++                if(maskQuotedCode && node.closest('pre, code, blockquote'))return '';
++                const copy = node.cloneNode(true);
++                copy.querySelectorAll('button, [role="button"], [role="toolbar"], [aria-hidden="true"], ' +
++                    'h4[data-conversation-role], ' + userNodeSelector + ', ' + toolSubtree)
+                     .forEach(control => control.remove());
+-                assistantBodyText = normalize(bodyCopy.textContent);
++                if(maskQuotedCode)copy.querySelectorAll('pre, code, blockquote').forEach(quoted => quoted.remove());
++                return normalize(copy.textContent);
++            }};
++            assistantDiagnosticText = normalize(diagnosticNodes.map(node=>strippedText(node)).join(' '));
++            assistantRefusalText = normalize(diagnosticNodes.map(node=>strippedText(node,true)).join(' '));
++            structuredReportQuoted=diagnosticNodes.some(node=>Boolean(node.closest('blockquote')||node.querySelector('blockquote')));
++            let unselectedTextPresent = false;
++            if (includeDiagnostic && latestAssistant && !diagnosticNodes.includes(latestAssistant)) {{
++                const remainder = latestAssistant.cloneNode(true);
++                remainder.querySelectorAll(contentSelector + (canonicalBody ? ', ' + selectionSelector : '') +
++                    ', button, [role="button"], [role="toolbar"], [aria-hidden="true"], h4[data-conversation-role], ' +
++                    userNodeSelector + ', ' + toolSubtree).forEach(node => node.remove());
++                unselectedTextPresent = normalize(remainder.textContent).length > 0;
++            }}
++            bodyCoverage = {{selectedBlocks:diagnosticNodes.length,
++                canonicalBody:canonicalBody ? 'QUALIFIED' : 'UNPROVEN',unselectedTextPresent}};
+             }}
+             // ChatGPT can render an old assistant as a load-error placeholder
+             // while retaining Copy/Regenerate controls. Those controls alone
+             // are not evidence of a usable completed response.
+             {RESPONSE_LOAD_ERROR_DETECTOR}
+             if (assistantLoadError(latestAssistant))
+                 return ['load-error', 0, 0, true, false];
++            if (!latestAssistant && pairedTurn && turnsAfterWake.length === 0 &&
++                    unmountedExchangeLoadError(responseBoundary, userNodeSelector))
++                return ['load-error', 0, 0, false, false];
+             const latestAssistantTurn = latestAssistant
+                 ? (latestAssistant.closest("[data-content-search-turn-key]") ||
+                    latestAssistant.closest("[data-testid^='conversation-turn-']") ||
+                    latestAssistant.closest("article[id^='conversation-turn-']") ||
+                    latestAssistant.closest("article[data-turn='assistant']") ||
+                    latestAssistant.parentElement)
+                 : null;
+             const pairedCompletionAction = pairedTurn
+                 ? latestUser.querySelector("button[data-testid='copy-turn-action-button']")
+                 : null;
+             const completionAction = pairedCompletionAction || (latestAssistantTurn
+                 ? latestAssistantTurn.querySelector("button[data-testid='copy-turn-action-button']")
+                 : null);
+             // The paired turn can also hold a USER Copy button. For passive
+             // cooperative completion, climb only inside an assistant-only
+             // subtree; never treat a whole-turn control or a mounted message
+             // selection id as proof that the assistant finished.
+             let assistantCompletionAction = null;
+             for (let scope = latestAssistant; scope && scope !== latestUser; scope = scope.parentElement) {{
+                 if (scope.querySelector(userNodeSelector)) break;
+                 const actions = Array.from(new Set([
+                     ...scope.querySelectorAll("button[data-testid='copy-turn-action-button']"),
+                     ...scope.querySelectorAll(".turn-action-controls button[aria-label='Copy']"),
+                     ...scope.querySelectorAll(".turn-action-controls button[aria-label='Copy message']"),
+-                ])).filter(button => !bodyNode || !bodyNode.contains(button));
++                ])).filter(button => !bodyNodes.some(body => body.contains(button)));

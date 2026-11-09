@@ -1,0 +1,113 @@
+                         "https://chatgpt.com/c/other"]:
+             self.assertFalse(self.probe.exact_url(current, target))
+ 
+ 
++    def test_sent_continuation_diagnostics_cannot_admit_unknown_or_unreceived_delivery(self):
++        url="https://chatgpt.com/c/fixture"
++        event_id="wake-intent-"+"b"*64
++        message="frozen continuation"
++        refs=['catdesk.wake.v1:'+k+':'+v for k,v in [('purpose','NEW_TASK'),('source-event','web-work-'+'a'*64),
++            ('source-turn','initial-context-'+'c'*64),('priority','0'),('expires-utc','100')]]
++        target=dict(generation=1,url=url,digest=hashlib.sha256(url.encode()).hexdigest())
++        digest=hashlib.sha256(message.encode()).hexdigest()
++        value=dict(phase='SENT',messageDigest=digest,target=target,event=dict(eventId=event_id,projectId='alpha',
++            eventType='engineering_attention',targetGeneration=1,message=message,auditReferences=refs),
++            receipt=dict(schemaVersion=1,eventId=event_id,targetGeneration=1,targetDigest=target['digest'],
++                messageDigest=digest,sentUtc=10,evidence='EXACT_USER_MESSAGE_APPENDED'))
++        with tempfile.TemporaryDirectory() as root:
++            path=Path(root)/'deliveries'/(event_id+'.json');path.parent.mkdir()
++            def read(item,**kw):
++                path.write_text(json.dumps(item));checksum=hashlib.sha256(path.read_bytes()).hexdigest()
++                return self.probe.load_delivery_message(path,checksum,url,response_only=True,**kw)
++            with self.assertRaises(ValueError):read(value)
++            self.assertEqual(read(value,sent_diagnostics=True),value)
++            for changed in [value | {'phase':'SUBMITTING'},value | {'receipt':None},
++                value | {'event':value['event'] | {'auditReferences':refs[:-1]}},
++                value | {'event':value['event'] | {'auditReferences':[v.replace('NEW_TASK','ROLLOVER') for v in refs]}}]:
++                with self.assertRaises((ValueError,KeyError)):read(changed,sent_diagnostics=True)
++
++
++    def test_source_review_delivery_is_passive_diagnostics_only_and_exact_receipt_bound(self):
++        url='https://chatgpt.com/c/fixture'
++        identity='web-work-'+'a'*64
++        message='frozen public source review'
++        digest=hashlib.sha256(message.encode()).hexdigest()
++        target=dict(url=url,digest=hashlib.sha256(url.encode()).hexdigest(),generation=1)
++        value=dict(phase='SENT',messageDigest=digest,target=target,
++            event=dict(eventId=identity,projectId='alpha',eventType='source_review',targetGeneration=1,
++                message=message,auditReferences=['catdesk-review-v1:original-frozen-grant']),
++            receipt=dict(schemaVersion=1,eventId=identity,targetGeneration=1,targetDigest=target['digest'],
++                messageDigest=digest,sentUtc=10,evidence='EXACT_USER_MESSAGE_APPENDED'))
++        with tempfile.TemporaryDirectory() as root:
++            path=Path(root)/'deliveries'/(identity+'.json');path.parent.mkdir()
++            def read(item,**flags):
++                path.write_text(json.dumps(item));checksum=hashlib.sha256(path.read_bytes()).hexdigest()
++                result=self.probe.load_delivery_message(path,checksum,url,**flags)
++                self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(),checksum)
++                return result
++            allowed=dict(response_only=True,sent_diagnostics=True,source_review_diagnostics=True)
++            self.assertEqual(read(value,**allowed),value)
++            for flags in [dict(),dict(response_only=True),dict(response_only=True,sent_diagnostics=True),
++                dict(response_only=True,source_review_diagnostics=True),dict(source_review_diagnostics=True),
++                allowed | dict(receipt_only=True)]:
++                with self.subTest(flags=flags),self.assertRaises((ValueError,KeyError)):
++                    read(value,**flags)
++            for changed in [value | dict(phase='SUBMITTING'),value | dict(receipt=None),
++                value | dict(event=value['event'] | dict(auditReferences=[])),
++                value | dict(event=value['event'] | dict(auditReferences=['catdesk-review-v1:a','catdesk-review-v1:b'])),
++                value | dict(event=value['event'] | dict(auditReferences=['catdesk-review-v1:'])),
++                value | dict(event=value['event'] | dict(auditReferences=['catdesk-review-v1:bad/grant'])),
++                value | dict(event=value['event'] | dict(auditReferences=['catdesk-review-v1:'+'a'*129])),
++                value | dict(event=value['event'] | dict(eventId='wake-intent-'+'a'*64)),
++                value | dict(event=value['event'] | dict(targetGeneration=2)),
++                value | dict(receipt=value['receipt'] | dict(evidence='UNVERIFIED')),
++                value | dict(receipt=value['receipt'] | dict(messageDigest='b'*64))]:
++                with self.subTest(changed=changed),self.assertRaises((ValueError,KeyError)):
++                    read(changed,**allowed)
++
++
++    def awaited_response(self, states, deadline=5, late_complete=False):
++        clock=[0.0];sleeps=[];observed=[]
++        delivery=dict(messageDigest='a'*64,event=dict(eventId='web-work-'+'b'*64,message='PRIVATE_USER'),
++            target=dict(generation=1,digest='c'*64))
++        sink=types.SimpleNamespace(response_observation_controls=None)
++        sequence=iter(states)
++        def observe(cdp,message,digest):
++            self.assertIs(cdp,controlled)
++            self.assertEqual((message,digest),('PRIVATE_USER','a'*64))
++            item=next(sequence);observed.append(item)
++            if isinstance(item,Exception):raise item
++            if isinstance(item,tuple):
++                state,reason=item[:2]
++                sink.response_observation_reason=reason
++                sink.response_observation_controls=dict(item[2]) if len(item)>2 else None
++            else:
++                state=item
++                sink.response_observation_reason='GENERATION_ACTIVE' if state=='RESPONSE_PENDING' else 'COMPLETE'
++                sink.response_observation_controls=None
++            if late_complete and state=='RESPONSE_COMPLETE':clock[0]=deadline+1
++            return state
++        sink.observe_cooperative_response=observe
++        def sleep(seconds):
++            self.assertGreater(seconds,0);self.assertLessEqual(seconds,1)
++            sleeps.append(seconds);clock[0]+=seconds
++        controlled=object();output=io.StringIO()
++        with contextlib.redirect_stdout(output):
++            completed=self.probe.report_sent_response(sink,controlled,delivery,sleep=sleep,
++                await_deadline=deadline,monotonic=lambda:clock[0])
++        self.assertNotIn('PRIVATE_',output.getvalue())
++        return completed,output.getvalue(),clock[0],sleeps,observed
++
++
++    def test_existing_response_wait_keeps_owner_until_two_fresh_completed_samples(self):
++        result,out,elapsed,sleeps,observed=self.awaited_response([
++            'RESPONSE_PENDING','RESPONSE_PENDING','RESPONSE_COMPLETE','RESPONSE_COMPLETE'])
++        self.assertTrue(result)
++        self.assertEqual(observed[-2:],['RESPONSE_COMPLETE','RESPONSE_COMPLETE'])
++        self.assertEqual(observed.count('RESPONSE_PENDING'),2)
++        self.assertEqual(elapsed,2.25)
++        self.assertEqual(json.loads(out.split('PROBE:RESPONSE:')[1])['stage'],'RESPONSE_COMPLETE')
++        # If generation resumes during the stability spacing, start a fresh pair.
++        result,_,_,_,observed=self.awaited_response([
++            'RESPONSE_PENDING','RESPONSE_COMPLETE','RESPONSE_PENDING','RESPONSE_COMPLETE','RESPONSE_COMPLETE'])
++        self.assertTrue(result)

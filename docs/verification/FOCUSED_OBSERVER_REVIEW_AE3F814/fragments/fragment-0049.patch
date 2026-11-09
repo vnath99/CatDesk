@@ -1,0 +1,51 @@
++                "allow_without_plan",
++                json!("PRIVATE_FLAG"),
++                "PLAN_FLAG_NOT_BOOLEAN",
++            ),
++            ("dry_run", json!(true), "DRY_RUN_NOT_FALSE"),
++            ("include_full_output", json!(true), "FULL_OUTPUT_NOT_FALSE"),
++            ("cwd", json!("PRIVATE_WORKSPACE"), "CWD_OVERRIDE_FORBIDDEN"),
++            ("timeout", json!(1), "TIMEOUT_OVERRIDE_FORBIDDEN"),
++            (
++                "PRIVATE_FIELD",
++                json!("PRIVATE_VALUE"),
++                "UNSUPPORTED_OUTER_FIELD",
++            ),
++        ] {
++            let mut arguments = normal.clone();
++            arguments[field] = value;
++            cases.push((arguments, invariant));
++        }
++        for (arguments, invariant) in cases {
++            let request: JsonRpcRequest = serde_json::from_value(json!({"jsonrpc":"2.0",
++                "id":"synthetic-refusal","method":"tools/call",
++                "params":{"name":"run_command","arguments":arguments}}))
++            .unwrap();
++            let response = serde_json::to_value(
++                handle_cached("never-admitted-private-workspace", &request).await,
++            )
++            .unwrap();
++            assert_eq!(
++                response["error"]["message"],
++                "WEB_TASK_CACHED_ARGUMENTS_INVALID"
++            );
++            assert_eq!(
++                response["error"]["data"],
++                json!({
++                "phase":"CACHED_ENVELOPE_VALIDATION", "invariant":invariant,
++                "nativeExecutionAttempted":false, "retryAuthorized":false})
++            );
++            assert!(response.get("result").is_none());
++            assert!(!response.to_string().contains("PRIVATE_"));
++        }
++        let metadata = cached_transport_metadata();
++        assert_eq!(
++            metadata["outerArguments"]["mustBeAbsent"],
++            json!(["cwd", "timeout"])
++        );
++        assert_eq!(
++            metadata["outerArguments"]["falseOnly"],
++            json!(["dry_run", "include_full_output"])
++        );
++    }
+ }

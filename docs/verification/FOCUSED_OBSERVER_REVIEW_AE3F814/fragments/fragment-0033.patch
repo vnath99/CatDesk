@@ -1,0 +1,208 @@
++        || store.delivery(&delivery.event.event_id)?.as_ref() != Some(delivery)
++    {
++        return Err("READINESS_WORK_DELIVERY_CHANGED".into());
++    }
++    Ok(())
++}
++
++#[cfg(any(windows, test))]
++fn exact_hash(id: &str) -> bool {
++    id.len() == 64
++        && id
++            .bytes()
++            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
++}
++
++#[cfg(windows)]
++fn inspect_readiness(
++    store: &Store,
++    project: &str,
++    target: &Target,
++    delivery: Option<&crate::store::Delivery>,
++    mode: Mode,
++    keep_current: &dyn Fn() -> Result<()>,
++) -> Result<serde_json::Value> {
++    if !crate::protocol::valid_id(project) {
++        return Err("READINESS_PROJECT_INVALID".into());
++    }
++    let delivery = delivery.ok_or("READINESS_WORK_DELIVERY_CHANGED")?;
++    require_selection(store, project, target)?;
++    keep_current()?;
++    let _host = if mode == Mode::ResponseOwnerHeld {
++        None
++    } else {
++        Some(store.host_lock()?)
++    };
++    let _browser = acquire_browser_quiescence(store)?;
++    require_selection(store, project, target)?;
++    keep_current()?;
++    require_delivery(store, project, target, delivery, mode)?;
++    // Retain installed owner/adapter identity without demanding that the old
++    // selected adapter implement this new read-only diagnostic operation.
++    installed_browser_directory(store)?;
++    require_plain_install_directory(&store.root().join("runtime"))?;
++    let python = crate::development_runtime::browser_child_path(
++        &store.root().join("runtime/python.exe"),
++        false,
++    )?;
++    let profile = crate::development_runtime::browser_child_path(
++        &store.root().join("browser-profile"),
++        true,
++    )?;
++    let source_primitives = Path::new(env!("CARGO_MANIFEST_DIR"))
++        .parent()
++        .ok_or("READINESS_SOURCE_UNAVAILABLE")?
++        .join("scripts/wake_bridge.py");
++    let image_directory = std::env::current_exe()
++        .map_err(|_| "READINESS_SOURCE_UNAVAILABLE")?
++        .parent()
++        .ok_or("READINESS_SOURCE_UNAVAILABLE")?
++        .to_path_buf();
++    let expected = format!(
++        "{:x}",
++        Sha256::digest(include_bytes!("../../scripts/wake_bridge.py"))
++    );
++    let primitives = verified_packaged_primitives(&source_primitives, &image_directory, &expected)?;
++    let program = include_bytes!("../../scripts/wake_readiness_visual_probe.py");
++    let loader = crate::readiness_probe::embedded_program_loader(program)?;
++    let delivery_path = store
++        .root()
++        .join("deliveries")
++        .join(format!("{}.json", delivery.event.event_id));
++    require_plain_install_file(&delivery_path)?;
++    let delivery_hash = sha256_file(&delivery_path, "READINESS_WORK_DELIVERY_CHANGED")?;
++    let mut command = Command::new(python);
++    command
++        .arg("-I")
++        .arg("-c")
++        .arg(loader)
++        .arg("--await-start")
++        .arg("--profile")
++        .arg(profile)
++        .arg("--conversation-url")
++        .arg(&target.url)
++        .arg("--primitives")
++        .arg(primitives)
++        .arg("--primitives-sha256")
++        .arg(expected)
++        .arg("--read-only")
++        .arg("--seconds")
++        .arg(if mode == Mode::ResponseOwnerHeld {
++            "60"
++        } else {
++            "20"
++        })
++        .arg("--delivery-file")
++        .arg(&delivery_path)
++        .arg("--delivery-sha256")
++        .arg(&delivery_hash)
++        .arg("--response-only")
++        .arg("--task-diagnostics")
++        .current_dir(store.root());
++    if mode == Mode::ResponseOwnerHeld {
++        command.arg("--await-existing-response");
++    }
++    if mode == Mode::HistoricalDiagnostics {
++        command.arg("--historical-response");
++    }
++    if mode == Mode::SentDiagnostics && delivery.event.event_type == "source_review" {
++        command.arg("--source-review-diagnostics");
++    }
++    let mut rows = Vec::new();
++    let result = crate::readiness_probe::run_bounded_observed_program(
++        &mut command,
++        Duration::from_secs(90),
++        &mut rows,
++        program,
++    );
++    // These failures are returned only after Job-empty and pipe-reader exit.
++    // Any other native ownership failure cannot claim cleanup or page state.
++    if let Err(reason) = result
++        && !matches!(
++            reason,
++            "PROBE_PROCESS_TIMEOUT"
++                | "PROBE_PIPE_FAILED"
++                | "PROBE_FAILED"
++                | "PROBE_OUTPUT_FAILED"
++                | "PROBE_OUTPUT_TOO_LARGE"
++                | "PROBE_OUTPUT_INVALID"
++        )
++    {
++        return Err(reason.into());
++    }
++    require_selection(store, project, target)?;
++    keep_current()?;
++    require_delivery(store, project, target, delivery, mode)?;
++    if sha256_file(&delivery_path, "READINESS_WORK_DELIVERY_CHANGED")? != delivery_hash {
++        return Err("READINESS_WORK_DELIVERY_CHANGED".into());
++    }
++    let final_state = rows
++        .iter()
++        .rev()
++        .find_map(|row| row.strip_prefix("PROBE:FINAL:"));
++    let phase = rows
++        .iter()
++        .rev()
++        .find_map(|row| row.strip_prefix("PROBE:PHASE:"));
++    let surface = rows
++        .iter()
++        .rev()
++        .find_map(|row| crate::readiness_probe::surface_observation(row));
++    let tabs = rows
++        .iter()
++        .rev()
++        .find_map(|row| crate::readiness_probe::tab_observation(row));
++    let response = if result.is_ok()
++        && phase == Some("BROWSER_CLOSED")
++        && final_state.is_some()
++        && tabs
++            .as_ref()
++            .is_some_and(|v| v["state"] == "TARGET_TAB_EXACT" && v["candidateFrame"] == "TOP")
++        && surface
++            .as_ref()
++            .is_some_and(|v| v["route"] == "EXACT" && v["document"] == "COMPLETE")
++        && !rows
++            .iter()
++            .any(|row| row.starts_with("PROBE:RESPONSE_STATE:"))
++    {
++        let values: Vec<_> = rows
++            .iter()
++            .filter_map(|row| {
++                if mode == Mode::HistoricalDiagnostics {
++                    crate::readiness_probe::historical_response_observation(row)
++                } else {
++                    crate::readiness_probe::sent_response_observation(row)
++                }
++            })
++            .collect();
++        if values.len() == 1 {
++            response::validate_observation(delivery, &values[0])?;
++            Some(values[0].clone())
++        } else {
++            None
++        }
++    } else {
++        None
++    };
++    let diagnostics: Vec<_> = rows
++        .iter()
++        .filter_map(|row| crate::readiness_probe::task_response_diagnostics(row))
++        .collect();
++    let task_diagnostics = if mode != Mode::ResponseOwnerHeld
++        && response
++            .as_ref()
++            .is_some_and(|v| v["stage"] == "RESPONSE_COMPLETE")
++        && diagnostics.len() == 1
++    {
++        Some(&diagnostics[0])
++    } else {
++        None
++    };
++    Ok(
++        serde_json::json!({"action":"web_work_inspect","projectId":project,
++        "status":if result.is_ok() && final_state.is_some() {"BROWSER_READINESS_OBSERVED"} else {"BROWSER_OBSERVATION_INCOMPLETE"},
++        "failureReason":result.err(),"lastPhase":phase,"finalState":final_state,
++        "browserObservation":surface,"tabObservation":tabs,"observations":rows,
++        "targetGeneration":target.generation,"targetDigest":target.digest,"eventId":delivery.event.event_id,
++        "sourceDeliverySha256":delivery_hash,"advisory":true,"browserReadOnly":true,
++        "sendAttempted":false,"receiptCreated":false,"stateChanged":false,"retryAuthorized":false,
