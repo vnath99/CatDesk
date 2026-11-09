@@ -1709,5 +1709,25 @@
       "installedAutomaticReadbackAcceptance": "NOT_QUALIFIED",
       "c1NativeCoding": "INCOMPLETE"
     }
+  },
+  "argumentFailureHints": {
+    "observedUtc": "2026-11-09T01:35:13.266601+00:00",
+    "status": "SOURCE_PASS_LIVE_NOT_RUN",
+    "schemaVersion": 4,
+    "legacySchemasAccepted": [
+      1,
+      2,
+      3
+    ],
+    "toolNames": 4,
+    "argumentCategories": 6,
+    "cachedInvariantNames": 12,
+    "arbitraryContentExported": false,
+    "executionOrRetryAuthority": false,
+    "domTests": 96,
+    "probeTests": 39,
+    "nativeReadinessTests": 19,
+    "rootAndWakeClippy": "PASS",
+    "installedAcceptance": "NOT_RUN"
   }
 }

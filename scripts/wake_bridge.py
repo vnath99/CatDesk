@@ -198,25 +198,37 @@ TASK_REFUSAL_CATEGORIES = ("IDENTITY_MISMATCH", "TOOL_UNAVAILABLE", "CONTEXT_UNA
                            "AUTHORIZATION_REQUIRED", "DISPATCH_REJECTED")
 TASK_UNAVAILABLE_SUBJECTS = ("RUN_COMMAND", "CENTRAL_TASK_TOOL", "NATIVE_CALL",
                              "PRIVATE_CONTEXT", "EXECUTION_KEY", "CATDESK_APP")
+TASK_MENTIONED_TOOLS = ("RUN_COMMAND", "CENTRAL_TASK_TOOL", "NATIVE_DISPATCH", "NATIVE_STATUS")
+TASK_ARGUMENT_ISSUES = ("JSON_SYNTAX", "MISSING_REQUIRED_FIELD", "UNEXPECTED_FIELD",
+                        "TYPE_MISMATCH", "TOOL_NAME_REJECTED", "CACHED_ENVELOPE_REJECTED")
+TASK_CACHED_INVARIANTS = ("ARGUMENTS_NOT_OBJECT", "COMMAND_NOT_STRING", "PLAN_FLAG_NOT_BOOLEAN",
+                          "DRY_RUN_NOT_FALSE", "FULL_OUTPUT_NOT_FALSE", "CWD_OVERRIDE_FORBIDDEN",
+                          "TIMEOUT_OVERRIDE_FORBIDDEN", "UNSUPPORTED_OUTER_FIELD", "COMMAND_TOO_LARGE",
+                          "RESERVED_PREFIX_INVALID", "PAYLOAD_JSON_INVALID", "PAYLOAD_NOT_OBJECT")
 
 
 def valid_task_response_hints(value: Any) -> bool:
     """Closed assistant-text hints, never tool availability or execution proof."""
     flags = ("toolUnavailable", "contextUnavailable", "approvalRequested", "nativeDispatchMentioned")
     version = value.get("schemaVersion") if isinstance(value, dict) else None
-    fields = {"schemaVersion", "basis", "knownCodes"} | ({"refusalCategories", "scanTruncated"} if version in (2, 3) else set())
-    if version == 3:
+    fields = {"schemaVersion", "basis", "knownCodes"} | ({"refusalCategories", "scanTruncated"} if version in (2, 3, 4) else set())
+    if version in (3, 4):
         fields.add("unavailableSubjects")
+    extra = {"mentionedTools":TASK_MENTIONED_TOOLS, "argumentIssues":TASK_ARGUMENT_ISSUES,
+             "cachedInvariants":TASK_CACHED_INVARIANTS} if version == 4 else {}
+    fields.update(extra)
     return (isinstance(value, dict) and set(value) == set(flags) | fields
-            and type(version) is int and version in {1, 2, 3}
+            and type(version) is int and version in {1, 2, 3, 4}
             and value["basis"] == "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION"
             and all(type(value[key]) is bool for key in flags)
             and isinstance(value["knownCodes"], list)
             and value["knownCodes"] == [code for code in TASK_RESPONSE_CODES if code in value["knownCodes"]]
             and (version == 1 or (type(value["scanTruncated"]) is bool and isinstance(value["refusalCategories"], list)
                  and value["refusalCategories"] == [kind for kind in TASK_REFUSAL_CATEGORIES if kind in value["refusalCategories"]]))
-            and (version != 3 or (isinstance(value["unavailableSubjects"], list)
-                 and value["unavailableSubjects"] == [subject for subject in TASK_UNAVAILABLE_SUBJECTS if subject in value["unavailableSubjects"]])))
+            and (version not in (3, 4) or (isinstance(value["unavailableSubjects"], list)
+                 and value["unavailableSubjects"] == [subject for subject in TASK_UNAVAILABLE_SUBJECTS if subject in value["unavailableSubjects"]]))
+            and all(isinstance(value[field], list) and value[field] == [item for item in allowed if item in value[field]]
+                    for field, allowed in extra.items()))
 
 
 def valid_tool_marker_diagnostics(value: Any) -> bool:
@@ -2107,12 +2119,34 @@ class CdpSink:
                         if (missing.test(left) || missing.test(right)) unavailableSubjects.add(span.subject);
                     }});
                 }}
-                result.push({{schemaVersion:3,basis:'ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION',
+                const mentionedTools = {{
+                    RUN_COMMAND:/\\brun_command\\b/.test(text),
+                    CENTRAL_TASK_TOOL:/\\bcatdesk_web_task_tool\\b/.test(text),
+                    NATIVE_DISPATCH:/\\bnative\\.codex\\.dispatch\\b/.test(text),
+                    NATIVE_STATUS:/\\bnative\\.codex\\.status\\b/.test(text)
+                }};
+                // Fixed classifications only. No unknown field name, value,
+                // provider excerpt, parsed envelope or arbitrary code leaves
+                // the browser. A reported cause remains an assistant hint;
+                // it cannot establish a fresh call or authorize a retry.
+                const argumentIssues = {{
+                    JSON_SYNTAX:/(?:invalid|malformed|parse|parsing|syntax).{{0,50}}json|json.{{0,50}}(?:invalid|malformed|parse|parsing|syntax)|unexpected token|unterminated (?:string|object)/.test(text),
+                    MISSING_REQUIRED_FIELD:/(?:missing|required).{{0,45}}(?:field|argument|parameter)|(?:field|argument|parameter).{{0,45}}(?:missing|required)/.test(text),
+                    UNEXPECTED_FIELD:/(?:unknown|unexpected|unrecognized|unsupported|extra).{{0,35}}(?:field|argument|parameter|property)|additional properties (?:are )?not allowed/.test(text),
+                    TYPE_MISMATCH:/(?:invalid|incorrect|wrong|unexpected).{{0,25}}type|(?:expected|must be|must have).{{0,30}}(?:object|string|boolean|integer|array)/.test(text),
+                    TOOL_NAME_REJECTED:/(?:unknown|unrecognized|unsupported|invalid|no such).{{0,20}}(?:tool|function)|(?:tool|function).{{0,35}}(?:not found|does not exist)/.test(text),
+                    CACHED_ENVELOPE_REJECTED:hasCode('WEB_TASK_CACHED_ARGUMENTS_INVALID')
+                }};
+                const cachedInvariants = {json.dumps(TASK_CACHED_INVARIANTS)};
+                result.push({{schemaVersion:4,basis:'ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION',
                     toolUnavailable,contextUnavailable,
                     approvalRequested,
                     nativeDispatchMentioned:text.includes('native.codex.dispatch'),
                     scanTruncated:assistantBodyText.length > 32768,
                     unavailableSubjects:{json.dumps(TASK_UNAVAILABLE_SUBJECTS)}.filter(subject => unavailableSubjects.has(subject)),
+                    mentionedTools:{json.dumps(TASK_MENTIONED_TOOLS)}.filter(tool => mentionedTools[tool]),
+                    argumentIssues:{json.dumps(TASK_ARGUMENT_ISSUES)}.filter(issue => argumentIssues[issue]),
+                    cachedInvariants:cachedInvariants.filter(hasCode),
                     knownCodes:known.filter(hasCode),
                     refusalCategories:{json.dumps(TASK_REFUSAL_CATEGORIES)}.filter(kind => refusals[kind])}});
             }}

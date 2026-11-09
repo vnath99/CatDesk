@@ -9024,3 +9024,25 @@ This is live source-controller qualification with an installed sender, not an
 installed automatic-readback upgrade or full C1 acceptance. Existing protected
 package-promotion prerequisites remain unchanged. C1 coding and task-specific
 result Wake remain incomplete; C2 is not started. No operator relay is pending.
+
+
+## 2026-11-09T01:35:13.266601+00:00 — bounded argument-failure readback
+
+SOURCE PASS, LIVE NOT RUN for this extension. The existing exact-exchange
+response classifier now emits assistant-hint schema 4 with closed lists of
+four known tool names, six argument-failure categories and twelve public cached-
+envelope invariants. It exports no error excerpt, unknown field name, argument
+value, private context, draft or key. Empty lists remain unproved causes; text
+mentions never prove a fresh call, tool availability, execution or retry grant.
+Native readers retain schemas 1–3 and reject unknown/duplicate/out-of-order
+labels or added content. No browser action, sender, scheduler or authority was
+added; `operator web review inspect-response` is the same read-only operation.
+
+Tests pass: 96 actual DOM tests, 39 probe tests, 19 native readiness tests,
+formatting, strict root and Wake Clippy. Coverage includes exact code boundaries,
+private-value exclusion, empty/unknown/duplicate categories, legacy readers,
+wrong/duplicate exchanges and bounded scans. Next is one read-only observation
+of the already completed serving continuation with a matched separate controller.
+No USER message or native call will be sent. Installed upgrade and C1 coding
+remain incomplete; the observed INVALID_ARGUMENT is not assigned an invented
+specific cause. Existing protected promotion gates remain unchanged.

@@ -1124,7 +1124,7 @@ class CurrentDomTests(unittest.TestCase):
         self.sink.response_snapshot(CurrentDom(answer=body), 'exact wake message',
             require_usable_body=True, diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
         self.assertTrue(bridge.valid_task_response_hints(hints))
-        self.assertEqual(hints['schemaVersion'], 3)
+        self.assertEqual(hints['schemaVersion'], 4)
         self.assertEqual(hints['knownCodes'], ['WEB_TASK_CACHED_ARGUMENTS_INVALID', 'INVALID_ARGUMENT'])
         self.assertEqual(hints['refusalCategories'], ['DISPATCH_REJECTED'])
         self.assertNotIn('PRIVATE_CONTEXT_MARKER', json.dumps(hints))
@@ -1151,7 +1151,7 @@ class CurrentDomTests(unittest.TestCase):
                 for bad in [['PRIVATE_KEY_MARKER'], ['NATIVE_CALL','NATIVE_CALL'],
                             ['EXECUTION_KEY','RUN_COMMAND'], 'NATIVE_CALL', None]:
                     self.assertFalse(bridge.valid_task_response_hints(hints | {'unavailableSubjects':bad}))
-                for bad in [{}, [], True, 4]:
+                for bad in [{}, [], True, 5]:
                     self.assertFalse(bridge.valid_task_response_hints(hints | {'schemaVersion':bad}))
 
     def test_bounded_classifier_reports_incomplete_coverage_without_exporting_long_body(self):
@@ -1161,7 +1161,41 @@ class CurrentDomTests(unittest.TestCase):
         self.assertTrue(bridge.valid_task_response_hints(hints))
         self.assertTrue(hints['scanTruncated'])
         self.assertEqual(hints['knownCodes'], [])
-        self.assertLess(len(json.dumps(hints)), 800)
+        self.assertLess(len(json.dumps(hints)), 1100)
+
+    def test_argument_hints_report_only_closed_tools_causes_and_invariants(self):
+        hints = {}
+        body = ('run_command returned INVALID_ARGUMENT: invalid JSON, missing required field. '
+                'native.codex.dispatch was not attempted. CWD_OVERRIDE_FORBIDDEN '
+                'PAYLOAD_JSON_INVALID PRIVATE_FIELD=PRIVATE_VALUE executionKey=' + 'e'*64)
+        self.sink.response_snapshot(CurrentDom(answer=body), 'exact wake message',
+            diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
+        self.assertTrue(bridge.valid_task_response_hints(hints))
+        self.assertEqual(hints['mentionedTools'], ['RUN_COMMAND','NATIVE_DISPATCH'])
+        self.assertEqual(hints['argumentIssues'], ['JSON_SYNTAX','MISSING_REQUIRED_FIELD'])
+        self.assertEqual(hints['cachedInvariants'], ['CWD_OVERRIDE_FORBIDDEN','PAYLOAD_JSON_INVALID'])
+        for private in ['PRIVATE_FIELD','PRIVATE_VALUE','executionKey','e'*64]:
+            self.assertNotIn(private,json.dumps(hints))
+        for field in ['mentionedTools','argumentIssues','cachedInvariants']:
+            for bad in [['PRIVATE_VALUE'], hints[field]*2, True, {}, None]:
+                self.assertFalse(bridge.valid_task_response_hints(hints | {field:bad}))
+
+    def test_argument_hints_preserve_uncertainty_and_exact_code_boundaries(self):
+        hints = {}
+        self.sink.response_snapshot(CurrentDom(answer='INVALID_ARGUMENT. '
+            'NOT_CWD_OVERRIDE_FORBIDDEN_OTHER PRIVATE_TOOL_NAME.'), 'exact wake message',
+            diagnostic={}, tool_diagnostic={}, execution_diagnostic=hints)
+        self.assertEqual(hints['knownCodes'], ['INVALID_ARGUMENT'])
+        for field in ['mentionedTools','argumentIssues','cachedInvariants']:
+            self.assertEqual(hints[field],[])
+        self.assertNotIn('retryAuthorized',hints)
+        for version in [1,2,3]:
+            legacy = {k:v for k,v in hints.items() if k not in ['mentionedTools','argumentIssues','cachedInvariants']}
+            legacy['schemaVersion']=version
+            if version<3:legacy.pop('unavailableSubjects')
+            if version==1:
+                legacy.pop('refusalCategories');legacy.pop('scanTruncated')
+            self.assertTrue(bridge.valid_task_response_hints(legacy))
 
     def test_identity_refusal_and_exact_code_boundaries_are_closed(self):
         hints = {}

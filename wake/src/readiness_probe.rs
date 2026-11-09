@@ -876,6 +876,30 @@ fn task_diagnostics_are_closed_content_free_and_cannot_be_execution_receipts() {
         bad["assistantHints"]["unavailableSubjects"] = invalid;
         assert!(sanitized_rows(&format!("PROBE:TASK:{bad}")).is_empty());
     }
+    let mut expanded = scoped.clone();
+    expanded["assistantHints"]["schemaVersion"] = serde_json::json!(4);
+    expanded["assistantHints"]["mentionedTools"] =
+        serde_json::json!(["RUN_COMMAND", "NATIVE_DISPATCH"]);
+    expanded["assistantHints"]["argumentIssues"] = serde_json::json!(["JSON_SYNTAX"]);
+    expanded["assistantHints"]["cachedInvariants"] = serde_json::json!(["PAYLOAD_JSON_INVALID"]);
+    assert_eq!(
+        task_response_diagnostics(&format!("PROBE:TASK:{expanded}")),
+        Some(expanded.clone())
+    );
+    for field in ["mentionedTools", "argumentIssues", "cachedInvariants"] {
+        for invalid in [
+            serde_json::json!(["PRIVATE_VALUE"]),
+            serde_json::json!(true),
+            serde_json::json!(["JSON_SYNTAX", "JSON_SYNTAX"]),
+        ] {
+            let mut bad = expanded.clone();
+            bad["assistantHints"][field] = invalid;
+            assert!(sanitized_rows(&format!("PROBE:TASK:{bad}")).is_empty());
+        }
+    }
+    let mut bad = expanded;
+    bad["assistantHints"]["argumentValues"] = serde_json::json!("PRIVATE_CONTEXT");
+    assert!(sanitized_rows(&format!("PROBE:TASK:{bad}")).is_empty());
     let mut bad = scoped;
     bad["assistantHints"]["rawText"] = serde_json::json!("PRIVATE_BODY");
     assert!(sanitized_rows(&format!("PROBE:TASK:{bad}")).is_empty());

@@ -185,7 +185,7 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
         "EXECUTION_KEY",
         "CATDESK_APP",
     ];
-    let valid_subjects = version != 3
+    let valid_subjects = version < 3
         || hints
             .get("unavailableSubjects")
             .and_then(Value::as_array)
@@ -197,6 +197,59 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
                     .collect();
                 *selected == canonical
             });
+    let categories: &[(&str, &[&str])] = &[
+        (
+            "mentionedTools",
+            &[
+                "RUN_COMMAND",
+                "CENTRAL_TASK_TOOL",
+                "NATIVE_DISPATCH",
+                "NATIVE_STATUS",
+            ],
+        ),
+        (
+            "argumentIssues",
+            &[
+                "JSON_SYNTAX",
+                "MISSING_REQUIRED_FIELD",
+                "UNEXPECTED_FIELD",
+                "TYPE_MISMATCH",
+                "TOOL_NAME_REJECTED",
+                "CACHED_ENVELOPE_REJECTED",
+            ],
+        ),
+        (
+            "cachedInvariants",
+            &[
+                "ARGUMENTS_NOT_OBJECT",
+                "COMMAND_NOT_STRING",
+                "PLAN_FLAG_NOT_BOOLEAN",
+                "DRY_RUN_NOT_FALSE",
+                "FULL_OUTPUT_NOT_FALSE",
+                "CWD_OVERRIDE_FORBIDDEN",
+                "TIMEOUT_OVERRIDE_FORBIDDEN",
+                "UNSUPPORTED_OUTER_FIELD",
+                "COMMAND_TOO_LARGE",
+                "RESERVED_PREFIX_INVALID",
+                "PAYLOAD_JSON_INVALID",
+                "PAYLOAD_NOT_OBJECT",
+            ],
+        ),
+    ];
+    let valid_argument_hints = version != 4
+        || categories.iter().all(|(field, allowed)| {
+            hints
+                .get(*field)
+                .and_then(Value::as_array)
+                .is_some_and(|selected| {
+                    let canonical: Vec<Value> = allowed
+                        .iter()
+                        .filter(|item| selected.contains(&json!(item)))
+                        .map(|item| json!(item))
+                        .collect();
+                    *selected == canonical
+                })
+        });
     let selected = hints.get("knownCodes")?.as_array()?;
     let canonical: Vec<Value> = codes
         .iter()
@@ -206,7 +259,9 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
     if value.as_object()?.len() != 2
         || tools.as_object()?.len() != 9
         || hints.as_object()?.len()
-            != if version == 3 {
+            != if version == 4 {
+                13
+            } else if version == 3 {
                 10
             } else if version == 2 {
                 9
@@ -222,12 +277,13 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
         || !counts
             .iter()
             .all(|field| tools[*field].as_u64().is_some_and(|n| n <= 64))
-        || !matches!(version, 1..=3)
+        || !matches!(version, 1..=4)
         || hints["basis"] != "ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION"
         || !flags.iter().all(|field| hints[*field].as_bool().is_some())
         || *selected != canonical
         || !valid_refusals
         || !valid_subjects
+        || !valid_argument_hints
     {
         return None;
     }
