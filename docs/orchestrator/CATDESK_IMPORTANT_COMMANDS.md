@@ -6907,3 +6907,37 @@ unknown state, user/code exclusions, privacy, zero mutations and changed message
 identity. Next is one bounded read-only observation of the completed original
 serving continuation; no sender, backend, tunnel or Wake start is required.
 C1 remains incomplete; no original native call or USER message is replayed.
+
+
+## 2026-11-09T01:54:49.200658+00:00 — exact-exchange trace observation, live
+
+PASS for passive observation: the completed original exchange remained COMPLETE
+with INVALID_ARGUMENT. No known completed-work trace control qualified; counts
+of linked/visible panels and expanded/collapsed/unproved controls were all zero.
+This does not prove absent tools or absence of every possible trace UI. No
+control was clicked or inferred safe from an active tab. The source controller
+finished in 35.718 seconds; all 1,081 pins matched, its browser exited,
+profile/Wake counts are zero and port 3200 is closed. No USER send, native call,
+backend/tunnel/Wake start, binding, package or authentication change occurred.
+The native task is still unattempted; C1 and installed readback remain incomplete.
+
+Runtime source 5ff6bc46392ec315a03d11598d35aa82f105557d; separate controller
+67fe4656a0534d2c8fdf7a226bf52b2ab8ccd7887bb17bf6d5276d0bdaf8c640;
+adjacent observer fc5c029a6af2deda6d1a65c1571f2756e748105639c0d233ee60ed8156ba4827.
+
+Next eligibility assessment: an actual Web-caller no-effect cached-route shape
+probe may distinguish client validation from CatDesk validation. The retained
+empty-envelope probe used the Codex connector, which does not prove this Web
+caller's argument handling. Do not repeat that existing connector probe.
+The ordinary work-request API refuses replacement of the original OPEN task;
+do not close it, create another grant/project, or send an arbitrary message.
+A probe needs a typed, stable same-task continuation in the existing context/
+WakeIntent journal, prior SENT+COMPLETE proof, fresh original native no-effect
+checks and one bounded existing-owner serving window. It must request only the
+literal empty reserved envelope, omit every optional outer argument and carry
+no execution key, nativeCall or private capsule. No native dispatch is permitted
+by the diagnostic request. Unknown delivery must remain unreplayed. This
+transition is NOT IMPLEMENTED and no probe was queued or sent. Assess the exact
+existing guards and add only missing integration/tests before attempting it.
+No operator response relay or discretionary approval is pending. Do not expand
+unqualified traces, add more speculative selectors or bypass release authority.

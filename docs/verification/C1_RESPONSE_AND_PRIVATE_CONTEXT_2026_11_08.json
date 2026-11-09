@@ -1787,6 +1787,40 @@
     "probeTests": 39,
     "nativeReadinessTests": 19,
     "strictRootAndWakeClippy": "PASS",
-    "installedAcceptance": "NOT_RUN"
+    "installedAcceptance": "NOT_RUN",
+    "live": {
+      "observedUtc": "2026-11-09T01:54:49.200658+00:00",
+      "status": "OBSERVED_NO_QUALIFIED_TRACE_CONTROL",
+      "sourceCommit": "5ff6bc46392ec315a03d11598d35aa82f105557d",
+      "controllerSha256": "67fe4656a0534d2c8fdf7a226bf52b2ab8ccd7887bb17bf6d5276d0bdaf8c640",
+      "elapsedSeconds": 35.718,
+      "responseStage": "RESPONSE_COMPLETE",
+      "trace": {
+        "basis": "PRESENTATION_ONLY_NOT_TOOL_RECEIPT",
+        "collapsedControls": 0,
+        "expandedControls": 0,
+        "knownControls": 0,
+        "linkedPanels": 0,
+        "schemaVersion": 1,
+        "scope": "EXACT_USER_EXCHANGE",
+        "unprovenControls": 0,
+        "visiblePanels": 0
+      },
+      "capturedErrorNames": [
+        "INVALID_ARGUMENT"
+      ],
+      "taskAndReceiptAttributed": true,
+      "clicks": 0,
+      "newMessages": 0,
+      "nativeCalls": 0,
+      "servingOwnerStarts": 0,
+      "preservationPins": 1081,
+      "preservationMismatches": 0,
+      "ownedTreeExited": true,
+      "browserWakeProcessesAfter": 0,
+      "port3200ListenerAfter": false,
+      "installedAcceptance": "NOT_QUALIFIED",
+      "c1NativeCompletion": "INCOMPLETE"
+    }
   }
 }
