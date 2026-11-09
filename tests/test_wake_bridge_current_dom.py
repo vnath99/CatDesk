@@ -1468,6 +1468,9 @@ class CurrentDomTests(unittest.TestCase):
                     self.assertTrue(bridge.valid_trace_inspection(result))
                     if loading=='stuck':
                         self.assertEqual(result['knownCodes'],[])
+                        self.assertEqual(result['expandedState'],'OPEN')
+                        self.assertEqual(result['panelCount'],1)
+                        self.assertEqual(result['panelKind'],'FRESH_CHILD')
                         self.assertEqual(self.sink.trace_failure(),dict(schemaVersion=1,phase='READ',
                             boundary='PANEL_STABILITY',reason='TRACE_READ_WINDOW_EXPIRED'))
                     else:self.assertIsNone(self.sink.trace_failure())
@@ -1488,6 +1491,25 @@ class CurrentDomTests(unittest.TestCase):
         self.addCleanup(cdp.close)
         result=self.sink.inspect_response_trace(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
         self.assertEqual(result['state'],'CONTROL_UNSUPPORTED');self.assertIsNone(self.sink.trace_failure())
+
+    def test_trace_unstable_labels_at_deadline_export_only_last_structure(self):
+        class Changing(PersistentCurrentDom):
+            def evaluate(self,script):
+                value=super().evaluate(script)
+                if isinstance(value,list) and len(value)==10 and value[-1].get('state')=='OBSERVED':
+                    self.samples=getattr(self,'samples',0)+1
+                    value[-1]['knownCodes']=['INVALID_ARGUMENT'] if self.samples%2 else ['WEB_TASK_CACHED_ARGUMENTS_INVALID']
+                return value
+        cdp=Changing(observationEditor=True,traceInteractive=True,traceControls=[{'expanded':False}],
+            traceJson=json.dumps({'command':'CATDESK_WEB_TASK={}','PRIVATE_FIELD':'PRIVATE_VALUE'}))
+        self.addCleanup(cdp.close)
+        result=self.sink.inspect_response_trace(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+        self.assertEqual(result['state'],'OPEN_OUTCOME_UNKNOWN');self.assertEqual(cdp.mutations,1)
+        self.assertEqual(result['expandedState'],'OPEN');self.assertEqual(result['panelCount'],1)
+        self.assertEqual(result['knownCodes'],[]);self.assertEqual(result['mentionedTools'],[])
+        self.assertIsNone(result['argumentTypes']);self.assertEqual(result['requestMatchCount'],0)
+        self.assertFalse(result['unknownOuterFields']);self.assertTrue(bridge.valid_trace_inspection(result))
+        self.assertNotIn('PRIVATE_',json.dumps(result))
 
     def test_trace_reads_only_linked_details_or_fresh_role_panels_and_reports_truncated_coverage(self):
         for control,options,kind in [({'expanded':False,'linked':True},{},'CONTROL_LINK'),

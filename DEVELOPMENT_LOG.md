@@ -2318,3 +2318,40 @@ no borrowed later controls/errors, duplicate messages, drafts, generation,
 expired session, unsafe control and unknown click. Live historical-trace and
 installed acceptance are NOT_RUN at this checkpoint. Preserve the separate
 already-unknown trace and all original native state.
+
+
+### 2026-11-09T04:01:58.979869+00:00 — historical trace deadline, no repeat
+
+LIVE: exact original historical response classification passed again, but
+trace-panel recovery FAILED/UNKNOWN. One 38.000-second owned run acknowledged
+the one safe trace-open request, then failed to establish a stable attributable
+panel within its bounded read window. Exact diagnostic: READ / PANEL_STABILITY /
+TRACE_READ_WINDOW_EXPIRED. No specific cached argument, tool receipt or invariant
+was recovered. The original event now has its own durable attempt/outcome fence.
+Do not repeat it, reset either trace fence, infer failure-to-send, or authorize
+native retry. The separate later unknown trace remains preserved.
+
+The live controller came from source0d54f142f76982e51b72e110d358b9af27a8d981,
+SHA-256 a5ad6a44080ab7d48445c41c9fac0fcf3e936b3763cdd2cb1b84baa607d90ea4.
+All 1,088 earlier state pins matched; two intentional diagnostic records extend
+the baseline to1,090. Original task remains READY/no native attempt/receipt/
+journal/code diff. Owned tree exited, profile/Wake counts0 and port3200closed.
+No send, assistant retry, native call, backend/tunnel/Wake start or binding change.
+
+Offline diagnostic correction: at a read-window deadline, retain only the last
+valid structural metadata instead of replacing it with pre-click counts. Strip
+all unstable codes/tools/invariants/argument data; outcome remains UNKNOWN. This
+does not retrospectively recover this live run's missing intermediate counts.
+Twelve persistent-DOM trace and40 probe tests pass, including stuck/loading and
+unstable-label stripping; strict root/Wake Clippy pass. Native22 and CLI46 are
+the current historical-action source tests. The last-count refinement is SOURCE
+PASS, LIVE NOT_RUN. No additional live attempt is justified on either fenced event.
+
+Historical assistant hints remain INVALID_ARGUMENT / DISPATCH_REJECTED only.
+The original operator-reported WEB_TASK_CACHED_ARGUMENTS_INVALID rejected field
+is still unproved. Keep the frozen task, context, key and grant closed until
+genuine receipt/contract evidence supports recovery. Installed dev.84 readback
+upgrade still needs existing protected broker/review authority; these separate
+controller results are not installed acceptance. C1 native coding, independent
+verification and result Wake remain incomplete; C2 not started. No operator
+response relay, sign-in, new diagnostic message or changed connection requested.

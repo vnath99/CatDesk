@@ -1992,7 +1992,7 @@ class CdpSink:
         try:prepared=step('PREPARE')
         except Exception as error:record_failure(error);raise
         if prepared['state']!='CONTROL_READY':return prepared
-        opened=None
+        opened=None;last_read=None
         try:
             phase='OPEN'
             opened=step('OPEN')
@@ -2001,13 +2001,19 @@ class CdpSink:
             for _ in range(8):
                 sleeper(.25);current=step('READ');current.update(openAttempted=True,openRequested=True)
                 if not valid_trace_inspection(current):raise Attention('TRACE_PROTOCOL_INVALID')
+                last_read=current.copy()
                 if current['state']=='PANEL_UNPROVEN':prior=None;continue
                 if current['state']!='OBSERVED' or current==prior:return current
                 prior=current
             boundary='PANEL_STABILITY';raise Attention('TRACE_READ_WINDOW_EXPIRED')
         except Exception as error:
             record_failure(error)
-            value=prepared.copy();value.update(state='OPEN_OUTCOME_UNKNOWN',openAttempted=True,
+            value=(last_read if boundary=='PANEL_STABILITY' and last_read is not None else prepared).copy()
+            # Last structural metadata at a bounded read deadline is useful,
+            # but unstable content must never become partial tool evidence.
+            value.update(knownCodes=[],cachedInvariants=[],mentionedTools=[],argumentTypes=None,
+                requestMatchCount=0,unknownOuterFields=False)
+            value.update(state='OPEN_OUTCOME_UNKNOWN',openAttempted=True,
                 openRequested=bool(opened and opened['openRequested']),openOutcomeUnknown=True)
             return value
 
