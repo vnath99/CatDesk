@@ -2154,5 +2154,25 @@
     },
     "lastStructuralReadRefinement": "SOURCE_PASS_LIVE_NOT_RUN",
     "nativeRetryAuthorized": false
+  },
+  "c1BlockedDisposition": {
+    "observedUtc": "2026-11-09T04:09:58.168371+00:00",
+    "status": "BLOCKED",
+    "blockedAuditPassed": true,
+    "consecutiveNoProgressTurns": 3,
+    "fullObjectivePreserved": true,
+    "goalCompletionProved": false,
+    "productSourceCommit": "0fe135093accb1d22d1c3d3ee47180ad082cb4fa",
+    "preservationPins": 1090,
+    "preservationMismatches": 0,
+    "originalCachedArgumentFieldProved": false,
+    "originalNativeExecution": "NOT_RUN",
+    "independentNativeVerification": "NOT_RUN",
+    "nativeResultWake": "NOT_RUN",
+    "installedReadback": "NOT_QUALIFIED",
+    "laterMilestones": "NOT_RUN",
+    "newBrowserOrNativeOrServingActions": 0,
+    "operatorRelayRequested": false,
+    "documentationIsProductProgress": false
   }
 }
