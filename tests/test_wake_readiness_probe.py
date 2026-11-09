@@ -14,6 +14,23 @@ from unittest import mock
 
 
 class ReadinessProbeTests(unittest.TestCase):
+    def test_trace_report_uses_exact_delivery_and_masks_observer_exceptions(self):
+        delivery=dict(messageDigest='a'*64,event=dict(message='PRIVATE_USER'))
+        value=dict(schemaVersion=1,basis='TASK_BOUND_TRACE_UI_NOT_NATIVE_RECEIPT',state='CONTROL_UNSUPPORTED',
+            openAttempted=False,openRequested=False,openOutcomeUnknown=False,controlType='UNKNOWN',controlCount=1,
+            expandedState='CLOSED',panelKind='NONE',panelCount=0,knownCodes=[],cachedInvariants=[],mentionedTools=[],
+            requestMatchCount=0,argumentTypes=None,unknownOuterFields=False,scanTruncated=False)
+        sink=types.SimpleNamespace(inspect_response_trace=mock.Mock(return_value=value))
+        cdp=object();output=io.StringIO()
+        with contextlib.redirect_stdout(output):self.probe.report_response_trace(sink,cdp,delivery)
+        sink.inspect_response_trace.assert_called_once_with(cdp,'PRIVATE_USER','a'*64)
+        self.assertEqual(json.loads(output.getvalue().split('PROBE:TRACE:')[1]),value)
+        self.assertNotIn('PRIVATE_',output.getvalue())
+        sink.inspect_response_trace.side_effect=RuntimeError('PRIVATE_ERROR')
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):self.probe.report_response_trace(sink,cdp,delivery)
+        self.assertEqual(output.getvalue(),'PROBE:TRACE_STATE:UNPROVEN\n')
+
     def test_menu_report_binds_only_existing_delivery_and_never_exports_private_errors(self):
         delivery=dict(messageDigest='a'*64,event=dict(message='PRIVATE_USER'))
         value=dict(schemaVersion=1,basis='TRANSIENT_MENU_ONLY_NOT_TOOL_CATALOG',state='UNPROVEN',

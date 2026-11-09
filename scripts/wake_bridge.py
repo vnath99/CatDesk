@@ -209,6 +209,119 @@ TASK_CACHED_INVARIANTS = ("ARGUMENTS_NOT_OBJECT", "COMMAND_NOT_STRING", "PLAN_FL
                           "RESERVED_PREFIX_INVALID", "PAYLOAD_JSON_INVALID", "PAYLOAD_NOT_OBJECT")
 TASK_TRACE_COUNTS = ("knownControls", "expandedControls", "collapsedControls", "unprovenControls",
                      "linkedPanels", "visiblePanels")
+TRACE_STATES = {"UNPROVEN", "CONTROL_READY", "CONTROL_ABSENT", "CONTROL_AMBIGUOUS", "CONTROL_UNSUPPORTED",
+                "DRAFT_PRESENT", "GENERATION_ACTIVE", "PANEL_CONFLICT", "OPEN_REQUESTED", "OPEN_OUTCOME_UNKNOWN",
+                "CONTROL_CHANGED", "PANEL_UNPROVEN", "PANEL_AMBIGUOUS", "OBSERVED", "RESPONSE_CHANGED"}
+TRACE_ARGUMENT_FIELDS = ("command", "cwd", "timeout", "dry_run", "include_full_output", "allow_without_plan")
+
+
+def valid_trace_inspection(value: Any) -> bool:
+    flags=("openAttempted","openRequested","openOutcomeUnknown","unknownOuterFields","scanTruncated")
+    counts=("controlCount","panelCount","requestMatchCount")
+    fields={"schemaVersion","basis","state","controlType","expandedState","panelKind","knownCodes",
+            "cachedInvariants","mentionedTools","argumentTypes",*flags,*counts}
+    if (not isinstance(value,dict) or set(value)!=fields or type(value['schemaVersion']) is not int or value['schemaVersion']!=1
+            or value['basis']!='TASK_BOUND_TRACE_UI_NOT_NATIVE_RECEIPT' or not isinstance(value['state'],str) or value['state'] not in TRACE_STATES
+            or not isinstance(value['controlType'],str) or value['controlType'] not in {'UNKNOWN','BUTTON','SUMMARY'}
+            or not isinstance(value['expandedState'],str) or value['expandedState'] not in {'UNKNOWN','OPEN','CLOSED'}
+            or not isinstance(value['panelKind'],str) or value['panelKind'] not in {'NONE','CONTROL_LINK','DETAILS','FRESH_CHILD','FRESH_ROLE'}
+            or any(type(value[k]) is not bool for k in flags)
+            or any(type(value[k]) is not int or not 0<=value[k]<=64 for k in counts)):
+        return False
+    for field,allowed in [('knownCodes',TASK_RESPONSE_CODES),('cachedInvariants',TASK_CACHED_INVARIANTS),('mentionedTools',TASK_MENTIONED_TOOLS)]:
+        if not isinstance(value[field],list) or value[field]!=[v for v in allowed if v in value[field]]:return False
+    args=value['argumentTypes']
+    if args is not None and (not isinstance(args,dict) or set(args)!=set(TRACE_ARGUMENT_FIELDS)
+            or args['command']!='EMPTY_RESERVED_PROBE' or any(not isinstance(args[k],str) or args[k] not in {'ABSENT','NULL','BOOLEAN','STRING','NUMBER','OBJECT','ARRAY','OTHER'} for k in TRACE_ARGUMENT_FIELDS[1:])):return False
+    if value['openRequested'] and not value['openAttempted']:return False
+    if value['state']=='OBSERVED':
+        return (value['openRequested'] and not value['openOutcomeUnknown'] and value['expandedState']=='OPEN'
+                and value['controlCount']==value['panelCount']==1 and value['panelKind']!='NONE'
+                and (args is not None)==(value['requestMatchCount']==1))
+    return not (value['knownCodes'] or value['cachedInvariants'] or value['mentionedTools'] or args is not None or value['unknownOuterFields'] or value['requestMatchCount'])
+
+
+# Reuses response_snapshot's exact USER/assistant selection. Only this private
+# step can click; the native owner durably fences the event before launching it.
+TRACE_ACTION_JS = r"""
+(() => {
+ const out={schemaVersion:1,basis:'TASK_BOUND_TRACE_UI_NOT_NATIVE_RECEIPT',state:'UNPROVEN',
+  openAttempted:false,openRequested:false,openOutcomeUnknown:false,controlType:'UNKNOWN',controlCount:0,
+  expandedState:'UNKNOWN',panelKind:'NONE',panelCount:0,knownCodes:[],cachedInvariants:[],mentionedTools:[],
+  requestMatchCount:0,argumentTypes:null,unknownOuterFields:false,scanTruncated:false};
+ const fail=state=>Object.assign(out,{state});
+ if(location.href!==traceDocument || document.readyState!=='complete' || !assistantCompletionAction || !assistantBodyText || timeouts.length || retryButtons.length) return fail('RESPONSE_CHANGED');
+ if(traceConfig.stop.some(s=>Array.from(document.querySelectorAll(s)).some(visible))) return fail('GENERATION_ACTIVE');
+ const editors=Array.from(document.querySelectorAll(traceConfig.editor)).filter(visible);
+ if(editors.length!==1) return fail('CONTROL_UNSUPPORTED');
+ const editor=editors[0],form=editor.closest('form');
+ if((typeof editor.value==='string'?editor.value:editor.textContent||'').trim() || editor.querySelector('img,video,audio,input,[data-file-id]') ||
+  (form && form.querySelector('[data-file-id], [data-testid*="attachment" i]'))) return fail('DRAFT_PRESENT');
+ const scope=responseBoundary;
+ const excluded=userNodeSelector+', pre, code, form, [contenteditable], [data-markdown-text-style="assistant-message"], .markdown, [class~="prose"], [role="toolbar"], [data-tool-call-id], [data-testid="mcp-tool-call"], [data-testid="mcp-tool-result"]';
+ const controls=Array.from(scope?scope.querySelectorAll('button, [role="button"], summary'):[]).filter(n=>visible(n)&&!n.closest(excluded)&&
+  /^(?:worked|thought) for \d+(?:\.\d+)?(?:ms|s|m|h)(?: \d+(?:\.\d+)?(?:ms|s|m|h))?(?:\s*[>›])?$/i.test(normalize(n.innerText||n.textContent||n.getAttribute('aria-label')||'')));
+ out.controlCount=Math.min(controls.length,64);
+ if(controls.length!==1) return fail(controls.length?'CONTROL_AMBIGUOUS':'CONTROL_ABSENT');
+ const control=controls[0],details=control.tagName.toLowerCase()==='summary'?control.closest('details'):null;
+ out.controlType=details?'SUMMARY':control.tagName.toLowerCase()==='button'&&control.getAttribute('type')==='button'?'BUTTON':'UNKNOWN';
+ if(out.controlType==='UNKNOWN'||control.disabled||control.getAttribute('aria-disabled')==='true') return fail('CONTROL_UNSUPPORTED');
+ const expanded=details?(details.hasAttribute('open')?'true':'false'):control.getAttribute('aria-expanded');
+ out.expandedState=expanded==='true'?'OPEN':expanded==='false'?'CLOSED':'UNKNOWN';
+ const roles=()=>Array.from(document.querySelectorAll('[role="dialog"], [role="complementary"], [role="menu"]')).filter(visible);
+ const key='__catdeskTrace_'+traceRequest.nonce;
+ if(traceRequest.phase==='PREPARE') {
+  if(expanded!=='false'||roles().some(n=>n.getAttribute('role')!=='complementary')) return fail('PANEL_CONFLICT');
+  window[key]={control,scope,parent:control.parentElement,details,url:location.href,wake:expectedWake,phase:'PREPARED',
+   children:new Map(Array.from(control.parentElement.children,n=>[n,visible(n)])),roles:new Set(roles())};
+  return fail('CONTROL_READY');
+ }
+ const cache=window[key];
+ if(!cache||cache.control!==control||cache.scope!==scope||cache.parent!==control.parentElement||cache.url!==location.href||cache.wake!==expectedWake) return fail('CONTROL_CHANGED');
+ if(traceRequest.phase==='OPEN') {
+  if(cache.phase!=='PREPARED'||expanded!=='false') return fail('CONTROL_CHANGED');
+  cache.phase='OPEN_REQUESTED';out.openAttempted=true;
+  try { control.click();out.openRequested=true;return fail('OPEN_REQUESTED'); }
+  catch(_) {out.openOutcomeUnknown=true;return fail('OPEN_OUTCOME_UNKNOWN');}
+ }
+ if(traceRequest.phase!=='READ'||cache.phase!=='OPEN_REQUESTED') return fail('CONTROL_CHANGED');
+ out.openAttempted=out.openRequested=true;
+ if(expanded!=='true') return fail('PANEL_UNPROVEN');
+ let panels=[],kind='NONE';
+ const id=control.getAttribute('aria-controls');
+ if(details) {panels=[details];kind='DETAILS';}
+ else if(id&&id.length<=256) {panels=Array.from(document.querySelectorAll('[id]')).filter(n=>n.getAttribute('id')===id&&visible(n));kind='CONTROL_LINK';}
+ else {
+  panels=Array.from(cache.parent.children).filter(n=>n!==control&&!n.contains(control)&&visible(n)&&(!cache.children.has(n)||cache.children.get(n)===false));kind='FRESH_CHILD';
+  if(!panels.length) {panels=roles().filter(n=>!cache.roles.has(n)&&n.getAttribute('role')!=='menu');kind='FRESH_ROLE';}
+ }
+ panels=panels.filter(n=>!n.matches(userNodeSelector)&&!n.querySelector(userNodeSelector+', #prompt-textarea, textarea, [contenteditable], [data-content-search-turn-key]'));
+ out.panelCount=Math.min(panels.length,64);
+ if(panels.length!==1) return fail(panels.length?'PANEL_AMBIGUOUS':'PANEL_UNPROVEN');
+ out.panelKind=kind;
+ const panel=panels[0],copy=panel.cloneNode(true);
+ copy.querySelectorAll('button, summary, [role="button"], [role="toolbar"], [aria-hidden="true"]').forEach(n=>n.remove());
+ const raw=copy.textContent||'',text=raw.slice(0,32768).toLowerCase();out.scanTruncated=raw.length>32768;
+ const hasCode=code=>code==='HTTP_429'?/(?:http|status|error)\s*429/.test(text):new RegExp('\\b'+code.toLowerCase()+'\\b').test(text);
+ out.knownCodes=traceConfig.codes.filter(hasCode);out.cachedInvariants=traceConfig.invariants.filter(hasCode);
+ const tools={RUN_COMMAND:/\brun_command\b/.test(text),CENTRAL_TASK_TOOL:/\bcatdesk_web_task_tool\b/.test(text),NATIVE_DISPATCH:/\bnative\.codex\.dispatch\b/.test(text),NATIVE_STATUS:/\bnative\.codex\.status\b/.test(text)};
+ out.mentionedTools=traceConfig.tools.filter(n=>tools[n]);
+ const jsonNodes=[...(panel.matches('pre, code')?[panel]:[]),...panel.querySelectorAll('pre, code')].filter(visible).slice(0,32),matches=[];
+ for(const node of jsonNodes) {
+  const value=node.textContent||'';if(value.length>8192) continue;
+  try {let obj=JSON.parse(value);if(obj&&obj.name==='run_command')obj=obj.arguments;
+   if(obj&&typeof obj==='object'&&!Array.isArray(obj)&&obj.command==='CATDESK_WEB_TASK={}'&&!matches.some(v=>JSON.stringify(v)===JSON.stringify(obj))) matches.push(obj);
+  }catch(_){}
+ }
+ out.requestMatchCount=Math.min(matches.length,64);
+ if(matches.length===1) {
+  const obj=matches[0],type=k=>!Object.hasOwn(obj,k)?'ABSENT':obj[k]===null?'NULL':Array.isArray(obj[k])?'ARRAY':({boolean:'BOOLEAN',string:'STRING',number:'NUMBER',object:'OBJECT'}[typeof obj[k]]||'OTHER');
+  out.argumentTypes={command:'EMPTY_RESERVED_PROBE'};for(const k of traceConfig.arguments.slice(1))out.argumentTypes[k]=type(k);
+  out.unknownOuterFields=Object.keys(obj).some(k=>!traceConfig.arguments.includes(k));
+ }
+ return fail('OBSERVED');
+})()
+"""
 
 
 def valid_task_trace_metadata(value: Any) -> bool:
@@ -1823,10 +1936,40 @@ class CdpSink:
                 sleeper(.25)
         raise PostSubmitUnknown(last_stage)
 
+    def inspect_response_trace(self, cdp: Any, message: str, expected_digest: str, *, sleeper=time.sleep) -> dict[str, Any]:
+        """One explicitly fenced trace open; unknown outcomes never repeat it."""
+        nonce=os.urandom(16).hex()
+        def step(phase):
+            if self.observe_cooperative_response(cdp,message,expected_digest)!='RESPONSE_COMPLETE':
+                raise Attention('RESPONSE_STATE_UNPROVEN')
+            value={}
+            self.response_snapshot(cdp,message,require_usable_body=True,diagnostic={},tool_diagnostic={},execution_diagnostic={},
+                trace_action=(phase,nonce),trace_observation=value)
+            self.require_response_document(cdp)
+            return value
+        prepared=step('PREPARE')
+        if prepared['state']!='CONTROL_READY':return prepared
+        opened=None
+        try:
+            opened=step('OPEN')
+            if opened['state']!='OPEN_REQUESTED':return opened
+            sleeper(.25)
+            current=step('READ');sleeper(.25);again=step('READ')
+            for value in (current,again):value.update(openAttempted=True,openRequested=True)
+            if current!=again:raise Attention('RESPONSE_STATE_UNPROVEN')
+            if not valid_trace_inspection(current):raise Attention('RESPONSE_STATE_UNPROVEN')
+            return current
+        except Exception:
+            value=prepared.copy();value.update(state='OPEN_OUTCOME_UNKNOWN',openAttempted=True,
+                openRequested=bool(opened and opened['openRequested']),openOutcomeUnknown=True)
+            return value
+
     def response_snapshot(self, cdp: Any, message: str, *, require_usable_body: bool = False,
                           diagnostic: dict | None = None,
                           tool_diagnostic: dict | None = None,
-                          execution_diagnostic: dict | None = None) -> tuple[int, int, bool, bool]:
+                          execution_diagnostic: dict | None = None,
+                          trace_action: tuple[str,str] | None = None,
+                          trace_observation: dict | None = None) -> tuple[int, int, bool, bool]:
         """Return only bounded structural signals for the latest user turn.
 
         The timeout detector is intentionally exact-text and scoped strictly
@@ -1842,7 +1985,19 @@ class CdpSink:
             execution_diagnostic.clear()
             if diagnostic is None or tool_diagnostic is None:
                 raise ValueError("task hints require explicit response and tool diagnostics")
+        trace_request=None
+        trace_document=''
+        if trace_action is not None:
+            if (not require_usable_body or diagnostic is None or tool_diagnostic is None or execution_diagnostic is None
+                    or trace_observation is None or trace_action[0] not in {'PREPARE','OPEN','READ'}
+                    or not re.fullmatch('[a-f0-9]{32}',trace_action[1])):raise ValueError('invalid trace inspection')
+            trace_observation.clear()
+            self.require_response_document(cdp)
+            trace_document=str(cdp.get_current_url())
+            trace_request=dict(phase=trace_action[0],nonce=trace_action[1])
         script = f"""(() => {{
+            const traceRequest={json.dumps(trace_request)},traceDocument={json.dumps(trace_document)};
+            const traceConfig={json.dumps(dict(stop=STOP,editor=', '.join(EDITOR_SELECTORS),codes=TASK_RESPONSE_CODES,invariants=TASK_CACHED_INVARIANTS,tools=TASK_MENTIONED_TOOLS,arguments=TRACE_ARGUMENT_FIELDS))};
             const timeoutText = {json.dumps("Message delivery timed out. Please try again.")};
             const retryLabel = {json.dumps("Retry")};
             const expectedWake = {json.dumps(normalize_message(message))};
@@ -2191,13 +2346,14 @@ class CdpSink:
                     knownCodes:known.filter(hasCode),
                     refusalCategories:{json.dumps(TASK_REFUSAL_CATEGORIES)}.filter(kind => refusals[kind])}});
             }}
+            if(traceRequest) result.push({TRACE_ACTION_JS});
             return result;
         }})()"""
         try:
             value = self.cdp_value(cdp.evaluate(script))
         except Exception as error:
             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED") from error
-        if (not isinstance(value, list) or len(value) not in {5, 7, 8, 9} or
+        if (not isinstance(value, list) or len(value) not in {5, 7, 8, 9, 10} or
                 value[0] not in {"ready", "missing-user", "invalid", "load-error"} or
                 not isinstance(value[1], int) or isinstance(value[1], bool) or
                 not isinstance(value[2], int) or isinstance(value[2], bool) or
@@ -2211,7 +2367,7 @@ class CdpSink:
         if diagnostic is not None:
             allowed = {"ASSISTANT_NOT_MOUNTED", "ASSISTANT_BODY_UNPROVEN",
                        "ASSISTANT_COMPLETION_ACTION_UNPROVEN", "COMPLETE"}
-            if (len(value) != (9 if execution_diagnostic is not None else 8 if tool_diagnostic is not None else 7) or
+            if (len(value) != (10 if trace_action is not None else 9 if execution_diagnostic is not None else 8 if tool_diagnostic is not None else 7) or
                     not isinstance(value[5], str) or value[5] not in allowed or
                     not valid_response_control_diagnostics(value[6])):
                 raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
@@ -2225,6 +2381,9 @@ class CdpSink:
                 execution_diagnostic.update(value[8])
             diagnostic["reason"] = value[5]
             diagnostic["controls"] = value[6]
+            if trace_action is not None:
+                if not valid_trace_inspection(value[9]):raise PostSubmitUnknown('RESPONSE_STATE_QUERY_FAILED')
+                trace_observation.update(value[9])
         elif len(value) != 5:
             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
         return value[1], value[2], value[3], value[4]

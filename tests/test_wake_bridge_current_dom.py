@@ -156,15 +156,31 @@ const children = options.userOnly ? [user] : [user, assistant];
 for (const [index, trace] of (options.traceControls || []).entries()) {
   const id='PRIVATE_TRACE_PANEL_'+index;
   const control=el(trace.summary ? 'summary' : 'button', trace.summary ? {} : {
+    ...(options.traceInteractive ? {type:trace.type || 'button'} : {}),
     ...(trace.expanded===undefined ? {} : {'aria-expanded':String(trace.expanded)}),
     ...(trace.linked ? {'aria-controls':id} : {})
   }, trace.label || 'Worked for 46s');
   const panel=el('div',{id,hidden:trace.expanded!==true},'PRIVATE_TRACE_ARGUMENTS');
-  const node=trace.summary ? el('details',trace.expanded ? {open:''} : {},'', [control,panel]) : control;
+  if(options.traceInteractive) {
+    panel.text=options.tracePanelText || 'run_command INVALID_ARGUMENT WEB_TASK_CACHED_ARGUMENTS_INVALID CWD_OVERRIDE_FORBIDDEN PRIVATE_TRACE_VALUE';
+    if(options.traceJson)append(panel,el('pre',{},options.traceJson));
+  }
+  let node=trace.summary ? el('details',trace.expanded ? {open:''} : {},'', [control,panel]) : control;
+  if(options.traceInteractive && !trace.summary) {
+    const wrapper=el('section',{},'', options.traceRolePanel ? [control] : [control,panel]);node=wrapper;
+    control.click=()=>{
+      mutations++;control.attrs['aria-expanded']='true';panel.attrs.hidden=false;
+      if(options.traceRolePanel){panel.attrs.role='complementary';append(document,panel);}
+      if(options.traceClickThrows)throw Error('test click outcome unknown');
+      if(options.traceChangedControl)append(wrapper,el('button',{type:'button','aria-expanded':'true'},'Worked for 20s'));
+      if(options.traceAmbiguousPanels)append(wrapper,el('div',{},'PRIVATE_SECOND_PANEL'));
+    };
+  }
+  if(options.traceInteractive && trace.summary)control.click=()=>{mutations++;node.attrs.open='';panel.attrs.hidden=false;};
   if(trace.placement==='user')append(user.children[0],node);
   else if(trace.placement==='code')append(assistant.children[1].children[0],el('pre',{},'',[node]));
   else children.splice(1,0,node);
-  if(!trace.summary && trace.linked)children.splice(1,0,panel);
+  if(!trace.summary && trace.linked && !options.traceInteractive)children.splice(1,0,panel);
 }
 if (options.unmountedLoadError) {
   for (let i = 0; i < (options.unmountedErrorCount || 1); i++) {
@@ -390,6 +406,44 @@ class CurrentDom:
             self.mutations = observed["mutations"]
             return observed["value"]
         return observed
+
+
+class PersistentCurrentDom(CurrentDom):
+    """Run the actual probes against one DOM across transaction steps."""
+    def __init__(self,**options):
+        super().__init__(**options)
+        prefix=DOM.split('const value = eval(inputFrame.script);')[0]
+        prefix=prefix.replace("const inputFrame = JSON.parse(fs.readFileSync(0, 'utf8'));",
+            'const inputFrame = '+json.dumps({'options':options,'script':''})+';')
+        server=prefix+'''
+const reader=require('readline').createInterface({input:process.stdin});
+reader.on('line', line=>{try {const value=eval(JSON.parse(line));
+ process.stdout.write(JSON.stringify({value,mutations})+'\\n');
+}catch(error){process.stdout.write(JSON.stringify({error:String(error)})+'\\n');}});
+'''
+        self.fixture_directory=tempfile.TemporaryDirectory(prefix='catdesk-trace-dom-')
+        directory=Path(self.fixture_directory.name).resolve()
+        assert directory.parent==Path(tempfile.gettempdir()).resolve()
+        program=directory/'persistent-dom.js';program.write_text(server,encoding='utf-8')
+        try:
+            self.process=subprocess.Popen([shutil.which('node'),str(program)],stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,encoding='utf-8')
+        except BaseException:self.fixture_directory.cleanup();raise
+
+    def evaluate(self,script):
+        self.process.stdin.write(json.dumps(script)+'\n');self.process.stdin.flush()
+        line=self.process.stdout.readline()
+        if not line:raise AssertionError('persistent DOM exited')
+        observed=json.loads(line)
+        if 'error' in observed:raise AssertionError(observed['error'])
+        self.mutations=observed['mutations'];return observed['value']
+
+    def close(self):
+        self.process.stdin.close()
+        try:self.process.wait(timeout=3)
+        except subprocess.TimeoutExpired:self.process.kill();self.process.wait(timeout=3)
+        self.process.stdout.close();self.process.stderr.close()
+        self.fixture_directory.cleanup()
 
 
 @unittest.skipUnless(shutil.which("node"), "Node.js required for offline DOM probes")
@@ -1253,6 +1307,88 @@ class CurrentDomTests(unittest.TestCase):
                 self.sink.response_snapshot(CurrentDom(traceControls=[{'expanded':True,'linked':True}],**options),
                     'exact wake message',diagnostic={},tool_diagnostic={},execution_diagnostic=hints)
             self.assertEqual(hints,{})
+
+    def test_receipt_bound_trace_opens_once_and_returns_error_names_and_argument_types_only(self):
+        cdp=PersistentCurrentDom(observationEditor=True,traceInteractive=True,
+            traceControls=[{'expanded':False}],traceJson=json.dumps({'command':'CATDESK_WEB_TASK={}',
+                'cwd':None,'timeout':None,'PRIVATE_FIELD':'PRIVATE_KEY_VALUE'}))
+        self.addCleanup(cdp.close)
+        result=self.sink.inspect_response_trace(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+        self.assertEqual(result['state'],'OBSERVED')
+        self.assertEqual(result['panelKind'],'FRESH_CHILD')
+        self.assertEqual(result['knownCodes'],['WEB_TASK_CACHED_ARGUMENTS_INVALID','INVALID_ARGUMENT'])
+        self.assertEqual(result['cachedInvariants'],['CWD_OVERRIDE_FORBIDDEN'])
+        self.assertEqual(result['mentionedTools'],['RUN_COMMAND'])
+        self.assertEqual(result['argumentTypes']['cwd'],'NULL')
+        self.assertEqual(result['argumentTypes']['timeout'],'NULL')
+        self.assertTrue(result['unknownOuterFields'])
+        self.assertEqual(cdp.mutations,1)
+        self.assertTrue(bridge.valid_trace_inspection(result))
+        for secret in ['PRIVATE_','executionKey','CATDESK_WEB_TASK={}']:
+            self.assertNotIn(secret,json.dumps(result))
+        for field,bad in [('panelCount',2),('openRequested',False),('knownCodes',['PRIVATE_VALUE']),
+                ('argumentTypes',{'command':'PRIVATE_COMMAND'}),('rawText','PRIVATE_CONTEXT')]:
+            self.assertFalse(bridge.valid_trace_inspection(result|{field:bad}))
+
+    def test_trace_action_refuses_unsafe_controls_drafts_generation_and_ambiguous_exchange(self):
+        for options in [
+            {'traceControls':[{'expanded':False,'type':'submit'}]},
+            {'traceControls':[{'expanded':False},{'expanded':False}]},
+            {'observationDraft':'PRIVATE_DRAFT'}, {'observationStop':True},
+            {'observationLogin':True}, {'location':'chrome-error://chromewebdata/'},
+            {'duplicateUser':True}, {'userText':'foreign request'},
+        ]:
+            with self.subTest(options=options):
+                cdp=PersistentCurrentDom(**({'observationEditor':True,'traceInteractive':True,'traceControls':[{'expanded':False}]}|options))
+                try:
+                    try:result=self.sink.inspect_response_trace(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+                    except (bridge.Attention,bridge.PostSubmitUnknown):result=None
+                    if result is not None:self.assertNotEqual(result['state'],'OBSERVED');self.assertFalse(result['openAttempted'])
+                    self.assertEqual(getattr(cdp,'mutations',0),0)
+                finally:cdp.close()
+
+    def test_trace_unknown_or_changed_outcome_never_clicks_again_or_exports_partial_content(self):
+        for options,expected in [({'traceClickThrows':True},'OPEN_OUTCOME_UNKNOWN'),
+                ({'traceChangedControl':True},'CONTROL_AMBIGUOUS'),({'traceAmbiguousPanels':True},'PANEL_AMBIGUOUS')]:
+            with self.subTest(options=options):
+                cdp=PersistentCurrentDom(observationEditor=True,traceInteractive=True,traceControls=[{'expanded':False}],**options)
+                try:
+                    result=self.sink.inspect_response_trace(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+                    self.assertEqual(result['state'],expected);self.assertEqual(cdp.mutations,1)
+                    self.assertTrue(result['openAttempted']);self.assertEqual(result['knownCodes'],[])
+                    self.assertTrue(bridge.valid_trace_inspection(result));self.assertNotIn('PRIVATE_',json.dumps(result))
+                finally:cdp.close()
+
+    def test_trace_interrupted_transport_after_click_remains_unknown_without_a_second_click(self):
+        class Interrupted(PersistentCurrentDom):
+            def evaluate(self,script):
+                value=super().evaluate(script)
+                if self.mutations and not getattr(self,'interrupted',False):
+                    self.interrupted=True
+                    raise RuntimeError('PRIVATE_TRANSPORT_DIAGNOSTIC')
+                return value
+        cdp=Interrupted(observationEditor=True,traceInteractive=True,traceControls=[{'expanded':False}])
+        self.addCleanup(cdp.close)
+        result=self.sink.inspect_response_trace(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+        self.assertEqual(result['state'],'OPEN_OUTCOME_UNKNOWN');self.assertTrue(result['openOutcomeUnknown'])
+        self.assertTrue(result['openAttempted']);self.assertEqual(cdp.mutations,1)
+        self.assertEqual(result['knownCodes'],[]);self.assertNotIn('PRIVATE_',json.dumps(result))
+
+    def test_trace_reads_only_linked_details_or_fresh_role_panels_and_reports_truncated_coverage(self):
+        for control,options,kind in [({'expanded':False,'linked':True},{},'CONTROL_LINK'),
+                ({'summary':True,'expanded':False},{},'DETAILS'),
+                ({'expanded':False},{'traceRolePanel':True},'FRESH_ROLE'),
+                ({'expanded':False},{'tracePanelText':'safe '*7000+' WEB_TASK_ARGUMENTS_INVALID'},'FRESH_CHILD')]:
+            with self.subTest(kind=kind):
+                cdp=PersistentCurrentDom(observationEditor=True,traceInteractive=True,traceControls=[control],**options)
+                try:
+                    result=self.sink.inspect_response_trace(cdp,'exact wake message',bridge.digest('exact wake message'),sleeper=lambda _:None)
+                    self.assertEqual(result['state'],'OBSERVED');self.assertEqual(result['panelKind'],kind)
+                    self.assertEqual(cdp.mutations,1);self.assertTrue(bridge.valid_trace_inspection(result))
+                    if 'tracePanelText' in options:
+                        self.assertTrue(result['scanTruncated']);self.assertEqual(result['knownCodes'],[])
+                    self.assertNotIn('PRIVATE_',json.dumps(result))
+                finally:cdp.close()
 
     def test_identity_refusal_and_exact_code_boundaries_are_closed(self):
         hints = {}

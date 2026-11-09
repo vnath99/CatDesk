@@ -1897,5 +1897,28 @@
       "newMessages": 0,
       "preservationMismatches": 0
     }
+  },
+  "oneShotTaskTraceInspection": {
+    "observedUtc": "2026-11-09T02:47:36.956264+00:00",
+    "status": "SOURCE_PASS_LIVE_NOT_RUN",
+    "durablePerEventFence": true,
+    "maximumClicks": 1,
+    "unknownClickRetried": false,
+    "rawPanelOrArgumentValuesExported": false,
+    "panelKinds": [
+      "CONTROL_LINK",
+      "DETAILS",
+      "FRESH_CHILD",
+      "FRESH_ROLE"
+    ],
+    "broadDomTests": 102,
+    "focusedTraceTests": 7,
+    "nativeReadinessTests": 20,
+    "operatorCliTests": 46,
+    "probeTests": 40,
+    "rootAndWakeClippy": "PASS",
+    "failedLongFixtureRunRetained": true,
+    "installedAcceptance": "NOT_RUN",
+    "c1NativeCoding": "INCOMPLETE"
   }
 }

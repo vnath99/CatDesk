@@ -10,6 +10,56 @@ enum Mode {
     ResponseOwnerHeld,
     SentDiagnostics,
     AppMenu,
+    Trace,
+}
+
+pub fn inspect_sent_task_trace(
+    store: &Store,
+    project: &str,
+    target: &Target,
+    event: &str,
+    keep_current: &dyn Fn() -> Result<()>,
+) -> Result<serde_json::Value> {
+    let (delivery, timer) = store.sent_response_scope(project, target, event)?;
+    if timer.response_state != ResponseState::Complete {
+        return Err("READINESS_COMPLETED_RESPONSE_REQUIRED".into());
+    }
+    inspect_readiness(
+        store,
+        project,
+        target,
+        Some(&delivery),
+        Mode::Trace,
+        keep_current,
+    )
+}
+
+#[cfg(any(windows, test))]
+fn fence_trace_attempt(store: &Store, delivery: &crate::store::Delivery, hash: &str) -> Result<()> {
+    let logs = store.root().join("logs");
+    require_plain_install_directory(&logs)?;
+    let path = logs.join(format!(
+        "response-trace-{}.attempt.json",
+        delivery.event.event_id
+    ));
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                "READINESS_TRACE_ALREADY_RECORDED"
+            } else {
+                "READINESS_TRACE_FENCE_FAILED"
+            }
+        })?;
+    let bytes=serde_json::to_vec(&serde_json::json!({"schemaVersion":1,"purpose":"ONE_TASK_BOUND_TRACE_OPEN",
+        "projectId":delivery.event.project_id,"eventId":delivery.event.event_id,"targetGeneration":delivery.target.generation,
+        "targetDigest":delivery.target.digest,"messageDigest":delivery.message_digest,"sourceDeliverySha256":hash,
+        "controllerPid":std::process::id(),"recordedUtc":now(),"maximumClicks":1,"sendAllowed":false,"phase":"ATTEMPT_FENCED"})).map_err(|_|"READINESS_TRACE_FENCE_FAILED")?;
+    file.write_all(&bytes)
+        .and_then(|_| file.sync_all())
+        .map_err(|_| "READINESS_TRACE_FENCE_FAILED".into())
 }
 
 /// Explicit transient menu inspection of one completed receipt-bound task.
@@ -257,7 +307,7 @@ fn inspect_readiness(
     let receipt_only = mode == Mode::Receipt;
     let response_only = matches!(
         mode,
-        Mode::ResponseOwnerHeld | Mode::SentDiagnostics | Mode::AppMenu
+        Mode::ResponseOwnerHeld | Mode::SentDiagnostics | Mode::AppMenu | Mode::Trace
     );
     if !crate::protocol::valid_id(project) {
         return Err("READINESS_PROJECT_INVALID".into());
@@ -348,18 +398,31 @@ fn inspect_readiness(
         // require the Python reader's matching semantic-response flag.
         if matches!(
             mode,
-            Mode::SentDiagnostics | Mode::ResponseOwnerHeld | Mode::AppMenu
+            Mode::SentDiagnostics | Mode::ResponseOwnerHeld | Mode::AppMenu | Mode::Trace
         ) {
             command.arg("--task-diagnostics");
         }
         if mode == Mode::AppMenu {
             command.arg("--inspect-app-menu");
         }
+        if mode == Mode::Trace {
+            command.arg("--inspect-response-trace");
+        }
         Some(hash)
     } else {
         None
     };
     let mut rows = Vec::new();
+    if mode == Mode::Trace {
+        keep_current()?;
+        fence_trace_attempt(
+            store,
+            delivery.ok_or("READINESS_WORK_DELIVERY_CHANGED")?,
+            delivery_hash
+                .as_deref()
+                .ok_or("READINESS_WORK_DELIVERY_CHANGED")?,
+        )?;
+    }
     let result = crate::readiness_probe::run_bounded_observed(
         &mut command,
         Duration::from_secs(90),
@@ -485,7 +548,7 @@ fn inspect_readiness(
         .iter()
         .rev()
         .find_map(|row| crate::readiness_probe::composer_app_observation(row));
-    let task_diagnostics = if matches!(mode, Mode::SentDiagnostics | Mode::AppMenu)
+    let task_diagnostics = if matches!(mode, Mode::SentDiagnostics | Mode::AppMenu | Mode::Trace)
         && response
             .as_ref()
             .is_some_and(|v| v["stage"] == "RESPONSE_COMPLETE")
@@ -495,6 +558,32 @@ fn inspect_readiness(
     } else {
         None
     };
+    let trace = rows
+        .iter()
+        .rev()
+        .find_map(|row| crate::readiness_probe::trace_observation(row));
+    if mode == Mode::Trace {
+        let path = store.root().join("logs").join(format!(
+            "response-trace-{}.outcome.json",
+            delivery
+                .ok_or("READINESS_WORK_DELIVERY_CHANGED")?
+                .event
+                .event_id
+        ));
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+            .map_err(|_| "READINESS_TRACE_OUTCOME_FAILED")?;
+        let bytes = serde_json::to_vec(
+            &serde_json::json!({"schemaVersion":1,"ownedTreeExited":true,"traceObservation":trace,
+            "phase":phase,"finalState":final_state,"recordedUtc":now(),"sendAttempted":false}),
+        )
+        .map_err(|_| "READINESS_TRACE_OUTCOME_FAILED")?;
+        file.write_all(&bytes)
+            .and_then(|_| file.sync_all())
+            .map_err(|_| "READINESS_TRACE_OUTCOME_FAILED")?;
+    }
     Ok(
         serde_json::json!({"action":if delivery.is_some() {"web_work_inspect"} else {"web_browser_inspect"},"projectId":project,
         "status":if result.is_ok() && final_state.is_some() {"BROWSER_READINESS_OBSERVED"} else {"BROWSER_OBSERVATION_INCOMPLETE"},
@@ -503,10 +592,10 @@ fn inspect_readiness(
         "targetGeneration":target.generation,"targetDigest":target.digest,
         "eventId":delivery.map(|d| &d.event.event_id),"sourceDeliverySha256":delivery_hash,
         "submissionObservation":submission,"submissionObservationState":submission_state,
-        "advisory":!receipt_only,"browserReadOnly":mode!=Mode::AppMenu,"transientMenuInspection":mode==Mode::AppMenu,"sendAttempted":false,
+        "advisory":!receipt_only,"browserReadOnly":!matches!(mode,Mode::AppMenu|Mode::Trace),"transientMenuInspection":mode==Mode::AppMenu,"transientTraceInspection":mode==Mode::Trace,"diagnosticJournalChanged":mode==Mode::Trace,"sendAttempted":false,
         "receiptCreated":false,"stateChanged":false,"retryAuthorized":false,"workResolved":false,
         "persistedReceipt":receipt,"receiptProofRequested":receipt_only,"responseObservation":response,
-        "taskDiagnostics":task_diagnostics,"appPresentation":app_observation,
+        "taskDiagnostics":task_diagnostics,"appPresentation":app_observation,"traceObservation":trace,
         "appMenuObservation":rows.iter().rev().find_map(|row|crate::readiness_probe::app_menu_observation(row)),"reviewAuthorityGranted":false,
         "submissionOutcome":if receipt.is_some() {"PERSISTED_RECEIPT_PROVEN"} else {"NOT_ASSESSED"},"authenticationVerified":false,
         "ownedTreeExited":true,"hostStarted":false,"schedulerStarted":false}),
@@ -599,6 +688,26 @@ mod tests {
         unknown.phase = Phase::Submitting;
         unknown.receipt = None;
         assert!(require_delivery(&store, "alpha", &target, &unknown, true).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(
+            inspect_sent_task_trace(&store, "alpha", &target, &event.event_id, &|| Ok(()))
+                .unwrap_err(),
+            "READINESS_COMPLETED_RESPONSE_REQUIRED"
+        );
+        store.complete_timer(&event.event_id).unwrap();
+        let hash = sha256_file(&path, "fixture").unwrap();
+        fence_trace_attempt(&store, &sent, &hash).unwrap();
+        let fence = store
+            .root()
+            .join("logs")
+            .join(format!("response-trace-{}.attempt.json", event.event_id));
+        let witness = std::fs::read(&fence).unwrap();
+        assert_eq!(
+            fence_trace_attempt(&store, &sent, &"f".repeat(64)).unwrap_err(),
+            "READINESS_TRACE_ALREADY_RECORDED"
+        );
+        assert_eq!(std::fs::read(&fence).unwrap(), witness);
+        assert!(!String::from_utf8(witness).unwrap().contains(&event.message));
         assert_eq!(std::fs::read(&path).unwrap(), before);
     }
 

@@ -169,6 +169,48 @@ pub(crate) fn app_menu_observation(line: &str) -> Option<serde_json::Value> {
     Some(value)
 }
 
+pub(crate) fn trace_observation(line: &str) -> Option<serde_json::Value> {
+    let text = line.strip_prefix("PROBE:TRACE:")?;
+    if text.len() > 4096 {
+        return None;
+    }
+    crate::runtime::canonical_trace_observation(serde_json::from_str(text).ok()?)
+}
+
+#[test]
+fn trace_protocol_preserves_closed_error_and_argument_types_without_values_or_retry_authority() {
+    let value = serde_json::json!({"schemaVersion":1,"basis":"TASK_BOUND_TRACE_UI_NOT_NATIVE_RECEIPT","state":"OBSERVED",
+        "openAttempted":true,"openRequested":true,"openOutcomeUnknown":false,"controlType":"BUTTON","controlCount":1,
+        "expandedState":"OPEN","panelKind":"FRESH_CHILD","panelCount":1,"knownCodes":["WEB_TASK_CACHED_ARGUMENTS_INVALID","INVALID_ARGUMENT"],
+        "cachedInvariants":["CWD_OVERRIDE_FORBIDDEN"],"mentionedTools":["RUN_COMMAND"],"requestMatchCount":1,
+        "argumentTypes":{"command":"EMPTY_RESERVED_PROBE","cwd":"NULL","timeout":"ABSENT","dry_run":"ABSENT","include_full_output":"ABSENT","allow_without_plan":"ABSENT"},
+        "unknownOuterFields":false,"scanTruncated":false});
+    assert_eq!(
+        trace_observation(&format!("PROBE:TRACE:{value}")),
+        Some(value.clone())
+    );
+    for (field, bad) in [
+        ("panelCount", serde_json::json!(2)),
+        ("openAttempted", serde_json::json!(false)),
+        ("knownCodes", serde_json::json!(["PRIVATE_BODY"])),
+        ("rawPanel", serde_json::json!("PRIVATE_VALUE")),
+        (
+            "argumentTypes",
+            serde_json::json!({"command":"PRIVATE_COMMAND"}),
+        ),
+        ("state", serde_json::json!("UNPROVEN")),
+    ] {
+        let mut changed = value.clone();
+        changed[field] = bad;
+        assert!(trace_observation(&format!("PROBE:TRACE:{changed}")).is_none());
+        assert!(sanitized_rows(&format!("PROBE:TRACE:{changed}")).is_empty());
+    }
+    assert_eq!(
+        sanitized_rows("PROBE:TRACE_STATE:UNPROVEN\nPROBE:TRACE_STATE:PRIVATE_BODY"),
+        ["PROBE:TRACE_STATE:UNPROVEN"]
+    );
+}
+
 pub(crate) fn surface_observation(line: &str) -> Option<serde_json::Value> {
     let text = line.strip_prefix("PROBE:SURFACE:")?;
     if text.len() > 1024 {
@@ -439,6 +481,12 @@ fn sanitized_rows(text: &str) -> Vec<String> {
             }
             if state.starts_with("APP_MENU_STATE:") {
                 return state == "APP_MENU_STATE:UNPROVEN";
+            }
+            if state.starts_with("TRACE:") {
+                return trace_observation(line).is_some();
+            }
+            if state.starts_with("TRACE_STATE:") {
+                return state == "TRACE_STATE:UNPROVEN";
             }
             if state.starts_with("APP_STATE:") {
                 return state == "APP_STATE:UNPROVEN";

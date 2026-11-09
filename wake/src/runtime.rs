@@ -29,11 +29,12 @@ mod review_reconcile;
 mod scoped_review;
 pub use readiness::{
     inspect_registered_delivery_readiness, inspect_registered_readiness,
-    inspect_sent_task_app_menu, inspect_sent_task_response_diagnostics,
+    inspect_sent_task_app_menu, inspect_sent_task_response_diagnostics, inspect_sent_task_trace,
     read_registered_delivery_receipt,
 };
 pub(crate) use response::canonical_observation as canonical_response_observation;
 pub(crate) use response::canonical_task_diagnostics as canonical_task_response_diagnostics;
+pub(crate) use response::canonical_trace_observation;
 pub(crate) use response::validate_observation as validate_response_observation;
 pub use review_reconcile::{
     SubmissionDiagnosisReport, diagnose_scoped_review_guarded, diagnosed_scoped_review_guarded,

@@ -2074,3 +2074,35 @@ C1 code/test/result-Wake and installed automatic-readback acceptance remain
 incomplete. No further probe send, private-context resend, argument rewrite,
 replacement task or manual response relay is authorized by this result. C2 is
 not started. Existing release authority remains unchanged.
+
+
+## 2026-11-09T02:47:36.956264+00:00 — one-shot task-bound trace inspection
+
+SOURCE PASS; LIVE NOT RUN. `operator web review inspect-trace --project-id PROJECT
+--event-id EVENT` reuses the existing stopped-host browser owner. It requires a
+registered task and exact SENT receipt plus COMPLETE timer. A create-new event
+fence in the existing logs directory precedes browser launch; another attempt
+is refused even if its supplied delivery hash changes. Completion/unknown
+outcomes are retained separately. No force/reset/retry/selector/URL parameter,
+USER send, key, binding, worker, tunnel or scheduler is introduced.
+
+The existing response primitive permits one unique known trace control only:
+exact USER/assistant/document, safe button or native summary outside user/prose/
+code/tool output/forms, empty composer and idle generation. A lost click result
+never repeats. Panel readback needs an exact control link, native details or a
+witnessed fresh child/role panel, with two stable post-click samples. Unknown,
+changed or ambiguous surfaces export no partial panel content. Returned data is
+fixed error/tool labels and, only for a displayed exact public empty probe,
+known outer-argument TYPES without values. UI observations remain distinct from
+native/RPC execution receipts and never create release or review authority.
+
+Validation: 102-case broad DOM run plus 7 focused persistent-DOM trace cases;
+20 native readiness, 46 CLI and 40 probe tests; formatting and strict root/Wake
+Clippy pass. Tests include one/zero click bounds, wrong/duplicate messages,
+unsafe controls, drafts, generation, expired/network sessions, interrupted
+transport, unstable controls, ambiguous panels, all supported panel layouts,
+truncated coverage, privacy, unknown protocol values and the durable no-repeat
+fence. A large-text fixture hit Windows' command-line limit; retained that failed
+run, moved the test driver into a checked temporary directory, and reran the
+focused cases successfully. No product workaround or installation change.
+C1 native coding and installed automatic-readback acceptance remain incomplete.

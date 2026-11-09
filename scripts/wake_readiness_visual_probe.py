@@ -194,6 +194,12 @@ def report_app_menu(sink,cdp,delivery,report=print):
         report('PROBE:APP_MENU:'+json.dumps(value,separators=(',',':'),sort_keys=True),flush=True)
     except Exception:report('PROBE:APP_MENU_STATE:UNPROVEN',flush=True)
 
+def report_response_trace(sink,cdp,delivery,report=print):
+    try:
+        value=sink.inspect_response_trace(cdp,delivery['event']['message'],delivery['messageDigest'])
+        report('PROBE:TRACE:'+json.dumps(value,separators=(',',':'),sort_keys=True),flush=True)
+    except Exception:report('PROBE:TRACE_STATE:UNPROVEN',flush=True)
+
 
 def surface_state(value):
     route = value["route"]
@@ -448,6 +454,7 @@ def main():
     parser.add_argument("--response-only", action="store_true")
     parser.add_argument("--task-diagnostics", action="store_true")
     parser.add_argument("--inspect-app-menu", action="store_true")
+    parser.add_argument("--inspect-response-trace", action="store_true")
     args = parser.parse_args()
     if args.await_start and sys.stdin.readline() != "START\n":
         return 2
@@ -469,7 +476,7 @@ def main():
     message = None
     receipt_delivery = None
     response_delivery = None
-    if args.inspect_app_menu and not (args.task_diagnostics and args.response_only and args.read_only and args.profile is not None and args.delivery_file is not None):
+    if (args.inspect_app_menu and args.inspect_response_trace) or ((args.inspect_app_menu or args.inspect_response_trace) and not (args.task_diagnostics and args.response_only and args.read_only and args.profile is not None and args.delivery_file is not None)):
         return 2
     if (args.task_diagnostics and not args.response_only) or (args.receipt_only and args.response_only) or ((args.receipt_only or args.response_only) and (not args.read_only or args.delivery_file is None)):
         return 2
@@ -559,6 +566,8 @@ def main():
                     report_composer_apps(sink, cdp)
                 if args.inspect_app_menu and completed:
                     report_app_menu(sink,cdp,response_delivery)
+                if args.inspect_response_trace and completed:
+                    report_response_trace(sink,cdp,response_delivery)
             else:
                 print("PROBE:RESPONSE_STATE:UNPROVEN", flush=True)
     print("PROBE:PHASE:BROWSER_CLOSED", flush=True)

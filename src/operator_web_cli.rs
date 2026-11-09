@@ -113,6 +113,10 @@ pub(crate) enum WebAction {
         project_id: String,
         event_id: String,
     },
+    ReviewInspectTrace {
+        project_id: String,
+        event_id: String,
+    },
     ReviewInspectSubmission {
         project_id: String,
         event_id: String,
@@ -608,6 +612,7 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
             "read"
             | "inspect-response"
             | "inspect-app-menu"
+            | "inspect-trace"
             | "inspect-submission"
             | "reconcile-submission"
             | "reobserve"
@@ -627,6 +632,11 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                 })
             } else if verb == "inspect-app-menu" {
                 Ok(WebAction::ReviewInspectAppMenu {
+                    project_id: project_id.into(),
+                    event_id: event_id.into(),
+                })
+            } else if verb == "inspect-trace" {
+                Ok(WebAction::ReviewInspectTrace {
                     project_id: project_id.into(),
                     event_id: event_id.into(),
                 })
@@ -1183,6 +1193,7 @@ fn read_review(workspace: &Path, project: &str, event_id: &str) -> Result<Value,
 enum TaskObservation {
     SentResponse,
     AppMenu,
+    Trace,
     PendingSubmission,
     ReconcileSubmission,
 }
@@ -1215,7 +1226,7 @@ fn inspect_review_response(
         .unwrap_or_else(|| delivery.event.event_id.clone());
     let task_record =
         crate::web_work_state::WorkLedger::record_for_event(workspace, project, &source_event)?;
-    if mode == TaskObservation::AppMenu
+    if matches!(mode, TaskObservation::AppMenu | TaskObservation::Trace)
         && task_record
             .as_ref()
             .is_none_or(|record| record.task_assignment.is_none())
@@ -1251,7 +1262,9 @@ fn inspect_review_response(
         lease.check_target(&target)
     };
     guard()?;
-    let mut value = if mode == TaskObservation::AppMenu {
+    let mut value = if mode == TaskObservation::Trace {
+        catdesk_wake::runtime::inspect_sent_task_trace(&wake, project, &target, event_id, &guard)?
+    } else if mode == TaskObservation::AppMenu {
         catdesk_wake::runtime::inspect_sent_task_app_menu(
             &wake, project, &target, event_id, &guard,
         )?
@@ -1325,7 +1338,9 @@ fn inspect_review_response(
             value["receiptCommitState"] = json!("UNPROVEN");
         }
     }
-    value["action"] = json!(if mode == TaskObservation::AppMenu {
+    value["action"] = json!(if mode == TaskObservation::Trace {
+        "web_task_trace_inspect"
+    } else if mode == TaskObservation::AppMenu {
         "web_task_app_menu_inspect"
     } else if mode == TaskObservation::ReconcileSubmission {
         "web_task_submission_reconcile"
@@ -1932,6 +1947,10 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             project_id,
             event_id,
         } => inspect_review_response(&workspace, &project_id, &event_id, TaskObservation::AppMenu),
+        WebAction::ReviewInspectTrace {
+            project_id,
+            event_id,
+        } => inspect_review_response(&workspace, &project_id, &event_id, TaskObservation::Trace),
         WebAction::ReviewReobserve {
             project_id,
             event_id,
@@ -3011,6 +3030,38 @@ mod tests {
         ] {
             let mut changed = valid.clone();
             changed.extend(args(&[extra, "foreign"]));
+            assert!(parse(&changed).is_err());
+        }
+        assert!(parse(&valid[..6]).is_err());
+    }
+
+    #[test]
+    fn trace_inspection_selects_only_an_existing_task_event_without_click_or_replay_override() {
+        let valid = args(&[
+            "operator",
+            "web",
+            "review",
+            "inspect-trace",
+            "--project-id",
+            "alpha",
+            "--event-id",
+            "wake-intent-existing",
+        ]);
+        assert!(matches!(
+            parse(&valid),
+            Ok(WebAction::ReviewInspectTrace { .. })
+        ));
+        for key in [
+            "--selector",
+            "--url",
+            "--input-file",
+            "--submit",
+            "--force",
+            "--retry",
+            "--profile",
+        ] {
+            let mut changed = valid.clone();
+            changed.extend(args(&[key, "foreign"]));
             assert!(parse(&changed).is_err());
         }
         assert!(parse(&valid[..6]).is_err());

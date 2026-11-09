@@ -325,6 +325,119 @@ pub(crate) fn canonical_task_diagnostics(value: Value) -> Option<Value> {
     Some(value)
 }
 
+pub(crate) fn canonical_trace_observation(value: Value) -> Option<Value> {
+    let flags = [
+        "openAttempted",
+        "openRequested",
+        "openOutcomeUnknown",
+        "unknownOuterFields",
+        "scanTruncated",
+    ];
+    let counts = ["controlCount", "panelCount", "requestMatchCount"];
+    if value.as_object()?.len() != 18
+        || value["schemaVersion"].as_u64() != Some(1)
+        || value["basis"] != "TASK_BOUND_TRACE_UI_NOT_NATIVE_RECEIPT"
+        || !matches!(
+            value["state"].as_str()?,
+            "UNPROVEN"
+                | "CONTROL_READY"
+                | "CONTROL_ABSENT"
+                | "CONTROL_AMBIGUOUS"
+                | "CONTROL_UNSUPPORTED"
+                | "DRAFT_PRESENT"
+                | "GENERATION_ACTIVE"
+                | "PANEL_CONFLICT"
+                | "OPEN_REQUESTED"
+                | "OPEN_OUTCOME_UNKNOWN"
+                | "CONTROL_CHANGED"
+                | "PANEL_UNPROVEN"
+                | "PANEL_AMBIGUOUS"
+                | "OBSERVED"
+                | "RESPONSE_CHANGED"
+        )
+        || !matches!(
+            value["controlType"].as_str()?,
+            "UNKNOWN" | "BUTTON" | "SUMMARY"
+        )
+        || !matches!(
+            value["expandedState"].as_str()?,
+            "UNKNOWN" | "OPEN" | "CLOSED"
+        )
+        || !matches!(
+            value["panelKind"].as_str()?,
+            "NONE" | "CONTROL_LINK" | "DETAILS" | "FRESH_CHILD" | "FRESH_ROLE"
+        )
+        || !flags.iter().all(|key| value[*key].as_bool().is_some())
+        || !counts
+            .iter()
+            .all(|key| value[*key].as_u64().is_some_and(|n| n <= 64))
+    {
+        return None;
+    }
+    // Reuse the same closed error/tool vocabulary; these neutral flags are
+    // validation input only and are never returned as execution evidence.
+    canonical_task_diagnostics(
+        json!({"toolDiagnostics":{"schemaVersion":1,"basis":"VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT",
+        "scope":"EXACT_USER_EXCHANGE","selectorCoverage":"KNOWN_MARKERS_ONLY","callMarkers":0,"resultMarkers":0,"errorMarkers":0,"busyMarkers":0,"countOverflow":false},
+        "assistantHints":{"schemaVersion":4,"basis":"ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION","toolUnavailable":false,"contextUnavailable":false,"approvalRequested":false,"nativeDispatchMentioned":false,
+        "knownCodes":value["knownCodes"],"refusalCategories":[],"scanTruncated":false,"unavailableSubjects":[],"mentionedTools":value["mentionedTools"],"argumentIssues":[],"cachedInvariants":value["cachedInvariants"]}}),
+    )?;
+    let arguments = &value["argumentTypes"];
+    if !arguments.is_null()
+        && (arguments.as_object()?.len() != 6
+            || arguments["command"] != "EMPTY_RESERVED_PROBE"
+            || ![
+                "cwd",
+                "timeout",
+                "dry_run",
+                "include_full_output",
+                "allow_without_plan",
+            ]
+            .iter()
+            .all(|key| {
+                matches!(
+                    arguments[*key].as_str(),
+                    Some(
+                        "ABSENT"
+                            | "NULL"
+                            | "BOOLEAN"
+                            | "STRING"
+                            | "NUMBER"
+                            | "OBJECT"
+                            | "ARRAY"
+                            | "OTHER"
+                    )
+                )
+            }))
+    {
+        return None;
+    }
+    if value["openRequested"] == true && value["openAttempted"] != true {
+        return None;
+    }
+    if value["state"] == "OBSERVED" {
+        if value["openRequested"] != true
+            || value["openOutcomeUnknown"] != false
+            || value["expandedState"] != "OPEN"
+            || value["controlCount"] != 1
+            || value["panelCount"] != 1
+            || value["panelKind"] == "NONE"
+            || (!arguments.is_null()) != (value["requestMatchCount"] == 1)
+        {
+            return None;
+        }
+    } else if !value["knownCodes"].as_array()?.is_empty()
+        || !value["cachedInvariants"].as_array()?.is_empty()
+        || !value["mentionedTools"].as_array()?.is_empty()
+        || !arguments.is_null()
+        || value["unknownOuterFields"] != false
+        || value["requestMatchCount"] != 0
+    {
+        return None;
+    }
+    Some(value)
+}
+
 pub(crate) fn validate_observation(delivery: &Delivery, value: &Value) -> Result<bool> {
     let receipt = delivery
         .receipt
