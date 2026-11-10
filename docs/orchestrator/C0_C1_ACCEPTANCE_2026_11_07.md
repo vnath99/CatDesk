@@ -2545,3 +2545,55 @@ leak; the review packet omitted a decisive unchanged validator check. The failed
 report remains preserved and unqualified while genuine reassessment is prepared.
 Original later messages, source integration and promotion remain held. A new
 communication grant alone cannot supersede review evidence or qualify C1.
+
+### 2026-11-10T00:30:20Z — local source-read compatibility and no-send admission
+
+The first local command-compatibility attempt failed before source execution:
+its catalog exceeded the response envelope. The second fitted that catalog but
+the shell guard refused the first piped command with `SHELL_MODE_BLOCKED`, also
+before source execution. Both remain failed, with cleanup verified. The first
+helper's post-launch modification and preserved executed bytes are recorded;
+neither failure was relabeled or worked around by weakening safeguards.
+
+Public input commit `3004c462cf615009660f3b69edf62f9940afb9b6` supplies four
+byte-faithful slices of unchanged focused source
+`ae3f81445dc543d236732060e8d02e54b8c3a978`. A third finite local MCP owner
+passed in 64.479s: four simple Git reads matched exact raw-LF bytes and hashes,
+1,315 fresh preservation pins matched, and owned processes/readers/endpoint
+closed. No browser, tunnel, protected backend, native task or message was started.
+This is local source-read qualification, not a completed Web review or installed
+runtime acceptance.
+
+Normal one-message authorization and one no-send preflight subsequently passed
+in a 25.627s owner with 1,342 unchanged pins, all old grants/records preserved,
+zero new reservations and verified cleanup. **As of this admission checkpoint,
+the reassessment is NOT_SENT**; platform approval, revised reviewer judgment,
+source acceptance and producer authority are not established. See the
+[separate stage evidence](../verification/CORRECTIVE_SOURCE_REVIEW_RECOVERY_2026_11_09.json).
+The original ninth FAIL/CLOSED record remains immutable, later original messages
+remain held, and qualified coverage stays eight of eleven groups and 35 of 50
+fragments. Native edit, verification, result Wake, protected promotion and C1
+acceptance remain incomplete.
+
+### 2026-11-10T00:44:33Z — one-shot reassessment read; failed preservation qualification
+
+The reassessment now has one exact SENT receipt, a completed assistant turn,
+persisted-page readback and automatic event-bound response capture through the
+64 KiB read path. Its 244.609s workflow received REVIEWED_PARTIAL with a reported
+RETRACTED disposition, five original fragments and four countercontexts. Schema
+validation, source-read corroboration and effective revision selection remain
+pending. The earlier NOT_SENT entry describes admission only and is preserved.
+
+The 247.872s overall owner **FAILED**, exit code 1: one readiness-history journal
+pin changed out of 1,354; 1,353 matched. Its possible attribution to a supported
+journal append is under investigation, not yet qualified. The failed owner
+remains failed. Cleanup independently verified zero test-owned, canonical or
+exact-profile processes, no retained owned identities and actual endpoint refusal.
+No native dispatch, unexpected native files, authentication change, new tunnel or
+recurring owner was recorded. See the [separate delivery evidence](../verification/CORRECTIVE_SOURCE_REVIEW_RECOVERY_2026_11_09.json).
+
+Neither reported retraction nor cleanup substitutes for the missing preservation
+and review qualification. The original ninth FAIL/CLOSED evidence stays intact,
+coverage remains eight of eleven groups and 35 of 50 fragments, and later messages
+remain held. Do not replay the delivered request. No source acceptance, producer
+authority, protected promotion or native C1 completion is established.

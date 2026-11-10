@@ -3394,3 +3394,67 @@ The failed report remains immutable; a genuinely attributable reassessment and
 explicit evidence disposition are required before it can supply source coverage.
 Neither local tests nor a new communication authorization can manufacture review
 or release authority. C1, cumulative acceptance and promotion remain incomplete.
+
+### 2026-11-10T00:30:20Z — simple Git reads qualified; reassessment admitted without sending
+
+The first bounded local read-compatibility attempt failed in 103.792s because
+the 205,157-byte catalog exceeded its 131,072-byte envelope limit. No source
+command executed. Its helper was modified after launch; the original executed
+bytes and failed result remain preserved, without reclassifying that attempt.
+The second attempt fitted the catalog but failed in 4.824s: the first piped
+request returned `SHELL_MODE_BLOCKED` before source execution. Both attempts
+preserved their state pins and verified owned cleanup and endpoint refusal.
+No shell, authentication or transport safeguard was weakened.
+
+Public input commit `3004c462cf615009660f3b69edf62f9940afb9b6` instead publishes
+four exact raw-LF slices of unchanged focused source
+`ae3f81445dc543d236732060e8d02e54b8c3a978` for simple Git reads. The third
+local compatibility owner passed in 64.479s: all four returned slices matched
+their exact bytes and SHA-256, all 1,315 fresh preservation pins matched, readers
+closed, no owned processes remained and the endpoint refused connections. It
+started no browser, tunnel, protected backend, native task or review message.
+This qualifies local command compatibility, not ChatGPT review or installation.
+
+The existing normal authorization and no-send preflight then each ran once.
+The 25.627s owner passed with an eligible one-message reassessment grant, zero
+reservations, zero messages sent and 1,342 unchanged preservation pins. Existing
+grants, work records and native ownership were preserved; cleanup passed.
+At this admission checkpoint the new review is **NOT_SENT** and
+`platformApprovalGranted:false`; no response or revised verdict is established.
+The [dated evidence](docs/verification/CORRECTIVE_SOURCE_REVIEW_RECOVERY_2026_11_09.json)
+records separate result and owner hashes for each stage.
+
+The original ninth FAIL and CLOSED communication remain immutable. Eight
+partials and 35 of 50 fragments qualify; later original messages remain held.
+Admission must not be rerun or treated as review acceptance. Genuine attributable
+reassessment and its explicit evidence disposition are still required before
+cumulative review, source integration, producer authority or promotion. C1 remains
+incomplete, with no verified native edit, verification or result Wake.
+
+### 2026-11-10T00:44:33Z — reassessment delivered once; preservation discrepancy holds qualification
+
+The admitted reassessment ran once and obtained an exact SENT receipt, completed
+assistant turn, persisted-page readback and automatic event-bound response read
+through the 64 KiB read path. The 244.609s workflow received REVIEWED_PARTIAL
+with a reported RETRACTED finding disposition, five original fragments and four
+countercontexts. Schema validation, source-read corroboration and effective
+revision selection are not yet established. The earlier NOT_SENT admission
+checkpoint remains historical evidence, rather than the current delivery state.
+
+The overall 247.872s owner **FAILED** with exit code 1: one readiness-history
+journal pin changed among 1,354 preservation pins; the other 1,353 matched.
+Whether this is the expected supported journal append remains under
+investigation. The failed owner must not be relabeled healthy or the discrepancy
+treated as resolved before independent qualification. All test-owned processes,
+canonical processes and exact-profile processes exited, readers/owned identities
+were closed, and actual endpoint refusal was verified. Cleanup success does not
+make the overall owner pass. No native dispatch, unexpected native files,
+authentication change, new tunnel or recurring owner was recorded.
+
+The [dated evidence](docs/verification/CORRECTIVE_SOURCE_REVIEW_RECOVERY_2026_11_09.json)
+retains the exact result, owner and response evidence hashes without publishing
+private identities or response content. The original ninth FAIL/CLOSED record
+is preserved. Coverage remains eight of eleven groups and 35 of 50 fragments;
+later original messages, integration and promotion remain held. The delivered
+request must not be replayed. Source acceptance, producer authority and the native
+C1 cycle remain incomplete.
