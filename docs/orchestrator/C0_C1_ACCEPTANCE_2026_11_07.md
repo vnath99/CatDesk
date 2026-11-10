@@ -2633,3 +2633,25 @@ review's live cause unproved. No new candidate or review restart is implied.
 Cumulative review, source acceptance, producer authority, installed qualification,
 promotion and native C1 remain incomplete; mapping performed no product or native
 operation and sent no message.
+
+### 2026-11-10T01:29:24Z — eleven partials qualified; final acceptance remains separate
+
+Original reviews ten and eleven passed one exact SENT/COMPLETE/automatic-read
+cycle each. Their owners passed in 280.649s/223.962s with 1,299/1,312 unchanged
+pins, raw journal before-images, exact 64-entry transitions and verified zero
+remaining owned/profile processes and endpoint refusal. Seven/three fragments,
+ten/six source reads and zero findings qualified; five/six context needs remain
+for final resolution. Communication closures passed in 8.532s/7.995s with
+1,307/1,320 unchanged pins and `taskCompletionVerified:false`. The
+[dated evidence](../verification/CORRECTIVE_SOURCE_REVIEW_RECOVERY_2026_11_09.json)
+records actual result/proof/closure hashes.
+
+Coverage is now eleven logical partial groups, 50 original fragments and 18
+changed code paths, with all 59 communications CLOSED and 29 grants retained.
+Group9's source-only qualification preserves its raw owner FAIL and operational
+UNPROVEN history; H's missing later reader/UTF-8 metadata fixes and the unproved
+Group3 cause remain disclosed. Original final message twelve remains unused.
+Five public final inputs/eight declared reads are published at coordinator-verified
+remote commit `c66aa3af6b17bfe95ac633b7aaee69ffd1064f05`. This supplies review
+inputs, not cumulative judgment, source acceptance, producer authority, installed
+qualification, promotion or native C1 completion.
