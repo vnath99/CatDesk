@@ -3458,3 +3458,43 @@ is preserved. Coverage remains eight of eleven groups and 35 of 50 fragments;
 later original messages, integration and promotion remain held. The delivered
 request must not be replayed. Source acceptance, producer authority and the native
 C1 cycle remain incomplete.
+
+### 2026-11-10T00:52:31Z — source reads corroborated; communication closed without review selection
+
+The 0.531s file-only evidence audit validated the reassessment schema and matched
+all eleven source-read logs once each, including the reported RETRACTED disposition.
+Its evidence remains unqualified while the original owner failure and readiness
+history discrepancy remain unresolved. The bounded historical search did not
+recover the missing original first row from the 64-entry journal; no retroactive
+preservation waiver was granted. Normal communication-only closure subsequently
+passed in a 7.875s owner (7.172s workflow), preserving 1,361 pins, other records,
+grants, native claim and delivery/timer bytes. It recorded CLOSED/completed with
+`taskCompletionVerified:false`, leaving zero open communications and sending no
+new USER message or native action. These distinct results and their hashes are
+in the [dated record](docs/verification/CORRECTIVE_SOURCE_REVIEW_RECOVERY_2026_11_09.json).
+The original run remains FAILED with one mismatch; its historical ninth FAIL is
+preserved. Source-only contract separation is being prepared, not yet qualified;
+no effective revision, source acceptance or producer authority has been selected.
+Coverage stays eight of eleven groups and 35 of 50 fragments. Promotion and C1
+remain incomplete.
+
+### 2026-11-10T01:01:42Z — explicit source-only Group 9 mapping; operational limitation retained
+
+An independently reviewed source-only rule, supported by 53 passing pure-data
+checks in 0.037s, now maps the closed reassessment to logical Group 9 using its
+valid schema, eleven corroborated reads, RETRACTED disposition, five original
+fragments, four countercontexts and verified cleanup. Qualified source coverage
+is nine of eleven groups and 40 of 50 fragments; original groups ten and eleven
+are NOT_SENT at this checkpoint. The [mapping record](docs/verification/CORRECTIVE_SOURCE_REVIEW_RECOVERY_2026_11_09.json)
+preserves the original FAIL and all old/current context needs. This does not
+repair the failed send owner: one readiness-history mismatch, unavailable prior
+journal bytes and unknown evicted row remain operationally UNPROVEN; the other
+1,353 static pins matched. Future journal qualification must preserve raw prior
+bytes and prove the exact 64-entry append/eviction transition. Focused candidate
+`ae3f814` contains neither source-only fix `74981c9` (shared USER projection) nor
+`5cc3362` (captured UTF-8 output identity). Its mixed-selector readers can fail
+closed; those cases do not demonstrate wrong-chat delivery or establish the
+third review's live cause. Its command responses do not expose the later byte/hash
+metadata. No candidate change or review restart occurred. Final cumulative review,
+source acceptance, producer authority, installed qualification, promotion and C1
+remain incomplete; the mapping made no product call, send or native action.
