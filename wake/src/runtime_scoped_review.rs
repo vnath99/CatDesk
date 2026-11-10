@@ -1864,6 +1864,73 @@ mod tests {
     }
 
     #[test]
+    fn scoped_guard_rechecks_deadline_after_slow_metadata_guard() {
+        let mut before = |_: &Event, _: &Target| Ok(());
+        let keep = || {
+            thread::sleep(Duration::from_millis(30));
+            Ok(())
+        };
+        let guard = ScopedReviewGuard {
+            deadline: Instant::now() + Duration::from_millis(10),
+            review_event: false,
+            before_submit: &mut before,
+            keep_running: &keep,
+        };
+        assert_eq!(guard.check().unwrap_err(), "SCOPED_REVIEW_TIMEOUT");
+    }
+
+    #[test]
+    fn scoped_deadline_after_fence_refuses_ack_and_keeps_unknown_without_replay() {
+        let (store, _, target) = fixture("deadline-after-fence");
+        let event = work_event(&store, "alpha", &target);
+        let fake = adapter(&event, &target);
+        let ack = fake.ack_count.clone();
+        let admitted = fake.admitted.clone();
+        let mut handoff = |actual: &Event, _: &Target| {
+            store.require_submitting_witness(&store.delivery(&actual.event_id)?.unwrap())?;
+            thread::sleep(Duration::from_millis(1100));
+            Ok(())
+        };
+        let result = run_selected_with_adapter(
+            &store,
+            &event.event_id,
+            1,
+            Selection::WorkRequest(&event, &target),
+            &mut |_, _| {
+                admitted.set(true);
+                Ok(())
+            },
+            &|| Ok(()),
+            |_, _| {
+                Ok(FencedAdapter {
+                    inner: fake,
+                    handoff: &mut handoff,
+                })
+            },
+        );
+        assert_eq!(result.unwrap_err(), "SCOPED_REVIEW_TIMEOUT");
+        assert_eq!(ack.get(), 0);
+        let retained = store.delivery(&event.event_id).unwrap().unwrap();
+        assert_eq!(retained.phase, Phase::Submitting);
+        assert!(retained.receipt.is_none());
+        store.require_submitting_witness(&retained).unwrap();
+        assert!(store.timer(&event.event_id).unwrap().is_none());
+        assert_eq!(
+            run_selected_with_adapter::<FakeAdapter>(
+                &store,
+                &event.event_id,
+                1,
+                Selection::WorkRequest(&event, &target),
+                &mut |_, _| panic!("no repeated admission"),
+                &|| Ok(()),
+                |_, _| panic!("no replay browser")
+            )
+            .unwrap_err(),
+            "SCOPED_REVIEW_REPLAY_REFUSED"
+        );
+    }
+
+    #[test]
     fn scoped_review_rejects_replay_running_host_and_invalid_budget_before_adapter() {
         let (store, event, _) = fixture("scoped-preflight");
         for limit in [0, 181] {

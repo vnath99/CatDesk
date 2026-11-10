@@ -9,12 +9,15 @@ use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
 static TEMP: AtomicU64 = AtomicU64::new(0);
 #[path = "store_reobserve.rs"]
 mod reobserve;
+#[cfg(test)]
+#[path = "store_submission_deadline_tests.rs"]
+mod submission_deadline_tests;
 const MAX_FILE: u64 = 1024 * 1024;
 pub const MANUAL_TURN_PREFIX: &str = "manual-turn-";
 const MAX_SOURCE_PROGRESS_ITEMS: usize = 100_000;
@@ -1791,6 +1794,30 @@ impl Store {
         receipt: Option<Receipt>,
         reason: Option<String>,
     ) -> Result<Delivery> {
+        self.transition_with_deadline(id, owner, next, receipt, reason, None)
+    }
+
+    /// Scoped admission must check its monotonic deadline after acquiring the
+    /// transaction lock, immediately before starting a new submission witness.
+    /// Already-started I/O and existing uncertain submissions are not undone.
+    pub fn begin_submission_before_deadline(
+        &self,
+        id: &str,
+        owner: &str,
+        deadline: Instant,
+    ) -> Result<Delivery> {
+        self.transition_with_deadline(id, owner, Phase::Submitting, None, None, Some(deadline))
+    }
+
+    fn transition_with_deadline(
+        &self,
+        id: &str,
+        owner: &str,
+        next: Phase,
+        receipt: Option<Receipt>,
+        reason: Option<String>,
+        submission_deadline: Option<Instant>,
+    ) -> Result<Delivery> {
         let _lock = self.lock()?;
         let mut delivery = self.read_delivery(id)?.ok_or("SUBMISSION_CLAIM_MISSING")?;
         if delivery.owner != owner {
@@ -1829,6 +1856,9 @@ impl Store {
                 target_digest: delivery.target.digest.clone(),
                 started_utc: now(),
             };
+            if submission_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                return Err("SCOPED_REVIEW_TIMEOUT".into());
+            }
             atomic(&self.submission_start_path(id), &start)?;
         }
         delivery.phase = next;

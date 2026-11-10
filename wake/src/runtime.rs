@@ -7623,7 +7623,11 @@ impl ScopedReviewGuard<'_> {
         if Instant::now() >= self.deadline {
             return Err("SCOPED_REVIEW_TIMEOUT".into());
         }
-        (self.keep_running)()
+        (self.keep_running)()?;
+        if Instant::now() >= self.deadline {
+            return Err("SCOPED_REVIEW_TIMEOUT".into());
+        }
+        Ok(())
     }
 }
 
@@ -7767,16 +7771,27 @@ fn attempt_inner<A: SubmissionAdapter>(
                             return Err("HOST_PAUSED_BEFORE_SUBMIT".into());
                         }
                     }
-                    store.transition(
-                        &d.event.event_id,
-                        lease.owner(),
-                        Phase::Submitting,
-                        None,
-                        None,
-                    )?;
+                    if let Some(guard) = scoped.as_ref() {
+                        store.begin_submission_before_deadline(
+                            &d.event.event_id,
+                            lease.owner(),
+                            guard.deadline,
+                        )?;
+                    } else {
+                        store.transition(
+                            &d.event.event_id,
+                            lease.owner(),
+                            Phase::Submitting,
+                            None,
+                            None,
+                        )?;
+                    }
                     status.submission = "SUBMITTING".into();
                     // A durable witness precedes this ownership handoff.
                     adapter.submit_fenced(&d.event, &d.target)?;
+                    if let Some(guard) = scoped.as_ref() {
+                        guard.check()?;
+                    }
                     adapter.send(serde_json::json!({"submit": true}))?;
                     submit_dispatched = true;
                 }

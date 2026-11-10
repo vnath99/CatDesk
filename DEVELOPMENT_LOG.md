@@ -3582,3 +3582,38 @@ started. Native C1/C49 fences and the INCONCLUSIVE source-release hold remain
 separate from the primary direct Web workflow. Actual live edit, verification
 and self-Wake are still pending. See
 `docs/verification/DIRECT_WEB_MANUAL_WAKE_2026_11_10.json`.
+
+## 2026-11-10 03:40 UTC — scoped submission deadline and actual delivery outcome
+
+Fixed three demonstrated source gaps in the existing bounded sender: the clock
+is checked after a slow metadata callback, under the Store transaction lock
+immediately before starting a new submission witness, and after fencing before
+authorizing submission. The Store lock runs only a monotonic time comparison;
+it does not invoke project callbacks. Existing unscoped transitions retain their
+behavior. An existing uncertain witness is never removed or relabeled. I/O that
+started before expiry may finish afterward; this is not a hard real-time claim.
+
+Four new deterministic tests passed, with 35 distinct focused checks overall.
+Root/Wake formatting and strict all-target Clippy passed. Independent source
+review found no material issue. The first test compile failed with E0373 in a
+fixture closure; explicit moved channel ownership corrected it. No installed
+binary contains this deadline change yet, and it does not establish the cause
+or outcome of the actual invitation timeout.
+
+The previously created isolated worktree and task were independently reconciled
+without repeating registration. One subsequent invitation timed out with a
+durable SUBMITTING witness and no receipt. One read-only receipt reconciliation
+returned WEB_WORK_RECEIPT_UNPROVEN. A separately qualified development observer
+then reported the exact owned plain draft, zero matching visible USER turns,
+and PENDING_DRAFT_PRESERVED_NO_SEND. Bounded visible history does not establish
+that a prior submission never occurred. The draft and unknown-send fence remain
+intact; no resend, grant, edit, verification or self-Wake occurred.
+
+The invitation's finite serving test verified authenticated transport with
+unauthorized requests rejected, and published the central scoped task tool.
+The later observer started neither backend nor tunnel. Every test-owned process
+exited and the local endpoint closed. This is development-controller evidence,
+not installed manual-Wake, project coding or unattended acceptance. Existing
+native tasks, project bindings and protected release authority are preserved.
+No operator authentication action is required by the latest observation.
+See `docs/verification/SCOPED_SUBMISSION_DEADLINE_2026_11_10.json`.
