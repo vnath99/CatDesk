@@ -8,6 +8,42 @@ use crate::install_broker_policy::{BrokerProtectedPolicyV1, PolicyVerifiedSameSt
 const PURPOSE: &str = "catdesk-wake-same-state-selection-transaction";
 const MAX_V3_RECORD_BYTES: usize = 48 * 1024;
 
+/// Failed bytes are retained observations, never release qualification.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SameStateFailedCurrentImageV3 {
+    pub(crate) name: String,
+    pub(crate) actual_sha256: Option<String>,
+    pub(crate) byte_length: Option<u64>,
+    pub(crate) identity: Option<FullFileIdentityV2>,
+}
+
+fn validate_failed_images(images: &[SameStateFailedCurrentImageV3], volume: u64) -> Result<()> {
+    if images.len() != 2
+        || !images
+            .iter()
+            .zip(["CatDeskWakeHost.exe", "CatDeskBinagotchy.exe"])
+            .all(|(image, name)| {
+                image.name == name
+                    && match (&image.actual_sha256, image.byte_length, &image.identity) {
+                        (None, None, None) => true,
+                        (Some(sha), Some(length), Some(identity)) => {
+                            lowercase_hex(sha, 64)
+                                && length <= 80 * 1024 * 1024
+                                && identity.volume_serial == volume
+                                && identity.volume_serial != 0
+                                && lowercase_hex(&identity.file_id_hex, 32)
+                                && identity.file_id_hex != "0".repeat(32)
+                        }
+                        _ => false,
+                    }
+            })
+    {
+        return Err("WAKE_SAME_STATE_FAILED_IMAGE_OBSERVATION_INVALID".into());
+    }
+    Ok(())
+}
+
 fn v3_file_info(file: &File, expected_length: Option<usize>) -> Result<()> {
     file_info_bounded(file, expected_length, MAX_V3_RECORD_BYTES)
 }
@@ -38,6 +74,10 @@ pub(super) fn record_name_v3(generation: u64, phase: InstallPhaseV1) -> String {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct SameStateLedgerBindingV3 {
+    /// SELECT records retain their original canonical encoding. A distinct
+    /// signed purpose is required for the shorter, existing-package rollback.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) operation: Option<String>,
     pub(crate) install_generation: u64,
     pub(crate) approval_id: String,
     pub(crate) signed_payload_sha256: String,
@@ -55,8 +95,25 @@ pub(crate) struct SameStateLedgerBindingV3 {
 }
 
 impl SameStateLedgerBindingV3 {
+    pub(crate) fn is_rollback(&self) -> bool {
+        self.operation.as_deref() == Some("ROLLBACK_SAME_STATE_RELEASE")
+    }
+    fn order(&self) -> &[InstallPhaseV1] {
+        if self.is_rollback() {
+            &[
+                InstallPhaseV1::Intent,
+                InstallPhaseV1::OldOwnerStopped,
+                InstallPhaseV1::PointerSwitched,
+                InstallPhaseV1::NewOwnerProven,
+                InstallPhaseV1::Complete,
+            ]
+        } else {
+            &InstallPhaseV1::ORDER
+        }
+    }
     fn validate(&self, root: &ObjectIdentityV1) -> Result<()> {
-        if self.install_generation == 0
+        if (self.operation.is_some() && !self.is_rollback())
+            || self.install_generation == 0
             || self.accepted_at_utc_seconds == 0
             || !crate::protocol::valid_id(&self.approval_id)
             || self.protected_root != *root
@@ -99,6 +156,8 @@ struct SameStateRecordV3 {
     signed_envelope_hex: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     observed_selection_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    failed_current_images: Option<Vec<SameStateFailedCurrentImageV3>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -321,6 +380,22 @@ pub(super) fn history_v3(
     if !present[0] {
         return Err("WAKE_SAME_STATE_LEDGER_RECORD_CORRUPT".into());
     }
+    let mut intent_file = open_optional(root, &record_name_v3(generation, InstallPhaseV1::Intent))?
+        .ok_or("WAKE_LEDGER_RECORD_CORRUPT")?;
+    let (intent, _) = read_v3(&mut intent_file)?;
+    // Record opens deny sharing. Retain the decoded binding, not a second
+    // INTENT lease, while the unchanged global lock protects the history scan.
+    drop(intent_file);
+    intent.binding.validate(root_id)?;
+    let order = intent.binding.order();
+    for phase in InstallPhaseV1::ORDER {
+        if present[phase.index()] && !order.contains(&phase) {
+            return Err("WAKE_SAME_STATE_LEDGER_PHASE_INVALID".into());
+        }
+    }
+    if intent.binding.is_rollback() && present[PUBLICATION_ATTEMPT_SLOT] {
+        return Err("WAKE_SAME_STATE_PUBLICATION_ATTEMPT_INVALID".into());
+    }
     let mut prior = "0".repeat(64);
     let mut binding = None;
     let mut escrow = None;
@@ -329,7 +404,7 @@ pub(super) fn history_v3(
     let mut stopped_digest = None;
     let mut staged_digest = None;
     let mut gap = false;
-    for phase in InstallPhaseV1::ORDER {
+    for &phase in order {
         if !present[phase.index()] {
             gap = true;
             continue;
@@ -355,6 +430,17 @@ pub(super) fn history_v3(
             envelope = Some(envelope_escrow_bytes(&record)?);
         } else if record.original_selection_hex.is_some() || record.signed_envelope_hex.is_some() {
             return Err("WAKE_SAME_STATE_ESCROW_INVALID".into());
+        }
+        if record.binding.is_rollback() && phase == InstallPhaseV1::OldOwnerStopped {
+            validate_failed_images(
+                record
+                    .failed_current_images
+                    .as_deref()
+                    .ok_or("WAKE_SAME_STATE_FAILED_IMAGE_OBSERVATION_INVALID")?,
+                record.binding.state_root.volume_serial,
+            )?;
+        } else if record.failed_current_images.is_some() {
+            return Err("WAKE_SAME_STATE_FAILED_IMAGE_OBSERVATION_INVALID".into());
         }
         if phase.index() >= InstallPhaseV1::PointerSwitched.index() {
             if record.observed_selection_sha256.as_deref()
@@ -384,7 +470,7 @@ pub(super) fn history_v3(
                 .as_deref()
                 .ok_or("WAKE_SAME_STATE_PUBLICATION_ATTEMPT_INVALID")?,
         )?;
-    } else if current.index() >= InstallPhaseV1::Published.index() {
+    } else if !binding.is_rollback() && current.index() >= InstallPhaseV1::Published.index() {
         return Err("WAKE_SAME_STATE_PUBLICATION_ATTEMPT_MISSING".into());
     }
     if present[POINTER_ATTEMPT_SLOT] {
@@ -581,6 +667,7 @@ impl<'a> BrokerLedgerGuard<'a> {
                         .collect(),
                 ),
                 observed_selection_sha256: None,
+                failed_current_images: None,
             };
             (
                 InstallPhaseV1::Intent,
@@ -627,10 +714,72 @@ impl AdmittedSameStateLedgerLeaseV3<'_, '_> {
         next: InstallPhaseV1,
         observed_selection_sha256: Option<&str>,
     ) -> Result<()> {
+        self.record_phase_with_observation(next, observed_selection_sha256, None)
+    }
+    pub(crate) fn record_rollback_stopped(
+        &mut self,
+        images: &[SameStateFailedCurrentImageV3],
+    ) -> Result<()> {
+        if !self.binding.is_rollback() {
+            return Err("WAKE_SAME_STATE_LEDGER_PHASE_INVALID".into());
+        }
+        validate_failed_images(images, self.binding.state_root.volume_serial)?;
+        self.record_phase_with_observation(
+            InstallPhaseV1::OldOwnerStopped,
+            None,
+            Some(images.to_vec()),
+        )
+    }
+    pub(crate) fn failed_current_images(
+        &self,
+    ) -> Result<Option<Vec<SameStateFailedCurrentImageV3>>> {
+        if !self.binding.is_rollback() || self.phase == InstallPhaseV1::Intent {
+            return Ok(None);
+        }
+        let mut file = open_optional(
+            self.root,
+            &record_name_v3(
+                self.binding.install_generation,
+                InstallPhaseV1::OldOwnerStopped,
+            ),
+        )?
+        .ok_or("WAKE_SAME_STATE_FAILED_IMAGE_OBSERVATION_INVALID")?;
+        let (record, _) = read_v3(&mut file)?;
+        if record.binding != self.binding
+            || record.phase != phase_name_v3(InstallPhaseV1::OldOwnerStopped)
+        {
+            return Err("WAKE_SAME_STATE_FAILED_IMAGE_OBSERVATION_INVALID".into());
+        }
+        let images = record
+            .failed_current_images
+            .ok_or("WAKE_SAME_STATE_FAILED_IMAGE_OBSERVATION_INVALID")?;
+        validate_failed_images(&images, self.binding.state_root.volume_serial)?;
+        Ok(Some(images))
+    }
+    fn record_phase_with_observation(
+        &mut self,
+        next: InstallPhaseV1,
+        observed_selection_sha256: Option<&str>,
+        failed_current_images: Option<Vec<SameStateFailedCurrentImageV3>>,
+    ) -> Result<()> {
         self.policy.revalidate()?;
+        if self.binding.is_rollback() && next == InstallPhaseV1::OldOwnerStopped {
+            validate_failed_images(
+                failed_current_images
+                    .as_deref()
+                    .ok_or("WAKE_SAME_STATE_FAILED_IMAGE_OBSERVATION_INVALID")?,
+                self.binding.state_root.volume_serial,
+            )?;
+        } else if failed_current_images.is_some() {
+            return Err("WAKE_SAME_STATE_FAILED_IMAGE_OBSERVATION_INVALID".into());
+        }
         if self.policy.readback()?.policy_sha256 != self.binding.policy_sha256
             || root_info(self.root)? != self.binding.protected_root
-            || next.index() != self.phase.index() + 1
+            || self
+                .binding
+                .order()
+                .windows(2)
+                .all(|pair| pair != [self.phase, next])
             || (next.index() >= InstallPhaseV1::PointerSwitched.index()
                 && observed_selection_sha256
                     != Some(self.binding.planned_selection_sha256.as_str()))
@@ -656,6 +805,9 @@ impl AdmittedSameStateLedgerLeaseV3<'_, '_> {
             selection_attempt(self.root, &self.binding, &self.digest)?;
         }
         if next == InstallPhaseV1::Published {
+            if self.binding.is_rollback() {
+                return Err("WAKE_SAME_STATE_LEDGER_PHASE_INVALID".into());
+            }
             publication_attempt(self.root, &self.binding, &self.digest)?;
         }
         let record = SameStateRecordV3 {
@@ -667,6 +819,7 @@ impl AdmittedSameStateLedgerLeaseV3<'_, '_> {
             original_selection_hex: None,
             signed_envelope_hex: None,
             observed_selection_sha256: observed_selection_sha256.map(str::to_owned),
+            failed_current_images,
         };
         self.digest = write_v3(self.root, &self.binding.protected_root, &record)?;
         self.phase = next;
@@ -727,7 +880,8 @@ impl AdmittedSameStateLedgerLeaseV3<'_, '_> {
     }
     pub(crate) fn record_publication_attempt(&mut self) -> Result<()> {
         self.policy.revalidate()?;
-        if self.phase != InstallPhaseV1::Staged
+        if self.binding.is_rollback()
+            || self.phase != InstallPhaseV1::Staged
             || root_info(self.root)? != self.binding.protected_root
         {
             return Err("WAKE_SAME_STATE_PUBLICATION_ATTEMPT_INVALID".into());
@@ -782,6 +936,7 @@ mod tests {
 
     fn binding(raw: &[u8]) -> SameStateLedgerBindingV3 {
         SameStateLedgerBindingV3 {
+            operation: None,
             install_generation: 1,
             approval_id: "signed-selection-one".into(),
             signed_payload_sha256: "1".repeat(64),
@@ -806,6 +961,33 @@ mod tests {
         }
     }
 
+    #[test]
+    fn same_state_rollback_order_is_five_real_phases_and_select_encoding_stays_unchanged() {
+        let mut selected = binding(b"before");
+        let raw = serde_json::to_value(&selected).unwrap();
+        assert!(raw.get("operation").is_none());
+        assert_eq!(selected.order(), &InstallPhaseV1::ORDER);
+        selected.operation = Some("ROLLBACK_SAME_STATE_RELEASE".into());
+        selected.validate(&selected.protected_root).unwrap();
+        assert_eq!(
+            selected.order(),
+            &[
+                InstallPhaseV1::Intent,
+                InstallPhaseV1::OldOwnerStopped,
+                InstallPhaseV1::PointerSwitched,
+                InstallPhaseV1::NewOwnerProven,
+                InstallPhaseV1::Complete
+            ]
+        );
+        selected.operation = Some("SELECT_SAME_STATE_RELEASE".into());
+        assert!(
+            selected.validate(&selected.protected_root).is_err(),
+            "SELECT keeps its legacy omitted encoding"
+        );
+        selected.operation = Some("OTHER".into());
+        assert!(selected.validate(&selected.protected_root).is_err());
+    }
+
     fn fixture_record(
         binding: &SameStateLedgerBindingV3,
         phase: InstallPhaseV1,
@@ -825,6 +1007,7 @@ mod tests {
                 .then(|| envelope.iter().map(|v| format!("{v:02x}")).collect()),
             observed_selection_sha256: (phase.index() >= InstallPhaseV1::PointerSwitched.index())
                 .then(|| binding.planned_selection_sha256.clone()),
+            failed_current_images: None,
         }
     }
 
@@ -1186,6 +1369,7 @@ mod tests {
             original_selection_hex: Some(raw.iter().map(|v| format!("{v:02x}")).collect()),
             signed_envelope_hex: Some("00".into()),
             observed_selection_sha256: None,
+            failed_current_images: None,
         };
         assert_eq!(escrow_bytes(&record).unwrap(), raw);
         record.original_selection_hex = Some("00".into());
@@ -1211,6 +1395,7 @@ mod tests {
             original_selection_hex: Some(selection.iter().map(|v| format!("{v:02x}")).collect()),
             signed_envelope_hex: Some(envelope.iter().map(|v| format!("{v:02x}")).collect()),
             observed_selection_sha256: None,
+            failed_current_images: None,
         };
         assert!(bytes(&record).unwrap().len() <= MAX_V3_RECORD_BYTES);
         assert_eq!(escrow_bytes(&record).unwrap(), selection);

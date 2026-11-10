@@ -1,3 +1,22 @@
+## 2026-11-10 — existing release model gains exact previous-version rollback
+
+The version selector's original retained predecessor now has an operational
+broker rollback writer. It uses the same signed V3 envelope, fixed protected
+policy/service/pipe, global ledger and native resource leases. Rollback is a
+distinct signed purpose with five genuine phases; no staging or publication is
+reported for an already installed predecessor. Current damaged or missing image
+observations remain diagnostics, not qualification. The exact original full
+release facts and raw semantic receipts must remain available.
+
+329 distinct cases plus formatting and strict Clippy pass, including actual
+Windows pointer interruption/resume and lost-COMPLETE diagnostics. This does not
+qualify installed rollback, automatic startup fallback, process crash/power-loss
+recovery or unattended operation. Reviewed first provisioning and signer
+enrollment remain the concrete installation boundary; the existing installer
+still refuses unprovisioned mutation. No alternate installer, key, profile,
+registry or scheduler was introduced. Evidence:
+[rollback source](../verification/SAME_STATE_WAKE_ROLLBACK_SOURCE_2026_11_10.json).
+
 ## 2026-11-10 — non-dispatching foreground health before release admission
 
 The existing development foreground owner now has an explicitly bounded PAUSED
@@ -7,10 +26,18 @@ runtime install leases remain owned through child gate, pause, STOP and empty
 Job confirmation. No new owner, profile, target, scheduler or approval registry
 is introduced. Startup task recovery is deferred until RUNNING, once.
 
-38 distinct source/native-fixture cases and strict checks pass. Build and actual
-host start/stop are next. Backend-only health and a successful source heartbeat
-fixture are not substituted for actual Wake working evidence or protected
-installation/rollback acceptance.
+38 distinct source/native-fixture cases and strict checks pass separately from
+actual development results. Exact source
+`dba8fc374622c93f9b8ca3744f8ba59f99fb7030` built in a separate checkout; its
+selected package passed two actual 10-second PAUSED Host starts and one 15-second
+authenticated backend check (401/401/200; 79 tools). The live owner exited in
+71.329 seconds, all 755 preservation pins matched, and task-state inventories
+were unchanged. No browser, Wake dispatch, message, tunnel or production change
+occurred. The existing development selector's verification record is local only.
+This establishes bounded development lifecycle health; full browser Wake,
+protected installation, installed recovery/rollback and direct Web work remain
+unaccepted. Evidence:
+[actual development health](../verification/BOUNDED_PAUSED_WAKE_LIVE_DEVELOPMENT_2026_11_10.json).
 
 ## 2026-11-10 — existing-root migration implementation and evidence boundaries
 

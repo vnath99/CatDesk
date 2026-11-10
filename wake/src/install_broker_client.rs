@@ -904,7 +904,10 @@ impl FixedBrokerApprovalClient<'_> {
             serde_json::from_slice(approval).map_err(|_| "WAKE_SAME_STATE_REQUEST_INVALID")?;
         let payload = &request["payload"];
         if payload["schemaVersion"] != 3
-            || payload["operation"] != "SELECT_SAME_STATE_RELEASE"
+            || !matches!(
+                payload["operation"].as_str(),
+                Some("SELECT_SAME_STATE_RELEASE" | "ROLLBACK_SAME_STATE_RELEASE")
+            )
             || payload["approvalId"]
                 .as_str()
                 .is_none_or(|s| !crate::protocol::valid_id(s))
@@ -962,6 +965,38 @@ pub(crate) fn same_state_complete_reply_matches(
                     .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
         })
     };
+    let rollback = payload["operation"] == "ROLLBACK_SAME_STATE_RELEASE";
+    let failed_images_valid = !rollback
+        || value["failedCurrentImages"]
+            .as_array()
+            .is_some_and(|images| {
+                images.len() == 2
+                    && images
+                        .iter()
+                        .zip(["CatDeskWakeHost.exe", "CatDeskBinagotchy.exe"])
+                        .all(|(image, name)| {
+                            image.as_object().is_some_and(|o| {
+                                o.len() == 4
+                                    && o.keys().all(|k| {
+                                        ["name", "actualSha256", "byteLength", "identity"].contains(&k.as_str())
+                                    })
+                            }) && image["name"] == name
+                                && ((image["actualSha256"].is_null()
+                                    && image["byteLength"].is_null()
+                                    && image["identity"].is_null())
+                                    || (hash(&image["actualSha256"])
+                                        && image["byteLength"].as_u64().is_some_and(|n| n <= 80*1024*1024)
+                                        && serde_json::from_value::<
+                                            crate::install_broker_offline_v2::FullFileIdentityV2,
+                                        >(
+                                            image["identity"].clone()
+                                        )
+                                        .is_ok_and(|id| id.volume_serial != 0
+                                            && Some(id.volume_serial) == payload["stateSnapshot"]["root"]["volumeSerial"].as_u64()
+                                            && id.file_id_hex.len()==32 && id.file_id_hex != "0".repeat(32)
+                                            && id.file_id_hex.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))))
+                        })
+            });
     payload["approvalId"]
         .as_str()
         .is_some_and(crate::protocol::valid_id)
@@ -970,11 +1005,18 @@ pub(crate) fn same_state_complete_reply_matches(
         && envelope_sha256
             .bytes()
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-        && value
-            .as_object()
-            .is_some_and(|o| o.len() == KEYS.len() && o.keys().all(|k| KEYS.contains(&k.as_str())))
+        && value.as_object().is_some_and(|o| {
+            o.len() == KEYS.len() + usize::from(rollback)
+                && o.keys()
+                    .all(|k| KEYS.contains(&k.as_str()) || (rollback && k == "failedCurrentImages"))
+        })
+        && failed_images_valid
         && value["schemaVersion"] == 3
-        && value["operation"] == "SELECT_SAME_STATE_RELEASE"
+        && matches!(
+            payload["operation"].as_str(),
+            Some("SELECT_SAME_STATE_RELEASE" | "ROLLBACK_SAME_STATE_RELEASE")
+        )
+        && value["operation"] == payload["operation"]
         && value["phase"] == "COMPLETE"
         && value["approvalId"] == payload["approvalId"]
         && value["installGeneration"] == payload["installGeneration"]
@@ -1124,7 +1166,7 @@ mod tests {
 
     #[test]
     fn same_state_reply_requires_exact_request_and_complete_stopped_readback() {
-        let payload = serde_json::json!({"approvalId":"approval-one", "installGeneration":1,
+        let payload = serde_json::json!({"operation":"SELECT_SAME_STATE_RELEASE","approvalId":"approval-one", "installGeneration":1,
             "plannedSelectionSha256":"a".repeat(64)});
         let result = serde_json::json!({"schemaVersion":3,"operation":"SELECT_SAME_STATE_RELEASE",
             "approvalId":"approval-one","installGeneration":1,"phase":"COMPLETE",
@@ -1156,6 +1198,76 @@ mod tests {
             &result,
             &payload,
             &"d".repeat(64)
+        ));
+    }
+
+    #[test]
+    fn same_state_rollback_reply_never_substitutes_select_or_unknown_diagnostics() {
+        let payload = serde_json::json!({"operation":"ROLLBACK_SAME_STATE_RELEASE","approvalId":"rollback-one",
+            "installGeneration":2,"plannedSelectionSha256":"a".repeat(64),"stateSnapshot":{"root":{"volumeSerial":1}}});
+        let result = serde_json::json!({"schemaVersion":3,"operation":"ROLLBACK_SAME_STATE_RELEASE",
+            "approvalId":"rollback-one","installGeneration":2,"phase":"COMPLETE",
+            "signedEnvelopeSha256":"b".repeat(64),"selectedSha256":"a".repeat(64),
+            "completeRecordSha256":"c".repeat(64),"runtimeState":"STOPPED",
+            "browserOrWakeStarted":false,"liveAcceptanceVerified":false,
+            "failedCurrentImages":[{"name":"CatDeskWakeHost.exe","actualSha256":null,"byteLength":null,"identity":null},
+                {"name":"CatDeskBinagotchy.exe","actualSha256":null,"byteLength":null,"identity":null}]});
+        assert!(same_state_complete_reply_matches(
+            &result,
+            &payload,
+            &"b".repeat(64)
+        ));
+        let mut present = result.clone();
+        present["failedCurrentImages"][0] = serde_json::json!({"name":"CatDeskWakeHost.exe",
+            "actualSha256":"d".repeat(64),"byteLength":12,"identity":{"volumeSerial":1,"fileIdHex":"1".repeat(32)}});
+        assert!(same_state_complete_reply_matches(
+            &present,
+            &payload,
+            &"b".repeat(64)
+        ));
+        for identity in [
+            serde_json::json!({"volumeSerial":0,"fileIdHex":"1".repeat(32)}),
+            serde_json::json!({"volumeSerial":2,"fileIdHex":"1".repeat(32)}),
+            serde_json::json!({"volumeSerial":1,"fileIdHex":"0".repeat(32)}),
+            serde_json::json!({"volumeSerial":1,"fileIdHex":"G".repeat(32)}),
+        ] {
+            let mut changed = present.clone();
+            changed["failedCurrentImages"][0]["identity"] = identity;
+            assert!(!same_state_complete_reply_matches(
+                &changed,
+                &payload,
+                &"b".repeat(64)
+            ));
+        }
+        for (key, value) in [
+            ("operation", serde_json::json!("SELECT_SAME_STATE_RELEASE")),
+            ("failedCurrentImages", serde_json::json!([])),
+            ("runtimeState", serde_json::json!("RUNNING")),
+        ] {
+            let mut changed = result.clone();
+            changed[key] = value;
+            assert!(!same_state_complete_reply_matches(
+                &changed,
+                &payload,
+                &"b".repeat(64)
+            ));
+        }
+        let mut changed = result.clone();
+        changed
+            .as_object_mut()
+            .unwrap()
+            .remove("failedCurrentImages");
+        assert!(!same_state_complete_reply_matches(
+            &changed,
+            &payload,
+            &"b".repeat(64)
+        ));
+        let mut changed = result;
+        changed["failedCurrentImages"][0]["privateBody"] = serde_json::json!("refused");
+        assert!(!same_state_complete_reply_matches(
+            &changed,
+            &payload,
+            &"b".repeat(64)
         ));
     }
     use std::sync::atomic::{AtomicU64, Ordering};

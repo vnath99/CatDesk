@@ -370,12 +370,51 @@ impl Fixture {
         }
     }
     fn pins(&self, admission: &SameStateLedgerAdmissionV3) -> SameStateReadPinsV3 {
-        SameStateReadPinsV3::observe_with_intake(
+        SameStateReadPinsV3::observe_with_mode(
             &self.policy,
             admission,
             SameStateIntakeV3::Isolated(self.intake.clone()),
+            self.payload.operation == "ROLLBACK_SAME_STATE_RELEASE",
         )
         .unwrap()
+    }
+    fn rollback() -> Self {
+        let mut fixture = Self::new();
+        let previous = fixture.payload.rollback_authority.release().clone();
+        std::fs::rename(
+            fixture.intake.join("previous"),
+            fixture
+                .state
+                .join("versions")
+                .join(&previous.manifest.package_id),
+        )
+        .unwrap();
+        let target =
+            crate::install_broker_approval::same_state::same_state_release_pointer_v3(&previous)
+                .unwrap();
+        let qualification =
+            crate::install_broker_approval::same_state::same_state_release_qualification_sha256(
+                &previous,
+            )
+            .unwrap();
+        let mut current: Value = serde_json::from_slice(&fixture.before).unwrap();
+        current["selection"] = json!({"schemaVersion":2,"generation":7,
+            "current":{"pointer":serde_json::from_slice::<Value>(&fixture.before).unwrap(),"qualificationSha256":"f".repeat(64)},
+            "previous":{"pointer":target,"qualificationSha256":qualification}});
+        fixture.before = serde_json::to_vec(&current).unwrap();
+        std::fs::write(fixture.state.join("current.json"), &fixture.before).unwrap();
+        fixture.payload.operation = "ROLLBACK_SAME_STATE_RELEASE".into();
+        fixture.payload.approval_id = "rollback-fixture-one".into();
+        fixture.payload.candidate = previous.clone();
+        fixture.payload.rollback_authority =
+            SameStateRollbackAuthorityV3::VerifiedWorkingPrevious { release: previous };
+        let guard = BrokerLedgerGuard::acquire(&fixture.handle).unwrap();
+        let admission = guard
+            .same_state_admission_v3(&"0".repeat(64), 1000)
+            .unwrap();
+        fixture.payload.state_snapshot = fixture.pins(&admission).snapshot().clone();
+        drop(guard);
+        fixture
     }
     fn signed(&mut self, guard: &BrokerLedgerGuard<'_>) -> Vec<u8> {
         let prospective = guard
@@ -577,5 +616,383 @@ fn same_state_native_package_pins_bound_size_and_partial_staging_never_overwrite
         fixture.before
     );
     fixture.preserved();
+    fixture.cleanup();
+}
+
+#[test]
+fn same_state_rollback_real_damaged_current_selects_only_intact_previous() {
+    let mut fixture = Fixture::rollback();
+    let old: Value = serde_json::from_slice(&fixture.before).unwrap();
+    let image = fixture
+        .state
+        .join("versions")
+        .join(install_id(&old).unwrap())
+        .join("CatDeskWakeHost.exe");
+    let damaged = b"damaged old image is retained, never declared healthy";
+    std::fs::write(&image, damaged).unwrap();
+    let handle = fixture.handle.try_clone().unwrap();
+    let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+    let envelope = fixture.signed(&guard);
+    let admission = guard
+        .same_state_admission_v3(&digest(&envelope), 1000)
+        .unwrap();
+    let grant = fixture.grant(&admission, envelope);
+    let resources = SameStateInstallResources::acquire(grant).unwrap();
+    let original = resources.grant().original_selection_bytes().unwrap();
+    let mut ledger = guard
+        .begin_same_state_v3(resources.grant(), &admission, &original)
+        .unwrap();
+    let result = resources.commit_selection(&mut ledger).unwrap();
+    assert_eq!(result["status"], "ROLLED_BACK_STOPPED");
+    assert_eq!(
+        result["failedCurrentImages"][0]["actualSha256"],
+        digest(damaged)
+    );
+    assert_eq!(result["workingAcceptance"], false);
+    assert_eq!(std::fs::read(&image).unwrap(), damaged);
+    let after = install_selection::inspect_install_selection(
+        &std::fs::read(fixture.state.join("current.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(after["selection"]["generation"], 8);
+    assert!(after["selection"]["previous"].is_null());
+    assert_eq!(
+        after["current"]["directory"],
+        fixture.payload.candidate.manifest.package_id
+    );
+    assert_eq!(ledger.phase(), InstallPhaseV1::Complete);
+    for entry in std::fs::read_dir(&fixture.broker).unwrap() {
+        let name = entry.unwrap().file_name().to_string_lossy().into_owned();
+        assert!(
+            !name.ends_with("stage-started.json")
+                && !name.ends_with("staged.json")
+                && !name.ends_with("published.json")
+                && !name.ends_with("publication-attempt.json")
+        );
+    }
+    assert!(
+        std::fs::read_dir(fixture.state.join("versions"))
+            .unwrap()
+            .all(|entry| !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".staging-"))
+    );
+    fixture.preserved();
+    drop(ledger);
+    drop(handle);
+    fixture.cleanup();
+}
+
+#[test]
+fn same_state_rollback_missing_current_reports_supported_selector_absence_boundary() {
+    let mut fixture = Fixture::rollback();
+    let old: Value = serde_json::from_slice(&fixture.before).unwrap();
+    let image = fixture
+        .state
+        .join("versions")
+        .join(install_id(&old).unwrap())
+        .join("CatDeskWakeHost.exe");
+    std::fs::remove_file(&image).unwrap();
+    let handle = fixture.handle.try_clone().unwrap();
+    let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+    let envelope = fixture.signed(&guard);
+    let admission = guard
+        .same_state_admission_v3(&digest(&envelope), 1000)
+        .unwrap();
+    let resources =
+        SameStateInstallResources::acquire(fixture.grant(&admission, envelope)).unwrap();
+    let original = resources.grant().original_selection_bytes().unwrap();
+    let mut ledger = guard
+        .begin_same_state_v3(resources.grant(), &admission, &original)
+        .unwrap();
+    let result = resources.commit_selection(&mut ledger).unwrap();
+    assert!(result["failedCurrentImages"][0]["actualSha256"].is_null());
+    assert_eq!(result["absenceBoundary"], "SUPPORTED_SELECTORS_ONLY");
+    assert!(!image.exists());
+    fixture.preserved();
+    drop(ledger);
+    drop(handle);
+    fixture.cleanup();
+}
+
+#[test]
+fn same_state_rollback_altered_previous_or_current_cas_refuses_without_intent() {
+    let mut fixture = Fixture::rollback();
+    let handle = fixture.handle.try_clone().unwrap();
+    let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+    let envelope = fixture.signed(&guard);
+    let admission = guard
+        .same_state_admission_v3(&digest(&envelope), 1000)
+        .unwrap();
+    let operator = crate::install_broker_operator::isolated_same_state_operator_fixture(
+        &fixture.policy.readback().unwrap().operator_sid_sha256,
+    );
+    let frame =
+        crate::install_broker_request::isolated_same_state_frame_fixture(envelope, operator);
+    let pins = fixture.pins(&admission);
+    let mut current: Value = serde_json::from_slice(&fixture.before).unwrap();
+    current["selection"]["generation"] = json!(99);
+    // Retained native pins deny replacement, rather than accepting a CAS from
+    // another reader. A stale signed snapshot is tested after releasing them.
+    assert!(std::fs::write(fixture.state.join("current.json"), b"changed").is_err());
+    drop(pins);
+    std::fs::write(
+        fixture.state.join("current.json"),
+        serde_json::to_vec(&current).unwrap(),
+    )
+    .unwrap();
+    assert!(
+        fixture
+            .policy
+            .verify_same_state_selection_v3(&frame, fixture.pins(&admission), &admission)
+            .is_err()
+    );
+    std::fs::write(fixture.state.join("current.json"), &fixture.before).unwrap();
+    let target = fixture
+        .state
+        .join("versions")
+        .join(&fixture.payload.candidate.manifest.package_id)
+        .join("adapter.py");
+    std::fs::write(&target, b"altered fallback").unwrap();
+    assert!(
+        SameStateReadPinsV3::observe_with_mode(
+            &fixture.policy,
+            &admission,
+            SameStateIntakeV3::Isolated(fixture.intake.clone()),
+            true
+        )
+        .is_err()
+    );
+    assert_eq!(std::fs::read_dir(&fixture.broker).unwrap().count(), 2);
+    fixture.preserved();
+    drop(guard);
+    drop(handle);
+    fixture.cleanup();
+}
+
+#[test]
+fn same_state_rollback_failed_image_in_use_refuses_without_killing_or_intent() {
+    let mut fixture = Fixture::rollback();
+    let old: Value = serde_json::from_slice(&fixture.before).unwrap();
+    let image = fixture
+        .state
+        .join("versions")
+        .join(install_id(&old).unwrap())
+        .join("CatDeskWakeHost.exe");
+    let held = OpenOptions::new()
+        .read(true)
+        .share_mode(1)
+        .open(&image)
+        .unwrap();
+    let handle = fixture.handle.try_clone().unwrap();
+    let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+    let envelope = fixture.signed(&guard);
+    let admission = guard
+        .same_state_admission_v3(&digest(&envelope), 1000)
+        .unwrap();
+    assert_eq!(
+        SameStateInstallResources::acquire(fixture.grant(&admission, envelope))
+            .err()
+            .unwrap(),
+        "WAKE_OFFLINE_LAUNCH_IMAGE_UNAVAILABLE"
+    );
+    assert_eq!(
+        std::fs::read(fixture.state.join("current.json")).unwrap(),
+        fixture.before
+    );
+    assert_eq!(std::fs::read_dir(&fixture.broker).unwrap().count(), 2);
+    drop(held);
+    fixture.preserved();
+    drop(guard);
+    drop(handle);
+    fixture.cleanup();
+}
+
+#[test]
+fn same_state_rollback_real_before_and_after_pointer_interruptions_resume_exactly() {
+    for stop in [
+        InstallPhaseV1::OldOwnerStopped,
+        InstallPhaseV1::PointerSwitched,
+    ] {
+        let mut fixture = Fixture::rollback();
+        let handle = fixture.handle.try_clone().unwrap();
+        let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+        let envelope = fixture.signed(&guard);
+        let admission = guard
+            .same_state_admission_v3(&digest(&envelope), 1000)
+            .unwrap();
+        let resources =
+            SameStateInstallResources::acquire(fixture.grant(&admission, envelope.clone()))
+                .unwrap();
+        let original = resources.grant().original_selection_bytes().unwrap();
+        let mut ledger = guard
+            .begin_same_state_v3(resources.grant(), &admission, &original)
+            .unwrap();
+        assert_eq!(
+            resources
+                .commit_selection_until(&mut ledger, stop)
+                .err()
+                .unwrap(),
+            "FIXTURE_SAME_STATE_COMMIT_INTERRUPTED"
+        );
+        assert_eq!(ledger.phase(), InstallPhaseV1::OldOwnerStopped);
+        drop(ledger);
+        let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+        assert!(
+            guard
+                .same_state_admission_v3(&"f".repeat(64), 1001)
+                .is_err()
+        );
+        let admission = guard
+            .same_state_admission_v3(&digest(&envelope), 1001)
+            .unwrap();
+        let resources =
+            SameStateInstallResources::acquire(fixture.grant(&admission, envelope.clone()))
+                .unwrap();
+        let original = resources.grant().original_selection_bytes().unwrap();
+        let mut ledger = guard
+            .begin_same_state_v3(resources.grant(), &admission, &original)
+            .unwrap();
+        resources.commit_selection(&mut ledger).unwrap();
+        let complete = ledger.complete_record_sha256().unwrap().to_owned();
+        drop(ledger);
+        // Model a lost reply: reconnecting only the exact signed transaction
+        // reads its existing COMPLETE and cannot create a second generation.
+        let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+        let admission = guard
+            .same_state_admission_v3(&digest(&envelope), 1002)
+            .unwrap();
+        assert_eq!(admission.install_generation, 1);
+        let resources =
+            SameStateInstallResources::acquire(fixture.grant(&admission, envelope)).unwrap();
+        let original = resources.grant().original_selection_bytes().unwrap();
+        let mut ledger = guard
+            .begin_same_state_v3(resources.grant(), &admission, &original)
+            .unwrap();
+        resources.commit_selection(&mut ledger).unwrap();
+        assert_eq!(ledger.complete_record_sha256().unwrap(), complete);
+        fixture.preserved();
+        drop(ledger);
+        drop(handle);
+        fixture.cleanup();
+    }
+}
+
+#[test]
+fn same_state_rollback_resume_refuses_changed_failed_image_observation() {
+    let mut fixture = Fixture::rollback();
+    let old: Value = serde_json::from_slice(&fixture.before).unwrap();
+    let image = fixture
+        .state
+        .join("versions")
+        .join(install_id(&old).unwrap())
+        .join("CatDeskWakeHost.exe");
+    let handle = fixture.handle.try_clone().unwrap();
+    let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+    let envelope = fixture.signed(&guard);
+    let admission = guard
+        .same_state_admission_v3(&digest(&envelope), 1000)
+        .unwrap();
+    let resources =
+        SameStateInstallResources::acquire(fixture.grant(&admission, envelope.clone())).unwrap();
+    let original = resources.grant().original_selection_bytes().unwrap();
+    let mut ledger = guard
+        .begin_same_state_v3(resources.grant(), &admission, &original)
+        .unwrap();
+    assert!(
+        resources
+            .commit_selection_until(&mut ledger, InstallPhaseV1::OldOwnerStopped)
+            .is_err()
+    );
+    drop(ledger);
+    std::fs::write(&image, b"changed after interruption; preserve and refuse").unwrap();
+    let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+    let admission = guard
+        .same_state_admission_v3(&digest(&envelope), 1001)
+        .unwrap();
+    let resources =
+        SameStateInstallResources::acquire(fixture.grant(&admission, envelope)).unwrap();
+    let original = resources.grant().original_selection_bytes().unwrap();
+    let mut ledger = guard
+        .begin_same_state_v3(resources.grant(), &admission, &original)
+        .unwrap();
+    assert_eq!(
+        resources.commit_selection(&mut ledger).err().unwrap(),
+        "WAKE_SAME_STATE_FAILED_IMAGE_CHANGED"
+    );
+    assert_eq!(ledger.phase(), InstallPhaseV1::OldOwnerStopped);
+    assert_eq!(
+        std::fs::read(&image).unwrap(),
+        b"changed after interruption; preserve and refuse"
+    );
+    assert_eq!(
+        std::fs::read(fixture.state.join("current.json")).unwrap(),
+        fixture.before
+    );
+    fixture.preserved();
+    drop(ledger);
+    drop(handle);
+    fixture.cleanup();
+}
+
+#[test]
+fn same_state_rollback_complete_readback_retains_original_failed_image_diagnostics() {
+    let mut fixture = Fixture::rollback();
+    let old: Value = serde_json::from_slice(&fixture.before).unwrap();
+    let image = fixture
+        .state
+        .join("versions")
+        .join(install_id(&old).unwrap())
+        .join("CatDeskWakeHost.exe");
+    let handle = fixture.handle.try_clone().unwrap();
+    let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+    let envelope = fixture.signed(&guard);
+    let admission = guard
+        .same_state_admission_v3(&digest(&envelope), 1000)
+        .unwrap();
+    let resources =
+        SameStateInstallResources::acquire(fixture.grant(&admission, envelope.clone())).unwrap();
+    let original = resources.grant().original_selection_bytes().unwrap();
+    let mut ledger = guard
+        .begin_same_state_v3(resources.grant(), &admission, &original)
+        .unwrap();
+    resources.commit_selection(&mut ledger).unwrap();
+    let complete = ledger.complete_record_sha256().unwrap().to_owned();
+    let observations = ledger.failed_current_images().unwrap().unwrap();
+    assert_eq!(observations.len(), 2);
+    drop(ledger);
+    std::fs::write(
+        &image,
+        b"later independent mutation is not historical preservation",
+    )
+    .unwrap();
+    let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+    let admission = guard
+        .same_state_admission_v3(&digest(&envelope), 1001)
+        .unwrap();
+    let resources =
+        SameStateInstallResources::acquire(fixture.grant(&admission, envelope)).unwrap();
+    let original = resources.grant().original_selection_bytes().unwrap();
+    let mut ledger = guard
+        .begin_same_state_v3(resources.grant(), &admission, &original)
+        .unwrap();
+    assert_eq!(
+        resources.commit_selection(&mut ledger).err().unwrap(),
+        "WAKE_SAME_STATE_FAILED_IMAGE_CHANGED"
+    );
+    assert_eq!(ledger.complete_record_sha256().unwrap(), complete);
+    assert_eq!(
+        ledger.failed_current_images().unwrap().unwrap(),
+        observations
+    );
+    assert_eq!(
+        std::fs::read(&image).unwrap(),
+        b"later independent mutation is not historical preservation"
+    );
+    fixture.preserved();
+    drop(ledger);
+    drop(handle);
     fixture.cleanup();
 }

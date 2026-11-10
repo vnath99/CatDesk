@@ -4,12 +4,13 @@
 use super::*;
 use crate::{
     install_broker_approval::same_state::{
-        SameStateObjectV3, SameStateObservedV3, SameStateRetainedResumeV3,
-        SameStateRootSelectionApprovalV3, SameStateSnapshotV3,
+        SameStateObjectV3, SameStateObservedV3, SameStatePreviousSelectionV3,
+        SameStateRetainedResumeV3, SameStateRootSelectionApprovalV3, SameStateSnapshotV3,
         validate_same_state_runtime_manifest_v3,
     },
     install_broker_ledger::{
-        AdmittedSameStateLedgerLeaseV3, InstallPhaseV1, SameStateLedgerAdmissionV3,
+        AdmittedSameStateLedgerLeaseV3, InstallPhaseV1,
+        SameStateFailedCurrentImageV3 as FailedCurrentImageV3, SameStateLedgerAdmissionV3,
     },
     install_broker_offline_pins::OfflineObjectPinV2,
     install_broker_policy::{BrokerProtectedPolicyV1, PolicyVerifiedSameStateSelectionV3},
@@ -235,9 +236,27 @@ fn object(pin: &mut OfflineObjectPinV2) -> Result<(SameStateObjectV3, Vec<u8>)> 
     ))
 }
 
+fn original_previous(raw: &[u8]) -> Result<SameStatePreviousSelectionV3> {
+    let inspected = install_selection::inspect_install_selection(raw)?;
+    let previous = &inspected["selection"]["previous"];
+    let pointer = previous
+        .get("pointer")
+        .ok_or("WAKE_SAME_STATE_ROLLBACK_PREVIOUS_REQUIRED")?
+        .clone();
+    let qualification_sha256 = previous["qualificationSha256"]
+        .as_str()
+        .ok_or("WAKE_SAME_STATE_ROLLBACK_PREVIOUS_REQUIRED")?
+        .to_owned();
+    Ok(SameStatePreviousSelectionV3 {
+        pointer,
+        qualification_sha256,
+    })
+}
+
 /// Actual read handles only. Its factory derives all paths from fixed policy
 /// and fixed submission roles. It grants no mutation authority.
 pub(crate) struct SameStateReadPinsV3 {
+    rollback: bool,
     root: PathBuf,
     _ancestors: Vec<OfflineObjectPinV2>,
     current: Option<OfflineObjectPinV2>,
@@ -262,6 +281,19 @@ enum SameStateIntakeV3 {
 }
 
 impl SameStateReadPinsV3 {
+    pub(crate) fn observe_for_operation(
+        policy: &BrokerProtectedPolicyV1,
+        admission: &SameStateLedgerAdmissionV3,
+        operation: &str,
+    ) -> Result<Self> {
+        match operation {
+            "SELECT_SAME_STATE_RELEASE" => Self::observe(policy, admission),
+            "ROLLBACK_SAME_STATE_RELEASE" => {
+                Self::observe_with_mode(policy, admission, SameStateIntakeV3::Fixed, true)
+            }
+            _ => Err("WAKE_SAME_STATE_OPERATION_INVALID".into()),
+        }
+    }
     pub(crate) fn observe(
         policy: &BrokerProtectedPolicyV1,
         admission: &SameStateLedgerAdmissionV3,
@@ -273,6 +305,14 @@ impl SameStateReadPinsV3 {
         policy: &BrokerProtectedPolicyV1,
         admission: &SameStateLedgerAdmissionV3,
         intake: SameStateIntakeV3,
+    ) -> Result<Self> {
+        Self::observe_with_mode(policy, admission, intake, false)
+    }
+    fn observe_with_mode(
+        policy: &BrokerProtectedPolicyV1,
+        admission: &SameStateLedgerAdmissionV3,
+        intake: SameStateIntakeV3,
+        rollback: bool,
     ) -> Result<Self> {
         let configured = policy.same_state_resource_v2()?;
         let root = PathBuf::from(&configured.path);
@@ -317,34 +357,47 @@ impl SameStateReadPinsV3 {
         {
             return Err("WAKE_SAME_STATE_SELECTION_UNKNOWN".into());
         }
-        let candidate = match &intake {
-            SameStateIntakeV3::Fixed => {
-                RuntimePackagePinsV3::fixed(RuntimeSourceRoleV3::Candidate)?
-            }
-            #[cfg(test)]
-            SameStateIntakeV3::Isolated(path) => {
-                RuntimePackagePinsV3::isolated(path, RuntimeSourceRoleV3::Candidate)?
+        let target = if rollback {
+            Some(original_previous(&original_raw)?)
+        } else {
+            None
+        };
+        let candidate = if let Some(target) = &target {
+            RuntimePackagePinsV3::installed(&root, install_id(&target.pointer)?)?
+        } else {
+            match &intake {
+                SameStateIntakeV3::Fixed => {
+                    RuntimePackagePinsV3::fixed(RuntimeSourceRoleV3::Candidate)?
+                }
+                #[cfg(test)]
+                SameStateIntakeV3::Isolated(path) => {
+                    RuntimePackagePinsV3::isolated(path, RuntimeSourceRoleV3::Candidate)?
+                }
             }
         };
         let original: Value = serde_json::from_slice(&original_raw)
             .map_err(|_| "WAKE_SAME_STATE_SELECTION_INVALID")?;
-        let previous = match &intake {
-            #[cfg(test)]
-            SameStateIntakeV3::Isolated(path) => {
-                RuntimePackagePinsV3::isolated(path, RuntimeSourceRoleV3::Previous)?
-            }
-            SameStateIntakeV3::Fixed
-                if Path::new(r"C:\ProgramData\CatDesk\WakeSubmissionV1\previous").exists() =>
-            {
-                RuntimePackagePinsV3::fixed(RuntimeSourceRoleV3::Previous)?
-            }
-            SameStateIntakeV3::Fixed => {
-                let pointer = original
-                    .get("selection")
-                    .and_then(|s| s.get("previous"))
-                    .and_then(|p| p.get("pointer"))
-                    .unwrap_or(&original);
-                RuntimePackagePinsV3::installed(&root, install_id(pointer)?)?
+        let previous = if let Some(target) = &target {
+            RuntimePackagePinsV3::installed(&root, install_id(&target.pointer)?)?
+        } else {
+            match &intake {
+                #[cfg(test)]
+                SameStateIntakeV3::Isolated(path) => {
+                    RuntimePackagePinsV3::isolated(path, RuntimeSourceRoleV3::Previous)?
+                }
+                SameStateIntakeV3::Fixed
+                    if Path::new(r"C:\ProgramData\CatDesk\WakeSubmissionV1\previous").exists() =>
+                {
+                    RuntimePackagePinsV3::fixed(RuntimeSourceRoleV3::Previous)?
+                }
+                SameStateIntakeV3::Fixed => {
+                    let pointer = original
+                        .get("selection")
+                        .and_then(|s| s.get("previous"))
+                        .and_then(|p| p.get("pointer"))
+                        .unwrap_or(&original);
+                    RuntimePackagePinsV3::installed(&root, install_id(pointer)?)?
+                }
             }
         };
         let receipt_root = match intake {
@@ -365,6 +418,7 @@ impl SameStateReadPinsV3 {
                 selection_attempt_present: admission.selection_attempt_present,
             });
         Ok(Self {
+            rollback,
             root,
             _ancestors: ancestors,
             current: Some(current),
@@ -410,6 +464,9 @@ impl SameStateReadPinsV3 {
         admission: &SameStateLedgerAdmissionV3,
     ) -> Result<SameStateObservedV3> {
         self.revalidate()?;
+        if self.rollback != (payload.operation == "ROLLBACK_SAME_STATE_RELEASE") {
+            return Err("WAKE_SAME_STATE_OPERATION_INVALID".into());
+        }
         validate_same_state_runtime_manifest_v3(
             self.candidate.runtime_manifest_bytes(),
             &payload.candidate,
@@ -447,7 +504,21 @@ impl SameStateReadPinsV3 {
                 Err("WAKE_SAME_STATE_RELEASE_QUALIFICATION_MISMATCH".into())
             }
         };
-        self.planned = if payload.rollback_authority.is_reconstruction() {
+        self.planned = if self.rollback {
+            let target = original_previous(&self.original_raw)?;
+            if target.pointer != candidate
+                || target.qualification_sha256 != candidate_qualification
+                || payload.candidate != *previous_release
+                || payload.rollback_authority.is_reconstruction()
+            {
+                return Err("WAKE_SAME_STATE_ROLLBACK_TARGET_MISMATCH".into());
+            }
+            install_selection::propose_install_selection_rollback(
+                &self.original_raw,
+                &digest(&self.original_raw),
+                &verify,
+            )?
+        } else if payload.rollback_authority.is_reconstruction() {
             install_selection::propose_reconstructed_install_selection(
                 &self.original_raw,
                 &digest(&self.original_raw),
@@ -495,6 +566,11 @@ impl SameStateReadPinsV3 {
                 .then(|| install_id(&original).map(str::to_owned))
                 .transpose()?,
             retained_resume: self.resume.clone(),
+            original_previous: if self.rollback {
+                Some(original_previous(&self.original_raw)?)
+            } else {
+                None
+            },
         })
     }
     fn pin_receipts(&mut self, payload: &SameStateRootSelectionApprovalV3) -> Result<()> {
@@ -526,6 +602,9 @@ impl SameStateReadPinsV3 {
             ),
             ("previous-working.json", working.receipt_sha256.as_str()),
         ];
+        if self.rollback {
+            roles.retain(|(name, _)| name.starts_with("previous-"));
+        }
         if let crate::install_broker_approval::same_state::SameStateRollbackAuthorityV3::ReviewedSourceReconstruction{reconstruction_receipt_sha256,..}=&payload.rollback_authority {
             roles.push(("reconstruction.json",reconstruction_receipt_sha256));
         }
@@ -584,7 +663,8 @@ impl SameStateReadPinsV3 {
                 && r.original_escrow_sha256 == digest(&self.original_raw)
                 && self.snapshot.current.sha256 == payload.planned_selection_sha256
         });
-        if comparison != payload.state_snapshot
+        if self.rollback != (payload.operation == "ROLLBACK_SAME_STATE_RELEASE")
+            || comparison != payload.state_snapshot
             || (!before && !after)
             || digest(&self.planned) != payload.planned_selection_sha256
             || self.candidate.manifest() != &payload.candidate.manifest
@@ -658,6 +738,9 @@ pub(crate) struct SameStateInstallResources<'p> {
     _host: HostLease,
     _browser: File,
     _legacy_images: Vec<OfflineObjectPinV2>,
+    failed_image_observations: Vec<FailedCurrentImageV3>,
+    missing_images: Vec<PathBuf>,
+    _failed_image_parents: Vec<(PathBuf, OfflineObjectPinV2)>,
 }
 
 impl<'p> SameStateInstallResources<'p> {
@@ -694,6 +777,26 @@ impl<'p> SameStateInstallResources<'p> {
             return Err("WAKE_SAME_STATE_LEGACY_PREVIOUS_IMAGE_OVERLAP".into());
         }
         let mut legacy_images = Vec::new();
+        let rollback = grant.payload().operation == "ROLLBACK_SAME_STATE_RELEASE";
+        let mut failed_image_observations = Vec::new();
+        let mut missing_images = Vec::new();
+        let mut failed_image_parents = Vec::new();
+        if rollback {
+            let versions = store.root().join("versions");
+            failed_image_parents.push((
+                versions.clone(),
+                OfflineObjectPinV2::same_state_directory(&versions)?,
+            ));
+            let old_directory = versions.join(install_id(&original)?);
+            match std::fs::symlink_metadata(&old_directory) {
+                Ok(_) => failed_image_parents.push((
+                    old_directory.clone(),
+                    OfflineObjectPinV2::same_state_directory(&old_directory)?,
+                )),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(_) => return Err("WAKE_SAME_STATE_FAILED_IMAGE_OBSERVATION_UNAVAILABLE".into()),
+            }
+        }
         for (name, field) in [
             ("CatDeskWakeHost.exe", "hostSha256"),
             ("CatDeskBinagotchy.exe", "binagotchySha256"),
@@ -703,10 +806,38 @@ impl<'p> SameStateInstallResources<'p> {
                 .join("versions")
                 .join(install_id(&original)?)
                 .join(name);
+            if rollback {
+                match std::fs::symlink_metadata(&image) {
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        failed_image_observations.push(FailedCurrentImageV3 {
+                            name: name.into(),
+                            actual_sha256: None,
+                            byte_length: None,
+                            identity: None,
+                        });
+                        missing_images.push(image);
+                        continue;
+                    }
+                    Err(_) => {
+                        return Err("WAKE_SAME_STATE_FAILED_IMAGE_OBSERVATION_UNAVAILABLE".into());
+                    }
+                    Ok(_) => {}
+                }
+            }
             let pin = OfflineObjectPinV2::open(&image, false)?;
             let mut pin = pin.exclude_new_image_opens(&image)?;
-            if digest(&pin.read_bounded(80 * 1024 * 1024)?) != pointer_hash(&original, field)? {
+            let actual_raw = pin.read_bounded(80 * 1024 * 1024)?;
+            let actual_sha256 = digest(&actual_raw);
+            if !rollback && actual_sha256 != pointer_hash(&original, field)? {
                 return Err("WAKE_SAME_STATE_LEGACY_IMAGE_MISMATCH".into());
+            }
+            if rollback {
+                failed_image_observations.push(FailedCurrentImageV3 {
+                    name: name.into(),
+                    actual_sha256: Some(actual_sha256),
+                    byte_length: Some(actual_raw.len() as u64),
+                    identity: Some(pin.identity().full.clone()),
+                });
             }
             legacy_images.push(pin);
         }
@@ -734,18 +865,79 @@ impl<'p> SameStateInstallResources<'p> {
             _host: host,
             _browser: browser,
             _legacy_images: legacy_images,
+            failed_image_observations,
+            missing_images,
+            _failed_image_parents: failed_image_parents,
         })
     }
     pub(crate) fn grant(&self) -> &PolicyVerifiedSameStateSelectionV3<'p> {
         &self.grant
+    }
+    fn revalidate_failed_images(&mut self) -> Result<()> {
+        if self.grant.payload().operation != "ROLLBACK_SAME_STATE_RELEASE" {
+            return Ok(());
+        }
+        for (path, pin) in &self._failed_image_parents {
+            pin.revalidate_path(path)?;
+        }
+        for path in &self.missing_images {
+            if !matches!(std::fs::symlink_metadata(path), Err(ref error) if error.kind() == std::io::ErrorKind::NotFound)
+            {
+                return Err("WAKE_SAME_STATE_FAILED_IMAGE_CHANGED".into());
+            }
+        }
+        let mut held = self._legacy_images.iter_mut();
+        for observation in &self.failed_image_observations {
+            if let Some(expected) = &observation.actual_sha256 {
+                let pin = held.next().ok_or("WAKE_SAME_STATE_FAILED_IMAGE_CHANGED")?;
+                let raw = pin.read_bounded(80 * 1024 * 1024)?;
+                if digest(&raw) != *expected
+                    || Some(raw.len() as u64) != observation.byte_length
+                    || Some(&pin.identity().full) != observation.identity.as_ref()
+                {
+                    return Err("WAKE_SAME_STATE_FAILED_IMAGE_CHANGED".into());
+                }
+            }
+        }
+        Ok(())
     }
 
     pub(crate) fn commit_selection(
         self,
         ledger: &mut AdmittedSameStateLedgerLeaseV3<'_, 'p>,
     ) -> Result<Value> {
+        self.commit_selection_inner(ledger, None)
+    }
+    #[cfg(test)]
+    fn commit_selection_until(
+        self,
+        ledger: &mut AdmittedSameStateLedgerLeaseV3<'_, 'p>,
+        stop_after: InstallPhaseV1,
+    ) -> Result<Value> {
+        self.commit_selection_inner(
+            ledger,
+            Some(if stop_after == InstallPhaseV1::OldOwnerStopped {
+                "before-pointer"
+            } else {
+                "after-pointer"
+            }),
+        )
+    }
+    fn commit_selection_inner(
+        mut self,
+        ledger: &mut AdmittedSameStateLedgerLeaseV3<'_, 'p>,
+        stop_after: Option<&str>,
+    ) -> Result<Value> {
         self.grant.revalidate()?;
-        let payload = self.grant.payload();
+        self.revalidate_failed_images()?;
+        let payload = self.grant.payload().clone();
+        let rollback = payload.operation == "ROLLBACK_SAME_STATE_RELEASE";
+        if rollback
+            && let Some(retained) = ledger.failed_current_images()?
+            && retained != self.failed_image_observations
+        {
+            return Err("WAKE_SAME_STATE_FAILED_IMAGE_CHANGED".into());
+        }
         if ledger.binding()
             != &self
                 .grant
@@ -784,7 +976,17 @@ impl<'p> SameStateInstallResources<'p> {
         if handoff_path.exists() {
             self.require_handoff(&binding)?;
         }
-        if ledger.phase() == InstallPhaseV1::Intent {
+        if rollback && ledger.phase() == InstallPhaseV1::Intent {
+            // Existing predecessor pins and all STOPPED ownership leases are
+            // retained. No package creation, staging or publication occurs.
+            self.grant.revalidate()?;
+            self.revalidate_failed_images()?;
+            ledger.record_rollback_stopped(&self.failed_image_observations)?;
+            if stop_after == Some("before-pointer") {
+                return Err("FIXTURE_SAME_STATE_COMMIT_INTERRUPTED".into());
+            }
+        }
+        if !rollback && ledger.phase() == InstallPhaseV1::Intent {
             ledger.record_phase(InstallPhaseV1::StageStarted, None)?;
             let mut pins = self.grant.pins_mut()?;
             materialize(
@@ -878,6 +1080,7 @@ impl<'p> SameStateInstallResources<'p> {
         }
         if ledger.phase() == InstallPhaseV1::OldOwnerStopped {
             self.grant.revalidate()?;
+            self.revalidate_failed_images()?;
             ledger.record_pointer_attempt()?;
             let mut transaction = self.require_handoff(&binding)?;
             transaction
@@ -916,6 +1119,9 @@ impl<'p> SameStateInstallResources<'p> {
             }
             drop(pins);
             self.grant.revalidate()?;
+            if stop_after == Some("after-pointer") {
+                return Err("FIXTURE_SAME_STATE_COMMIT_INTERRUPTED".into());
+            }
             ledger.record_phase(
                 InstallPhaseV1::PointerSwitched,
                 Some(&ledger.binding().planned_selection_sha256.clone()),
@@ -923,6 +1129,7 @@ impl<'p> SameStateInstallResources<'p> {
         }
         if ledger.phase() == InstallPhaseV1::PointerSwitched {
             self.grant.revalidate()?;
+            self.revalidate_failed_images()?;
             ledger.record_phase(
                 InstallPhaseV1::NewOwnerProven,
                 Some(&ledger.binding().planned_selection_sha256.clone()),
@@ -930,6 +1137,7 @@ impl<'p> SameStateInstallResources<'p> {
         }
         if ledger.phase() == InstallPhaseV1::NewOwnerProven {
             self.grant.revalidate()?;
+            self.revalidate_failed_images()?;
             ledger.record_phase(
                 InstallPhaseV1::Complete,
                 Some(&ledger.binding().planned_selection_sha256.clone()),
@@ -937,10 +1145,20 @@ impl<'p> SameStateInstallResources<'p> {
         }
         let complete = ledger.complete_record_sha256()?.to_owned();
         self.grant.revalidate()?;
+        self.revalidate_failed_images()?;
         if handoff_path.exists() {
             self.require_handoff(&binding)?;
             std::fs::remove_file(&handoff_path)
                 .map_err(|_| "HOST_INSTALL_HANDOFF_CLEANUP_FAILED")?;
+        }
+        if rollback {
+            return Ok(
+                json!({"action":"same_state_wake_rollback","status":"ROLLED_BACK_STOPPED",
+                "current":candidate_id,"previous":null,"selectionSha256":ledger.binding().planned_selection_sha256,
+                "completeRecordSha256":complete,"failedCurrentImages":self.failed_image_observations,
+                "failedArtifactsPreservedInPlace":true,"absenceBoundary":"SUPPORTED_SELECTORS_ONLY",
+                "hostStarted":false,"browserStarted":false,"messagesSent":0,"workingAcceptance":false}),
+            );
         }
         Ok(
             json!({"action":"same_state_wake_selection","status":"SELECTED_STOPPED","current":candidate_id,"previous":previous_id,

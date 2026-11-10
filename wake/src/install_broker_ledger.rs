@@ -58,7 +58,8 @@ use std::{
 #[path = "install_broker_ledger_same_state.rs"]
 mod same_state;
 pub(crate) use same_state::{
-    AdmittedSameStateLedgerLeaseV3, SameStateLedgerAdmissionV3, SameStateLedgerBindingV3,
+    AdmittedSameStateLedgerLeaseV3, SameStateFailedCurrentImageV3, SameStateLedgerAdmissionV3,
+    SameStateLedgerBindingV3,
 };
 
 const MAX_RECORD_BYTES: usize = 4096;

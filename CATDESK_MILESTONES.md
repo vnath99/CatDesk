@@ -1,4 +1,15 @@
-## 2026-11-10 — safe paused-host source ready for actual fallback qualification
+## 2026-11-10 — signed predecessor rollback implemented; protected cutover open
+
+329 distinct source/native-fixture tests, formatting and strict Clippy pass.
+The same broker can select only the original escrowed, working-qualified
+previous release, with exact current CAS, durable interruption recovery and
+failed-current diagnostics. The initial self-contention failure and correction
+remain recorded. No service, installed selection, browser or pending Web task
+was changed. Actual installed rollback and direct Web edit/verify/self-Wake
+remain unaccepted. Evidence:
+[rollback qualification](docs/verification/SAME_STATE_WAKE_ROLLBACK_SOURCE_2026_11_10.json).
+
+## 2026-11-10 — actual finite development Wake lifecycle qualified
 
 The existing owner supports finite PAUSED startup without discovering,
 retrying or dispatching pending work. Capability/STOPPED checks precede control
@@ -6,9 +17,16 @@ changes and existing leases cover the complete bounded lifecycle. 38 distinct
 source/native-fixture cases plus formatting and strict Clippy pass in an
 isolated snapshot, separate from rollback work.
 
-Actual matching-package Wake health, protected installation, runtime rollback
-and direct Web edit/verify/self-Wake remain open. Held submissions and all
-existing project state remain preserved. Evidence:
+Exact source `dba8fc374622c93f9b8ca3744f8ba59f99fb7030` built and passed two
+actual 10-second PAUSED Host starts plus one 15-second authenticated development
+backend check (401/401/200; 79 tools). All 755 preservation pins matched, no task
+files were added or removed, and owned processes exited. No browser, Wake
+dispatch, message, tunnel or production change occurred. The successful record
+is local development verification, not protected release authority. Installed
+production, recovery/rollback and direct Web edit/verify/self-Wake acceptance
+remain open; held submissions and existing project state stay preserved.
+Evidence:
+[actual development health](docs/verification/BOUNDED_PAUSED_WAKE_LIVE_DEVELOPMENT_2026_11_10.json),
 [paused startup source](docs/verification/BOUNDED_PAUSED_WAKE_STARTUP_SOURCE_2026_11_10.json).
 
 ## 2026-11-10 — real development health; protected Wake migration still open

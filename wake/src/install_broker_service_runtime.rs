@@ -46,7 +46,10 @@ fn is_same_state_selection_request(bytes: &[u8]) -> Result<bool> {
     if value["payload"]["schemaVersion"] != 3 {
         return Ok(false);
     }
-    if value["payload"]["operation"] != "SELECT_SAME_STATE_RELEASE" {
+    if !matches!(
+        value["payload"]["operation"].as_str(),
+        Some("SELECT_SAME_STATE_RELEASE" | "ROLLBACK_SAME_STATE_RELEASE")
+    ) {
         return Err("WAKE_BROKER_REQUEST_OPERATION_UNSUPPORTED".into());
     }
     Ok(true)
@@ -190,7 +193,14 @@ fn run_one_service_submission() -> Result<()> {
         let envelope_sha256 = format!("{:x}", Sha256::digest(frame.approval_envelope()));
         let admission =
             ledger.same_state_admission_v3(&envelope_sha256, observed.sampled_at_utc_seconds)?;
-        let pins = crate::runtime::SameStateReadPinsV3::observe(&policy, &admission)?;
+        let purpose: serde_json::Value = serde_json::from_slice(frame.approval_envelope())
+            .map_err(|_| "WAKE_BROKER_REQUEST_ENCODING_INVALID")?;
+        let operation = purpose["payload"]["operation"]
+            .as_str()
+            .ok_or("WAKE_BROKER_REQUEST_OPERATION_UNSUPPORTED")?;
+        let pins = crate::runtime::SameStateReadPinsV3::observe_for_operation(
+            &policy, &admission, operation,
+        )?;
         let grant = policy.verify_same_state_selection_v3(&frame, pins, &admission)?;
         let resources = crate::runtime::SameStateInstallResources::acquire(grant)?;
         // acceptedUTC is the protected signature-verification sample, as in
@@ -205,14 +215,17 @@ fn run_one_service_submission() -> Result<()> {
         drop(clock); // global lock is moved, never released, into the lease.
         let mut transaction =
             ledger.begin_same_state_v3(resources.grant(), &admission, &original)?;
-        resources.commit_selection(&mut transaction)?;
+        let outcome = resources.commit_selection(&mut transaction)?;
         let complete_sha256 = transaction.complete_record_sha256()?.to_owned();
         let binding = transaction.binding();
-        let reply = serde_json::json!({"schemaVersion":3,"operation":"SELECT_SAME_STATE_RELEASE",
+        let mut reply = serde_json::json!({"schemaVersion":3,"operation":operation,
             "approvalId":binding.approval_id,"installGeneration":binding.install_generation,"phase":"COMPLETE",
             "signedEnvelopeSha256":binding.signed_envelope_sha256,"selectedSha256":binding.planned_selection_sha256,
             "completeRecordSha256":complete_sha256,"runtimeState":"STOPPED",
             "browserOrWakeStarted":false,"liveAcceptanceVerified":false});
+        if operation == "ROLLBACK_SAME_STATE_RELEASE" {
+            reply["failedCurrentImages"] = outcome["failedCurrentImages"].clone();
+        }
         let payload: serde_json::Value =
             serde_json::from_slice::<serde_json::Value>(frame.approval_envelope())
                 .map_err(|_| "WAKE_BROKER_REQUEST_ENCODING_INVALID")?["payload"]
@@ -325,6 +338,12 @@ mod tests {
         assert!(
             is_same_state_selection_request(
                 br#"{"payload":{"schemaVersion":3,"operation":"SELECT_SAME_STATE_RELEASE"}}"#
+            )
+            .unwrap()
+        );
+        assert!(
+            is_same_state_selection_request(
+                br#"{"payload":{"schemaVersion":3,"operation":"ROLLBACK_SAME_STATE_RELEASE"}}"#
             )
             .unwrap()
         );

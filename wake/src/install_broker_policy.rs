@@ -318,6 +318,7 @@ impl<'p> PolicyVerifiedSameStateSelectionV3<'p> {
         }
         let p = self.payload();
         Ok(crate::install_broker_ledger::SameStateLedgerBindingV3 {
+            operation: (p.operation == "ROLLBACK_SAME_STATE_RELEASE").then(|| p.operation.clone()),
             install_generation: p.install_generation,
             approval_id: p.approval_id.clone(),
             signed_payload_sha256: self.verified.signed_payload_sha256().into(),

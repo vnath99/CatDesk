@@ -15,6 +15,14 @@ const DOMAIN: &[u8] = b"CatDeskWakeSameStateRootSelectionApprovalV3\0";
 const MAX_ENVELOPE_BYTES: usize = 16 * 1024;
 const MAX_AGE_SECONDS: u64 = 7 * 24 * 60 * 60;
 
+pub const SAME_STATE_SELECT_OPERATION: &str = "SELECT_SAME_STATE_RELEASE";
+pub const SAME_STATE_ROLLBACK_OPERATION: &str = "ROLLBACK_SAME_STATE_RELEASE";
+
+/// Read-only operation classification; it never supplies admission authority.
+pub fn is_same_state_rollback_operation(operation: &str) -> bool {
+    operation == SAME_STATE_ROLLBACK_OPERATION
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SameStateObjectV3 {
@@ -143,6 +151,14 @@ pub struct SameStateRetainedResumeV3 {
     pub selection_attempt_present: bool,
 }
 
+/// Derived only from the parsed ORIGINAL selection/retained escrow by the
+/// policy-owned resource reader. No filesystem locator or current health.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SameStatePreviousSelectionV3 {
+    pub pointer: serde_json::Value,
+    pub qualification_sha256: String,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SameStateObservedV3 {
     pub now_utc_seconds: u64,
@@ -160,6 +176,7 @@ pub struct SameStateObservedV3 {
     /// flat document. Reconstruction is deliberately limited to that cutover.
     pub legacy_current_package_id: Option<String>,
     pub retained_resume: Option<SameStateRetainedResumeV3>,
+    pub original_previous: Option<SameStatePreviousSelectionV3>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -228,6 +245,26 @@ pub fn same_state_manifest_sha256(manifest: &PackageManifestV1) -> Result<String
     Ok(format!("{:x}", Sha256::digest(bytes)))
 }
 
+pub fn same_state_release_pointer_v3(
+    release: &SameStateQualifiedReleaseV3,
+) -> Result<serde_json::Value> {
+    validate_manifest(&release.manifest).map_err(|_| "WAKE_SELECTION_PACKAGE_INVALID")?;
+    let artifacts = &release.manifest.artifacts;
+    Ok(
+        serde_json::json!({"schemaVersion":1,"directory":release.manifest.package_id,
+        "hostSha256":artifacts[0].sha256,"binagotchySha256":artifacts[1].sha256,
+        "adapterSha256":artifacts[2].sha256,"wakeBridgeSha256":artifacts[3].sha256}),
+    )
+}
+
+pub fn same_state_release_qualification_sha256(
+    release: &SameStateQualifiedReleaseV3,
+) -> Result<String> {
+    validate_manifest(&release.manifest).map_err(|_| "WAKE_SELECTION_PACKAGE_INVALID")?;
+    let bytes = serde_json::to_vec(release).map_err(|_| "WAKE_SELECTION_ENCODING_INVALID")?;
+    Ok(format!("{:x}", Sha256::digest(bytes)))
+}
+
 fn validate_release(release: &SameStateQualifiedReleaseV3, working: bool, now: u64) -> Result<()> {
     let manifest = same_state_manifest_sha256(&release.manifest)?;
     let local = &release.local_qualification;
@@ -271,7 +308,10 @@ fn validate_payload(
     observed: &SameStateObservedV3,
 ) -> Result<()> {
     if payload.schema_version != 3
-        || payload.operation != "SELECT_SAME_STATE_RELEASE"
+        || !matches!(
+            payload.operation.as_str(),
+            SAME_STATE_SELECT_OPERATION | SAME_STATE_ROLLBACK_OPERATION
+        )
         || !crate::protocol::valid_id(&payload.approval_id)
         || !crate::protocol::valid_id(&payload.reviewer_identity)
         || payload.reviewer_identity.len() > 128
@@ -331,7 +371,8 @@ fn validate_payload(
     validate_release(&payload.candidate, false, observed.now_utc_seconds)?;
     let previous = payload.rollback_authority.release();
     validate_release(previous, true, observed.now_utc_seconds)?;
-    if payload.candidate.manifest.package_id == previous.manifest.package_id
+    let rollback = is_same_state_rollback_operation(&payload.operation);
+    if (!rollback && payload.candidate.manifest.package_id == previous.manifest.package_id)
         || same_state_manifest_sha256(&payload.candidate.manifest)?
             != observed.candidate_manifest_sha256
         || payload.candidate.runtime_manifest_sha256 != observed.candidate_runtime_manifest_sha256
@@ -339,6 +380,24 @@ fn validate_payload(
         || previous.runtime_manifest_sha256 != observed.previous_runtime_manifest_sha256
     {
         return Err("WAKE_SELECTION_PACKAGE_MISMATCH".into());
+    }
+    if rollback {
+        let original_previous = observed
+            .original_previous
+            .as_ref()
+            .ok_or("WAKE_SELECTION_ROLLBACK_INVALID")?;
+        if !matches!(
+            &payload.rollback_authority,
+            SameStateRollbackAuthorityV3::VerifiedWorkingPrevious { .. }
+        ) || observed.legacy_current_package_id.is_some()
+            || &payload.candidate != previous
+            || original_previous.pointer != same_state_release_pointer_v3(previous)?
+            || original_previous.qualification_sha256
+                != same_state_release_qualification_sha256(previous)?
+        {
+            return Err("WAKE_SELECTION_ROLLBACK_INVALID".into());
+        }
+        return Ok(());
     }
     match &payload.rollback_authority {
         SameStateRollbackAuthorityV3::VerifiedWorkingPrevious { release } => {
@@ -606,6 +665,7 @@ pub(crate) mod tests {
             approved_reviewer_identity: payload.reviewer_identity.clone(),
             legacy_current_package_id: None,
             retained_resume: None,
+            original_previous: None,
         };
         (payload, observed, SigningKey::from_bytes(&[7; 32]))
     }
@@ -621,6 +681,25 @@ pub(crate) mod tests {
             signature_hex,
         })
         .unwrap()
+    }
+
+    pub(crate) fn rollback_fixture() -> (
+        SameStateRootSelectionApprovalV3,
+        SameStateObservedV3,
+        SigningKey,
+    ) {
+        let (mut payload, mut observed, key) = fixture();
+        let target = payload.rollback_authority.release().clone();
+        payload.operation = SAME_STATE_ROLLBACK_OPERATION.into();
+        payload.candidate = target.clone();
+        observed.candidate_manifest_sha256 = observed.previous_manifest_sha256.clone();
+        observed.candidate_runtime_manifest_sha256 =
+            observed.previous_runtime_manifest_sha256.clone();
+        observed.original_previous = Some(SameStatePreviousSelectionV3 {
+            pointer: same_state_release_pointer_v3(&target).unwrap(),
+            qualification_sha256: same_state_release_qualification_sha256(&target).unwrap(),
+        });
+        (payload, observed, key)
     }
 
     #[test]
@@ -1026,5 +1105,147 @@ pub(crate) mod tests {
                 .is_err()
             );
         }
+    }
+
+    #[test]
+    fn same_state_rollback_selects_exact_qualified_previous_without_current_artifact_health() {
+        let (payload, observed, key) = rollback_fixture();
+        assert_eq!(payload.candidate, *payload.rollback_authority.release());
+        assert!(observed.legacy_current_package_id.is_none());
+        assert_ne!(
+            payload.state_snapshot.current.sha256,
+            payload.candidate.manifest.artifacts[0].sha256
+        );
+        // The before image is selection metadata. No failed current binary,
+        // manifest or working-health assertion is supplied to this verifier.
+        let proof = verify_same_state_selection_approval_v3(
+            &envelope(&payload, &key),
+            &key.verifying_key(),
+            &observed,
+        )
+        .unwrap();
+        assert_eq!(proof.payload().operation, SAME_STATE_ROLLBACK_OPERATION);
+        assert_eq!(
+            serde_json::to_value(&payload)
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .len(),
+            12
+        );
+    }
+
+    #[test]
+    fn same_state_rollback_refuses_missing_changed_legacy_or_reconstructed_predecessor() {
+        let (payload, observed, key) = rollback_fixture();
+        for variant in 0..7 {
+            let mut bad = payload.clone();
+            let mut physical = observed.clone();
+            match variant {
+                0 => physical.original_previous = None,
+                1 => {
+                    physical.original_previous.as_mut().unwrap().pointer["hostSha256"] =
+                        "f".repeat(64).into()
+                }
+                2 => {
+                    physical
+                        .original_previous
+                        .as_mut()
+                        .unwrap()
+                        .qualification_sha256 = "f".repeat(64)
+                }
+                3 => physical.legacy_current_package_id = Some("unqualified-dev84".into()),
+                4 => bad.candidate.working_evidence = None,
+                5 => {
+                    bad.rollback_authority =
+                        SameStateRollbackAuthorityV3::ReviewedSourceReconstruction {
+                            release: bad.candidate.clone(),
+                            old_raw_selection_escrow_sha256: bad
+                                .state_snapshot
+                                .current
+                                .sha256
+                                .clone(),
+                            reconstruction_receipt_sha256: "f".repeat(64),
+                        }
+                }
+                _ => bad.operation = "ROLLBACK".into(),
+            }
+            assert!(
+                verify_same_state_selection_approval_v3(
+                    &envelope(&bad, &key),
+                    &key.verifying_key(),
+                    &physical
+                )
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn same_state_rollback_requires_full_review_and_wake_runtime_and_keeps_select_distinct() {
+        let (payload, observed, key) = rollback_fixture();
+        for variant in 0..3 {
+            let mut bad = payload.clone();
+            let mut target = bad.candidate.clone();
+            match variant {
+                0 => target.working_evidence.as_mut().unwrap().scope = "DEVELOPMENT_BACKEND".into(),
+                1 => target.independent_review.verdict = SameStateEvidenceVerdictV3::Inconclusive,
+                _ => target.working_evidence.as_mut().unwrap().owner_verified = false,
+            }
+            bad.candidate = target.clone();
+            bad.rollback_authority =
+                SameStateRollbackAuthorityV3::VerifiedWorkingPrevious { release: target };
+            assert!(
+                verify_same_state_selection_approval_v3(
+                    &envelope(&bad, &key),
+                    &key.verifying_key(),
+                    &observed
+                )
+                .is_err()
+            );
+        }
+        let mut selection = payload;
+        selection.operation = SAME_STATE_SELECT_OPERATION.into();
+        assert_eq!(
+            verify_same_state_selection_approval_v3(
+                &envelope(&selection, &key),
+                &key.verifying_key(),
+                &observed
+            )
+            .unwrap_err(),
+            "WAKE_SELECTION_PACKAGE_MISMATCH"
+        );
+    }
+
+    #[test]
+    fn same_state_rollback_resume_uses_escrowed_original_previous_and_exact_attempt() {
+        let (payload, mut observed, key) = rollback_fixture();
+        observed.state_snapshot.current.identity.file_id_hex = "a".repeat(32);
+        observed.state_snapshot.current.sha256 = payload.planned_selection_sha256.clone();
+        observed.retained_resume = Some(SameStateRetainedResumeV3 {
+            original_snapshot_sha256: format!(
+                "{:x}",
+                Sha256::digest(serde_json::to_vec(&payload.state_snapshot).unwrap())
+            ),
+            before_selection_sha256: payload.state_snapshot.current.sha256.clone(),
+            planned_selection_sha256: payload.planned_selection_sha256.clone(),
+            original_escrow_sha256: payload.state_snapshot.current.sha256.clone(),
+            selection_attempt_present: true,
+        });
+        verify_same_state_selection_approval_v3(
+            &envelope(&payload, &key),
+            &key.verifying_key(),
+            &observed,
+        )
+        .unwrap();
+        observed.original_previous = None;
+        assert!(
+            verify_same_state_selection_approval_v3(
+                &envelope(&payload, &key),
+                &key.verifying_key(),
+                &observed
+            )
+            .is_err()
+        );
     }
 }

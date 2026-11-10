@@ -1,4 +1,24 @@
-## 2026-11-10 — finite PAUSED Wake qualification (new source; live test pending)
+## 2026-11-10 — rollback uses the same signed native broker request
+
+The existing `install-broker submit --approval-file <absolute-frozen-envelope>`
+interface now admits the signed V3 purpose `ROLLBACK_SAME_STATE_RELEASE`.
+It targets only the original escrowed `selection.previous` with identical full
+qualification and original receipt bytes; SELECT keeps its existing encoding.
+Current-byte CAS, stopped-owner leases, original failed-image diagnostics and
+no-replay rules remain mandatory. No separate rollback root or arbitrary
+package path is accepted.
+
+This is source/native-fixture qualified (329 distinct cases), not yet installed.
+Do not run it against an unprovisioned broker. `preflight` and `submit` neither
+enroll trust nor start a service; `wake/install.ps1` still refuses non-BuildOnly.
+The first provisioning step must be independently reviewed and enroll a genuine
+public approval key, exact native operator/reviewer and existing state-root
+identity. Main-EXE release authority is a different purpose. Preserve the fixed
+SCM ACL: ordinary `Start-Service` is not a substitute for a qualified bootstrap
+owner. No new signing authority is created by these source tests. Evidence:
+[rollback source](../verification/SAME_STATE_WAKE_ROLLBACK_SOURCE_2026_11_10.json).
+
+## 2026-11-10 — finite PAUSED Wake qualification (development live PASS)
 
 ```text
 <qualified-new-controller> operator web-dev-runtime run-paused --max-runtime-seconds <1..180>
@@ -13,8 +33,16 @@ unchanged. An older selected Host returns `DEV_RUNTIME_PAUSED_PACKAGE_REQUIRED`.
 Do not replace the profile, targets or original unknown events to run this check.
 
 38 distinct source/native-fixture cases, formatting and strict root/Wake Clippy
-pass. A matching built package and actual paused-host qualification are still
-required; no production or Web acceptance follows from these source results.
+pass separately from live evidence. Built source
+`dba8fc374622c93f9b8ca3744f8ba59f99fb7030` passed two actual 10-second PAUSED
+starts and a 15-second selected-package backend check (401/401/200; 79 tools).
+All 755 preservation pins matched, task files were neither added nor removed,
+and owned processes exited. No browser, Wake dispatch, message, tunnel or
+production change occurred. The existing development verification record is
+local only; the installed legacy Host still does not gain this command or
+capability. Protected installation, rollback and actual Web work remain separate
+acceptance gates. Evidence:
+[actual development health](../verification/BOUNDED_PAUSED_WAKE_LIVE_DEVELOPMENT_2026_11_10.json).
 
 ## 2026-11-10 — same-state broker operator interface (new source; not installed)
 

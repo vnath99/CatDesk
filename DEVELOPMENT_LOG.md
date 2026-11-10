@@ -1,4 +1,21 @@
-## 2026-11-10 — bounded PAUSED owner, isolated source qualification
+## 2026-11-10 — same-state rollback writer qualified in native fixtures
+
+The existing signed broker now supports rollback to the exact original,
+qualified predecessor. It reuses the protected policy, pipe, global ledger,
+resource leases and pointer CAS. Five real phases preserve actual failed-image
+diagnostics through COMPLETE; missing images have an explicit supported-selector
+boundary. No current-release health or reconstruction is invented.
+
+The first bounded run retained six Windows recovery failures caused by one
+extra unshared INTENT handle. Closing that handle while keeping the global lock
+resolved them. A fresh run passed 329 distinct cases, both formatting checks
+and strict root/Wake Clippy in 190.633 seconds; 231 source and six protected
+preservation pins matched. This is native-fixture qualification, not installed
+rollback or Web acceptance. Next: exact published artifact build and reviewed
+first provisioning of the existing broker with genuine signer enrollment.
+Evidence: [rollback source](docs/verification/SAME_STATE_WAKE_ROLLBACK_SOURCE_2026_11_10.json).
+
+## 2026-11-10 — actual bounded PAUSED Wake and development-backend health
 
 Added a finite PAUSED option to the existing development foreground lifecycle.
 It keeps the current resource leases and refuses an unsupported Host before
@@ -9,8 +26,18 @@ An isolated snapshot passed 31 distinct Wake/native cases, formatting and strict
 root/Wake Clippy; the corrected root binary CLI check passed seven cases. The
 initial wrong-target wrapper and a subsequent cold-compile deadline failure
 remain recorded. Both stopped without source/production mutation. Matching
-artifact build and actual paused-host qualification are next, separately from
-rollback implementation and protected deployment. Evidence:
+source `dba8fc374622c93f9b8ca3744f8ba59f99fb7030` was then built separately in
+102.490 seconds of owned time. Two actual 10-second PAUSED Host starts passed,
+followed by a 15-second selected-package backend check: missing/wrong bearer
+401/401, authenticated initialize 200, and a 79-tool catalog including the central
+tool. The live owner completed in 71.329 seconds; all 755 preservation pins
+matched, no task-state files were added or removed, and owned processes exited.
+No browser, message, Wake dispatch, tunnel, native project task or production
+change occurred. The existing selector now retains a local development-only
+verification record. Protected release authority, installed recovery/rollback
+and direct Web edit/verify/self-Wake acceptance remain separate and open.
+Evidence:
+[actual development health](docs/verification/BOUNDED_PAUSED_WAKE_LIVE_DEVELOPMENT_2026_11_10.json),
 [paused startup source](docs/verification/BOUNDED_PAUSED_WAKE_STARTUP_SOURCE_2026_11_10.json).
 
 ## 2026-11-10 — frozen build and finite development health; functional broker integration
