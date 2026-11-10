@@ -2770,3 +2770,12 @@ No source receipt is SYSTEM-service, release, installed or Web acceptance. Origi
 unknown sends and optional native tasks remain fenced. The actual direct Web
 edit/verify/delivered self-Wake and second independent project are still required.
 Evidence: `../verification/WAKE_PROTECTED_STAGE_HANDOFF_SOURCE_2026_11_10.json`.
+
+### 2026-11-10 — Journal observation repair is source qualification only
+
+The status-reader race passed five focused regressions, formatting and strict
+Clippy with preserved state and process cleanup. Rebuild and review the GUI before
+using that source result for installed operation. Actual direct Web editing,
+independent verification, delivered self-Wake continuation and second-project
+isolation remain required. Original uncertain deliveries remain fenced.
+Evidence: `../verification/AUTONOMY_EVENT_POLL_READONLY_SOURCE_2026_11_10.json`.

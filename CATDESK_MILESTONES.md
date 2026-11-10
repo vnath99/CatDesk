@@ -10121,3 +10121,11 @@ formatting and strict Clippy passed. No privileged installation, signed authorit
 or actual Web/self-Wake acceptance follows. Prepare exact-commit immutable GUI, Host
 and broker artifacts through the existing release process; keep prior artifacts.
 Evidence: `docs/verification/WAKE_PROTECTED_STAGE_HANDOFF_SOURCE_2026_11_10.json`.
+
+### 2026-11-10 — Read-only event polling qualified in source
+
+The legacy status-reader tail-repair race is fixed and passed five focused cases,
+formatting and strict Clippy. Both runtime source lines retain the same correction
+through a normal merge. GUI rebuilds, actual fallback working qualification and
+protected selection remain separate; no Web edit/self-Wake cycle is accepted yet.
+Evidence: `docs/verification/AUTONOMY_EVENT_POLL_READONLY_SOURCE_2026_11_10.json`.

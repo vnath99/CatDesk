@@ -5539,3 +5539,14 @@ the retained earlier GUI does not acquire the privacy fix through a Host upgrade
 A new GUI, Host and broker build is therefore required for the corrected candidate,
 with the GUI retained as a distinct Wake companion rather than an implicit
 canonical-backend promotion. Native81 and GUI6 evidence share the same source fence.
+
+### 2026-11-10 — Event-reader repair verified; rebuild the affected GUIs
+
+Event polling now leaves journal bytes intact, with repair confined to the existing
+locked append path. Five cases, formatting and strict Clippy passed. Keep the old
+GUI artifact findings and the failed verifier record; neither is relabeled healthy.
+Build corrected GUIs for candidate and fallback from their published source trees.
+Retain the unchanged Host/broker only with exact compiler-input equivalence and
+truthful component origins. The independently reviewed first-broker inputs stay
+separate from GUI release authority. See the
+`../verification/AUTONOMY_EVENT_POLL_READONLY_SOURCE_2026_11_10.json` record.

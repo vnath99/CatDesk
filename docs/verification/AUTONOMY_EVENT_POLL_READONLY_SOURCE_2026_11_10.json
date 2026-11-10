@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-10",
+  "scope": "EVENT_JOURNAL_POLLING_SOURCE_AND_DISPOSABLE_WINDOWS_FIXTURES",
+  "finding": {
+    "statusReaderCouldRepairAnActiveAppendWithoutWriterLock": true,
+    "liveCorruptionObserved": false,
+    "independentFindingSha256": "4170fe0fb4a1592d3df6acd5de8330643614343ed6a55ee5f5f512b0325c29f2",
+    "oldArtifactFindingSha256": "8efa75f1202ca47d40ea00e387836ed9d49bfa7aece28ebcd75654b98625a26a"
+  },
+  "repair": {
+    "sourcePath": "src/delegated/autonomy_state.rs",
+    "normalizedLfSha256": "83d51e4ac9a57a7fde7c11ad4417c1e31ee8c6814ff5eaa6283b81de73172247",
+    "pollingDoesNotRepairOrWrite": true,
+    "explicitAppendRepairRetainsExistingMutationLock": true,
+    "lineIoErrorsFailClosed": true,
+    "validUnterminatedJsonBehaviorPreserved": true,
+    "schemaOrAuthorizationChanged": false,
+    "independentRemediationReviewSha256": "502fd9141d2848a0bac143de87d44ce705e757e3a63abe4c5ab82e09a21555b6"
+  },
+  "sourceHistory": {
+    "testedSnapshotBaseline": "f0ce5531d282ea858f20883bdaf18df187482b16",
+    "testedSnapshotCommittedAs": "8cb928f5d30a03785247a4c3e2265692f11cebb9",
+    "testsPrecededCommit": true,
+    "normalMergeCommit": "c2cde01cf07892021d5d6d7a0c25e5bd791c6732",
+    "historyRewritten": false
+  },
+  "qualification": {
+    "sourceFenceSha256": "6dc1ffde42d1cc1e6ac5a3cf09679a5bbe8189e07b6598816a934b571e2c0665",
+    "resultSha256": "335092f31ce4b7c580caa0e9aa952ad86142b08ddca87426d9cb62b13823b06d",
+    "ownerSha256": "31596b9cb9be08a192dc8029cb225f2de5cf82561705486be77cefd21e07a9a2",
+    "independentActualReadbackSha256": "5929c42e038e9e999b6813278fdf17988b4a09b37d620af9c3052f040d6fdc76",
+    "distinctCasesPassed": 5,
+    "requiredCases": [
+      "event_poll_torn_tail_is_read_only_and_locked_append_repairs",
+      "event_poll_preserves_concurrent_partial_append",
+      "concurrent_session_saves_and_event_append_preserve_sticky_profile_evidence",
+      "state_events_and_cursor_round_trip_durably",
+      "lock_prevents_second_owner_and_release_is_owner_scoped"
+    ],
+    "rootFormattingPassed": true,
+    "rootStrictAllTargetClippyPassed": true,
+    "sourceInputsUnchanged": 238,
+    "distinctCompiledRootInputsRehashed": 168,
+    "statePinsUnchanged": 1650,
+    "taskInventoryPaths": 1607,
+    "taskFilesAdded": 0,
+    "taskFilesRemoved": 0,
+    "profileDirectoryIdentityUnchanged": true,
+    "sourceProcessesRemaining": 0,
+    "ownerElapsedSeconds": 129.0056837,
+    "initialHarnessRefusalPreserved": true,
+    "initialRefusalReason": "Compiler-relative dependency operands were resolved against the verifier working directory.",
+    "initialRefusalResultSha256": "009f89077508d87c7e0d0ad84846369e23d8eb3e47e9e018cb4be54b0df6bdb7",
+    "initialRefusalOwnerSha256": "4e8d8dfe7d6e5b7a65355cfc567941c00ccbb18a60d3178b96371b0a93112590",
+    "verifiedCompiledBinaryReusedWithoutAnotherCleanOrBuild": true
+  },
+  "acceptance": {
+    "sourceRemediationQualified": true,
+    "newGuiArtifactsBuilt": false,
+    "oldGuiArtifactFindingsStillRetained": true,
+    "fullArtifactReleaseApproval": false,
+    "protectedInstallationChanged": false,
+    "browserOrWakeStarted": false,
+    "messageSent": false,
+    "projectBindingChanged": false,
+    "actualWebEditVerifySelfWakeAccepted": false,
+    "twoProjectLiveAcceptance": false
+  }
+}

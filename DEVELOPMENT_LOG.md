@@ -4032,3 +4032,18 @@ qualification. Its first new checkout check refused before compiling because Git
 system line-ending policy differed from the explicit LF checkout policy; preserve
 that refusal and use per-command checkout settings, without resetting source or
 changing Git configuration. Existing unknown Web submissions remain fenced.
+
+### 2026-11-10 20:31 UTC — Event polling no longer repairs a live journal
+
+Fixed a source-confirmed race in legacy status observation: polling could truncate
+an event tail while its writer held the mutation lock. Polling now parses without
+writing; explicit append repair retains that lock. Five focused cases, including
+a real partial append paused behind a channel barrier, passed with formatting and
+strict all-target Clippy. Source, task state and profile checks matched; all owned
+processes exited. The initial verifier refusal for compiler-relative dependency
+paths is retained; its compiled test binary was verified and reused for the tests.
+The source-only fallback fix was normally merged into the existing branch, keeping
+both exact histories. Existing GUI artifacts remain held until rebuilt and reviewed.
+Verified Host/broker inputs are disjoint from this file and can be retained with
+their original provenance. Protected installation and live Web acceptance remain open.
+Evidence: `docs/verification/AUTONOMY_EVENT_POLL_READONLY_SOURCE_2026_11_10.json`.
