@@ -5508,3 +5508,12 @@ the cause; never retry an uncertain production operation. The existing product
 Ed25519 issuer can technically support a fresh approved Wake-purpose signature;
 neither a new key nor automatic Wake enrollment is implied. See the lifecycle
 appendix and `../verification/WAKE_OBSERVER_PRIVACY_SOURCE_2026_11_10.json`.
+
+### 2026-11-10 — Verified reader checkpoint
+
+The exact reader commit `9c521ba5` now has clean-checkout qualification: 29 cases,
+formatting, strict Clippy and unchanged source/state/task inventory. No protected
+installation or Web send occurred. Publication remains separate: native zero-open
+control passes while five-child-open control returns `0xc0000022`. Reuse the
+existing protected-stage security and guarded handle handoff before attempting
+another qualified candidate; never drop pins from an exposed stage.

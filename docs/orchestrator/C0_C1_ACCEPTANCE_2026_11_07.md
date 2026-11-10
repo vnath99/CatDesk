@@ -2752,3 +2752,11 @@ All eleven observer JSON frame families now emit validated canonical projections
 fences remain held. No protected installation, Web edit, delivered self-Wake or
 independent two-conversation operation was demonstrated in this source checkpoint.
 See `../verification/WAKE_OBSERVER_PRIVACY_SOURCE_2026_11_10.json`.
+
+### 2026-11-10 — Exact source evidence retained
+
+The independent clean checkout of reader commit `9c521ba5` passed all 29 readiness
+cases, formatting and strict Clippy, preserving the recorded state and inventory.
+This closes the reader-source checkpoint only. The unpublished publication repair,
+protected installed qualification and actual Web edit/verify/delivered self-Wake
+remain open. Original unknown submissions and task fences remain held.

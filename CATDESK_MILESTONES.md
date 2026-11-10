@@ -10106,3 +10106,10 @@ qualification remains open. The existing product signer is documented separately
 from fresh Wake-purpose authority. Same-state publication still fails an actual
 native rename control; no release readiness or Web/self-Wake acceptance is claimed.
 Evidence: `docs/verification/WAKE_OBSERVER_PRIVACY_SOURCE_2026_11_10.json`.
+
+### 2026-11-10 — Exact reader source qualification
+
+Commit `9c521ba5` passed the 29-case readiness suite, formatting and strict Clippy
+in its own clean checkout. The evidence JSON records exact source/tree and result
+hashes. This is source qualification; installed observation and the Web cycle
+remain open. The separate publication repair still requires Windows qualification.

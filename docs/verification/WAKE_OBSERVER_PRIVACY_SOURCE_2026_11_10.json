@@ -40,7 +40,7 @@
     "overallDiagnosticPassed": false,
     "overallFailure": "Separate unpublished publication change returned native status 0xc0000022; that failure remains preserved.",
     "unpublishedPublicationFilesIncludedInThisCheckpoint": false,
-    "exactCommittedTreeQualification": "PENDING"
+    "exactCommittedTreeQualification": "PASS_SOURCE_ONLY"
   },
   "acceptance": {
     "fullSourceReviewEstablished": false,
@@ -53,5 +53,25 @@
     "installedObservationQualified": false,
     "actualWebEditVerifySelfWakeAccepted": false,
     "twoProjectLiveAcceptance": false
+  },
+  "exactCommittedTreeEvidence": {
+    "sourceCommit": "9c521ba5d287c0f6646886d24c57ffdee3d912b9",
+    "sourceTree": "17edd43c24cd405621ebeecd44d3e45d4dcd101e",
+    "sourceFenceSha256": "fc9ab4814ca1e1e405a9f2679d0c03cf6d868e64440d557371a88b1d88fecb6d",
+    "resultSha256": "343edd78799f855c40cbdc8910ab0cafd5ca051c8ba59d4874603673b8bce4f8",
+    "ownerSha256": "0755f5132071ced77279c88a13aa4d65161c2bfe865083ee865a026a64296338",
+    "readinessCasesPassed": 29,
+    "newCasesPassed": 3,
+    "wakeFormattingPassed": true,
+    "wakeStrictClippyPassed": true,
+    "sourceInputsUnchanged": 238,
+    "statePinsUnchanged": 1650,
+    "taskInventoryPaths": 1607,
+    "taskFilesAdded": 0,
+    "taskFilesRemoved": 0,
+    "scopedSourceProcessesRemaining": 0,
+    "exactCommittedTreeClean": true,
+    "installedAcceptance": false,
+    "releaseAuthority": false
   }
 }

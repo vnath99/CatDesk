@@ -3982,3 +3982,15 @@ The separate publication patch failed its actual native rename test with status
 `0xc0000022` and remains outside this checkpoint. All failure records are retained.
 See `docs/verification/WAKE_OBSERVER_PRIVACY_SOURCE_2026_11_10.json` for exact scope.
 No installation, signing, browser, send, binding change or Web acceptance occurred.
+
+### 2026-11-10 — Exact reader commit qualified independently
+
+A clean detached checkout of `9c521ba5d287c0f6646886d24c57ffdee3d912b9`
+passed all 29 readiness cases, formatting and strict Wake Clippy. All 238 source
+inputs, 1,650 state pins and 1,607 task-inventory paths stayed unchanged; no scoped
+source processes remained. This excludes the unpublished installer changes.
+The initial checkout's long-path failure was retained and resolved using Git's
+per-command long-path option, with no repository configuration change.
+The separate native control succeeds with zero child opens and returns
+`0xc0000022` with five read handles; destination rights alone do not resolve it.
+Installation and actual Web/self-Wake acceptance remain open.
