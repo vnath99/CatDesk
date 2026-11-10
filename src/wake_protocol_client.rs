@@ -331,12 +331,28 @@ pub(crate) fn publish_registered_manual_wake(
         return Err("WEB_TASK_MANUAL_WAKE_ARGUMENTS_INVALID".into());
     }
     preflight_prepared_invitation(prepared, expected)?;
-    let message = format!(
-        "CatDesk manual continuation. Project: {project} Request: {request_id} Task: {task_id} Source event: {} Source turn: {} Continue this project's unfinished authorized task using its existing handoff and current grants. Preserve task ownership and reconcile unknown outcomes before further execution.",
-        intent.source_event_id, intent.source_turn_id
+    let message = registered_manual_wake_message(
+        project,
+        request_id,
+        task_id,
+        intent.source_event_id,
+        intent.source_turn_id,
     );
     let store = Store::open(&wake_root_for_workspace(control_workspace)?)?;
     store.produce_expected_wake(project, &message, expected, intent)
+}
+
+pub(crate) fn registered_manual_wake_message(
+    project: &str,
+    request_id: &str,
+    task_id: &str,
+    source_event_id: &str,
+    source_turn_id: &str,
+) -> String {
+    format!(
+        "CatDesk manual continuation. Project: {project} Request: {request_id} Task: {task_id} Source event: {} Source turn: {} Continue this project's unfinished authorized task using its existing handoff and current grants. Preserve task ownership and reconcile unknown outcomes before further execution.",
+        source_event_id, source_turn_id
+    )
 }
 
 fn publication_target(

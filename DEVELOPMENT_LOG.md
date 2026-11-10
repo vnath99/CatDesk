@@ -3552,3 +3552,33 @@ edits, and the change does not enable recurring owners or relax protected
 release safeguards. This checkpoint changes documentation only: no runtime,
 project binding, native session, source implementation or Git operation occurred.
 The full multi-project MVP is not complete.
+
+
+## 2026-11-10 — exact manual self-Wake source path for direct Web tasks
+
+Implemented a narrow extension of the existing sender for one already completed
+manual-Wake task call. It checks the original assignment, explicit grant,
+argument/result hashes, fixed event/message and exact paired target. Existing
+rollover carry remains guarded. No new registry, owner, scheduler or grant is
+created. The project lease releases only after durable submission fencing; a
+legitimate continued tool call can then progress. Prior unknown effects still
+refuse admission, and completed or ambiguous submissions cannot be resent.
+
+Six meaningful new tests join the existing sender cases: 3 coordinator tests and
+31 sender tests passed; the final 3 changed selector tests passed again after a
+lint correction. Root/Wake formatting and strict all-target Clippy pass. Initial
+compile, fixture and lint failures and their corrections remain in the dated
+qualification evidence; repeated selector checks are not counted as new tests.
+Independent source review found no remaining material issue. This is source-only
+qualification; no installed, live or unattended manual-Wake acceptance follows.
+
+The fresh direct-task registration attempt failed safely in a read-only
+preservation scan at 141.063 seconds. Independent checks established that no
+worktree, branch, task, grant, request or message was created, both binding stores
+were unchanged, and recorded test process identities were gone. The broad scan
+is being replaced with the existing selected-metadata approach; the old failed
+attempt remains immutable. No browser, backend, tunnel or native provider
+started. Native C1/C49 fences and the INCONCLUSIVE source-release hold remain
+separate from the primary direct Web workflow. Actual live edit, verification
+and self-Wake are still pending. See
+`docs/verification/DIRECT_WEB_MANUAL_WAKE_2026_11_10.json`.

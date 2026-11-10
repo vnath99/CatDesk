@@ -158,6 +158,12 @@ pub(crate) enum WebAction {
         project_id: String,
         request_id: String,
     },
+    WorkManualWakeDeliver {
+        project_id: String,
+        request_id: String,
+        call_id: String,
+        event_id: String,
+    },
     WorkInspect {
         project_id: String,
         request_id: String,
@@ -335,6 +341,26 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         return Err("WEB_USAGE: invalid project ID".into());
     }
     match (group, verb) {
+        ("work", "manual-wake-deliver") => {
+            let mut id = |option| {
+                options
+                    .remove(option)
+                    .filter(|id| id.len() <= 200 && catdesk_wake::protocol::valid_id(id))
+                    .ok_or_else(|| format!("WEB_USAGE: {option} is required"))
+            };
+            let request_id = id("--request-id")?;
+            let call_id = id("--call-id")?;
+            let event_id = id("--event-id")?;
+            if !options.is_empty() {
+                return Err("WEB_USAGE: unexpected manual Wake delivery option".into());
+            }
+            Ok(WebAction::WorkManualWakeDeliver {
+                project_id: project_id.into(),
+                request_id: request_id.into(),
+                call_id: call_id.into(),
+                event_id: event_id.into(),
+            })
+        }
         ("browser", "inspect") if options.is_empty() => Ok(WebAction::BrowserInspect {
             project_id: project_id.into(),
         }),
@@ -2037,6 +2063,18 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             project_id,
             request_id,
         } => crate::web_work::deliver(&workspace, &project_id, &request_id),
+        WebAction::WorkManualWakeDeliver {
+            project_id,
+            request_id,
+            call_id,
+            event_id,
+        } => crate::web_work::deliver_manual_wake(
+            &workspace,
+            &project_id,
+            &request_id,
+            &call_id,
+            &event_id,
+        ),
         WebAction::WorkInspect {
             project_id,
             request_id,
@@ -3543,6 +3581,56 @@ mod tests {
         let mut invalid = base.clone();
         *invalid.last_mut().unwrap() = "../other".into();
         assert!(parse(&invalid).is_err());
+    }
+
+    #[test]
+    fn manual_wake_delivery_cli_accepts_only_retained_task_event_identity() {
+        let base = args(&[
+            "operator",
+            "web",
+            "work",
+            "manual-wake-deliver",
+            "--project-id",
+            "alpha",
+            "--request-id",
+            "existing-one",
+            "--call-id",
+            "wake-one",
+            "--event-id",
+            "wake-intent-one",
+        ]);
+        assert_eq!(
+            parse(&base).unwrap(),
+            WebAction::WorkManualWakeDeliver {
+                project_id: "alpha".into(),
+                request_id: "existing-one".into(),
+                call_id: "wake-one".into(),
+                event_id: "wake-intent-one".into(),
+            }
+        );
+        for option in [
+            "--message",
+            "--conversation-url",
+            "--workspace",
+            "--force",
+            "--input-file",
+            "--execution-key",
+            "--max-runtime-seconds",
+            "--native-queue-task-id",
+        ] {
+            let mut bad = base.clone();
+            bad.extend(args(&[option, "unexpected"]));
+            assert!(parse(&bad).is_err(), "{option}");
+        }
+        for omit in ["--request-id", "--call-id", "--event-id"] {
+            let mut bad = base.clone();
+            let i = bad.iter().position(|s| s == omit).unwrap();
+            bad.drain(i..i + 2);
+            assert!(parse(&bad).is_err());
+        }
+        let mut bad = base.clone();
+        *bad.last_mut().unwrap() = "../other".into();
+        assert!(parse(&bad).is_err());
     }
 
     #[test]

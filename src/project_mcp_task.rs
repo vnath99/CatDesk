@@ -24,6 +24,9 @@ use std::{
 };
 #[path = "project_task_context.rs"]
 mod context_delivery;
+#[path = "project_task_manual_wake.rs"]
+mod manual_delivery;
+pub(crate) use manual_delivery::authorize_manual_wake_delivery;
 #[cfg(windows)]
 #[path = "project_task_recovery.rs"]
 mod recovery;
@@ -1030,12 +1033,7 @@ pub(crate) fn journal_manual_wake(
     {
         return Err("WEB_TASK_MANUAL_WAKE_EVENT_MISMATCH".into());
     }
-    let result = json!({"status":"WAKE_INTENT_RECORDED", "projectId":event.project_id,
-        "eventId":event.event_id, "createdUtc":event.created_utc,
-        "targetGeneration":event.target_generation, "sourceTurnId":request.source_turn_id,
-        "expiresUtc":metadata.expires_utc,
-        "deliveryProved":false, "taskCompletionVerified":false,
-        "nativeSessionAction":"NONE", "browserStarted":false, "wakeHostStarted":false});
+    let result = manual_wake_result(&event, &request.source_turn_id, metadata.expires_utc);
     let result_hash = catdesk_wake::protocol::digest(&result.to_string());
     journal
         .transition_tool_call(
@@ -1050,6 +1048,19 @@ pub(crate) fn journal_manual_wake(
         )
         .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
     Ok(result)
+}
+
+fn manual_wake_result(
+    event: &catdesk_wake::protocol::Event,
+    source_turn_id: &str,
+    expires_utc: u64,
+) -> Value {
+    json!({"status":"WAKE_INTENT_RECORDED", "projectId":event.project_id,
+        "eventId":event.event_id, "createdUtc":event.created_utc,
+        "targetGeneration":event.target_generation, "sourceTurnId":source_turn_id,
+        "expiresUtc":expires_utc,
+        "deliveryProved":false, "taskCompletionVerified":false,
+        "nativeSessionAction":"NONE", "browserStarted":false, "wakeHostStarted":false})
 }
 
 pub(crate) fn native_status_selection(
@@ -2045,6 +2056,207 @@ pub(crate) mod tests {
             path,
             ledger.record("request-a").unwrap().unwrap(),
         )
+    }
+
+    #[test]
+    fn manual_wake_delivery_requires_exact_completed_call_and_reads_without_state_creation() {
+        use crate::delegated::journal::{ToolCallRecordV1, ToolMutationKind};
+        use catdesk_wake::{
+            protocol::{Event, WakeMetadata, WakePurpose},
+            store::WakeIntent,
+        };
+        let (scope, _, _, record) = linked_fixture();
+        let target = &record.target;
+        let grant =
+            grant_web_execution_with_manual_wake(&scope, &record, target, false, true).unwrap();
+        let key: String =
+            serde_json::from_slice(&fs::read(grant["executionKeyFile"].as_str().unwrap()).unwrap())
+                .unwrap();
+        let request = ManualWakeRequest::parse(
+            json!({"sourceTurnId":"task-turn-one","priority":3,"ttlSeconds":600}),
+        )
+        .unwrap();
+        let created = catdesk_wake::store::now();
+        let intent = WakeIntent {
+            purpose: WakePurpose::ManualEndTurn,
+            source_event_id: &record.event_id,
+            source_turn_id: &request.source_turn_id,
+            priority: request.priority,
+            ttl_seconds: request.ttl_seconds,
+        };
+        let event = Event {
+            schema_version: 1,
+            event_id: intent.event_id("alpha").unwrap(),
+            project_id: "alpha".into(),
+            event_type: "engineering_attention".into(),
+            created_utc: created,
+            target_generation: target.generation,
+            message: crate::wake_protocol_client::registered_manual_wake_message(
+                "alpha",
+                &record.request_id,
+                "task-fixture",
+                &record.event_id,
+                &request.source_turn_id,
+            ),
+            audit_references: vec![],
+        }
+        .with_wake_metadata(WakeMetadata {
+            purpose: WakePurpose::ManualEndTurn,
+            source_event_id: record.event_id.clone(),
+            source_turn_id: request.source_turn_id.clone(),
+            priority: request.priority,
+            expires_utc: created + 600,
+        })
+        .unwrap();
+        let directory = state_root(&scope, "task-fixture");
+        let journal_root = directory.join("journal");
+        assert!(!journal_root.exists());
+        assert!(
+            authorize_manual_wake_delivery(&scope, &record, target, &event, "wake-one", true)
+                .is_err()
+        );
+        assert!(
+            !journal_root.exists(),
+            "a failed read cannot create a task journal"
+        );
+        journal_manual_wake(&scope, &record, &key, "wake-one", &request, target, || {
+            Ok(event.clone())
+        })
+        .unwrap();
+        let journal = DelegatedJournal::open(&journal_root).unwrap();
+        let run = RunId::new("task-fixture").unwrap();
+        let run_root = journal.run_dir(&run).unwrap();
+        let files = [
+            directory.join("assignment.json"),
+            directory.join("execution-grant.json"),
+            run_root.join("contract.json"),
+            run_root.join("tool_calls.json"),
+        ];
+        let before: Vec<_> = files.iter().map(|p| fs::read(p).unwrap()).collect();
+        authorize_manual_wake_delivery(&scope, &record, target, &event, "wake-one", true).unwrap();
+        for change in [
+            "message", "priority", "expiry", "source", "audit", "project", "event-id",
+        ] {
+            let mut changed = event.clone();
+            match change {
+                "message" => changed.message.push_str(" altered"),
+                "priority" => {
+                    let mut m = changed.wake_metadata().unwrap().unwrap();
+                    m.priority += 1;
+                    changed.audit_references.clear();
+                    changed = changed.with_wake_metadata(m).unwrap();
+                }
+                "expiry" => {
+                    let mut m = changed.wake_metadata().unwrap().unwrap();
+                    m.expires_utc += 1;
+                    changed.audit_references.clear();
+                    changed = changed.with_wake_metadata(m).unwrap();
+                }
+                "source" => {
+                    let mut m = changed.wake_metadata().unwrap().unwrap();
+                    m.source_event_id = "another-source".into();
+                    changed.audit_references.clear();
+                    changed = changed.with_wake_metadata(m).unwrap();
+                }
+                "audit" => changed.audit_references.push("unapproved-extra".into()),
+                "project" => changed.project_id = "beta".into(),
+                _ => changed.event_id = "wake-intent-other".into(),
+            }
+            assert!(
+                authorize_manual_wake_delivery(&scope, &record, target, &changed, "wake-one", true)
+                    .is_err(),
+                "{change}"
+            );
+        }
+        assert!(
+            authorize_manual_wake_delivery(&scope, &record, target, &event, "other-call", true)
+                .is_err()
+        );
+        let changed_target = catdesk_wake::protocol::Target::new(2, target.url.clone()).unwrap();
+        assert!(
+            authorize_manual_wake_delivery(
+                &scope,
+                &record,
+                &changed_target,
+                &event,
+                "wake-one",
+                true
+            )
+            .is_err()
+        );
+        for (path, bytes) in files.iter().zip(&before) {
+            assert_eq!(fs::read(path).unwrap(), *bytes);
+        }
+        let mut not_opted_in: Value = serde_json::from_slice(&before[1]).unwrap();
+        not_opted_in["allowManualWake"] = json!(false);
+        fs::write(&files[1], serde_json::to_vec(&not_opted_in).unwrap()).unwrap();
+        assert_eq!(
+            authorize_manual_wake_delivery(&scope, &record, target, &event, "wake-one", true)
+                .unwrap_err(),
+            "WEB_TASK_MANUAL_WAKE_NOT_GRANTED"
+        );
+        fs::write(&files[1], &before[1]).unwrap();
+        let original = journal.load_tool_calls(&run).unwrap();
+        for change in [
+            "status",
+            "tool",
+            "arguments",
+            "request",
+            "result",
+            "run",
+            "mutation",
+        ] {
+            let mut calls = original.clone();
+            let call = calls.get_mut("wake-one").unwrap();
+            match change {
+                "status" => call.status = ToolCallStatus::OutcomeUnknown,
+                "tool" => call.tool_name = "patch.apply".into(),
+                "arguments" => call.arguments_hash = "wrong".into(),
+                "request" => call.request_hash = "wrong".into(),
+                "result" => call.result_hash = Some("wrong".into()),
+                "run" => call.run_id = RunId::new("another-task").unwrap(),
+                _ => call.mutation_kind = ToolMutationKind::ReadOnly,
+            }
+            fs::write(&files[3], serde_json::to_vec(&calls).unwrap()).unwrap();
+            assert!(
+                authorize_manual_wake_delivery(&scope, &record, target, &event, "wake-one", false)
+                    .is_err(),
+                "{change}"
+            );
+        }
+        fs::write(&files[3], &before[3]).unwrap();
+        // A pre-existing unknown call blocks handoff. After the durable fence,
+        // a newly executing scoped call must not cancel its own continuation.
+        journal
+            .record_tool_call_requested(ToolCallRecordV1 {
+                schema_version: 1,
+                run_id: run,
+                tool_call_id: ToolCallId::new("continued-read").unwrap(),
+                tool_name: "read".into(),
+                request_hash: "x".into(),
+                arguments_hash: "x".into(),
+                mutation_kind: ToolMutationKind::ReadOnly,
+                status: ToolCallStatus::Requested,
+                result_hash: None,
+                outcome_summary: None,
+            })
+            .unwrap();
+        assert_eq!(
+            authorize_manual_wake_delivery(&scope, &record, target, &event, "wake-one", true)
+                .unwrap_err(),
+            "PROJECT_TASK_RECOVERY_REQUIRED"
+        );
+        authorize_manual_wake_delivery(&scope, &record, target, &event, "wake-one", false).unwrap();
+        fs::write(
+            directory.join("execution-revoked.json"),
+            b"{\"revoked\":true}",
+        )
+        .unwrap();
+        assert_eq!(
+            authorize_manual_wake_delivery(&scope, &record, target, &event, "wake-one", false)
+                .unwrap_err(),
+            "WEB_TASK_GRANT_REVOKED"
+        );
     }
 
     #[test]

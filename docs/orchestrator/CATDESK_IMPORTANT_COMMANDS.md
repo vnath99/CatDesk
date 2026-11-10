@@ -1,3 +1,34 @@
+## 2026-11-10 — direct Web task and exact manual-Wake delivery
+
+Current acceptance follows the user's direct Web → v5 → scoped local edit and
+verification → manual self-Wake direction. Native coding is optional. Earlier
+native C1 commands below retain their original contracts and no-replay fences;
+do not use them to start or reinterpret a new direct task.
+
+The source adds this narrow local command:
+
+```text
+<qualified-controller-containing-this-change> operator web work manual-wake-deliver --project-id PROJECT --request-id REQUEST --call-id ORIGINAL_MANUAL_WAKE_CALL --event-id RECORDED_EVENT
+```
+
+It selects an existing completed `wake.manual_end_turn` call and validates its
+archived assignment, manual-Wake grant, request/result hashes, fixed message,
+current paired target and existing rollover carry proof. It cannot supply new
+message text, publish another intent, scan sibling queues or create a grant.
+The existing installed-profile sender owns the browser for at most 180 seconds.
+The project lease is released only after a durable submission witness, allowing
+the continued task to use its scoped tools. SENT, SUBMITTING and unknown outcomes
+retain the existing no-replay fences. Queue admission, exact delivery receipt,
+completed response and cleanup are separate evidence.
+
+This command is **source-tested, not installed/live-qualified**. The installed
+backend's edit, verification and queue-only manual-Wake actions already exist;
+its old operator CLI does not acquire this new delivery command merely because
+source tests pass. Do not start the shared installed host for a narrow canary:
+its unrelated queued work and review discovery remain preserved. Use the
+supported development/release procedure and record each qualification layer.
+See [current acceptance](C0_C1_ACCEPTANCE_2026_11_07.md).
+
 ## 2026-11-08T20:00:47.515801+00:00 — identity clarification completed; preserve its receipt
 
 The original C1 identity clarification is now SENT/COMPLETE under the original task/grant, alongside its unchanged earlier SENT invitation/context/continuation. Do not re-run `context-deliver-clarification` as a native retry. Native job READY, no attempt/receipt/edit; exact code/test/Wake acceptance remains incomplete. Local identity reconciliation passed19 checks and the clarification passed actual delivery/cleanup. A separate34.422-second content-free read verified the new completed exchange but did not classify its explanation. The single new operator summary question is pending; full installed response snapshots remain unavailable. No approval/sign-in/settings action is requested. Qualified private preservation baseline now1069 pins; evidence is in docs/verification/C1_RESPONSE_AND_PRIVATE_CONTEXT_2026_11_08.json.

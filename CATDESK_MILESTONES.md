@@ -1,3 +1,20 @@
+## 2026-11-10 — primary Web work scope and manual-Wake source progress
+
+The user's current required loop is ChatGPT Web → CatDesk v5 → authorized local
+project-file edit and verification → manual self-Wake. Native Codex coding is
+optional; original native requests remain held under their unchanged identities.
+The full direct loop and multi-project MVP remain unaccepted.
+
+Source now selects one completed task-journal manual-Wake event through the
+existing bounded browser sender, preserving project isolation, durable submit
+fencing and no-replay rules. Focused tests cover exact authority, refusal cases,
+lease handoff, independent projects and unchanged sender paths. This is source
+progress, not installed or unattended acceptance. A fresh isolated direct-task
+registration test stopped in its read-only preflight before any task, worktree,
+grant or message was created; the failed attempt is preserved. The narrower
+supported test preparation continues. See the
+[current acceptance authority](docs/orchestrator/C0_C1_ACCEPTANCE_2026_11_07.md).
+
 ## 2026-11-08T20:00:47.515801+00:00 — reconciled identity clarification delivered; native execution still unattempted
 
 Source b67ee0254e385c001e053ad34a328bfcd57df4d7 built a separate controller fe22fa3e6435763d51047e81b5134aa69e676932e2f3c02ba2b7cb06a6e5e405 in46.453seconds with1064 pins preserved. The reviewed observer bytes were independently matched to the exact Git source and build. No installation, selection, protected fingerprint or release-authority change occurred. A stale private harness observer pin refused before any product action; its failed receipt was retained before correcting only that test pin.

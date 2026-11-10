@@ -45,8 +45,9 @@ pub(crate) use review_reconcile::{
     canonical_submission_observation, validate_pre_edit_refusal_frame,
 };
 pub use scoped_review::{
-    run_scoped_review, run_scoped_rollover_continuation, run_scoped_rollover_handoff,
-    run_scoped_task_continuation, run_scoped_task_continuation_handoff, run_scoped_work_request,
+    run_scoped_manual_end_turn_handoff, run_scoped_review, run_scoped_rollover_continuation,
+    run_scoped_rollover_handoff, run_scoped_task_continuation,
+    run_scoped_task_continuation_handoff, run_scoped_work_request,
 };
 #[path = "runtime_task_context.rs"]
 mod task_context;

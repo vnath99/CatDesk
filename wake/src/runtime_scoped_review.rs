@@ -9,6 +9,7 @@ enum Selection<'a> {
     RolloverContinuation(&'a Event, &'a Target),
     RolloverHandoff(&'a Event, &'a Target),
     WorkRequest(&'a Event, &'a Target),
+    ManualEndTurn(&'a Event, &'a Target),
 }
 
 struct FencedAdapter<'a, A> {
@@ -175,6 +176,40 @@ pub fn run_scoped_task_continuation_handoff(
     )
 }
 
+/// Deliver only one previously journaled manual intent selected by its task
+/// owner. The callback releases that task's lease only after durable fencing.
+pub fn run_scoped_manual_end_turn_handoff(
+    store: &Store,
+    event: &Event,
+    target: &Target,
+    maximum_seconds: u64,
+    before_submit: &mut dyn FnMut(&Event, &Target) -> Result<()>,
+    keep_running: &dyn Fn() -> Result<()>,
+    after_fence: &mut dyn FnMut(&Event, &Target) -> Result<()>,
+) -> Result<Value> {
+    run_selected_with_adapter(
+        store,
+        &event.event_id,
+        maximum_seconds,
+        Selection::ManualEndTurn(event, target),
+        before_submit,
+        keep_running,
+        |deadline, guard| {
+            let installed = installed_ordinary_browser_directory(store)?;
+            let inner = Adapter::spawn_from_installed_guarded(
+                store.root(),
+                &installed,
+                deadline.saturating_duration_since(Instant::now()),
+                guard,
+            )?;
+            Ok(FencedAdapter {
+                inner,
+                handoff: after_fence,
+            })
+        },
+    )
+}
+
 pub fn run_scoped_review(
     store: &Store,
     event_id: &str,
@@ -269,8 +304,34 @@ fn run_selected_with_adapter<A: SubmissionAdapter>(
     let rollover = matches!(&selection, Selection::RolloverContinuation(..));
     let handoff = matches!(&selection, Selection::RolloverHandoff(..));
     let work = matches!(&selection, Selection::WorkRequest(..));
+    let manual = matches!(&selection, Selection::ManualEndTurn(..));
     let permitted = match selection {
         Selection::Review => review,
+        Selection::ManualEndTurn(expected, target) => {
+            target.validate()?;
+            &event == expected
+                && event.event_type == "engineering_attention"
+                && event.audit_references.len() == 5
+                && store.config()?.targets.get(&event.project_id) == Some(target)
+                && event.wake_metadata()?.is_some_and(|metadata| {
+                    let Some(ttl_seconds) = metadata.expires_utc.checked_sub(event.created_utc)
+                    else {
+                        return false;
+                    };
+                    metadata.purpose == crate::protocol::WakePurpose::ManualEndTurn
+                        && crate::store::WakeIntent {
+                            purpose: metadata.purpose,
+                            source_event_id: &metadata.source_event_id,
+                            source_turn_id: &metadata.source_turn_id,
+                            priority: metadata.priority,
+                            ttl_seconds,
+                        }
+                        .event_id(&event.project_id)
+                        .ok()
+                        .as_deref()
+                            == Some(event.event_id.as_str())
+                })
+        }
         Selection::WorkRequest(expected, target) => {
             target.validate()?;
             &event == expected
@@ -396,7 +457,7 @@ fn run_selected_with_adapter<A: SubmissionAdapter>(
         return Err("SCOPED_REVIEW_RECEIPT_REQUIRED".into());
     }
     Ok(
-        json!({"action":if review {"scoped_review_run"} else if handoff {"scoped_rollover_handoff_run"} else if rollover {"scoped_rollover_continuation_run"} else if work {"scoped_work_request_run"} else {"scoped_task_continuation_run"},"eventId":event_id,"projectId":event.project_id,
+        json!({"action":if review {"scoped_review_run"} else if handoff {"scoped_rollover_handoff_run"} else if rollover {"scoped_rollover_continuation_run"} else if work {"scoped_work_request_run"} else if manual {"scoped_manual_end_turn_run"} else {"scoped_task_continuation_run"},"eventId":event_id,"projectId":event.project_id,
         "targetGeneration":final_delivery.target.generation,"targetDigest":final_delivery.target.digest,
         "phase":final_delivery.phase,"receipt":final_delivery.receipt,"maximumSeconds":maximum_seconds,
         "hostStarted":false,"schedulerStarted":false,"desiredStateChanged":false}),
@@ -1309,6 +1370,205 @@ mod tests {
                 assert_eq!(result.unwrap()["phase"], "SENT");
                 assert!(delivery.receipt.is_some());
             }
+        }
+    }
+
+    fn manual_event(store: &Store, project: &str, target: &Target) -> Event {
+        store
+            .produce_expected_wake(
+                project,
+                "fixed journal-authorized continuation",
+                target,
+                crate::store::WakeIntent {
+                    purpose: crate::protocol::WakePurpose::ManualEndTurn,
+                    source_event_id: "original-task-event",
+                    source_turn_id: "finished-turn",
+                    priority: 1,
+                    ttl_seconds: 600,
+                },
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn scoped_manual_end_turn_is_exact_and_one_unknown_project_does_not_block_another() {
+        let (store, _, alpha) = fixture("manual-independent");
+        let beta = store.config().unwrap().targets["beta"].clone();
+        let ae = manual_event(&store, "alpha", &alpha);
+        let be = manual_event(&store, "beta", &beta);
+        let foreign = store.root().join("queue/gamma-unreadable.json");
+        std::fs::write(&foreign, b"preserved unrelated queue").unwrap();
+        for (event, target, unknown) in [(&ae, &alpha, true), (&be, &beta, false)] {
+            let mut fake = adapter(event, target);
+            if unknown {
+                fake.receipt.message_digest = "0".repeat(64);
+            }
+            let admitted = fake.admitted.clone();
+            let ack = fake.ack_count.clone();
+            let result = run_selected_with_adapter(
+                &store,
+                &event.event_id,
+                120,
+                Selection::ManualEndTurn(event, target),
+                &mut |_, _| {
+                    admitted.set(true);
+                    Ok(())
+                },
+                &|| Ok(()),
+                |_, _| Ok(fake),
+            );
+            assert_eq!(result.is_err(), unknown);
+            assert_eq!(ack.get(), 1);
+            if !unknown {
+                assert_eq!(result.unwrap()["action"], "scoped_manual_end_turn_run");
+            }
+            assert_eq!(
+                store.delivery(&event.event_id).unwrap().unwrap().phase,
+                if unknown {
+                    Phase::Submitting
+                } else {
+                    Phase::Sent
+                }
+            );
+            assert_eq!(
+                run_selected_with_adapter::<FakeAdapter>(
+                    &store,
+                    &event.event_id,
+                    120,
+                    Selection::ManualEndTurn(event, target),
+                    &mut |_, _| panic!("no replay admission"),
+                    &|| Ok(()),
+                    |_, _| panic!("no replay browser")
+                )
+                .unwrap_err(),
+                "SCOPED_REVIEW_REPLAY_REFUSED"
+            );
+        }
+        assert_eq!(
+            std::fs::read(foreign).unwrap(),
+            b"preserved unrelated queue"
+        );
+    }
+
+    #[test]
+    fn manual_end_turn_handoff_occurs_after_durable_fence_and_failure_never_reacks() {
+        for deny in [false, true] {
+            let (store, _, target) = fixture("manual-handoff");
+            let event = manual_event(&store, "alpha", &target);
+            let fake = adapter(&event, &target);
+            let admitted = fake.admitted.clone();
+            let ack = fake.ack_count.clone();
+            let handoffs = Cell::new(0);
+            let mut handoff = |actual: &Event, actual_target: &Target| {
+                assert!(admitted.get());
+                assert_eq!(ack.get(), 0);
+                assert_eq!(actual, &event);
+                assert_eq!(actual_target, &target);
+                store.require_submitting_witness(&store.delivery(&event.event_id)?.unwrap())?;
+                handoffs.set(handoffs.get() + 1);
+                if deny {
+                    Err("TEST_MANUAL_HANDOFF_REFUSED".into())
+                } else {
+                    Ok(())
+                }
+            };
+            let result = run_selected_with_adapter(
+                &store,
+                &event.event_id,
+                120,
+                Selection::ManualEndTurn(&event, &target),
+                &mut |_, _| {
+                    admitted.set(true);
+                    Ok(())
+                },
+                &|| Ok(()),
+                |_, _| {
+                    Ok(FencedAdapter {
+                        inner: fake,
+                        handoff: &mut handoff,
+                    })
+                },
+            );
+            assert_eq!(handoffs.get(), 1);
+            assert_eq!(ack.get(), u32::from(!deny));
+            if deny {
+                assert_eq!(result.unwrap_err(), "TEST_MANUAL_HANDOFF_REFUSED");
+                assert_eq!(
+                    store.delivery(&event.event_id).unwrap().unwrap().phase,
+                    Phase::Submitting
+                );
+                assert!(store.timer(&event.event_id).unwrap().is_none());
+                assert_eq!(
+                    run_selected_with_adapter::<FakeAdapter>(
+                        &store,
+                        &event.event_id,
+                        120,
+                        Selection::ManualEndTurn(&event, &target),
+                        &mut |_, _| panic!("no repeated fence"),
+                        &|| Ok(()),
+                        |_, _| panic!("no replay browser")
+                    )
+                    .unwrap_err(),
+                    "SCOPED_REVIEW_REPLAY_REFUSED"
+                );
+            } else {
+                assert_eq!(result.unwrap()["phase"], "SENT");
+            }
+        }
+    }
+
+    #[test]
+    fn scoped_manual_end_turn_refuses_wrong_purpose_changed_target_event_and_expiry_before_browser()
+    {
+        for changed in ["purpose", "target", "event", "expired"] {
+            let (store, _, target) = fixture(&format!("manual-invalid-{changed}"));
+            let mut event = manual_event(&store, "alpha", &target);
+            let mut expected = event.clone();
+            let mut selected_target = target.clone();
+            match changed {
+                "purpose" => {
+                    let mut metadata = event.wake_metadata().unwrap().unwrap();
+                    metadata.purpose = crate::protocol::WakePurpose::NewTask;
+                    event.audit_references.clear();
+                    event = event.with_wake_metadata(metadata).unwrap();
+                    expected = event.clone();
+                }
+                "target" => selected_target.generation += 1,
+                "event" => expected.message.push_str(" changed"),
+                _ => {
+                    let mut metadata = event.wake_metadata().unwrap().unwrap();
+                    event.created_utc = now() - 1000;
+                    metadata.expires_utc = now() - 1;
+                    event.audit_references.clear();
+                    event = event.with_wake_metadata(metadata).unwrap();
+                    expected = event.clone();
+                }
+            }
+            let queue = store
+                .root()
+                .join("queue")
+                .join(format!("{}.json", event.event_id));
+            atomic(&queue, &event).unwrap();
+            let before = std::fs::read(&queue).unwrap();
+            assert_eq!(
+                run_selected_with_adapter::<FakeAdapter>(
+                    &store,
+                    &event.event_id,
+                    120,
+                    Selection::ManualEndTurn(&expected, &selected_target),
+                    &mut |_, _| panic!("no invalid admission"),
+                    &|| Ok(()),
+                    |_, _| panic!("no invalid browser")
+                )
+                .unwrap_err(),
+                if changed == "expired" {
+                    "QUEUE_EVENT_EXPIRED"
+                } else {
+                    "SCOPED_REVIEW_EVENT_INVALID"
+                }
+            );
+            assert!(store.delivery(&event.event_id).unwrap().is_none());
+            assert_eq!(std::fs::read(queue).unwrap(), before);
         }
     }
 

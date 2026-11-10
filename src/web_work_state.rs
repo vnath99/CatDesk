@@ -170,6 +170,12 @@ impl LedgerFile {
 }
 
 impl WorkLedger {
+    pub(crate) fn open_read_only(workspace: &Path, project_id: &str) -> Result<Self, String> {
+        let ledger = Self::at(workspace, project_id)?;
+        ledger.load()?;
+        Ok(ledger)
+    }
+
     pub(crate) fn open(workspace: &Path, project_id: &str) -> Result<Self, String> {
         let ledger = Self::at(workspace, project_id)?;
         let parent = ledger.path.parent().ok_or("WEB_WORK_LEDGER_UNSAFE")?;

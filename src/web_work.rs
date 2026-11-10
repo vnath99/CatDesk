@@ -24,6 +24,9 @@ pub(crate) use delivery::inspect as inspect_delivery;
 pub(crate) use delivery::reconcile as reconcile_delivery;
 pub(crate) use delivery::response as observe_response;
 pub(crate) use delivery::retry_pre_submit;
+#[path = "web_work_manual_delivery.rs"]
+mod manual_delivery;
+pub(crate) use manual_delivery::deliver as deliver_manual_wake;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
