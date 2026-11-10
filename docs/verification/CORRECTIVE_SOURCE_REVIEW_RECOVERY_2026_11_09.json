@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordedUtc": "2026-11-09T23:47:49Z",
+  "recordedUtc": "2026-11-10T00:01:42Z",
   "classification": "LIVE_SELECTED_DEV_RECOVERY_AND_CORROBORATED_PARTIAL_REVIEW_NOT_C1",
   "publicIdentities": {
     "focusedMainSource": "ae3f81445dc543d236732060e8d02e54b8c3a978",
@@ -244,8 +244,62 @@
       "closurePreservationMismatches": 0,
       "ownedCleanupAndEndpointRefusalVerified": true,
       "taskCompletionVerified": false
+    },
+    {
+      "group": 8,
+      "sameRegisteredGrant": true,
+      "messagesDelivered": 1,
+      "exactReceiptAndCompletedPersistedReadbackVerified": true,
+      "ownerSeconds": 230.114,
+      "assignedFragmentsInspected": 5,
+      "matchingReadCommandCounts": [1, 1, 1, 1, 1, 1, 1, 1],
+      "findings": 0,
+      "contextNeedsRetainedPrivately": 5,
+      "preservationPins": 1269,
+      "preservationMismatches": 0,
+      "communicationClosureOwnerSeconds": 8.082,
+      "closurePreservationPins": 1271,
+      "closurePreservationMismatches": 0,
+      "ownedCleanupAndEndpointRefusalVerified": true,
+      "taskCompletionVerified": false
     }
   ],
+  "ninthReviewHold": {
+    "reviewerVerdict": "FAIL",
+    "originalReportPreserved": true,
+    "ownerPassed": true,
+    "ownerSeconds": 236.284,
+    "exactSingleDeliveryCompletedReadbackAndCleanupVerified": true,
+    "preservationPins": 1278,
+    "preservationMismatches": 0,
+    "matchingReadCommandCounts": [1, 1, 1, 1, 1, 1, 1, 1],
+    "reportedFindings": 1,
+    "findingPath": "wake/src/runtime_response.rs",
+    "finding": "ALLEGED_EXTRA_TOP_LEVEL_BODY_FIELD_PASSTHROUGH",
+    "independentExactSourceAudits": 2,
+    "counterevidence": "METADATA_FIELD_COUNT_PLUS_REQUIRED_FIELD_VALIDATION_REJECTS_EXTRA_BODY",
+    "focusedCandidateRegression": {
+      "test": "historical_response_protocol_is_separate_from_current_turn_and_rejects_text",
+      "testsRun": 1,
+      "testsPassed": 1,
+      "buildSeconds": 19.33,
+      "boundedOwnerMaximumSeconds": 180,
+      "ownerPassed": true,
+      "sourceModified": false,
+      "browserActions": 0,
+      "nativeCodexDispatches": 0
+    },
+    "sourceArtifactContextGap": "PATCH_ONLY_INPUT_OMITTED_DECISIVE_UNCHANGED_FIELD_COUNT_CHECK",
+    "findingDisposition": "GENUINE_REASSESSMENT_PENDING_ORIGINAL_FAIL_NOT_RELABELED",
+    "normalCommunicationClosedWithFailPreserved": true,
+    "closureOwnerSeconds": 8.287,
+    "closurePreservationPins": 1280,
+    "closurePreservationMismatches": 0,
+    "laterOriginalMessagesHeld": true,
+    "sourceAccepted": false,
+    "producerAuthority": false,
+    "promotionPerformed": false
+  },
   "closureAndCleanup": {
     "supportedCommunicationClosure": "CLOSED",
     "closureOwnerPassed": true,
@@ -263,9 +317,9 @@
     "recurringAutomationStarted": false
   },
   "acceptanceLimits": {
-    "qualifiedFreshPartialGroups": 7,
+    "qualifiedFreshPartialGroups": 8,
     "requiredFreshPartialGroups": 11,
-    "qualifiedSourceFragments": 30,
+    "qualifiedSourceFragments": 35,
     "requiredSourceFragments": 50,
     "requiredChangedCodePaths": 18,
     "genuineCumulativeReview": "NOT_OBTAINED",

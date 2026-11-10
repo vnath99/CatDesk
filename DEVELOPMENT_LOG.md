@@ -3374,3 +3374,23 @@ context resolution and cumulative acceptance remain pending. Separately prepared
 integration/finalization steps passed 33 file-only checks and independent review,
 but require actual final proof hashes and have not run. No production authority
 or native coding acceptance is implied.
+
+### 2026-11-10T00:01:42Z — eighth partial passed; ninth finding held for reassessment
+
+The eighth review qualified and closed with all five assigned fragments, eight
+matching source reads, no findings, a 230.114s owner and verified cleanup. Eight
+partials and 35 of 50 fragments qualify. The ninth delivery/readback also passed
+its 236.284s owner, preserving 1,278 pins, but its genuine report returned FAIL
+for an alleged extra `body` field passing response-diagnostic serialization.
+All eight source-read logs corroborated. Communication closed truthfully with
+FAIL in 8.287s; later original messages and promotion remain held.
+
+Two exact-source audits found that the existing metadata field-count check and
+required-field validation reject the alleged extra field. The cited existing
+regression passed on the unchanged candidate: one test executed, zero failures,
+19.33s compilation, finite 180s owner. The original patch-only review inputs
+omitted the decisive unchanged check. No speculative source correction was made.
+The failed report remains immutable; a genuinely attributable reassessment and
+explicit evidence disposition are required before it can supply source coverage.
+Neither local tests nor a new communication authorization can manufacture review
+or release authority. C1, cumulative acceptance and promotion remain incomplete.

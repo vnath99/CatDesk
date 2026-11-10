@@ -2537,3 +2537,11 @@ with no findings and clean bounded shutdown. All context obligations remain
 retained for final review. Integration and finalization are prepared and tested
 only; genuine cumulative proof is still required before source advance, ACK,
 producer or protected promotion. C1 remains incomplete.
+
+At 2026-11-10T00:01:42Z eight qualified partials cover 35 of 50 fragments.
+The ninth review's delivery/readback/cleanup passed but its report returned FAIL.
+Exact source and the cited one-test regression contradict its proposed extra-body
+leak; the review packet omitted a decisive unchanged validator check. The failed
+report remains preserved and unqualified while genuine reassessment is prepared.
+Original later messages, source integration and promotion remain held. A new
+communication grant alone cannot supersede review evidence or qualify C1.
