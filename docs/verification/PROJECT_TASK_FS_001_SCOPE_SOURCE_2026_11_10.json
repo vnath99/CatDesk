@@ -222,5 +222,76 @@
     "src/workspace_tools.rs": "c5840352b59fc13fd11db29e65e4c6f58c1a4efdfa5b19441c5ec83e4d9a9d6f",
     "src/delegated/integrated.rs": "2e61656cc682c73c12ca0df0cadaa1a0983cb3b9283703c54c8b5d89b117e55f"
   },
-  "preparedUtc": "2026-11-10T15:18:51.353717+00:00"
+  "preparedUtc": "2026-11-10T15:18:51.353717+00:00",
+  "mainCandidateBuild": {
+    "classification": "BUILT_CANDIDATE_ONLY",
+    "finishedUtc": "2026-11-10T15:33:51.745183+00:00",
+    "sourceCommit": "9e41260177f7a6f09cb4fa17e1950536dd690386",
+    "sourceTree": "ebbf4074f9ae5ae0d7ccd910fba0161b1fb945be",
+    "sourceFenceSha256": "9ac83ce9555d22004e49f34677853e5524db2a6f2434ec46aefd3c3f0d114c28",
+    "sourceQualificationResultSha256": "2879172b7d690586545c70d8fcea0a47957ff3c00c08b91d4533ae5118a513ab",
+    "sourceQualificationOwnerSha256": "0aeddc7fdd75997f93fcb536bb193c8fd20f8893808dada7a37d51bc8d5fe2fa",
+    "sourcePublicationReceiptSha256": "55500de06ee6654d7c330c8cad7f0bb22cb1a6f42298ca2c7ae1b0a8d16897c9",
+    "sourceReviewScope": "NARROW_FS_001_SOURCE_REMEDIATION_ONLY",
+    "artifactSha256": "f205822e47ebc6e658bfee110f8100699c49ee5446e2dcae6eaa85239b04b59c",
+    "byteLength": 39558144,
+    "buildProfile": "release",
+    "cargoExitCode": 0,
+    "buildJobs": 1,
+    "workflowSeconds": 502.016,
+    "ownerSeconds": 504.0793086,
+    "buildResultSha256": "5a60a1c34eca2824e59bead8b8ced4b2b1f7fab4272b5bf007200285d4551d14",
+    "buildOwnerSha256": "4c4a78e15fcb59876aa94d1c051ce428114c9dbb9cca2b238cb003be4dbee8df",
+    "provenanceSha256": "180101759de634e59e0a5abd43d4dc7f544a40e6e877114f55edef692538ac62",
+    "readonlyArtifactVerification": {
+      "passed": true,
+      "peMachine": "AMD64",
+      "optionalHeader": "PE32_PLUS",
+      "checksumFileMatches": true,
+      "checksumLineEnding": "CRLF",
+      "checksumFileSha256": "1f12a69dc820f332c3881390b287886e155c837aaf052b11c5ad7e9b90e60ca6",
+      "initialLFOnlyAssertionFailed": true,
+      "initialAssertionPersistentWrites": 0,
+      "existingArtifactAndChecksumBytesUnchanged": true,
+      "verificationSha256": "fee080da1dcea7a7120db0b76c47677aa3517a3c68c4406153defe21c1c8ffde"
+    },
+    "preservation": {
+      "sourcePinsMatched": 238,
+      "statePinsMatched": 1650,
+      "protectedPinsMatched": 6,
+      "sourceMismatches": 0,
+      "stateMismatches": 0,
+      "protectedMismatches": 0,
+      "taskFilesAdded": 0,
+      "taskFilesRemoved": 0,
+      "profileIdentityPreserved": true,
+      "allBuildOwnedProcessesExited": true,
+      "compilerProcessesRemaining": 0,
+      "exactProfileProcessesRemaining": 0
+    },
+    "actions": {
+      "mainCandidateExecutions": 0,
+      "hostBuilds": 0,
+      "brokerBuilds": 0,
+      "productCommands": 0,
+      "browserStarts": 0,
+      "installedChanges": 0,
+      "selectionChanges": 0,
+      "signingActions": 0
+    },
+    "acceptanceBoundary": {
+      "newSeparateCandidateContainsFs001Fix": true,
+      "existingFrozenCandidateDReplaced": false,
+      "candidateApproved": false,
+      "fullIndependentSourceReviewEstablished": false,
+      "producerAuthorityEstablished": false,
+      "releaseAuthorityEstablished": false,
+      "fullApplicationSuitabilityEstablished": false,
+      "runtimeHealthEstablished": false,
+      "installedAcceptanceEstablished": false,
+      "installedSandboxQualified": false,
+      "actualWebCycleAccepted": false,
+      "c1Accepted": false
+    }
+  }
 }

@@ -3960,3 +3960,14 @@ main artifact and its required review remain future work. Direct per-project Web
 edit/verify/self-Wake remains unaccepted; native Codex and a central coordinator
 are optional. Installed Wake route compatibility and approved Wake signing
 authority remain separate gates. No signer or protected authority was created.
+
+## 2026-11-10 — BUILT_CANDIDATE_ONLY: FS-001 main executable
+
+One separate main release candidate was built from published source `9e412601`
+with retained build provenance and exact artifact identity. Read-only AMD64/PE32+
+and checksum verification passed; the existing valid CRLF checksum was preserved
+after an initial LF-only diagnostic assertion failed without writes. All source,
+state and protected pins matched and build-owned processes exited. The executable
+was not run, approved or installed; the frozen candidate remains unchanged. No
+Host/broker build, signing, runtime-health or Web acceptance is established. See
+`docs/verification/PROJECT_TASK_FS_001_SCOPE_SOURCE_2026_11_10.json`.

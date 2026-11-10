@@ -10089,3 +10089,12 @@ The existing frozen candidate omits the new main fix; artifact qualification and
 review remain open. Actual per-project Web edit/verify/self-Wake is unaccepted.
 Native Codex and a coordinator are optional. Installed Wake route compatibility
 and genuine approved release authority remain separate; no signer was created.
+
+### 2026-11-10 — BUILT_CANDIDATE_ONLY: separate main artifact retained
+
+A separate release executable from `9e412601` now contains the FS-001 source fix,
+with build provenance and read-only PE/checksum identity verified. It has not
+been run, approved or installed. Source qualification remains distinct from
+artifact approval, runtime health and Web acceptance; the old candidate is
+preserved. Exact evidence is in
+`docs/verification/PROJECT_TASK_FS_001_SCOPE_SOURCE_2026_11_10.json`.

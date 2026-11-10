@@ -2735,3 +2735,12 @@ unknown-outcome fences remain unchanged. The existing candidate lacks the new
 main fix; new artifact/review/promotion work and installed Web acceptance remain
 open. Installed Wake route compatibility and approved release authority are
 separate gates. No protected promotion or C1 completion is claimed.
+
+### 2026-11-10 — BUILT_CANDIDATE_ONLY does not close installed acceptance
+
+A separate main release candidate from `9e412601` contains the source correction;
+its exact build and read-only PE/checksum evidence are retained in the
+[evidence record](../verification/PROJECT_TASK_FS_001_SCOPE_SOURCE_2026_11_10.json).
+It was not run, approved or installed. No runtime health, protected authority or
+actual Web cycle follows from compilation; installed acceptance and C1 remain
+open, and the existing frozen candidate is preserved.

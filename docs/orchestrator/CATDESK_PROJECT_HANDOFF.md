@@ -5489,3 +5489,12 @@ bindings, grants and unknown-outcome fences. Direct per-project Web work and
 self-Wake remain the goal; native Codex and a coordinator are optional. Installed
 Wake route compatibility and approved signing authority remain distinct gates;
 no new signer or installed acceptance was established.
+
+## 2026-11-10 — BUILT_CANDIDATE_ONLY main checkpoint
+
+The separate main executable built from `9e412601` contains the scoped file fix.
+Exact identity, provenance and unchanged-state/cleanup evidence are recorded in
+`../verification/PROJECT_TASK_FS_001_SCOPE_SOURCE_2026_11_10.json`. This is a build
+checkpoint: the executable remains unexecuted, unapproved and uninstalled, with
+no whole-source, protected release, runtime-health or Web acceptance claim. The
+existing frozen candidate and original task fences remain unchanged.
