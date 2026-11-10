@@ -353,6 +353,14 @@ impl Store {
         })
     }
 
+    /// Internal admitted same-root writer: require the existing namespace;
+    /// unlike open(), refusal never initializes missing runtime directories.
+    pub(crate) fn open_existing_writer(root: &Path) -> Result<Self> {
+        let mut store = Self::open_read_only(root)?;
+        store.read_only = false;
+        Ok(store)
+    }
+
     /// Test-build-only constructor for sandboxed integration tests whose worker
     /// may not be permitted to inspect every ancestor above the repository.
     /// Production `open` remains unchanged and still validates from the volume
@@ -3206,6 +3214,11 @@ pub fn read<T: DeserializeOwned>(path: &Path) -> Result<T> {
 pub fn atomic<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     reject_link(path)?;
     let bytes = serde_json::to_vec_pretty(value).map_err(|_| "STATE_SERIALIZATION_FAILED")?;
+    atomic_bytes(path, &bytes)
+}
+
+pub(crate) fn atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
+    reject_link(path)?;
     if bytes.len() as u64 > MAX_FILE {
         return Err("STATE_TOO_LARGE".into());
     }
@@ -3220,7 +3233,7 @@ pub fn atomic<T: Serialize>(path: &Path, value: &T) -> Result<()> {
         .open(&tmp)
         .map_err(|_| "STATE_WRITE_FAILED")?;
     let result = (|| {
-        file.write_all(&bytes)
+        file.write_all(bytes)
             .and_then(|_| file.sync_all())
             .map_err(|_| "STATE_WRITE_FAILED")?;
         drop(file);

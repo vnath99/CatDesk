@@ -31,6 +31,9 @@ const ARTIFACT_NAMES: [&str; 4] = [
     "wake_bridge.py",
 ];
 const MANIFEST_NAME: &str = "manifest.json";
+#[path = "install_broker_source_runtime.rs"]
+mod runtime_v3;
+pub(crate) use runtime_v3::{RuntimePackagePinsV3, RuntimeSourceRoleV3};
 const MAX_MANIFEST_BYTES: usize = 4096;
 const MAX_DIRECTORY_ENTRIES: usize = 16;
 const FILE_OPEN: u32 = 1;

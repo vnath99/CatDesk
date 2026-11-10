@@ -1,3 +1,35 @@
+## 2026-11-10 — frozen build and finite development health; functional broker integration
+
+Built exact published source `5de26e8e9f9d60b8e823dd0a8278539231a1c897`
+in a detached checkout. Four artifacts and their original runtime MAP manifest
+are retained. The first development intake incorrectly included that manifest;
+the exact-four-file inventory guard refused before selection. Raw authority and
+selection remained unchanged, all 578 pins matched, and the failed attempt was
+preserved. A separately reviewed four-file intake then passed two finite
+15-second authenticated loopback backend starts in 71.292 seconds total. Both
+owned trees exited, endpoints returned definite connection refusal, and no
+browser/Wake/tunnel/native task or production state changed.
+
+The existing fixed broker source now connects its protected policy/native frame,
+read pins, same global versioned journal and real same-root atomic selector.
+Added an early native preflight/submission interface, original signed-envelope
+and selection escrow, sticky attempt/readback recovery, truthful stopped-selection
+phase and full receipt scope matching. No generic install guard was removed.
+The first Wake all-target/all-feature engineering compile passed in 12.855 seconds;
+the final bounded run passed 316 distinct Rust tests, formatting and strict
+root/Wake Clippy in 72.759 seconds. The initial failed run remains retained: real
+Windows tests caught an open staging writer and a legacy 4 KiB journal-size check
+in the V3 path; both were fixed with regressions while preserving legacy limits.
+Source/preservation pins matched in both runs. No protected release signature or
+installed qualification follows. The guarded runtime rollback writer remains a
+separate next implementation task.
+
+This increment does not supply protected signer authority, qualify a Wake
+fallback from backend-only health, replay either held invitation, or establish
+installed multi-project acceptance. Source and actual deployment are tracked
+separately. Evidence:
+[development health](docs/verification/FROZEN_WAKE_FALLBACK_DEVELOPMENT_HEALTH_2026_11_10.json).
+
 ## 2026-11-08T20:00:47.515801+00:00 — reconciled identity clarification delivered; native execution still unattempted
 
 Source b67ee0254e385c001e053ad34a328bfcd57df4d7 built a separate controller fe22fa3e6435763d51047e81b5134aa69e676932e2f3c02ba2b7cb06a6e5e405 in46.453seconds with1064 pins preserved. The reviewed observer bytes were independently matched to the exact Git source and build. No installation, selection, protected fingerprint or release-authority change occurred. A stale private harness observer pin refused before any product action; its failed receipt was retained before correcting only that test pin.

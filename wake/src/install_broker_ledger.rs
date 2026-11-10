@@ -18,6 +18,9 @@
 //! Production has no generic phase advancement past STAGED. Typed retained
 //! physical receipts permit PUBLISHED and, only after an independently proven
 //! OLD_OWNER_STOPPED phase, a one-attempt protected pointer switch.
+//! The versioned same-state branch shares this protected journal and lock;
+//! its separately signed fallback/escrow admission does not promote V1/V2
+//! diagnostic observations into migration or working-release authority.
 
 use crate::{
     Result,
@@ -50,6 +53,12 @@ use std::{
     io::{Read, Seek, SeekFrom, Write},
     os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle},
     ptr,
+};
+
+#[path = "install_broker_ledger_same_state.rs"]
+mod same_state;
+pub(crate) use same_state::{
+    AdmittedSameStateLedgerLeaseV3, SameStateLedgerAdmissionV3, SameStateLedgerBindingV3,
 };
 
 const MAX_RECORD_BYTES: usize = 4096;
@@ -1355,6 +1364,11 @@ fn parse_record_name(name: &str) -> Result<(u64, LedgerRecordKindV1)> {
         LedgerRecordKindV1::PublicationAttempt
     } else if suffix == "pointer-attempt" {
         LedgerRecordKindV1::PointerAttempt
+    } else if suffix == "selection-verified-stopped" {
+        // V3 uses the same ordering slot, but never claims a host was started.
+        // Its reader requires this exact name; the V1 reader still requires
+        // its unchanged new-owner-proven record and therefore cannot mix them.
+        LedgerRecordKindV1::Phase(InstallPhaseV1::NewOwnerProven)
     } else {
         LedgerRecordKindV1::Phase(
             InstallPhaseV1::ORDER
@@ -1369,7 +1383,12 @@ fn parse_record_name(name: &str) -> Result<(u64, LedgerRecordKindV1)> {
         LedgerRecordKindV1::PublicationAttempt => publication_attempt_name(generation),
         LedgerRecordKindV1::PointerAttempt => pointer_attempt_name(generation),
     };
-    if generation == 0 || canonical_name != name {
+    let same_state_alias =
+        matches!(
+            kind,
+            LedgerRecordKindV1::Phase(InstallPhaseV1::NewOwnerProven)
+        ) && same_state::record_name_v3(generation, InstallPhaseV1::NewOwnerProven) == name;
+    if generation == 0 || (canonical_name != name && !same_state_alias) {
         return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
     }
     Ok((generation, kind))
@@ -1755,17 +1774,33 @@ fn validated_latest_accepted_at(
         if last_phase != InstallPhaseV1::Complete {
             return Err("WAKE_LEDGER_PRIOR_INCOMPLETE".into());
         }
-        let (intent, phase, _, _) = historical_intent(root, generation, present, root_id)?;
-        if !approval_ids.insert(intent.approval_id.clone())
-            || !approval_digests.insert(intent.signed_approval_sha256.clone())
-        {
+        let (approval_id, signed, accepted, phase) =
+            if same_state::is_v3_generation(root, generation)? {
+                let (intent, phase, _, _, _) =
+                    same_state::history_v3(root, generation, present, root_id)?;
+                (
+                    intent.approval_id,
+                    intent.signed_payload_sha256,
+                    intent.accepted_at_utc_seconds,
+                    phase,
+                )
+            } else {
+                let (intent, phase, _, _) = historical_intent(root, generation, present, root_id)?;
+                (
+                    intent.approval_id,
+                    intent.signed_approval_sha256,
+                    intent.accepted_at_utc_seconds,
+                    phase,
+                )
+            };
+        if !approval_ids.insert(approval_id) || !approval_digests.insert(signed) {
             return Err("WAKE_LEDGER_APPROVAL_REPLAY".into());
         }
-        if last_accepted.is_some_and(|prior| intent.accepted_at_utc_seconds < prior) {
+        if last_accepted.is_some_and(|prior| accepted < prior) {
             return Err("WAKE_LEDGER_CLOCK_ROLLBACK".into());
         }
         last_generation = Some(generation);
-        last_accepted = Some(intent.accepted_at_utc_seconds);
+        last_accepted = Some(accepted);
         last_phase = phase;
     }
     if ledger_inventory(root)? != inventory {

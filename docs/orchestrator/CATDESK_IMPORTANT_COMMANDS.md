@@ -1,3 +1,37 @@
+## 2026-11-10 — same-state broker operator interface (new source; not installed)
+
+The existing WakeHost source now recognizes these native operator commands
+**before opening any default state store**:
+
+```text
+<qualified-new-WakeHost.exe> install-broker preflight
+<qualified-new-WakeHost.exe> install-broker submit --approval-file <absolute-frozen-signed-envelope.json>
+```
+
+Preflight reads only the existing fixed service, protected policy and same-state
+configuration. Submission authenticates that same fixed service/pipe, performs
+one write and reads one bounded, identity-matched result. It starts no service,
+provisions no policy, creates no signing key and supplies no caller-selected
+state root. A missing result is `WAKE_SAME_STATE_RESULT_UNKNOWN_NO_RETRY`;
+inspect the same protected journal before any subsequent operation. These are
+new source interfaces, **not commands supported by the installed dev.84 host**.
+They are not a bypass for `wake/install.ps1`'s unprovisioned guard.
+
+Same-state admission requires genuine protected-key approval, native operator
+identity, exact retained state/artifact/receipt evidence and a separately
+qualified working Wake fallback. Backend-only health or a limited source review
+cannot satisfy that requirement. Existing legacy install guards stay closed.
+No executable production submission is authorized by compilation alone.
+
+The frozen published-source package passed two finite authenticated **development
+backend** starts/restarts. Missing/wrong bearer returned 401; valid initialize,
+tool catalog and registered-project read succeeded. All test owners exited and
+all preservation checks matched. The development selector accepts exactly four
+artifact files and generates its own manifest; the immutable release package's
+manifest stays preserved separately. No WakeHost, browser, tunnel or production
+selection ran in that qualification. Evidence:
+[development health](../verification/FROZEN_WAKE_FALLBACK_DEVELOPMENT_HEALTH_2026_11_10.json).
+
 ## 2026-11-10 — bounded-send compatibility and current installation limitation
 
 The source lifecycle now serializes existing start/restart/control operations

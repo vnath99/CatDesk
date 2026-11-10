@@ -1,14 +1,15 @@
 //! Fixed Windows SCM entry point for the separately provisioned Wake broker.
 //!
-//! This is a real one-shot service process boundary, but it is deliberately
-//! unable to mutate an install. It refuses after a bounded, operator-admitted
-//! frame because no trusted dev.84 connected-owner observation or independent
-//! exact-source CI fetch is available to the transaction yet. The fixed
-//! service/namespace must be separately signed and provisioned by an
-//! administrator; this module never creates either.
+//! The legacy V1 transaction remains refused. The distinct same-state V3
+//! operation requires its separately provisioned policy, admitted native
+//! operator, signed local qualification, retained physical resources and
+//! protected phase journal before a selection can change. The fixed service
+//! image/key/namespace must be provisioned by an administrator; this module
+//! creates none of them and accepts no caller-selected state path.
 
 #![cfg(windows)]
 
+use sha2::{Digest, Sha256};
 use std::ffi::{OsStr, c_void};
 use std::os::windows::ffi::OsStrExt;
 use std::sync::Mutex;
@@ -19,7 +20,7 @@ use crate::Result;
 use crate::install_broker_current_observer::BrokerSelfClockPin;
 use crate::install_broker_endpoint::create_fixed_broker_endpoint_from_protected_policy;
 use crate::install_broker_ledger::BrokerLedgerGuard;
-use crate::install_broker_pipe_io::connect_once;
+use crate::install_broker_pipe_io::{connect_once, write_once};
 use crate::install_broker_policy::load_fixed_broker_policy_read_only;
 use crate::install_broker_preflight::{SERVICE_NAME, acquire_fixed_protected_root_for_reader};
 use crate::install_broker_request::read_admitted_approval_frame;
@@ -37,6 +38,19 @@ const ERROR_SERVICE_SPECIFIC_ERROR: u32 = 1066;
 const SERVICE_REFUSAL_CODE: u32 = 1;
 const CONNECT_DEADLINE: Duration = Duration::from_secs(120);
 const READ_DEADLINE: Duration = Duration::from_secs(10);
+const REPLY_DEADLINE: Duration = Duration::from_secs(10);
+
+fn is_same_state_selection_request(bytes: &[u8]) -> Result<bool> {
+    let value: serde_json::Value =
+        serde_json::from_slice(bytes).map_err(|_| "WAKE_BROKER_REQUEST_ENCODING_INVALID")?;
+    if value["payload"]["schemaVersion"] != 3 {
+        return Ok(false);
+    }
+    if value["payload"]["operation"] != "SELECT_SAME_STATE_RELEASE" {
+        return Err("WAKE_BROKER_REQUEST_OPERATION_UNSUPPORTED".into());
+    }
+    Ok(true)
+}
 
 static STOP_REQUESTED: AtomicBool = AtomicBool::new(false);
 static STATUS_HANDLE: AtomicUsize = AtomicUsize::new(0);
@@ -165,10 +179,63 @@ fn run_one_service_submission() -> Result<()> {
     let frame =
         read_admitted_approval_frame(&mut endpoint, &policy, READ_DEADLINE, &STOP_REQUESTED)?;
     // Keep every pin and the global lock live after the admitted last read.
-    clock.readback()?;
+    let observed = clock.readback()?;
     policy.revalidate()?;
     if frame.approval_envelope().is_empty() {
         return Err("WAKE_BROKER_REQUEST_SIZE_INVALID".into());
+    }
+    if is_same_state_selection_request(frame.approval_envelope())? {
+        // The operator token belongs to this single completed read. Policy
+        // derives the sole state path; no request path or observer is trusted.
+        let envelope_sha256 = format!("{:x}", Sha256::digest(frame.approval_envelope()));
+        let admission =
+            ledger.same_state_admission_v3(&envelope_sha256, observed.sampled_at_utc_seconds)?;
+        let pins = crate::runtime::SameStateReadPinsV3::observe(&policy, &admission)?;
+        let grant = policy.verify_same_state_selection_v3(&frame, pins, &admission)?;
+        let resources = crate::runtime::SameStateInstallResources::acquire(grant)?;
+        // acceptedUTC is the protected signature-verification sample, as in
+        // V1. A separate final sample must still be in the fresh approval's
+        // validity window immediately before INTENT; resume keeps originalUTC.
+        let final_clock = clock.readback()?;
+        resources
+            .grant()
+            .require_acceptance_time(final_clock.sampled_at_utc_seconds)?;
+        resources.grant().revalidate()?;
+        let original = resources.grant().original_selection_bytes()?;
+        drop(clock); // global lock is moved, never released, into the lease.
+        let mut transaction =
+            ledger.begin_same_state_v3(resources.grant(), &admission, &original)?;
+        resources.commit_selection(&mut transaction)?;
+        let complete_sha256 = transaction.complete_record_sha256()?.to_owned();
+        let binding = transaction.binding();
+        let reply = serde_json::json!({"schemaVersion":3,"operation":"SELECT_SAME_STATE_RELEASE",
+            "approvalId":binding.approval_id,"installGeneration":binding.install_generation,"phase":"COMPLETE",
+            "signedEnvelopeSha256":binding.signed_envelope_sha256,"selectedSha256":binding.planned_selection_sha256,
+            "completeRecordSha256":complete_sha256,"runtimeState":"STOPPED",
+            "browserOrWakeStarted":false,"liveAcceptanceVerified":false});
+        let payload: serde_json::Value =
+            serde_json::from_slice::<serde_json::Value>(frame.approval_envelope())
+                .map_err(|_| "WAKE_BROKER_REQUEST_ENCODING_INVALID")?["payload"]
+                .clone();
+        if !crate::install_broker_client::same_state_complete_reply_matches(
+            &reply,
+            &payload,
+            &envelope_sha256,
+        ) {
+            return Err("WAKE_SAME_STATE_RESULT_BINDING_INVALID".into());
+        }
+        // A lost reply never rolls back a durable COMPLETE or permits a new
+        // approval. Recovery inspects the same protected transaction first.
+        let raw =
+            serde_json::to_vec(&reply).map_err(|_| "WAKE_SAME_STATE_RESULT_ENCODING_INVALID")?;
+        write_once(
+            endpoint.as_handle(),
+            &raw,
+            8192,
+            REPLY_DEADLINE,
+            &STOP_REQUESTED,
+        )?;
+        return Ok(());
     }
     // No supplied observation, requested path, CI claim, or legacy pathname
     // is converted into a transaction capability here. A later source change
@@ -246,6 +313,29 @@ pub fn run_fixed_service_binary() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn same_state_dispatch_is_versioned_without_reclassifying_legacy_requests() {
+        assert!(
+            !is_same_state_selection_request(
+                br#"{"payload":{"schemaVersion":1,"operation":"INSTALL"}}"#
+            )
+            .unwrap()
+        );
+        assert!(
+            is_same_state_selection_request(
+                br#"{"payload":{"schemaVersion":3,"operation":"SELECT_SAME_STATE_RELEASE"}}"#
+            )
+            .unwrap()
+        );
+        assert!(
+            is_same_state_selection_request(
+                br#"{"payload":{"schemaVersion":3,"operation":"OTHER"}}"#
+            )
+            .is_err()
+        );
+        assert!(is_same_state_selection_request(b"not json").is_err());
+    }
 
     #[test]
     fn status_never_reports_successful_install_authority() {

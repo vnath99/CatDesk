@@ -18,6 +18,11 @@ use std::{
 
 #[path = "runtime_install_selection.rs"]
 mod install_selection;
+#[cfg(windows)]
+#[path = "runtime_same_state_install.rs"]
+mod same_state_install;
+#[cfg(windows)]
+pub(crate) use same_state_install::{SameStateInstallResources, SameStateReadPinsV3};
 #[path = "runtime_reobserve.rs"]
 mod reobserve;
 pub use install_selection::{
@@ -468,6 +473,18 @@ struct ReviewedInstallTransaction {
     prior_desired: String,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     operator_stop_requested: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    same_state: Option<SameStateHandoffV3>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SameStateHandoffV3 {
+    schema_version: u32,
+    approval_envelope_sha256: String,
+    before_selection_sha256: String,
+    planned_selection_sha256: String,
+    selection_write_started: bool,
 }
 
 fn reviewed_install_transaction_path(store: &Store) -> PathBuf {
@@ -502,6 +519,9 @@ fn begin_or_resume_reviewed_install_handoff(store: &Store, candidate: &str) -> R
     let path = reviewed_install_transaction_path(store);
     if path.exists() {
         let transaction = read_reviewed_install_handoff(store)?;
+        if transaction.same_state.is_some() {
+            return Err("HOST_INSTALL_HANDOFF_CONFLICT".into());
+        }
         if transaction.candidate_directory == candidate {
             return Ok(transaction.prior_desired);
         }
@@ -528,6 +548,7 @@ fn begin_or_resume_reviewed_install_handoff(store: &Store, candidate: &str) -> R
                 candidate_directory: candidate.into(),
                 prior_desired: transaction.prior_desired.clone(),
                 operator_stop_requested: transaction.operator_stop_requested,
+                same_state: None,
             },
         )?;
         return Ok(transaction.prior_desired);
@@ -540,6 +561,7 @@ fn begin_or_resume_reviewed_install_handoff(store: &Store, candidate: &str) -> R
             candidate_directory: candidate.into(),
             prior_desired: prior_desired.clone(),
             operator_stop_requested: false,
+            same_state: None,
         },
     )?;
     Ok(prior_desired)
@@ -1189,8 +1211,15 @@ fn require_plain_install_file(path: &Path) -> Result<()> {
 }
 
 fn validate_reviewed_manifest(manifest: &serde_json::Value) -> Result<String> {
+    validate_reviewed_manifest_version(manifest, VERSION)
+}
+
+fn validate_reviewed_manifest_version(
+    manifest: &serde_json::Value,
+    version: &str,
+) -> Result<String> {
     if manifest.get("schemaVersion").and_then(|v| v.as_u64()) != Some(1)
-        || manifest.get("version").and_then(|v| v.as_str()) != Some(VERSION)
+        || manifest.get("version").and_then(|v| v.as_str()) != Some(version)
         || manifest.get("protocolVersion").and_then(|v| v.as_u64()) != Some(1)
         || manifest.get("acceptance").and_then(|v| v.as_str()) != Some("DEVELOPMENT_NOT_ACTIVATED")
     {
@@ -1198,7 +1227,7 @@ fn validate_reviewed_manifest(manifest: &serde_json::Value) -> Result<String> {
     }
     let host = manifest_hash(manifest, "CatDeskWakeHost.exe")?;
     let gui = manifest_hash(manifest, "CatDeskBinagotchy.exe")?;
-    Ok(format!("{}-{}-{}", VERSION, &host[..12], &gui[..12]))
+    Ok(format!("{}-{}-{}", version, &host[..12], &gui[..12]))
 }
 
 fn validate_reviewed_candidate(
@@ -1296,6 +1325,29 @@ fn publish_reviewed_install_checked(
     expected_id: &str,
     expected_hashes: Option<&ReviewedInstallExpectedHashes>,
 ) -> Result<ReviewedInstallPublication> {
+    let lease = reviewed_install_lease(store)?;
+    publish_reviewed_install_owned(
+        store,
+        staging_name,
+        expected_id,
+        expected_hashes,
+        VERSION,
+        &[expected_id],
+        &lease,
+    )
+}
+
+// Only internal retained install transactions may use a manifest version and
+// exact coexisting pair different from this executable's legacy installer.
+fn publish_reviewed_install_owned(
+    store: &Store,
+    staging_name: &str,
+    expected_id: &str,
+    expected_hashes: Option<&ReviewedInstallExpectedHashes>,
+    version: &str,
+    allowed_ids: &[&str],
+    _lease: &ReviewedInstallLease,
+) -> Result<ReviewedInstallPublication> {
     if !staging_name.starts_with(".staging-")
         || !valid_install_component(staging_name)
         || !valid_install_component(expected_id)
@@ -1304,14 +1356,13 @@ fn publish_reviewed_install_checked(
         return Err("HOST_INSTALL_POINTER_INVALID".into());
     }
 
-    let _lease = reviewed_install_lease(store)?;
     let versions = store.root().join("versions");
     require_plain_install_directory(&versions)?;
     let staging = versions.join(staging_name);
     require_plain_install_directory(&staging)?;
     require_plain_install_file(&staging.join("manifest.json"))?;
     let manifest: serde_json::Value = read(&staging.join("manifest.json"))?;
-    let canonical_id = validate_reviewed_manifest(&manifest)?;
+    let canonical_id = validate_reviewed_manifest_version(&manifest, version)?;
     if canonical_id != expected_id {
         return Err("HOST_INSTALL_IDENTITY_MISMATCH".into());
     }
@@ -1349,13 +1400,16 @@ fn publish_reviewed_install_checked(
             Ok(value) => value,
             Err(_) => continue,
         };
-        if candidate_manifest.get("version").and_then(|v| v.as_str()) != Some(VERSION) {
+        if candidate_manifest.get("version").and_then(|v| v.as_str()) != Some(version) {
             continue;
         }
         if name != expected_id {
+            if allowed_ids.contains(&name.as_str()) {
+                continue;
+            }
             return Err("HOST_INSTALL_VERSION_IDENTITY_CONFLICT".into());
         }
-        let canonical_existing = validate_reviewed_manifest(&candidate_manifest)?;
+        let canonical_existing = validate_reviewed_manifest_version(&candidate_manifest, version)?;
         if canonical_existing != expected_id {
             return Err("HOST_INSTALL_IDENTITY_MISMATCH".into());
         }
@@ -1384,7 +1438,7 @@ fn publish_reviewed_install_checked(
         require_plain_install_directory(&final_directory)?;
         require_plain_install_file(&final_directory.join("manifest.json"))?;
         let published_manifest: serde_json::Value = read(&final_directory.join("manifest.json"))?;
-        if validate_reviewed_manifest(&published_manifest)? != expected_id {
+        if validate_reviewed_manifest_version(&published_manifest, version)? != expected_id {
             return Err("HOST_INSTALL_IDENTITY_MISMATCH".into());
         }
         let published_hashes = validate_reviewed_candidate(&final_directory, &published_manifest)?;
@@ -1393,7 +1447,7 @@ fn publish_reviewed_install_checked(
 
     Ok(ReviewedInstallPublication {
         directory: expected_id.to_string(),
-        version: VERSION.into(),
+        version: version.into(),
         already_materialized,
     })
 }

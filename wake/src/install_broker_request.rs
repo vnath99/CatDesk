@@ -42,6 +42,18 @@ impl AdmittedBrokerApprovalFrameV1 {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn isolated_same_state_frame_fixture(
+    envelope: Vec<u8>,
+    operator: OperatorTokenEvidenceV1,
+) -> AdmittedBrokerApprovalFrameV1 {
+    assert!(!envelope.is_empty() && envelope.len() <= MAX_APPROVAL_FRAME_BYTES);
+    AdmittedBrokerApprovalFrameV1 {
+        approval_envelope: envelope,
+        operator,
+    }
+}
+
 fn read_once_then_admit<T>(
     pipe: BorrowedHandle<'_>,
     deadline: Duration,

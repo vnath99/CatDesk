@@ -1,4 +1,4 @@
-//! Dormant read-only loader for the separately installed Wake broker policy.
+//! Pinned loader for the separately installed Wake broker policy.
 //!
 //! Only the compiled `C:\ProgramData\CatDesk\WakeProtectedInstallV1` root and
 //! fixed `broker-policy.json` name are accepted in production. The policy file
@@ -9,7 +9,10 @@
 //! durable namespace attempt permits WRITE sharing; DELETE remains denied.
 //! This proves a snapshot of installed bytes, not that an independent offline
 //! authority approved the bootstrap, nor that a service or worker token is
-//! correctly provisioned. It grants no install or launch authority.
+//! correctly provisioned. Its V1 readback grants no install or launch authority.
+//! The distinct V3 factory additionally binds the admitted frame, protected
+//! key, physical resource pins and journal admission before returning its
+//! purpose-specific same-state transaction capability.
 
 use crate::{
     Result,
@@ -35,6 +38,7 @@ use ed25519_dalek::VerifyingKey;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
+    cell::RefCell,
     ffi::{OsStr, c_void},
     fs::File,
     io::{Read, Seek, SeekFrom},
@@ -169,6 +173,32 @@ struct PolicyWireV1 {
     approval_public_key_hex: String,
 }
 
+/// One administrator-provisioned existing state root. No request selects a
+/// path, profile, credential store, project registry or alternate transport.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SameStateRootPolicyV2 {
+    pub(crate) path: String,
+    pub(crate) identity: FullFileIdentityV2,
+    /// A signed reconstruction still needs its own reviewed fallback and
+    /// escrow evidence. This protected switch alone never creates either.
+    pub(crate) allow_reviewed_reconstruction: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PolicyWireV2 {
+    schema_version: u32,
+    purpose: String,
+    protected_root: ObjectIdentityV1,
+    policy_file: ObjectIdentityV1,
+    service_sid: String,
+    operator_sid: String,
+    approval_public_key_hex: String,
+    same_state_reviewer_identity: String,
+    same_state_root: SameStateRootPolicyV2,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ExactSecurity {
     owner: String,
@@ -205,6 +235,8 @@ pub struct BrokerProtectedPolicyV1 {
     operator_sid: String,
     operator_sid_bytes: Vec<u8>,
     approval_key: VerifyingKey,
+    same_state_root: Option<SameStateRootPolicyV2>,
+    same_state_reviewer_identity: Option<String>,
 }
 
 /// Opaque proof that this envelope was verified by the pinned, independently
@@ -214,6 +246,99 @@ pub struct PolicyVerifiedApprovalV1<'p> {
     policy: &'p BrokerProtectedPolicyV1,
     verified: VerifiedApprovalV1,
     readback: BrokerProtectedPolicyReadbackV1,
+}
+
+/// Same-state authority can be produced only by this pinned protected policy,
+/// one admitted native frame, actual retained resources and the protected
+/// journal's generation/clock admission. Pure signature proof is insufficient.
+pub(crate) struct PolicyVerifiedSameStateSelectionV3<'p> {
+    policy: &'p BrokerProtectedPolicyV1,
+    verified: crate::install_broker_approval::same_state::VerifiedSameStateSelectionApprovalV3,
+    readback: BrokerProtectedPolicyReadbackV1,
+    pins: RefCell<crate::runtime::SameStateReadPinsV3>,
+    envelope: Vec<u8>,
+    fresh_admission: bool,
+}
+
+impl<'p> PolicyVerifiedSameStateSelectionV3<'p> {
+    pub(crate) fn policy(&self) -> &'p BrokerProtectedPolicyV1 {
+        self.policy
+    }
+    pub(crate) fn payload(
+        &self,
+    ) -> &crate::install_broker_approval::same_state::SameStateRootSelectionApprovalV3 {
+        self.verified.payload()
+    }
+    pub(crate) fn pins_mut(
+        &self,
+    ) -> Result<std::cell::RefMut<'_, crate::runtime::SameStateReadPinsV3>> {
+        self.pins
+            .try_borrow_mut()
+            .map_err(|_| "WAKE_SAME_STATE_PIN_BORROW_CONFLICT".into())
+    }
+    pub(crate) fn envelope_bytes(&self) -> &[u8] {
+        &self.envelope
+    }
+    pub(crate) fn original_selection_bytes(&self) -> Result<Vec<u8>> {
+        let raw = self
+            .pins
+            .try_borrow()
+            .map_err(|_| "WAKE_SAME_STATE_PIN_BORROW_CONFLICT")?
+            .original_selection()
+            .to_vec();
+        if format!("{:x}", Sha256::digest(&raw)) != self.payload().state_snapshot.current.sha256 {
+            return Err("WAKE_SAME_STATE_ESCROW_INVALID".into());
+        }
+        Ok(raw)
+    }
+    pub(crate) fn revalidate(&self) -> Result<()> {
+        if self.policy.readback()? != self.readback
+            || self.verified.verification_key_sha256() != self.readback.approval_public_key_sha256
+        {
+            return Err("WAKE_SAME_STATE_PROTECTED_POLICY_CHANGED".into());
+        }
+        self.pins_mut()?.revalidate_for_payload(self.payload())
+    }
+    pub(crate) fn require_acceptance_time(&self, now: u64) -> Result<()> {
+        let p = self.payload();
+        if now < self.verified.verified_at_utc_seconds()
+            || (self.fresh_admission && (now < p.issued_utc_seconds || now > p.expires_utc_seconds))
+        {
+            return Err("WAKE_SAME_STATE_ACCEPTANCE_CLOCK_INVALID".into());
+        }
+        Ok(())
+    }
+    pub(crate) fn ledger_binding(
+        &self,
+        accepted: u64,
+    ) -> Result<crate::install_broker_ledger::SameStateLedgerBindingV3> {
+        self.revalidate()?;
+        if accepted != self.verified.verified_at_utc_seconds() {
+            return Err("WAKE_SAME_STATE_ACCEPTANCE_CLOCK_INVALID".into());
+        }
+        let p = self.payload();
+        Ok(crate::install_broker_ledger::SameStateLedgerBindingV3 {
+            install_generation: p.install_generation,
+            approval_id: p.approval_id.clone(),
+            signed_payload_sha256: self.verified.signed_payload_sha256().into(),
+            signed_envelope_sha256: self.verified.signed_envelope_sha256().into(),
+            policy_sha256: self.readback.policy_sha256.clone(),
+            verification_key_sha256: self.readback.approval_public_key_sha256.clone(),
+            protected_root: self.readback.protected_root.clone(),
+            state_root: p.state_snapshot.root.clone(),
+            accepted_at_utc_seconds: accepted,
+            state_snapshot_sha256: same_state_canonical_sha256(&p.state_snapshot)?,
+            candidate_sha256: same_state_canonical_sha256(&p.candidate)?,
+            rollback_authority_sha256: same_state_canonical_sha256(&p.rollback_authority)?,
+            before_selection_sha256: p.state_snapshot.current.sha256.clone(),
+            planned_selection_sha256: p.planned_selection_sha256.clone(),
+        })
+    }
+}
+
+fn same_state_canonical_sha256<T: Serialize>(value: &T) -> Result<String> {
+    let raw = serde_json::to_vec(value).map_err(|_| "WAKE_SAME_STATE_ENCODING_INVALID")?;
+    Ok(format!("{:x}", Sha256::digest(raw)))
 }
 
 /// Protected-key provenance for the V2 ledger/CI consumers. This proves only
@@ -523,6 +648,84 @@ fn parse_policy(
     Ok((wire, key, operator_sid_bytes))
 }
 
+type ParsedVersionedPolicy = (
+    PolicyWireV1,
+    VerifyingKey,
+    Vec<u8>,
+    Option<(SameStateRootPolicyV2, String)>,
+);
+
+fn parse_policy_versioned(
+    bytes: &[u8],
+    root_id: &ObjectIdentityV1,
+    file_id: &ObjectIdentityV1,
+    service_sid: &str,
+) -> Result<ParsedVersionedPolicy> {
+    let version: serde_json::Value =
+        serde_json::from_slice(bytes).map_err(|_| "WAKE_BROKER_POLICY_ENCODING_INVALID")?;
+    // Only the explicitly new schema takes the V2 decoder. Existing V1 and
+    // unsupported-version behavior retain the original strict V1 parser.
+    if version["schemaVersion"] != 2 {
+        let (wire, key, sid) = parse_policy(bytes, root_id, file_id, service_sid)?;
+        return Ok((wire, key, sid, None));
+    }
+    let wire: PolicyWireV2 =
+        serde_json::from_slice(bytes).map_err(|_| "WAKE_BROKER_POLICY_ENCODING_INVALID")?;
+    if wire.schema_version != 2
+        || serde_json::to_vec(&wire).map_err(|_| "WAKE_BROKER_POLICY_ENCODING_INVALID")? != bytes
+    {
+        return Err("WAKE_BROKER_POLICY_ENCODING_INVALID".into());
+    }
+    if !crate::protocol::valid_id(&wire.same_state_reviewer_identity)
+        || wire.same_state_reviewer_identity.len() > 128
+    {
+        return Err("WAKE_BROKER_POLICY_REVIEWER_INVALID".into());
+    }
+    let path = wire.same_state_root.path.as_bytes();
+    if path.len() < 3
+        || path.len() > 2048
+        || !path[0].is_ascii_alphabetic()
+        || path[1] != b':'
+        || !matches!(path[2], b'\\' | b'/')
+        || wire.same_state_root.path.chars().any(char::is_control)
+        || wire.same_state_root.identity.volume_serial == 0
+        || wire.same_state_root.identity.file_id_hex.len() != 32
+        || !wire
+            .same_state_root
+            .identity
+            .file_id_hex
+            .bytes()
+            .all(|v| v.is_ascii_digit() || (b'a'..=b'f').contains(&v))
+        || wire
+            .same_state_root
+            .identity
+            .file_id_hex
+            .bytes()
+            .all(|v| v == b'0')
+    {
+        return Err("WAKE_BROKER_POLICY_STATE_ROOT_INVALID".into());
+    }
+    // Reuse every V1 key/operator/protected-object constraint unchanged.
+    let base = PolicyWireV1 {
+        schema_version: 1,
+        purpose: wire.purpose,
+        protected_root: wire.protected_root,
+        policy_file: wire.policy_file,
+        service_sid: wire.service_sid,
+        operator_sid: wire.operator_sid,
+        approval_public_key_hex: wire.approval_public_key_hex,
+    };
+    let base_bytes =
+        serde_json::to_vec(&base).map_err(|_| "WAKE_BROKER_POLICY_ENCODING_INVALID")?;
+    let (base, key, sid) = parse_policy(&base_bytes, root_id, file_id, service_sid)?;
+    Ok((
+        base,
+        key,
+        sid,
+        Some((wire.same_state_root, wire.same_state_reviewer_identity)),
+    ))
+}
+
 fn load_pinned(
     root: RootPin,
     root_id: ObjectIdentityV1,
@@ -542,8 +745,12 @@ fn load_pinned(
     if file_id.volume_serial != root_id.volume_serial {
         return Err("WAKE_BROKER_POLICY_OBJECT_INVALID".into());
     }
-    let (wire, approval_key, operator_sid_bytes) =
-        parse_policy(&bytes, &root_id, &file_id, &service_sid)?;
+    let (wire, approval_key, operator_sid_bytes, same_state) =
+        parse_policy_versioned(&bytes, &root_id, &file_id, &service_sid)?;
+    let (same_state_root, same_state_reviewer_identity) = match same_state {
+        Some((root, reviewer)) => (Some(root), Some(reviewer)),
+        None => (None, None),
+    };
     let value = BrokerProtectedPolicyV1 {
         root,
         file: Mutex::new(file),
@@ -556,12 +763,108 @@ fn load_pinned(
         operator_sid: wire.operator_sid,
         operator_sid_bytes,
         approval_key,
+        same_state_root,
+        same_state_reviewer_identity,
     };
     value.revalidate()?;
     Ok(value)
 }
 
 impl BrokerProtectedPolicyV1 {
+    pub(crate) fn same_state_resource_v2(&self) -> Result<&SameStateRootPolicyV2> {
+        self.revalidate()?;
+        self.same_state_root
+            .as_ref()
+            .ok_or_else(|| "WAKE_SAME_STATE_POLICY_REQUIRED".into())
+    }
+
+    pub(crate) fn same_state_reviewer_identity_v2(&self) -> Result<&str> {
+        self.revalidate()?;
+        self.same_state_reviewer_identity
+            .as_deref()
+            .ok_or_else(|| "WAKE_SAME_STATE_POLICY_REQUIRED".into())
+    }
+
+    pub fn same_state_configuration_status(&self) -> Result<serde_json::Value> {
+        self.revalidate()?;
+        Ok(serde_json::json!({"operation":"SELECT_SAME_STATE_RELEASE",
+            "sameStateOperationConfigured":self.same_state_root.is_some(),
+            "reviewerConfigured":self.same_state_reviewer_identity.is_some(),
+            "reviewedReconstructionEnabled":self.same_state_root.as_ref()
+                .is_some_and(|r| r.allow_reviewed_reconstruction),
+            "resourceQualificationPerformed":false,"installationAuthorized":false}))
+    }
+
+    pub(crate) fn verify_same_state_selection_v3<'p>(
+        &'p self,
+        frame: &crate::install_broker_request::AdmittedBrokerApprovalFrameV1,
+        mut pins: crate::runtime::SameStateReadPinsV3,
+        admission: &crate::install_broker_ledger::SameStateLedgerAdmissionV3,
+    ) -> Result<PolicyVerifiedSameStateSelectionV3<'p>> {
+        use crate::install_broker_approval::same_state::{
+            SameStateRetainedResumeV3, SameStateRootSelectionApprovalV3,
+            verify_same_state_selection_approval_v3,
+        };
+        let before = self.readback()?;
+        self.same_state_resource_v2()?;
+        let envelope = frame.approval_envelope();
+        if frame.operator_evidence().operator_sid_sha256() != before.operator_sid_sha256
+            || format!("{:x}", Sha256::digest(envelope)) != admission.envelope_sha256()
+        {
+            return Err("WAKE_SAME_STATE_ADMITTED_OPERATOR_MISMATCH".into());
+        }
+        // This decode chooses no paths and makes no authority. The pure
+        // signature verifier below repeats closed/canonical envelope parsing.
+        let outer: serde_json::Value =
+            serde_json::from_slice(envelope).map_err(|_| "WAKE_SAME_STATE_ENCODING_INVALID")?;
+        let payload: SameStateRootSelectionApprovalV3 =
+            serde_json::from_value(outer["payload"].clone())
+                .map_err(|_| "WAKE_SAME_STATE_ENCODING_INVALID")?;
+        let mut observed = pins.observed(self, &payload, admission)?;
+        observed.now_utc_seconds = admission.accepted_at_utc_seconds;
+        observed.next_install_generation = admission.install_generation;
+        observed.policy_sha256 = before.policy_sha256.clone();
+        observed.approved_reviewer_identity = self.same_state_reviewer_identity_v2()?.into();
+        observed.allow_reviewed_reconstruction =
+            self.same_state_resource_v2()?.allow_reviewed_reconstruction;
+        observed.retained_resume = if let Some(binding) = &admission.resume_binding {
+            let original = admission
+                .original_selection
+                .as_deref()
+                .ok_or("WAKE_SAME_STATE_ESCROW_MISSING")?;
+            if binding.signed_envelope_sha256 != admission.envelope_sha256()
+                || admission.original_envelope.as_deref() != Some(envelope)
+            {
+                return Err("WAKE_SAME_STATE_RESUME_BINDING_INVALID".into());
+            }
+            Some(SameStateRetainedResumeV3 {
+                original_snapshot_sha256: binding.state_snapshot_sha256.clone(),
+                before_selection_sha256: binding.before_selection_sha256.clone(),
+                planned_selection_sha256: binding.planned_selection_sha256.clone(),
+                original_escrow_sha256: format!("{:x}", Sha256::digest(original)),
+                selection_attempt_present: admission.selection_attempt_present,
+            })
+        } else {
+            None
+        };
+        let verified =
+            verify_same_state_selection_approval_v3(envelope, &self.approval_key, &observed)?;
+        if self.readback()? != before
+            || verified.verification_key_sha256() != before.approval_public_key_sha256
+        {
+            return Err("WAKE_SAME_STATE_PROTECTED_POLICY_CHANGED".into());
+        }
+        let grant = PolicyVerifiedSameStateSelectionV3 {
+            policy: self,
+            verified,
+            readback: before,
+            pins: RefCell::new(pins),
+            envelope: envelope.to_vec(),
+            fresh_admission: admission.resume_binding.is_none(),
+        };
+        grant.revalidate()?;
+        Ok(grant)
+    }
     /// Construct mutation-compatible pins under the matching retained global
     /// ledger guard. This acquires handles only; signatures, closed inventory,
     /// quarantine, exact CI and broker observations are still required before
@@ -1189,12 +1492,152 @@ pub(crate) mod tests {
         second.cleanup();
     }
 
+    #[test]
+    fn same_state_policy_v2_is_closed_explicit_and_does_not_change_v1() {
+        let fixture = Fixture::new();
+        let original = serde_json::to_vec(&fixture.wire).unwrap();
+        let (_, _, _, old_resource) = parse_policy_versioned(
+            &original,
+            &fixture.root_id,
+            &fixture.wire.policy_file,
+            &fixture.service_sid,
+        )
+        .unwrap();
+        assert!(old_resource.is_none());
+        let root = SameStateRootPolicyV2 {
+            path: r"C:\existing-state".into(),
+            identity: FullFileIdentityV2 {
+                volume_serial: 1,
+                file_id_hex: "1".repeat(32),
+            },
+            allow_reviewed_reconstruction: false,
+        };
+        let wire = PolicyWireV2 {
+            schema_version: 2,
+            purpose: fixture.wire.purpose.clone(),
+            protected_root: fixture.wire.protected_root.clone(),
+            policy_file: fixture.wire.policy_file.clone(),
+            service_sid: fixture.wire.service_sid.clone(),
+            operator_sid: fixture.wire.operator_sid.clone(),
+            approval_public_key_hex: fixture.wire.approval_public_key_hex.clone(),
+            same_state_reviewer_identity: "independent-reviewer".into(),
+            same_state_root: root.clone(),
+        };
+        let raw = serde_json::to_vec(&wire).unwrap();
+        let (_, _, _, resource) = parse_policy_versioned(
+            &raw,
+            &fixture.root_id,
+            &fixture.wire.policy_file,
+            &fixture.service_sid,
+        )
+        .unwrap();
+        assert_eq!(resource, Some((root, "independent-reviewer".into())));
+        assert!(
+            parse_policy(
+                &raw,
+                &fixture.root_id,
+                &fixture.wire.policy_file,
+                &fixture.service_sid
+            )
+            .is_err()
+        );
+        for mutation in 0..7 {
+            let mut changed = wire.clone();
+            match mutation {
+                0 => {
+                    changed.same_state_root.path = "relative".into();
+                }
+                1 => {
+                    changed.same_state_root.identity.file_id_hex = "0".repeat(32);
+                }
+                2 => {
+                    changed.same_state_root.identity.volume_serial = 0;
+                }
+                6 => {
+                    changed.schema_version = 3;
+                }
+                _ => {}
+            }
+            let mut raw = String::from_utf8(serde_json::to_vec(&changed).unwrap()).unwrap();
+            if mutation == 3 {
+                raw = raw.replace(
+                    "\"allowReviewedReconstruction\":false",
+                    "\"allowReviewedReconstruction\":null",
+                );
+            }
+            if mutation == 4 {
+                raw = raw.replace(
+                    "\"sameStateRoot\":{",
+                    "\"sameStateRoot\":{\"callerRoot\":\"other\",",
+                );
+            }
+            if mutation == 5 {
+                raw = raw.replace(",\"allowReviewedReconstruction\":false", "");
+            }
+            assert!(
+                parse_policy_versioned(
+                    raw.as_bytes(),
+                    &fixture.root_id,
+                    &fixture.wire.policy_file,
+                    &fixture.service_sid
+                )
+                .is_err(),
+                "mutation {mutation}"
+            );
+        }
+        fixture.cleanup();
+    }
+
     /// Build only an isolated test policy in an already pinned temporary root.
     /// The production loader still accepts only the compiled protected path.
     pub(crate) fn load_fixture_policy_for_existing_root(
         path: &std::path::Path,
         root: &OwnedHandle,
         root_id: &ObjectIdentityV1,
+    ) -> Result<BrokerProtectedPolicyV1> {
+        load_fixture_policy_options(path, root, root_id, None)
+    }
+
+    pub(crate) fn load_same_state_fixture_policy_for_existing_root(
+        path: &std::path::Path,
+        root: &OwnedHandle,
+        root_id: &ObjectIdentityV1,
+        state_path: &std::path::Path,
+        state_identity: FullFileIdentityV2,
+        allow_reconstruction: bool,
+        reviewer: &str,
+    ) -> Result<BrokerProtectedPolicyV1> {
+        let temporary =
+            std::fs::canonicalize(std::env::temp_dir()).map_err(|_| "FIXTURE_ROOT_INVALID")?;
+        let state = std::fs::canonicalize(state_path).map_err(|_| "FIXTURE_ROOT_INVALID")?;
+        let policy = std::fs::canonicalize(path).map_err(|_| "FIXTURE_ROOT_INVALID")?;
+        if !state.starts_with(&temporary)
+            || !policy.starts_with(&temporary)
+            || state == temporary
+            || policy == temporary
+        {
+            return Err("FIXTURE_ROOT_INVALID".into());
+        }
+        load_fixture_policy_options(
+            path,
+            root,
+            root_id,
+            Some((
+                SameStateRootPolicyV2 {
+                    path: state_path.to_string_lossy().into_owned(),
+                    identity: state_identity,
+                    allow_reviewed_reconstruction: allow_reconstruction,
+                },
+                reviewer.into(),
+            )),
+        )
+    }
+
+    fn load_fixture_policy_options(
+        path: &std::path::Path,
+        root: &OwnedHandle,
+        root_id: &ObjectIdentityV1,
+        same_state: Option<(SameStateRootPolicyV2, String)>,
     ) -> Result<BrokerProtectedPolicyV1> {
         let policy_path = path.join(FIXED_BROKER_POLICY_FILE);
         std::fs::write(&policy_path, b"initial").expect("initial fixture policy");
@@ -1218,11 +1661,23 @@ pub(crate) mod tests {
                 .map(|byte| format!("{byte:02x}"))
                 .collect(),
         };
-        std::fs::write(
-            &policy_path,
-            serde_json::to_vec(&wire).expect("policy wire"),
-        )
-        .expect("canonical fixture policy");
+        let raw = if let Some((state, reviewer)) = same_state {
+            serde_json::to_vec(&PolicyWireV2 {
+                schema_version: 2,
+                purpose: wire.purpose,
+                protected_root: wire.protected_root,
+                policy_file: wire.policy_file,
+                service_sid: wire.service_sid,
+                operator_sid: wire.operator_sid,
+                approval_public_key_hex: wire.approval_public_key_hex,
+                same_state_reviewer_identity: reviewer,
+                same_state_root: state,
+            })
+        } else {
+            serde_json::to_vec(&wire)
+        }
+        .expect("policy wire");
+        std::fs::write(&policy_path, raw).expect("canonical fixture policy");
         let pinned_root = root
             .as_handle()
             .try_clone_to_owned()
@@ -1640,7 +2095,7 @@ pub(crate) mod tests {
             "WAKE_BROKER_POLICY_BINDING_INVALID"
         );
         wrong = fixture.wire.clone();
-        wrong.schema_version = 2;
+        wrong.schema_version = 3;
         fixture.write_wire(&wrong);
         assert_eq!(
             fixture.load().err().unwrap(),

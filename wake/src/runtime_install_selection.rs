@@ -243,6 +243,55 @@ pub fn propose_install_selection(
     })
 }
 
+/// One first-selection reconstruction proposal over a legacy flat document.
+/// The old selection is preserved by the admitted transaction as escrow; it
+/// is deliberately not promoted to a working predecessor by this function.
+/// Only the policy-admitted same-root installer may consume this proposal.
+/// This function performs no I/O and creates no release or write authority.
+pub(super) fn propose_reconstructed_install_selection(
+    before: &[u8],
+    expected_sha256: &str,
+    candidate: &Value,
+    candidate_qualification: &str,
+    previous: &Value,
+    previous_qualification: &str,
+    verify: &dyn Fn(&Value, &str, bool) -> Result<()>,
+) -> Result<Vec<u8>> {
+    check_cas(before, expected_sha256)?;
+    let prior = parse(before)?;
+    if prior.selection.is_some() {
+        return Err("HOST_INSTALL_RECONSTRUCTION_NOT_LEGACY".into());
+    }
+    let current: PointerV1 = serde_json::from_value(candidate.clone()).map_err(|_| INVALID)?;
+    let fallback: PointerV1 = serde_json::from_value(previous.clone()).map_err(|_| INVALID)?;
+    current.validate()?;
+    fallback.validate()?;
+    if !hash(candidate_qualification)
+        || !hash(previous_qualification)
+        || current.directory == fallback.directory
+        || current.directory == prior.directory
+        || fallback.directory == prior.directory
+    {
+        return Err(INVALID.into());
+    }
+    // An existing directory or a signed reference alone is never evidence
+    // that the separately reconstructed fallback has actually worked.
+    verify(previous, previous_qualification, true)?;
+    verify(candidate, candidate_qualification, false)?;
+    encode(SelectionV2 {
+        schema_version: 2,
+        generation: 1,
+        current: ReleaseV2 {
+            pointer: current,
+            qualification_sha256: candidate_qualification.into(),
+        },
+        previous: Some(ReleaseV2 {
+            pointer: fallback,
+            qualification_sha256: previous_qualification.into(),
+        }),
+    })
+}
+
 /// Propose recovery from an intact qualified predecessor even when current
 /// artifact bytes are damaged. Current pointer/qualification metadata must
 /// still parse; malformed selection or missing/unqualified previous refuses.
@@ -505,6 +554,112 @@ mod tests {
         assert!(
             propose_install_selection_rollback(&bytes(&changed), &digest(&before), &verified)
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn reconstruction_retains_qualified_fallback_without_qualifying_legacy_bytes() {
+        let before = bytes(&pointer(3));
+        let after = propose_reconstructed_install_selection(
+            &before,
+            &digest(&before),
+            &pointer(2),
+            &"2".repeat(64),
+            &pointer(1),
+            &"1".repeat(64),
+            &verified,
+        )
+        .unwrap();
+        let selected: Value = serde_json::from_slice(&after).unwrap();
+        assert_eq!(selected["directory"], "version-2");
+        assert_eq!(selected["selection"]["generation"], 1);
+        assert_eq!(selected["selection"]["previous"]["pointer"], pointer(1));
+        assert_ne!(selected["selection"]["previous"]["pointer"], pointer(3));
+        assert_eq!(before, bytes(&pointer(3)));
+        assert_eq!(super::super::install_id(&selected).unwrap(), "version-2");
+    }
+
+    #[test]
+    fn reconstruction_refuses_unqualified_fallback_and_never_reuses_legacy_as_health() {
+        let before = bytes(&pointer(3));
+        assert!(
+            propose_reconstructed_install_selection(
+                &before,
+                &digest(&before),
+                &pointer(2),
+                &"2".repeat(64),
+                &pointer(1),
+                &"1".repeat(64),
+                &|p, q, working| {
+                    if working {
+                        Err("NO_INDEPENDENT_WORKING_EVIDENCE".into())
+                    } else {
+                        verified(p, q, false)
+                    }
+                },
+            )
+            .is_err()
+        );
+        for (current, previous) in [
+            (pointer(3), pointer(1)),
+            (pointer(2), pointer(3)),
+            (pointer(2), pointer(2)),
+        ] {
+            assert!(
+                propose_reconstructed_install_selection(
+                    &before,
+                    &digest(&before),
+                    &current,
+                    &"2".repeat(64),
+                    &previous,
+                    &"1".repeat(64),
+                    &|_, _, _| Ok(()),
+                )
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn reconstruction_requires_exact_legacy_prestate_and_valid_qualification_identity() {
+        let before = bytes(&pointer(3));
+        assert!(
+            propose_reconstructed_install_selection(
+                &before,
+                &"0".repeat(64),
+                &pointer(2),
+                &"2".repeat(64),
+                &pointer(1),
+                &"1".repeat(64),
+                &verified,
+            )
+            .is_err()
+        );
+        assert!(
+            propose_reconstructed_install_selection(
+                &before,
+                &digest(&before),
+                &pointer(2),
+                "unverified",
+                &pointer(1),
+                &"1".repeat(64),
+                &verified,
+            )
+            .is_err()
+        );
+        let upgraded = selected();
+        assert_eq!(
+            propose_reconstructed_install_selection(
+                &upgraded,
+                &digest(&upgraded),
+                &pointer(3),
+                &"3".repeat(64),
+                &pointer(1),
+                &"1".repeat(64),
+                &|_, _, _| Ok(()),
+            )
+            .unwrap_err(),
+            "HOST_INSTALL_RECONSTRUCTION_NOT_LEGACY"
         );
     }
 

@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-10T07:11:37.566977+00:00",
+  "classification": "TESTED_SOURCE_AND_DISPOSABLE_NATIVE_WINDOWS_TRANSACTION",
+  "sourceBaseCommit": "5de26e8e9f9d60b8e823dd0a8278539231a1c897",
+  "implementationFilesSha256": {
+    "wake/src/bin/CatDeskWakeHost.rs": "abc1c3008cfcde6f676f4db644e845b85f7bcdee21f20cfd9fe14b7f61c77076",
+    "wake/src/install_broker_approval.rs": "7eb3eff9b3703f46402b6455796d3df52125196d475baf8286c6fc9f0296b231",
+    "wake/src/install_broker_client.rs": "567196de47a6b1e06cc828d92f7d868bbceef330ed41f8a856b30ea1c007d5aa",
+    "wake/src/install_broker_ledger.rs": "2c11d98d76ea8be5b174a0dace48fdc16a2bbad16a8bb31ba8642d1385af418e",
+    "wake/src/install_broker_ledger_same_state.rs": "1a867099439bd83dc55a27b92d3db4cddce38cccb200357e336c8aefd9f58fe0",
+    "wake/src/install_broker_offline_pins.rs": "6240d27096b9d52d824374a35da6c2762784360f70f4621d481d61f7c2454420",
+    "wake/src/install_broker_operator.rs": "3551f72179d51125c5c9b2daaca13711ef11fb1d8969c0b375435a47ecbeabff",
+    "wake/src/install_broker_pipe_io.rs": "42b05139d63a31b874799901739c473a873d579e232a9b614a36c1c367612ee5",
+    "wake/src/install_broker_policy.rs": "865afadc0a480c4f0ee1213fc27f87ccb9fb585c07cdbc7eca80450137de69a6",
+    "wake/src/install_broker_request.rs": "f5d6646a00809fd891415c79d82e3208d821c971d8f51cd4d5697b9071228793",
+    "wake/src/install_broker_same_state_approval.rs": "c92142545d6e495579372fcadce80194daab7496009df8c3d486519d938ea304",
+    "wake/src/install_broker_service_runtime.rs": "0a5bccd32d1704fcc2f6da30aa21f3b051bb84ba0058496c359d971739bdaeb7",
+    "wake/src/install_broker_source.rs": "a43f72dcf9238dc4e838ccdf593163cd2770a88a5431757d130c021a9cd7b6c2",
+    "wake/src/install_broker_source_runtime.rs": "389edea051d6e18ee075cdb2df8757c233a9a1cc1d8b203edf66f8c1a1a75a86",
+    "wake/src/runtime.rs": "84c8b825d49b2d11d8dbff868174f32bec532f5959ac295d14a38fda37ae0150",
+    "wake/src/runtime_install_selection.rs": "324433f6deed3bad5798dd57b55e8d5a157dae091187f0e56bcd2dfd27addfe4",
+    "wake/src/runtime_same_state_install.rs": "ae8517b563e34833ed1924ae3a074980ffc119f5604b145666e26ac733c49f78",
+    "wake/src/runtime_same_state_install_tests.rs": "5f6bd6f7e429e96701c815bb8598293df0b1385eb7a73873e9b8767ae78b0143",
+    "wake/src/store.rs": "6d8acd9cc41994d03ddacb9ef552b438b98a5a8679f21117340a42ad54f7d4e2"
+  },
+  "verification": {
+    "passed": true,
+    "distinctPassingTests": 316,
+    "stages": [
+      {
+        "name": "same-state",
+        "exitCode": 0,
+        "passingTestExecutions": 24
+      },
+      {
+        "name": "broker-regression",
+        "exitCode": 0,
+        "passingTestExecutions": 265
+      },
+      {
+        "name": "selection",
+        "exitCode": 0,
+        "passingTestExecutions": 10
+      },
+      {
+        "name": "lifecycle-transactions",
+        "exitCode": 0,
+        "passingTestExecutions": 21
+      },
+      {
+        "name": "host-entry",
+        "exitCode": 0,
+        "passingTestExecutions": 4
+      },
+      {
+        "name": "host-recovery",
+        "exitCode": 0,
+        "passingTestExecutions": 6
+      },
+      {
+        "name": "native-cli",
+        "exitCode": 0,
+        "passingTestExecutions": 5
+      },
+      {
+        "name": "fmt-root",
+        "exitCode": 0,
+        "passingTestExecutions": 0
+      },
+      {
+        "name": "fmt-wake",
+        "exitCode": 0,
+        "passingTestExecutions": 0
+      },
+      {
+        "name": "clippy-root",
+        "exitCode": 0,
+        "passingTestExecutions": 0
+      },
+      {
+        "name": "clippy-wake",
+        "exitCode": 0,
+        "passingTestExecutions": 0
+      }
+    ],
+    "sourcePins": 231,
+    "sourceMismatches": 0,
+    "productionPreservationPins": 6,
+    "productionPreservationMismatches": 0,
+    "elapsedOwnerSeconds": 72.7590264,
+    "maximumOwnerSeconds": 450,
+    "timedOut": false,
+    "terminationFailed": false
+  },
+  "initialFailure": {
+    "preserved": true,
+    "passed": false,
+    "distinctPassingTests": 312,
+    "failures": [
+      "Windows stage manifest WRITE handle conflicted with immutable readback",
+      "V3 journal still reused legacy 4096-byte metadata limit",
+      "Invalid-version fixture used the newly supported policy version",
+      "Strict Wake Clippy rejected dead-code/style/type-complexity issues"
+    ],
+    "corrections": [
+      "Close synchronized manifest before readback",
+      "Use isolated bounded 48KiB V3 metadata checks; preserve 4KiB V1 checks and test actual maximum-sized escrow",
+      "Use truly unsupported policy version while retaining legacy refusal classification",
+      "Correct warnings without suppression"
+    ],
+    "sourceAndPreservationMismatches": 0
+  },
+  "nativeFixtureCoverage": [
+    "Protected policy and genuine fixture signature admission to actual same-root native leases",
+    "Bounded fixed intake and raw receipt semantic matching",
+    "Immutable staging/publication and exact current selection CAS/readback",
+    "Durable selection-verified-stopped and COMPLETE before matching handoff cleanup",
+    "Mixed V1/V3 global generation, replay and incomplete-prior rejection",
+    "Exact original selection and signed-envelope escrow on post-pointer ledger resume",
+    "Sticky ambiguous publication attempt and preserved partial staging",
+    "Refused limited review, backend-only working evidence, legacy handoff, size overflow and mismatched identity"
+  ],
+  "authority": {
+    "productionInstallPerformed": false,
+    "serviceProvisionedOrStarted": false,
+    "signingAuthorityCreated": false,
+    "realWakeRuntimeWorkingQualified": false,
+    "runtimeRollbackWriterImplemented": false,
+    "automaticFailedCurrentStartupFallbackActivated": false,
+    "actualSCMOrProcessCrashOrPowerLossQualified": false,
+    "installedWebEditVerifySelfWakeAccepted": false
+  },
+  "nextExecutableEngineeringTask": "Qualify an actual no-send Wake runtime fallback and implement/qualify the existing guarded rollback writer; then build/review exact release artifacts and obtain genuine protected native-operator admission. No replay of held invitations."
+}

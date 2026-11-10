@@ -1,3 +1,28 @@
+## 2026-11-10 — real development health; protected Wake migration still open
+
+Published-source fallback artifacts built separately and passed two finite
+isolated development-backend starts/restarts: 401/401/200 authentication,
+central task publication among 79 tools, registered-project read, natural
+owned-tree exit and exact closed endpoints. All 578 preservation checks passed.
+The first wrong-inventory attempt refused before selection and remains recorded.
+No browser, WakeHost, external tunnel or production selection was started.
+
+The existing broker now has a source implementation of same-state signed
+selection plus native preflight/submission; its first all-target/all-feature
+compile passed. This is not installed qualification or new production authority.
+Exact receipt semantics and Windows transaction/ledger interruption/replay
+fixtures passed within 316 distinct Rust cases plus strict root/Wake Clippy and
+formatting. Actual SCM crash/power-loss and the runtime rollback writer remain
+open; a stored predecessor is not installed rollback acceptance. A full independent release
+review, real working Wake fallback and protected native admission remain
+required before installation.
+
+Direct Web scoped edit, verification and delivered/completed self-Wake have not
+passed. The two uncertain invitations remain held, with their drafts and original
+identities intact. Native coding remains optional; original native C1/C49 and
+other project sessions are preserved. Evidence:
+[actual development health](docs/verification/FROZEN_WAKE_FALLBACK_DEVELOPMENT_HEALTH_2026_11_10.json).
+
 ## 2026-11-10 — direct Web boundary evidence and adapter installation gap
 
 The next source increment closes specific installation races using existing

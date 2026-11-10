@@ -6,6 +6,95 @@ use catdesk_wake::{
 };
 use std::path::Path;
 
+#[cfg(windows)]
+#[derive(Debug, Eq, PartialEq)]
+enum InstallBrokerAction {
+    Preflight,
+    Submit(std::path::PathBuf),
+}
+
+#[cfg(windows)]
+fn parse_install_broker_action(args: &[String]) -> Result<Option<InstallBrokerAction>> {
+    if args.first().map(String::as_str) != Some("install-broker") {
+        return Ok(None);
+    }
+    match args {
+        [_, action] if action == "preflight" => Ok(Some(InstallBrokerAction::Preflight)),
+        [_, action, flag, path]
+            if action == "submit"
+                && flag == "--approval-file"
+                && !path.is_empty()
+                && !path.chars().any(char::is_control)
+                && Path::new(path).is_absolute() =>
+        {
+            Ok(Some(InstallBrokerAction::Submit(path.into())))
+        }
+        _ => Err("WAKE_INSTALL_BROKER_ARGUMENTS_INVALID".into()),
+    }
+}
+
+#[cfg(windows)]
+fn install_broker_action(args: &[String]) -> Result<Option<serde_json::Value>> {
+    use catdesk_wake::{
+        install_broker_client::connect_fixed_broker_for_approval,
+        install_broker_policy::load_fixed_broker_policy_read_only,
+        install_broker_preflight::inspect_fixed_broker_read_only,
+    };
+    use std::{io::Read, os::windows::fs::OpenOptionsExt};
+    let Some(action) = parse_install_broker_action(args)? else {
+        return Ok(None);
+    };
+    let preflight = inspect_fixed_broker_read_only()?;
+    let policy = load_fixed_broker_policy_read_only()?;
+    match action {
+        InstallBrokerAction::Preflight => Ok(Some(
+            serde_json::json!({"action":"install_broker_preflight",
+            "broker":preflight,"policy":policy.readback()?,"sameState":policy.same_state_configuration_status()?,
+            "stateStoreOpened":false,"serviceStarted":false,"installationAttempted":false}),
+        )),
+        InstallBrokerAction::Submit(path) => {
+            let metadata = std::fs::symlink_metadata(&path)
+                .map_err(|_| "WAKE_INSTALL_APPROVAL_UNAVAILABLE")?;
+            use std::os::windows::fs::MetadataExt;
+            if !metadata.is_file()
+                || metadata.file_attributes() & 0x400 != 0
+                || metadata.len() == 0
+                || metadata.len() > 16 * 1024
+            {
+                return Err("WAKE_INSTALL_APPROVAL_INVALID".into());
+            }
+            let mut file = std::fs::OpenOptions::new()
+                .read(true)
+                .share_mode(1)
+                .custom_flags(0x0020_0000)
+                .open(path)
+                .map_err(|_| "WAKE_INSTALL_APPROVAL_UNAVAILABLE")?;
+            let mut bytes = Vec::new();
+            (&mut file)
+                .take(16 * 1024 + 1)
+                .read_to_end(&mut bytes)
+                .map_err(|_| "WAKE_INSTALL_APPROVAL_UNAVAILABLE")?;
+            if bytes.is_empty() || bytes.len() > 16 * 1024 {
+                return Err("WAKE_INSTALL_APPROVAL_INVALID".into());
+            }
+            // Fixed policy/service/pipe attestation precedes the one write.
+            // No state-root, service-start, signing or settings argument exists.
+            connect_fixed_broker_for_approval(&policy)?
+                .submit_same_state_approval_v3(&bytes)
+                .map(Some)
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn install_broker_action(args: &[String]) -> Result<Option<serde_json::Value>> {
+    if args.first().map(String::as_str) == Some("install-broker") {
+        Err("WAKE_BROKER_WINDOWS_REQUIRED".into())
+    } else {
+        Ok(None)
+    }
+}
+
 fn open_runtime_store(root: &Path) -> Result<Store> {
     #[cfg(feature = "test-support")]
     if let Some(parent) = std::env::var_os("CATDESK_WAKE_TEST_ONLY_ROOT_PARENT") {
@@ -41,6 +130,12 @@ fn main() {
 }
 fn execute() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    // Broker operations resolve only the fixed protected policy/service. Do
+    // this before default_root/Store::open can initialize an unrelated store.
+    if let Some(result) = install_broker_action(&args)? {
+        println!("{result}");
+        return Ok(());
+    }
     if let [command, workspace] = args.as_slice()
         && command == "--dev-foreground-host"
     {
@@ -282,4 +377,53 @@ fn execute() -> Result<()> {
     }
     println!("{}", serde_json::json!({"ok": true}));
     Ok(())
+}
+
+#[cfg(all(test, windows))]
+mod install_broker_cli_tests {
+    use super::*;
+    fn args(values: &[&str]) -> Vec<String> {
+        values.iter().map(|v| (*v).into()).collect()
+    }
+    #[test]
+    fn fixed_native_broker_cli_has_no_root_service_or_signing_override() {
+        assert_eq!(
+            parse_install_broker_action(&args(&["install-broker", "preflight"])).unwrap(),
+            Some(InstallBrokerAction::Preflight)
+        );
+        assert!(matches!(
+            parse_install_broker_action(&args(&[
+                "install-broker",
+                "submit",
+                "--approval-file",
+                r"C:\frozen.json"
+            ]))
+            .unwrap(),
+            Some(InstallBrokerAction::Submit(_))
+        ));
+        for values in [
+            vec!["install-broker"],
+            vec!["install-broker", "preflight", "--start"],
+            vec![
+                "install-broker",
+                "submit",
+                "--approval-file",
+                "relative.json",
+            ],
+            vec!["install-broker", "submit", "--root", r"C:\state"],
+            vec![
+                "install-broker",
+                "submit",
+                "--approval-file",
+                r"C:\frozen.json",
+                "--sign",
+            ],
+        ] {
+            assert!(parse_install_broker_action(&args(&values)).is_err());
+        }
+        assert_eq!(
+            parse_install_broker_action(&args(&["status"])).unwrap(),
+            None
+        );
+    }
 }

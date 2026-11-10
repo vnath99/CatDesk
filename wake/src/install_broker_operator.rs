@@ -33,6 +33,16 @@ impl OperatorTokenEvidenceV1 {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn isolated_same_state_operator_fixture(sid_sha256: &str) -> OperatorTokenEvidenceV1 {
+    assert_eq!(sid_sha256.len(), 64);
+    OperatorTokenEvidenceV1 {
+        operator_sid_sha256: sid_sha256.into(),
+        integrity_rid: 0x3000,
+        session_id: 1,
+    }
+}
+
 #[cfg(not(windows))]
 pub fn inspect_connected_pipe_operator(
     _pipe: std::os::fd::BorrowedFd<'_>,

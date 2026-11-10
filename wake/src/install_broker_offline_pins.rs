@@ -319,15 +319,49 @@ pub(crate) fn full_identity_of_handle(raw: *mut c_void) -> Result<FullFileIdenti
 }
 
 /// A single exact opened object. Keeping the value alive retains its handle.
-struct OfflineObjectPinV2 {
+pub(crate) struct OfflineObjectPinV2 {
     file: File,
     identity: OfflineObjectIdentityV2,
     directory: bool,
 }
 
 impl OfflineObjectPinV2 {
-    fn open(path: &Path, directory: bool) -> Result<Self> {
+    pub(crate) fn same_state_directory(path: &Path) -> Result<Self> {
+        // Same-state selection retains directory identity while allowing the
+        // admitted writer to create immutable children; DELETE stays denied.
+        Self::open_with_sharing(path, true, 3)
+    }
+    pub(crate) fn open(path: &Path, directory: bool) -> Result<Self> {
         Self::open_with_sharing(path, directory, FILE_SHARE_READ)
+    }
+
+    pub(crate) fn identity(&self) -> &OfflineObjectIdentityV2 {
+        &self.identity
+    }
+
+    pub(crate) fn read_bounded(&mut self, maximum: usize) -> Result<Vec<u8>> {
+        if self.directory {
+            return Err("WAKE_OFFLINE_PIN_FILE_REQUIRED".into());
+        }
+        self.matches(&self.identity.clone())?;
+        self.file
+            .seek(SeekFrom::Start(0))
+            .map_err(|_| "WAKE_OFFLINE_PIN_READ_FAILED")?;
+        let mut bytes = Vec::new();
+        (&mut self.file)
+            .take(maximum as u64 + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|_| "WAKE_OFFLINE_PIN_READ_FAILED")?;
+        if bytes.len() > maximum {
+            return Err("WAKE_OFFLINE_PIN_READ_TOO_LARGE".into());
+        }
+        self.matches(&self.identity.clone())?;
+        Ok(bytes)
+    }
+
+    pub(crate) fn revalidate_path(&self, path: &Path) -> Result<()> {
+        self.matches(&self.identity)?;
+        Self::open(path, self.directory)?.matches(&self.identity)
     }
 
     fn open_with_sharing(path: &Path, directory: bool, sharing: u32) -> Result<Self> {
@@ -357,7 +391,7 @@ impl OfflineObjectPinV2 {
     /// This prevents new normal image opens while this handle lives. It does
     /// not prove that an existing process exited, paths cannot drift, or the
     /// supplied selection exhausts historical launchers or token-specific roots.
-    fn exclude_new_image_opens(self, path: &Path) -> Result<Self> {
+    pub(crate) fn exclude_new_image_opens(self, path: &Path) -> Result<Self> {
         if self.directory {
             return Err("WAKE_OFFLINE_LAUNCH_IMAGE_ROLE_INVALID".into());
         }

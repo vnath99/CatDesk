@@ -1,3 +1,40 @@
+## 2026-11-10 — existing-root migration implementation and evidence boundaries
+
+The new source composes the existing fixed install broker, protected policy,
+native operator pipe and global journal into an exact same-state selection
+operation. It does not install a second owner or move project/profile state.
+The policy's versioned extension names one exact existing root; signed V3
+approval binds physical state identities, current/control/config hashes,
+candidate and distinct qualified fallback, raw evidence, generation and the
+planned atomic `current.json` bytes. Legacy readers retain their flat projection.
+
+An explicitly enabled reviewed-source reconstruction may escrow an unqualified
+legacy selection and select independently qualified new/fallback artifacts. It
+never treats old executable hashes or previous selection as working evidence.
+Local source qualification, full independent review and actual `WAKE_RUNTIME`
+working proof remain separate. Development-backend health is insufficient.
+
+The transaction retains existing install/root/host/browser leases, excludes the
+exact old selected images and drains the known bounded selector path. This is
+not a claim to quarantine arbitrary copied/manual launchers. Conflicting legacy
+handoffs, package overlap, partial/unknown publication and third-state pointers
+refuse. Durable publication/selection attempts prevent blind retries. Original
+selection and signed-envelope bytes remain in the existing protected journal.
+A successful transaction records `selection-verified-stopped`, then COMPLETE
+before removing its matching runtime handoff; it does **not** claim a newly
+started or healthy host. No old mechanism is retired at this source stage.
+
+The first all-target/all-feature engineering compile passed. Final verification
+passed 316 distinct Rust cases, formatting and strict root/Wake Clippy, including
+an actual Windows file transaction with inert artifacts. Protected SCM operation,
+process-crash/power-loss behavior and installed deployment remain unqualified.
+The runtime rollback writer and automatic failed-current fallback are not yet
+connected to the pure rollback planner; retaining a predecessor is not proof that
+either recovery path is operational. No legacy mechanism is retired.
+The published-source package's two real isolated development-backend starts
+passed authentication/catalog/cleanup, while actual Wake runtime fallback,
+production selection and Web edit/verify/self-Wake acceptance remain open.
+
 ## 2026-11-10 — one compatible Wake selection document; source seam only
 
 The next Wake selection format keeps the existing `current.json`, its flat

@@ -892,6 +892,99 @@ impl FixedBrokerApprovalClient<'_> {
         self.revalidate()?;
         write_one_message(&self.pipe, approval)
     }
+
+    /// One native-operator submission and one bounded result on the same
+    /// attested instance. A lost result is indeterminate, never retry authority.
+    pub fn submit_same_state_approval_v3(mut self, approval: &[u8]) -> Result<serde_json::Value> {
+        use std::os::windows::io::AsHandle;
+        if approval.is_empty() || approval.len() > MAX_APPROVAL_BYTES {
+            return Err("WAKE_BROKER_CLIENT_APPROVAL_SIZE_INVALID".into());
+        }
+        let request: serde_json::Value =
+            serde_json::from_slice(approval).map_err(|_| "WAKE_SAME_STATE_REQUEST_INVALID")?;
+        let payload = &request["payload"];
+        if payload["schemaVersion"] != 3
+            || payload["operation"] != "SELECT_SAME_STATE_RELEASE"
+            || payload["approvalId"]
+                .as_str()
+                .is_none_or(|s| !crate::protocol::valid_id(s))
+            || payload["installGeneration"].as_u64().is_none_or(|n| n == 0)
+        {
+            return Err("WAKE_SAME_STATE_REQUEST_INVALID".into());
+        }
+        self.revalidate()?;
+        write_one_message(&self.pipe, approval)?;
+        let raw = crate::install_broker_pipe_io::read_once(
+            self.pipe.as_handle(),
+            8192,
+            std::time::Duration::from_secs(180),
+            &std::sync::atomic::AtomicBool::new(false),
+        )
+        .map_err(|_| "WAKE_SAME_STATE_RESULT_UNKNOWN_NO_RETRY")?;
+        let result: serde_json::Value =
+            serde_json::from_slice(&raw).map_err(|_| "WAKE_SAME_STATE_RESULT_UNKNOWN_NO_RETRY")?;
+        if !same_state_complete_reply_matches(
+            &result,
+            payload,
+            &format!("{:x}", Sha256::digest(approval)),
+        ) {
+            return Err("WAKE_SAME_STATE_RESULT_UNKNOWN_NO_RETRY".into());
+        }
+        // The original connected instance was attested before the only write.
+        // Natural SCM exit after its reply is allowed; no reconnect or second
+        // operator request is hidden behind result observation.
+        Ok(result)
+    }
+}
+
+pub(crate) fn same_state_complete_reply_matches(
+    value: &serde_json::Value,
+    payload: &serde_json::Value,
+    envelope_sha256: &str,
+) -> bool {
+    const KEYS: &[&str] = &[
+        "schemaVersion",
+        "operation",
+        "approvalId",
+        "installGeneration",
+        "phase",
+        "signedEnvelopeSha256",
+        "selectedSha256",
+        "completeRecordSha256",
+        "runtimeState",
+        "browserOrWakeStarted",
+        "liveAcceptanceVerified",
+    ];
+    let hash = |v: &serde_json::Value| {
+        v.as_str().is_some_and(|s| {
+            s.len() == 64
+                && s.bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        })
+    };
+    payload["approvalId"]
+        .as_str()
+        .is_some_and(crate::protocol::valid_id)
+        && payload["installGeneration"].as_u64().is_some_and(|n| n > 0)
+        && envelope_sha256.len() == 64
+        && envelope_sha256
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        && value
+            .as_object()
+            .is_some_and(|o| o.len() == KEYS.len() && o.keys().all(|k| KEYS.contains(&k.as_str())))
+        && value["schemaVersion"] == 3
+        && value["operation"] == "SELECT_SAME_STATE_RELEASE"
+        && value["phase"] == "COMPLETE"
+        && value["approvalId"] == payload["approvalId"]
+        && value["installGeneration"] == payload["installGeneration"]
+        && value["signedEnvelopeSha256"] == envelope_sha256
+        && hash(&value["selectedSha256"])
+        && value["selectedSha256"] == payload["plannedSelectionSha256"]
+        && hash(&value["completeRecordSha256"])
+        && value["runtimeState"] == "STOPPED"
+        && value["browserOrWakeStarted"] == false
+        && value["liveAcceptanceVerified"] == false
 }
 
 /// Connect only to the compiled local pipe. No request data is sent here.
@@ -1028,6 +1121,43 @@ fn write_one_message(pipe: &OwnedHandle, approval: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn same_state_reply_requires_exact_request_and_complete_stopped_readback() {
+        let payload = serde_json::json!({"approvalId":"approval-one", "installGeneration":1,
+            "plannedSelectionSha256":"a".repeat(64)});
+        let result = serde_json::json!({"schemaVersion":3,"operation":"SELECT_SAME_STATE_RELEASE",
+            "approvalId":"approval-one","installGeneration":1,"phase":"COMPLETE",
+            "signedEnvelopeSha256":"b".repeat(64),"selectedSha256":"a".repeat(64),
+            "completeRecordSha256":"c".repeat(64),"runtimeState":"STOPPED",
+            "browserOrWakeStarted":false,"liveAcceptanceVerified":false});
+        assert!(same_state_complete_reply_matches(
+            &result,
+            &payload,
+            &"b".repeat(64)
+        ));
+        for (key, bad) in [
+            ("phase", serde_json::json!("POINTER_SWITCHED")),
+            ("selectedSha256", serde_json::json!("d".repeat(64))),
+            ("approvalId", serde_json::json!("other")),
+            ("installGeneration", serde_json::json!(2)),
+            ("runtimeState", serde_json::json!("RUNNING")),
+            ("liveAcceptanceVerified", serde_json::json!(true)),
+            ("privateBody", serde_json::json!("not permitted")),
+        ] {
+            let mut changed = result.clone();
+            changed[key] = bad;
+            assert!(
+                !same_state_complete_reply_matches(&changed, &payload, &"b".repeat(64)),
+                "{key}"
+            );
+        }
+        assert!(!same_state_complete_reply_matches(
+            &result,
+            &payload,
+            &"d".repeat(64)
+        ));
+    }
     use std::sync::atomic::{AtomicU64, Ordering};
 
     const PIPE_ACCESS_DUPLEX: u32 = 3;
