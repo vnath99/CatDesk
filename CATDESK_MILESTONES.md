@@ -1,3 +1,16 @@
+## 2026-11-10 — safe paused-host source ready for actual fallback qualification
+
+The existing owner supports finite PAUSED startup without discovering,
+retrying or dispatching pending work. Capability/STOPPED checks precede control
+changes and existing leases cover the complete bounded lifecycle. 38 distinct
+source/native-fixture cases plus formatting and strict Clippy pass in an
+isolated snapshot, separate from rollback work.
+
+Actual matching-package Wake health, protected installation, runtime rollback
+and direct Web edit/verify/self-Wake remain open. Held submissions and all
+existing project state remain preserved. Evidence:
+[paused startup source](docs/verification/BOUNDED_PAUSED_WAKE_STARTUP_SOURCE_2026_11_10.json).
+
 ## 2026-11-10 — real development health; protected Wake migration still open
 
 Published-source fallback artifacts built separately and passed two finite

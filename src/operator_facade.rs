@@ -183,6 +183,9 @@ pub(crate) enum WebDevelopmentAction {
     RunBounded {
         maximum_seconds: u64,
     },
+    RunPausedBounded {
+        maximum_seconds: u64,
+    },
     RunBackend {
         maximum_seconds: u64,
     },
@@ -396,7 +399,13 @@ fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction,
                 .ok_or("WEB_DEVELOPMENT_FOREGROUND_BUDGET_INVALID")?;
             Ok(WebDevelopmentAction::RunBounded { maximum_seconds })
         }
-        _ => Err("WEB_DEVELOPMENT_ARGUMENTS_INVALID: use prepare --package <directory> --python-runtime <directory>, update-package --package <directory>, recover-package, record-verification --input-file <file>, login --project-id <id>, enqueue --project-id <id> --event-id <id> --message-file <file>, retry --project-id <id> --event-id dev-<id>, status, start, stop, run, or run-backend [--max-runtime-seconds <1..900>]".into()),
+        Some("run-paused") if args.len() == 5 && args[3] == "--max-runtime-seconds" => {
+            let maximum_seconds = args[4].parse::<u64>().ok()
+                .filter(|seconds| (1..=180).contains(seconds))
+                .ok_or("WEB_DEVELOPMENT_PAUSED_BUDGET_INVALID")?;
+            Ok(WebDevelopmentAction::RunPausedBounded { maximum_seconds })
+        }
+        _ => Err("WEB_DEVELOPMENT_ARGUMENTS_INVALID: use prepare --package <directory> --python-runtime <directory>, update-package --package <directory>, recover-package, record-verification --input-file <file>, login --project-id <id>, enqueue --project-id <id> --event-id <id> --message-file <file>, retry --project-id <id> --event-id dev-<id>, status, start, stop, run, run-paused --max-runtime-seconds <1..180>, or run-backend [--max-runtime-seconds <1..900>]".into()),
     }
 }
 
@@ -1093,6 +1102,9 @@ pub(crate) async fn execute_operator_action(
                 WebDevelopmentAction::Run => development_runtime::run_foreground(workspace),
                 WebDevelopmentAction::RunBounded { maximum_seconds } => {
                     development_runtime::run_foreground_bounded(workspace, maximum_seconds)
+                }
+                WebDevelopmentAction::RunPausedBounded { maximum_seconds } => {
+                    development_runtime::run_foreground_paused_bounded(workspace, maximum_seconds)
                 }
                 WebDevelopmentAction::RunBackend { maximum_seconds } => {
                     development_backend::run(workspace, maximum_seconds).await
@@ -2712,6 +2724,78 @@ mod tests {
             ],
         ] {
             assert!(parse_operator_action(invalid.into_iter().map(str::to_string)).is_err());
+        }
+    }
+
+    #[test]
+    fn web_development_paused_run_requires_one_bounded_fixed_action() {
+        for value in ["1", "180"] {
+            assert!(
+                matches!(parse_operator_action(["operator","web-dev-runtime","run-paused","--max-runtime-seconds",value].map(str::to_string)).unwrap(),
+                Some(OperatorAction::WebDevelopment(WebDevelopmentAction::RunPausedBounded {maximum_seconds})) if maximum_seconds == value.parse::<u64>().unwrap())
+            );
+        }
+        for values in [
+            vec!["operator", "web-dev-runtime", "run-paused"],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "run-paused",
+                "--max-runtime-seconds",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "run-paused",
+                "--root",
+                "C:/other",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "run-paused",
+                "--max-runtime-seconds",
+                "10",
+                "--root",
+                "C:/other",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "run-paused",
+                "--max-runtime-seconds",
+                "0",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "run-paused",
+                "--max-runtime-seconds",
+                "181",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "run-paused",
+                "--max-runtime-seconds",
+                "-1",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "run-paused",
+                "--max-runtime-seconds",
+                "18446744073709551616",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "run-paused",
+                "--max-runtime-seconds",
+                "abc",
+            ],
+        ] {
+            assert!(parse_operator_action(values.into_iter().map(str::to_owned)).is_err());
         }
     }
 

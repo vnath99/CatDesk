@@ -72,6 +72,11 @@ pub use snapshot::{
 mod scheduler;
 use response::observe_sent_response;
 
+/// The launcher checks this compiled fact before relying on non-dispatching
+/// PAUSED startup preserving pending task journals.
+pub(crate) const PAUSED_STARTUP_CAPABILITY: &[u8] =
+    b"CATDESK_WAKE_PAUSED_STARTUP_NO_TASK_RETRY_V1\n";
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Control {
@@ -444,11 +449,11 @@ pub struct ReviewedInstallPublication {
 }
 
 #[derive(Debug)]
-struct ReviewedInstallLease {
+pub(crate) struct ReviewedInstallLease {
     _file: File,
 }
 
-fn reviewed_install_lease(store: &Store) -> Result<ReviewedInstallLease> {
+pub(crate) fn reviewed_install_lease(store: &Store) -> Result<ReviewedInstallLease> {
     let path = store.root().join("install.lock");
     let mut options = OpenOptions::new();
     options.create(true).read(true).write(true);
@@ -508,7 +513,7 @@ fn read_reviewed_install_handoff(store: &Store) -> Result<ReviewedInstallTransac
     Ok(transaction)
 }
 
-fn require_no_reviewed_install_handoff(store: &Store) -> Result<()> {
+pub(crate) fn require_no_reviewed_install_handoff(store: &Store) -> Result<()> {
     if reviewed_install_handoff_active(store)? {
         return Err("HOST_INSTALL_HANDOFF_CONFLICT".into());
     }
@@ -603,7 +608,7 @@ pub fn control(store: &Store, desired: &str) -> Result<()> {
     control_under_install_lease(store, desired, &lease)
 }
 
-fn control_under_install_lease(
+pub(crate) fn control_under_install_lease(
     store: &Store,
     desired: &str,
     _lease: &ReviewedInstallLease,
@@ -5969,6 +5974,179 @@ mod review_discovery_tests {
     }
 
     #[test]
+    fn paused_host_preserves_submitting_witness_and_expired_login_attention() {
+        use crate::protocol::{Event, WakeMetadata, WakePurpose};
+        let (base, _workspace, store, _activation, _) = fixture();
+        let event = store
+            .produce(
+                "paused-unknown",
+                "catdesk",
+                "review_ready",
+                "fixed pending message",
+            )
+            .unwrap();
+        {
+            let lease = store.host_lock().unwrap();
+            store.claim(&event, &lease).unwrap();
+            store
+                .transition(
+                    &event.event_id,
+                    lease.owner(),
+                    Phase::Submitting,
+                    None,
+                    None,
+                )
+                .unwrap();
+        }
+        let target = store.config().unwrap().targets["catdesk"].clone();
+        let created = now() - 120;
+        let expired = Event {
+            schema_version: 1,
+            event_id: "paused-expired-login".into(),
+            project_id: "catdesk".into(),
+            event_type: "engineering_attention".into(),
+            created_utc: created,
+            message: "fixed expired fixture message".into(),
+            target_generation: target.generation,
+            audit_references: Vec::new(),
+        }
+        .with_wake_metadata(WakeMetadata {
+            purpose: WakePurpose::ManualEndTurn,
+            source_event_id: "original-source".into(),
+            source_turn_id: "original-turn".into(),
+            priority: 1,
+            expires_utc: created + 60,
+        })
+        .unwrap();
+        assert!(expired.is_expired_at(now()).unwrap());
+        atomic(
+            &store.root().join("queue/paused-expired-login.json"),
+            &expired,
+        )
+        .unwrap();
+        atomic(
+            &store.root().join("deliveries/paused-expired-login.json"),
+            &crate::store::Delivery {
+                schema_version: 1,
+                event: expired.clone(),
+                target,
+                phase: Phase::Attention,
+                owner: "original-owner".into(),
+                updated_utc: now(),
+                message_digest: crate::protocol::digest(&expired.message),
+                receipt: None,
+                reason: Some("LOGIN_OR_PROFILE_REQUIRED".into()),
+            },
+        )
+        .unwrap();
+        let paths = [
+            "queue/paused-unknown.json",
+            "deliveries/paused-unknown.json",
+            "logs/submission-start-paused-unknown.json",
+            "queue/paused-expired-login.json",
+            "deliveries/paused-expired-login.json",
+            "config.json",
+        ];
+        let before = paths
+            .iter()
+            .map(|p| std::fs::read(store.root().join(p)).unwrap())
+            .collect::<Vec<_>>();
+        control(&store, "PAUSED").unwrap();
+        let root = store.root().to_owned();
+        let worker = thread::spawn(move || {
+            let host_store = Store::open(&root).unwrap();
+            let lease = host_store.host_lock().unwrap();
+            run_with_lease(&host_store, &lease)
+        });
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            if read::<Status>(&store.root().join("status.json")).is_ok_and(|s| s.host == "PAUSED") {
+                break;
+            }
+            if Instant::now() >= deadline {
+                control(&store, "STOPPED").unwrap();
+                let _ = worker.join();
+                panic!("paused heartbeat was not observed");
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        control(&store, "STOPPED").unwrap();
+        worker.join().unwrap().unwrap();
+        for (path, bytes) in paths.iter().zip(before) {
+            assert_eq!(
+                std::fs::read(store.root().join(path)).unwrap(),
+                bytes,
+                "{path}"
+            );
+        }
+        assert_eq!(
+            store.delivery(&event.event_id).unwrap().unwrap().phase,
+            Phase::Submitting
+        );
+        assert_eq!(
+            store.delivery(&expired.event_id).unwrap().unwrap().phase,
+            Phase::Attention
+        );
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn paused_startup_defers_the_existing_running_retry_exactly_once() {
+        let (base, _workspace, store, _activation, _) = fixture();
+        let event = store
+            .produce(
+                "paused-then-running",
+                "catdesk",
+                "review_ready",
+                "fixed message",
+            )
+            .unwrap();
+        let lease = store.host_lock().unwrap();
+        store.claim(&event, &lease).unwrap();
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Attention,
+                None,
+                Some("LOGIN_OR_PROFILE_REQUIRED".into()),
+            )
+            .unwrap();
+        let path = store.root().join("deliveries/paused-then-running.json");
+        let before = std::fs::read(&path).unwrap();
+        let mut pending = true;
+        for mode in ["PAUSED", "STOPPED", "PAUSED"] {
+            retry_startup_when_running(&store, mode, &mut pending).unwrap();
+            assert!(pending);
+            assert_eq!(std::fs::read(&path).unwrap(), before);
+        }
+        retry_startup_when_running(&store, "RUNNING", &mut pending).unwrap();
+        assert!(!pending);
+        assert_eq!(
+            store.delivery(&event.event_id).unwrap().unwrap().phase,
+            Phase::Claimed
+        );
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Attention,
+                None,
+                Some("LOGIN_OR_PROFILE_REQUIRED".into()),
+            )
+            .unwrap();
+        let second = std::fs::read(&path).unwrap();
+        retry_startup_when_running(&store, "RUNNING", &mut pending).unwrap();
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            second,
+            "later RUNNING iterations must not retry again"
+        );
+        drop(lease);
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
     fn startup_does_not_rearm_receiptless_target_drift_without_explicit_retry() {
         let (base, _workspace, store, _activation, _changed) = fixture();
         let event = store
@@ -6941,6 +7119,14 @@ fn retry_safe_startup_attention(store: &Store) -> Result<()> {
     Ok(())
 }
 
+fn retry_startup_when_running(store: &Store, mode: &str, pending: &mut bool) -> Result<()> {
+    if mode == "RUNNING" && *pending {
+        retry_safe_startup_attention(store)?;
+        *pending = false;
+    }
+    Ok(())
+}
+
 const HOST_RECOVERY_RESET_WINDOW_SECONDS: u64 = 300;
 const HOST_RECOVERY_MAX_BACKOFF_SECONDS: u64 = 60;
 const HOST_RECOVERY_MAX_ATTEMPTS: u32 = 8;
@@ -7297,7 +7483,10 @@ mod host_runtime_recovery_tests {
 }
 
 fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
-    retry_safe_startup_attention(store)?;
+    // Keep the compatibility bytes in optimized Host images too. A paused
+    // launch never retries task records; explicit RUNNING retries once.
+    std::hint::black_box(PAUSED_STARTUP_CAPABILITY);
+    let mut startup_retry_pending = true;
     let mut live = status(store)?;
     live.version = VERSION.into();
     live.pid = std::process::id();
@@ -7308,6 +7497,7 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
     let mut next_response_probe = BTreeMap::<String, u64>::new();
     loop {
         let mode = desired(store)?;
+        retry_startup_when_running(store, &mode, &mut startup_retry_pending)?;
         live.host = mode.clone();
         live.targets = store.config()?.targets;
         // Turn timers are durable Store state, not attempt-local browser state.

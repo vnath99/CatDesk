@@ -1,3 +1,17 @@
+## 2026-11-10 — non-dispatching foreground health before release admission
+
+The existing development foreground owner now has an explicitly bounded PAUSED
+startup. The selected Host must advertise the reviewed compatibility marker;
+legacy Hosts are refused before control mutation. Existing backend/project and
+runtime install leases remain owned through child gate, pause, STOP and empty
+Job confirmation. No new owner, profile, target, scheduler or approval registry
+is introduced. Startup task recovery is deferred until RUNNING, once.
+
+38 distinct source/native-fixture cases and strict checks pass. Build and actual
+host start/stop are next. Backend-only health and a successful source heartbeat
+fixture are not substituted for actual Wake working evidence or protected
+installation/rollback acceptance.
+
 ## 2026-11-10 — existing-root migration implementation and evidence boundaries
 
 The new source composes the existing fixed install broker, protected policy,

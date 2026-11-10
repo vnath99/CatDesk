@@ -1,3 +1,18 @@
+## 2026-11-10 — bounded PAUSED owner, isolated source qualification
+
+Added a finite PAUSED option to the existing development foreground lifecycle.
+It keeps the current resource leases and refuses an unsupported Host before
+control writes. Moved task retry to the first explicit RUNNING iteration, so a
+paused health check preserves unknown submissions and expired attention.
+
+An isolated snapshot passed 31 distinct Wake/native cases, formatting and strict
+root/Wake Clippy; the corrected root binary CLI check passed seven cases. The
+initial wrong-target wrapper and a subsequent cold-compile deadline failure
+remain recorded. Both stopped without source/production mutation. Matching
+artifact build and actual paused-host qualification are next, separately from
+rollback implementation and protected deployment. Evidence:
+[paused startup source](docs/verification/BOUNDED_PAUSED_WAKE_STARTUP_SOURCE_2026_11_10.json).
+
 ## 2026-11-10 — frozen build and finite development health; functional broker integration
 
 Built exact published source `5de26e8e9f9d60b8e823dd0a8278539231a1c897`

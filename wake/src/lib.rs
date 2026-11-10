@@ -75,6 +75,9 @@ pub mod development_runtime {
     pub fn run_foreground_bounded(_: &Path, _: u64) -> Result<Value> {
         Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
     }
+    pub fn run_foreground_paused_bounded(_: &Path, _: u64) -> Result<Value> {
+        Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
+    }
     pub fn run_foreground_host(_: &Path) -> Result<()> {
         Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
     }

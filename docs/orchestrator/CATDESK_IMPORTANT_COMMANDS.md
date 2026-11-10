@@ -1,3 +1,21 @@
+## 2026-11-10 — finite PAUSED Wake qualification (new source; live test pending)
+
+```text
+<qualified-new-controller> operator web-dev-runtime run-paused --max-runtime-seconds <1..180>
+```
+
+This explicit development command requires STOPPED and a selected Host with the
+new non-dispatching startup capability before changing control. It retains the
+existing selection/install leases through the foreground Job, gate, bounded
+pause and STOP/cleanup. Startup retry occurs only on the first RUNNING iteration;
+PAUSED preserves pending submissions and expired attention. Normal run/start are
+unchanged. An older selected Host returns `DEV_RUNTIME_PAUSED_PACKAGE_REQUIRED`.
+Do not replace the profile, targets or original unknown events to run this check.
+
+38 distinct source/native-fixture cases, formatting and strict root/Wake Clippy
+pass. A matching built package and actual paused-host qualification are still
+required; no production or Web acceptance follows from these source results.
+
 ## 2026-11-10 — same-state broker operator interface (new source; not installed)
 
 The existing WakeHost source now recognizes these native operator commands

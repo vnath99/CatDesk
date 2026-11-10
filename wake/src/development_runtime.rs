@@ -1946,17 +1946,57 @@ pub fn start(workspace: &Path) -> Result<Value> {
 /// another session may issue stop, then this call returns the child exit.
 /// A private kill-on-close Job owns all descendants before runtime startup.
 pub fn run_foreground(workspace: &Path) -> Result<Value> {
-    run_foreground_inner(workspace, None)
+    run_foreground_inner(workspace, None, ForegroundStartMode::Running)
 }
 
 pub fn run_foreground_bounded(workspace: &Path, maximum_seconds: u64) -> Result<Value> {
     if !(1..=900).contains(&maximum_seconds) {
         return Err("DEV_RUNTIME_FOREGROUND_BUDGET_INVALID".into());
     }
-    run_foreground_inner(workspace, Some(maximum_seconds))
+    run_foreground_inner(
+        workspace,
+        Some(maximum_seconds),
+        ForegroundStartMode::Running,
+    )
 }
 
-fn run_foreground_inner(workspace: &Path, maximum_seconds: Option<u64>) -> Result<Value> {
+/// A finite, non-dispatching lifecycle observation using the same selected
+/// Host, foreground gate and contained owner. No target/profile is changed.
+pub fn run_foreground_paused_bounded(workspace: &Path, maximum_seconds: u64) -> Result<Value> {
+    if !(1..=180).contains(&maximum_seconds) {
+        return Err("DEV_RUNTIME_PAUSED_BUDGET_INVALID".into());
+    }
+    run_foreground_inner(
+        workspace,
+        Some(maximum_seconds),
+        ForegroundStartMode::Paused,
+    )
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ForegroundStartMode {
+    Running,
+    Paused,
+}
+
+fn run_foreground_inner(
+    workspace: &Path,
+    maximum_seconds: Option<u64>,
+    mode: ForegroundStartMode,
+) -> Result<Value> {
+    // The existing development selection leases exclude package replacement.
+    // The actual runtime install lease below excludes normal resume/start for
+    // this whole finite paused observation, without touching other workspaces.
+    let paused_workspace = if mode == ForegroundStartMode::Paused {
+        Some(canonical_workspace(workspace)?)
+    } else {
+        None
+    };
+    let _backend = paused_workspace.as_deref().map(backend_lock).transpose()?;
+    let _projects = paused_workspace
+        .as_deref()
+        .map(|path| project_backend_lock(path, false))
+        .transpose()?;
     let (store, executable) = validated_launch(workspace)?;
     let host = fs::read(&executable).map_err(|_| "DEV_RUNTIME_EXECUTABLE_UNAVAILABLE")?;
     if !host
@@ -1965,15 +2005,46 @@ fn run_foreground_inner(workspace: &Path, maximum_seconds: Option<u64>) -> Resul
     {
         return Err("DEV_RUNTIME_FOREGROUND_PACKAGE_REQUIRED".into());
     }
+    if mode == ForegroundStartMode::Paused
+        && !host
+            .windows(runtime::PAUSED_STARTUP_CAPABILITY.len())
+            .any(|part| part == runtime::PAUSED_STARTUP_CAPABILITY)
+    {
+        return Err("DEV_RUNTIME_PAUSED_PACKAGE_REQUIRED".into());
+    }
+    let install_lease = if mode == ForegroundStartMode::Paused {
+        let held = runtime::reviewed_install_lease(&store)?;
+        runtime::require_no_reviewed_install_handoff(&store)?;
+        Some(held)
+    } else {
+        None
+    };
     drop(store.host_lock()?);
     let previous: Value = read_json(&store.root().join("control.json"), 4096)?;
+    if mode == ForegroundStartMode::Paused
+        && previous.get("schemaVersion").and_then(Value::as_u64) != Some(1)
+    {
+        return Err("DEV_RUNTIME_CONTROL_INVALID".into());
+    }
     let previous_desired = previous
         .get("desired")
         .and_then(Value::as_str)
         .filter(|value| matches!(*value, "RUNNING" | "PAUSED" | "STOPPED"))
         .ok_or("DEV_RUNTIME_CONTROL_INVALID")?
         .to_owned();
-    runtime::control(&store, "RUNNING")?;
+    if mode == ForegroundStartMode::Paused && previous_desired != "STOPPED" {
+        return Err("DEV_RUNTIME_PAUSED_REQUIRES_STOPPED".into());
+    }
+    let initial_control = if mode == ForegroundStartMode::Paused {
+        "PAUSED"
+    } else {
+        "RUNNING"
+    };
+    let set_control = |desired: &str| match install_lease.as_ref() {
+        Some(held) => runtime::control_under_install_lease(&store, desired, held),
+        None => runtime::control(&store, desired),
+    };
+    set_control(initial_control)?;
     let mut command = Command::new(&executable);
     command
         .arg("--dev-foreground-host")
@@ -1983,7 +2054,7 @@ fn run_foreground_inner(workspace: &Path, maximum_seconds: Option<u64>) -> Resul
     let (pid, exit, deadline_reached) = match foreground::run_with_deadline(
         &mut command,
         maximum_seconds.map(Duration::from_secs),
-        || runtime::control(&store, "STOPPED"),
+        || set_control("STOPPED"),
     ) {
         Ok(result) => result,
         Err(error) => {
@@ -1994,16 +2065,27 @@ fn run_foreground_inner(workspace: &Path, maximum_seconds: Option<u64>) -> Resul
                 } else {
                     &previous_desired
                 };
-                runtime::control(&store, restore)?;
+                set_control(restore)?;
             }
             return Err(error);
         }
     };
-    Ok(
-        json!({"mode":"DEVELOPMENT_UNPROTECTED","status":"FOREGROUND_HOST_EXITED",
+    if mode == ForegroundStartMode::Paused {
+        // A natural early child exit also leaves this finite observation
+        // stopped, after the foreground owner proved its tree empty.
+        set_control("STOPPED")?;
+        let stopped: runtime::Control = read_json(&store.root().join("control.json"), 4096)?;
+        if stopped.schema_version != 1 || stopped.desired != "STOPPED" {
+            return Err("DEV_RUNTIME_PAUSED_STOP_UNPROVEN".into());
+        }
+    }
+    let mut result = json!({"mode":"DEVELOPMENT_UNPROTECTED","status":"FOREGROUND_HOST_EXITED",
         "pid":pid,"success":exit.success(),"exitCode":exit.code(),"ownedTreeExited":true,
-        "maximumRuntimeSeconds":maximum_seconds,"deadlineReached":deadline_reached}),
-    )
+        "maximumRuntimeSeconds":maximum_seconds,"deadlineReached":deadline_reached});
+    if mode == ForegroundStartMode::Paused {
+        result["initialControl"] = json!(initial_control);
+    }
+    Ok(result)
 }
 
 /// Internal foreground entry: EOF or a mismatched owner gate exits before any
@@ -2535,6 +2617,85 @@ mod tests {
             );
         }
         assert_eq!(fs::read(root.join("control.json")).unwrap(), before);
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn paused_foreground_requires_new_host_capability_and_explicit_finite_budget() {
+        let (parent, workspace, package, python) = fixture();
+        fs::write(package.join("CatDeskWakeHost.exe"), foreground::OWNER_GATE).unwrap();
+        prepare_fixture(&workspace, &package, &python);
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let store = Store::open(&root).unwrap();
+        store
+            .set_target(
+                "fixture-project",
+                0,
+                "https://chatgpt.com/c/paused-fixture-only",
+            )
+            .unwrap();
+        let before = fs::read(root.join("control.json")).unwrap();
+        let config = fs::read(root.join("config.json")).unwrap();
+        for budget in [0, 181, u64::MAX] {
+            assert_eq!(
+                run_foreground_paused_bounded(&workspace, budget).unwrap_err(),
+                "DEV_RUNTIME_PAUSED_BUDGET_INVALID"
+            );
+        }
+        assert_eq!(
+            run_foreground_paused_bounded(&workspace, 1).unwrap_err(),
+            "DEV_RUNTIME_PAUSED_PACKAGE_REQUIRED"
+        );
+        assert_eq!(fs::read(root.join("control.json")).unwrap(), before);
+        assert_eq!(fs::read(root.join("config.json")).unwrap(), config);
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn paused_foreground_refuses_other_intent_and_releases_owned_leases_on_spawn_failure() {
+        let (parent, workspace, package, python) = fixture();
+        fs::write(
+            package.join("CatDeskWakeHost.exe"),
+            [foreground::OWNER_GATE, runtime::PAUSED_STARTUP_CAPABILITY].concat(),
+        )
+        .unwrap();
+        prepare_fixture(&workspace, &package, &python);
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let store = Store::open(&root).unwrap();
+        store
+            .set_target(
+                "fixture-project",
+                0,
+                "https://chatgpt.com/c/paused-fixture-only",
+            )
+            .unwrap();
+        for desired in ["RUNNING", "PAUSED"] {
+            runtime::control(&store, desired).unwrap();
+            let before = fs::read(root.join("control.json")).unwrap();
+            assert_eq!(
+                run_foreground_paused_bounded(&workspace, 1).unwrap_err(),
+                "DEV_RUNTIME_PAUSED_REQUIRES_STOPPED"
+            );
+            assert_eq!(fs::read(root.join("control.json")).unwrap(), before);
+        }
+        runtime::control(&store, "STOPPED").unwrap();
+        // The inert fixture is not an executable. This exercises real launch
+        // failure, with the same held install lease needed by the STOP closure.
+        assert_eq!(
+            run_foreground_paused_bounded(&workspace, 1).unwrap_err(),
+            "DEV_RUNTIME_START_FAILED"
+        );
+        assert_eq!(
+            read_json::<runtime::Control>(&root.join("control.json"), 4096)
+                .unwrap()
+                .desired,
+            "STOPPED"
+        );
+        let backend = backend_lock(&workspace).unwrap();
+        let projects = project_backend_lock(&workspace, false).unwrap();
+        let install = runtime::reviewed_install_lease(&store).unwrap();
+        let host = store.host_lock().unwrap();
+        drop((backend, projects, install, host));
         cleanup(&parent);
     }
 
