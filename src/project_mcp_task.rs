@@ -1466,6 +1466,7 @@ impl ProjectTask {
             },
         )
         .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
+        service.enforce_project_task_read_scope();
         #[cfg(windows)]
         let recovery_claim = if let Some(lifetime) = lifetime {
             recovery::begin(&mut writer, project, &recovery_inspection, &lifetime)?
@@ -1533,58 +1534,19 @@ impl ProjectTask {
     }
 
     fn validate_paths(&self, name: &str, args: &Value) -> Result<(), String> {
+        if !matches!(name, "read" | "search" | "patch.preview" | "diff.actual") {
+            return Ok(());
+        }
+        let scope = crate::workspace_tools::TaskReadScope::new(
+            &self.root,
+            &self.contract.allowed_paths,
+            &self.contract.forbidden_paths,
+        )?;
         let check = |value: &Value| -> Result<(), String> {
             let path = value
                 .as_str()
                 .ok_or("PROJECT_TASK_EXPLICIT_PATH_REQUIRED")?;
-            // Let the existing patch engine enforce contract path policy; read
-            // and diff also need this explicit check (the generic read service
-            // otherwise permits the entire workspace).
-            if !self.contract.allowed_paths.iter().any(|allowed| {
-                path == allowed
-                    || (allowed == "." && !path.starts_with('.'))
-                    || path
-                        .strip_prefix(allowed)
-                        .is_some_and(|s| s.starts_with('/'))
-            }) || path.split(['/', '\\']).any(|c| {
-                c.is_empty()
-                    || c == "."
-                    || c == ".."
-                    || c == ".git"
-                    || c == ".catdesk"
-                    || c.contains(':')
-            }) || self.contract.forbidden_paths.iter().any(|forbidden| {
-                path == forbidden
-                    || path
-                        .strip_prefix(forbidden)
-                        .is_some_and(|s| s.starts_with('/'))
-            }) {
-                return Err("PROJECT_TASK_PATH_OUTSIDE_ASSIGNMENT".into());
-            }
-            let target = self.root.join(path);
-            let mut existing = target.as_path();
-            loop {
-                match fs::symlink_metadata(existing) {
-                    Ok(_) => break,
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                        // New assigned files may need several parent directories.
-                        // Stop at any existing entry, including a dangling link;
-                        // only true absence permits walking to another ancestor.
-                        existing = existing.parent().ok_or("PROJECT_TASK_PATH_UNAVAILABLE")?;
-                    }
-                    Err(_) => return Err("PROJECT_TASK_PATH_UNAVAILABLE".into()),
-                }
-            }
-            let canonical = existing
-                .canonicalize()
-                .map_err(|_| "PROJECT_TASK_PATH_UNAVAILABLE")?;
-            if !canonical.starts_with(&self.root) {
-                return Err("PROJECT_TASK_PATH_OUTSIDE_ASSIGNMENT".into());
-            }
-            if existing != target && !canonical.is_dir() {
-                return Err("PROJECT_TASK_PATH_UNAVAILABLE".into());
-            }
-            Ok(())
+            scope.resolve_requested(path, name == "search").map(|_| ())
         };
         match name {
             "read" | "search" => check(
@@ -1734,6 +1696,9 @@ impl ProjectTask {
                     .unwrap_or(true);
                 return result;
             }
+            // Recheck under the existing per-task execution mutex: a queued
+            // call must not reuse path resolution from before another call.
+            task.validate_paths(&request.tool_name, &request.arguments)?;
             match runtime.block_on(state.service.execute_tool_call(&request)) {
                 Ok(result) => serde_json::to_value(result)
                     .map_err(|_| "PROJECT_TASK_RESULT_UNAVAILABLE".into()),
@@ -2004,6 +1969,854 @@ pub(crate) mod tests {
 
     fn call(id: &str, tool: &str, arguments: Value) -> Value {
         json!({"taskId":"task-fixture","callId":id,"tool":tool,"arguments":arguments})
+    }
+
+    fn read_scope_fixture(id: &str) -> (ResolvedProjectScopeV1, PathBuf, PathBuf) {
+        let (scope, root, assignment) = fixture(id);
+        let mut value: Value = serde_json::from_slice(&fs::read(&assignment).unwrap()).unwrap();
+        value["contract"]["allowedPaths"] = json!(["src"]);
+        value["contract"]["forbiddenPaths"] = json!([".git", ".catdesk", "src/private"]);
+        fs::write(&assignment, serde_json::to_vec(&value).unwrap()).unwrap();
+        fs::create_dir(root.join("src/private")).unwrap();
+        fs::write(
+            root.join("src/public-scope.txt"),
+            format!("TASK_SCOPE_PUBLIC_SYNTHETIC_{id}\n"),
+        )
+        .unwrap();
+        fs::write(
+            root.join("src/private/scope-canary.txt"),
+            "TASK_SCOPE_PRIVATE_SYNTHETIC\n",
+        )
+        .unwrap();
+        (scope, root, assignment)
+    }
+
+    fn remove_read_scope_fixture(scope: &ResolvedProjectScopeV1) {
+        let parent = scope
+            .control_workspace
+            .parent()
+            .unwrap()
+            .canonicalize()
+            .unwrap();
+        assert_eq!(
+            parent.parent(),
+            Some(std::env::temp_dir().canonicalize().unwrap().as_path())
+        );
+        assert!(
+            parent
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("project-task-")
+        );
+        fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[tokio::test]
+    async fn project_task_read_scope_refuses_mixed_separator_and_case_aliases() {
+        let (scope, _root, assignment) = read_scope_fixture("alpha");
+        let task = ProjectTask::open(&scope, &assignment).unwrap();
+        let mut outcomes = Vec::new();
+        for (index, path) in [
+            r"src/private\scope-canary.txt",
+            r"src\private/scope-canary.txt",
+            "src/PRIVATE/scope-canary.txt",
+            "SRC/private/scope-canary.txt",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            outcomes.push((
+                path,
+                task.execute(call(
+                    &format!("forbidden-read-{index}"),
+                    "read",
+                    json!({"path":path}),
+                ))
+                .await,
+            ));
+        }
+        task.close().await.unwrap();
+        drop(task);
+        remove_read_scope_fixture(&scope);
+        for (path, outcome) in outcomes {
+            assert_eq!(
+                outcome.err().as_deref(),
+                Some("PROJECT_TASK_PATH_OUTSIDE_ASSIGNMENT"),
+                "forbidden path spelling must be refused: {path}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn project_task_read_scope_search_keeps_public_and_excludes_private() {
+        let (scope, _root, assignment) = read_scope_fixture("alpha");
+        let task = ProjectTask::open(&scope, &assignment).unwrap();
+        let outcome = task
+            .execute(call(
+                "scoped-search",
+                "search",
+                json!({
+                    "path":"src", "pattern":"TASK_SCOPE_", "fixedStrings":true
+                }),
+            ))
+            .await;
+        task.close().await.unwrap();
+        drop(task);
+        remove_read_scope_fixture(&scope);
+        let output = outcome
+            .expect("broad allowed-directory search must retain permitted matches")
+            .to_string();
+        assert!(output.contains("TASK_SCOPE_PUBLIC_SYNTHETIC_alpha"));
+        assert!(!output.contains("TASK_SCOPE_PRIVATE_SYNTHETIC"));
+        assert!(!output.contains("src/private/"));
+    }
+
+    #[tokio::test]
+    async fn project_task_read_scope_checks_resolved_within_root_junction() {
+        let (scope, root, assignment) = read_scope_fixture("alpha");
+        let link = root.join("src/public-alias");
+        let private = root.join("src/private");
+        let powershell =
+            PathBuf::from(std::env::var_os("SystemRoot").expect("Windows system root"))
+                .join("System32/WindowsPowerShell/v1.0/powershell.exe");
+        let output = std::process::Command::new(powershell)
+            .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
+                "New-Item -ItemType Junction -Path $env:CATDESK_TEST_LINK -Target $env:CATDESK_TEST_TARGET -ErrorAction Stop | Out-Null"])
+            .env("CATDESK_TEST_LINK", crate::command::normalize_windows_verbatim_path(link.clone()))
+            .env("CATDESK_TEST_TARGET", crate::command::normalize_windows_verbatim_path(private.clone()))
+            .output().unwrap();
+        assert!(
+            output.status.success(),
+            "owned within-root junction fixture required"
+        );
+        assert_eq!(
+            link.canonicalize().unwrap(),
+            private.canonicalize().unwrap()
+        );
+        let task = ProjectTask::open(&scope, &assignment).unwrap();
+        let outcome = task
+            .execute(call(
+                "alias-read",
+                "read",
+                json!({"path":"src/public-alias/scope-canary.txt"}),
+            ))
+            .await;
+        task.close().await.unwrap();
+        drop(task);
+        fs::remove_dir(&link).unwrap();
+        remove_read_scope_fixture(&scope);
+        assert_eq!(
+            outcome.err().as_deref(),
+            Some("PROJECT_TASK_PATH_OUTSIDE_ASSIGNMENT")
+        );
+    }
+
+    #[tokio::test]
+    async fn project_task_read_scope_search_does_not_open_forbidden_files_or_ignore_metadata() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let (scope, root, assignment) = read_scope_fixture("alpha");
+        fs::write(
+            root.join("src/private/.ignore"),
+            "owned-synthetic-ignore-entry\n",
+        )
+        .unwrap();
+        let task = ProjectTask::open(&scope, &assignment).unwrap();
+        let private = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(root.join("src/private/scope-canary.txt"))
+            .unwrap();
+        let ignore = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(root.join("src/private/.ignore"))
+            .unwrap();
+        let outcome = task
+            .execute(call(
+                "locked-scoped-search",
+                "search",
+                json!({
+                    "path":"src", "pattern":"TASK_SCOPE_", "fixedStrings":true
+                }),
+            ))
+            .await;
+        task.close().await.unwrap();
+        drop(task);
+        drop(private);
+        drop(ignore);
+        remove_read_scope_fixture(&scope);
+        let output = outcome
+            .expect("forbidden subtree must be pruned before file or ignore reads")
+            .to_string();
+        assert!(output.contains("TASK_SCOPE_PUBLIC_SYNTHETIC_alpha"));
+        assert!(!output.contains("TASK_SCOPE_PRIVATE_SYNTHETIC"));
+    }
+
+    #[tokio::test]
+    async fn project_task_read_scope_refusal_does_not_block_sibling_task() {
+        let (a_scope, _a_root, a_assignment) = read_scope_fixture("alpha");
+        let (b_scope, _b_root, b_assignment) = read_scope_fixture("beta");
+        let a = ProjectTask::open(&a_scope, &a_assignment).unwrap();
+        let b = ProjectTask::open(&b_scope, &b_assignment).unwrap();
+        let (forbidden, allowed) = tokio::join!(
+            a.execute(call(
+                "forbidden-alpha",
+                "read",
+                json!({"path":r"src/private\scope-canary.txt"})
+            )),
+            b.execute(call(
+                "allowed-beta",
+                "read",
+                json!({"path":"src/public-scope.txt"})
+            )),
+        );
+        a.close().await.unwrap();
+        b.close().await.unwrap();
+        drop(a);
+        drop(b);
+        remove_read_scope_fixture(&a_scope);
+        remove_read_scope_fixture(&b_scope);
+        assert_eq!(
+            forbidden.err().as_deref(),
+            Some("PROJECT_TASK_PATH_OUTSIDE_ASSIGNMENT")
+        );
+        assert!(
+            allowed
+                .expect("sibling permitted read remains available")
+                .to_string()
+                .contains("TASK_SCOPE_PUBLIC_SYNTHETIC_beta")
+        );
+    }
+
+    #[tokio::test]
+    async fn project_task_namespace_scope_refuses_resolved_win32_name_twin() {
+        fn exact_fixture_junction(link: &Path, target: &Path) -> std::io::Result<()> {
+            use std::os::windows::{ffi::OsStrExt, fs::OpenOptionsExt, io::AsRawHandle};
+            #[link(name = "kernel32")]
+            unsafe extern "system" {
+                fn DeviceIoControl(
+                    handle: *mut std::ffi::c_void,
+                    code: u32,
+                    input: *mut std::ffi::c_void,
+                    input_len: u32,
+                    output: *mut std::ffi::c_void,
+                    output_len: u32,
+                    returned: *mut u32,
+                    overlapped: *mut std::ffi::c_void,
+                ) -> i32;
+            }
+            let print = target
+                .canonicalize()?
+                .as_os_str()
+                .encode_wide()
+                .collect::<Vec<_>>();
+            if !print.starts_with(&[b'\\' as u16, b'\\' as u16, b'?' as u16, b'\\' as u16]) {
+                return Err(std::io::Error::other(
+                    "owned fixture target must be verbatim",
+                ));
+            }
+            // Mirror the retained inert FSCTL mount-point recipe, replacing
+            // only the namespace prefix. Do not normalize the exact dot name.
+            let mut substitute = vec![b'\\' as u16, b'?' as u16, b'?' as u16, b'\\' as u16];
+            substitute.extend_from_slice(&print[4..]);
+            let substitute = substitute
+                .iter()
+                .flat_map(|unit| unit.to_le_bytes())
+                .collect::<Vec<_>>();
+            let print = print
+                .iter()
+                .flat_map(|unit| unit.to_le_bytes())
+                .collect::<Vec<_>>();
+            let data_len = 8 + substitute.len() + 2 + print.len() + 2;
+            if data_len > 16_376 {
+                return Err(std::io::Error::other(
+                    "owned fixture mount buffer too large",
+                ));
+            }
+            let mut buffer = vec![0u8; data_len + 8];
+            buffer[..4].copy_from_slice(&0xa0000003u32.to_le_bytes());
+            buffer[4..6].copy_from_slice(&(data_len as u16).to_le_bytes());
+            buffer[10..12].copy_from_slice(&(substitute.len() as u16).to_le_bytes());
+            buffer[12..14].copy_from_slice(&((substitute.len() + 2) as u16).to_le_bytes());
+            buffer[14..16].copy_from_slice(&(print.len() as u16).to_le_bytes());
+            buffer[16..16 + substitute.len()].copy_from_slice(&substitute);
+            let print_start = 16 + substitute.len() + 2;
+            buffer[print_start..print_start + print.len()].copy_from_slice(&print);
+            fs::create_dir(link)?;
+            let handle = fs::OpenOptions::new()
+                .access_mode(0x00120100)
+                .share_mode(7)
+                .custom_flags(0x02200000)
+                .open(link)?;
+            let mut returned = 0;
+            let succeeded = unsafe {
+                DeviceIoControl(
+                    handle.as_raw_handle(),
+                    0x000900a4,
+                    buffer.as_mut_ptr().cast(),
+                    buffer.len() as u32,
+                    std::ptr::null_mut(),
+                    0,
+                    &mut returned,
+                    std::ptr::null_mut(),
+                )
+            };
+            if succeeded == 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        }
+        let (scope, root, assignment) = read_scope_fixture("alpha");
+        let distinct = root.join("src/private.");
+        fs::create_dir(&distinct).unwrap();
+        fs::write(
+            distinct.join("scope-canary.txt"),
+            "TASK_SCOPE_PUBLIC_DISTINCT_NAME\n",
+        )
+        .unwrap();
+        let link = root.join("src/namespace-alias");
+        let setup = exact_fixture_junction(&link, &distinct);
+        let exact_target = setup.is_ok()
+            && matches!((link.canonicalize(), distinct.canonicalize()), (Ok(link), Ok(target)) if link == target)
+            && fs::read_to_string(distinct.join("scope-canary.txt"))
+                .ok()
+                .as_deref()
+                == Some("TASK_SCOPE_PUBLIC_DISTINCT_NAME\n")
+            && fs::read_to_string(root.join("src/private/scope-canary.txt"))
+                .ok()
+                .as_deref()
+                == Some("TASK_SCOPE_PRIVATE_SYNTHETIC\n");
+        if !exact_target {
+            if fs::symlink_metadata(&link).is_ok() {
+                fs::remove_dir(&link).unwrap();
+            }
+            remove_read_scope_fixture(&scope);
+            assert!(
+                exact_target,
+                "owned exact verbatim-target junction fixture required"
+            );
+            return;
+        }
+        let task = ProjectTask::open(&scope, &assignment).unwrap();
+        let outcome = task
+            .execute(call(
+                "namespace-read",
+                "read",
+                json!({"path":"src/namespace-alias/scope-canary.txt"}),
+            ))
+            .await;
+        task.close().await.unwrap();
+        drop(task);
+        fs::remove_dir(&link).unwrap();
+        remove_read_scope_fixture(&scope);
+        assert_eq!(
+            outcome.err().as_deref(),
+            Some("PROJECT_TASK_PATH_OUTSIDE_ASSIGNMENT")
+        );
+    }
+
+    #[tokio::test]
+    async fn project_task_diff_scope_keeps_public_tracked_untracked_and_deleted() {
+        let (scope, root, assignment) = read_scope_fixture("alpha");
+        fs::write(
+            root.join("src/public-deleted.txt"),
+            "TASK_DIFF_PUBLIC_DELETED_BASE\n",
+        )
+        .unwrap();
+        git(
+            &root,
+            &[
+                "add",
+                "src/public-scope.txt",
+                "src/public-deleted.txt",
+                "src/private/scope-canary.txt",
+            ],
+        );
+        fs::write(
+            root.join("src/public-scope.txt"),
+            "TASK_DIFF_PUBLIC_TRACKED\n",
+        )
+        .unwrap();
+        fs::remove_file(root.join("src/public-deleted.txt")).unwrap();
+        fs::write(
+            root.join("src/public-new.txt"),
+            "TASK_DIFF_PUBLIC_UNTRACKED\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("src/private/scope-canary.txt"),
+            "TASK_DIFF_PRIVATE_TRACKED\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("src/private/new.txt"),
+            "TASK_DIFF_PRIVATE_UNTRACKED\n",
+        )
+        .unwrap();
+        let task = ProjectTask::open(&scope, &assignment).unwrap();
+        let outcome = task
+            .execute(call("broad-diff", "diff.actual", json!({"paths":["src"]})))
+            .await;
+        task.close().await.unwrap();
+        drop(task);
+        remove_read_scope_fixture(&scope);
+        let output = outcome
+            .expect("directory diff must retain authorized changes")
+            .to_string();
+        assert!(output.contains("TASK_DIFF_PUBLIC_TRACKED"));
+        assert!(output.contains("TASK_DIFF_PUBLIC_UNTRACKED"));
+        assert!(output.contains("TASK_DIFF_PUBLIC_DELETED_BASE"));
+        assert!(!output.contains("TASK_DIFF_PRIVATE"));
+        assert!(!output.contains("src/private/"));
+    }
+
+    #[tokio::test]
+    async fn project_task_diff_scope_keeps_untracked_real_path_behind_tracked_junction_alias() {
+        let (scope, root, assignment) = read_scope_fixture("alpha");
+        let real = root.join("src/real");
+        let alias = root.join("src/alias");
+        fs::create_dir(&real).unwrap();
+        fs::write(real.join("new.txt"), "TASK_DIFF_PUBLIC_REAL_UNTRACKED\n").unwrap();
+        let powershell =
+            PathBuf::from(std::env::var_os("SystemRoot").expect("Windows system root"))
+                .join("System32/WindowsPowerShell/v1.0/powershell.exe");
+        let junction = std::process::Command::new(powershell)
+            .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
+                "New-Item -ItemType Junction -Path $env:CATDESK_TEST_LINK -Target $env:CATDESK_TEST_TARGET -ErrorAction Stop | Out-Null"])
+            .env("CATDESK_TEST_LINK", crate::command::normalize_windows_verbatim_path(alias.clone()))
+            .env("CATDESK_TEST_TARGET", crate::command::normalize_windows_verbatim_path(real.clone()))
+            .output().unwrap();
+        let exact_target = junction.status.success()
+            && alias
+                .canonicalize()
+                .ok()
+                .zip(real.canonicalize().ok())
+                .is_some_and(|(alias, real)| alias == real);
+        if !exact_target {
+            let _ = fs::remove_dir(&alias);
+            remove_read_scope_fixture(&scope);
+            panic!("owned tracked-alias junction fixture required");
+        }
+        let object = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(["hash-object", "-w", "--", "src/real/new.txt"])
+            .output()
+            .unwrap();
+        assert!(object.status.success(), "owned fixture object required");
+        let object_id = String::from_utf8(object.stdout).unwrap();
+        let object_id = object_id.trim();
+        assert_eq!(object_id.len(), 40);
+        assert!(object_id.bytes().all(|byte| byte.is_ascii_hexdigit()));
+        git(
+            &root,
+            &[
+                "update-index",
+                "--add",
+                "--cacheinfo",
+                "100644",
+                object_id,
+                "src/alias/new.txt",
+            ],
+        );
+        git(
+            &root,
+            &[
+                "add",
+                "src/public-scope.txt",
+                "src/private/scope-canary.txt",
+            ],
+        );
+        fs::write(
+            root.join("src/public-scope.txt"),
+            "TASK_DIFF_PUBLIC_TRACKED_ALIAS_CONTROL\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("src/private/scope-canary.txt"),
+            "TASK_DIFF_PRIVATE_ALIAS_CONTROL\n",
+        )
+        .unwrap();
+        let task = ProjectTask::open(&scope, &assignment).unwrap();
+        let outcome = task
+            .execute(call(
+                "tracked-alias-diff",
+                "diff.actual",
+                json!({"paths":["src"]}),
+            ))
+            .await;
+        task.close().await.unwrap();
+        drop(task);
+        fs::remove_dir(&alias).unwrap();
+        remove_read_scope_fixture(&scope);
+        let output = outcome.expect("an indexed alias must not hide the real untracked path");
+        assert!(
+            output["payload"]["paths"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("src/real/new.txt"))
+        );
+        let text = output.to_string();
+        assert!(text.contains("TASK_DIFF_PUBLIC_REAL_UNTRACKED"));
+        assert!(text.contains("TASK_DIFF_PUBLIC_TRACKED_ALIAS_CONTROL"));
+        assert!(!text.contains("TASK_DIFF_PRIVATE"));
+        assert!(!text.contains("src/private/"));
+    }
+
+    #[tokio::test]
+    async fn project_task_diff_scope_keeps_file_deletion_when_replaced_by_directory() {
+        let (scope, root, assignment) = read_scope_fixture("alpha");
+        let replaced = root.join("src/replaced.txt");
+        fs::write(&replaced, "TASK_DIFF_PUBLIC_REPLACED_BASE\n").unwrap();
+        git(
+            &root,
+            &["add", "src/replaced.txt", "src/private/scope-canary.txt"],
+        );
+        fs::remove_file(&replaced).unwrap();
+        fs::create_dir(&replaced).unwrap();
+        fs::write(
+            replaced.join("new.rs"),
+            "TASK_DIFF_PUBLIC_REPLACEMENT_CHILD\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("src/private/scope-canary.txt"),
+            "TASK_DIFF_PRIVATE_REPLACEMENT_CONTROL\n",
+        )
+        .unwrap();
+        let task = ProjectTask::open(&scope, &assignment).unwrap();
+        let outcome = task
+            .execute(call(
+                "file-to-directory-diff",
+                "diff.actual",
+                json!({"paths":["src"]}),
+            ))
+            .await;
+        task.close().await.unwrap();
+        drop(task);
+        remove_read_scope_fixture(&scope);
+        let output =
+            outcome.expect("a directory replacement must retain the indexed file deletion");
+        let paths = output["payload"]["paths"].as_array().unwrap();
+        assert!(paths.contains(&json!("src/replaced.txt")));
+        assert!(paths.contains(&json!("src/replaced.txt/new.rs")));
+        let diff = output["payload"]["diff"].as_str().unwrap();
+        assert!(diff.contains("--- a/src/replaced.txt\n+++ /dev/null"));
+        assert!(diff.contains("-TASK_DIFF_PUBLIC_REPLACED_BASE"));
+        assert!(diff.contains("TASK_DIFF_PUBLIC_REPLACEMENT_CHILD"));
+        assert!(!diff.contains("TASK_DIFF_PRIVATE"));
+        assert!(!diff.contains("src/private/"));
+    }
+
+    #[tokio::test]
+    async fn project_task_diff_scope_refuses_conflicted_index_parent_with_forbidden_descendant() {
+        use std::io::Write;
+        use std::process::Stdio;
+
+        let (scope, root, assignment) = read_scope_fixture("alpha");
+        let mut value: Value = serde_json::from_slice(&fs::read(&assignment).unwrap()).unwrap();
+        value["contract"]["forbiddenPaths"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!("src/conflicted/private"));
+        fs::write(&assignment, serde_json::to_vec(&value).unwrap()).unwrap();
+        // Synthetic bytes supply owned Git blobs only. Neither conflicting pathname
+        // exists in the worktree, so the index guard cannot rely on is_dir().
+        let mut object_ids = Vec::new();
+        for content in [
+            "TASK_DIFF_PUBLIC_CONFLICT_PARENT\n",
+            "TASK_DIFF_PRIVATE_CONFLICT_CHILD\n",
+        ] {
+            let mut child = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&root)
+                .args(["hash-object", "-w", "--stdin"])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .unwrap();
+            child
+                .stdin
+                .take()
+                .unwrap()
+                .write_all(content.as_bytes())
+                .unwrap();
+            let output = child.wait_with_output().unwrap();
+            assert!(
+                output.status.success(),
+                "owned conflicted-index blob required: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let object_id = String::from_utf8(output.stdout).unwrap();
+            let object_id = object_id.trim();
+            assert_eq!(object_id.len(), 40);
+            assert!(object_id.bytes().all(|byte| byte.is_ascii_hexdigit()));
+            object_ids.push(object_id.to_owned());
+        }
+        let index_info = format!(
+            "100644 {} 2\tsrc/conflicted\n100644 {} 3\tsrc/conflicted/private/file.txt\n",
+            object_ids[0], object_ids[1]
+        );
+        let mut child = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(["update-index", "--index-info"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(index_info.as_bytes())
+            .unwrap();
+        let seeded = child.wait_with_output().unwrap();
+        assert!(
+            seeded.status.success(),
+            "owned D/F-conflicted index required"
+        );
+        let index = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(["ls-files", "--stage", "--", "src/conflicted"])
+            .output()
+            .unwrap();
+        let index_text = String::from_utf8(index.stdout).unwrap();
+        let exact_conflict = index.status.success()
+            && index_text.lines().collect::<Vec<_>>() == index_info.lines().collect::<Vec<_>>()
+            && !root.join("src/conflicted").exists();
+        let task = ProjectTask::open(&scope, &assignment).unwrap();
+        let outcome = task
+            .execute(call(
+                "conflicted-index-diff",
+                "diff.actual",
+                json!({"paths":["src"]}),
+            ))
+            .await;
+        let calls = task
+            .journal
+            .load_tool_calls(&RunId::new("task-fixture").unwrap());
+        task.close().await.unwrap();
+        drop(task);
+        remove_read_scope_fixture(&scope);
+        assert!(
+            exact_conflict,
+            "the fixture must retain both absent-parent index stages"
+        );
+        assert_eq!(
+            outcome.err().as_deref(),
+            Some("PROJECT_TASK_TOOL_REJECTED_SEE_DURABLE_JOURNAL_NO_BLIND_RETRY")
+        );
+        let calls = calls.unwrap();
+        let refused = calls.get("conflicted-index-diff").unwrap();
+        assert_eq!(refused.status, ToolCallStatus::Failed);
+        assert!(refused.result_hash.is_none());
+        assert!(refused.outcome_summary.as_deref().is_some_and(|summary| {
+            summary.contains("task diff index has an ambiguous file/directory path")
+        }));
+    }
+
+    #[tokio::test]
+    async fn project_task_diff_scope_treats_globs_literally_and_empty_selection_stays_empty() {
+        let (scope, root, assignment) = read_scope_fixture("alpha");
+        let mut value: Value = serde_json::from_slice(&fs::read(&assignment).unwrap()).unwrap();
+        value["contract"]["forbiddenPaths"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!("src/a"));
+        fs::write(&assignment, serde_json::to_vec(&value).unwrap()).unwrap();
+        fs::write(root.join("src/a"), "TASK_DIFF_PRIVATE_PATTERN\n").unwrap();
+        fs::write(root.join("src/b"), "TASK_DIFF_PUBLIC_PATTERN\n").unwrap();
+        let task = ProjectTask::open(&scope, &assignment).unwrap();
+        let literal = task
+            .execute(call(
+                "literal-diff",
+                "diff.actual",
+                json!({"paths":["src/[ab]"]}),
+            ))
+            .await;
+        let empty = task
+            .execute(call(
+                "empty-diff",
+                "diff.actual",
+                json!({"paths":["src/no-such-assigned-file"]}),
+            ))
+            .await;
+        task.close().await.unwrap();
+        drop(task);
+        remove_read_scope_fixture(&scope);
+        for output in [literal, empty] {
+            let output = output.expect("literal nonmatching selectors produce an empty artifact");
+            assert_eq!(output["payload"]["paths"], json!([]));
+            assert_eq!(output["payload"]["diff"], json!(""));
+            assert!(!output.to_string().contains("TASK_DIFF_PRIVATE"));
+        }
+    }
+
+    #[tokio::test]
+    async fn project_task_diff_scope_does_not_open_forbidden_files_or_ignore_metadata() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let (scope, root, assignment) = read_scope_fixture("alpha");
+        git(
+            &root,
+            &[
+                "add",
+                "src/public-scope.txt",
+                "src/private/scope-canary.txt",
+            ],
+        );
+        fs::write(
+            root.join("src/public-scope.txt"),
+            "TASK_DIFF_PUBLIC_LOCK_CONTROL\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("src/private/scope-canary.txt"),
+            "TASK_DIFF_PRIVATE_LOCK_CONTROL\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("src/private/.ignore"),
+            "owned-synthetic-ignore-entry\n",
+        )
+        .unwrap();
+        let task = ProjectTask::open(&scope, &assignment).unwrap();
+        let private = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(root.join("src/private/scope-canary.txt"))
+            .unwrap();
+        let ignore = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(root.join("src/private/.ignore"))
+            .unwrap();
+        let outcome = task
+            .execute(call("locked-diff", "diff.actual", json!({"paths":["src"]})))
+            .await;
+        task.close().await.unwrap();
+        drop(task);
+        drop(private);
+        drop(ignore);
+        remove_read_scope_fixture(&scope);
+        let output = outcome
+            .expect("forbidden subtree must be excluded before diff content reads")
+            .to_string();
+        assert!(output.contains("TASK_DIFF_PUBLIC_LOCK_CONTROL"));
+        assert!(!output.contains("TASK_DIFF_PRIVATE"));
+    }
+
+    #[tokio::test]
+    async fn project_task_diff_scope_batches_large_literal_file_selections() {
+        let (scope, root, assignment) = read_scope_fixture("alpha");
+        fs::create_dir(root.join("src/batch")).unwrap();
+        for index in 0..80 {
+            fs::write(
+                root.join(format!("src/batch/public-{index:03}.txt")),
+                "owned-base\n",
+            )
+            .unwrap();
+        }
+        git(&root, &["add", "src/batch", "src/private/scope-canary.txt"]);
+        for index in 0..80 {
+            fs::write(
+                root.join(format!("src/batch/public-{index:03}.txt")),
+                format!("TASK_DIFF_PUBLIC_BATCH_{index:03}\n"),
+            )
+            .unwrap();
+        }
+        fs::write(
+            root.join("src/private/scope-canary.txt"),
+            "TASK_DIFF_PRIVATE_BATCH\n",
+        )
+        .unwrap();
+        let task = ProjectTask::open(&scope, &assignment).unwrap();
+        let outcome = task
+            .execute(call(
+                "batched-diff",
+                "diff.actual",
+                json!({"paths":["src"]}),
+            ))
+            .await;
+        task.close().await.unwrap();
+        drop(task);
+        remove_read_scope_fixture(&scope);
+        let output = outcome.expect("broad directory diff must batch permitted paths");
+        assert_eq!(
+            output["payload"]["paths"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|path| path
+                    .as_str()
+                    .is_some_and(|path| path.starts_with("src/batch/")))
+                .count(),
+            80
+        );
+        assert!(!output.to_string().contains("TASK_DIFF_PRIVATE"));
+    }
+
+    #[tokio::test]
+    async fn project_task_diff_scope_patch_apply_literal_target_does_not_expand() {
+        let (scope, root, assignment) = read_scope_fixture("alpha");
+        let mut value: Value = serde_json::from_slice(&fs::read(&assignment).unwrap()).unwrap();
+        value["contract"]["forbiddenPaths"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!("src/a.txt"));
+        fs::write(&assignment, serde_json::to_vec(&value).unwrap()).unwrap();
+        fs::write(root.join("src/[a].txt"), "OWNED_LITERAL_OLD\n").unwrap();
+        fs::write(root.join("src/a.txt"), "owned-private-base\n").unwrap();
+        git(
+            &root,
+            &[
+                "--literal-pathspecs",
+                "add",
+                "--",
+                "src/[a].txt",
+                "src/a.txt",
+            ],
+        );
+        fs::write(root.join("src/a.txt"), "TASK_DIFF_PRIVATE_APPLY\n").unwrap();
+        let task = ProjectTask::open(&scope, &assignment).unwrap();
+        let preview = task
+            .execute(call(
+                "literal-preview",
+                "patch.preview",
+                json!({
+                    "patchId":"literal-scoped-patch", "operations":[{
+                        "path":"src/[a].txt", "old":"OWNED_LITERAL_OLD", "new":"OWNED_LITERAL_NEW"
+                    }]
+                }),
+            ))
+            .await;
+        let applied = if preview.is_ok() {
+            task.execute(call(
+                "literal-apply",
+                "patch.apply",
+                json!({"patchId":"literal-scoped-patch"}),
+            ))
+            .await
+        } else {
+            Err("owned literal preview did not complete".into())
+        };
+        let assigned_updated = fs::read_to_string(root.join("src/[a].txt"));
+        let forbidden_unchanged = fs::read_to_string(root.join("src/a.txt"));
+        task.close().await.unwrap();
+        drop(task);
+        remove_read_scope_fixture(&scope);
+        assert!(preview.is_ok());
+        let output = applied
+            .expect("literal assigned patch must retain a scoped returned diff")
+            .to_string();
+        assert_eq!(assigned_updated.unwrap(), "OWNED_LITERAL_NEW\n");
+        assert_eq!(forbidden_unchanged.unwrap(), "TASK_DIFF_PRIVATE_APPLY\n");
+        assert!(output.contains("OWNED_LITERAL_NEW"));
+        assert!(!output.contains("TASK_DIFF_PRIVATE_APPLY"));
     }
 
     fn linked_fixture() -> (

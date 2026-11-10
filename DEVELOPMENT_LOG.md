@@ -3935,3 +3935,28 @@ planner remains inactive. Exact legacy provenance/quiescence, executable broker
 dispatch, trusted package admission and installed/live qualification are next.
 Actual Web edit/verification/self-Wake is still unaccepted. Evidence:
 `docs/verification/WAKE_LIFECYCLE_SELECTION_RACES_2026_11_10.json`.
+
+## 2026-11-10 — FS-001 scoped file access and diff source qualification
+
+The task-scoped correction shares resolved path checks, filters forbidden files
+before opening them, and keeps diff/patch paths literal and scoped. It also
+preserves an authorized untracked target behind a tracked alias, reports a file
+deletion when replaced by a directory, and refuses a conflicted index parent
+with a forbidden descendant. These are source findings and bounded fixtures;
+no live disclosure is claimed.
+
+The final matrix passed 26 task cases, all 14 new regressions, one workspace
+compatibility case and eight patch-engine cases, plus formatting and strict root
+Clippy. Two existing installed-sandbox tests remain explicitly excluded. The
+five intended RED failures and both later fixture setup failures are retained;
+the final setup repair changed only task test code. All 238 source, 1,650 state
+and six protected pins matched, with no task-file changes or remaining owned
+processes. Narrow independent source review has zero remaining scoped findings;
+it is not a whole-source release review. See
+`docs/verification/PROJECT_TASK_FS_001_SCOPE_SOURCE_2026_11_10.json`.
+
+The frozen candidate does not include this new main-backend fix. A qualified
+main artifact and its required review remain future work. Direct per-project Web
+edit/verify/self-Wake remains unaccepted; native Codex and a central coordinator
+are optional. Installed Wake route compatibility and approved Wake signing
+authority remain separate gates. No signer or protected authority was created.

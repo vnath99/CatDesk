@@ -2717,3 +2717,21 @@ Five public final inputs/eight declared reads are published at coordinator-verif
 remote commit `c66aa3af6b17bfe95ac633b7aaee69ffd1064f05`. This supplies review
 inputs, not cumulative judgment, source acceptance, producer authority, installed
 qualification, promotion or native C1 completion.
+
+### 2026-11-10 — FS-001 source matrix passed; installed Web cycle remains open
+
+The final matrix passed 26 task cases, all 14 new regressions, one workspace and
+eight patch-engine cases, formatting and strict root Clippy. Two existing
+native-sandbox exclusions are not passing or installed qualification. Historical
+RED and both setup failures remain recorded. The final test-only repair retained
+all other 237 source pins; the full run preserved state, protected artifacts and
+profile identity. Narrow independent source review reports zero scoped findings,
+without whole-source or producer authority. See the
+[evidence record](../verification/PROJECT_TASK_FS_001_SCOPE_SOURCE_2026_11_10.json).
+
+Current acceptance permits direct Web edit/verify/self-Wake without a mandatory
+native Codex hop or central coordinator. Original frozen native tasks and
+unknown-outcome fences remain unchanged. The existing candidate lacks the new
+main fix; new artifact/review/promotion work and installed Web acceptance remain
+open. Installed Wake route compatibility and approved release authority are
+separate gates. No protected promotion or C1 completion is claimed.

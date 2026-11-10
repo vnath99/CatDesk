@@ -5470,3 +5470,22 @@ refusals. The relevant daemon set keeps its one-extra 65-row refusal and the
 raw same-image source has a 257-row fail-closed ceiling. A fresh separate
 T-0319 verdict is required; no recovery, tunnel, wake, Scheduler, or target
 action was performed.
+
+## 2026-11-10 — FS-001 source checkpoint
+
+FS-001 now has 26 passing task cases, including 14 new regressions, plus nine
+compatibility cases and passing root formatting/strict Clippy. The two existing
+installed-sandbox exclusions remain outside qualification. Preserve the five
+intended RED failures, the initial namespace fixture failure and the later blob
+setup failure; the final stdin-based fixture repair changed no production code.
+The source-only diff fixes cover alias-hidden untracked files, file-to-directory
+deletions and conflicted-index scope refusal. No live leak is inferred. Narrow
+independent review has zero scoped findings and is not whole-source authority.
+See `../verification/PROJECT_TASK_FS_001_SCOPE_SOURCE_2026_11_10.json`.
+
+The frozen candidate lacks these new main-backend changes. Prepare a qualified
+main artifact with genuine required review before guarded promotion. Retain all
+bindings, grants and unknown-outcome fences. Direct per-project Web work and
+self-Wake remain the goal; native Codex and a coordinator are optional. Installed
+Wake route compatibility and approved signing authority remain distinct gates;
+no new signer or installed acceptance was established.
