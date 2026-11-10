@@ -263,6 +263,116 @@ pub fn read_registered_delivery_receipt(
     )
 }
 
+/// Retain only closed, content-free receipt diagnostics after the bounded owner
+/// exits. This is an observation, never proof of a failed send or retry authority.
+pub fn receipt_failure_diagnosis(value: &serde_json::Value) -> Result<serde_json::Value> {
+    use serde_json::{Value, json};
+    const INVALID: &str = "WEB_WORK_RECEIPT_DIAGNOSIS_INVALID";
+    fn word(value: &Value, allowed: &[&str]) -> bool {
+        value.is_null() || value.as_str().is_some_and(|word| allowed.contains(&word))
+    }
+    if ![
+        "status",
+        "ownedTreeExited",
+        "failureReason",
+        "lastPhase",
+        "finalState",
+        "submissionObservationState",
+    ]
+    .iter()
+    .all(|key| value.get(key).is_some())
+        || !matches!(
+            value["status"].as_str(),
+            Some("BROWSER_READINESS_OBSERVED" | "BROWSER_OBSERVATION_INCOMPLETE")
+        )
+        || value["ownedTreeExited"] != true
+        || !word(
+            &value["failureReason"],
+            &[
+                "PROBE_PROCESS_TIMEOUT",
+                "PROBE_PIPE_FAILED",
+                "PROBE_FAILED",
+                "PROBE_OUTPUT_FAILED",
+                "PROBE_OUTPUT_TOO_LARGE",
+                "PROBE_OUTPUT_INVALID",
+            ],
+        )
+        || !word(
+            &value["lastPhase"],
+            &[
+                "IMPORT_BROWSER",
+                "BROWSER_START",
+                "CDP_NAVIGATION",
+                "OBSERVING",
+                "BROWSER_CLOSED",
+            ],
+        )
+        || !word(
+            &value["finalState"],
+            &[
+                "URL_UNAVAILABLE",
+                "URL_INVALID",
+                "CHROME_ERROR",
+                "LOGIN_VISIBLE",
+                "CAPTCHA_VISIBLE",
+                "HOME",
+                "TARGET_DRIFT",
+                "EXACT_DOCUMENT_LOADING",
+                "EXACT_EDITOR_AMBIGUOUS",
+                "EXACT_NO_EDITOR",
+                "EXACT_READY_BUSY",
+                "EXACT_DRAFT_PRESENT",
+                "EXACT_READY_RESPONSE_TIMEOUT",
+                "EXACT_READY_RESPONSE_LOAD_ERROR",
+                "EXACT_READY_IDLE",
+                "OBSERVATION_UNAVAILABLE",
+            ],
+        )
+        || !word(
+            &value["submissionObservationState"],
+            &["OBSERVED", "OBSERVATION_UNAVAILABLE", "TARGET_UNAVAILABLE"],
+        )
+    {
+        return Err(INVALID.into());
+    }
+    let mut fields = Vec::new();
+    for (key, prefix, validate) in [
+        (
+            "browserObservation",
+            "PROBE:SURFACE:",
+            crate::readiness_probe::surface_observation as fn(&str) -> Option<Value>,
+        ),
+        (
+            "tabObservation",
+            "PROBE:TAB:",
+            crate::readiness_probe::tab_observation as fn(&str) -> Option<Value>,
+        ),
+        (
+            "submissionObservation",
+            "PROBE:SUBMISSION:",
+            crate::readiness_probe::submission_observation as fn(&str) -> Option<Value>,
+        ),
+    ] {
+        let item = value.get(key).ok_or(INVALID)?;
+        let parsed = if item.is_null() {
+            Value::Null
+        } else {
+            validate(&format!("{prefix}{item}"))
+                .filter(|parsed| parsed == item)
+                .ok_or(INVALID)?
+        };
+        fields.push((key, parsed));
+    }
+    let mut diagnosis = json!({"schemaVersion":1, "status":value["status"],
+        "failureReason":value["failureReason"], "lastPhase":value["lastPhase"], "finalState":value["finalState"],
+        "submissionObservationState":value["submissionObservationState"], "ownedTreeExited":true,
+        "submissionOutcome":"UNKNOWN", "retryAuthorized":false});
+    for (key, item) in fields {
+        diagnosis[key] = item;
+    }
+    Ok(diagnosis)
+}
+
 /// Only the existing reobservation owner calls this while retaining host ownership.
 pub(super) fn read_sent_response_observation(
     store: &Store,
@@ -496,7 +606,7 @@ fn inspect_readiness(
         .arg("--seconds")
         // Only the retained response owner waits for an already-delivered
         // assistant turn. Keep the same 90-second native containment ceiling.
-        .arg(if mode == Mode::ResponseOwnerHeld {
+        .arg(if mode == Mode::ResponseOwnerHeld || receipt_only {
             "60"
         } else {
             "20"
@@ -782,6 +892,74 @@ fn inspect_readiness(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn receipt_diagnosis_fixture() -> serde_json::Value {
+        serde_json::json!({"status":"BROWSER_OBSERVATION_INCOMPLETE", "ownedTreeExited":true,
+            "failureReason":"PROBE_PROCESS_TIMEOUT", "lastPhase":"OBSERVING", "finalState":null,
+            "submissionObservationState":null, "browserObservation":null, "tabObservation":null,
+            "submissionObservation":null})
+    }
+
+    #[test]
+    fn receipt_failure_diagnosis_preserves_fixed_timeout_without_private_rows_or_authority() {
+        let mut observation = receipt_diagnosis_fixture();
+        observation["observations"] =
+            serde_json::json!(["PRIVATE_DRAFT", "https://private.invalid"]);
+        observation["body"] = serde_json::json!("PRIVATE_CONTEXT");
+        let diagnosis = receipt_failure_diagnosis(&observation).unwrap();
+        assert_eq!(diagnosis["failureReason"], "PROBE_PROCESS_TIMEOUT");
+        assert_eq!(diagnosis["submissionOutcome"], "UNKNOWN");
+        assert_eq!(diagnosis["retryAuthorized"], false);
+        assert!(!diagnosis.to_string().contains("PRIVATE"));
+        assert!(diagnosis.get("observations").is_none());
+        assert_eq!(receipt_failure_diagnosis(&diagnosis).unwrap(), diagnosis);
+    }
+
+    #[test]
+    fn receipt_failure_diagnosis_rejects_unknown_codes_missing_fields_and_unverified_cleanup() {
+        for (key, bad) in [
+            ("status", serde_json::json!("HEALTHY")),
+            ("failureReason", serde_json::json!("PRIVATE_EXCEPTION")),
+            ("lastPhase", serde_json::json!("ARBITRARY_PHASE")),
+            ("finalState", serde_json::json!("ARBITRARY_BODY")),
+            ("submissionObservationState", serde_json::json!("SENT")),
+            ("ownedTreeExited", serde_json::json!(false)),
+            (
+                "browserObservation",
+                serde_json::json!({"body":"PRIVATE_CONTEXT"}),
+            ),
+            (
+                "tabObservation",
+                serde_json::json!({"url":"https://private.invalid"}),
+            ),
+            (
+                "submissionObservation",
+                serde_json::json!({"draft":"PRIVATE_DRAFT"}),
+            ),
+        ] {
+            let mut observation = receipt_diagnosis_fixture();
+            observation[key] = bad;
+            assert_eq!(
+                receipt_failure_diagnosis(&observation).unwrap_err(),
+                "WEB_WORK_RECEIPT_DIAGNOSIS_INVALID",
+                "{key}"
+            );
+        }
+        for key in [
+            "failureReason",
+            "lastPhase",
+            "finalState",
+            "submissionObservationState",
+            "browserObservation",
+        ] {
+            let mut observation = receipt_diagnosis_fixture();
+            observation.as_object_mut().unwrap().remove(key);
+            assert!(
+                receipt_failure_diagnosis(&observation).is_err(),
+                "missing {key}"
+            );
+        }
+    }
 
     #[test]
     fn sent_continuation_inspection_requires_exact_semantic_receipt_without_retry_or_mutation() {

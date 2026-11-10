@@ -2685,6 +2685,85 @@ async fn run_native_daemon(backend_only: bool) -> Result<(), Box<dyn std::error:
 
 // ── Main ────────────────────────────────────────────────────
 
+// This one additive refusal envelope keeps WorkReconcile's existing exit2.
+// No result field can select an arbitrary process exit code.
+fn operator_web_receipt_refusal(result: &serde_json::Value) -> bool {
+    use catdesk_wake::protocol::{digest, valid_id};
+    const FIELDS: &[&str] = &[
+        "action",
+        "status",
+        "errorCode",
+        "projectId",
+        "requestId",
+        "eventId",
+        "targetGeneration",
+        "targetDigest",
+        "messageSha256",
+        "sourceDeliverySha256",
+        "taskAttribution",
+        "deliveryPhase",
+        "receiptCommitState",
+        "submissionOutcome",
+        "browserReadOnly",
+        "sendAttempted",
+        "receiptCreated",
+        "stateChanged",
+        "retryAuthorized",
+        "nativeGrantCreated",
+        "hostStarted",
+        "workResolved",
+        "diagnosis",
+    ];
+    let Some(object) = result.as_object() else {
+        return false;
+    };
+    let hash = |value: &serde_json::Value| {
+        value.as_str().is_some_and(|s| {
+            s.len() == 64
+                && s.bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        })
+    };
+    let project = result["projectId"].as_str().unwrap_or("");
+    let request = result["requestId"].as_str().unwrap_or("");
+    let task = &result["taskAttribution"];
+    object.len() == FIELDS.len()
+        && object.keys().all(|key| FIELDS.contains(&key.as_str()))
+        && result["action"] == "web_work_reconcile"
+        && result["status"] == "attention"
+        && result["errorCode"] == "WEB_WORK_RECEIPT_UNPROVEN"
+        && valid_id(project)
+        && valid_id(request)
+        && result["eventId"] == format!("web-work-{}", digest(&format!("{project}\0{request}")))
+        && result["targetGeneration"].as_u64().is_some_and(|n| n > 0)
+        && ["targetDigest", "messageSha256", "sourceDeliverySha256"]
+            .iter()
+            .all(|key| hash(&result[key]))
+        && (task.is_null()
+            || (task.as_object().is_some_and(|o| o.len() == 4)
+                && task["taskId"].as_str().is_some_and(valid_id)
+                && hash(&task["assignmentSha256"])
+                && hash(&task["scopeSha256"])
+                && task["executionVerified"] == false))
+        && result["deliveryPhase"] == "SUBMITTING"
+        && result["receiptCommitState"] == "UNPROVEN"
+        && result["submissionOutcome"] == "UNKNOWN"
+        && result["browserReadOnly"] == true
+        && [
+            "sendAttempted",
+            "receiptCreated",
+            "stateChanged",
+            "retryAuthorized",
+            "nativeGrantCreated",
+            "hostStarted",
+            "workResolved",
+        ]
+        .iter()
+        .all(|key| result[key] == false)
+        && catdesk_wake::runtime::receipt_failure_diagnosis(&result["diagnosis"])
+            .is_ok_and(|diagnosis| diagnosis == result["diagnosis"])
+}
+
 fn operator_web_error_code(error: &str) -> &str {
     const REFUSED: &str = "WEB_OPERATION_REFUSED";
     if matches!(
@@ -2724,6 +2803,18 @@ fn operator_web_error_code(error: &str) -> &str {
             | "SCOPED_REVIEW_RECEIPT_REQUIRED"
             | "SCOPED_REVIEW_REPLAY_REFUSED"
             | "SCOPED_REVIEW_TIMEOUT"
+            | "PROJECT_TASK_ASSIGNMENT_INVALID"
+            | "PROJECT_TASK_ASSIGNMENT_DIGEST_CHANGED"
+            | "PROJECT_TASK_CONTRACT_INVALID"
+            | "PROJECT_TASK_CONTRACT_CHANGED"
+            | "PROJECT_TASK_COMMAND_AUTHORITY_INVALID"
+            | "PROJECT_TASK_COMMAND_AUTHORITY_CHANGED"
+            | "PROJECT_TASK_COMMAND_PROFILE_NOT_ASSIGNED"
+            | "PROJECT_TASK_REQUIRES_SEPARATE_LINKED_WORKTREE"
+            | "PROJECT_TASK_WORKTREE_IDENTITY_MISMATCH"
+            | "PROJECT_TASK_WORKTREE_UNAVAILABLE"
+            | "PROJECT_COMMAND_PROFILE_INVALID"
+            | "PROJECT_COMMAND_DIRECT_EXECUTABLE_REQUIRED"
             | "READINESS_COMPLETED_RESPONSE_REQUIRED"
             | "READINESS_PLATFORM_UNSUPPORTED"
             | "READINESS_PROJECT_INVALID"
@@ -2871,7 +2962,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let workspace = std::env::current_dir()?;
             match operator_facade::execute_operator_action(action, &workspace).await {
                 Ok(result) => {
+                    let receipt_refused = operator_web && operator_web_receipt_refusal(&result);
                     println!("{result}");
+                    if receipt_refused {
+                        std::process::exit(2);
+                    }
                     return Ok(());
                 }
                 Err(error) => {
@@ -3853,6 +3948,92 @@ fn render_toast(f: &mut Frame, palette: theme::Palette, msg: &str, pos: (u16, u1
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn project_assignment_error_codes_keep_fixed_categories_without_private_details() {
+        for code in [
+            "PROJECT_TASK_ASSIGNMENT_INVALID",
+            "PROJECT_TASK_ASSIGNMENT_DIGEST_CHANGED",
+            "PROJECT_TASK_CONTRACT_INVALID",
+            "PROJECT_TASK_CONTRACT_CHANGED",
+            "PROJECT_TASK_COMMAND_AUTHORITY_INVALID",
+            "PROJECT_TASK_COMMAND_AUTHORITY_CHANGED",
+            "PROJECT_TASK_COMMAND_PROFILE_NOT_ASSIGNED",
+            "PROJECT_TASK_REQUIRES_SEPARATE_LINKED_WORKTREE",
+            "PROJECT_TASK_WORKTREE_IDENTITY_MISMATCH",
+            "PROJECT_TASK_WORKTREE_UNAVAILABLE",
+            "PROJECT_COMMAND_PROFILE_INVALID",
+            "PROJECT_COMMAND_DIRECT_EXECUTABLE_REQUIRED",
+        ] {
+            assert_eq!(super::operator_web_error_code(code), code);
+            assert_eq!(
+                super::operator_web_error_code(&format!(
+                    "{code}: PRIVATE_CONTEXT https://private.invalid"
+                )),
+                code
+            );
+        }
+        for untrusted in [
+            "PROJECT_TASK_PRIVATE_CONTEXT",
+            "PROJECT_COMMAND_PRIVATE_KEY",
+            "PROJECT_TASK_ASSIGNMENT_INVALID_PRIVATE",
+            "PROJECT_TASK_ASSIGNMENT_INVALID\nPRIVATE_CONTEXT",
+        ] {
+            assert_eq!(
+                super::operator_web_error_code(untrusted),
+                "WEB_OPERATION_REFUSED"
+            );
+        }
+    }
+
+    fn ordinary_receipt_refusal_fixture() -> serde_json::Value {
+        serde_json::json!({"action":"web_work_reconcile", "status":"attention", "errorCode":"WEB_WORK_RECEIPT_UNPROVEN",
+            "projectId":"alpha", "requestId":"request-a",
+            "eventId":format!("web-work-{}",catdesk_wake::protocol::digest("alpha\0request-a")),
+            "targetGeneration":1, "targetDigest":"a".repeat(64), "messageSha256":"b".repeat(64),
+            "sourceDeliverySha256":"c".repeat(64), "taskAttribution":null, "deliveryPhase":"SUBMITTING",
+            "receiptCommitState":"UNPROVEN", "submissionOutcome":"UNKNOWN", "browserReadOnly":true,
+            "sendAttempted":false, "receiptCreated":false, "stateChanged":false, "retryAuthorized":false,
+            "nativeGrantCreated":false, "hostStarted":false, "workResolved":false,
+            "diagnosis":{"schemaVersion":1,"status":"BROWSER_OBSERVATION_INCOMPLETE","failureReason":"PROBE_PROCESS_TIMEOUT",
+                "lastPhase":"OBSERVING","finalState":null,"submissionObservationState":null,"ownedTreeExited":true,
+                "submissionOutcome":"UNKNOWN","retryAuthorized":false,"browserObservation":null,"tabObservation":null,"submissionObservation":null}})
+    }
+
+    #[test]
+    fn ordinary_receipt_refusal_keeps_exit2_only_for_the_exact_closed_envelope() {
+        use serde_json::json;
+        let frame = ordinary_receipt_refusal_fixture();
+        assert!(super::operator_web_receipt_refusal(&frame));
+        for (key, bad) in [
+            ("action", json!("web_work_inspect")),
+            ("errorCode", json!("ARBITRARY_CODE")),
+            ("deliveryPhase", json!("SENT")),
+            ("receiptCreated", json!(true)),
+            ("retryAuthorized", json!(true)),
+            ("submissionOutcome", json!("FAILED_SEND")),
+            ("eventId", json!("foreign-event")),
+            ("targetGeneration", json!(0)),
+            ("sourceDeliverySha256", json!("invalid")),
+            ("taskAttribution", json!({"taskId":"unbound"})),
+        ] {
+            let mut changed = frame.clone();
+            changed[key] = bad;
+            assert!(!super::operator_web_receipt_refusal(&changed), "{key}");
+        }
+        let mut caller_exit = frame.clone();
+        caller_exit["exitCode"] = json!(0);
+        assert!(!super::operator_web_receipt_refusal(&caller_exit));
+        let mut private_body = frame.clone();
+        private_body["diagnosis"]["body"] = json!("PRIVATE_BODY");
+        assert!(!super::operator_web_receipt_refusal(&private_body));
+        assert!(!super::operator_web_receipt_refusal(
+            &json!({"status":"attention","errorCode":"WEB_WORK_RECEIPT_UNPROVEN"})
+        ));
+        assert!(!super::operator_web_receipt_refusal(
+            &json!({"action":"web_work_reconcile","phase":"SENT"})
+        ));
+    }
+
     #[test]
     fn native_mcp_auth_validates_explicit_values_without_downgrading() {
         assert_eq!(

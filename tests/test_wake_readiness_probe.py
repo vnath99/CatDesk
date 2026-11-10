@@ -412,6 +412,61 @@ class ReadinessProbeTests(unittest.TestCase):
         with contextlib.redirect_stdout(output):self.probe.report_persisted_receipt(sink,object(),delivery)
         self.assertNotIn("PRIVATE_",output.getvalue())
 
+    def test_receipt_report_forwards_existing_deadline_without_new_authority(self):
+        delivery=dict(messageDigest="a"*64,event=dict(eventId="web-work-"+"b"*64,message="PRIVATE_MESSAGE"),
+                      target=dict(generation=1,digest="c"*64))
+        sink=mock.Mock()
+        sink.reconcile_persisted_receipt.return_value=types.SimpleNamespace(record_id=delivery["event"]["eventId"],
+            target_sha256="c"*64,message_sha256="a"*64,browser_sent_at_unix=10)
+        cdp=object();output=io.StringIO()
+        with contextlib.redirect_stdout(output):self.probe.report_persisted_receipt(sink,cdp,delivery,deadline=42.5)
+        sink.reconcile_persisted_receipt.assert_called_once_with(cdp,"a"*64,"PRIVATE_MESSAGE",
+            delivery["event"]["eventId"],"c"*64,observation_deadline=42.5)
+        self.assertEqual([call[0] for call in sink.method_calls],["reconcile_persisted_receipt"])
+        self.assertNotIn("PRIVATE_",output.getvalue())
+
+    def test_receipt_probe_shares_startup_readiness_and_receipt_budget_without_reload(self):
+        target="https://chatgpt.com/c/fixture"
+        delivery=dict(messageDigest="a"*64,event=dict(eventId="web-work-"+"b"*64,message="PRIVATE_MESSAGE"),
+                      target=dict(generation=1,digest="c"*64))
+        for startup_seconds in (20.0,70.0):
+            clock=[0.0]
+            browser=mock.MagicMock()
+            def start(**_):
+                clock[0]+=startup_seconds
+                return mock.MagicMock(__enter__=mock.Mock(return_value=browser),__exit__=mock.Mock(return_value=False))
+            sink=mock.Mock()
+            sink.browser_surface_observation.return_value=dict(route="EXACT",document="COMPLETE",editor="READY",
+                composer="DRAFT_PRESENT",history="PRESENT",generation="IDLE",assistant="PRESENT",
+                exchange="UNATTRIBUTED",recovery="OBSERVATION_ONLY")
+            def receipt(*_,observation_deadline):
+                self.assertEqual(observation_deadline,60.0)
+                if clock[0]>=observation_deadline:raise RuntimeError("PRIVATE_EXPIRED_OBSERVATION")
+                return types.SimpleNamespace(record_id=delivery["event"]["eventId"],target_sha256="c"*64,
+                    message_sha256="a"*64,browser_sent_at_unix=10)
+            sink.reconcile_persisted_receipt.side_effect=receipt
+            with tempfile.TemporaryDirectory() as profile:
+                args=["probe","--conversation-url",target,"--profile",profile,"--seconds","60","--read-only",
+                    "--primitives","fixture.py","--primitives-sha256","d"*64,"--receipt-only",
+                    "--delivery-file","fixture.json","--delivery-sha256","e"*64]
+                output=io.StringIO()
+                with mock.patch.dict(sys.modules,{"seleniumbase":types.SimpleNamespace(SB=start)}), mock.patch.object(sys,"argv",args), \
+                        mock.patch.object(self.probe,"load_observation_sink",return_value=sink), \
+                        mock.patch.object(self.probe,"load_delivery_message",return_value=delivery), \
+                        mock.patch.object(self.probe,"select_registered_target_tab",return_value="TARGET_TAB_EXACT"), \
+                        mock.patch.object(self.probe.time,"monotonic",side_effect=lambda:clock[0]), \
+                        mock.patch.object(self.probe.time,"sleep") as sleep, contextlib.redirect_stdout(output):
+                    self.assertEqual(self.probe.main(),0)
+                sleep.assert_not_called()
+            self.assertEqual(clock[0],startup_seconds)
+            sink.reconcile_persisted_receipt.assert_called_once()
+            browser.cdp.get.assert_not_called()
+            browser.cdp.click.assert_not_called()
+            browser.cdp.press_keys.assert_not_called()
+            browser.cdp.send_keys.assert_not_called()
+            self.assertNotIn("PRIVATE_",output.getvalue())
+            self.assertIn("PROBE:RECEIPT:" if startup_seconds<60 else "PROBE:RECEIPT_STATE:UNPROVEN",output.getvalue())
+
     def test_event_probe_observes_only_exact_page_and_never_retries_home(self):
         target = "https://chatgpt.com/c/fixture"
         for route in ("EXACT", "HOME"):

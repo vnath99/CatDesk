@@ -196,12 +196,13 @@ def report_sent_response(sink, cdp, delivery, report=print, sleep=time.sleep, *,
         return False
 
 
-def report_persisted_receipt(sink, cdp, delivery, report=print):
+def report_persisted_receipt(sink, cdp, delivery, report=print, *, deadline=None):
     """Use the existing two-sample persisted USER reader; never retry a response."""
     event, target = delivery["event"], delivery["target"]
     try:
         receipt = sink.reconcile_persisted_receipt(
-            cdp, delivery["messageDigest"], event["message"], event["eventId"], target["digest"]
+            cdp, delivery["messageDigest"], event["message"], event["eventId"], target["digest"],
+            **({"observation_deadline": deadline} if deadline is not None else {}),
         )
         value = dict(schemaVersion=1, eventId=receipt.record_id,
                      targetGeneration=target["generation"], targetDigest=receipt.target_sha256,
@@ -574,6 +575,9 @@ def main():
             return surface_state(value), value
         except Exception:
             return "OBSERVATION_UNAVAILABLE", None
+    # Receipt readiness and persistence proof share one budget, including browser
+    # startup. Other observation modes retain their existing timing behavior.
+    receipt_deadline = time.monotonic() + args.seconds if receipt_delivery is not None else None
     print("PROBE:PHASE:IMPORT_BROWSER", flush=True)
     from seleniumbase import SB
     def report_tab(facts):
@@ -588,7 +592,7 @@ def main():
             print("PROBE:" + select_registered_target_tab(cdp, url, report_tab), flush=True)
         last = None
         last_surface = None
-        deadline = time.monotonic() + args.seconds
+        deadline = receipt_deadline if receipt_deadline is not None else time.monotonic() + args.seconds
         recover_after = time.monotonic() + min(5.0, args.seconds / 2)
         recovery_attempted = False
         # A returned tab can still be loading when the initial independent
@@ -612,7 +616,7 @@ def main():
             if surface is not None and surface != last_surface:
                 print("PROBE:SURFACE:" + json.dumps(surface, separators=(",", ":"), sort_keys=True), flush=True)
                 last_surface = surface
-            if (args.await_existing_response and response_delivery is not None and surface is not None
+            if ((receipt_delivery is not None or (args.await_existing_response and response_delivery is not None)) and surface is not None
                     and surface.get("route") == "EXACT" and surface.get("document") == "COMPLETE"):
                 # Do not consume the response budget merely sampling a ready
                 # surface. The same deadline covers both readiness and waiting.
@@ -633,7 +637,7 @@ def main():
                 print("PROBE:SUBMISSION_STATE:TARGET_UNAVAILABLE", flush=True)
         if receipt_delivery is not None:
             if surface is not None and surface.get("route") == "EXACT" and surface.get("document") == "COMPLETE":
-                report_persisted_receipt(sink, cdp, receipt_delivery)
+                report_persisted_receipt(sink, cdp, receipt_delivery, deadline=deadline)
             else:
                 print("PROBE:RECEIPT_STATE:UNPROVEN", flush=True)
         if response_delivery is not None:

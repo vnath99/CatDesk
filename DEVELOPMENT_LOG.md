@@ -3617,3 +3617,33 @@ not installed manual-Wake, project coding or unattended acceptance. Existing
 native tasks, project bindings and protected release authority are preserved.
 No operator authentication action is required by the latest observation.
 See `docs/verification/SCOPED_SUBMISSION_DEADLINE_2026_11_10.json`.
+
+## 2026-11-10 — retain ordinary receipt diagnostics within one observation budget
+
+Ordinary receipt reconciliation now retains a closed, content-free diagnosis
+when no persisted receipt is proven. Identity comes from the original ledger,
+target and unchanged delivery hash. The existing failure code and CLI exit 2
+remain; no-proof never enters receipt/timer CAS or authorizes a resend. Raw
+observation rows, drafts, URLs, private bodies and unknown exceptions are omitted.
+Twelve exact existing assignment/contract/command/worktree refusal categories
+also survive the CLI redactor; arbitrary PROJECT_ strings remain refused.
+
+The receipt-only probe now shares one shortening-only deadline across startup,
+readiness and proof, inside the unchanged 90-second native process limit. A late
+second sample cannot create a receipt. Other callers retain their existing
+default receipt window. Six final Rust tests, 106 final Python checks, strict
+workspace/all-target Clippy and formatting passed. A prior full bridge attempt
+retains its one failed new expectation and 129 passes; the expectation was
+corrected and affected cases passed. That earlier run exited naturally and no
+process was stopped. Independent review found and resolved the final-sample
+boundary issue before final checks.
+
+A separate prospective project assignment was correctly rejected because its
+prepared artifact declarations were strings rather than the required objects.
+The request/worktree exist, but no assignment, execution grant or browser send
+followed. Actual unchanged canonical Rust contract types independently rejected
+the original and accepted a separately retained corrected revision. This was a
+preparation error, not an installed application regression. No task is recreated
+and the original failed evidence remains. The earlier unknown invitation stays
+fenced; there is no new installed, Web-edit or self-Wake acceptance yet.
+See `docs/verification/ORDINARY_RECEIPT_DIAGNOSTICS_2026_11_10.json`.

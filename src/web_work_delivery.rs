@@ -41,6 +41,63 @@ enum Action<'a> {
     Response,
 }
 
+fn receipt_unproven_frame(
+    project: &str,
+    record: &crate::web_work_state::WorkRecord,
+    target: &Target,
+    prior: &catdesk_wake::store::Delivery,
+    source_delivery_sha256: &str,
+    observation: &Value,
+) -> Result<Value, String> {
+    const INVALID: &str = "WEB_WORK_RECEIPT_DIAGNOSIS_INVALID";
+    validate_selection(project, record, target, &prior.event)?;
+    if prior.phase != catdesk_wake::store::Phase::Submitting
+        || prior.receipt.is_some()
+        || prior.target != *target
+        || prior.message_digest != record.message_sha256
+        || source_delivery_sha256.len() != 64
+        || !source_delivery_sha256
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        || observation["action"] != "web_work_inspect"
+        || observation["projectId"] != project
+        || observation["eventId"] != record.event_id
+        || observation["targetGeneration"] != target.generation
+        || observation["targetDigest"] != target.digest
+        || observation["sourceDeliverySha256"] != source_delivery_sha256
+        || observation.get("persistedReceipt") != Some(&Value::Null)
+        || observation["receiptProofRequested"] != true
+        || observation["browserReadOnly"] != true
+        || observation["sendAttempted"] != false
+        || observation["receiptCreated"] != false
+        || observation["stateChanged"] != false
+        || observation["retryAuthorized"] != false
+        || observation["workResolved"] != false
+        || observation["hostStarted"] != false
+        || observation["schedulerStarted"] != false
+        || observation["reviewAuthorityGranted"] != false
+    {
+        return Err(INVALID.into());
+    }
+    let diagnosis = runtime::receipt_failure_diagnosis(observation)?;
+    // Task identity comes from the authoritative ledger, never the browser row.
+    let task = record.task_assignment.as_ref().map(|assignment| {
+        json!({
+            "taskId":assignment.task_id, "assignmentSha256":assignment.assignment_sha256,
+            "scopeSha256":assignment.scope_sha256, "executionVerified":false,
+        })
+    });
+    Ok(json!({"action":"web_work_reconcile", "status":"attention",
+        "errorCode":"WEB_WORK_RECEIPT_UNPROVEN", "projectId":project, "requestId":record.request_id,
+        "eventId":record.event_id, "targetGeneration":target.generation, "targetDigest":target.digest,
+        "messageSha256":record.message_sha256, "sourceDeliverySha256":source_delivery_sha256,
+        "taskAttribution":task, "deliveryPhase":"SUBMITTING", "receiptCommitState":"UNPROVEN",
+        "submissionOutcome":"UNKNOWN", "browserReadOnly":true, "sendAttempted":false,
+        "receiptCreated":false, "stateChanged":false, "retryAuthorized":false,
+        "nativeGrantCreated":false, "hostStarted":false, "workResolved":false,
+        "diagnosis":diagnosis}))
+}
+
 pub(crate) fn deliver(workspace: &Path, project: &str, request_id: &str) -> Result<Value, String> {
     selected_work(workspace, project, request_id, Action::Deliver)
 }
@@ -181,10 +238,30 @@ fn selected_work(
         let prior = prior.as_ref().ok_or("WEB_WORK_DELIVERY_MISSING")?;
         let observation =
             runtime::read_registered_delivery_receipt(&wake, project, &target, prior, &guard)?;
-        let receipt = observation
-            .get("persistedReceipt")
-            .filter(|v| !v.is_null())
-            .ok_or("WEB_WORK_RECEIPT_UNPROVEN")?;
+        let receipt = observation.get("persistedReceipt").filter(|v| !v.is_null());
+        let Some(receipt) = receipt else {
+            // Preserve the existing refusal and unknown-submission boundary,
+            // while retaining this owner's bounded content-free observations.
+            // This branch has no receipt/timer CAS or other state mutation.
+            guard()?;
+            if wake.delivery(&record.event_id)?.as_ref() != Some(prior) {
+                return Err("WEB_WORK_DELIVERY_SELECTION_CHANGED".into());
+            }
+            let bytes = std::fs::read_to_string(
+                wake.root()
+                    .join("deliveries")
+                    .join(format!("{}.json", record.event_id)),
+            )
+            .map_err(|_| "WEB_WORK_RECEIPT_DIAGNOSIS_INVALID")?;
+            return receipt_unproven_frame(
+                project,
+                &record,
+                &target,
+                prior,
+                &protocol::digest(&bytes),
+                &observation,
+            );
+        };
         let receipt: catdesk_wake::store::Receipt =
             serde_json::from_value(receipt.clone()).map_err(|_| "WEB_WORK_RECEIPT_UNPROVEN")?;
         // The browser has exited. Only this short local commit holds shared
@@ -295,6 +372,144 @@ fn retry_selected(
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
+
+    fn unproven_fixture() -> (
+        crate::web_work_state::WorkRecord,
+        catdesk_wake::store::Delivery,
+        Value,
+    ) {
+        let target = Target::new(1, "https://chatgpt.com/c/fixture-alpha".into()).unwrap();
+        let event = Event {
+            schema_version: 1,
+            event_id: format!("web-work-{}", protocol::digest("alpha\0request-a")),
+            project_id: "alpha".into(),
+            event_type: "engineering_attention".into(),
+            created_utc: 100,
+            message: "Review source".into(),
+            target_generation: 1,
+            audit_references: vec![],
+        };
+        let record = crate::web_work_state::WorkRecord {
+            request_id: "request-a".into(),
+            event_id: event.event_id.clone(),
+            message_sha256: protocol::digest(&event.message),
+            target: target.clone(),
+            phase: "OPEN".into(),
+            outcome: None,
+            summary_sha256: None,
+            reported_status: None,
+            task_assignment: Some(crate::web_work_state::WorkTaskAssignment {
+                task_id: "task-a".into(),
+                assignment_sha256: "c".repeat(64),
+                scope_sha256: "d".repeat(64),
+            }),
+        };
+        let prior = catdesk_wake::store::Delivery {
+            schema_version: 1,
+            event,
+            target: target.clone(),
+            phase: catdesk_wake::store::Phase::Submitting,
+            owner: "fixture-owner".into(),
+            updated_utc: 100,
+            message_digest: record.message_sha256.clone(),
+            receipt: None,
+            reason: None,
+        };
+        let observation = json!({"action":"web_work_inspect", "projectId":"alpha", "eventId":record.event_id,
+            "targetGeneration":1, "targetDigest":target.digest, "sourceDeliverySha256":"e".repeat(64),
+            "persistedReceipt":null, "receiptProofRequested":true, "browserReadOnly":true,
+            "sendAttempted":false, "receiptCreated":false, "stateChanged":false, "retryAuthorized":false,
+            "workResolved":false, "hostStarted":false, "schedulerStarted":false, "reviewAuthorityGranted":false,
+            "status":"BROWSER_OBSERVATION_INCOMPLETE", "ownedTreeExited":true, "failureReason":"PROBE_PROCESS_TIMEOUT",
+            "lastPhase":"OBSERVING", "finalState":null, "submissionObservationState":null,
+            "browserObservation":null, "tabObservation":null, "submissionObservation":null});
+        (record, prior, observation)
+    }
+
+    #[test]
+    fn ordinary_receipt_refusal_retains_attribution_without_receipt_cas_or_private_content() {
+        let (record, prior, mut observation) = unproven_fixture();
+        let before_record = record.clone();
+        let before_delivery = prior.clone();
+        observation["observations"] = json!(["PRIVATE_DRAFT", "https://private.invalid"]);
+        observation["taskAttribution"] = json!({"taskId":"FOREIGN_TASK"});
+        let frame = receipt_unproven_frame(
+            "alpha",
+            &record,
+            &record.target,
+            &prior,
+            &"e".repeat(64),
+            &observation,
+        )
+        .unwrap();
+        assert_eq!(frame["errorCode"], "WEB_WORK_RECEIPT_UNPROVEN");
+        assert_eq!(frame["taskAttribution"]["taskId"], "task-a");
+        assert_eq!(frame["taskAttribution"]["assignmentSha256"], "c".repeat(64));
+        for key in [
+            "receiptCreated",
+            "stateChanged",
+            "sendAttempted",
+            "retryAuthorized",
+            "nativeGrantCreated",
+            "workResolved",
+        ] {
+            assert_eq!(frame[key], false, "{key}");
+        }
+        assert_eq!(frame["submissionOutcome"], "UNKNOWN");
+        assert!(!frame.to_string().contains("PRIVATE"));
+        assert!(!frame.to_string().contains("FOREIGN_TASK"));
+        assert!(frame.get("receipt").is_none());
+        // The builder has no Store, browser or commit callback and cannot mutate either authority.
+        assert_eq!(record, before_record);
+        assert_eq!(prior, before_delivery);
+    }
+
+    #[test]
+    fn ordinary_receipt_refusal_rejects_changed_identity_or_non_readonly_observation() {
+        for (key, bad) in [
+            ("projectId", json!("beta")),
+            ("eventId", json!("foreign-event")),
+            ("targetGeneration", json!(2)),
+            ("targetDigest", json!("f".repeat(64))),
+            ("sourceDeliverySha256", json!("f".repeat(64))),
+            ("receiptProofRequested", json!(false)),
+            ("persistedReceipt", json!({"unverified":true})),
+            ("sendAttempted", json!(true)),
+            ("stateChanged", json!(true)),
+            ("receiptCreated", json!(true)),
+            ("retryAuthorized", json!(true)),
+            ("browserObservation", json!({"body":"PRIVATE_BODY"})),
+            ("failureReason", json!("UNKNOWN_PRIVATE_EXCEPTION")),
+        ] {
+            let (record, prior, mut observation) = unproven_fixture();
+            observation[key] = bad;
+            assert!(
+                receipt_unproven_frame(
+                    "alpha",
+                    &record,
+                    &record.target,
+                    &prior,
+                    &"e".repeat(64),
+                    &observation
+                )
+                .is_err(),
+                "{key}"
+            );
+        }
+        let (record, mut prior, observation) = unproven_fixture();
+        prior.phase = catdesk_wake::store::Phase::Attention;
+        assert!(
+            receipt_unproven_frame(
+                "alpha",
+                &record,
+                &record.target,
+                &prior,
+                &"e".repeat(64),
+                &observation
+            )
+            .is_err()
+        );
+    }
     #[test]
     fn central_metadata_recovery_preserves_work_contract_and_refuses_foreign_or_closed_requests() {
         use sha2::{Digest, Sha256};

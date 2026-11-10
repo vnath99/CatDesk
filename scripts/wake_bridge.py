@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import threading
@@ -3238,6 +3239,7 @@ class CdpSink:
         monotonic=time.monotonic,
         sleeper=time.sleep,
         wall_time=time.time,
+        observation_deadline: float | None = None,
     ) -> DeliveryReceipt:
         """Prove an already-SUBMITTING event without typing or submitting again.
 
@@ -3248,6 +3250,15 @@ class CdpSink:
         separated observations on the exact stored conversation.
         """
         deadline = monotonic() + POST_SUBMIT_RECEIPT_WINDOW_SECONDS
+        if observation_deadline is not None:
+            if type(observation_deadline) not in (int, float) or not math.isfinite(observation_deadline):
+                raise ValueError("invalid receipt observation deadline")
+            # A bounded owner can shorten this observation; it can never renew
+            # its original budget or authorize another USER submission.
+            deadline = min(deadline, observation_deadline)
+        def pause():
+            sleeper(min(.25, max(0.0, deadline - monotonic())))
+
         stable_observations = 0
         first_stable_at = None
         last_stage = "SUBMIT_RECEIPT_UNPROVEN"
@@ -3260,19 +3271,25 @@ class CdpSink:
                 raise PostSubmitUnknown(bounded_submit_target_drift_reason(current_url, self.url))
             try:
                 if self.post_submit_visible_any(cdp, NETWORK):
-                    sleeper(.25)
+                    pause()
                     continue
             except Attention:
-                sleeper(.25)
+                pause()
                 continue
             try:
                 current_count, turns_after = self.trusted_turn_anchor_state(cdp, message)
             except Attention:
-                sleeper(.25)
+                pause()
                 continue
+            if monotonic() >= deadline:
+                last_stage = "SUBMIT_RECEIPT_UNPROVEN"
+                break
             last_stage = self.turn_anchor_receipt_stage(0, current_count, turns_after)
             if last_stage == "RECEIPT_OK":
                 now = monotonic()
+                if now >= deadline:
+                    last_stage = "SUBMIT_RECEIPT_UNPROVEN"
+                    break
                 if stable_observations == 0:
                     stable_observations, first_stable_at = 1, now
                 elif first_stable_at is not None and now > first_stable_at:
@@ -3288,7 +3305,7 @@ class CdpSink:
                 raise PostSubmitUnknown(last_stage)
             else:
                 stable_observations, first_stable_at = 0, None
-            sleeper(.25)
+            pause()
         raise PostSubmitUnknown(last_stage)
 
     @staticmethod

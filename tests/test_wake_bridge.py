@@ -2436,6 +2436,72 @@ class WakeBridgeTests(unittest.TestCase):
         self.assertEqual(9.0, receipt.browser_sent_at_unix)
         self.assertEqual([0.25], clock.sleeps)
 
+    def test_submitting_reconciliation_shared_deadline_only_shortens_and_never_submits(self):
+        class Cdp:
+            def get_current_url(self): return "https://chatgpt.com/c/review-one"
+        sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, .5)
+        for requested, expected_end in ((.6, .6), (600.0, 60.0)):
+            clock = [0.0]
+            sleeps = []
+            def sleep(value):
+                self.assertGreater(value, 0)
+                sleeps.append(value)
+                clock[0] += value
+            with patch.object(sink, "post_submit_visible_any", return_value=False), patch.object(
+                sink, "trusted_turn_anchor_state", return_value=(0, 0)
+            ), patch.object(sink, "smoke_path_submit") as submit:
+                with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "SUBMIT_CLEARED_NO_APPEND"):
+                    sink.reconcile_persisted_receipt(Cdp(), wake_bridge.digest("exact"), "exact",
+                        self.record_id, wake_bridge.digest(sink.url), monotonic=lambda:clock[0],
+                        sleeper=sleep, observation_deadline=requested)
+                submit.assert_not_called()
+            self.assertAlmostEqual(clock[0], expected_end)
+            self.assertLessEqual(max(sleeps), .25)
+
+    def test_submitting_reconciliation_rejects_expired_or_invalid_deadline_without_observation(self):
+        sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, .5)
+        cdp = types.SimpleNamespace(get_current_url=lambda:self.fail("expired deadline queried the page"))
+        for deadline in (-1.0, 0.0):
+            with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "SUBMIT_RECEIPT_UNPROVEN"):
+                sink.reconcile_persisted_receipt(cdp, wake_bridge.digest("exact"), "exact", self.record_id,
+                    wake_bridge.digest(sink.url), monotonic=lambda:0.0, observation_deadline=deadline)
+        for deadline in (float("nan"), float("inf"), True, "PRIVATE_DEADLINE"):
+            with self.assertRaises(ValueError):
+                sink.reconcile_persisted_receipt(cdp, wake_bridge.digest("exact"), "exact", self.record_id,
+                    wake_bridge.digest(sink.url), monotonic=lambda:0.0, observation_deadline=deadline)
+
+    def test_submitting_reconciliation_does_not_mint_a_receipt_after_shared_deadline(self):
+        sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, .5)
+        cdp = types.SimpleNamespace(get_current_url=lambda:sink.url)
+        clock = [0.0]
+        calls = [0]
+        def anchor(*_):
+            calls[0] += 1
+            if calls[0] == 2: clock[0] = 1.0
+            return (1, 1)
+        def sleep(value): clock[0] += value
+        with patch.object(sink, "post_submit_visible_any", return_value=False), patch.object(
+            sink, "trusted_turn_anchor_state", side_effect=anchor
+        ):
+            with self.assertRaises(wake_bridge.PostSubmitUnknown):
+                sink.reconcile_persisted_receipt(cdp, wake_bridge.digest("exact"), "exact", self.record_id,
+                    wake_bridge.digest(sink.url), monotonic=lambda:clock[0], sleeper=sleep,
+                    wall_time=lambda:self.fail("late proof minted a receipt"), observation_deadline=.5)
+
+    def test_submitting_reconciliation_rechecks_deadline_at_final_stable_sample(self):
+        sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, .5)
+        cdp = types.SimpleNamespace(get_current_url=lambda:sink.url)
+        # The second DOM query finishes just inside the limit; the subsequent
+        # sample timestamp reaches it. That sample must not mint a receipt.
+        times = iter([0.0, 0.0, .1, .1, .1, .35, .49, .5])
+        with patch.object(sink, "post_submit_visible_any", return_value=False), patch.object(
+            sink, "trusted_turn_anchor_state", return_value=(1, 1)
+        ):
+            with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "SUBMIT_RECEIPT_UNPROVEN"):
+                sink.reconcile_persisted_receipt(cdp, wake_bridge.digest("exact"), "exact", self.record_id,
+                    wake_bridge.digest(sink.url), monotonic=lambda:next(times), sleeper=lambda _:None,
+                    wall_time=lambda:self.fail("boundary sample minted a receipt"), observation_deadline=.5)
+
     def test_submitting_reconciliation_rejects_duplicate_or_target_drift(self):
         class Cdp:
             def __init__(self, url="https://chatgpt.com/c/review-one"): self.url = url
