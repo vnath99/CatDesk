@@ -423,6 +423,8 @@ pub struct ReviewedInstallHandoff {
     pub directory: String,
     pub version: String,
     pub prior_desired: String,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub operator_stop_requested: bool,
     pub already_current: bool,
     pub final_host: String,
     pub final_pid: u32,
@@ -453,6 +455,8 @@ fn reviewed_install_lease(store: &Store) -> Result<ReviewedInstallLease> {
     let file = options
         .open(path)
         .map_err(|_| "HOST_INSTALL_ALREADY_RUNNING".to_string())?;
+    file.try_lock()
+        .map_err(|_| "HOST_INSTALL_ALREADY_RUNNING".to_string())?;
     Ok(ReviewedInstallLease { _file: file })
 }
 
@@ -462,24 +466,42 @@ struct ReviewedInstallTransaction {
     schema_version: u32,
     candidate_directory: String,
     prior_desired: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    operator_stop_requested: bool,
 }
 
 fn reviewed_install_transaction_path(store: &Store) -> PathBuf {
     store.root().join("reviewed-install-handoff.json")
 }
 
+fn read_reviewed_install_handoff(store: &Store) -> Result<ReviewedInstallTransaction> {
+    let transaction: ReviewedInstallTransaction =
+        read(&reviewed_install_transaction_path(store))
+            .map_err(|_| "HOST_INSTALL_HANDOFF_CONFLICT".to_string())?;
+    if transaction.schema_version != 1
+        || !valid_install_component(&transaction.candidate_directory)
+        || transaction.candidate_directory.starts_with(".staging-")
+        || !matches!(
+            transaction.prior_desired.as_str(),
+            "RUNNING" | "PAUSED" | "STOPPED"
+        )
+    {
+        return Err("HOST_INSTALL_HANDOFF_CONFLICT".into());
+    }
+    Ok(transaction)
+}
+
+fn require_no_reviewed_install_handoff(store: &Store) -> Result<()> {
+    if reviewed_install_handoff_active(store)? {
+        return Err("HOST_INSTALL_HANDOFF_CONFLICT".into());
+    }
+    Ok(())
+}
+
 fn begin_or_resume_reviewed_install_handoff(store: &Store, candidate: &str) -> Result<String> {
     let path = reviewed_install_transaction_path(store);
     if path.exists() {
-        let transaction: ReviewedInstallTransaction = read(&path)?;
-        if transaction.schema_version != 1
-            || !matches!(
-                transaction.prior_desired.as_str(),
-                "RUNNING" | "PAUSED" | "STOPPED"
-            )
-        {
-            return Err("HOST_INSTALL_HANDOFF_CONFLICT".into());
-        }
+        let transaction = read_reviewed_install_handoff(store)?;
         if transaction.candidate_directory == candidate {
             return Ok(transaction.prior_desired);
         }
@@ -505,6 +527,7 @@ fn begin_or_resume_reviewed_install_handoff(store: &Store, candidate: &str) -> R
                 schema_version: 1,
                 candidate_directory: candidate.into(),
                 prior_desired: transaction.prior_desired.clone(),
+                operator_stop_requested: transaction.operator_stop_requested,
             },
         )?;
         return Ok(transaction.prior_desired);
@@ -516,6 +539,7 @@ fn begin_or_resume_reviewed_install_handoff(store: &Store, candidate: &str) -> R
             schema_version: 1,
             candidate_directory: candidate.into(),
             prior_desired: prior_desired.clone(),
+            operator_stop_requested: false,
         },
     )?;
     Ok(prior_desired)
@@ -523,7 +547,7 @@ fn begin_or_resume_reviewed_install_handoff(store: &Store, candidate: &str) -> R
 
 fn complete_reviewed_install_handoff(store: &Store, candidate: &str) -> Result<()> {
     let path = reviewed_install_transaction_path(store);
-    let transaction: ReviewedInstallTransaction = read(&path)?;
+    let transaction = read_reviewed_install_handoff(store)?;
     if transaction.schema_version != 1 || transaction.candidate_directory != candidate {
         return Err("HOST_INSTALL_HANDOFF_CONFLICT".into());
     }
@@ -541,6 +565,30 @@ pub fn control(store: &Store, desired: &str) -> Result<()> {
     if !matches!(desired, "RUNNING" | "PAUSED" | "STOPPED") {
         return Err("HOST_CONTROL_INVALID".into());
     }
+    let lease = reviewed_install_lease(store)?;
+    if reviewed_install_handoff_active(store)? {
+        if desired != "STOPPED" {
+            return Err("HOST_INSTALL_HANDOFF_CONFLICT".into());
+        }
+        let mut transaction = read_reviewed_install_handoff(store)?;
+        if !transaction.operator_stop_requested {
+            // Preserve intent even if the subsequent control write fails or
+            // this operator process exits before reaching it.
+            transaction.operator_stop_requested = true;
+            atomic(&reviewed_install_transaction_path(store), &transaction)?;
+        }
+    }
+    control_under_install_lease(store, desired, &lease)
+}
+
+fn control_under_install_lease(
+    store: &Store,
+    desired: &str,
+    _lease: &ReviewedInstallLease,
+) -> Result<()> {
+    if !matches!(desired, "RUNNING" | "PAUSED" | "STOPPED") {
+        return Err("HOST_CONTROL_INVALID".into());
+    }
     atomic(
         &store.root().join("control.json"),
         &Control {
@@ -555,10 +603,12 @@ pub fn control(store: &Store, desired: &str) -> Result<()> {
 /// RUNNING merely because the Binagotchy console was opened. Explicit start
 /// and resume operations continue to call start_installed themselves.
 pub fn start_installed_only_if_desired_running(store: &Store) -> Result<bool> {
+    let lease = reviewed_install_lease(store)?;
+    require_no_reviewed_install_handoff(store)?;
     if desired(store)? != "RUNNING" {
         return Ok(false);
     }
-    start_installed(store)?;
+    start_installed_under_install_lease(store, &lease)?;
     Ok(true)
 }
 
@@ -889,8 +939,10 @@ mod browser_process_root_tests {
 }
 
 pub fn start(store: &Store) -> Result<()> {
+    let lease = reviewed_install_lease(store)?;
+    require_no_reviewed_install_handoff(store)?;
     let executable = std::env::current_exe().map_err(|_| "HOST_EXECUTABLE_UNAVAILABLE")?;
-    start_executable(store, &executable)
+    start_executable_under_install_lease(store, &executable, &lease)
 }
 
 fn install_id(pointer: &serde_json::Value) -> Result<&str> {
@@ -981,6 +1033,12 @@ pub fn verify_installed_browser_artifacts(
 }
 
 pub fn start_installed(store: &Store) -> Result<()> {
+    let lease = reviewed_install_lease(store)?;
+    require_no_reviewed_install_handoff(store)?;
+    start_installed_under_install_lease(store, &lease)
+}
+
+fn start_installed_under_install_lease(store: &Store, lease: &ReviewedInstallLease) -> Result<()> {
     if store.config()?.targets.is_empty() {
         return Ok(());
     }
@@ -993,7 +1051,39 @@ pub fn start_installed(store: &Store) -> Result<()> {
         return Err("HOST_EXECUTABLE_HASH_MISMATCH".into());
     }
     verify_installed_browser_artifacts(store.root(), &install_directory)?;
-    start_executable(store, &executable)
+    start_executable_under_install_lease(store, &executable, lease)
+}
+
+/// Keep STOP, singleton release, and selected-package startup in one existing
+/// install transaction. Host children never acquire this lease.
+pub fn restart_installed(store: &Store) -> Result<()> {
+    let lease = reviewed_install_lease(store)?;
+    require_no_reviewed_install_handoff(store)?;
+    control_under_install_lease(store, "STOPPED", &lease)
+        .map_err(|_| "HOST_RESTART_STOP_FAILED".to_string())?;
+    drop(stopped_host_lease(store).map_err(|error| {
+        if error == "HOST_STOPPED_OWNER_EXIT_TIMEOUT" {
+            error
+        } else {
+            "HOST_RESTART_STATUS_FAILED".into()
+        }
+    })?);
+    start_installed_under_install_lease(store, &lease)
+        .map_err(|_| "HOST_RESTART_START_FAILED".into())
+}
+
+fn stopped_host_lease(store: &Store) -> Result<HostLease> {
+    for _ in 0..100 {
+        if status(store)?.host == "STOPPED" {
+            match store.host_lock() {
+                Ok(lease) => return Ok(lease),
+                Err(error) if error == "HOST_ALREADY_RUNNING" => {}
+                Err(error) => return Err(error),
+            }
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    Err("HOST_STOPPED_OWNER_EXIT_TIMEOUT".into())
 }
 
 fn stopped_owner_requires_handoff_wait(host: &str) -> Result<bool> {
@@ -1004,7 +1094,11 @@ fn stopped_owner_requires_handoff_wait(host: &str) -> Result<bool> {
     }
 }
 
-fn start_executable(store: &Store, executable: &Path) -> Result<()> {
+fn start_executable_under_install_lease(
+    store: &Store,
+    executable: &Path,
+    lease: &ReviewedInstallLease,
+) -> Result<()> {
     if store.config()?.targets.is_empty() {
         return Ok(());
     }
@@ -1026,6 +1120,7 @@ fn start_executable(store: &Store, executable: &Path) -> Result<()> {
                 if stopped_owner_requires_handoff_wait(&existing.host)? {
                     thread::sleep(Duration::from_millis(100));
                 } else {
+                    control_under_install_lease(store, "RUNNING", lease)?;
                     return Ok(());
                 }
             }
@@ -1035,7 +1130,7 @@ fn start_executable(store: &Store, executable: &Path) -> Result<()> {
     if !startable {
         return Err("HOST_STOPPED_OWNER_EXIT_TIMEOUT".into());
     }
-    control(store, "RUNNING")?;
+    control_under_install_lease(store, "RUNNING", lease)?;
     let mut command = Command::new(executable);
     command
         .arg("--host")
@@ -1406,7 +1501,13 @@ pub fn activate_reviewed_install(
     require_activation_candidate_self(store, expected_hashes)?;
     activate_reviewed_install_checked(store, Some(expected_hashes), |handoff| {
         guard.recheck_path()?;
+        if handoff.operator_stop_requested
+            && (handoff.final_host != "STOPPED" || handoff.final_pid != 0)
+        {
+            return Err("WAKE_STORE_AUTHORITY_STOPPED_OWNER_UNPROVEN".into());
+        }
         if handoff.prior_desired == "RUNNING"
+            && !handoff.operator_stop_requested
             && (handoff.final_host != "RUNNING" || handoff.final_pid == 0)
         {
             return Err("WAKE_STORE_AUTHORITY_NEW_OWNER_UNAVAILABLE".into());
@@ -1445,7 +1546,7 @@ fn activate_reviewed_install_checked(
     expected_hashes: Option<&ReviewedInstallExpectedHashes>,
     verify_new_owner: impl FnOnce(&ReviewedInstallHandoff) -> Result<()>,
 ) -> Result<ReviewedInstallHandoff> {
-    let _lease = reviewed_install_lease(store)?;
+    let lease = reviewed_install_lease(store)?;
     let (id, directory, manifest) = reviewed_candidate(store)?;
     let host = directory.join("CatDeskWakeHost.exe");
     let gui = directory.join("CatDeskBinagotchy.exe");
@@ -1483,38 +1584,57 @@ fn activate_reviewed_install_checked(
     // retry resumes the same candidate and restores the original RUNNING/PAUSED
     // state instead of mistaking the transient STOPPED value for operator intent.
     let prior_desired = begin_or_resume_reviewed_install_handoff(store, &id)?;
+    let transaction = read_reviewed_install_handoff(store)?;
+    let operator_stop_requested = transaction.operator_stop_requested;
+    let effective_restore = if operator_stop_requested {
+        "STOPPED"
+    } else {
+        &prior_desired
+    };
+    let mut stopped_owner = None;
+    if !already_current || operator_stop_requested {
+        control_under_install_lease(store, "STOPPED", &lease)?;
+        // Retain the singleton through selection and readback. A direct old
+        // --host entry cannot pass its post-lease package check in this gap.
+        stopped_owner = Some(stopped_host_lease(store)?);
+    }
     if !already_current {
-        control(store, "STOPPED")?;
-        for _ in 0..100 {
-            if status(store)?.host == "STOPPED" && store.host_lock().is_ok() {
-                break;
-            }
-            thread::sleep(Duration::from_millis(100));
-        }
-        if store.host_lock().is_err() {
-            return Err("HOST_STOPPED_OWNER_EXIT_TIMEOUT".into());
-        }
         if let Some(previous) = previous.as_ref() {
             atomic(&store.root().join("previous.json"), previous)?;
         }
-        atomic(
-            &path,
-            &serde_json::json!({"schemaVersion":1,"directory":id,"hostSha256":host_hash,"binagotchySha256":gui_hash,"adapterSha256":adapter_hash,"wakeBridgeSha256":wake_bridge_hash}),
-        )?;
+        let selected = serde_json::json!({"schemaVersion":1,"directory":id,"hostSha256":host_hash,"binagotchySha256":gui_hash,"adapterSha256":adapter_hash,"wakeBridgeSha256":wake_bridge_hash});
+        atomic(&path, &selected)?;
+        if read::<serde_json::Value>(&path)? != selected {
+            return Err("HOST_INSTALL_POINTER_MISMATCH".into());
+        }
     }
-    if prior_desired == "RUNNING" {
-        start_installed(store)?;
+    if !operator_stop_requested {
+        drop(stopped_owner.take());
+    }
+    if effective_restore == "RUNNING" {
+        start_installed_under_install_lease(store, &lease)?;
     } else {
-        control(store, &prior_desired)?;
+        control_under_install_lease(store, effective_restore, &lease)?;
     }
-    let final_status = status(store)?;
+    let (final_host, final_pid) = if operator_stop_requested {
+        // The retained singleton proves no other host owns or can enter the
+        // runtime through verification and cleanup, including already-current.
+        if stopped_owner.is_none() {
+            return Err("WAKE_STORE_AUTHORITY_STOPPED_OWNER_UNPROVEN".into());
+        }
+        ("STOPPED".into(), 0)
+    } else {
+        let final_status = status(store)?;
+        (final_status.host, final_status.pid)
+    };
     let handoff = ReviewedInstallHandoff {
         directory: id,
         version: VERSION.into(),
         prior_desired,
+        operator_stop_requested,
         already_current,
-        final_host: final_status.host,
-        final_pid: final_status.pid,
+        final_host,
+        final_pid,
     };
     // The new owner must prove it inherited this exact store before the
     // recovery transaction is removed. A failed proof leaves the pointer and
@@ -6805,19 +6925,25 @@ fn reviewed_install_handoff_active(store: &Store) -> Result<bool> {
 }
 
 fn verify_current_host_authority(store: &Store) -> Result<()> {
+    let executable =
+        std::env::current_exe().map_err(|_| "HOST_EXECUTABLE_UNAVAILABLE".to_string())?;
+    verify_current_host_authority_at(store, &executable)
+}
+
+// Private path seam for the same selected-package check; production callers
+// always obtain their own executable from the OS above, never CLI input.
+fn verify_current_host_authority_at(store: &Store, executable: &Path) -> Result<()> {
     let pointer: serde_json::Value = read(&store.root().join("current.json"))?;
     let id = install_id(&pointer)?;
     let expected_directory = std::fs::canonicalize(store.root().join("versions").join(id))
         .map_err(|_| "HOST_INSTALL_UNAVAILABLE".to_string())?;
-    let executable =
-        std::env::current_exe().map_err(|_| "HOST_EXECUTABLE_UNAVAILABLE".to_string())?;
     let actual_directory =
         std::fs::canonicalize(executable.parent().ok_or("HOST_INSTALL_POINTER_INVALID")?)
             .map_err(|_| "HOST_INSTALL_UNAVAILABLE".to_string())?;
     if actual_directory != expected_directory {
         return Err("HOST_INSTALL_POINTER_MISMATCH".into());
     }
-    let host_hash = sha256_file(&executable, "HOST_EXECUTABLE_UNAVAILABLE")?;
+    let host_hash = sha256_file(executable, "HOST_EXECUTABLE_UNAVAILABLE")?;
     if !host_hash.eq_ignore_ascii_case(pointer_hash(&pointer, "hostSha256")?) {
         return Err("HOST_EXECUTABLE_HASH_MISMATCH".into());
     }
@@ -6854,6 +6980,9 @@ fn persist_host_runtime_failure(
 pub fn run(store: &Store) -> Result<()> {
     let root_pin = crate::install_authority::HostRootPin::acquire(store.root())?;
     let lease = store.host_lock()?;
+    // An old launcher may have captured an executable before waiting for this
+    // lease. Re-read selection after ownership, before any owner/status effect.
+    verify_current_host_authority(store)?;
     let _owner_proof =
         crate::install_authority::HostOwnerProofServer::start(store.root(), &root_pin, &lease)?;
     run_with_lease(store, &lease)
@@ -6862,6 +6991,7 @@ pub fn run(store: &Store) -> Result<()> {
 pub fn run_resilient(store: &Store) -> Result<()> {
     let root_pin = crate::install_authority::HostRootPin::acquire(store.root())?;
     let lease = store.host_lock()?;
+    verify_current_host_authority(store)?;
     let _owner_proof =
         crate::install_authority::HostOwnerProofServer::start(store.root(), &root_pin, &lease)?;
     let mut consecutive_failures = 0u32;
@@ -6977,6 +7107,10 @@ pub fn run_resilient(store: &Store) -> Result<()> {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "runtime_host_entry_tests.rs"]
+mod host_entry_tests;
 
 #[cfg(test)]
 mod host_runtime_recovery_tests {
@@ -8122,6 +8256,285 @@ mod reviewed_install_transaction_tests {
         );
         activate_reviewed_install_checked(&store, None, |_| Ok(())).expect("reviewed retry");
         assert!(!reviewed_install_transaction_path(&store).exists());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn lifecycle_install_lease_refuses_public_control_and_start_without_mutation() {
+        let (root, store) = fixture();
+        control(&store, "PAUSED").unwrap();
+        let before = std::fs::read(root.join("control.json")).unwrap();
+        let lease = reviewed_install_lease(&store).unwrap();
+        for state in ["RUNNING", "PAUSED", "STOPPED"] {
+            assert_eq!(
+                control(&store, state).unwrap_err(),
+                "HOST_INSTALL_ALREADY_RUNNING"
+            );
+        }
+        assert_eq!(start(&store).unwrap_err(), "HOST_INSTALL_ALREADY_RUNNING");
+        assert_eq!(
+            start_installed(&store).unwrap_err(),
+            "HOST_INSTALL_ALREADY_RUNNING"
+        );
+        assert_eq!(
+            restart_installed(&store).unwrap_err(),
+            "HOST_INSTALL_ALREADY_RUNNING"
+        );
+        assert_eq!(
+            start_installed_only_if_desired_running(&store).unwrap_err(),
+            "HOST_INSTALL_ALREADY_RUNNING"
+        );
+        assert_eq!(std::fs::read(root.join("control.json")).unwrap(), before);
+        assert!(!root.join("current.json").exists());
+        assert!(!reviewed_install_transaction_path(&store).exists());
+        drop(lease);
+        control(&store, "STOPPED").unwrap();
+        assert_eq!(desired(&store).unwrap(), "STOPPED");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn lifecycle_explicit_start_resumes_paused_owner_but_console_preserves_intent() {
+        let (root, store) = fixture();
+        store
+            .set_target("alpha", 0, "https://chatgpt.com/c/fixture")
+            .unwrap();
+        let (stage, id) = stage_candidate(&root, "paused-owner", "inert host", "gui", "adapter");
+        publish_reviewed_install_checked(&store, &stage, &id, None).unwrap();
+        control(&store, "PAUSED").unwrap();
+        activate_reviewed_install_checked(&store, None, |_| Ok(())).unwrap();
+        let mut live = status(&store).unwrap();
+        live.host = "PAUSED".into();
+        live.pid = std::process::id();
+        live.updated_utc = now();
+        atomic(&root.join("status.json"), &live).unwrap();
+        let owner = store.host_lock().unwrap();
+        let before = std::fs::read(root.join("control.json")).unwrap();
+        assert!(!start_installed_only_if_desired_running(&store).unwrap());
+        assert_eq!(std::fs::read(root.join("control.json")).unwrap(), before);
+        start_installed(&store).unwrap(); // Existing owner: never executes inert artifact.
+        assert_eq!(desired(&store).unwrap(), "RUNNING");
+        drop(owner);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn lifecycle_activation_reuses_install_lease_and_releases_host_before_owner_proof() {
+        let (root, store) = fixture();
+        let (stage, id) =
+            stage_candidate(&root, "install-composition", "inert host", "gui", "adapter");
+        publish_reviewed_install_checked(&store, &stage, &id, None).unwrap();
+        control(&store, "PAUSED").unwrap();
+        let failure = activate_reviewed_install_checked(&store, None, |_| {
+            assert_eq!(
+                control(&store, "STOPPED").unwrap_err(),
+                "HOST_INSTALL_ALREADY_RUNNING"
+            );
+            assert_eq!(
+                start_installed(&store).unwrap_err(),
+                "HOST_INSTALL_ALREADY_RUNNING"
+            );
+            assert!(
+                store.host_lock().is_ok(),
+                "selection lease must be dropped before new owner proof"
+            );
+            assert_eq!(desired(&store).unwrap(), "PAUSED");
+            assert_eq!(
+                install_id(&read::<serde_json::Value>(&root.join("current.json")).unwrap())
+                    .unwrap(),
+                id
+            );
+            Err("WAKE_STORE_AUTHORITY_NEW_OWNER_UNPROVEN".into())
+        })
+        .unwrap_err();
+        assert_eq!(failure, "WAKE_STORE_AUTHORITY_NEW_OWNER_UNPROVEN");
+        assert!(reviewed_install_transaction_path(&store).exists());
+        assert_eq!(desired(&store).unwrap(), "PAUSED");
+        activate_reviewed_install_checked(&store, None, |_| Ok(())).unwrap();
+        assert!(!reviewed_install_transaction_path(&store).exists());
+        assert!(store.host_lock().is_ok());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn reviewed_stop_intent_preserves_legacy_bytes_and_refuses_pending_public_start() {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase", deny_unknown_fields)]
+        struct LegacyTransaction {
+            schema_version: u32,
+            candidate_directory: String,
+            prior_desired: String,
+        }
+        let (root, store) = fixture();
+        control(&store, "RUNNING").unwrap();
+        begin_or_resume_reviewed_install_handoff(&store, "candidate-a").unwrap();
+        let path = reviewed_install_transaction_path(&store);
+        let legacy_bytes = std::fs::read(&path).unwrap();
+        let legacy: LegacyTransaction = serde_json::from_slice(&legacy_bytes).unwrap();
+        assert_eq!(legacy.schema_version, 1);
+        assert_eq!(legacy.candidate_directory, "candidate-a");
+        assert_eq!(legacy.prior_desired, "RUNNING");
+        assert!(
+            !read::<serde_json::Value>(&path)
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .contains_key("operatorStopRequested")
+        );
+        let control_before = std::fs::read(root.join("control.json")).unwrap();
+        for state in ["RUNNING", "PAUSED"] {
+            assert_eq!(
+                control(&store, state).unwrap_err(),
+                "HOST_INSTALL_HANDOFF_CONFLICT"
+            );
+        }
+        assert_eq!(start(&store).unwrap_err(), "HOST_INSTALL_HANDOFF_CONFLICT");
+        assert_eq!(
+            start_installed(&store).unwrap_err(),
+            "HOST_INSTALL_HANDOFF_CONFLICT"
+        );
+        assert_eq!(
+            restart_installed(&store).unwrap_err(),
+            "HOST_INSTALL_HANDOFF_CONFLICT"
+        );
+        assert_eq!(
+            start_installed_only_if_desired_running(&store).unwrap_err(),
+            "HOST_INSTALL_HANDOFF_CONFLICT"
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), legacy_bytes);
+        assert_eq!(
+            std::fs::read(root.join("control.json")).unwrap(),
+            control_before
+        );
+        control(&store, "STOPPED").unwrap();
+        let annotated = std::fs::read(&path).unwrap();
+        assert!(serde_json::from_slice::<LegacyTransaction>(&annotated).is_err());
+        let transaction = read_reviewed_install_handoff(&store).unwrap();
+        assert!(transaction.operator_stop_requested);
+        assert_eq!(transaction.prior_desired, "RUNNING");
+        assert_eq!(transaction.candidate_directory, "candidate-a");
+        control(&store, "STOPPED").unwrap();
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            annotated,
+            "STOP never clears or rewrites a retained intent"
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn reviewed_stop_intent_survives_control_failure_and_candidate_supersession() {
+        let (root, store) = fixture();
+        control(&store, "RUNNING").unwrap();
+        begin_or_resume_reviewed_install_handoff(&store, "candidate-a").unwrap();
+        let prior_control = std::fs::read(root.join("control.json")).unwrap();
+        std::fs::remove_file(root.join("control.json")).unwrap();
+        std::fs::create_dir(root.join("control.json")).unwrap();
+        assert!(control(&store, "STOPPED").is_err());
+        let transaction = read_reviewed_install_handoff(&store).unwrap();
+        assert!(
+            transaction.operator_stop_requested,
+            "intent precedes the failed control effect"
+        );
+        assert_eq!(transaction.prior_desired, "RUNNING");
+        std::fs::remove_dir(root.join("control.json")).unwrap();
+        std::fs::write(root.join("control.json"), prior_control).unwrap();
+        atomic(
+            &root.join("current.json"),
+            &serde_json::json!({"schemaVersion":1,"directory":"candidate-a"}),
+        )
+        .unwrap();
+        assert_eq!(
+            begin_or_resume_reviewed_install_handoff(&store, "candidate-b").unwrap(),
+            "RUNNING"
+        );
+        let superseded = read_reviewed_install_handoff(&store).unwrap();
+        assert_eq!(superseded.candidate_directory, "candidate-b");
+        assert_eq!(superseded.prior_desired, "RUNNING");
+        assert!(superseded.operator_stop_requested);
+        assert_eq!(
+            start_installed(&store).unwrap_err(),
+            "HOST_INSTALL_HANDOFF_CONFLICT"
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn reviewed_stop_intent_after_failed_proof_stays_stopped_on_already_current_retry() {
+        let (root, store) = fixture();
+        let (stage, id) = stage_candidate(&root, "sticky-stop", "inert host", "gui", "adapter");
+        publish_reviewed_install_checked(&store, &stage, &id, None).unwrap();
+        control(&store, "RUNNING").unwrap();
+        // No configured targets: no fixture artifact is ever executed.
+        assert_eq!(
+            activate_reviewed_install_checked(&store, None, |_| Err(
+                "WAKE_STORE_AUTHORITY_NEW_OWNER_UNPROVEN".into()
+            ))
+            .unwrap_err(),
+            "WAKE_STORE_AUTHORITY_NEW_OWNER_UNPROVEN"
+        );
+        control(&store, "STOPPED").unwrap();
+        let annotated = std::fs::read(reviewed_install_transaction_path(&store)).unwrap();
+        assert_eq!(
+            activate_reviewed_install_checked(&store, None, |handoff| {
+                assert!(handoff.already_current);
+                assert!(handoff.operator_stop_requested);
+                assert_eq!(handoff.prior_desired, "RUNNING");
+                assert_eq!(handoff.final_host, "STOPPED");
+                assert_eq!(handoff.final_pid, 0);
+                assert!(matches!(store.host_lock(), Err(error) if error == "HOST_ALREADY_RUNNING"));
+                assert_eq!(desired(&store).unwrap(), "STOPPED");
+                Err("WAKE_STORE_AUTHORITY_NEW_OWNER_UNPROVEN".into())
+            })
+            .unwrap_err(),
+            "WAKE_STORE_AUTHORITY_NEW_OWNER_UNPROVEN"
+        );
+        assert_eq!(
+            std::fs::read(reviewed_install_transaction_path(&store)).unwrap(),
+            annotated
+        );
+        let handoff = activate_reviewed_install_checked(&store, None, |handoff| {
+            assert!(handoff.operator_stop_requested);
+            assert_eq!(handoff.final_host, "STOPPED");
+            assert_eq!(handoff.final_pid, 0);
+            assert!(matches!(store.host_lock(), Err(error) if error == "HOST_ALREADY_RUNNING"));
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(handoff.prior_desired, "RUNNING");
+        assert!(!reviewed_install_transaction_path(&store).exists());
+        assert!(store.host_lock().is_ok());
+        assert_eq!(desired(&store).unwrap(), "STOPPED");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn reviewed_stop_intent_malformed_pending_state_refuses_without_export_or_mutation() {
+        let (root, store) = fixture();
+        control(&store, "PAUSED").unwrap();
+        let control_before = std::fs::read(root.join("control.json")).unwrap();
+        let path = reviewed_install_transaction_path(&store);
+        for malformed in [
+            r#"{"private":"do not export this body"}"#,
+            r#"{"schemaVersion":1,"candidateDirectory":"candidate-a","priorDesired":"RUNNING","operatorStopRequested":"secret"}"#,
+            r#"{"schemaVersion":1,"candidateDirectory":"../private-candidate","priorDesired":"RUNNING"}"#,
+            r#"{"schemaVersion":1,"candidateDirectory":".staging-private-candidate","priorDesired":"RUNNING"}"#,
+        ] {
+            std::fs::write(&path, malformed).unwrap();
+            assert_eq!(
+                control(&store, "STOPPED").unwrap_err(),
+                "HOST_INSTALL_HANDOFF_CONFLICT"
+            );
+            assert_eq!(
+                start_installed(&store).unwrap_err(),
+                "HOST_INSTALL_HANDOFF_CONFLICT"
+            );
+            assert_eq!(std::fs::read(&path).unwrap(), malformed.as_bytes());
+            assert_eq!(
+                std::fs::read(root.join("control.json")).unwrap(),
+                control_before
+            );
+        }
         let _ = std::fs::remove_dir_all(root);
     }
 

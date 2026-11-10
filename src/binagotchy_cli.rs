@@ -1445,7 +1445,6 @@ fn execute_command(
             if store.config()?.targets.is_empty() {
                 return Err("TARGET_NOT_CONFIGURED".into());
             }
-            catdesk_wake::runtime::control(&store, "RUNNING")?;
             catdesk_wake::runtime::start_installed(&store)?;
             writeln!(out, "WakeHost resumed.").map_err(|_| "CLI_OUTPUT_FAILED")?;
         }

@@ -1,0 +1,254 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-10T05:22:56.709691+00:00",
+  "classification": "SOURCE_AND_NATIVE_LOCK_FIXTURE_QUALIFICATION_ONLY",
+  "sourceBaseCommit": "2ea053eb2c9d8b7be1feed5d522338e133d5b359",
+  "sourceFiles": [
+    {
+      "path": "wake/src/runtime.rs",
+      "sha256": "eb624025fecb64e8b88048b7f6a3c855bf107d8b30728b3da6290bd82c65afd6",
+      "normalizedLfSha256": "eb624025fecb64e8b88048b7f6a3c855bf107d8b30728b3da6290bd82c65afd6"
+    },
+    {
+      "path": "wake/src/runtime_host_entry_tests.rs",
+      "sha256": "7af536c3de412ea175aa130a121d8d4ecebf86fdcb9a6671b295942c409fd1f8",
+      "normalizedLfSha256": "7af536c3de412ea175aa130a121d8d4ecebf86fdcb9a6671b295942c409fd1f8"
+    },
+    {
+      "path": "src/mcp.rs",
+      "sha256": "9bea49944d272690ea660d12446a183c4e3741f93ad93dff2fb0c73dda75f45d",
+      "normalizedLfSha256": "9bea49944d272690ea660d12446a183c4e3741f93ad93dff2fb0c73dda75f45d"
+    },
+    {
+      "path": "src/binagotchy_cli.rs",
+      "sha256": "b126c644ee7d855f97ac252ecf506a0102f2e17af41c38e49e5ae735c10adc63",
+      "normalizedLfSha256": "b126c644ee7d855f97ac252ecf506a0102f2e17af41c38e49e5ae735c10adc63"
+    }
+  ],
+  "changes": [
+    "Recheck actual selected host image after acquiring the host lease, before owner proof/status/journal/dispatch",
+    "Serialize existing public Wake lifecycle operations using the existing nonblocking install lease; internal helpers reuse actual ownership",
+    "Retain host lease across activation pointer write/readback; child host entry never acquires install lease",
+    "Preserve explicit paused-owner resume and presentation STOPPED/PAUSED intent",
+    "Record sticky operator STOP in the existing handoff journal before control effect, preserve original priorDesired and honor STOP through interrupted recovery/supersession",
+    "Refuse public start/restart/nonSTOP operations on pending handoff; fixed content-free MCP phase errors"
+  ],
+  "checks": [
+    {
+      "batch": "nov10-wake-lifecycle-serialization-source-checks",
+      "name": "clippy-root",
+      "exitCode": 0,
+      "passedCases": null,
+      "failedCases": 0,
+      "metadataSha256": "b0e67f9a18884ca418ffc72916b96475288df0698b601893ce44723e809cc8e5",
+      "logSha256": "2b0061f89f6b22480b302c4e173eab82d7ce704965842e2ba7b5e72aabefef3c",
+      "startedUtc": "2026-11-10T05:13:02.2540635+00:00",
+      "finishedUtc": "2026-11-10T05:13:23.6405172+00:00"
+    },
+    {
+      "batch": "nov10-wake-lifecycle-serialization-source-checks",
+      "name": "clippy-wake",
+      "exitCode": 0,
+      "passedCases": null,
+      "failedCases": 0,
+      "metadataSha256": "1e5c5370ef7f86b07fb067b2b38449c45b313f0feeecabc95aecf4dbd89dcf54",
+      "logSha256": "a3c5142b304b12edb8959e65181028874803037c594ec1c042d650c52ca22b70",
+      "startedUtc": "2026-11-10T05:13:23.6411913+00:00",
+      "finishedUtc": "2026-11-10T05:13:29.0119300+00:00"
+    },
+    {
+      "batch": "nov10-wake-lifecycle-serialization-source-checks",
+      "name": "development-fence",
+      "exitCode": 0,
+      "passedCases": 1,
+      "failedCases": 0,
+      "metadataSha256": "52c8e16875c67f0f4972301a1b72161f81491667a8465d16b8683345a948c8c6",
+      "logSha256": "ab91f8393e8479b06f87f0c2a6185330a2002cbddcac7479c68baae686dfe6c5",
+      "startedUtc": "2026-11-10T05:11:58.9527196+00:00",
+      "finishedUtc": "2026-11-10T05:12:57.1173902+00:00"
+    },
+    {
+      "batch": "nov10-wake-lifecycle-serialization-source-checks",
+      "name": "fmt-root",
+      "exitCode": 0,
+      "passedCases": null,
+      "failedCases": 0,
+      "metadataSha256": "c50194eef74140f8469db317a41672f79978e6df48db73fc449e333580369dc0",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "startedUtc": "2026-11-10T05:12:57.6750271+00:00",
+      "finishedUtc": "2026-11-10T05:13:01.2913372+00:00"
+    },
+    {
+      "batch": "nov10-wake-lifecycle-serialization-source-checks",
+      "name": "fmt-wake",
+      "exitCode": 0,
+      "passedCases": null,
+      "failedCases": 0,
+      "metadataSha256": "c208080ea9547afac28b575d647efe8d53b576743f9d9681467f8515f9b59d2c",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "startedUtc": "2026-11-10T05:13:01.2920052+00:00",
+      "finishedUtc": "2026-11-10T05:13:02.2533913+00:00"
+    },
+    {
+      "batch": "nov10-wake-lifecycle-serialization-source-checks",
+      "name": "host-entry",
+      "exitCode": 101,
+      "passedCases": 1,
+      "failedCases": 3,
+      "metadataSha256": "5bbd9513eff10c78666434aa424ef8dc6d2d158070cb32da44789be67e8f725f",
+      "logSha256": "1ad4c0632e96484fb0dba2d958ae53ee4b3661686eadd9e58261f256aba9b0fa",
+      "startedUtc": "2026-11-10T05:11:41.0645135+00:00",
+      "finishedUtc": "2026-11-10T05:11:58.2602463+00:00"
+    },
+    {
+      "batch": "nov10-wake-lifecycle-serialization-source-checks",
+      "name": "host-recovery",
+      "exitCode": 0,
+      "passedCases": 6,
+      "failedCases": 0,
+      "metadataSha256": "0ff69452ee8d8c59531a1832b24ab13897fb4f6c3d6b13670380e254711e4cdf",
+      "logSha256": "28fb89bfe4ca286951b0887d2b68a1b0801465b00dd26820ba69d258636a883b",
+      "startedUtc": "2026-11-10T05:11:58.7835914+00:00",
+      "finishedUtc": "2026-11-10T05:11:58.9520483+00:00"
+    },
+    {
+      "batch": "nov10-wake-lifecycle-serialization-source-checks",
+      "name": "install-transactions",
+      "exitCode": 0,
+      "passedCases": 17,
+      "failedCases": 0,
+      "metadataSha256": "9b3af247d70ba25321913b7dadfcde61d2615708eb8681826513632b486b8176",
+      "logSha256": "953bbf18caef024d46764f7834ce7a9d556b4dd674fff03de755602d2dc71be7",
+      "startedUtc": "2026-11-10T05:11:58.2734142+00:00",
+      "finishedUtc": "2026-11-10T05:11:58.7823407+00:00"
+    },
+    {
+      "batch": "nov10-wake-lifecycle-serialization-source-checks",
+      "name": "presentation-stop-intent",
+      "exitCode": 0,
+      "passedCases": 1,
+      "failedCases": 0,
+      "metadataSha256": "237999060abd3f9c5d3adfc29675189d4975bd4b020c4345ea6225ab606dc033",
+      "logSha256": "66890a352afae23b4cc004b1b57ec6625c1f91b9e2ffdd2462560f6737f9dbfb",
+      "startedUtc": "2026-11-10T05:12:57.1179866+00:00",
+      "finishedUtc": "2026-11-10T05:12:57.6744017+00:00"
+    },
+    {
+      "batch": "nov10-wake-lifecycle-recovery-final-checks",
+      "name": "clippy-root",
+      "exitCode": 0,
+      "passedCases": null,
+      "failedCases": 0,
+      "metadataSha256": "09a36ce0b8fd4c79919ab84a9ad2cd639dfa0ec9e07cc12b6442150c55d053a7",
+      "logSha256": "d252ab1681663fd57569eeb33f1e5a642d1f14c578973a0b0d2e24dbd9208d82",
+      "startedUtc": "2026-11-10T05:20:41.9685407+00:00",
+      "finishedUtc": "2026-11-10T05:21:03.4950222+00:00"
+    },
+    {
+      "batch": "nov10-wake-lifecycle-recovery-final-checks",
+      "name": "clippy-wake",
+      "exitCode": 0,
+      "passedCases": null,
+      "failedCases": 0,
+      "metadataSha256": "8cde364be0b8d6ea83769b31ed4cdb68e1e7a1a6e8bfdfc42a6f0cede167efa2",
+      "logSha256": "cb57b3090fa6487f2328dd661f611f86b0c9e1316ff4b06c7c316d01f565bd88",
+      "startedUtc": "2026-11-10T05:21:03.4957357+00:00",
+      "finishedUtc": "2026-11-10T05:21:10.7232672+00:00"
+    },
+    {
+      "batch": "nov10-wake-lifecycle-recovery-final-checks",
+      "name": "fmt-root",
+      "exitCode": 0,
+      "passedCases": null,
+      "failedCases": 0,
+      "metadataSha256": "b7e38532345761e3696bf4be62c004d9e91298ec6aecdd8c36c368cf1b91b787",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "startedUtc": "2026-11-10T05:20:37.4115043+00:00",
+      "finishedUtc": "2026-11-10T05:20:41.0004938+00:00"
+    },
+    {
+      "batch": "nov10-wake-lifecycle-recovery-final-checks",
+      "name": "fmt-wake",
+      "exitCode": 0,
+      "passedCases": null,
+      "failedCases": 0,
+      "metadataSha256": "58feef0a44dde1828e63f1ca6fc45d13a04105523a2e876878a4d019b62ca18d",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "startedUtc": "2026-11-10T05:20:41.0013702+00:00",
+      "finishedUtc": "2026-11-10T05:20:41.9676919+00:00"
+    },
+    {
+      "batch": "nov10-wake-lifecycle-recovery-final-checks",
+      "name": "host-entry",
+      "exitCode": 0,
+      "passedCases": 4,
+      "failedCases": 0,
+      "metadataSha256": "b28607f8f91b0b8620962c021082eccfdcadc23864a14455767a841aba77ee8c",
+      "logSha256": "2274d14f1046e40bc685671c4e1bbf4c5681db17d82c43f66661d2ebf3132e25",
+      "startedUtc": "2026-11-10T05:20:26.1580500+00:00",
+      "finishedUtc": "2026-11-10T05:20:36.3990375+00:00"
+    },
+    {
+      "batch": "nov10-wake-lifecycle-recovery-final-checks",
+      "name": "host-recovery",
+      "exitCode": 0,
+      "passedCases": 6,
+      "failedCases": 0,
+      "metadataSha256": "af760537d0477c95bdc80cf4f782771ae350d28439013ac73b7f66cec4a56101",
+      "logSha256": "30c99d9360f94d09822fc432ea7e753160965a145deec51b0b7fe76199334e7d",
+      "startedUtc": "2026-11-10T05:20:37.2432473+00:00",
+      "finishedUtc": "2026-11-10T05:20:37.4109186+00:00"
+    },
+    {
+      "batch": "nov10-wake-lifecycle-recovery-final-checks",
+      "name": "install-transactions",
+      "exitCode": 0,
+      "passedCases": 21,
+      "failedCases": 0,
+      "metadataSha256": "9ff68b3953e52527905b88d4ff9bb0a8d73d7ab9c4552ef40cad05e511e4637a",
+      "logSha256": "7cb229364b11a9142310a07da2b220fbd9967a9bfbd832eec0a8fb9a51f43a6c",
+      "startedUtc": "2026-11-10T05:20:36.4115440+00:00",
+      "finishedUtc": "2026-11-10T05:20:37.2424852+00:00"
+    }
+  ],
+  "distinctPassingRustCases": 33,
+  "initialFailedRun": {
+    "retained": true,
+    "passedHostEntryCases": 1,
+    "failedHostEntryCases": 3,
+    "cause": "Test snapshot attempted a Windows byte-range-locked host.lock body read",
+    "productionGuardFailureEstablished": false,
+    "timedOut": false,
+    "terminationFailed": false
+  },
+  "correctedHostEntryCasesPassed": 4,
+  "finalTransactionCasesPassed": 21,
+  "finalHostRecoveryCasesPassed": 6,
+  "formatAndStrictRootWakeClippyPassed": true,
+  "initialOwnerElapsedSeconds": 108.9071046,
+  "finalOwnerElapsedSeconds": 45.4164119,
+  "finalOwnerNaturalExit": true,
+  "qualificationAuditSha256": "7dc1be245692beec43b78812ba5964372d0f4c88e0560f52263e2681e3597cdb",
+  "journalCompatibility": {
+    "oldUnannotatedBytesSupported": true,
+    "falseFlagOmitted": true,
+    "annotatedStopRefusedByOldStrictReader": true,
+    "originalPriorDesiredPreserved": true,
+    "newJournalOrRegistryIntroduced": false
+  },
+  "limitations": [
+    "No installed host process startup/restart, actual package promotion, power-loss recovery, browser send or Web coding cycle qualified",
+    "Existing legacy installation writer still retains its separate pointer format; single-document planner is not activated",
+    "Installed legacy package requires independent provenance/quiescence qualification; new source checks are not assumed present",
+    "Existing broker provisioning and transaction-dispatch gates remain closed"
+  ],
+  "productCommands": 0,
+  "browserStarts": 0,
+  "backendOrTunnelStarts": 0,
+  "messagesSent": 0,
+  "protectedRuntimeOrBindingChangesPerformed": false,
+  "recurringAutomationEnabled": false,
+  "installedAcceptance": false,
+  "actualWebEditVerificationSelfWakeAccepted": false,
+  "fullMvpComplete": false
+}

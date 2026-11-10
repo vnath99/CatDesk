@@ -1,5 +1,16 @@
 ## 2026-11-10 — bounded-send compatibility and current installation limitation
 
+The source lifecycle now serializes existing start/restart/control operations
+with the existing install lock. Its MCP restart reports
+`WAKE_RESTART_INSTALL_BUSY` for an active transaction and
+`WAKE_RESTART_RECOVERY_REQUIRED` for a pending handoff. These are distinct from
+authentication, target pairing and browser errors. Do not repeat restart behind
+either refusal. Explicit STOP during interrupted recovery is recorded in that
+same handoff journal before its control effect; the original `priorDesired`
+remains intact. Annotated STOP journals require the qualified new recovery owner:
+older strict readers refuse them. Never clear the flag to make an old reader
+accept the transaction. These behaviors are source-qualified, not installed.
+
 New bounded work invitations and manual end-turn deliveries require a supported
 fenced/native-entry adapter and bridge pair, in addition to the existing package
 integrity checks. An unsupported installed pair returns

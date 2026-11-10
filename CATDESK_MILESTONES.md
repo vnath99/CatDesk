@@ -1,5 +1,14 @@
 ## 2026-11-10 — direct Web boundary evidence and adapter installation gap
 
+The next source increment closes specific installation races using existing
+leases and journals: post-lease host-image validation, serialized lifecycle
+commands, retained host ownership through pointer readback, and durable STOP
+intent across interrupted recovery. Thirty-three distinct Rust cases, formatting
+and strict root/Wake lint are qualified. Initial Windows snapshot fixture failures
+remain preserved; corrected tests retain the real lock. No installation gate was
+opened and no actual host startup or Web coding acceptance follows. See
+`docs/verification/WAKE_LIFECYCLE_SELECTION_RACES_2026_11_10.json`.
+
 One bounded development test restored the canonical backend and existing tunnel
 owner, verified unauthorized rejection and authenticated catalog access, and
 confirmed publication of the central scoped task tool. This was finite serving

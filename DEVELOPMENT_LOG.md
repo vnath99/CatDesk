@@ -3695,3 +3695,37 @@ state writes do not share the install lease. Close those races and prove selecte
 image authority after acquisition before composing activation. Installed legacy
 package provenance remains a separate qualification requirement; do not assume
 new source checks already exist in its executable.
+
+## 2026-11-10 — close Wake lifecycle races and preserve interrupted STOP intent
+
+The actual host entry functions now recheck the selected image after acquiring
+their host lease and before owner proof, status, journals or dispatch. Existing
+public start/restart/control paths share the existing install lock; internal
+activation calls reuse actual ownership. Activation keeps the host lease through
+pointer write/readback. Child startup never takes the install lock. MCP restart
+uses the same runtime operation with fixed phase errors, and explicit resume
+still resumes a paused owner without making presentation startup activate Wake.
+
+A later operator STOP is durable in the existing handoff journal before its
+control effect. Interrupted recovery and candidate supersession preserve both
+original intent and sticky STOP; pending public starts refuse. STOP recovery
+holds actual host ownership through verification and cleanup, even for an
+already-current candidate. Old journal bytes remain supported; an annotated new
+journal is refused by older strict readers. No second registry or authority is
+introduced, and no production broker guard is opened.
+
+Thirty-three distinct Rust cases are qualified. Final entry/transaction/recovery
+groups pass 4/21/6 cases; two earlier application boundary tests also passed.
+Formatting and strict root/Wake all-target Clippy pass. The initial entry group
+retains one pass and three fixture failures: Windows correctly refused reading
+the held host lock. The correction compares its type/presence/length while
+retaining the lease and byte-comparing all data files. Initial failed logs remain
+immutable. Both bounded owners exited naturally with verified containment.
+
+These are source and disposable native-lock fixtures. No actual installed host,
+browser, backend, tunnel, project task or message was started. The legacy writer
+still retains its separate pointer behavior; the compatible atomic-selection
+planner remains inactive. Exact legacy provenance/quiescence, executable broker
+dispatch, trusted package admission and installed/live qualification are next.
+Actual Web edit/verification/self-Wake is still unaccepted. Evidence:
+`docs/verification/WAKE_LIFECYCLE_SELECTION_RACES_2026_11_10.json`.

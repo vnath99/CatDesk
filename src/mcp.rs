@@ -4641,44 +4641,34 @@ fn handle_wake_restart_installed(req: &JsonRpcRequest) -> JsonRpcResponse {
                 .into(),
         );
     }
-    if catdesk_wake::runtime::control(&store, "STOPPED").is_err() {
-        return tool_error_response(
-            req,
-            "code: WAKE_RESTART_STOP_FAILED\nmessage: existing WakeHost could not be asked to stop"
-                .into(),
-        );
-    }
-
-    let mut stopped = false;
-    for _ in 0..50 {
-        match catdesk_wake::runtime::status(&store) {
-            Ok(status) if status.host == "STOPPED" => {
-                stopped = true;
-                break;
-            }
-            Ok(_) => std::thread::sleep(std::time::Duration::from_millis(100)),
-            Err(_) => {
-                return tool_error_response(
-                    req,
-                    "code: WAKE_RESTART_STATUS_FAILED\nmessage: WakeHost stop state could not be verified"
-                        .into(),
-                );
-            }
-        }
-    }
-    if !stopped {
-        return tool_error_response(
-            req,
-            "code: WAKE_RESTART_STOP_TIMEOUT\nmessage: existing WakeHost did not release its host lease in time"
-                .into(),
-        );
-    }
-    if catdesk_wake::runtime::start_installed(&store).is_err() {
-        return tool_error_response(
-            req,
-            "code: WAKE_RESTART_START_FAILED\nmessage: registered immutable WakeHost failed hash-verified startup"
-                .into(),
-        );
+    if let Err(reason) = catdesk_wake::runtime::restart_installed(&store) {
+        let (code, message) = match reason.as_str() {
+            "HOST_INSTALL_ALREADY_RUNNING" => (
+                "WAKE_RESTART_INSTALL_BUSY",
+                "an installation transaction owns the Wake lifecycle",
+            ),
+            "HOST_INSTALL_HANDOFF_CONFLICT" => (
+                "WAKE_RESTART_RECOVERY_REQUIRED",
+                "an unresolved installation handoff requires guarded recovery",
+            ),
+            "HOST_RESTART_STOP_FAILED" => (
+                "WAKE_RESTART_STOP_FAILED",
+                "existing WakeHost could not be asked to stop",
+            ),
+            "HOST_RESTART_STATUS_FAILED" => (
+                "WAKE_RESTART_STATUS_FAILED",
+                "WakeHost stop state could not be verified",
+            ),
+            "HOST_STOPPED_OWNER_EXIT_TIMEOUT" => (
+                "WAKE_RESTART_STOP_TIMEOUT",
+                "existing WakeHost did not release its host lease in time",
+            ),
+            _ => (
+                "WAKE_RESTART_START_FAILED",
+                "registered immutable WakeHost failed hash-verified startup",
+            ),
+        };
+        return tool_error_response(req, format!("code: {code}\nmessage: {message}"));
     }
     let status = match catdesk_wake::runtime::status(&store) {
         Ok(status) => status,
@@ -5028,7 +5018,6 @@ fn handle_binagotchy_command(req: &JsonRpcRequest) -> JsonRpcResponse {
             if store.config()?.targets.is_empty() {
                 return Err("TARGET_NOT_CONFIGURED".into());
             }
-            catdesk_wake::runtime::control(&store, "RUNNING")?;
             catdesk_wake::runtime::start_installed(&store)?;
             Ok(json!({"command":"resume","state":"RUNNING"}))
         }

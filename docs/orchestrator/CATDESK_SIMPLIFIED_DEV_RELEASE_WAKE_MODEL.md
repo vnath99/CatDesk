@@ -27,11 +27,17 @@ legacy writers. The source fixture exercises abandoned staging and the existing
 atomic writer; it is not a real process-crash or installed recovery test.
 
 The attested-source startup path can capture an old package before waiting for
-the host lease, and control writes do not share the install lease. The composed
-migration must close those concrete races and verify selected-image authority
-after acquisition, before status or dispatch. The installed legacy manifest
-lacks source provenance; source checks cannot be attributed to its bytes by
-assumption.
+the host lease. Source now rechecks selected-image authority after acquisition
+and before status or dispatch, serializes public lifecycle commands with the
+existing install lease, and holds the host lease through selection/readback.
+Child host entry never takes the install lease. Interrupted recovery retains a
+later explicit STOP in the same journal and proves stopped ownership before
+completion, including an already-current candidate. Original intent is retained;
+older unannotated journals stay readable and older strict readers refuse new
+STOP annotations. These are source/native-lock fixture results, not installed
+cutover. The legacy manifest lacks source provenance; new source checks cannot
+be attributed to its bytes by assumption. The single-document planner is not yet
+wired into the legacy writer, and no old mechanism is retired.
 
 The present broker script refuses before installation and its service dispatch
 is incomplete. Provisioning configuration alone cannot solve that defect. Keep
