@@ -4047,3 +4047,15 @@ both exact histories. Existing GUI artifacts remain held until rebuilt and revie
 Verified Host/broker inputs are disjoint from this file and can be retained with
 their original provenance. Protected installation and live Web acceptance remain open.
 Evidence: `docs/verification/AUTONOMY_EVENT_POLL_READONLY_SOURCE_2026_11_10.json`.
+
+### 2026-11-10 21:47 UTC — Corrected GUI pair and local development health verified
+
+Fresh GUIs from candidate `4293fa29` and fallback `8cb928f5` now contain the
+event-reader fix. Exact four-artifact source review and unsigned local source
+qualification receipts are complete for the declared Wake runtime purpose. Both
+packages passed two bounded PAUSED Host cycles and authenticated loopback checks
+(401 without or with a wrong bearer, 200 authenticated; 79 tools), with STOPPED
+cleanup, zero owned images and preserved task/profile evidence. The verified
+fallback is retained, and candidate development verification metadata is recorded.
+Protected installation and actual per-project Web edit/verify/delivered self-Wake
+remain open. Evidence: `docs/verification/AUTONOMY_EVENT_POLL_READONLY_SOURCE_2026_11_10.json`.

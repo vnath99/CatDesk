@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "date": "2026-11-10",
-  "scope": "EVENT_JOURNAL_POLLING_SOURCE_AND_DISPOSABLE_WINDOWS_FIXTURES",
+  "scope": "EVENT_JOURNAL_POLLING_SOURCE_QUALIFICATION_AND_DECLARED_RUNTIME_DEVELOPMENT_EVIDENCE",
   "finding": {
     "statusReaderCouldRepairAnActiveAppendWithoutWriterLock": true,
     "liveCorruptionObserved": false,
@@ -57,14 +57,169 @@
   },
   "acceptance": {
     "sourceRemediationQualified": true,
-    "newGuiArtifactsBuilt": false,
+    "newGuiArtifactsBuilt": true,
     "oldGuiArtifactFindingsStillRetained": true,
     "fullArtifactReleaseApproval": false,
     "protectedInstallationChanged": false,
-    "browserOrWakeStarted": false,
     "messageSent": false,
     "projectBindingChanged": false,
     "actualWebEditVerifySelfWakeAccepted": false,
-    "twoProjectLiveAcceptance": false
+    "twoProjectLiveAcceptance": false,
+    "artifactSourceReviewAcceptedForDeclaredRuntimePurpose": true,
+    "sourceQualificationReceiptsPrepared": true,
+    "developmentPausedHostStarted": true,
+    "developmentBackendStarted": true,
+    "browserStarted": false,
+    "productionWakeStarted": false,
+    "candidateLocalDevelopmentVerification": "RECORDED_LOCAL_ONLY"
+  },
+  "releasePreparation": {
+    "observedThroughUtc": "2026-11-10T21:47:00Z",
+    "scope": "DECLARED_FOUR_ROLE_RUNTIME_SOURCE_REVIEW_AND_LOCAL_PAUSED_DEVELOPMENT_HEALTH",
+    "candidateSourceCommit": "4293fa296586e418fd77bd465e0c37e2cb4d6392",
+    "fallbackSourceCommit": "8cb928f5d30a03785247a4c3e2265692f11cebb9",
+    "pairBuild": {
+      "passed": true,
+      "resultSha256": "6d3821821fa08e06a1fd5d34ad1191c4eda94a0c2c131f8fd6558130aacdeaed",
+      "ownerSha256": "f7a9a2f7f385477db179f90df03c40dbf1ddc1c1e4e232fbff0bee81ba11b820",
+      "freshGuiBuilds": 2,
+      "candidateGuiSha256": "538d1267258cddf7ec45b61c94ec6b364366e1523a610ac72e2e657072f21d98",
+      "fallbackGuiSha256": "bcf2f2dc65077b20de3ca683fc6bf29f464b8ddee161edf0ea63f4cba03d3325",
+      "hostAndBrokerRebuiltInPair": false,
+      "retainedComponentsKeepOriginalProvenance": true
+    },
+    "sourceAndReview": {
+      "independentReviewScope": "FULL_SOURCE_FOR_DEFINED_FOUR_ROLE_WAKE_RUNTIME_ONLY",
+      "candidateReviewSha256": "ed400694e1b8f9d11e6d3cbdd5133acf705f9dd9630d8c1ed8eac6d265fc005e",
+      "fallbackReviewSha256": "1505b427091ecaaaa90e7251166d111d396084a4b6ff95d9f8198467f20cb934",
+      "artifactBoundReviewDetailSha256": "e70c23b99f39e18e98f0e64b979e9062d16b3c1f6d524134bf070c503f87c234",
+      "sourceQualificationScope": "EXACT_SOURCE",
+      "candidateLocalSourceReceiptSha256": "eb7f0eeeca1bbd7ee0e17fa0ff1b18b240e89037a4fdcdead0378f0bd07fa87b",
+      "fallbackLocalSourceReceiptSha256": "c0d3edc05b20974fbdcd52826b45c6fed948930f5f64e82c42f530c701d8e62c",
+      "sourceQualificationDetailSha256": "e9e8a1cd59277234f300e9c8b90a220af94cbf12086f959c3b4ea63403c838f3",
+      "actualFiveCaseQaExecutedAtFallbackSnapshot": true,
+      "candidateUsesExplicitSourceComposition": true,
+      "allTestsAtCandidateExecuted": false,
+      "canonicalMainApplicationApproval": false,
+      "definedRuntimePurposeFullSourceReviewed": true,
+      "wholeApplicationReviewed": false
+    },
+    "developmentHealth": {
+      "scope": "LOCAL_DEVELOPMENT_ONLY",
+      "eachReleasePausedHostCycles": 2,
+      "eachPausedCycleSeconds": 10,
+      "eachAuthenticatedLoopbackSeconds": 15,
+      "missingBearerStatus": 401,
+      "wrongBearerStatus": 401,
+      "authenticatedInitializeStatus": 200,
+      "catalogStatus": 200,
+      "toolCount": 79,
+      "centralToolPublished": true,
+      "registeredProjectsRead": true,
+      "fallback": {
+        "passed": true,
+        "resultSha256": "7a2f1ab0455b3d74d881ac40c5dec3a38413dd60746ff98d7982772393db035c",
+        "ownerSha256": "0c037cf5582047737950403f916700d02c762f34612f8c94d1a1144968c2d310",
+        "ownerElapsedSeconds": 46.4177751,
+        "statePinsUnchanged": 1652
+      },
+      "candidate": {
+        "passed": true,
+        "resultSha256": "a61622a57df4f52b12ca197800d8eef8965ba19cef9a97f57696fa0ee111263c",
+        "ownerSha256": "eb0baeb67a0c84647ba5ef19cd2693e007d18452530dcec49dca8d1c3170d517",
+        "ownerElapsedSeconds": 46.1013743,
+        "statePinsUnchanged": 1659
+      },
+      "taskFilesAdded": 0,
+      "taskFilesRemoved": 0,
+      "profileDirectoryIdentityPreserved": true,
+      "ownedImagesRemaining": 0,
+      "profileProcessesRemaining": 0,
+      "endpointClosed": true,
+      "finalHostControl": "STOPPED",
+      "browserStarts": 0,
+      "messagesSent": 0,
+      "wakeDispatches": 0,
+      "tunnelStarts": 0,
+      "productionChanges": 0
+    },
+    "localDevelopmentRecords": {
+      "fallbackVerificationRecorded": true,
+      "fallbackResultSha256": "fb35c87959640749d0f334a72a1d3ee530f6ad9e9bb0af42863e59f026ba550e",
+      "fallbackOwnerSha256": "7210de86dbc70efdd37286da876f8d9a1619f9c4ff1cc2bb5fd71911f69d2137",
+      "verifiedFallbackRetained": true,
+      "candidateVerificationStatus": "RECORDED_LOCAL_ONLY",
+      "candidateVerificationRecorded": true,
+      "operatorRecordedMetadataIsProtectedAuthority": false,
+      "candidateVerificationSha256": "17b2e87b869aa10c399dc10f1bc9d1d805549d84c5eb6196b039f8530d598622",
+      "candidateInputSha256": "b235c6f266d89d4af03b37149a72689ac1a2c8922fdf361a0d1e8f20c1521102",
+      "candidateResultSha256": "76a993e3d7091e8afc5e1b08b0957906d0e0b11d3f3d2c7743669e71fd6e31a0",
+      "candidateOwnerSha256": "50057d321da5510c982212d93a40a33983c3e63398fbca09efee171673ceea6a",
+      "candidateRecordPinsUnchanged": 1670,
+      "candidateRecordProtectedPinsUnchanged": 6,
+      "candidateRecordTaskInventoryPaths": 1607,
+      "candidateRecordOwnerElapsedSeconds": 3.8236974
+    },
+    "remainingAcceptance": {
+      "heldOriginalTasksUseCanonicalBackendAndProtectedWake": true,
+      "developmentRerouteAttempted": false,
+      "originalTaskIdentityOrGrantReplaced": false,
+      "productionSelectionChanged": false,
+      "webEditVerifySelfWakeAccepted": false,
+      "twoProjectLiveAcceptance": false,
+      "reviewedUnsignedCollectorSha256": "b365336678c4906fdef32eeb644ac797c0c81a7fa64e42a502099e1a38fb97cd",
+      "freshPurposeSignaturePending": true,
+      "highInteractiveOperatorAdmissionPending": true,
+      "newSigningIdentityCreated": false,
+      "nativeCodexHopRequired": false,
+      "coordinatorRequired": false
+    },
+    "deploymentInputs": {
+      "scope": "IMMUTABLE_FOUR_ARTIFACT_BUILD_INPUTS",
+      "mapIsDistinctFromNativeArray": true,
+      "mapIsDistinctFromGeneratedDevelopmentManifest": true,
+      "brokerIncludedInFourArtifactTuple": false,
+      "fallback": {
+        "sourceCommit": "8cb928f5d30a03785247a4c3e2265692f11cebb9",
+        "guiSha256": "bcf2f2dc65077b20de3ca683fc6bf29f464b8ddee161edf0ea63f4cba03d3325",
+        "guiActualOriginCommit": "8cb928f5d30a03785247a4c3e2265692f11cebb9",
+        "hostSha256": "2a432a3024442a104603514504d904c642c6ed6ea65e2a33907bf30827921457",
+        "hostActualOriginCommit": "f0ce5531d282ea858f20883bdaf18df187482b16",
+        "nativeArrayManifestSha256": "048e11d2d59a179ec5baaafa8dea81fc655a9e4bab17d97e23bf15fece492ffe",
+        "buildMapManifestRawSha256": "be3f36932a4fbfc25824603f3505134dadcaf3c135bb1e2283297316a09e0dd7",
+        "buildProvenanceSha256": "7345dcce48767816b51b09acd80fb1ec9a68a46309c3ba1f29239bbd760ff631"
+      },
+      "candidate": {
+        "sourceCommit": "4293fa296586e418fd77bd465e0c37e2cb4d6392",
+        "guiSha256": "538d1267258cddf7ec45b61c94ec6b364366e1523a610ac72e2e657072f21d98",
+        "guiActualOriginCommit": "4293fa296586e418fd77bd465e0c37e2cb4d6392",
+        "hostSha256": "a5f95fac201a0359b0d6cc3b5fdf1f871e7844f41436aa4c706420dac0588fc4",
+        "hostActualOriginCommit": "a5f3cd496e8cab6e3a265da47c3cb25b897f857d",
+        "nativeArrayManifestSha256": "f0db21f2aa5ed9ba2192bb98839c43a87feac2b003e869aeb0893c690f8f733e",
+        "buildMapManifestRawSha256": "a56f958bb6da9075733589d8ffd0608ecec643a7b9515f2790968e03e53565d1",
+        "buildProvenanceSha256": "e15370e7e4bec28c2a815c5f8891950e57679c9f8c3413b84c5c9ecc6fb327e5"
+      }
+    },
+    "limitedWorkingEvidence": {
+      "candidateObservedEvidenceIsNotACandidateWorkingIntakeRole": true,
+      "rawHealthWorkingReleaseFlagsUnchanged": true,
+      "fallback": {
+        "receiptSha256": "a67a2c40033a18572b3d56443c9b826d803c20d0c4813eb9bbbe37315cb3f35b",
+        "independentReadbackSha256": "053d43f9c7156a143b7a8dde032888f4d63fd77cd9abbbce8fa2542df23dd72b",
+        "nativeScope": "WAKE_RUNTIME",
+        "actualObservedScope": "DEVELOPMENT_PAUSED_OWNER_STARTUP_NORMAL_STOP_ONLY",
+        "browserOrWebWakeQualified": false,
+        "protectedInstallationQualified": false
+      },
+      "candidateObserved": {
+        "receiptSha256": "f393a00caed70d274e6dcdaaba30953647a824572f1f3ff00edfcb81bf263b6b",
+        "independentReadbackSha256": "336d5720c80c232eaca53e7cbc9a0078018b8a811ab0a434bc6808145d841c58",
+        "nativeScope": "WAKE_RUNTIME",
+        "actualObservedScope": "DEVELOPMENT_PAUSED_OWNER_STARTUP_NORMAL_STOP_ONLY",
+        "browserOrWebWakeQualified": false,
+        "protectedInstallationQualified": false
+      },
+      "fallbackIsChosenPreparedPrevious": true
+    }
   }
 }

@@ -1256,3 +1256,28 @@ The GUI also links the Wake crate and owns reachable readiness code. Rebuild the
 GUI and Host when qualifying the reader correction; retaining an older GUI while
 replacing only Host does not update that path. A Wake companion build is separate
 from canonical-backend promotion and supplies no protected main-image authority.
+
+### 2026-11-10T21:47Z — Exact runtime evidence ready; installation remains gated
+
+New GUI builds now bind the corrected candidate source `4293fa296586e418fd77bd465e0c37e2cb4d6392`
+and fallback source `8cb928f5d30a03785247a4c3e2265692f11cebb9`. Retained Host
+and broker components keep their actual earlier origins, with unchanged compiled
+inputs independently verified. The defined runtime tuples have artifact-bound
+independent source reviews, local source qualification and actual PAUSED runtime
+lifecycle evidence. The fallback is recorded and retained through the existing
+development verification/selection mechanism. See the
+[qualification record](../verification/AUTONOMY_EVENT_POLL_READONLY_SOURCE_2026_11_10.json)
+for exact hashes and limits; these reviews do not approve every canonical
+application entry point.
+
+This preparation does not provision or start the protected broker. Complete the
+existing fixed-root unsigned-input collection in the qualified operator context,
+obtain the genuine explicit Wake-purpose signature, then use the supported
+`wake/install.ps1 -Bootstrap` preflight and separately authorized execution with
+the frozen Host/envelope/public-key hashes. Same-state selection remains a
+separate signed transaction requiring exact physical state, protected policy,
+candidate/previous receipts and any applicable legacy reconstruction evidence.
+Do not substitute development metadata for those native observations. No original
+uncertain Web task may be replayed or moved to another route while these gates
+remain unmet. Installed reader observation, direct file work, delivered self-Wake
+and independent two-project isolation are still live acceptance requirements.

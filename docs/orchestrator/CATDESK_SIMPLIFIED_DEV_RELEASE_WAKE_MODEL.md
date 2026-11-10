@@ -2779,3 +2779,21 @@ reader fix has exact-commit source evidence; installed Web/self-Wake acceptance
 remains open. Continue the concrete protected-stage/native-rename repair using
 the existing policy, security descriptors and journal, with no parallel release
 system, replacement tunnel or recurring automation.
+
+### 2026-11-10T21:47Z — Development selection has a verified predecessor
+
+The protected-stage repair and read-only event-polling fix now have qualified
+immutable runtime tuples. The candidate and fallback each passed actual bounded
+PAUSED Host start/restart/stop and authenticated development MCP checks. Their
+normal development verification records are saved; the selected candidate retains
+the verified fallback as its immediate previous version. All test-owned processes
+exited, with project/task state preserved.
+
+These results supersede the earlier source-only readiness of those two tuples,
+not the protected installation or Web acceptance status. Original uncertain Web
+tasks retain their canonical workspace and protected Wake route; development
+selection provides no permission to reroute them. Reuse the existing first-broker
+bootstrap and same-state selection procedures after genuine purpose-bound signing
+and operator admission. The [qualification record](../verification/AUTONOMY_EVENT_POLL_READONLY_SOURCE_2026_11_10.json)
+keeps artifact origins, retained-component equivalence, local checks, independent
+review, development health and the remaining installed/Web gates separate.

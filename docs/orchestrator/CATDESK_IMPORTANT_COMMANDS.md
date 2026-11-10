@@ -7650,3 +7650,24 @@ retain the failure evidence and finish the existing protected-stage handoff.
 Never drop pins on an exposed stage, clear an unknown delivery, or repeat a Web
 task merely because review or installation is blocked. Direct project Web work
 and self-Wake remain the acceptance path; native Codex delegation is optional.
+
+### 2026-11-10T21:47Z — Corrected runtime pair qualified in development
+
+The corrected candidate GUI from `4293fa296586e418fd77bd465e0c37e2cb4d6392`
+and fallback GUI from `8cb928f5d30a03785247a4c3e2265692f11cebb9` now have
+actual bounded development lifecycle and authenticated MCP evidence. Each tuple
+passed two PAUSED Host cycles and one loopback backend check. Both verification
+records were saved through the existing command:
+
+```text
+<qualified-controller> operator web-dev-runtime record-verification --input-file <frozen-development-verification.json>
+```
+
+The candidate is selected with the verified fallback retained; both are STOPPED.
+This command records development evidence only. It does not enroll an issuer,
+install a protected package or authorize a Web send. Use the exact artifact and
+manifest evidence in the [runtime qualification record](../verification/AUTONOMY_EVENT_POLL_READONLY_SOURCE_2026_11_10.json).
+The original uncertain tasks remain bound to the protected installation. Do not
+move them into development or replay them to work around installation authority.
+The next operator step remains the already frozen unsigned-input collector,
+followed by a genuine approved Wake-purpose signature and native admission.
