@@ -1110,7 +1110,7 @@ impl AutonomousStateStoreV1 {
         after_sequence: u64,
     ) -> Result<Vec<AutonomousEventV1>, AutonomyStateError> {
         self.ensure_session_exists(session_id)?;
-        let events = read_jsonl_repair_tail(&self.session_dir(session_id)?.join("events.jsonl"))?;
+        let events = read_jsonl(&self.session_dir(session_id)?.join("events.jsonl"))?;
         Ok(events
             .into_iter()
             .filter(|event: &AutonomousEventV1| event.sequence > after_sequence)
@@ -2969,20 +2969,27 @@ fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T, AutonomyStateError> 
     serde_json::from_reader(file).map_err(serde_error)
 }
 
-fn read_jsonl_repair_tail<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>, AutonomyStateError> {
+fn read_jsonl<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>, AutonomyStateError> {
     if !path.exists() {
         return Ok(Vec::new());
     }
-    repair_torn_jsonl_tail(path)?;
     let file = File::open(path).map_err(io_error)?;
-    BufReader::new(file)
-        .lines()
-        .filter(|line| line.as_ref().is_ok_and(|line| !line.trim().is_empty()))
-        .map(|line| {
-            line.map_err(io_error)
-                .and_then(|line| serde_json::from_str(&line).map_err(serde_error))
-        })
-        .collect()
+    let mut values = Vec::new();
+    for line in BufReader::new(file).lines() {
+        let line = line.map_err(io_error)?;
+        if !line.trim().is_empty() {
+            values.push(serde_json::from_str(&line).map_err(serde_error)?);
+        }
+    }
+    Ok(values)
+}
+
+// The caller must hold the session state-mutation lock while repairing.
+fn read_jsonl_repair_tail<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>, AutonomyStateError> {
+    if path.exists() {
+        repair_torn_jsonl_tail(path)?;
+    }
+    read_jsonl(path)
 }
 
 fn repair_torn_jsonl_tail(path: &Path) -> Result<(), AutonomyStateError> {
@@ -4351,8 +4358,8 @@ mod tests {
     }
 
     #[test]
-    fn torn_terminal_event_is_repaired_without_losing_prior_events() {
-        let (_root, store) = store("torn-tail");
+    fn event_poll_torn_tail_is_read_only_and_locked_append_repairs() {
+        let (root, store) = store("torn-tail-read-only");
         store
             .create_session("session-one", queue())
             .expect("session");
@@ -4368,9 +4375,123 @@ mod tests {
             .open(&events_path)
             .expect("events open");
         file.write_all(b"{not-json").expect("torn tail");
+        file.sync_data().expect("torn tail durable");
         drop(file);
-        let events = store.poll_events("session-one", 0).expect("repaired poll");
-        assert_eq!(events.len(), 1);
+        let before_poll = fs::read(&events_path).expect("torn bytes");
+        let poll = store.poll_events("session-one", 0);
+        let after_poll = fs::read(&events_path).expect("after poll bytes");
+        let appended = store.append_event("session-one", "writer_repaired", "writer repaired");
+        let events = store.poll_events("session-one", 0);
+        let snapshot = store.load_session("session-one");
+        drop(store);
+        assert_eq!(root.parent(), Some(std::env::temp_dir().as_path()));
+        let cleanup = fs::remove_dir_all(&root);
+
+        assert!(cleanup.is_ok(), "owned fixture cleanup: {cleanup:?}");
+        assert!(matches!(poll, Err(AutonomyStateError::Serde(_))));
+        assert_eq!(after_poll, before_poll, "poll must not repair the journal");
+        assert_eq!(appended.expect("locked append repairs").sequence, 2);
+        let events = events.expect("writer repaired events");
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].kind, "session_created");
+        assert_eq!(events[1].kind, "writer_repaired");
+        assert_eq!(snapshot.expect("snapshot").last_event_sequence, 2);
+    }
+
+    #[test]
+    fn event_poll_preserves_concurrent_partial_append() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let (root, store) = store("partial-event-read-only");
+        store
+            .create_session("session-one", queue())
+            .expect("session");
+        store
+            .append_event("session-one", "session_created", "session created")
+            .expect("event");
+        let events_path = store
+            .session_dir("session-one")
+            .expect("path")
+            .join("events.jsonl");
+        let baseline = fs::read(&events_path).expect("baseline");
+        let event = AutonomousEventV1 {
+            schema_version: AUTONOMY_STATE_SCHEMA_VERSION,
+            session_id: "session-one".into(),
+            sequence: 2,
+            kind: "concurrent_event".into(),
+            summary: "synthetic concurrent event".into(),
+        };
+        let event_bytes = serde_json::to_vec(&event).expect("event bytes");
+        let split = event_bytes.len() / 2;
+        let mut expected_partial = baseline.clone();
+        expected_partial.extend_from_slice(&event_bytes[..split]);
+        let mut expected_complete = baseline;
+        expected_complete.extend_from_slice(&event_bytes);
+        expected_complete.push(b'\n');
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let (resume_tx, resume_rx) = mpsc::channel();
+        let writer_store = store.clone();
+        let writer_path = events_path.clone();
+        let writer = std::thread::spawn(move || -> Result<(), AutonomyStateError> {
+            let _mutation_lock = writer_store.acquire_state_mutation_lock("session-one")?;
+            let mut snapshot = writer_store.load_session("session-one")?;
+            let mut file = OpenOptions::new()
+                .append(true)
+                .open(&writer_path)
+                .map_err(io_error)?;
+            file.write_all(&event_bytes[..split]).map_err(io_error)?;
+            file.sync_data().map_err(io_error)?;
+            ready_tx.send(()).map_err(|_| {
+                AutonomyStateError::Validation("synthetic reader disconnected".into())
+            })?;
+            resume_rx
+                .recv_timeout(Duration::from_secs(5))
+                .map_err(|_| {
+                    AutonomyStateError::Validation("synthetic reader did not resume writer".into())
+                })?;
+            file.write_all(&event_bytes[split..]).map_err(io_error)?;
+            file.write_all(b"\n").map_err(io_error)?;
+            file.sync_data().map_err(io_error)?;
+            drop(file);
+            snapshot.last_event_sequence = 2;
+            write_json_atomic(
+                &writer_store.session_dir("session-one")?.join("state.json"),
+                &snapshot,
+            )
+        });
+        let ready = ready_rx.recv_timeout(Duration::from_secs(5));
+        let partial_before_poll = fs::read(&events_path);
+        let poll = store.poll_events("session-one", 0);
+        let partial_after_poll = fs::read(&events_path);
+        let resumed = resume_tx.send(());
+        let writer_result = writer.join();
+        let final_bytes = fs::read(&events_path);
+        let final_events = store.poll_events("session-one", 0);
+        let final_snapshot = store.load_session("session-one");
+        drop(store);
+        assert_eq!(root.parent(), Some(std::env::temp_dir().as_path()));
+        let cleanup = fs::remove_dir_all(&root);
+
+        assert!(cleanup.is_ok(), "owned fixture cleanup: {cleanup:?}");
+        assert!(ready.is_ok(), "writer reached partial append: {ready:?}");
+        assert!(resumed.is_ok(), "writer resumed: {resumed:?}");
+        assert_eq!(writer_result.expect("writer joined"), Ok(()));
+        assert_eq!(
+            partial_before_poll.expect("partial bytes"),
+            expected_partial
+        );
+        assert!(matches!(poll, Err(AutonomyStateError::Serde(_))));
+        assert_eq!(
+            partial_after_poll.expect("partial bytes after poll"),
+            expected_partial,
+            "observer must not truncate a live writer's partial record",
+        );
+        assert_eq!(final_bytes.expect("completed bytes"), expected_complete);
+        let events = final_events.expect("completed events");
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[1], event);
+        assert_eq!(final_snapshot.expect("snapshot").last_event_sequence, 2);
     }
 
     #[test]
