@@ -1,3 +1,48 @@
+# Current C0/C1 acceptance authority — 2026-11-10T01:51:38Z
+
+The user's latest direction supersedes the earlier requirement for a mandatory
+native Codex hop. The first required loop is **ChatGPT Web → CatDesk v5 → an
+authorized project-file edit and verification → a project-specific manual
+self-Wake**. Codex/native delegation is optional. This changes acceptance
+priority; it does not declare any unfinished capability accepted.
+
+| Track | Current requirement and status |
+| --- | --- |
+| C0 serving and access | Preserve existing bounded backend, authentication, connector and catalog evidence. Confirm the actual Web caller's project/workspace scope for a live test; no new C0 pass is created by this clarification. |
+| C1 primary Web loop | NOT_DEMONSTRATED: the actual registered conversation must make one authorized local-file edit, verify the real result and request one bounded manual self-Wake with an exact durable receipt and attributable completed-response readback. |
+| Independent projects | Still required: two project conversations must work in separate registered workspaces; cross-project writes and duplicate execution must be refused, and a blocked project must not stall another. |
+| Optional native cycle | Still UNPASSED. Its historical native-MCP, private-context, dispatch-refusal, ownership and Wake evidence is preserved, but finishing that cycle is no longer a prerequisite for the primary Web loop. |
+| Focused source/release chain | INCONCLUSIVE: qualified baseline and all eleven partial groups/fifty fragments/eighteen paths, zero reported findings and five remaining suitability/context needs. No source acceptance, native-C7 finalization, producer or protected promotion follows. |
+
+The current C1 criterion above governs new work. Earlier dated references to a
+native C1 cycle record the then-required experiment and remain historical; they
+must not be rewritten as passes or used to stall independently eligible direct
+Web work. Original native C1/C49 identities, frozen arguments, grants, leases,
+receipts, unknown outcomes and no-replay fences remain untouched. No prepared
+source integration, report creation, CAS, ACK, build or promotion is to run from
+the INCONCLUSIVE review.
+
+The direct loop must reuse existing project registration, caller authentication,
+workspace containment, task ownership, file-tool permission and project/Wake
+pairing mechanisms. A source-review grant remains read-only and cannot become
+file-edit authority. Manual self-Wake means an explicitly requested, bounded
+project-specific delivery through supported CatDesk tools, with current
+URL/digest/generation checks and duplicate suppression; it does not activate
+recurring browser automation or create another owner. Read-only reviews,
+completed browser turns, source tests and isolated canaries do not prove the
+installed edit/verification/self-Wake loop. Preserve native sessions and all
+project state throughout bounded installed/live testing.
+
+The focused review's five needs concern the missing later shared USER-reader
+fix, captured-log evidence limitations and operational/history suitability.
+Its INCONCLUSIVE verdict and the older Group9 FAIL/raw-owner-failure history
+remain intact. Corroboration and communication closure are recorded separately
+from source, release, installed and user-facing acceptance. See the
+[canonical architecture](CANONICAL_CURRENT_ARCHITECTURE.md) for the primary and
+optional branches. The full multi-project milestone remains incomplete.
+
+---
+
 ## 2026-11-08T20:00:47.515801+00:00 — reconciled identity clarification delivered; native execution still unattempted
 
 Source b67ee0254e385c001e053ad34a328bfcd57df4d7 built a separate controller fe22fa3e6435763d51047e81b5134aa69e676932e2f3c02ba2b7cb06a6e5e405 in46.453seconds with1064 pins preserved. The reviewed observer bytes were independently matched to the exact Git source and build. No installation, selection, protected fingerprint or release-authority change occurred. A stale private harness observer pin refused before any product action; its failed receipt was retained before correcting only that test pin.

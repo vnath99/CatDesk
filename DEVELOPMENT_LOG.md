@@ -3521,3 +3521,34 @@ were published at coordinator-verified remote commit
 `c66aa3af6b17bfe95ac633b7aaee69ffd1064f05`; publication is not a final review
 judgment. Cumulative review, source acceptance, producer authority, installed
 qualification, promotion and the native C1 cycle remain incomplete.
+
+
+## 2026-11-10T01:51:38Z — user prioritizes direct Web file work and manual self-Wake
+
+The user clarified the required first acceptance loop as ChatGPT Web → CatDesk
+v5 → authorized project-file edit and verification → project-specific manual
+self-Wake. Codex/native execution is optional. Updated the canonical architecture
+and current C0/C1 authority to make this the primary branch while preserving all
+historical native evidence and the still-unpassed optional native experiment.
+A native dispatch is no longer a prerequisite for useful direct Web work or its
+acceptance. Original native C1/C49 contracts, arguments, grants, leases, histories
+and no-replay fences were not changed; no completed or uncertain message is to
+be replayed.
+
+The completed focused review returned INCONCLUSIVE with qualified baseline,
+eleven partial groups, fifty original fragments, eighteen paths, no reported
+findings and five suitability/context needs. Missing later shared-reader and
+captured-output metadata changes, evidence limitations and operational history
+remain material. Prepared native-C7 source integration/finalization/producer
+steps stay held; no report, FF, CAS, ACK, build or protected promotion follows
+from this verdict. Communication completion is tracked separately.
+
+The primary loop remains unaccepted until an actual registered Web conversation
+uses supported authentication/project scope to make and verify an authorized
+file edit and obtains one attributable bounded manual self-Wake receipt and
+completed-response readback. Two-project isolation, independent progress and
+cleanup remain required. Existing read-only review grants do not authorize file
+edits, and the change does not enable recurring owners or relax protected
+release safeguards. This checkpoint changes documentation only: no runtime,
+project binding, native session, source implementation or Git operation occurred.
+The full multi-project MVP is not complete.

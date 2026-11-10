@@ -9,6 +9,63 @@ read [`CATDESK_MILESTONES.md`](../../CATDESK_MILESTONES.md),
 [architecture/document index](ARCHITECTURE_DOCUMENT_INDEX.md) identifies
 superseded and historical material.
 
+## 2026-11-10T01:51:38Z — current user-authorized primary execution loop
+
+The user's latest direction makes **ChatGPT Web → CatDesk v5 → authorized
+project-file edit and verification → project-specific manual self-Wake** the
+required first acceptance loop. ChatGPT Web is the project agent; invoking
+Codex or another native coding provider is optional. A native dispatch is not
+a prerequisite for proving the direct Web loop or for continuing independently
+eligible project work.
+
+The direct loop must authenticate the actual Web caller, resolve its registered
+project identity and exact workspace, enforce approved file/task ownership, and
+retain attributable edit and verification evidence. Its manual self-Wake must
+use the existing project-specific queue and paired target, verify the exact
+conversation URL/digest/generation, suppress duplicates, and retain delivery
+and completed-response evidence. Manual self-Wake means an explicitly requested
+bounded delivery through supported CatDesk tools; it does not enable recurring
+automation or create another browser owner. Two independent project conversations
+must prove workspace isolation and independent progress. These are acceptance
+requirements, not claims that the installed runtime has already passed them.
+
+Historical native-MCP, dispatch, private-context, ownership and Wake evidence
+remains valid for its recorded scope. The earlier native coding cycle remains
+unpassed, but is no longer a prerequisite for the primary Web acceptance loop.
+Original native C1/C49 task identities, frozen arguments, grants, leases,
+receipts and no-replay fences remain unchanged. Optional native execution still
+requires its own existing authorization and recovery checks.
+
+The completed focused source review returned INCONCLUSIVE despite qualified
+baseline applicability, eleven partial groups, fifty fragments, eighteen paths
+and no reported findings; five suitability/context needs remain. This is not
+source acceptance, installed qualification or promotion authority. Its prepared
+native-C7 integration/finalization/producer chain remains held. The revised
+priority neither rewrites that verdict nor bypasses protected release checks.
+See the [current C0/C1 acceptance record](C0_C1_ACCEPTANCE_2026_11_07.md).
+
+### Existing direct-task route and its evidence limits
+
+The installed source already provides assignment-scoped `read`, `search`,
+`patch.preview`, `patch.apply`, `patch.compare`, `diff.actual`, `verify.command`
+and explicitly granted `wake.manual_end_turn`. A cached v5 catalog can reach the
+same central dispatcher through `run_command` with only
+`{"command":"CATDESK_WEB_TASK=<exact scoped JSON call>"}`. Omit `cwd` and
+`timeout`, including null values. This closed compatibility envelope neither
+executes shell text nor grants additional authority. Generic global-root file
+tools do not establish independent project scope.
+
+Use a fresh assignment, private execution key and separate linked worktree for
+new direct work; preserve existing native-specific assignments. Verification
+selects a locally frozen command profile; the installed Codex CLI may supply the
+Windows sandbox without making a model call or taking a native coding session.
+The shared MCP bearer and assignment key authenticate scoped access; they do not
+cryptographically authenticate the originating ChatGPT conversation. Exact
+browser delivery, target generation and task journals must establish the live
+conversation/task correlation. `WAKE_INTENT_RECORDED` proves queue admission
+only. Actual delivery, completed-response observation and cleanup remain separate
+live checks. These capabilities still need the direct installed acceptance loop.
+
 ## T-0476 operating model clarification — independent development and Wake
 
 **October 2026 operator priority:** An installed product-root-signed CatDesk main
@@ -37,20 +94,27 @@ target must remain STOPPED until paired Chat51 authority is proven.
 ## Current end-to-end architecture
 
 ```text
-Operator-designated ChatGPT conversation
+Registered project ChatGPT Web conversation
   -> official OpenAI Secure MCP tunnel/client       [external/operator owned]
-  -> CatDesk fixed loopback control transport       [CatDesk owned]
-  -> canonical provider turn / exact Codex thread   [CatDesk controlled]
-  -> durable contract, accounting, review, and continuity state
-  -> reviewed output and canonical review-inbox event
-  -> bounded one-shot wake delivery when separately eligible
+  -> authenticated CatDesk v5 / fixed loopback transport
+  -> registered project workspace and authorized local-file tools
+  -> attributable edit, verification and durable task/result state
+  -> bounded project-specific manual self-Wake
+  -> exact target receipt and completed-response readback
+
+Optional delegation:
+  authorized project task -> native provider / exact Codex thread
+  -> existing contract, accounting, review and continuity safeguards
 ```
 
 The project registry's designated conversation is a protected continuity
-binding. CatDesk CLI/app-server continuation reuses the exact canonical Codex
-thread and durable continuity metadata; it does not create, select, scrape, or
-retarget a ChatGPT conversation. Browser wake is not a continuation mechanism
-and is never required to establish thread identity.
+binding. The primary Web loop uses that project's exact conversation and paired
+Wake target; any rollover must preserve predecessor history and use the existing
+guarded binding transaction. For optional native delegation, CatDesk
+CLI/app-server continuation reuses the exact canonical Codex thread and durable
+continuity metadata; it does not create, select, scrape, or retarget a ChatGPT
+conversation. Browser Wake does not establish or replace a native thread's
+identity.
 
 The current stable control transport is recorded as `CONNECTED_VERIFIED` in
 the durable plan. A legacy `CatDesk_Local` HTTP 404 is not evidence to replace,
@@ -71,12 +135,13 @@ the external tunnel must never be treated as an authority to alter CatDesk
 supervisor state. No alternate listener, pipe, worker endpoint, service, or
 Scheduler task is a valid substitute for the reviewed fixed control path.
 
-## Provider, authentication, and contract boundary
+## Optional native-provider authentication and contract boundary
 
-Codex is preferred while eligible and remains tied to the current user's
-operator authentication context. CatDesk validates availability without reading
-authentication contents. A confirmed Codex allowance/credit exhaustion is a
-route transition within the **same logical session and task**:
+For a task explicitly delegated to a native provider, Codex is preferred while
+eligible and remains tied to the current user's operator authentication context.
+CatDesk validates availability without reading authentication contents. A
+confirmed Codex allowance/credit exhaustion is a route transition within the
+**same logical session and task**:
 
 1. Persist the provider-attested reset boundary and exact Codex thread metadata.
 2. Hand the same work to healthy contract-approved local Qwen.
@@ -87,7 +152,9 @@ route transition within the **same logical session and task**:
 If Codex is still exhausted, refresh the durable boundary and remain on (or
 return to) Qwen. A transient Codex 429 remains bounded Codex backoff. An
 unavailable Qwen fails closed to `WAITING_FOR_CHATGPT`; cloud, paid, browser,
-and other remote fallback are forbidden.
+and other remote provider fallback are forbidden for that native task. This
+fallback restriction does not disable the primary authorized ChatGPT Web client
+and local-file workflow described above.
 
 Autonomous work is limited by the approved task contract: workspace scope,
 allowed paths, provider policy, approved objective, and completion/review
@@ -130,7 +197,10 @@ access credentials.
 
 ## Review, wake, and recovery model
 
-`.catdesk/autonomy/review-inbox.json` is the canonical review-event authority.
+The primary Web loop must use existing project task journals, project-specific
+Wake queues and guarded paired targets. It does not require manufacturing a
+native provider turn or review-inbox event. For the optional native review-event
+route, `.catdesk/autonomy/review-inbox.json` is the canonical review authority.
 The newest unread actionable event for the exact session is the only candidate
 for delivery; acknowledgement and claims enforce one-writer/idempotent
 handling. T-0224 live natural-delivery acceptance is closed through T-0298 with
