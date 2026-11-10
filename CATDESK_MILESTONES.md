@@ -1,4 +1,35 @@
-## 2026-11-10 — fixed broker first-provisioning source qualified; Web acceptance still open
+## 2026-11-10 — focused corrections verified; actual direct Web cycle remains open
+
+352 distinct Rust cases, formatting/strict Clippy and the separate 19-case
+PowerShell suite pass. Complete independent bootstrap source review passes for
+the corrected fenced source, without artifact or operational authority. The
+retained C release's actual development health is a separate result.
+
+No approved signer was supplied and no key/enrollment or new protected release
+is assumed. The primary next step is the existing v5 scoped-file route and
+original SENT-receipt recovery, followed by exact delivered self-Wake. Native
+Codex is optional. Source/client catalog evidence does not establish that a
+particular installed binary executed the route; retained runtime receipts must
+provide that proof. Held tasks, drafts, bindings and native sessions remain
+preserved. No actual Web edit/verify/self-Wake acceptance is claimed.
+Evidence: [source and retained development results](docs/verification/WAKE_BOOTSTRAP_CORRECTIONS_AND_C_DEVELOPMENT_2026_11_10.json).
+
+## 2026-11-10 — actual release C development health; bootstrap review caught two concrete gaps
+
+Exact `9feface` release artifacts built successfully. Two finite PAUSED host
+starts and authenticated loopback MCP initialization/catalog passed; missing
+and wrong bearers returned 401. All 1,637 live preservation checks matched,
+and the local verification write passed 1,647 preservation checks. Tests ended
+STOPPED with the endpoint closed and no owned runtime/profile process left.
+
+Complete independent bootstrap review failed C for missing INTERACTIVE-group
+evidence. A real inert test also exposed the PowerShell launcher's inadequate
+parent-directory access mask. The corrected launcher passed 19 cases and an
+actual read-only C-image pin check; the token fix subsequently passed native qualification.
+No production promotion, signed issuer enrollment, browser send or Web
+edit/verify/self-Wake cycle is claimed. Original held requests remain untouched.
+
+## 2026-11-10 — fixed broker first-provisioning source qualified; Web acceptance still open (historical checkpoint)
 
 The existing installer now has an explicit signed first-bootstrap operation,
 read-only default preflight, create-only native setup and reusable exact-operator

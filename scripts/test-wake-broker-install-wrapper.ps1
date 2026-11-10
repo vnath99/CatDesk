@@ -9,6 +9,7 @@ $tokens = $null; $parseErrors = $null
 $wrapperAst = [Management.Automation.Language.Parser]::ParseFile($wrapper, [ref]$tokens, [ref]$parseErrors)
 if ($parseErrors.Count) { throw 'WRAPPER_PARSE_FAILED' }
 $cases = 0; $assertions = 0; $processStarts = 0; $builds = 0; $systemQueries = 0
+$pathPinCases = 0
 function Assert-That([bool]$Condition, [string]$Code) {
     if (-not $Condition) { throw $Code }
     $script:assertions++
@@ -30,11 +31,38 @@ $definition = @($definitions[0].CommandElements | Where-Object {
 })[0].Value
 Assert-That (-not ('CatDeskWakeBootstrapBoundedOutputV1' -as [type])) 'FRESH_POWERSHELL_TEST_PROCESS_REQUIRED'
 Add-Type -TypeDefinition $definition
+# Compile the actual independently versioned native path pin, not a test copy.
+$pinDefinitions = @($wrapperAst.FindAll({param($node)
+    $node -is [Management.Automation.Language.CommandAst] -and $node.GetCommandName() -ceq 'Add-Type' -and
+    @($node.CommandElements | Where-Object {
+        $_ -is [Management.Automation.Language.StringConstantExpressionAst] -and
+        $_.Value.Contains('public sealed class CatDeskWakeBootstrapPathPinV1')
+    }).Count -eq 1
+}, $true))
+Assert-That ($pinDefinitions.Count -eq 1) 'PATH_PIN_DEFINITION_AMBIGUOUS'
+$pinDefinition = @($pinDefinitions[0].CommandElements | Where-Object {
+    $_ -is [Management.Automation.Language.StringConstantExpressionAst] -and
+    $_.Value.Contains('public sealed class CatDeskWakeBootstrapPathPinV1')
+})[0].Value
+Assert-That (-not ('CatDeskWakeBootstrapPathPinV1' -as [type])) 'FRESH_PATH_PIN_TEST_PROCESS_REQUIRED'
+Add-Type -TypeDefinition $pinDefinition
 Add-Type -TypeDefinition @'
 using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+public static class CatDeskWakeWrapperNativeProbeV1 {
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true, ExactSpelling=true)]
+    private static extern SafeFileHandle CreateFileW(string path, uint access, uint share,
+        IntPtr security, uint disposition, uint flags, IntPtr template);
+    public static int DirectoryWriteError(string path) {
+        using (var handle = CreateFileW(path, 0x00120082, 7, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero)) {
+            return handle.IsInvalid ? Marshal.GetLastWin32Error() : 0;
+        }
+    }
+}
 public sealed class CatDeskWakeWrapperCountingStreamV1 : MemoryStream {
     public int MaximumReadRequest;
     public CatDeskWakeWrapperCountingStreamV1(byte[] bytes) : base(bytes, false) { }
@@ -164,6 +192,8 @@ $priorLocalAppData = [Environment]::GetEnvironmentVariable('LOCALAPPDATA', 'Proc
 $cleanupVerified = $false
 $temporaryCreated = $false
 $createdFiles = [Collections.Generic.List[string]]::new()
+$createdDirectories = [Collections.Generic.List[string]]::new()
+$createdJunctions = [Collections.Generic.List[string]]::new()
 try {
     Assert-That (-not [IO.Directory]::Exists($temporaryRoot)) 'TEST_DIRECTORY_ALREADY_EXISTS'
     $null = New-Item -ItemType Directory -Path $temporaryRoot -ErrorAction Stop
@@ -186,6 +216,43 @@ try {
     $unc = $frozen.Clone(); $unc.QualifiedHost='\\not-a-real-host\share\fixture.exe'
     Test-Refusal $unc 'WAKE_BOOTSTRAP_FROZEN_FILE_REQUIRED' $true
     if ($IsWindows) {
+        $pin = [CatDeskWakeBootstrapPathPinV1]::Open($candidate)
+        try {
+            Assert-That ([string]::Equals($pin.CanonicalFilePath, [IO.Path]::GetFullPath($candidate), [StringComparison]::OrdinalIgnoreCase)) 'PATH_PIN_CANONICAL_PATH_CHANGED'
+            $actual = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($pin.Stream)).ToLowerInvariant()
+            Assert-That ($actual -ceq [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes('inert fixture image'))).ToLowerInvariant()) 'PATH_PIN_HASH_NOT_FROM_RETAINED_HANDLE'
+            $pin.Revalidate()
+            $cases++; $pathPinCases++
+            $writer = $null; $writeRefused = $false
+            try { $writer = [IO.File]::Open($candidate, [IO.FileMode]::Open, [IO.FileAccess]::Write, [IO.FileShare]::ReadWrite) }
+            catch { $writeRefused = ($_.Exception.GetBaseException().HResult -band 65535) -in @(32,33) }
+            finally { if ($null -ne $writer) { $writer.Dispose() } }
+            Assert-That $writeRefused 'PATH_PIN_DID_NOT_EXCLUDE_LEAF_WRITER'
+            Assert-That ([CatDeskWakeWrapperNativeProbeV1]::DirectoryWriteError($temporaryRoot) -in @(32,33)) 'PATH_PIN_DID_NOT_EXCLUDE_PARENT_WRITER'
+            $cases++; $pathPinCases++
+        } finally { $pin.Dispose() }
+        Assert-That ([CatDeskWakeWrapperNativeProbeV1]::DirectoryWriteError($temporaryRoot) -eq 0) 'PATH_PIN_PARENT_HANDLE_NOT_RELEASED'
+        $target = Join-Path $temporaryRoot 'junction-target'
+        [void][IO.Directory]::CreateDirectory($target); $createdDirectories.Add($target)
+        $junctionLeaf = Join-Path $target 'candidate.bin'
+        [IO.File]::WriteAllBytes($junctionLeaf, [Text.Encoding]::UTF8.GetBytes('inert fixture image')); $createdFiles.Add($junctionLeaf)
+        $junction = Join-Path $temporaryRoot 'junction-parent'
+        [void](New-Item -ItemType Junction -Path $junction -Target $target); $createdJunctions.Add($junction)
+        $throughJunction = Join-Path $junction 'candidate.bin'
+        Assert-That (((Get-Item -LiteralPath $throughJunction).Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) 'JUNCTION_FIXTURE_LEAF_MUST_BE_PLAIN'
+        $junctionArgs = $frozen.Clone(); $junctionArgs.QualifiedHost = $throughJunction; $junctionArgs.ExpectedHostSha256 = $actual
+        Test-Refusal $junctionArgs 'WAKE_BOOTSTRAP_FROZEN_REPARSE_POINT_REFUSED'
+        $pathPinCases++
+        [IO.Directory]::Delete($junction, $false)
+        $hardlink = Join-Path $temporaryRoot 'candidate-hardlink.bin'
+        [void](New-Item -ItemType HardLink -Path $hardlink -Target $candidate); $createdFiles.Add($hardlink)
+        $failure = $null; $unexpectedPin = $null
+        try { $unexpectedPin = [CatDeskWakeBootstrapPathPinV1]::Open($candidate) }
+        catch { $failure = $_.Exception.GetBaseException().Message }
+        finally { if ($null -ne $unexpectedPin) { $unexpectedPin.Dispose() } }
+        Assert-That ($failure -ceq 'WAKE_BOOTSTRAP_FROZEN_FILE_REQUIRED') 'PATH_PIN_MULTILINK_LEAF_NOT_REFUSED'
+        $cases++; $pathPinCases++
+        [IO.File]::Delete($hardlink)
         Test-Refusal $frozen 'WAKE_BOOTSTRAP_FROZEN_FILE_CHANGED'
         $hashRefusalScope = 'ACTUAL_WRAPPER_ADMISSION'
     } else {
@@ -196,25 +263,39 @@ try {
             @($node.Body.Statements | Where-Object {$_.Extent.Text.Contains("throw 'WAKE_BOOTSTRAP_FROZEN_FILE_CHANGED'")}).Count -eq 1
         }, $true))
         Assert-That ($tryBlocks.Count -eq 1) 'FROZEN_HASH_PHASE_AMBIGUOUS'
-        $prefix = @(); foreach ($statement in $tryBlocks[0].Body.Statements) {
-            $prefix += $statement.Extent.Text
-            if ($statement.Extent.Text.Contains("throw 'WAKE_BOOTSTRAP_FROZEN_FILE_CHANGED'")) { break }
-        }
+        $prefix = @($tryBlocks[0].Body.Statements | Where-Object {
+            ($_ -is [Management.Automation.Language.AssignmentStatementAst] -and $_.Left.Extent.Text -in @('$imageHash','$approvalHash')) -or
+            ($_ -is [Management.Automation.Language.IfStatementAst] -and $_.Extent.Text.Contains("throw 'WAKE_BOOTSTRAP_FROZEN_FILE_CHANGED'"))
+        } | ForEach-Object {$_.Extent.Text})
+        Assert-That ($prefix.Count -eq 3) 'PORTABLE_HASH_PHASE_AMBIGUOUS'
         $QualifiedHost=$candidate; $ApprovalFile=$approval; $ExpectedHostSha256=$frozen.ExpectedHostSha256; $ExpectedApprovalSha256=$frozen.ExpectedApprovalSha256
-        $imagePin=$null; $approvalPin=$null; $failure=$null
+        $imageStream=[IO.File]::OpenRead($candidate); $approvalStream=[IO.File]::OpenRead($approval)
+        $imagePin=@{Stream=$imageStream}; $approvalPin=@{Stream=$approvalStream}; $failure=$null
         try { . ([scriptblock]::Create(($prefix -join "`n"))) } catch { $failure=$_.Exception.Message }
-        finally { if ($null -ne $approvalPin) { $approvalPin.Dispose() }; if ($null -ne $imagePin) { $imagePin.Dispose() } }
+        finally { $approvalStream.Dispose(); $imageStream.Dispose() }
         Assert-That ($failure -ceq 'WAKE_BOOTSTRAP_FROZEN_FILE_CHANGED') 'PORTABLE_HASH_PHASE_REFUSAL_CHANGED'
         $cases++; $hashRefusalScope='ACTUAL_HASH_PHASE_NON_WINDOWS'
     }
 } finally {
     [Environment]::SetEnvironmentVariable('LOCALAPPDATA', $priorLocalAppData, 'Process')
-    # Only these two known files and their empty, checked private directory.
+    # Only literal known files, junction entries and empty owned directories.
     Assert-That ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($temporaryRoot)) -ceq [IO.Path]::TrimEndingDirectorySeparator($temporaryBase)) 'TEST_CLEANUP_ROOT_MISMATCH'
     if ($temporaryCreated) {
         Assert-That (([IO.File]::GetAttributes($temporaryRoot) -band [IO.FileAttributes]::ReparsePoint) -eq 0) 'TEST_CLEANUP_DIRECTORY_REPLACED'
-        foreach ($path in @($candidate, $approval)) {
+        foreach ($path in $createdJunctions) {
+            if (Test-Path -LiteralPath $path) {
+                Assert-That ([IO.Path]::GetDirectoryName($path) -ceq $temporaryRoot) 'TEST_JUNCTION_CLEANUP_PATH_MISMATCH'
+                Assert-That (((Get-Item -LiteralPath $path).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) 'TEST_JUNCTION_REPLACED'
+                [IO.Directory]::Delete($path,$false)
+            }
+        }
+        foreach ($path in $createdFiles) {
             if ($createdFiles.Contains($path) -and [IO.File]::Exists($path)) { [IO.File]::Delete($path) }
+        }
+        foreach ($path in $createdDirectories) {
+            Assert-That ([IO.Path]::GetDirectoryName($path) -ceq $temporaryRoot) 'TEST_CHILD_CLEANUP_PATH_MISMATCH'
+            Assert-That (([IO.File]::GetAttributes($path) -band [IO.FileAttributes]::ReparsePoint) -eq 0) 'TEST_CHILD_DIRECTORY_REPLACED'
+            [IO.Directory]::Delete($path,$false)
         }
         [IO.Directory]::Delete($temporaryRoot, $false)
     }
@@ -223,4 +304,5 @@ try {
 }
 [ordered]@{passed=$true;totalPassCount=$cases;assertionCount=$assertions;retainedOutputUnits='UTF16_CHARACTERS';
     largeDrainAllocatedBytes=$allocatedBytes;hashRefusalScope=$hashRefusalScope;processStarts=$processStarts;builds=$builds;
-    systemQueries=$systemQueries;temporaryCleanupVerified=$cleanupVerified;nativeBootstrapCalls=0;serviceChanges=0} | ConvertTo-Json -Compress
+    systemQueries=$systemQueries;temporaryCleanupVerified=$cleanupVerified;nativeBootstrapCalls=0;serviceChanges=0;
+    nativePathPinCases=$pathPinCases;nativePathPinScope='OWNED_TEMP_INERT_FILES_ONLY'} | ConvertTo-Json -Compress

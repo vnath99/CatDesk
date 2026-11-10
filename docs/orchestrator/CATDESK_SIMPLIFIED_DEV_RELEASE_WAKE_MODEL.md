@@ -1,4 +1,37 @@
-## 2026-11-10 — first provisioning closes the one-shot broker lifecycle gap in source
+## 2026-11-10 — keep direct Web work separate from conditional release enrollment
+
+No approved Wake signer was provided. The operator's priority remains direct
+ChatGPT Web file editing, verification and delivered self-Wake through existing
+v5. Native delegation is optional. Check the existing scoped dispatcher alias,
+original delivery evidence and exact-event sender before requiring any protected
+upgrade. No additional signing/recovery system or new plugin is scheduled.
+
+The focused corrections passed 352 Rust and 19 PowerShell cases plus complete
+nonauthor bootstrap source review. This is a source checkpoint. Retained C's
+actual development health does not qualify a new D executable, protected
+installation or Web cycle. Any indispensable cutover must reuse the existing
+four-artifact selection, installer, review and operator authority; source PASS
+does not create that authority. Evidence:
+[dated qualification](../verification/WAKE_BOOTSTRAP_CORRECTIONS_AND_C_DEVELOPMENT_2026_11_10.json).
+
+## 2026-11-10 — release C development health and focused bootstrap corrections
+
+Published native source `9feface` produced immutable release artifacts. Two
+10-second PAUSED starts and a 15-second authenticated loopback backend passed;
+the verified predecessor remains retained. Local verification records only
+PAUSED ownership/startup/normal-stop and backend health. It grants no protected
+promotion or Web acceptance.
+
+Independent bootstrap review subsequently failed C for missing explicit enabled
+INTERACTIVE-group evidence. That source correction and the separately versioned
+PowerShell launcher subsequently passed source qualification; no new native candidate has been built.
+The launcher's Windows tests prove why a retained directory handle must include
+list access: metadata-only access did not enforce sharing. Attribute-only opens
+remain possible; their namespace effects require separate evidence. No new
+owner, service, registry, signer or recovery system was introduced. Original C
+artifacts, journals and all project bindings remain preserved.
+
+## 2026-11-10 — first provisioning closes the one-shot broker lifecycle gap in source (historical checkpoint)
 
 The fixed broker handles one request and exits. Its former demand-start plus
 query-only service ACL had no supported later start owner. First provisioning

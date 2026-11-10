@@ -1,4 +1,57 @@
-## 2026-11-10 — functional first broker bootstrap and explicit operator lifecycle
+## 2026-11-10 — direct Web acceptance stays primary; corrected source checkpoint
+
+The operator has not provided an approved Wake signer. No signing identity,
+enrollment or operational authority is assumed, and no further installation
+infrastructure is scheduled. First establish the existing v5 direct route and
+positive original delivery evidence. Native Codex delegation is optional.
+
+The focused corrections passed 352 distinct Rust cases across all 12 stages,
+formatting and strict Clippy in 223.986 seconds; all 238 source and six protected
+pins matched, with no compiler left. PowerShell separately passed 19 cases/70
+assertions. Complete nonauthor bootstrap source review passed within its stated
+scope; it grants no artifact or installation authority. Retained C development
+health below is not a live test of a newly built D release. No D release build
+or protected promotion has occurred. The exact empty-parent relative-create
+diagnostic refused both creates with no child observed in either destination;
+all owned temporary objects were cleaned up.
+
+Source supports the existing v5 `run_command` `CATDESK_WEB_TASK=` envelope for
+scoped file work and verification. Published tool metadata alone is not installed
+runtime proof. The held Bug/BYOVD requests still lack original matching SENT
+receipts, so no new grant, replay or task replacement is permitted. Exact-event
+delivery and receipt recovery must be assessed separately from file capability.
+See [dated evidence](docs/verification/WAKE_BOOTSTRAP_CORRECTIONS_AND_C_DEVELOPMENT_2026_11_10.json).
+
+## 2026-11-10 — actual C release build, development health and review-driven corrections
+
+The exact published `9feface` release build completed in 687.937 seconds with
+all source/protected pins matching. The actual development qualification then
+passed two 10-second PAUSED hosts and one 15-second loopback backend: bearer
+checks 401/401/200, catalog 200 with 79 tools, central route published and registry
+readable. Its owner finished in 45.128 seconds, with 1,637 preservation checks
+matching, no task-file inventory changes, endpoint closed and all owned runtime
+processes gone. Metadata-only local verification subsequently passed 1,647
+preservation checks. Previous verified A remains retained; production is unchanged.
+
+A separate inert junction test demonstrated that leaf hashing alone did not bind
+its reusable parent path. The first parent-pin regression then failed because
+metadata-only directory access did not enforce sharing. A bounded native API
+diagnostic proved the difference with directory-list access and independently
+qualified the nonempty-directory reparse refusal using valid empty controls.
+The minimal one-bit correction passed 19 PowerShell cases/70 assertions; an
+actual read-only pin/hash of C's image also passed. Earlier failures remain
+preserved. Attribute-only opens are not denied by sharing, and failed/unproven
+child exit is never reported as clean completion.
+
+A complete nonauthor bootstrap source review separately failed original C for
+its missing explicit INTERACTIVE-group check. The focused correction preserves
+existing primary/pipe identity, elevation, session and restriction gates while
+adding bounded enabled/non-deny-only group verification and seven regressions.
+Its native qualification subsequently passed as recorded above. Retained C bytes are unchanged and remain
+unqualified for privileged bootstrap. No signature, trust enrollment, installed
+cutover, browser send, task replay or full Web acceptance has been produced.
+
+## 2026-11-10 — functional first broker bootstrap and explicit operator lifecycle (historical checkpoint)
 
 Implemented the existing installer's missing first-provisioning path and fixed
 its one-shot/demand-start restart gap. The signed bootstrap binds reviewed bytes,

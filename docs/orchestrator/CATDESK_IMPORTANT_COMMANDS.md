@@ -1,4 +1,36 @@
-## 2026-11-10 — first fixed-broker bootstrap and reusable bounded starts (SOURCE QUALIFIED; NOT INSTALLED)
+## 2026-11-10 — existing v5 direct route first; no assumed signing authority
+
+No approved Wake signer has been provided. Do not generate one or treat source
+tests as enrollment. Corrected source passed 352 Rust and 19 PowerShell cases;
+the protected bootstrap procedure below remains conditional on genuine external
+authority and exact qualified artifacts, and is not the primary task.
+
+The source-supported v5 alias is `run_command` with exactly one `command` value:
+`CATDESK_WEB_TASK=` followed by the serialized scoped call. This dispatcher path
+is separate from shell execution and does not require native Codex. It still
+enforces original assignment, project/target identity, grants and SENT receipts.
+Do not add cwd overrides, invent a grant or substitute an unrelated receipt.
+The held requests require supported positive receipt recovery first; queued
+self-Wake intent is not delivery. Verify actual installed-route evidence before
+claiming acceptance. See [dated evidence](../verification/WAKE_BOOTSTRAP_CORRECTIONS_AND_C_DEVELOPMENT_2026_11_10.json).
+
+## 2026-11-10 — release C health and corrected launcher; protected bootstrap remains unqualified
+
+Release artifacts from `9feface` passed two finite PAUSED development starts and
+authenticated local MCP checks. They remain separate from production. Complete
+independent bootstrap review then found a missing INTERACTIVE-token check;
+nonzero session placement alone is insufficient. Do not use C for privileged
+bootstrap. The focused source correction subsequently passed qualification.
+
+The corrected PowerShell launcher passed 19 cases/70 assertions and an actual
+read-only pin/hash check of C's retained image. Earlier failed tests and the
+inert junction counterexample are preserved. These checks establish filesystem
+behavior, not an elevated installation or full Web cycle. The procedures below
+still require the corrected qualified native build, genuine approved issuer,
+signed packet, independent review and bounded operator owner. Held submissions
+remain fenced; no authentication relay or replay is required.
+
+## 2026-11-10 — first fixed-broker bootstrap and reusable bounded starts (HISTORICAL SOURCE CHECKPOINT; NOT INSTALLED)
 
 The new candidate adds first provisioning to the existing Wake installer. It
 creates no alternate service, profile, tunnel, registry or release history.
@@ -14,11 +46,20 @@ qualified PowerShell 7.6 launcher with real Windows elevation. Native admission
 also requires an unrestricted interactive primary token and an already-present
 SeRestorePrivilege; it never grants a Windows privilege or elevates itself.
 
-Run the read-only preflight through the existing wrapper, using finalized paths
-and lowercase SHA-256 values from the reviewed packet:
+Use a fresh, qualified PowerShell 7.6 `-NoProfile` process. Verify the reviewed
+launcher bytes **before interpreting them**, then invoke that in-memory script.
+The launcher pins every non-reparse ancestor and the same leaf handle used for
+hashing through normal verified child exit. A metadata-only directory handle
+does not enforce the intended sharing restriction; directory-list access is
+required. Attribute access remains separate. Finalized packet paths and hashes
+must identify a separately qualified native candidate and signed envelope:
 
 ```powershell
-.\wake\install.ps1 -Bootstrap -QualifiedHost '<qualified-new-WakeHost.exe>' `
+$launcherBytes = [IO.File]::ReadAllBytes('<reviewed-install.ps1>')
+$launcherHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($launcherBytes)).ToLowerInvariant()
+if ($launcherHash -cne '11278bdbfb2dc126ee11f3ad6eb71794e753fe5e33109bdd9325e103b9e3180a') { throw 'REVIEWED_LAUNCHER_CHANGED' }
+$launcher = [scriptblock]::Create([Text.Encoding]::UTF8.GetString($launcherBytes))
+& $launcher -Bootstrap -QualifiedHost '<qualified-new-WakeHost.exe>' `
   -ExpectedHostSha256 '<installer-sha256>' -ApprovalFile '<frozen-signed-bootstrap.json>' `
   -ExpectedApprovalSha256 '<envelope-sha256>' -ExpectedPublicKeySha256 '<approved-key-fingerprint>'
 ```
@@ -32,6 +73,9 @@ broker resources, binds the policy's actual file identity in place, and returns
 security/image/policy readback. It starts no service and changes no selection.
 Existing or partial targets, changed state, unsafe/busy parents, token failure
 or unknown outcome refuse; preserve evidence rather than rerunning or clearing.
+`NATIVE_EXIT_UNPROVEN` also remains failed/no-retry: it cannot establish that
+pins survived through a verified native exit. Actual elevated qualification
+requires the existing bounded owner and successful terminal cleanup.
 
 Subsequent lifecycle uses the same qualified native binary:
 
