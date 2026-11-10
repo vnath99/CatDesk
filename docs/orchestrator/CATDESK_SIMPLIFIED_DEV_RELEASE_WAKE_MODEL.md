@@ -1,3 +1,44 @@
+## 2026-11-10 — one compatible Wake selection document; source seam only
+
+The next Wake selection format keeps the existing `current.json`, its flat
+schema-1 fields and the same state root. An optional closed `selection`
+extension contains generation, current release and one qualified working
+predecessor in those same atomic bytes. The unchanged attested legacy reader
+functions can still read the flat projection. New readers refuse divergence,
+explicit null extensions, duplicate fields and stale full-document hashes.
+No second version registry or selection file is introduced.
+
+The new reader/update/rollback planners perform no filesystem writes. They
+require an explicit verifier for exact release evidence, with working evidence
+additionally required before retaining or selecting a predecessor. A damaged
+current release may retain an already qualified working predecessor during an
+upgrade. A qualification hash, directory's existence or previous selection is
+never itself qualification. A failed current artifact need not be readable to
+propose restoration of a verified predecessor; malformed selection metadata
+still refuses. Immutable failed artifacts and historical records remain intact.
+
+Migration remains held at the existing installation boundary. The next concrete
+implementation must compose the existing same-root owner/host/browser leases,
+candidate admission, exact predecessor qualification, full-byte CAS, atomic
+writer and readback in one reviewed transaction. Existing old writers must be
+detected by the full-byte CAS. Qualify installed startup, controlled failure,
+rollback and interrupted transactions before activating fallback or retiring
+legacy writers. The source fixture exercises abandoned staging and the existing
+atomic writer; it is not a real process-crash or installed recovery test.
+
+The attested-source startup path can capture an old package before waiting for
+the host lease, and control writes do not share the install lease. The composed
+migration must close those concrete races and verify selected-image authority
+after acquisition, before status or dispatch. The installed legacy manifest
+lacks source provenance; source checks cannot be attributed to its bytes by
+assumption.
+
+The present broker script refuses before installation and its service dispatch
+is incomplete. Provisioning configuration alone cannot solve that defect. Keep
+those gates closed until a reviewed executable migration and its release
+evidence exist. This seam changes no production authority, signing policy,
+profile, project binding, native-session owner, external tunnel or startup policy.
+
 ## 2026-11-03T16:35:17.988364+00:00 — shared composer-structure diagnostics implemented,341 cases pass and exact held-event observation qualified
 
 ## 2026-11-03T19:31:34.880166+00:00 — finite ordinary Web work delivery source qualified; native assignment preparation complete

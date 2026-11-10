@@ -2803,6 +2803,8 @@ fn operator_web_error_code(error: &str) -> &str {
             | "SCOPED_REVIEW_RECEIPT_REQUIRED"
             | "SCOPED_REVIEW_REPLAY_REFUSED"
             | "SCOPED_REVIEW_TIMEOUT"
+            | "SCOPED_WORK_INSTALLED_ADAPTER_UPGRADE_REQUIRED"
+            | "CONVERSATION_NATIVE_ENTRY_REQUIRED"
             | "PROJECT_TASK_ASSIGNMENT_INVALID"
             | "PROJECT_TASK_ASSIGNMENT_DIGEST_CHANGED"
             | "PROJECT_TASK_CONTRACT_INVALID"
@@ -2962,9 +2964,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let workspace = std::env::current_dir()?;
             match operator_facade::execute_operator_action(action, &workspace).await {
                 Ok(result) => {
-                    let receipt_refused = operator_web && operator_web_receipt_refusal(&result);
+                    let bounded_web_refusal = operator_web
+                        && (operator_web_receipt_refusal(&result)
+                            || catdesk_wake::runtime::is_scoped_work_timeout(&result));
                     println!("{result}");
-                    if receipt_refused {
+                    if bounded_web_refusal {
                         std::process::exit(2);
                     }
                     return Ok(());
@@ -3948,6 +3952,24 @@ fn render_toast(f: &mut Frame, palette: theme::Palette, msg: &str, pos: (u16, u1
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn scoped_native_entry_upgrade_error_is_fixed_without_arbitrary_scoped_details() {
+        assert_eq!(
+            super::operator_web_error_code(
+                "SCOPED_WORK_INSTALLED_ADAPTER_UPGRADE_REQUIRED: PRIVATE_DETAIL"
+            ),
+            "SCOPED_WORK_INSTALLED_ADAPTER_UPGRADE_REQUIRED"
+        );
+        assert_eq!(
+            super::operator_web_error_code("SCOPED_WORK_PRIVATE_PROFILE"),
+            "WEB_OPERATION_REFUSED"
+        );
+        assert_eq!(
+            super::operator_web_error_code("CONVERSATION_NATIVE_ENTRY_REQUIRED: PRIVATE_DETAIL"),
+            "CONVERSATION_NATIVE_ENTRY_REQUIRED"
+        );
+    }
+
     #[test]
     fn project_assignment_error_codes_keep_fixed_categories_without_private_details() {
         for code in [

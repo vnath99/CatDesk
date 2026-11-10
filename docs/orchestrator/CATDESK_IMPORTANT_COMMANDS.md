@@ -1,3 +1,27 @@
+## 2026-11-10 — bounded-send compatibility and current installation limitation
+
+New bounded work invitations and manual end-turn deliveries require a supported
+fenced/native-entry adapter and bridge pair, in addition to the existing package
+integrity checks. An unsupported installed pair returns
+`SCOPED_WORK_INSTALLED_ADAPTER_UPGRADE_REQUIRED` before a new claim or browser
+starts. An existing uncertain or completed send still returns its no-replay
+refusal first. Upgrading the development GUI alone does not upgrade installed
+Python. Supported source identities are compatibility evidence, not release,
+installation or working-health approval.
+
+Timeout diagnostics retain only the original event/target/message identities,
+delivery phase, fixed adapter stage and bounded callback timings. They retain
+exit 2 and never authorize a resend. Historical held drafts stay preserved.
+
+`wake/install.ps1 -BuildOnly` remains a build-only command. Without that switch,
+the existing script refuses with `WAKE_INSTALL_BROKER_UNPROVISIONED`; the current
+service also has an explicit unavailable-transaction gate. This is missing
+installation implementation, not an authentication flag or a request to try a
+different terminal. Do not remove either guard, copy Python over the installed
+package or change a fingerprint. No operator sign-in is required by the latest
+read-only observation. A concrete reviewed migration must exist before asking
+the operator to provision or run it.
+
 ## 2026-11-10 — direct Web task and exact manual-Wake delivery
 
 Current acceptance follows the user's direct Web → v5 → scoped local edit and

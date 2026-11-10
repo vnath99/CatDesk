@@ -67,6 +67,14 @@ class BusySingleton:
 
 
 class WakeBridgeTests(unittest.TestCase):
+    def test_conversation_native_entry_refuses_missing_evaluator_without_keyboard_fallback(self):
+        sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, .5)
+        cdp = types.SimpleNamespace(send_keys=lambda *_args, **_kwargs:self.fail("keyboard fallback used"))
+        with patch.object(sink, "pre_typing_ready"), patch.object(sink, "_replace_home_draft_once") as edit:
+            with self.assertRaisesRegex(wake_bridge.Attention, "CONVERSATION_NATIVE_ENTRY_REQUIRED"):
+                sink.insert_empty_conversation_draft(cdp, "PRIVATE_OWNED_MESSAGE")
+            edit.assert_not_called()
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)

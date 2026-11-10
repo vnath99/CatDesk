@@ -1,3 +1,33 @@
+## 2026-11-10 — direct Web boundary evidence and adapter installation gap
+
+One bounded development test restored the canonical backend and existing tunnel
+owner, verified unauthorized rejection and authenticated catalog access, and
+confirmed publication of the central scoped task tool. This was finite serving
+evidence; no new ChatGPT connector tool request was reached and persistent
+supervisor startup remains unqualified.
+
+The separate project's single invitation timed out. One read-only observation
+found the exact owned draft in the authenticated registered conversation, with
+no matching USER turn in bounded visible history. This does not prove that a
+historical submission never happened. The pending drafts and both projects'
+no-replay states remain preserved. No grant, actual Web code edit, verification
+or manual self-Wake completed. All test-owned processes exited.
+
+The installed legacy adapter types before the durable native fence and has no
+whole-entry deadline. These are confirmed hazards; the exact timeout subphase
+was not retained. Source now refuses new bounded work/manual sends on unsupported
+installed pairs, removes the reduced-adapter keyboard fallback and retains fixed
+timeout stages/timings. A compatible single-document release-selection planner
+is also prepared, without opening the incomplete installation broker. These
+increments require their recorded source qualification and later installed
+qualification; neither establishes the direct Web MVP.
+
+Next executable work is the reviewed existing-owner installation transaction,
+with retained verified rollback and real startup/recovery checks. Authentication
+is not the current blocker. Existing native C1/C49 and their independent fences
+remain preserved; native coding is optional for the primary direct Web cycle.
+See `docs/verification/DIRECT_WEB_BOUNDARY_LIVE_2026_11_10.json`.
+
 ## 2026-11-10 — primary Web work scope and manual-Wake source progress
 
 The user's current required loop is ChatGPT Web → CatDesk v5 → authorized local

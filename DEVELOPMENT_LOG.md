@@ -3647,3 +3647,51 @@ preparation error, not an installed application regression. No task is recreated
 and the original failed evidence remains. The earlier unknown invitation stays
 fenced; there is no new installed, Web-edit or self-Wake acceptance yet.
 See `docs/verification/ORDINARY_RECEIPT_DIAGNOSTICS_2026_11_10.json`.
+
+## 2026-11-10 — refuse unsupported entry and prepare one compatible Wake selection
+
+New bounded work/manual sends check supported installed adapter/bridge identities
+before claim or browser start, after existing package integrity verification.
+The list survives later controller changes; admitting another installed pair
+still requires review. Only compatibility hashes normalize Python line endings;
+artifact integrity remains exact. Missing native evaluation refuses the old
+keyboard fallback. Timeout results retain fixed stages and bounded callback
+costs without text, URLs or arbitrary exceptions, and the manual wrapper preserves
+the exact refusal and exit 2 before adding success metadata. Existing uncertainty,
+leases and no-replay behavior remain. Independent review rejected an earlier
+incomplete source-fragment check before qualification; no such check was released.
+
+The existing `current.json` can hold current/previous release metadata in a
+flat-compatible extension, with no second selection store. Pure reader/update/
+rollback proposals require exact-byte CAS and explicit release verification;
+working evidence is additionally required for the retained predecessor. A bad
+current artifact does not strand a qualified previous release. This adds no
+production writer, owner, service, authority or automatic fallback.
+
+The focused run retained 39 sender passes and one failed new ordering expectation;
+the fixture correction and a newly found manual-timeout wrapper regression then
+passed. Overall 52 distinct Rust and 133 Python cases are qualified, with root/
+Wake formatting and strict all-target Clippy passing. Earlier failed output is
+immutable. The disposable atomic-writer/abandoned-staging test is not a real
+crash or installed startup test. Actual installed adapter operands were read
+without a product call and fail the new supported-pair comparison. No browser,
+backend, tunnel, task grant, send, installation or recurring owner was started by
+this qualification. See
+`docs/verification/BOUNDED_ENTRY_AND_WAKE_SELECTION_SOURCE_2026_11_10.json`.
+
+The separately retained bounded live test established local authenticated
+serving/catalog and existing tunnel-owner readiness, but its invitation timed
+out. A single read-only visit found the owned draft, without proof that a prior
+submission never happened. Both held project drafts and no-replay states remain;
+actual Web edit/verification/self-Wake is still unaccepted. The installed adapter
+upgrade requires a reviewed executable existing-owner migration: installation is
+unconditionally refused today, and service dispatch is incomplete. Authentication
+is not the current blocker. No further unchanged browser inspection or resend is
+scheduled. See `docs/verification/DIRECT_WEB_BOUNDARY_LIVE_2026_11_10.json`.
+
+The exact attested-source startup trace found a concrete migration prerequisite:
+startup can capture an old image before waiting for the host lease, and desired
+state writes do not share the install lease. Close those races and prove selected
+image authority after acquisition before composing activation. Installed legacy
+package provenance remains a separate qualification requirement; do not assume
+new source checks already exist in its executable.

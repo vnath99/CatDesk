@@ -130,18 +130,47 @@ fn deliver_with_sender(
             .ok_or("WEB_TASK_MANUAL_WAKE_HANDOFF_UNPROVEN")?;
         Ok(())
     };
-    let mut result = send(&wake, &event, &target, &mut before, &guard, &mut handoff)?;
+    let result = send(&wake, &event, &target, &mut before, &guard, &mut handoff)?;
+    Ok(finish_delivery_result(result, request_id, call_id))
+}
+
+fn finish_delivery_result(mut result: Value, request_id: &str, call_id: &str) -> Value {
+    // The exact native refusal shape retains exit2. Success attribution must
+    // not decorate it into an unrecognized, apparently successful CLI result.
+    if runtime::is_scoped_work_timeout(&result) {
+        return result;
+    }
     result["requestId"] = json!(request_id);
     result["taskCallId"] = json!(call_id);
     result["taskCompletionVerified"] = json!(false);
     result["nativeSessionAction"] = json!("NONE");
-    Ok(result)
+    result
 }
 
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
     use catdesk_wake::store::{Phase, Receipt, WakeIntent};
+
+    #[test]
+    fn manual_wake_delivery_timeout_preserves_exact_refusal_for_exit2() {
+        let timeout = json!({"action":"scoped_manual_end_turn_run", "status":"attention", "errorCode":"SCOPED_REVIEW_TIMEOUT",
+            "projectId":"alpha", "eventId":"wake-intent-fixture", "targetGeneration":1, "targetDigest":"a".repeat(64),
+            "messageSha256":"b".repeat(64), "deliveryPhase":"ATTENTION", "receiptPresent":false,
+            "submissionOutcome":"UNKNOWN", "retryAuthorized":false, "nativeGrantCreatedBySender":false, "workResolved":false,
+            "diagnosis":{"schemaVersion":1,"lastAdapterStage":"READINESS_OBSERVED","elapsedMs":180001,
+                "maximumSeconds":180,"guardCheckCalls":5,"guardCheckMaxMs":3,"beforeSubmitCalls":0,
+                "beforeSubmitMaxMs":0,"timingCapped":false}});
+        assert!(runtime::is_scoped_work_timeout(&timeout));
+        let output = finish_delivery_result(timeout.clone(), "request-a", "wake-one");
+        assert_eq!(output, timeout);
+        assert!(runtime::is_scoped_work_timeout(&output));
+        assert!(output.get("taskCompletionVerified").is_none());
+        let success = finish_delivery_result(json!({"phase":"TEST_SENT"}), "request-a", "wake-one");
+        assert_eq!(success["requestId"], "request-a");
+        assert_eq!(success["taskCallId"], "wake-one");
+        assert_eq!(success["taskCompletionVerified"], false);
+    }
 
     #[test]
     fn manual_wake_delivery_retains_lease_until_fence_then_allows_scoped_task_progress() {

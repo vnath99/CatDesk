@@ -3842,12 +3842,10 @@ class CdpSink:
         The caller must already have persisted its uncertain-write boundary.
         """
         self.pre_typing_ready(cdp)
-        # Compatibility for reduced CDP adapters lacking native evaluation.
-        # Never fall back after starting a native editing transaction.
+        # Ordinary native-entry support must not fall back to an unbounded
+        # keyboard loop. A missing evaluator is a fixed pre-edit refusal.
         if not callable(getattr(cdp, "evaluate", None)):
-            cdp.send_keys(self.editor_selector(cdp, prevalidated=True),
-                          keyboard_safe_message(message), timeout=self.ui_timeout)
-            return
+            raise Attention("CONVERSATION_NATIVE_ENTRY_REQUIRED")
         self._replace_home_draft_once(
             cdp, message, None, "CONVERSATION_DRAFT_INSERT_UNVERIFIED", conversation=True
         )

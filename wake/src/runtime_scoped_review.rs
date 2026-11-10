@@ -12,6 +12,183 @@ enum Selection<'a> {
     ManualEndTurn(&'a Event, &'a Target),
 }
 
+#[derive(Default)]
+struct ScopedCallbackTiming {
+    calls: std::cell::Cell<u32>,
+    maximum_ms: std::cell::Cell<u32>,
+    capped: std::cell::Cell<bool>,
+}
+
+impl ScopedCallbackTiming {
+    fn record(&self, started: Instant) {
+        let millis = started.elapsed().as_millis();
+        self.capped
+            .set(self.capped.get() || millis > u32::MAX as u128 || self.calls.get() == u32::MAX);
+        self.calls.set(self.calls.get().saturating_add(1));
+        self.maximum_ms.set(
+            self.maximum_ms
+                .get()
+                .max(millis.min(u32::MAX as u128) as u32),
+        );
+    }
+}
+
+fn scoped_adapter_stage(value: &str) -> &'static str {
+    const STAGES: &[&str] = &[
+        "UNCLASSIFIED",
+        "NOT_OBSERVED",
+        "READINESS_OBSERVED",
+        "UC_OPEN_BEGIN",
+        "UC_OPEN_DONE",
+        "CDP_ACTIVATE_BEGIN",
+        "CDP_ACTIVATE_DONE",
+        "CDP_REUSE_BEGIN",
+        "CDP_REUSE_DONE",
+        "TARGET_OPEN",
+        "PAGE_READY",
+        "CHAT_IDLE",
+        "PREWRITE_READY",
+        "RECEIPT_BASELINE_READY",
+        "PREWRITE_CONFIRMED",
+        "BEFORE_SUBMIT",
+        "GENERATION_WAIT",
+        "GENERATION_ACTIVE",
+        "RESPONSE_TIMEOUT_DETECTED",
+        "RESPONSE_RETRYING",
+        "RESPONSE_RETRY_STARTED",
+        "RESPONSE_COMPLETED",
+        "RESPONSE_COMPLETED_AFTER_REOPEN",
+    ];
+    STAGES
+        .iter()
+        .copied()
+        .find(|stage| *stage == value)
+        .unwrap_or("UNCLASSIFIED")
+}
+
+fn scoped_work_timeout_frame(
+    event: &Event,
+    target: &Target,
+    delivery: &crate::store::Delivery,
+    status: &Status,
+    selection: (bool, u64),
+    elapsed: Duration,
+    timings: (&ScopedCallbackTiming, &ScopedCallbackTiming),
+) -> Value {
+    let (manual, maximum_seconds) = selection;
+    let (guard, before_submit) = timings;
+    json!({"action":if manual {"scoped_manual_end_turn_run"} else {"scoped_work_request_run"},
+        "status":"attention", "errorCode":"SCOPED_REVIEW_TIMEOUT", "projectId":event.project_id,
+        "eventId":event.event_id, "targetGeneration":target.generation, "targetDigest":target.digest,
+        "messageSha256":delivery.message_digest, "deliveryPhase":delivery.phase, "receiptPresent":delivery.receipt.is_some(),
+        "submissionOutcome":if delivery.receipt.is_some() {"RECEIPT_RETAINED"} else {"UNKNOWN"},
+        "retryAuthorized":false, "nativeGrantCreatedBySender":false, "workResolved":false,
+        "diagnosis":{"schemaVersion":1, "lastAdapterStage":scoped_adapter_stage(&status.browser),
+            "elapsedMs":elapsed.as_millis().min(u32::MAX as u128) as u32, "maximumSeconds":maximum_seconds,
+            "guardCheckCalls":guard.calls.get(), "guardCheckMaxMs":guard.maximum_ms.get(),
+            "beforeSubmitCalls":before_submit.calls.get(), "beforeSubmitMaxMs":before_submit.maximum_ms.get(),
+            "timingCapped":guard.capped.get() || before_submit.capped.get() || elapsed.as_millis() > u32::MAX as u128}})
+}
+
+/// Only this closed native timeout envelope retains the CLI's existing exit2.
+pub fn is_scoped_work_timeout(value: &Value) -> bool {
+    const FIELDS: &[&str] = &[
+        "action",
+        "status",
+        "errorCode",
+        "projectId",
+        "eventId",
+        "targetGeneration",
+        "targetDigest",
+        "messageSha256",
+        "deliveryPhase",
+        "receiptPresent",
+        "submissionOutcome",
+        "retryAuthorized",
+        "nativeGrantCreatedBySender",
+        "workResolved",
+        "diagnosis",
+    ];
+    const DIAGNOSTIC: &[&str] = &[
+        "schemaVersion",
+        "lastAdapterStage",
+        "elapsedMs",
+        "maximumSeconds",
+        "guardCheckCalls",
+        "guardCheckMaxMs",
+        "beforeSubmitCalls",
+        "beforeSubmitMaxMs",
+        "timingCapped",
+    ];
+    let Some(object) = value.as_object() else {
+        return false;
+    };
+    let d = &value["diagnosis"];
+    let hash = |v: &Value| {
+        v.as_str().is_some_and(|s| {
+            s.len() == 64
+                && s.bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        })
+    };
+    object.len() == FIELDS.len()
+        && object.keys().all(|k| FIELDS.contains(&k.as_str()))
+        && matches!(
+            value["action"].as_str(),
+            Some("scoped_work_request_run" | "scoped_manual_end_turn_run")
+        )
+        && value["status"] == "attention"
+        && value["errorCode"] == "SCOPED_REVIEW_TIMEOUT"
+        && value["projectId"]
+            .as_str()
+            .is_some_and(crate::protocol::valid_id)
+        && value["eventId"]
+            .as_str()
+            .is_some_and(crate::protocol::valid_id)
+        && value["targetGeneration"].as_u64().is_some_and(|n| n > 0)
+        && hash(&value["targetDigest"])
+        && hash(&value["messageSha256"])
+        && matches!(
+            value["deliveryPhase"].as_str(),
+            Some("ATTENTION" | "SUBMITTING" | "SENT")
+        )
+        && value["receiptPresent"].is_boolean()
+        && (value["deliveryPhase"] == "SENT") == (value["receiptPresent"] == true)
+        && value["submissionOutcome"]
+            == (if value["receiptPresent"] == true {
+                "RECEIPT_RETAINED"
+            } else {
+                "UNKNOWN"
+            })
+        && [
+            "retryAuthorized",
+            "nativeGrantCreatedBySender",
+            "workResolved",
+        ]
+        .iter()
+        .all(|key| value[key] == false)
+        && d.as_object().is_some_and(|o| {
+            o.len() == DIAGNOSTIC.len() && o.keys().all(|k| DIAGNOSTIC.contains(&k.as_str()))
+        })
+        && d["schemaVersion"] == 1
+        && d["timingCapped"].is_boolean()
+        && d["lastAdapterStage"]
+            .as_str()
+            .is_some_and(|s| scoped_adapter_stage(s) == s)
+        && d["maximumSeconds"]
+            .as_u64()
+            .is_some_and(|n| (1..=180).contains(&n))
+        && [
+            "elapsedMs",
+            "guardCheckCalls",
+            "guardCheckMaxMs",
+            "beforeSubmitCalls",
+            "beforeSubmitMaxMs",
+        ]
+        .iter()
+        .all(|key| d[key].as_u64().is_some_and(|n| n <= u32::MAX as u64))
+}
+
 struct FencedAdapter<'a, A> {
     inner: A,
     handoff: &'a mut dyn FnMut(&Event, &Target) -> Result<()>,
@@ -35,6 +212,23 @@ impl<A: SubmissionAdapter> SubmissionAdapter for FencedAdapter<'_, A> {
     }
 }
 
+fn scoped_work_package_preflight(store: &Store, event: &Event) -> Result<()> {
+    event.validate()?;
+    if desired(store)? != "STOPPED" {
+        return Err("SCOPED_REVIEW_HOST_NOT_STOPPED".into());
+    }
+    // Existing ambiguous/terminal work is never reclassified as a package
+    // problem, nor does a missing or unreadable witness permit a fresh claim.
+    if store
+        .delivery(&event.event_id)?
+        .is_some_and(|d| d.phase != Phase::Claimed)
+        || store.submission_witness_present(&event.event_id)?
+    {
+        return Err("SCOPED_REVIEW_REPLAY_REFUSED".into());
+    }
+    installed_scoped_work_browser_directory(store).map(|_| ())
+}
+
 /// Deliver one exact ordinary invitation chosen by its central work journal.
 /// Uses the existing sender/receipt protocol without starting the shared host.
 pub fn run_scoped_work_request(
@@ -45,6 +239,7 @@ pub fn run_scoped_work_request(
     before_submit: &mut dyn FnMut(&Event, &Target) -> Result<()>,
     keep_running: &dyn Fn() -> Result<()>,
 ) -> Result<Value> {
+    scoped_work_package_preflight(store, event)?;
     run_selected_with_adapter(
         store,
         &event.event_id,
@@ -53,7 +248,7 @@ pub fn run_scoped_work_request(
         before_submit,
         keep_running,
         |deadline, guard| {
-            let installed = installed_ordinary_browser_directory(store)?;
+            let installed = installed_scoped_work_browser_directory(store)?;
             Adapter::spawn_from_installed_guarded(
                 store.root(),
                 &installed,
@@ -187,6 +382,7 @@ pub fn run_scoped_manual_end_turn_handoff(
     keep_running: &dyn Fn() -> Result<()>,
     after_fence: &mut dyn FnMut(&Event, &Target) -> Result<()>,
 ) -> Result<Value> {
+    scoped_work_package_preflight(store, event)?;
     run_selected_with_adapter(
         store,
         &event.event_id,
@@ -195,7 +391,7 @@ pub fn run_scoped_manual_end_turn_handoff(
         before_submit,
         keep_running,
         |deadline, guard| {
-            let installed = installed_ordinary_browser_directory(store)?;
+            let installed = installed_scoped_work_browser_directory(store)?;
             let inner = Adapter::spawn_from_installed_guarded(
                 store.root(),
                 &installed,
@@ -266,16 +462,24 @@ fn run_selected_with_adapter<A: SubmissionAdapter>(
     if !crate::protocol::valid_id(event_id) || !(1..=180).contains(&maximum_seconds) {
         return Err("SCOPED_REVIEW_ARGUMENTS_INVALID".into());
     }
-    let deadline = Instant::now() + Duration::from_secs(maximum_seconds);
+    let started = Instant::now();
+    let deadline = started + Duration::from_secs(maximum_seconds);
+    let guard_timing = ScopedCallbackTiming::default();
+    let before_submit_timing = ScopedCallbackTiming::default();
     let guard = || {
         if Instant::now() >= deadline {
             return Err("SCOPED_REVIEW_TIMEOUT".into());
         }
-        keep_running()?;
-        if desired(store)? != "STOPPED" {
-            return Err("SCOPED_REVIEW_HOST_NOT_STOPPED".into());
-        }
-        Ok(())
+        let check_started = Instant::now();
+        let result = (|| {
+            keep_running()?;
+            if desired(store)? != "STOPPED" {
+                return Err("SCOPED_REVIEW_HOST_NOT_STOPPED".into());
+            }
+            Ok(())
+        })();
+        guard_timing.record(check_started);
+        result
     };
     guard()?;
     let lease = store.host_lock()?;
@@ -405,13 +609,19 @@ fn run_selected_with_adapter<A: SubmissionAdapter>(
     }
     let delivery = store.claim(&event, &lease)?;
     let mut status = local_status(&delivery);
+    let mut timed_before_submit = |event: &Event, target: &Target| {
+        let callback_started = Instant::now();
+        let result = before_submit(event, target);
+        before_submit_timing.record(callback_started);
+        result
+    };
     let result = (|| {
         guard()?;
         let mut adapter = connect(deadline, &guard)?;
         let mut scoped = ScopedReviewGuard {
             deadline,
             review_event: review,
-            before_submit,
+            before_submit: &mut timed_before_submit,
             keep_running: &guard,
         };
         let result = attempt_inner(
@@ -447,6 +657,23 @@ fn run_selected_with_adapter<A: SubmissionAdapter>(
                 let _ = store.set_timer_response_state(event_id, ResponseState::Attention);
             }
             _ => {}
+        }
+        if (work || manual) && reason == "SCOPED_REVIEW_TIMEOUT" {
+            let current = store
+                .delivery(event_id)?
+                .ok_or("SCOPED_REVIEW_RECEIPT_REQUIRED")?;
+            if current.event != event || current.target != delivery.target {
+                return Err("SCOPED_REVIEW_EVENT_INVALID".into());
+            }
+            return Ok(scoped_work_timeout_frame(
+                &event,
+                &delivery.target,
+                &current,
+                &status,
+                (manual, maximum_seconds),
+                started.elapsed(),
+                (&guard_timing, &before_submit_timing),
+            ));
         }
         return Err(reason);
     }
@@ -589,6 +816,239 @@ mod tests {
             }
         })).unwrap();
         directory
+    }
+
+    fn current_native_entry_package(store: &Store, metadata_suffix: bool) -> PathBuf {
+        let directory = ordinary_package(store);
+        let mut pointer: Value = read(&store.root().join("current.json")).unwrap();
+        let mut manifest: Value = read(&directory.join("manifest.json")).unwrap();
+        for (name, pointer_key, bytes) in [
+            (
+                "adapter.py",
+                "adapterSha256",
+                include_bytes!("../adapter.py").as_slice(),
+            ),
+            (
+                "wake_bridge.py",
+                "wakeBridgeSha256",
+                include_bytes!("../../scripts/wake_bridge.py").as_slice(),
+            ),
+        ] {
+            let mut bytes = bytes.to_vec();
+            if metadata_suffix {
+                bytes.extend_from_slice(b"\n# unrelated diagnostic metadata\n");
+            }
+            std::fs::write(directory.join(name), &bytes).unwrap();
+            let digest = format!("{:x}", Sha256::digest(&bytes));
+            pointer[pointer_key] = json!(digest);
+            manifest["artifacts"][name] = json!(digest);
+        }
+        atomic(&store.root().join("current.json"), &pointer).unwrap();
+        atomic(&directory.join("manifest.json"), &manifest).unwrap();
+        directory
+    }
+
+    #[test]
+    fn scoped_native_entry_known_pair_accepts_and_unknown_installed_metadata_requires_review() {
+        for suffix in [false, true] {
+            let (store, _, _) = fixture("native-entry-current");
+            let directory = current_native_entry_package(&store, suffix);
+            if suffix {
+                assert_eq!(
+                    installed_scoped_work_browser_directory(&store).unwrap_err(),
+                    "SCOPED_WORK_INSTALLED_ADAPTER_UPGRADE_REQUIRED"
+                );
+            } else {
+                assert_eq!(
+                    installed_scoped_work_browser_directory(&store).unwrap(),
+                    directory
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn scoped_native_entry_accepts_reviewed_lf_or_crlf_with_exact_artifact_integrity() {
+        for crlf in [false, true] {
+            let (store, _, _) = fixture("native-entry-line-endings");
+            let directory = current_native_entry_package(&store, false);
+            let mut pointer: Value = read(&store.root().join("current.json")).unwrap();
+            let mut manifest: Value = read(&directory.join("manifest.json")).unwrap();
+            for (name, key) in [
+                ("adapter.py", "adapterSha256"),
+                ("wake_bridge.py", "wakeBridgeSha256"),
+            ] {
+                let lf = std::fs::read_to_string(directory.join(name))
+                    .unwrap()
+                    .replace("\r\n", "\n");
+                let bytes = if crlf { lf.replace('\n', "\r\n") } else { lf };
+                std::fs::write(directory.join(name), &bytes).unwrap();
+                let hash = crate::protocol::digest(&bytes);
+                pointer[key] = json!(hash);
+                manifest["artifacts"][name] = json!(hash);
+            }
+            atomic(&store.root().join("current.json"), &pointer).unwrap();
+            atomic(&directory.join("manifest.json"), &manifest).unwrap();
+            assert_eq!(
+                installed_scoped_work_browser_directory(&store).unwrap(),
+                directory
+            );
+        }
+    }
+
+    #[test]
+    fn scoped_native_entry_legacy_refuses_work_and_manual_before_claim_or_browser() {
+        let (store, _, target) = fixture("native-entry-legacy");
+        ordinary_package(&store);
+        let work = work_event(&store, "alpha", &target);
+        let manual = manual_event(&store, "alpha", &target);
+        let beta = store.config().unwrap().targets["beta"].clone();
+        let beta_event = work_event(&store, "beta", &beta);
+        let before_status = std::fs::read(store.root().join("status.json")).ok();
+        for event in [&work, &manual] {
+            let queue = store
+                .root()
+                .join("queue")
+                .join(format!("{}.json", event.event_id));
+            let before = std::fs::read(&queue).unwrap();
+            let mut before_submit =
+                |_: &Event, _: &Target| panic!("legacy package must not admit input");
+            let result = if event == &work {
+                run_scoped_work_request(&store, event, &target, 120, &mut before_submit, &|| Ok(()))
+            } else {
+                run_scoped_manual_end_turn_handoff(
+                    &store,
+                    event,
+                    &target,
+                    120,
+                    &mut before_submit,
+                    &|| Ok(()),
+                    &mut |_, _| panic!("legacy package must not hand off"),
+                )
+            };
+            assert_eq!(
+                result.unwrap_err(),
+                "SCOPED_WORK_INSTALLED_ADAPTER_UPGRADE_REQUIRED"
+            );
+            assert!(store.delivery(&event.event_id).unwrap().is_none());
+            assert!(!store.submission_witness_present(&event.event_id).unwrap());
+            assert_eq!(std::fs::read(queue).unwrap(), before);
+        }
+        assert_eq!(
+            std::fs::read(store.root().join("status.json")).ok(),
+            before_status
+        );
+        let round = super::super::scheduler::fair_round(
+            &store,
+            &store.config().unwrap().targets,
+            None,
+            &std::collections::BTreeMap::new(),
+            now(),
+        )
+        .unwrap();
+        assert!(
+            round
+                .iter()
+                .any(|event| event.project_id == beta_event.project_id)
+        );
+    }
+
+    #[test]
+    fn scoped_native_entry_does_not_trust_a_flag_or_reclassify_existing_uncertainty() {
+        let (store, _, target) = fixture("native-entry-flag");
+        let directory = ordinary_package(&store);
+        let mut manifest: Value = read(&directory.join("manifest.json")).unwrap();
+        manifest["fencedNativeEntryProtocol"] = json!(1);
+        atomic(&directory.join("manifest.json"), &manifest).unwrap();
+        assert_eq!(
+            installed_scoped_work_browser_directory(&store).unwrap_err(),
+            "SCOPED_WORK_INSTALLED_ADAPTER_UPGRADE_REQUIRED"
+        );
+        let event = work_event(&store, "alpha", &target);
+        let host = store.host_lock().unwrap();
+        let claimed = store.claim(&event, &host).unwrap();
+        store
+            .transition(
+                &event.event_id,
+                &claimed.owner,
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        drop(host);
+        let before = store.delivery(&event.event_id).unwrap().unwrap();
+        assert_eq!(
+            run_scoped_work_request(
+                &store,
+                &event,
+                &target,
+                120,
+                &mut |_, _| panic!("unknown cannot submit"),
+                &|| Ok(())
+            )
+            .unwrap_err(),
+            "SCOPED_REVIEW_REPLAY_REFUSED"
+        );
+        assert_eq!(store.delivery(&event.event_id).unwrap().unwrap(), before);
+        assert!(store.submission_witness_present(&event.event_id).unwrap());
+        let (other, _, target) = fixture("native-entry-attention");
+        ordinary_package(&other);
+        let event = work_event(&other, "alpha", &target);
+        let host = other.host_lock().unwrap();
+        let claimed = other.claim(&event, &host).unwrap();
+        other
+            .transition(
+                &event.event_id,
+                &claimed.owner,
+                Phase::Attention,
+                None,
+                Some("SCOPED_REVIEW_TIMEOUT".into()),
+            )
+            .unwrap();
+        drop(host);
+        let before = other.delivery(&event.event_id).unwrap().unwrap();
+        assert_eq!(
+            run_scoped_work_request(
+                &other,
+                &event,
+                &target,
+                120,
+                &mut |_, _| panic!("attention cannot submit"),
+                &|| Ok(())
+            )
+            .unwrap_err(),
+            "SCOPED_REVIEW_REPLAY_REFUSED"
+        );
+        assert_eq!(other.delivery(&event.event_id).unwrap().unwrap(), before);
+    }
+
+    #[test]
+    fn scoped_native_entry_refuses_changed_critical_code_even_with_consistent_manifest() {
+        let (store, _, _) = fixture("native-entry-critical-change");
+        let directory = current_native_entry_package(&store, false);
+        let path = directory.join("adapter.py");
+        let source = std::fs::read_to_string(&path).unwrap();
+        let changed = source.replace(
+            "sink.insert_empty_conversation_draft(cdp, typed_message)",
+            "pass  # changed native entry",
+        );
+        assert_ne!(source, changed);
+        std::fs::write(&path, &changed).unwrap();
+        let hash = crate::protocol::digest(&changed);
+        let mut pointer: Value = read(&store.root().join("current.json")).unwrap();
+        let mut manifest: Value = read(&directory.join("manifest.json")).unwrap();
+        pointer["adapterSha256"] = json!(hash);
+        manifest["artifacts"]["adapter.py"] = json!(hash);
+        atomic(&store.root().join("current.json"), &pointer).unwrap();
+        atomic(&directory.join("manifest.json"), &manifest).unwrap();
+        // Integrity is intact in this disposable fixture, but the required
+        // reviewed entry protocol is not. No install/review authority is made.
+        installed_ordinary_browser_directory(&store).unwrap();
+        assert_eq!(
+            installed_scoped_work_browser_directory(&store).unwrap_err(),
+            "SCOPED_WORK_INSTALLED_ADAPTER_UPGRADE_REQUIRED"
+        );
     }
 
     #[test]
@@ -1908,7 +2368,11 @@ mod tests {
                 })
             },
         );
-        assert_eq!(result.unwrap_err(), "SCOPED_REVIEW_TIMEOUT");
+        let frame = result.unwrap();
+        assert!(is_scoped_work_timeout(&frame));
+        assert_eq!(frame["diagnosis"]["lastAdapterStage"], "BEFORE_SUBMIT");
+        assert_eq!(frame["deliveryPhase"], "SUBMITTING");
+        assert_eq!(frame["retryAuthorized"], false);
         assert_eq!(ack.get(), 0);
         let retained = store.delivery(&event.event_id).unwrap().unwrap();
         assert_eq!(retained.phase, Phase::Submitting);
@@ -1928,6 +2392,121 @@ mod tests {
             .unwrap_err(),
             "SCOPED_REVIEW_REPLAY_REFUSED"
         );
+    }
+
+    #[test]
+    fn scoped_work_timeout_retains_actual_readiness_stage_without_private_status() {
+        struct Waiting {
+            observed: bool,
+        }
+        impl SubmissionAdapter for Waiting {
+            fn send(&mut self, _: Value) -> Result<()> {
+                Ok(())
+            }
+            fn receive(
+                &mut self,
+                _: Duration,
+            ) -> std::result::Result<Result<Value>, mpsc::RecvTimeoutError> {
+                if !self.observed {
+                    self.observed = true;
+                    Ok(Ok(
+                        json!({"stage":"READINESS_OBSERVED", "route":"SAME_CONVERSATION", "reason":"READY"}),
+                    ))
+                } else {
+                    thread::sleep(Duration::from_millis(1100));
+                    Err(mpsc::RecvTimeoutError::Timeout)
+                }
+            }
+        }
+        let (store, _, target) = fixture("work-timeout-readiness");
+        let event = work_event(&store, "alpha", &target);
+        let frame = run_selected_with_adapter(
+            &store,
+            &event.event_id,
+            1,
+            Selection::WorkRequest(&event, &target),
+            &mut |_, _| panic!("no submit"),
+            &|| Ok(()),
+            |_, _| Ok(Waiting { observed: false }),
+        )
+        .unwrap();
+        assert!(is_scoped_work_timeout(&frame));
+        assert_eq!(frame["diagnosis"]["lastAdapterStage"], "READINESS_OBSERVED");
+        assert_eq!(frame["diagnosis"]["beforeSubmitCalls"], 0);
+        assert_eq!(frame["deliveryPhase"], "ATTENTION");
+        assert!(!store.submission_witness_present(&event.event_id).unwrap());
+        let delivery = store.delivery(&event.event_id).unwrap().unwrap();
+        let mut status = local_status(&delivery);
+        status.browser = "PRIVATE_CONTEXT https://private.invalid".into();
+        let safe = scoped_work_timeout_frame(
+            &event,
+            &target,
+            &delivery,
+            &status,
+            (false, 1),
+            Duration::from_secs(1),
+            (
+                &ScopedCallbackTiming::default(),
+                &ScopedCallbackTiming::default(),
+            ),
+        );
+        assert_eq!(safe["diagnosis"]["lastAdapterStage"], "UNCLASSIFIED");
+        assert!(!safe.to_string().contains("PRIVATE"));
+        for (key, bad) in [
+            ("errorCode", json!("PRIVATE_ERROR")),
+            ("retryAuthorized", json!(true)),
+            ("exitCode", json!(0)),
+        ] {
+            let mut changed = safe.clone();
+            changed[key] = bad;
+            assert!(!is_scoped_work_timeout(&changed), "{key}");
+        }
+        let mut changed = safe;
+        changed["diagnosis"]["body"] = json!("PRIVATE_DRAFT");
+        assert!(!is_scoped_work_timeout(&changed));
+    }
+
+    #[test]
+    fn scoped_work_timeout_distinguishes_metadata_guard_from_before_submit_cost() {
+        for slow_before_submit in [false, true] {
+            let (store, _, target) = fixture("work-timeout-callback-cost");
+            let event = work_event(&store, "alpha", &target);
+            let fake = adapter(&event, &target);
+            let calls = Cell::new(0);
+            let frame = run_selected_with_adapter(
+                &store,
+                &event.event_id,
+                1,
+                Selection::WorkRequest(&event, &target),
+                &mut |_, _| {
+                    if slow_before_submit {
+                        thread::sleep(Duration::from_millis(1100));
+                    }
+                    Ok(())
+                },
+                &|| {
+                    calls.set(calls.get() + 1);
+                    if !slow_before_submit && calls.get() == 5 {
+                        thread::sleep(Duration::from_millis(1100));
+                    }
+                    Ok(())
+                },
+                |_, _| Ok(fake),
+            )
+            .unwrap();
+            assert!(is_scoped_work_timeout(&frame));
+            let d = &frame["diagnosis"];
+            assert_eq!(d["beforeSubmitCalls"], u64::from(slow_before_submit));
+            if slow_before_submit {
+                assert!(d["beforeSubmitMaxMs"].as_u64().unwrap() >= 1000);
+                assert!(d["guardCheckMaxMs"].as_u64().unwrap() < 1000);
+            } else {
+                assert!(d["guardCheckMaxMs"].as_u64().unwrap() >= 1000);
+                assert_eq!(d["beforeSubmitMaxMs"], 0);
+            }
+            assert_eq!(frame["deliveryPhase"], "ATTENTION");
+            assert!(!store.submission_witness_present(&event.event_id).unwrap());
+        }
     }
 
     #[test]

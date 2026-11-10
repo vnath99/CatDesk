@@ -16,8 +16,13 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[path = "runtime_install_selection.rs"]
+mod install_selection;
 #[path = "runtime_reobserve.rs"]
 mod reobserve;
+pub use install_selection::{
+    inspect_install_selection, propose_install_selection, propose_install_selection_rollback,
+};
 #[path = "runtime_response.rs"]
 mod response;
 pub use reobserve::reobserve_sent_response_guarded;
@@ -45,8 +50,8 @@ pub(crate) use review_reconcile::{
     canonical_submission_observation, validate_pre_edit_refusal_frame,
 };
 pub use scoped_review::{
-    run_scoped_manual_end_turn_handoff, run_scoped_review, run_scoped_rollover_continuation,
-    run_scoped_rollover_handoff, run_scoped_task_continuation,
+    is_scoped_work_timeout, run_scoped_manual_end_turn_handoff, run_scoped_review,
+    run_scoped_rollover_continuation, run_scoped_rollover_handoff, run_scoped_task_continuation,
     run_scoped_task_continuation_handoff, run_scoped_work_request,
 };
 #[path = "runtime_task_context.rs"]
@@ -2515,6 +2520,43 @@ fn installed_ordinary_browser_directory(store: &Store) -> Result<PathBuf> {
     // It does not advertise new-chat creation or cooperative response polling.
     if manifest.get("protocolVersion").and_then(|v| v.as_u64()) != Some(1) {
         return Err("ORDINARY_INSTALLED_PACKAGE_UNSUPPORTED".into());
+    }
+    Ok(directory)
+}
+
+// Protocol compatibility only: these reviewed source identities support the
+// fenced/native-entry contract. They do not authorize release or installation.
+// Retain previously supported pairs when a future GUI/observer changes; this is
+// deliberately independent of this controller's current include_bytes hashes.
+const SUPPORTED_SCOPED_NATIVE_ENTRY_PAIRS: &[(&str, &str)] = &[(
+    "47ef6ae0a8c36ee0086b8f5652a583dd5983e63bb65b8429fb24b895270094b7",
+    "00794db41eec0cea25a1300555603f0743d749b73c5006dc0c4a19610f56b1c0",
+)];
+
+fn installed_scoped_work_browser_directory(store: &Store) -> Result<PathBuf> {
+    // Pointer/manifest/artifact integrity remains exact; release admission is
+    // separate. Only this compatibility comparison normalizes CRLF to LF.
+    let directory = installed_ordinary_browser_directory(store)?;
+    let compatible_hash = |name: &str| -> Result<String> {
+        let path = directory.join(name);
+        if std::fs::metadata(&path)
+            .map_err(|_| "SCOPED_WORK_INSTALLED_ADAPTER_UPGRADE_REQUIRED")?
+            .len()
+            > 512 * 1024
+        {
+            return Err("SCOPED_WORK_INSTALLED_ADAPTER_UPGRADE_REQUIRED".into());
+        }
+        let code = std::fs::read_to_string(path)
+            .map_err(|_| "SCOPED_WORK_INSTALLED_ADAPTER_UPGRADE_REQUIRED")?;
+        Ok(crate::protocol::digest(&code.replace("\r\n", "\n")))
+    };
+    let adapter = compatible_hash("adapter.py")?;
+    let bridge = compatible_hash("wake_bridge.py")?;
+    if !SUPPORTED_SCOPED_NATIVE_ENTRY_PAIRS
+        .iter()
+        .any(|(a, b)| *a == adapter && *b == bridge)
+    {
+        return Err("SCOPED_WORK_INSTALLED_ADAPTER_UPGRADE_REQUIRED".into());
     }
     Ok(directory)
 }
@@ -7700,7 +7742,11 @@ fn attempt_inner<A: SubmissionAdapter>(
                     if scoped.is_none() {
                         deadline = Instant::now() + Duration::from_secs(180);
                     }
-                    status.browser = format!("READINESS_{route}_{reason}");
+                    status.browser = if scoped.is_some() {
+                        "READINESS_OBSERVED".into()
+                    } else {
+                        format!("READINESS_{route}_{reason}")
+                    };
                     if route == "SAME_CONVERSATION" && reason == "READY" {
                         status.login = "READY".into();
                     }
@@ -7754,6 +7800,9 @@ fn attempt_inner<A: SubmissionAdapter>(
                     }
                 }
                 Some("BEFORE_SUBMIT") => {
+                    if scoped.is_some() {
+                        status.browser = "BEFORE_SUBMIT".into();
+                    }
                     crate::development_runtime::validate_target_isolation_for_store(
                         store.root(),
                         &d.target.url,
