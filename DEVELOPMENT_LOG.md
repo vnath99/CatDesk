@@ -4018,3 +4018,17 @@ the retained earlier GUI does not acquire the privacy fix through a Host upgrade
 A new GUI, Host and broker build is therefore required for the corrected candidate,
 with the GUI retained as a distinct Wake companion rather than an implicit
 canonical-backend promotion. Native81 and GUI6 evidence share the same source fence.
+
+### 2026-11-10 19:36 UTC — Corrected candidate artifacts built and read back
+
+The bounded, sequential release build from published `a5f3cd496e8cab6e3a265da47c3cb25b897f857d`
+completed in 676 seconds. Independent readback verified the GUI, Host and broker,
+their checksums, immutable copies and compiler-reported source inputs. Build-owned
+processes exited, with recorded state and task inventories preserved. Exact hashes
+are in `docs/verification/WAKE_PROTECTED_STAGE_HANDOFF_SOURCE_2026_11_10.json`.
+These are review inputs; nothing was signed, installed, selected or delivered.
+The retained fallback needs a corrected runtime tuple and actual bounded working
+qualification. Its first new checkout check refused before compiling because Git's
+system line-ending policy differed from the explicit LF checkout policy; preserve
+that refusal and use per-command checkout settings, without resetting source or
+changing Git configuration. Existing unknown Web submissions remain fenced.

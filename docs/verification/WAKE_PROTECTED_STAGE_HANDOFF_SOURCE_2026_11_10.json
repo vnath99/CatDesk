@@ -77,6 +77,29 @@
     "actualWebEditVerifySelfWakeAccepted": false,
     "twoProjectLiveAcceptance": false
   },
+  "candidateBuild": {
+    "classification": "BUILT_REVIEW_INPUTS_ONLY",
+    "sourceCommit": "a5f3cd496e8cab6e3a265da47c3cb25b897f857d",
+    "sourceTree": "374167c3c6aec687a5b81359f3d923b8df6166d3",
+    "finishedUtc": "2026-11-10T19:36:01.1164246+00:00",
+    "resultSha256": "56823c4115db17ba7c07152814c004018609239af2729e6f8dbdbf311e5aaaa1",
+    "ownerSha256": "5349c56105dae03d07559e8db5f1fb31827097be33b5d0cc2e1654c744df2cb8",
+    "provenanceSha256": "4eeaadbd9de5e334c6afdcfb1589d07c6532a816751a358e22d6e18a9a2f1877",
+    "independentArtifactReadbackSha256": "86bb3f5a2b60b96c6dd923b0061ea26cd0d553dabff2bfa6ac009b7928f59ac4",
+    "artifacts": {
+      "CatDeskBinagotchy.exe": "56546dcadfa880f7e94b93669b609c4fec6da782965e84f14a0cce9001c3394c",
+      "CatDeskWakeHost.exe": "a5f95fac201a0359b0d6cc3b5fdf1f871e7844f41436aa4c706420dac0588fc4",
+      "CatDeskWakeInstallBroker.exe": "51fe85a01586e02cf4ab7b3b7dd030ff9e406b6093b22c3bc4892eff7e1b1919"
+    },
+    "reportedSourceOperandsRehashed": {"gui": 214, "host": 65, "broker": 65},
+    "artifactOrSourceMismatches": 0,
+    "buildOwnedProcessesExited": true,
+    "compilerProcessesRemaining": 0,
+    "protectedInstallationChanged": false,
+    "packageSelected": false,
+    "signedOrApprovedForRelease": false,
+    "installedAcceptance": false
+  },
   "guiConsumerQualification": {
     "resultSha256": "f383818f22c176b8a5c0323d6c11a9aa03b18c4b55b9eb38c60249f601bedde4",
     "ownerSha256": "0a63b45de396d3d294ea77c9e988ef1160914aa3593326c7eb909147847b1e1a",
