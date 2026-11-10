@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-10T08:48:30.7381980+00:00",
+  "classification": "EXACT_PUBLISHED_SOURCE_DEBUG_RELEASE_INPUTS_NOT_INSTALLED",
+  "sourceCommit": "f6a4054940e9a308ac3cbedc47d8d7ac6d4630c7",
+  "sourceTree": "6aff460c4cec01ab4ffc5021cf8c85ff50cb0cc7",
+  "sourceVerificationRecord": "SAME_STATE_WAKE_ROLLBACK_SOURCE_2026_11_10.json",
+  "build": {
+    "passed": true,
+    "profile": "debug",
+    "lockedOfflineBuildCommands": 3,
+    "workflowElapsedSeconds": 91.70400000002701,
+    "ownerElapsedSeconds": 92.7468917,
+    "maximumOwnerSeconds": 530,
+    "runtimeMapManifestSha256": "d22e48dc4c2f276310cf6f41979e8854238e32570e9e088ffee563ff34f9c7f6",
+    "runtimeArtifacts": [
+      {
+        "name": "CatDeskBinagotchy.exe",
+        "sha256": "e7e395a9a91ac0d180f3df0992f67ffd7365eba44a1fec8d2931e4a430efcd78",
+        "byteLength": 76638208
+      },
+      {
+        "name": "CatDeskWakeHost.exe",
+        "sha256": "3ee5fd6af31ae445866514af9ab2afd94e6a6bbd9f22da7fdf26a5f6674ba362",
+        "byteLength": 4240896
+      },
+      {
+        "name": "adapter.py",
+        "sha256": "11ef16ca7d7636c861dc1b6492f5e74ade269c03ed34e77dc4407da9fa606b9b",
+        "byteLength": 66268
+      },
+      {
+        "name": "wake_bridge.py",
+        "sha256": "5671574c987ca5962c5e181ba7a26a84ba418c8a64a1864134cc58ba6b958a6f",
+        "byteLength": 299980
+      }
+    ],
+    "separateFixedBrokerArtifact": {
+      "name": "CatDeskWakeInstallBroker.exe",
+      "sha256": "bf1c63ae4dae525eb092ff2c3468d788da4437967e1eda54d1f6fce919007fde",
+      "byteLength": 4033536
+    },
+    "sourceInputMismatches": 0,
+    "productionPreservationMismatches": 0,
+    "compilerProcessesRemaining": 0,
+    "allBuildOwnedProcessesExited": true
+  },
+  "finalInventory": {
+    "observedUtc": "2026-11-10T08:50:44.9035075+00:00",
+    "scope": "EXACT_TASK_BUILD_AND_DEVELOPMENT_RUNTIME_IMAGE_ROOTS",
+    "ownedImagesRemaining": 0,
+    "processActions": 0
+  },
+  "authority": {
+    "protectedServiceProvisioned": false,
+    "trustKeyEnrolled": false,
+    "independentFullReleaseApprovalEstablished": false,
+    "signedSelectionEnvelopeIssued": false,
+    "installedSelectionChanged": false,
+    "productionBackendChanged": false,
+    "artifactRuntimeHealthQualifiedByThisBuild": false,
+    "installedRollbackQualified": false,
+    "webEditVerifySelfWakeAccepted": false
+  },
+  "evidenceSha256": {
+    "buildResult": "781c9f110a504d055505759fe85783305f5d9fe39df5dbd4309355ca0354d2b4",
+    "buildOwner": "07099040bd565161ef599bd5fd718a7ed5ce2c5505f279344e1f64fd8d2add4f",
+    "sourceQualification": "7b46b1cf0faeea7e315409de062e069046f0147d1c221702d97e62a3eeb0132a",
+    "exactPublication": "65f221358c093ab2d006e149d90d419897bd02829958f8560e961b5c05f2598c",
+    "finalProcessInventory": "f74b33e32c95655915de5850bd4256e4b0f9436f05adb8b62023187b02cd91a6"
+  },
+  "nextExecutableTask": "Implement and qualify reviewed first provisioning through the existing Wake installer boundary; enroll genuine external approval authority only through an explicit reviewed operator procedure. No replay of held Web requests."
+}

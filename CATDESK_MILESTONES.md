@@ -1,3 +1,26 @@
+## 2026-11-10 — exact build inputs and retained lifecycle evidence
+
+Published source `f6a4054940e9a308ac3cbedc47d8d7ac6d4630c7` built separately:
+GUI, WakeHost and the existing install broker, locked/offline in debug mode.
+The bounded owner passed in 92.747 seconds; source/protected pins matched,
+compiler processes and final owned-image inventory were zero. These are build
+inputs, not an installed or healthy production release.
+
+The retained `dba8fc3` artifact tuple also has a separately reviewed, unsigned
+`WAKE_RUNTIME` owner/startup/normal-stop fact receipt, derived from its two actual
+PAUSED runs. Original records remain unchanged. No independent proof-server
+challenge, full release approval or protected authority is inferred.
+
+The remaining installation boundary is explicit: the existing installer lacks
+reviewed first provisioning of the fixed broker and genuine signer enrollment;
+`preflight`/`submit` do not perform it. Full release review and a signed exact
+selection still need to be established. The next engineering step is the
+smallest reviewed bootstrap extension at the existing installer boundary.
+No authentication relay, service restart, message resend or new tunnel is
+required for that source work. Installed Web edit/verify/self-Wake remains open.
+Evidence: [exact build inputs](docs/verification/WAKE_PUBLISHED_BUILD_INPUTS_2026_11_10.json),
+[limited runtime facts](docs/verification/WAKE_RUNTIME_WORKING_FACTS_2026_11_10.json).
+
 ## 2026-11-10 — signed predecessor rollback implemented; protected cutover open
 
 329 distinct source/native-fixture tests, formatting and strict Clippy pass.
