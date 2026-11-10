@@ -29,9 +29,9 @@ use crate::{
     },
     install_broker_operator::{OperatorTokenEvidenceV1, inspect_connected_pipe_operator},
     install_broker_preflight::{
-        FixedProtectedRootReadGuard, acquire_fixed_protected_root_for_reader,
+        FixedProtectedRootReadGuard, acquire_fixed_protected_namespace_for_policy,
         canonical_broker_policy_security, canonical_protected_security,
-        inspect_fixed_broker_read_only, protected_security_raw,
+        inspect_fixed_broker_read_only, inspect_fixed_broker_with_policy, protected_security_raw,
     },
 };
 use ed25519_dalek::VerifyingKey;
@@ -197,6 +197,8 @@ struct PolicyWireV2 {
     approval_public_key_hex: String,
     same_state_reviewer_identity: String,
     same_state_root: SameStateRootPolicyV2,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    allow_operator_service_start: Option<bool>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -237,6 +239,7 @@ pub struct BrokerProtectedPolicyV1 {
     approval_key: VerifyingKey,
     same_state_root: Option<SameStateRootPolicyV2>,
     same_state_reviewer_identity: Option<String>,
+    allow_operator_service_start: bool,
 }
 
 /// Opaque proof that this envelope was verified by the pinned, independently
@@ -561,7 +564,7 @@ fn sid_text(sid: *mut c_void) -> Result<String> {
     String::from_utf16(units).map_err(|_| "WAKE_BROKER_POLICY_OPERATOR_INVALID".into())
 }
 
-fn user_sid_bytes(value: &str) -> Result<Vec<u8>> {
+pub(crate) fn user_sid_bytes(value: &str) -> Result<Vec<u8>> {
     if value.len() > MAX_SID_CHARS
         || !value.starts_with("S-1-")
         || !value
@@ -653,7 +656,7 @@ type ParsedVersionedPolicy = (
     PolicyWireV1,
     VerifyingKey,
     Vec<u8>,
-    Option<(SameStateRootPolicyV2, String)>,
+    Option<(SameStateRootPolicyV2, String, bool)>,
 );
 
 fn parse_policy_versioned(
@@ -723,7 +726,11 @@ fn parse_policy_versioned(
         base,
         key,
         sid,
-        Some((wire.same_state_root, wire.same_state_reviewer_identity)),
+        Some((
+            wire.same_state_root,
+            wire.same_state_reviewer_identity,
+            wire.allow_operator_service_start.unwrap_or(false),
+        )),
     ))
 }
 
@@ -748,10 +755,11 @@ fn load_pinned(
     }
     let (wire, approval_key, operator_sid_bytes, same_state) =
         parse_policy_versioned(&bytes, &root_id, &file_id, &service_sid)?;
-    let (same_state_root, same_state_reviewer_identity) = match same_state {
-        Some((root, reviewer)) => (Some(root), Some(reviewer)),
-        None => (None, None),
-    };
+    let (same_state_root, same_state_reviewer_identity, allow_operator_service_start) =
+        match same_state {
+            Some((root, reviewer, allow_start)) => (Some(root), Some(reviewer), allow_start),
+            None => (None, None, false),
+        };
     let value = BrokerProtectedPolicyV1 {
         root,
         file: Mutex::new(file),
@@ -766,12 +774,25 @@ fn load_pinned(
         approval_key,
         same_state_root,
         same_state_reviewer_identity,
+        allow_operator_service_start,
     };
     value.revalidate()?;
     Ok(value)
 }
 
 impl BrokerProtectedPolicyV1 {
+    pub(crate) fn operator_service_start_sid(&self) -> Result<Option<&str>> {
+        self.revalidate()?;
+        Ok(self
+            .allow_operator_service_start
+            .then_some(self.operator_sid.as_str()))
+    }
+
+    pub(crate) fn current_process_operator(&self) -> Result<OperatorTokenEvidenceV1> {
+        self.revalidate()?;
+        crate::install_broker_operator::inspect_current_process_operator(&self.operator_sid_bytes)
+    }
+
     pub(crate) fn same_state_resource_v2(&self) -> Result<&SameStateRootPolicyV2> {
         self.revalidate()?;
         self.same_state_root
@@ -793,6 +814,7 @@ impl BrokerProtectedPolicyV1 {
             "reviewerConfigured":self.same_state_reviewer_identity.is_some(),
             "reviewedReconstructionEnabled":self.same_state_root.as_ref()
                 .is_some_and(|r| r.allow_reviewed_reconstruction),
+            "operatorServiceStartAuthorized":self.allow_operator_service_start,
             "resourceQualificationPerformed":false,"installationAuthorized":false}))
     }
 
@@ -1086,7 +1108,10 @@ impl BrokerProtectedPolicyV1 {
 
 /// Zero-argument fixed-root loader. It performs no file or service mutation.
 pub fn load_fixed_broker_policy_read_only() -> Result<BrokerProtectedPolicyV1> {
-    let guard = acquire_fixed_protected_root_for_reader()?;
+    // The namespace-only reader is private and grants nothing. Parsing the
+    // physically pinned protected policy supplies the exact optional operator
+    // START ACE; full SCM/image validation must succeed before this returns.
+    let guard = acquire_fixed_protected_namespace_for_policy()?;
     let root_id = guard.root_identity().clone();
     let service_sid = guard.service_sid().to_owned();
     let root_security = ExactSecurity {
@@ -1097,13 +1122,52 @@ pub fn load_fixed_broker_policy_read_only() -> Result<BrokerProtectedPolicyV1> {
         owner: SYSTEM_SID.into(),
         sddl: canonical_broker_policy_security(&service_sid)?,
     };
-    load_pinned(
+    let policy = load_pinned(
         RootPin::Fixed(guard),
         root_id,
         service_sid,
         root_security,
         file_security,
-    )
+    )?;
+    let snapshot = inspect_fixed_broker_with_policy(&policy)?;
+    if snapshot.protected_root != policy.root_id {
+        return Err("WAKE_BROKER_POLICY_ROOT_CHANGED".into());
+    }
+    policy.revalidate()?;
+    Ok(policy)
+}
+
+/// Bootstrap serialization only. Actual creation, operator authority and full
+/// physical/SCM admission remain the native bootstrap's separate obligations.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn encode_same_state_bootstrap_policy(
+    root_id: ObjectIdentityV1,
+    policy_id: ObjectIdentityV1,
+    service_sid: &str,
+    operator_sid: &str,
+    key_hex: &str,
+    reviewer: &str,
+    state: SameStateRootPolicyV2,
+    allow_start: bool,
+) -> Result<Vec<u8>> {
+    let wire = PolicyWireV2 {
+        schema_version: 2,
+        purpose: POLICY_PURPOSE.into(),
+        protected_root: root_id.clone(),
+        policy_file: policy_id.clone(),
+        service_sid: service_sid.into(),
+        operator_sid: operator_sid.into(),
+        approval_public_key_hex: key_hex.into(),
+        same_state_reviewer_identity: reviewer.into(),
+        same_state_root: state,
+        allow_operator_service_start: allow_start.then_some(true),
+    };
+    let bytes = serde_json::to_vec(&wire).map_err(|_| "WAKE_BROKER_POLICY_ENCODING_INVALID")?;
+    if bytes.len() > MAX_POLICY_BYTES {
+        return Err("WAKE_BROKER_POLICY_SIZE_INVALID".into());
+    }
+    parse_policy_versioned(&bytes, &root_id, &policy_id, service_sid)?;
+    Ok(bytes)
 }
 
 #[cfg(test)]
@@ -1336,6 +1400,75 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn service_start_policy_is_default_off_and_bootstrap_encoding_preserves_old_v2_bytes() {
+        let fixture = Fixture::new();
+        let old = fixture.load().unwrap();
+        assert!(old.operator_service_start_sid().unwrap().is_none());
+        drop(old);
+        let state = SameStateRootPolicyV2 {
+            path: r"C:\existing-state".into(),
+            identity: FullFileIdentityV2 {
+                volume_serial: 1,
+                file_id_hex: "1".repeat(32),
+            },
+            allow_reviewed_reconstruction: false,
+        };
+        let encode = |allow| {
+            encode_same_state_bootstrap_policy(
+                fixture.root_id.clone(),
+                fixture.wire.policy_file.clone(),
+                &fixture.service_sid,
+                &fixture.wire.operator_sid,
+                &fixture.wire.approval_public_key_hex,
+                "reviewer",
+                state.clone(),
+                allow,
+            )
+            .unwrap()
+        };
+        let off = encode(false);
+        let value: serde_json::Value = serde_json::from_slice(&off).unwrap();
+        assert!(value.get("allowOperatorServiceStart").is_none());
+        assert!(
+            !parse_policy_versioned(
+                &off,
+                &fixture.root_id,
+                &fixture.wire.policy_file,
+                &fixture.service_sid
+            )
+            .unwrap()
+            .3
+            .unwrap()
+            .2
+        );
+        let on = encode(true);
+        assert!(
+            parse_policy_versioned(
+                &on,
+                &fixture.root_id,
+                &fixture.wire.policy_file,
+                &fixture.service_sid
+            )
+            .unwrap()
+            .3
+            .unwrap()
+            .2
+        );
+        let mut changed: serde_json::Value = serde_json::from_slice(&on).unwrap();
+        changed["allowOperatorServiceStart"] = serde_json::json!("true");
+        assert!(
+            parse_policy_versioned(
+                &serde_json::to_vec(&changed).unwrap(),
+                &fixture.root_id,
+                &fixture.wire.policy_file,
+                &fixture.service_sid
+            )
+            .is_err()
+        );
+        fixture.cleanup();
+    }
+
+    #[test]
     fn transaction_pins_require_matching_global_guard_and_preserve_other_role_sharing() {
         use crate::install_broker_ledger::BrokerLedgerGuard;
         use std::{fs::OpenOptions, os::windows::fs::OpenOptionsExt};
@@ -1523,6 +1656,7 @@ pub(crate) mod tests {
             approval_public_key_hex: fixture.wire.approval_public_key_hex.clone(),
             same_state_reviewer_identity: "independent-reviewer".into(),
             same_state_root: root.clone(),
+            allow_operator_service_start: None,
         };
         let raw = serde_json::to_vec(&wire).unwrap();
         let (_, _, _, resource) = parse_policy_versioned(
@@ -1532,7 +1666,7 @@ pub(crate) mod tests {
             &fixture.service_sid,
         )
         .unwrap();
-        assert_eq!(resource, Some((root, "independent-reviewer".into())));
+        assert_eq!(resource, Some((root, "independent-reviewer".into(), false)));
         assert!(
             parse_policy(
                 &raw,
@@ -1673,6 +1807,7 @@ pub(crate) mod tests {
                 approval_public_key_hex: wire.approval_public_key_hex,
                 same_state_reviewer_identity: reviewer,
                 same_state_root: state,
+                allow_operator_service_start: None,
             })
         } else {
             serde_json::to_vec(&wire)

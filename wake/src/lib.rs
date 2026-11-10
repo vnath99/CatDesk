@@ -4,6 +4,12 @@ pub mod development_runtime;
 pub mod install_authority;
 pub mod install_broker_approval;
 #[cfg(windows)]
+pub mod install_broker_bootstrap;
+#[cfg(windows)]
+pub(crate) mod install_broker_bootstrap_files;
+#[cfg(windows)]
+pub(crate) mod install_broker_bootstrap_scm;
+#[cfg(windows)]
 pub mod install_broker_candidate_stage;
 #[cfg(windows)]
 pub(crate) mod install_broker_ci_fetch;
@@ -20,6 +26,8 @@ pub mod install_broker_endpoint;
 pub mod install_broker_ledger;
 #[cfg(windows)]
 pub mod install_broker_legacy_owner;
+#[cfg(windows)]
+pub mod install_broker_lifecycle;
 #[cfg(windows)]
 pub mod install_broker_offline_pins;
 pub mod install_broker_offline_v2;

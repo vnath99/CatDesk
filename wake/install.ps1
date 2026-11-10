@@ -1,5 +1,135 @@
-param([switch]$BuildOnly, [switch]$RebuildGui)
+param(
+    [switch]$BuildOnly,
+    [switch]$RebuildGui,
+    [switch]$Bootstrap,
+    [switch]$Execute,
+    [string]$QualifiedHost,
+    [string]$ExpectedHostSha256,
+    [string]$ApprovalFile,
+    [string]$ExpectedApprovalSha256,
+    [string]$ExpectedPublicKeySha256
+)
 $ErrorActionPreference = 'Stop'
+
+# First enrollment remains an explicit operator operation. The frozen native
+# binary performs signature, elevated-owner, existing-state, create-only and
+# security checks. This wrapper neither creates trust nor edits protected data.
+# Without -Execute it invokes only the bounded, read-only native preflight.
+if ($Bootstrap) {
+    if ($BuildOnly -or $RebuildGui -or $PSVersionTable.PSVersion.Major -lt 7) {
+        throw 'WAKE_BOOTSTRAP_POWERSHELL_7_AND_EXCLUSIVE_MODE_REQUIRED'
+    }
+    foreach ($value in @($ExpectedHostSha256, $ExpectedApprovalSha256, $ExpectedPublicKeySha256)) {
+        if ($value -cnotmatch '^[a-f0-9]{64}$') { throw 'WAKE_BOOTSTRAP_FROZEN_IDENTITY_REQUIRED' }
+    }
+    foreach ($path in @($QualifiedHost, $ApprovalFile)) {
+        if (-not [IO.Path]::IsPathFullyQualified($path) -or
+            $path -cnotmatch '^[A-Za-z]:\\' -or
+            $path -match '[\x00-\x1f]' -or
+            -not (Test-Path -LiteralPath $path -PathType Leaf) -or
+            ((Get-Item -LiteralPath $path).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw 'WAKE_BOOTSTRAP_FROZEN_FILE_REQUIRED'
+        }
+    }
+    $imagePin = $null
+    $approvalPin = $null
+    $native = $null
+    try {
+        $imagePin = [IO.File]::Open($QualifiedHost, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+        $approvalPin = [IO.File]::Open($ApprovalFile, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+        if ($imagePin.Length -le 0 -or $imagePin.Length -gt 80MB -or
+            $approvalPin.Length -le 0 -or $approvalPin.Length -gt 64KB) {
+            throw 'WAKE_BOOTSTRAP_FROZEN_FILE_SIZE_INVALID'
+        }
+        $imageHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($imagePin)).ToLowerInvariant()
+        $approvalHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($approvalPin)).ToLowerInvariant()
+        if ($imageHash -cne $ExpectedHostSha256 -or $approvalHash -cne $ExpectedApprovalSha256) {
+            throw 'WAKE_BOOTSTRAP_FROZEN_FILE_CHANGED'
+        }
+        if (-not ('CatDeskWakeBootstrapBoundedOutputV1' -as [type])) {
+            Add-Type -TypeDefinition @'
+using System.IO;
+using System.Text;
+using System.Threading.Tasks;
+public sealed class CatDeskWakeBootstrapOutputV1 {
+    public string Text;
+    public bool Overflow;
+}
+public static class CatDeskWakeBootstrapBoundedOutputV1 {
+    public static async Task<CatDeskWakeBootstrapOutputV1> Drain(StreamReader reader, int limit) {
+        var buffer = new char[1024];
+        var text = new StringBuilder();
+        bool overflow = false;
+        int count;
+        while ((count = await reader.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) != 0) {
+            int keep = System.Math.Min(count, limit - text.Length);
+            if (keep > 0) text.Append(buffer, 0, keep);
+            if (count > keep) overflow = true;
+        }
+        return new CatDeskWakeBootstrapOutputV1 { Text = text.ToString(), Overflow = overflow };
+    }
+}
+'@
+        }
+        $info = [Diagnostics.ProcessStartInfo]::new()
+        $info.FileName = $QualifiedHost
+        $info.UseShellExecute = $false
+        $info.CreateNoWindow = $true
+        $info.RedirectStandardOutput = $true
+        $info.RedirectStandardError = $true
+        $action = if ($Execute) { 'bootstrap' } else { 'bootstrap-preflight' }
+        foreach ($argument in @('install-broker', $action, '--approval-file', $ApprovalFile,
+                '--expected-approval-sha256', $ExpectedApprovalSha256,
+                '--expected-public-key-sha256', $ExpectedPublicKeySha256)) {
+            $info.ArgumentList.Add($argument)
+        }
+        $native = [Diagnostics.Process]::Start($info)
+        $stdout = [CatDeskWakeBootstrapBoundedOutputV1]::Drain($native.StandardOutput, 65536)
+        $stderr = [CatDeskWakeBootstrapBoundedOutputV1]::Drain($native.StandardError, 4096)
+        if (-not $native.WaitForExit(90000)) {
+            # No retry: SCM/file creation may already have happened. The native
+            # coordinator starts no service or descendant; partial state is
+            # retained for reviewed recovery instead of deletion or overwrite.
+            $native.Kill()
+            if (-not $native.WaitForExit(5000)) { throw 'WAKE_BOOTSTRAP_NATIVE_EXIT_UNPROVEN_NO_RETRY' }
+            throw 'WAKE_BOOTSTRAP_OUTCOME_UNKNOWN_NO_RETRY'
+        }
+        if (-not $stdout.Wait(2000) -or -not $stderr.Wait(2000)) {
+            throw 'WAKE_BOOTSTRAP_READBACK_UNKNOWN_NO_RETRY'
+        }
+        $output = $stdout.Result.Text
+        $errorOutput = $stderr.Result.Text
+        if ($stdout.Result.Overflow -or $stderr.Result.Overflow) {
+            throw 'WAKE_BOOTSTRAP_READBACK_INVALID_NO_RETRY'
+        }
+        if ($native.ExitCode -ne 0) {
+            if ($errorOutput.Trim() -cmatch '^[A-Z][A-Z0-9_]{1,127}$') { throw $errorOutput.Trim() }
+            throw 'WAKE_BOOTSTRAP_NATIVE_REFUSED_NO_RETRY'
+        }
+        $result = $output | ConvertFrom-Json -ErrorAction Stop
+        if ($null -eq $result) { throw 'WAKE_BOOTSTRAP_READBACK_INVALID_NO_RETRY' }
+    } finally {
+        try {
+            if ($null -ne $native) {
+                try {
+                    if (-not $native.HasExited) {
+                        $native.Kill()
+                        if (-not $native.WaitForExit(5000)) { throw 'WAKE_BOOTSTRAP_NATIVE_EXIT_UNPROVEN_NO_RETRY' }
+                    }
+                } finally { $native.Dispose() }
+            }
+        } finally {
+            try { if ($null -ne $approvalPin) { $approvalPin.Dispose() } }
+            finally { if ($null -ne $imagePin) { $imagePin.Dispose() } }
+        }
+    }
+    $output.Trim()
+    return
+}
+if ($Execute -or $QualifiedHost -or $ExpectedHostSha256 -or $ApprovalFile -or
+    $ExpectedApprovalSha256 -or $ExpectedPublicKeySha256) {
+    throw 'WAKE_BOOTSTRAP_EXPLICIT_MODE_REQUIRED'
+}
 
 $wakeSource = $PSScriptRoot
 $repoSource = Split-Path -Parent $wakeSource

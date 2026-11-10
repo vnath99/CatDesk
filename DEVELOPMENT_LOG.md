@@ -1,3 +1,31 @@
+## 2026-11-10 — functional first broker bootstrap and explicit operator lifecycle
+
+Implemented the existing installer's missing first-provisioning path and fixed
+its one-shot/demand-start restart gap. The signed bootstrap binds reviewed bytes,
+approved public-key fingerprint, native operator and exact existing state; it
+creates only the fixed service/image/policy/empty lock and leaves the broker
+stopped. Normal starts use a policy-derived exact-operator START-only grant with
+fresh native high-token and same-handle/image checks. Submit still starts no
+service; release signatures, ledger/CAS and no-replay guards remain separate.
+
+Initial engineering compilation passed with three FFI warnings, then the
+pointer declaration mismatch was corrected. Peer review also tightened SCM
+return bounds, capped output readers, descriptor-length handling and retained
+state-root identity. The first complete matrix then passed 345 distinct Rust
+cases, both formatting checks and strict root/Wake Clippy in 245.751 seconds.
+The independent PowerShell/.NET wrapper run passed 15 cases/57 assertions; its
+8MiB drain allocated 903088 bytes and all effect-boundary calls were zero.
+All source/protected pins matched and temporary cleanup passed. No protected
+service, policy, key, current selection, browser or Web task was changed.
+
+A first read-only parent-ACL diagnostic failed account-name translation; its
+result is retained as invalid and superseded by direct raw-SID ACL inspection.
+No raw SIDs or protected logs are published. Current shared-parent create/EA/
+attribute rights are handled with retained no-WRITE/no-DELETE pins, not ACL
+rewriting; actual NT-relative create/collision and blocked-writer tests pass.
+Source and fixture evidence do not establish elevated production acceptance.
+Evidence: [bootstrap qualification](docs/verification/WAKE_BROKER_BOOTSTRAP_SOURCE_2026_11_10.json).
+
 ## 2026-11-10 — exact build inputs and retained lifecycle evidence
 
 Published source `f6a4054940e9a308ac3cbedc47d8d7ac6d4630c7` built separately:

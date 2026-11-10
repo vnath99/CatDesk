@@ -10,6 +10,13 @@ use std::path::Path;
 #[derive(Debug, Eq, PartialEq)]
 enum InstallBrokerAction {
     Preflight,
+    StartOnce,
+    Bootstrap {
+        preflight_only: bool,
+        approval: std::path::PathBuf,
+        approval_sha256: String,
+        public_key_sha256: String,
+    },
     Submit(std::path::PathBuf),
 }
 
@@ -20,6 +27,37 @@ fn parse_install_broker_action(args: &[String]) -> Result<Option<InstallBrokerAc
     }
     match args {
         [_, action] if action == "preflight" => Ok(Some(InstallBrokerAction::Preflight)),
+        [_, action] if action == "start-once" => Ok(Some(InstallBrokerAction::StartOnce)),
+        [
+            _,
+            action,
+            file_flag,
+            path,
+            hash_flag,
+            approval_sha256,
+            key_flag,
+            public_key_sha256,
+        ] if matches!(action.as_str(), "bootstrap" | "bootstrap-preflight")
+            && file_flag == "--approval-file"
+            && hash_flag == "--expected-approval-sha256"
+            && key_flag == "--expected-public-key-sha256"
+            && !path.is_empty()
+            && !path.chars().any(char::is_control)
+            && Path::new(path).is_absolute()
+            && [approval_sha256, public_key_sha256].iter().all(|value| {
+                value.len() == 64
+                    && value
+                        .bytes()
+                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            }) =>
+        {
+            Ok(Some(InstallBrokerAction::Bootstrap {
+                preflight_only: action == "bootstrap-preflight",
+                approval: path.into(),
+                approval_sha256: approval_sha256.clone(),
+                public_key_sha256: public_key_sha256.clone(),
+            }))
+        }
         [_, action, flag, path]
             if action == "submit"
                 && flag == "--approval-file"
@@ -44,6 +82,29 @@ fn install_broker_action(args: &[String]) -> Result<Option<serde_json::Value>> {
     let Some(action) = parse_install_broker_action(args)? else {
         return Ok(None);
     };
+    // First provisioning cannot require the already-installed broker. Its
+    // separate native entry verifies exact frozen enrollment, elevated owner,
+    // existing state identity, absent destinations and pinned parent safety.
+    if let InstallBrokerAction::Bootstrap {
+        preflight_only,
+        approval,
+        approval_sha256,
+        public_key_sha256,
+    } = &action
+    {
+        use catdesk_wake::install_broker_bootstrap::{
+            bootstrap_fixed_broker, preflight_fixed_broker,
+        };
+        return if *preflight_only {
+            preflight_fixed_broker(approval, approval_sha256, public_key_sha256)
+        } else {
+            bootstrap_fixed_broker(approval, approval_sha256, public_key_sha256)
+        }
+        .map(Some);
+    }
+    if action == InstallBrokerAction::StartOnce {
+        return catdesk_wake::install_broker_lifecycle::start_fixed_broker_once().map(Some);
+    }
     let preflight = inspect_fixed_broker_read_only()?;
     let policy = load_fixed_broker_policy_read_only()?;
     match action {
@@ -83,6 +144,7 @@ fn install_broker_action(args: &[String]) -> Result<Option<serde_json::Value>> {
                 .submit_same_state_approval_v3(&bytes)
                 .map(Some)
         }
+        _ => Err("WAKE_INSTALL_BROKER_ARGUMENTS_INVALID".into()),
     }
 }
 
@@ -391,6 +453,10 @@ mod install_broker_cli_tests {
             parse_install_broker_action(&args(&["install-broker", "preflight"])).unwrap(),
             Some(InstallBrokerAction::Preflight)
         );
+        assert_eq!(
+            parse_install_broker_action(&args(&["install-broker", "start-once"])).unwrap(),
+            Some(InstallBrokerAction::StartOnce)
+        );
         assert!(matches!(
             parse_install_broker_action(&args(&[
                 "install-broker",
@@ -425,5 +491,45 @@ mod install_broker_cli_tests {
             parse_install_broker_action(&args(&["status"])).unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn first_broker_bootstrap_cli_requires_both_frozen_identity_domains() {
+        let digest = "a".repeat(64);
+        let key = "b".repeat(64);
+        let valid = args(&[
+            "install-broker",
+            "bootstrap-preflight",
+            "--approval-file",
+            r"C:\frozen.json",
+            "--expected-approval-sha256",
+            &digest,
+            "--expected-public-key-sha256",
+            &key,
+        ]);
+        assert!(matches!(
+            parse_install_broker_action(&valid).unwrap(),
+            Some(InstallBrokerAction::Bootstrap {
+                preflight_only: true,
+                ..
+            })
+        ));
+        let mut execute = valid.clone();
+        execute[1] = "bootstrap".into();
+        assert!(matches!(
+            parse_install_broker_action(&execute).unwrap(),
+            Some(InstallBrokerAction::Bootstrap {
+                preflight_only: false,
+                ..
+            })
+        ));
+        for index in [2, 3, 4, 5, 6, 7] {
+            let mut bad = valid.clone();
+            bad[index] = "invalid".into();
+            assert!(parse_install_broker_action(&bad).is_err());
+        }
+        let mut extra = valid;
+        extra.push("--root".into());
+        assert!(parse_install_broker_action(&extra).is_err());
     }
 }

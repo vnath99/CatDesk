@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-10T09:43:21.485500+00:00",
+  "classification": "TESTED_SOURCE_NATIVE_WINDOWS_FILE_FIXTURES_AND_BOUNDED_DOTNET_IO",
+  "sourceBaseCommit": "d6d568ec488662ea417eddd13c1e9c1a7bba4b3f",
+  "implementationFilesSha256": {
+    "wake/install.ps1": "39475140d20bb8f6a5b56a073243c93adaf3d2caa108a40862b8a93da71d541a",
+    "wake/src/bin/CatDeskWakeHost.rs": "7a08352fadecb160d1f009c5945b4f073d70ba8e4448c71161600629df908351",
+    "wake/src/install_broker_durability.rs": "e8c19c548e21f424bb306384f80fdffdc52111497a6b43e19fc287a5122e3ae5",
+    "wake/src/install_broker_operator.rs": "788dae31213ffea0f0697f001b6009f4c3f53edf64b113f78a3257acdeca7923",
+    "wake/src/install_broker_policy.rs": "a4269d0b4fdb89cea8f732fcdc77b6724753e07c71507c99a63593984f5063e1",
+    "wake/src/install_broker_preflight.rs": "9a79369acfcda6ccd4a66ef4306c61988d5046519dcbdf399d17c7a24e0c8d3f",
+    "wake/src/lib.rs": "f1c19471b002a38b55a754f775c95b3189ebfb9c3124de49ce5d8d38be9e01b3",
+    "scripts/test-wake-broker-install-wrapper.ps1": "e5f60574657d7cc38701bb3e3e80599bc2c86b0632dcd66e05da6ed2694bed98",
+    "wake/src/install_broker_bootstrap.rs": "2541948f2ea84f5db08dbb8cfc5aa36c29c0f1cadd81566ddf1e27980cb45684",
+    "wake/src/install_broker_bootstrap_files.rs": "46896fcdcf28b769c6a3e8c7aa3aadb0999781e91c5405c7dceff890f2ac1031",
+    "wake/src/install_broker_bootstrap_scm.rs": "762990bf27c672357c20f18702df7d6f795b639dbc8a214fe447ab825fee6e6c",
+    "wake/src/install_broker_bootstrap_tests.rs": "fa7fd8c2fde75394e8dcfa9f473a7b40f8b2b745ad5136b4e9fb1f265375e98d",
+    "wake/src/install_broker_lifecycle.rs": "008afc0bb489972c479c0fe945eafd5f5751dae347db93ee082a4a267745a6ed"
+  },
+  "rust": {
+    "passed": true,
+    "distinctPassingTests": 345,
+    "stages": [
+      {
+        "name": "bootstrap-focused",
+        "exitCode": 0,
+        "passingTestExecutions": 10
+      },
+      {
+        "name": "same-state",
+        "exitCode": 0,
+        "passingTestExecutions": 37
+      },
+      {
+        "name": "broker-regression",
+        "exitCode": 0,
+        "passingTestExecutions": 286
+      },
+      {
+        "name": "selection",
+        "exitCode": 0,
+        "passingTestExecutions": 10
+      },
+      {
+        "name": "lifecycle-transactions",
+        "exitCode": 0,
+        "passingTestExecutions": 21
+      },
+      {
+        "name": "host-entry",
+        "exitCode": 0,
+        "passingTestExecutions": 4
+      },
+      {
+        "name": "host-recovery",
+        "exitCode": 0,
+        "passingTestExecutions": 6
+      },
+      {
+        "name": "native-cli",
+        "exitCode": 0,
+        "passingTestExecutions": 6
+      },
+      {
+        "name": "fmt-root",
+        "exitCode": 0,
+        "passingTestExecutions": 0
+      },
+      {
+        "name": "fmt-wake",
+        "exitCode": 0,
+        "passingTestExecutions": 0
+      },
+      {
+        "name": "clippy-root",
+        "exitCode": 0,
+        "passingTestExecutions": 0
+      },
+      {
+        "name": "clippy-wake",
+        "exitCode": 0,
+        "passingTestExecutions": 0
+      }
+    ],
+    "sourceInputs": 238,
+    "sourceMismatches": 0,
+    "protectedPreservationInputs": 6,
+    "protectedPreservationMismatches": 0,
+    "ownerElapsedSeconds": 245.7512612,
+    "timedOut": false,
+    "terminationFailed": false
+  },
+  "powerShell": {
+    "passed": true,
+    "totalPassCount": 15,
+    "assertions": 57,
+    "largeInputBytes": 8388608,
+    "largeDrainAllocatedBytes": 903088,
+    "retainedOutputUnits": "UTF16_CHARACTERS",
+    "temporaryCleanupVerified": true,
+    "effectBoundaryProcessStarts": 0,
+    "builds": 0,
+    "nativeBootstrapCalls": 0,
+    "serviceChanges": 0,
+    "ownerElapsedSeconds": 1.5758785
+  },
+  "implemented": [
+    "Purpose-specific externally signed first-bootstrap envelope pinned by operator-supplied envelope and existing approved public-key fingerprints",
+    "Exact reviewed installer/broker bytes and independent bootstrap-review facts; no key generation or signing",
+    "Actual elevated unrestricted interactive primary-operator and existing SeRestorePrivilege admission before writes; privilege restored or fail-stop",
+    "Fixed create-only filesystem and SCM setup; partial/existing state refuses without deletion, replacement or repair",
+    "Pinned existing state-root identity and exact current/control/config hashes; no Store initialization or selection writes",
+    "Parent no-WRITE/no-DELETE pin plus actual NT-relative create/collision and blocked-writer qualification",
+    "SYSTEM-owned self-bound policy written in place, exact file/security readback and existing native directory flush",
+    "Explicit policy-default-off START-only right for configured operator; general BA/IU remain query-only",
+    "Explicit native start-once checks same SCM handle/image and high operator; submit still never starts a service",
+    "Read-only default installer wrapper with capped output retention, bounded native process wait and no retry on ambiguous outcome"
+  ],
+  "engineeringCorrections": [
+    "Align GetSecurityInfo FFI pointer types with existing native declarations",
+    "Use returned SCM config length and validate structure size before pointer reads",
+    "Drain output with fixed retained limits rather than ReadToEnd plus a late size check",
+    "Preserve native API-reported descriptor conversion length consistently",
+    "Retain and recheck exact signed state-root object identity",
+    "Refuse broad parent mutation rights; hold no-WRITE parent pins for permitted create/metadata rights",
+    "Use existing direct native directory flush on owned created handles rather than unsupported directory sync assumptions"
+  ],
+  "authority": {
+    "actualSCMCreationOrStartQualified": false,
+    "actualSYSTEMOwnershipCreationQualified": false,
+    "protectedPolicyCreated": false,
+    "trustKeyEnrolled": false,
+    "privateKeyGeneratedOrRead": false,
+    "externallySignedBootstrapIssued": false,
+    "releaseReviewEvidenceIssued": false,
+    "installedSelectionChanged": false,
+    "canonicalBackendChanged": false,
+    "powerLossQualified": false,
+    "installedWebEditVerifySelfWakeAccepted": false
+  },
+  "evidenceSha256": {
+    "rustResultSha256": "ff316f384efdcbaa744af05c69af7291f85b9d3c91f046b43b0ee293920467c4",
+    "rustOwnerSha256": "6192b3eab61258fa387bf1cf296c5509e042c6c5d2364db9a606bfe9dfaea0e4",
+    "wrapperResultSha256": "644971b0008b5aedfb7400a0c0007a93b16c35213a81fb6ad24fbfa33eaaccbe",
+    "wrapperOwnerSha256": "a8fc9a2f2e0611045100f94fabcabdb3443b1a0663b732eed471b15b4f542d92"
+  },
+  "next": "Build exact published release inputs, identify an existing approved signer/public key, obtain a genuine reviewed bootstrap signature and perform the explicit elevated preflight/provisioning qualification; preserve all held Web effects."
+}

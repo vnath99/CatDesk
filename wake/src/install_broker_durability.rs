@@ -211,7 +211,7 @@ pub(crate) fn flush_pinned_directory(
     Ok(())
 }
 
-fn flush_directory_handle(
+pub(crate) fn flush_directory_handle(
     write_handle: &OwnedHandle,
     expected: &ObjectIdentityV1,
     point: ParentFlushPoint,

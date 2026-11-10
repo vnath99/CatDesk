@@ -1,3 +1,63 @@
+## 2026-11-10 — first fixed-broker bootstrap and reusable bounded starts (SOURCE QUALIFIED; NOT INSTALLED)
+
+The new candidate adds first provisioning to the existing Wake installer. It
+creates no alternate service, profile, tunnel, registry or release history.
+Installed dev.84 does not gain these commands until a qualified cutover.
+
+Prerequisites: exact reviewed source/artifact hashes, a complete independent
+bootstrap-source review bound to those bytes, a genuine externally signed
+`FIRST_FIXED_BROKER_PROVISION_ONLY` envelope, and the separately approved public
+key fingerprint. Keep private keys outside the AI conversation. The signed
+manifest binds the native operator, reviewer, exact existing physical state-root
+identity, current/control/config hashes and explicit policy choices. Use the
+qualified PowerShell 7.6 launcher with real Windows elevation. Native admission
+also requires an unrestricted interactive primary token and an already-present
+SeRestorePrivilege; it never grants a Windows privilege or elevates itself.
+
+Run the read-only preflight through the existing wrapper, using finalized paths
+and lowercase SHA-256 values from the reviewed packet:
+
+```powershell
+.\wake\install.ps1 -Bootstrap -QualifiedHost '<qualified-new-WakeHost.exe>' `
+  -ExpectedHostSha256 '<installer-sha256>' -ApprovalFile '<frozen-signed-bootstrap.json>' `
+  -ExpectedApprovalSha256 '<envelope-sha256>' -ExpectedPublicKeySha256 '<approved-key-fingerprint>'
+```
+
+Without `-Execute`, this verifies inputs, native owner, privilege availability,
+fixed-parent safety and absence only. It enables no privilege and creates no
+resource. After that exact packet is authorized and preflight succeeds, repeat
+with `-Execute` once. The native transaction creates only the compiled fixed
+broker resources, binds the policy's actual file identity in place, and returns
+`FIXED_BROKER_PROVISIONED_STOPPED_START_ONCE_AVAILABLE` only after native
+security/image/policy readback. It starts no service and changes no selection.
+Existing or partial targets, changed state, unsafe/busy parents, token failure
+or unknown outcome refuse; preserve evidence rather than rerunning or clearing.
+
+Subsequent lifecycle uses the same qualified native binary:
+
+```text
+<qualified-WakeHost.exe> install-broker preflight
+<qualified-WakeHost.exe> install-broker start-once
+<qualified-WakeHost.exe> install-broker submit --approval-file <frozen-signed-V3-envelope>
+```
+
+`start-once` is explicit and policy-default-off. The approved bootstrap permits
+only SERVICE_START for the configured operator; no STOP/configuration/DACL/
+owner/delete rights are added, and general BA/IU stay query-only. A SID ACE alone
+does not enforce elevation: the native start checks the actual high operator,
+and install writes still require same-read high-token admission plus a genuine
+signed selection and ledger/CAS authority. SCM_RUNNING_ONLY is not MCP or
+transaction readiness. The 15-second budget covers status polling, not a pending
+synchronous SCM RPC; live qualification must use the existing bounded owner and
+monitor the one-request broker through its terminal state. Submit never starts
+it automatically and an ambiguous request never permits a blind retry.
+
+The installer wrapper caps retained stdout/stderr and waits at most 90 seconds
+for its native child before no-retry quarantine. Its source tests passed 15
+cases; 345 distinct Rust cases, formatting and strict Clippy also pass. Actual
+SCM/elevated provisioning, installed rollback and Web work remain unqualified.
+Evidence: [bootstrap source](../verification/WAKE_BROKER_BOOTSTRAP_SOURCE_2026_11_10.json).
+
 ## 2026-11-10 — exact build inputs and retained lifecycle evidence
 
 Published source `f6a4054940e9a308ac3cbedc47d8d7ac6d4630c7` built separately:

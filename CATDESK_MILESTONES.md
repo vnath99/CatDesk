@@ -1,3 +1,14 @@
+## 2026-11-10 — fixed broker first-provisioning source qualified; Web acceptance still open
+
+The existing installer now has an explicit signed first-bootstrap operation,
+read-only default preflight, create-only native setup and reusable exact-operator
+START-only lifecycle. No new owner/service/registry/profile or unsigned release
+path is introduced. 345 Rust plus 15 PowerShell/.NET cases, formatting and
+strict Clippy pass; all preservation checks match. Actual elevated SCM setup,
+issuer enrollment, installed adapter cutover and direct Web edit/verify/self-Wake
+remain required. Held submissions and native sessions are preserved. Evidence:
+[bootstrap source](docs/verification/WAKE_BROKER_BOOTSTRAP_SOURCE_2026_11_10.json).
+
 ## 2026-11-10 — exact build inputs and retained lifecycle evidence
 
 Published source `f6a4054940e9a308ac3cbedc47d8d7ac6d4630c7` built separately:

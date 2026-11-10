@@ -51,6 +51,11 @@ pub fn inspect_connected_pipe_operator(
     Err("WAKE_BROKER_WINDOWS_REQUIRED".into())
 }
 
+#[cfg(not(windows))]
+pub fn inspect_current_process_operator(_: &[u8]) -> Result<OperatorTokenEvidenceV1> {
+    Err("WAKE_BROKER_WINDOWS_REQUIRED".into())
+}
+
 #[cfg(windows)]
 mod windows {
     use super::*;
@@ -63,6 +68,7 @@ mod windows {
 
     const TOKEN_QUERY: u32 = 0x0008;
     const TOKEN_USER: u32 = 1;
+    const TOKEN_TYPE: u32 = 8;
     const TOKEN_IMPERSONATION_LEVEL: u32 = 9;
     const TOKEN_SESSION_ID: u32 = 12;
     const TOKEN_ELEVATION: u32 = 20;
@@ -99,10 +105,12 @@ mod windows {
             size: u32,
             returned: *mut u32,
         ) -> i32;
+        fn OpenProcessToken(process: *mut c_void, access: u32, token: *mut *mut c_void) -> i32;
     }
 
     unsafe extern "system" {
         fn GetCurrentThread() -> *mut c_void;
+        fn GetCurrentProcess() -> *mut c_void;
         fn GetLastError() -> u32;
         fn CloseHandle(handle: *mut c_void) -> i32;
     }
@@ -125,7 +133,7 @@ mod windows {
         integrity_rid: u32,
         session_id: u32,
         elevated: bool,
-        impersonation_level: u32,
+        impersonation_level: Option<u32>,
         app_container: bool,
         restricted: bool,
     }
@@ -165,8 +173,33 @@ mod windows {
             return Err("WAKE_BROKER_OPERATOR_TOKEN_UNAVAILABLE".into());
         }
         let token = unsafe { OwnedHandle::from_raw_handle(raw_token) };
-        let facts = token_facts(token.as_raw_handle())?;
+        let facts = token_facts(token.as_raw_handle(), false)?;
         authorize_facts(&facts, protected_operator_sid)
+    }
+
+    /// This grants only current-process identity evidence. It never elevates,
+    /// enables privileges, creates a service or authorizes an installation.
+    pub fn inspect_current_process_operator(
+        protected_operator_sid: &[u8],
+    ) -> Result<OperatorTokenEvidenceV1> {
+        valid_sid(protected_operator_sid)?;
+        let mut prior = ptr::null_mut();
+        if unsafe { OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, 1, &mut prior) } != 0 {
+            unsafe { CloseHandle(prior) };
+            return Err("WAKE_BROKER_THREAD_ALREADY_IMPERSONATING".into());
+        }
+        if unsafe { GetLastError() } != ERROR_NO_TOKEN {
+            return Err("WAKE_BROKER_THREAD_TOKEN_UNAVAILABLE".into());
+        }
+        let mut raw = ptr::null_mut();
+        if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut raw) } == 0
+            || raw.is_null()
+        {
+            return Err("WAKE_BROKER_OPERATOR_TOKEN_UNAVAILABLE".into());
+        }
+        let token = unsafe { OwnedHandle::from_raw_handle(raw) };
+        let facts = token_facts(token.as_raw_handle(), true)?;
+        authorize_token_facts(&facts, protected_operator_sid, true)
     }
 
     fn query_token_blob(token: *mut c_void, class: u32) -> Result<Vec<u8>> {
@@ -282,7 +315,10 @@ mod windows {
         Ok(u32::from_le_bytes(last.try_into().expect("four bytes")))
     }
 
-    fn token_facts(token: *mut c_void) -> Result<TokenFacts> {
+    fn token_facts(token: *mut c_void, primary: bool) -> Result<TokenFacts> {
+        if token_u32(token, TOKEN_TYPE)? != if primary { 1 } else { 2 } {
+            return Err("WAKE_BROKER_OPERATOR_TOKEN_INVALID".into());
+        }
         let user_sid = embedded_sid(&query_token_blob(token, TOKEN_USER)?)?.to_vec();
         let integrity_rid = integrity_rid(embedded_sid(&query_token_blob(
             token,
@@ -290,7 +326,11 @@ mod windows {
         )?)?)?;
         let session_id = token_u32(token, TOKEN_SESSION_ID)?;
         let elevated = token_u32(token, TOKEN_ELEVATION)? == 1;
-        let impersonation_level = token_u32(token, TOKEN_IMPERSONATION_LEVEL)?;
+        let impersonation_level = if primary {
+            None
+        } else {
+            Some(token_u32(token, TOKEN_IMPERSONATION_LEVEL)?)
+        };
         let app_container = token_u32(token, TOKEN_IS_APP_CONTAINER)? != 0;
         // TokenHasRestrictions also covers disabled SIDs and deleted privileges.
         // IsTokenRestricted returns FALSE on API errors, which would fail open.
@@ -310,13 +350,27 @@ mod windows {
         facts: &TokenFacts,
         protected_operator_sid: &[u8],
     ) -> Result<OperatorTokenEvidenceV1> {
+        authorize_token_facts(facts, protected_operator_sid, false)
+    }
+
+    fn authorize_token_facts(
+        facts: &TokenFacts,
+        protected_operator_sid: &[u8],
+        primary: bool,
+    ) -> Result<OperatorTokenEvidenceV1> {
         valid_sid(protected_operator_sid)?;
         if protected_operator_sid == LOCAL_SYSTEM_SID
             || facts.user_sid != protected_operator_sid
             || facts.integrity_rid < SECURITY_MANDATORY_HIGH_RID
             || facts.session_id == 0
             || !facts.elevated
-            || !(2..=3).contains(&facts.impersonation_level)
+            || if primary {
+                facts.impersonation_level.is_some()
+            } else {
+                !facts
+                    .impersonation_level
+                    .is_some_and(|level| (2..=3).contains(&level))
+            }
             || facts.app_container
             || facts.restricted
         {
@@ -390,7 +444,7 @@ mod windows {
                 integrity_rid: SECURITY_MANDATORY_HIGH_RID,
                 session_id: 1,
                 elevated: true,
-                impersonation_level: 2,
+                impersonation_level: Some(2),
                 app_container: false,
                 restricted: false,
             }
@@ -402,6 +456,28 @@ mod windows {
             assert_eq!(evidence.integrity_rid, SECURITY_MANDATORY_HIGH_RID);
             assert_eq!(evidence.session_id, 1);
             assert_eq!(evidence.operator_sid_sha256.len(), 64);
+        }
+
+        #[test]
+        fn current_primary_operator_reuses_identity_gates_without_impersonation_level_claim() {
+            let mut facts = allowed();
+            facts.impersonation_level = None;
+            assert!(authorize_token_facts(&facts, &USER, true).is_ok());
+            assert!(authorize_facts(&facts, &USER).is_err());
+            assert!(authorize_token_facts(&allowed(), &USER, true).is_err());
+            assert!(authorize_token_facts(&facts, &OTHER, true).is_err());
+            for case in 0..4 {
+                let mut denied = facts.clone();
+                match case {
+                    0 => denied.elevated = false,
+                    1 => denied.integrity_rid = 0x2000,
+                    2 => denied.session_id = 0,
+                    _ => denied.restricted = true,
+                }
+                assert!(authorize_token_facts(&denied, &USER, true).is_err());
+            }
+            facts.app_container = true;
+            assert!(authorize_token_facts(&facts, &USER, true).is_err());
         }
 
         #[test]
@@ -436,9 +512,9 @@ mod windows {
         #[test]
         fn identification_only_impersonation_is_denied() {
             let mut facts = allowed();
-            facts.impersonation_level = 1;
+            facts.impersonation_level = Some(1);
             assert!(authorize_facts(&facts, &USER).is_err());
-            facts.impersonation_level = 4;
+            facts.impersonation_level = Some(4);
             assert!(authorize_facts(&facts, &USER).is_err());
         }
 
@@ -556,4 +632,10 @@ mod windows {
 }
 
 #[cfg(windows)]
-pub use windows::inspect_connected_pipe_operator;
+pub use windows::{inspect_connected_pipe_operator, inspect_current_process_operator};
+
+#[cfg(windows)]
+pub(crate) fn admit_bootstrap_operator(expected_sid: &str) -> Result<OperatorTokenEvidenceV1> {
+    let sid = crate::install_broker_policy::user_sid_bytes(expected_sid)?;
+    inspect_current_process_operator(&sid)
+}

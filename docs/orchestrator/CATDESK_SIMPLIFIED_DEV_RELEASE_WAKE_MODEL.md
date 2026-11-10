@@ -1,3 +1,29 @@
+## 2026-11-10 — first provisioning closes the one-shot broker lifecycle gap in source
+
+The fixed broker handles one request and exits. Its former demand-start plus
+query-only service ACL had no supported later start owner. First provisioning
+alone would therefore not make later upgrades or rollback usable. The source
+now supports explicit START-only permission for the configured operator, derived
+from protected policy; legacy V1/V2 omission remains default-off. General BA/IU
+retain query-only access and no service configuration/ownership rights expand.
+
+The existing installer now composes a purpose-specific externally signed
+bootstrap, native elevated-owner/privilege checks, fixed create-only SCM/files,
+self-bound protected policy and independent final readback. It enrolls an
+existing approved issuer; it neither generates keys nor issues release reviews,
+working qualification or selection approvals. A later V3 selection still needs
+its own genuine candidate/fallback evidence and signed exact snapshot. No
+existing parent ACL, project binding, current selection or historical journal
+is rewritten. Partial first setup stays preserved and refuses overwrite.
+
+345 Rust and 15 PowerShell/.NET cases pass, including real disposable Windows
+relative creation under a no-WRITE parent pin. This is source/file-fixture
+qualification, not actual SCM setup, power-loss recovery or installed Web
+acceptance. Next: exact release artifacts and genuine signer enrollment through
+the explicit operator procedure, then the guarded adapter cutover and original
+no-replay recovery. Evidence:
+[bootstrap source](../verification/WAKE_BROKER_BOOTSTRAP_SOURCE_2026_11_10.json).
+
 ## 2026-11-10 — exact build inputs and retained lifecycle evidence
 
 Published source `f6a4054940e9a308ac3cbedc47d8d7ac6d4630c7` built separately:
