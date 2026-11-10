@@ -977,6 +977,11 @@ impl BrokerProtectedPolicyV1 {
         Ok((&self.service_sid, &self.operator_sid))
     }
 
+    #[cfg(test)]
+    pub(crate) fn is_fixture_root(&self) -> bool {
+        matches!(&self.root, RootPin::Fixture(_))
+    }
+
     /// Use only immediately after the final request `ReadFile` on this same
     /// connected pipe instance. This makes no policy I/O before Windows
     /// impersonates the sender of that last message. The caller must have

@@ -7633,3 +7633,20 @@ known reason field may feed the existing redacted terms. NONE/UNPROVEN and omitt
 projections remain uncertain. No grant, retry, trace reopen or source-promotion
 authority is derived from this metadata. Qualify the actual installed package
 separately from source tests and controlled debug reads.
+### 2026-11-10 — Existing issuer and reader-source checkpoint
+
+Do not run `KEYGEN.ps1` to repair installation authority: it generates and writes
+key files. The existing product public key matches the compiled root. It can
+technically support a fresh operator-approved Wake-purpose signature, but prior
+main-image signatures do not enroll a Wake issuer or authorize selection. The
+operator-only signing ceremony and separate lifecycle gates are documented in
+`CATDESK_PRODUCTION_RELEASE_LIFECYCLE.md`. No reviewed generic signer command was
+established; do not invent one or read private signing material through an agent.
+
+Reader source commit `9c521ba5` passed 29 readiness cases, formatting and strict
+Clippy in a clean checkout. This is not an installed upgrade. The native rename
+control succeeds without child handles and refuses with five read handles;
+retain the failure evidence and finish the existing protected-stage handoff.
+Never drop pins on an exposed stage, clear an unknown delivery, or repeat a Web
+task merely because review or installation is blocked. Direct project Web work
+and self-Wake remain the acceptance path; native Codex delegation is optional.

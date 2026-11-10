@@ -3994,3 +3994,27 @@ per-command long-path option, with no repository configuration change.
 The separate native control succeeds with zero child opens and returns
 `0xc0000022` with five read handles; destination rights alone do not resolve it.
 Installation and actual Web/self-Wake acceptance remain open.
+### 2026-11-10 — Protected-stage native handoff qualified in disposable Windows fixtures
+
+Fixed the unpinned absolute-path stage writer using existing handle-relative
+creation and canonical protected descriptors. Actual controls established that
+five open descendants prevent the native directory rename even with proven
+destination rights. The repaired transaction protects fresh bytes from creation,
+journals the attempt, verifies the exact source DELETE capability, closes child
+handles, renames once without replacement, then verifies and repins through
+`Published`. Existing ACLs, ordinary readers, schemas and release authority stay
+unchanged. The matrix passed 81 cases, formatting and strict Clippy, with recorded
+source/state/inventory preservation and cleanup. Standard-user fixtures do not
+qualify SYSTEM-service execution or installation. Historical failures remain.
+See `docs/verification/WAKE_PROTECTED_STAGE_HANDOFF_SOURCE_2026_11_10.json`.
+
+### 2026-11-10 — GUI consumer verification and rebuild applicability
+
+Six exact readonly CLI parser/identity tests now pass under their compiled
+`operator_facade::web::tests` names; root formatting and strict all-target Clippy
+also pass. The original empty-selection failure remains preserved and counts as
+zero tests. The GUI links the Wake crate and reaches its readiness implementation;
+the retained earlier GUI does not acquire the privacy fix through a Host upgrade.
+A new GUI, Host and broker build is therefore required for the corrected candidate,
+with the GUI retained as a distinct Wake companion rather than an implicit
+canonical-backend promotion. Native81 and GUI6 evidence share the same source fence.

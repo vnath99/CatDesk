@@ -5517,3 +5517,25 @@ installation or Web send occurred. Publication remains separate: native zero-ope
 control passes while five-child-open control returns `0xc0000022`. Reuse the
 existing protected-stage security and guarded handle handoff before attempting
 another qualified candidate; never drop pins from an exposed stage.
+### 2026-11-10 — Protected creation and publication repair ready for artifact preparation
+
+The real native rename refusal was resolved in disposable Windows fixtures using
+the existing protected-stage security model. The 81-case matrix and strict checks
+pass, preserving recorded state and task inventory. Keep the original failures;
+the repair does not retry those attempts or rewrite an exposed stage's ACLs.
+Only newly created stages/files receive canonical protection. The exact source
+DELETE capability survives child closure, one no-replace rename and readback
+until `Published`. Build reviewed immutable artifacts next; actual SYSTEM-service,
+signing, installed Host and direct Web/self-Wake qualification remain separate.
+See `../verification/WAKE_PROTECTED_STAGE_HANDOFF_SOURCE_2026_11_10.json`.
+
+### 2026-11-10 — GUI consumer verification and rebuild applicability
+
+Six exact readonly CLI parser/identity tests now pass under their compiled
+`operator_facade::web::tests` names; root formatting and strict all-target Clippy
+also pass. The original empty-selection failure remains preserved and counts as
+zero tests. The GUI links the Wake crate and reaches its readiness implementation;
+the retained earlier GUI does not acquire the privacy fix through a Host upgrade.
+A new GUI, Host and broker build is therefore required for the corrected candidate,
+with the GUI retained as a distinct Wake companion rather than an implicit
+canonical-backend promotion. Native81 and GUI6 evidence share the same source fence.

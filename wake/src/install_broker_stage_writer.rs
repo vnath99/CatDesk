@@ -80,13 +80,50 @@ pub(crate) use offline_v2::{
 };
 
 #[derive(Clone)]
-enum StageSecurityMode {
+pub(crate) enum StageSecurityMode {
     Protected(String),
     #[cfg(test)]
     Fixture,
 }
 
 impl StageSecurityMode {
+    pub(crate) fn from_same_state_policy(policy: &BrokerProtectedPolicyV1) -> Result<Self> {
+        let (service_sid, _) = policy.checked_endpoint_sids()?;
+        #[cfg(test)]
+        if policy.is_fixture_root() {
+            // Disposable native fixtures exercise the real handle transaction,
+            // not LocalSystem ownership or production ACL admission.
+            return Ok(Self::Fixture);
+        }
+        Ok(Self::Protected(service_sid.into()))
+    }
+
+    pub(crate) fn creation_descriptor(&self, directory: bool) -> Result<Option<LocalDescriptor>> {
+        self.service_sid()
+            .map(|sid| descriptor(sid, directory))
+            .transpose()
+    }
+
+    pub(crate) fn readback(
+        &self,
+        handle: &impl AsRawHandle,
+        directory: bool,
+    ) -> Result<(String, String)> {
+        let actual = protected_security_raw(handle.as_raw_handle())?;
+        match self {
+            Self::Protected(sid) => {
+                if actual.0 != "S-1-5-18"
+                    || actual.1 != canonical_protected_security(sid, directory)?
+                {
+                    return Err("WAKE_BROKER_PUBLICATION_ACL_MISMATCH".into());
+                }
+            }
+            #[cfg(test)]
+            Self::Fixture => {}
+        }
+        Ok(actual)
+    }
+
     fn service_sid(&self) -> Option<&str> {
         match self {
             Self::Protected(value) => Some(value),
@@ -211,7 +248,12 @@ unsafe extern "system" {
     ) -> i32;
 }
 
-struct LocalDescriptor(*mut c_void);
+pub(crate) struct LocalDescriptor(*mut c_void);
+impl LocalDescriptor {
+    pub(crate) fn as_raw(&self) -> *mut c_void {
+        self.0
+    }
+}
 impl Drop for LocalDescriptor {
     fn drop(&mut self) {
         if !self.0.is_null() {
@@ -795,7 +837,7 @@ fn valid_publication_component(component: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_'))
 }
 
-fn open_publication_child(
+pub(crate) fn open_publication_child(
     parent: &OwnedHandle,
     component: &str,
     source: bool,
@@ -857,7 +899,7 @@ fn open_publication_child(
     Ok(handle)
 }
 
-fn rename_candidate_noreplace(
+pub(crate) fn rename_candidate_noreplace(
     candidate: &OwnedHandle,
     packages: &OwnedHandle,
     package_id: &str,
@@ -882,7 +924,7 @@ fn rename_candidate_noreplace(
         status: 0,
         information: 0,
     };
-    if unsafe {
+    let status = unsafe {
         NtSetInformationFile(
             candidate.as_raw_handle(),
             &mut iosb,
@@ -890,9 +932,13 @@ fn rename_candidate_noreplace(
             length,
             FILE_RENAME_INFORMATION_CLASS,
         )
-    } != 0
-        || iosb.status != 0
-    {
+    };
+    if status != 0 || iosb.status != 0 {
+        #[cfg(test)]
+        eprintln!(
+            "WAKE_BROKER_PUBLICATION_RENAME_FAILED ntStatus=0x{:08x} ioStatus=0x{:08x}",
+            status as u32, iosb.status as u32
+        );
         return Err("WAKE_BROKER_PUBLICATION_RENAME_FAILED".into());
     }
     Ok(())
@@ -2653,5 +2699,86 @@ pub(crate) mod tests {
         );
         drop(lease);
         fixture.cleanup();
+    }
+}
+
+#[cfg(test)]
+mod publication_pin_diagnostics {
+    use super::tests::TransactionFixture;
+    use super::*;
+    use std::fs::OpenOptions;
+    use std::os::windows::fs::OpenOptionsExt;
+
+    fn fresh_native_control(child_pins: usize) -> Result<()> {
+        assert!(matches!(child_pins, 0 | 5));
+        let fixture = TransactionFixture::new();
+        let source_path = fixture.root_path().join("native-control-source");
+        let destination_path = fixture.root_path().join("native-control-target");
+        std::fs::create_dir(&source_path).unwrap();
+        std::fs::create_dir(&destination_path).unwrap();
+        let names = [
+            MANIFEST,
+            ARTIFACTS[0],
+            ARTIFACTS[1],
+            ARTIFACTS[2],
+            ARTIFACTS[3],
+        ];
+        for (index, name) in names.into_iter().enumerate() {
+            std::fs::write(source_path.join(name), format!("owned inert bytes {index}")).unwrap();
+        }
+        let mut files = Vec::new();
+        for name in names.into_iter().take(child_pins) {
+            files.push(
+                OpenOptions::new()
+                    .access_mode(0x00100081)
+                    .share_mode(FILE_SHARE_READ)
+                    .custom_flags(FILE_OPEN_REPARSE_POINT)
+                    .open(source_path.join(name))
+                    .unwrap(),
+            );
+        }
+        let source = open_publication_child(fixture.root(), "native-control-source", true).unwrap();
+        let destination =
+            open_publication_child(fixture.root(), "native-control-target", false).unwrap();
+        // Each call owns a distinct fresh geometry and issues exactly one
+        // native rename. No failed attempt drops pins and retries.
+        let result = rename_candidate_noreplace(&source, &destination, "native-control-package");
+        eprintln!(
+            "NATIVE_PUBLICATION_CONTROL destinationAccess=0x1200a0 childReadPins={} result={:?}",
+            child_pins, result
+        );
+        let exact_effect = if result.is_ok() {
+            !source_path.exists()
+                && names.into_iter().enumerate().all(|(index, name)| {
+                    std::fs::read(destination_path.join("native-control-package").join(name))
+                        .is_ok_and(|bytes| bytes == format!("owned inert bytes {index}").as_bytes())
+                })
+        } else {
+            source_path.is_dir() && !destination_path.join("native-control-package").exists()
+        };
+        drop(source);
+        drop(destination);
+        drop(files);
+        fixture.cleanup();
+        assert!(
+            exact_effect,
+            "the one native attempt must have the exact inert effect or no effect"
+        );
+        result
+    }
+
+    #[test]
+    fn native_publication_control_zero_child_pins_proven_destination() {
+        fresh_native_control(0).expect("fresh native zero-child-open positive control refused");
+    }
+
+    #[test]
+    fn native_publication_control_five_child_pins_proven_destination() {
+        // This preserves the diagnosed NTFS boundary, not a publication
+        // success claim. The historical expected-positive failure is retained.
+        assert_eq!(
+            fresh_native_control(5).unwrap_err(),
+            "WAKE_BROKER_PUBLICATION_RENAME_FAILED"
+        );
     }
 }

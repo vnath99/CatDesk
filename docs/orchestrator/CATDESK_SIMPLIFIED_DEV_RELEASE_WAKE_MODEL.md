@@ -2761,3 +2761,21 @@ old target are not acceptable shortcuts.
   without a corresponding CatDesk registry commit; no WakeHost launch/browser
   event, protected main-image rotation, production daemon reload or private
   signer use was performed by this recovery work.
+## 2026-11-10 — Current per-project workflow and trust-domain clarification
+
+The current goal is independently bound ChatGPT Web project conversations using
+the existing CatDesk v5 file tools, verifying their changes and issuing their own
+project-scoped manual Wake. A central coordinator and native Codex delegation are
+optional. Historical single-chat URLs and generations above describe earlier
+observations; they are not authority to replace any current project binding.
+Preserve each project's history, native ownership and uncertain-delivery fences.
+
+The existing product Ed25519 public root was reconciled without private-key
+access. Reuse requires a fresh explicit Wake-purpose signature and the existing
+bootstrap/selection gates; generating another key is not inherently necessary.
+Source, immutable build artifacts, protected installation, actual browser delivery
+and unattended operation remain separate qualification levels. The published
+reader fix has exact-commit source evidence; installed Web/self-Wake acceptance
+remains open. Continue the concrete protected-stage/native-rename repair using
+the existing policy, security descriptors and journal, with no parallel release
+system, replacement tunnel or recurring automation.

@@ -1234,3 +1234,25 @@ Source review also identified an unpinned same-state staging destination before
 absolute child writes. That release boundary must be repaired and qualified
 before claiming same-state promotion readiness. No installed Web acceptance
 follows from the signing reconciliation.
+### 2026-11-10 — Same-state staging and native publication compatibility
+
+The source V3 route now reuses canonical SYSTEM/service protected descriptors for
+the new stage and all five leaves from creation. Interactive read/execute remains
+available. Do not retrofit protection onto an exposed stage or rewrite existing
+root, versions or package ACLs. Validate bytes, identities and security while
+pinned; durably record the existing attempt; acquire and verify the exact source
+DELETE capability before closing descendant handles for Windows' directory-rename
+rule. Perform one handle-relative no-replace rename, verify the original objects,
+security and bytes, and retain the source capability through repinning and
+`Published`. A failure remains journaled and must not trigger blind rename retry.
+
+Actual disposable Windows tests now pass this route and rollback/interruption
+checks. Their standard-user security fixtures do not establish privileged service
+execution. New immutable artifacts, genuine source/release review, the exact
+operator-approved signature, native admission and installed testing remain
+necessary. A passing source matrix never enrolls an issuer or promotes an image.
+
+The GUI also links the Wake crate and owns reachable readiness code. Rebuild the
+GUI and Host when qualifying the reader correction; retaining an older GUI while
+replacing only Host does not update that path. A Wake companion build is separate
+from canonical-backend promotion and supplies no protected main-image authority.

@@ -10113,3 +10113,11 @@ Commit `9c521ba5` passed the 29-case readiness suite, formatting and strict Clip
 in its own clean checkout. The evidence JSON records exact source/tree and result
 hashes. This is source qualification; installed observation and the Web cycle
 remain open. The separate publication repair still requires Windows qualification.
+### 2026-11-10 — Protected-stage publication source/native-fixture checkpoint
+
+The existing V3 transaction now uses protected creation and a verified native
+handle handoff compatible with Windows' open-descendant rule. All 81 scoped cases,
+formatting and strict Clippy passed. No privileged installation, signed authority
+or actual Web/self-Wake acceptance follows. Prepare exact-commit immutable GUI, Host
+and broker artifacts through the existing release process; keep prior artifacts.
+Evidence: `docs/verification/WAKE_PROTECTED_STAGE_HANDOFF_SOURCE_2026_11_10.json`.

@@ -2760,3 +2760,13 @@ cases, formatting and strict Clippy, preserving the recorded state and inventory
 This closes the reader-source checkpoint only. The unpublished publication repair,
 protected installed qualification and actual Web edit/verify/delivered self-Wake
 remain open. Original unknown submissions and task fences remain held.
+### 2026-11-10 — Real Windows fixture publication succeeds; installed cycle still open
+
+The protected-stage repair passed 81 cases, including the formerly refused
+publication/reconstruction and collision/interruption checks. Canonical security
+comes from the existing trusted policy and is applied only at fresh creation;
+byte-handle release follows durable intent and an exact retained DELETE capability.
+No source receipt is SYSTEM-service, release, installed or Web acceptance. Original
+unknown sends and optional native tasks remain fenced. The actual direct Web
+edit/verify/delivered self-Wake and second independent project are still required.
+Evidence: `../verification/WAKE_PROTECTED_STAGE_HANDOFF_SOURCE_2026_11_10.json`.

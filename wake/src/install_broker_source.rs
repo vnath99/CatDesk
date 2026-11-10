@@ -33,11 +33,15 @@ const ARTIFACT_NAMES: [&str; 4] = [
 const MANIFEST_NAME: &str = "manifest.json";
 #[path = "install_broker_source_runtime.rs"]
 mod runtime_v3;
-pub(crate) use runtime_v3::{RuntimePackagePinsV3, RuntimeSourceRoleV3};
+pub(crate) use runtime_v3::{
+    RuntimePackagePinsV3, RuntimePackagePublicationV3, RuntimePackageStageV3, RuntimeSourceRoleV3,
+};
 const MAX_MANIFEST_BYTES: usize = 4096;
 const MAX_DIRECTORY_ENTRIES: usize = 16;
 const FILE_OPEN: u32 = 1;
+const FILE_CREATE: u32 = 2;
 const FILE_READ_DATA: u32 = 1;
+const FILE_WRITE_DATA: u32 = 2;
 const FILE_READ_ATTRIBUTES: u32 = 0x80;
 const SYNCHRONIZE: u32 = 0x0010_0000;
 const FILE_SHARE_READ: u32 = 1;
@@ -194,13 +198,17 @@ fn size(info: &FileInfo) -> u64 {
 }
 
 fn open_path_directory(path: &OsStr) -> Result<OwnedHandle> {
+    open_path_directory_with_sharing(path, FILE_SHARE_READ | FILE_SHARE_WRITE)
+}
+
+fn open_path_directory_with_sharing(path: &OsStr, sharing: u32) -> Result<OwnedHandle> {
     const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
     let wide: Vec<u16> = path.encode_wide().chain(std::iter::once(0)).collect();
     let raw = unsafe {
         CreateFileW(
             wide.as_ptr(),
             FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            sharing,
             ptr::null_mut(),
             3,
             FILE_FLAG_BACKUP_SEMANTICS | FILE_OPEN_REPARSE_POINT,
@@ -216,6 +224,38 @@ fn open_path_directory(path: &OsStr) -> Result<OwnedHandle> {
 }
 
 fn open_relative(parent: &OwnedHandle, name: &str, directory: bool) -> Result<OwnedHandle> {
+    open_relative_object(
+        parent,
+        name,
+        directory,
+        false,
+        if directory {
+            FILE_SHARE_READ | FILE_SHARE_WRITE
+        } else {
+            FILE_SHARE_READ
+        },
+    )
+}
+
+fn open_relative_object(
+    parent: &OwnedHandle,
+    name: &str,
+    directory: bool,
+    create: bool,
+    sharing: u32,
+) -> Result<OwnedHandle> {
+    open_relative_object_secured(parent, name, directory, create, sharing, None, false)
+}
+
+fn open_relative_object_secured(
+    parent: &OwnedHandle,
+    name: &str,
+    directory: bool,
+    create: bool,
+    sharing: u32,
+    descriptor: Option<&crate::install_broker_stage_writer::LocalDescriptor>,
+    read_security: bool,
+) -> Result<OwnedHandle> {
     if !valid_component(name) {
         return Err("WAKE_BROKER_SOURCE_COMPONENT_INVALID".into());
     }
@@ -232,7 +272,7 @@ fn open_relative(parent: &OwnedHandle, name: &str, directory: bool) -> Result<Ow
         root_directory: parent.as_raw_handle(),
         object_name: &mut object_name,
         attributes: 0x40, // OBJ_CASE_INSENSITIVE; directory readback checks exact case.
-        security_descriptor: ptr::null_mut(),
+        security_descriptor: descriptor.map_or(ptr::null_mut(), |value| value.as_raw()),
         security_quality_of_service: ptr::null_mut(),
     };
     let mut iosb = IoStatusBlock {
@@ -243,17 +283,21 @@ fn open_relative(parent: &OwnedHandle, name: &str, directory: bool) -> Result<Ow
     let result = unsafe {
         NtCreateFile(
             &mut raw,
-            FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+            FILE_READ_DATA
+                | FILE_READ_ATTRIBUTES
+                | SYNCHRONIZE
+                | if read_security { 0x0002_0000 } else { 0 }
+                | if create && !directory {
+                    FILE_WRITE_DATA
+                } else {
+                    0
+                },
             &mut attributes,
             &mut iosb,
             ptr::null_mut(),
             0,
-            if directory {
-                FILE_SHARE_READ | FILE_SHARE_WRITE
-            } else {
-                FILE_SHARE_READ
-            },
-            FILE_OPEN,
+            sharing,
+            if create { FILE_CREATE } else { FILE_OPEN },
             FILE_SYNCHRONOUS_IO_NONALERT
                 | FILE_OPEN_REPARSE_POINT
                 | if directory {
@@ -273,7 +317,7 @@ fn open_relative(parent: &OwnedHandle, name: &str, directory: bool) -> Result<Ow
     Ok(handle)
 }
 
-fn fresh_directory(directory: &OwnedHandle) -> Result<OwnedHandle> {
+fn fresh_directory(directory: &OwnedHandle, sharing: u32) -> Result<OwnedHandle> {
     let mut empty = UnicodeString {
         length: 0,
         maximum_length: 0,
@@ -300,7 +344,7 @@ fn fresh_directory(directory: &OwnedHandle) -> Result<OwnedHandle> {
             &mut iosb,
             ptr::null_mut(),
             0,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            sharing,
             FILE_OPEN,
             FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT,
             ptr::null_mut(),
@@ -321,7 +365,21 @@ fn fresh_directory(directory: &OwnedHandle) -> Result<OwnedHandle> {
 }
 
 fn inventory(directory: &OwnedHandle, filter: Option<&str>, expected: &[&str]) -> Result<()> {
-    let fresh = fresh_directory(directory)?;
+    inventory_with_sharing(
+        directory,
+        filter,
+        expected,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+    )
+}
+
+fn inventory_with_sharing(
+    directory: &OwnedHandle,
+    filter: Option<&str>,
+    expected: &[&str],
+    sharing: u32,
+) -> Result<()> {
+    let fresh = fresh_directory(directory, sharing)?;
     let expected: BTreeSet<String> = expected.iter().map(|name| (*name).to_string()).collect();
     let mut seen = BTreeSet::new();
     let mut pattern = filter.map(|name| name.encode_utf16().collect::<Vec<_>>());

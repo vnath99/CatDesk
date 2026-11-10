@@ -3,7 +3,10 @@ use super::*;
 use crate::install_broker_approval::{ArtifactV1, PackageManifestV1, same_state::*};
 use crate::install_broker_ledger::BrokerLedgerGuard;
 use ed25519_dalek::SigningKey;
-use std::os::windows::{fs::OpenOptionsExt, io::OwnedHandle};
+use std::os::windows::{
+    fs::OpenOptionsExt,
+    io::{AsRawHandle, OwnedHandle},
+};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static NEXT: AtomicU64 = AtomicU64::new(1);
@@ -585,7 +588,7 @@ fn same_state_native_package_pins_bound_size_and_partial_staging_never_overwrite
     );
     let store = Store::open_existing_writer(&fixture.state).unwrap();
     let stage = ".staging-v3-isolated-candidate";
-    materialize(&store, &mut source, stage).unwrap();
+    materialize(&store, &mut source, stage, &fixture.policy).unwrap();
     verify_package(&store, stage, &source).unwrap();
     let sentinel = fixture
         .state
@@ -593,7 +596,15 @@ fn same_state_native_package_pins_bound_size_and_partial_staging_never_overwrite
         .join(".staging-v3-isolated-partial");
     std::fs::create_dir(&sentinel).unwrap();
     std::fs::write(sentinel.join("adapter.py"), b"partial bytes retained").unwrap();
-    assert!(materialize(&store, &mut source, ".staging-v3-isolated-partial").is_err());
+    assert!(
+        materialize(
+            &store,
+            &mut source,
+            ".staging-v3-isolated-partial",
+            &fixture.policy
+        )
+        .is_err()
+    );
     assert_eq!(
         std::fs::read(sentinel.join("adapter.py")).unwrap(),
         b"partial bytes retained"
@@ -615,6 +626,710 @@ fn same_state_native_package_pins_bound_size_and_partial_staging_never_overwrite
         std::fs::read(fixture.state.join("current.json")).unwrap(),
         fixture.before
     );
+    fixture.preserved();
+    fixture.cleanup();
+}
+
+fn inert_junction(handle: &File, target: Option<&Path>) -> std::io::Result<()> {
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn DeviceIoControl(
+            handle: *mut std::ffi::c_void,
+            code: u32,
+            input: *const std::ffi::c_void,
+            input_size: u32,
+            output: *mut std::ffi::c_void,
+            output_size: u32,
+            returned: *mut u32,
+            overlapped: *mut std::ffi::c_void,
+        ) -> i32;
+    }
+    let mut raw = 0xa0000003u32.to_le_bytes().to_vec();
+    let code = if let Some(target) = target {
+        let print = target.canonicalize()?.to_string_lossy().into_owned();
+        let substitute = format!(r"\??\{}", print.strip_prefix(r"\\?\").unwrap_or(&print));
+        let substitute = substitute.encode_utf16().collect::<Vec<_>>();
+        let print = print.encode_utf16().collect::<Vec<_>>();
+        let data_length = 8 + 2 * (substitute.len() + print.len() + 2);
+        if data_length + 8 > 16_384 {
+            return Err(std::io::Error::other("inert junction target exceeds bound"));
+        }
+        raw.extend_from_slice(&(data_length as u16).to_le_bytes());
+        raw.extend_from_slice(&0u16.to_le_bytes());
+        raw.extend_from_slice(&0u16.to_le_bytes());
+        raw.extend_from_slice(&((substitute.len() * 2) as u16).to_le_bytes());
+        raw.extend_from_slice(&(((substitute.len() + 1) * 2) as u16).to_le_bytes());
+        raw.extend_from_slice(&((print.len() * 2) as u16).to_le_bytes());
+        for unit in substitute.into_iter().chain([0]).chain(print).chain([0]) {
+            raw.extend_from_slice(&unit.to_le_bytes());
+        }
+        0x000900a4
+    } else {
+        raw.extend_from_slice(&[0; 4]);
+        0x000900ac
+    };
+    let mut returned = 0;
+    let result = unsafe {
+        DeviceIoControl(
+            handle.as_raw_handle(),
+            code,
+            raw.as_ptr().cast(),
+            raw.len() as u32,
+            std::ptr::null_mut(),
+            0,
+            &mut returned,
+            std::ptr::null_mut(),
+        )
+    };
+    if result == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+fn inert_directory_attributes(path: &Path) -> std::io::Result<File> {
+    OpenOptions::new()
+        .access_mode(0x00120100)
+        .share_mode(7)
+        .custom_flags(0x02200000)
+        .open(path)
+}
+
+#[test]
+fn same_state_materialize_retains_stage_against_rename_and_metadata_write() {
+    let fixture = Fixture::new();
+    let outside = fixture.path.join("outside-inert");
+    let control = fixture.path.join("junction-control");
+    std::fs::create_dir(&outside).unwrap();
+    std::fs::create_dir(&control).unwrap();
+    drop(
+        OpenOptions::new()
+            .write(true)
+            .share_mode(7)
+            .custom_flags(0x02200000)
+            .open(&control)
+            .unwrap(),
+    );
+    // Real unprivileged mount-point positive control, not an assumed attack.
+    let control_handle = inert_directory_attributes(&control).unwrap();
+    inert_junction(&control_handle, Some(&outside)).unwrap();
+    let control_is_exact = control.canonicalize().unwrap() == outside.canonicalize().unwrap();
+    inert_junction(&control_handle, None).unwrap();
+    drop(control_handle);
+
+    let store = Store::open_existing_writer(&fixture.state).unwrap();
+    let stage_name = ".staging-v3-inert-namespace";
+    let stage_path = fixture.state.join("versions").join(stage_name);
+    let stage = RuntimePackageStageV3::create(
+        store.root(),
+        stage_name,
+        crate::install_broker_stage_writer::StageSecurityMode::from_same_state_policy(
+            &fixture.policy,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let rename_denied = std::fs::rename(&stage_path, fixture.path.join("retired-stage")).is_err();
+    let stage_write_denied = OpenOptions::new()
+        .write(true)
+        .share_mode(7)
+        .custom_flags(0x02200000)
+        .open(&stage_path)
+        .is_err();
+    let versions_write_denied = OpenOptions::new()
+        .write(true)
+        .share_mode(7)
+        .custom_flags(0x02200000)
+        .open(fixture.state.join("versions"))
+        .is_err();
+    let root_write_denied = OpenOptions::new()
+        .write(true)
+        .share_mode(7)
+        .custom_flags(0x02200000)
+        .open(&fixture.state)
+        .is_err();
+    let mut metadata_route_succeeded = false;
+    let mut relative_create = None;
+    if let Ok(handle) = inert_directory_attributes(&stage_path)
+        && inert_junction(&handle, Some(&outside)).is_ok()
+    {
+        metadata_route_succeeded = true;
+        // Simulate metadata mutation after the last user-mode check.
+        relative_create = Some(stage.fixture_relative_create_after_metadata_change());
+        inert_junction(&handle, None).unwrap();
+    }
+    let outside_unchanged = std::fs::read_dir(&outside).unwrap().next().is_none();
+    let successful_create_stayed_in_stage = relative_create.as_ref().is_none_or(|result| {
+        result.is_err()
+            || std::fs::read(stage_path.join("adapter.py"))
+                .is_ok_and(|bytes| bytes == b"inert relative-create sentinel")
+    });
+    let retained_identity = stage.revalidate();
+    drop(stage);
+    let mut source =
+        RuntimePackagePinsV3::isolated(&fixture.intake, RuntimeSourceRoleV3::Candidate).unwrap();
+    let copied = materialize(
+        &store,
+        &mut source,
+        ".staging-v3-inert-positive",
+        &fixture.policy,
+    );
+    let verified = verify_package(&store, ".staging-v3-inert-positive", &source);
+    drop(source);
+    fixture.preserved();
+    fixture.cleanup();
+    assert!(control_is_exact);
+    assert!(rename_denied && stage_write_denied && versions_write_denied && root_write_denied);
+    assert!(
+        outside_unchanged,
+        "relative creation must not write into the inert junction target"
+    );
+    assert!(successful_create_stayed_in_stage);
+    assert!(retained_identity.is_ok());
+    assert!(copied.is_ok() && verified.is_ok());
+    if metadata_route_succeeded {
+        assert!(
+            relative_create.is_some(),
+            "actual metadata mutation must exercise the leaf primitive"
+        );
+    }
+}
+
+#[test]
+fn same_state_materialize_refuses_reparse_versions_before_any_write() {
+    let fixture = Fixture::new();
+    let versions = fixture.state.join("versions");
+    let retained = fixture.state.join("versions-retained");
+    let outside = fixture.path.join("outside-inert");
+    std::fs::create_dir(&outside).unwrap();
+    std::fs::rename(&versions, &retained).unwrap();
+    std::fs::create_dir(&versions).unwrap();
+    let handle = inert_directory_attributes(&versions).unwrap();
+    inert_junction(&handle, Some(&outside)).unwrap();
+    let control_is_exact = versions.canonicalize().unwrap() == outside.canonicalize().unwrap();
+    let store = Store::open_existing_writer(&fixture.state).unwrap();
+    let mut source =
+        RuntimePackagePinsV3::isolated(&fixture.intake, RuntimeSourceRoleV3::Candidate).unwrap();
+    let refused = materialize(
+        &store,
+        &mut source,
+        ".staging-v3-inert-substituted",
+        &fixture.policy,
+    );
+    let outside_unchanged = std::fs::read_dir(&outside).unwrap().next().is_none();
+    inert_junction(&handle, None).unwrap();
+    drop(handle);
+    std::fs::remove_dir(&versions).unwrap();
+    std::fs::rename(&retained, &versions).unwrap();
+    drop(source);
+    fixture.preserved();
+    fixture.cleanup();
+    assert!(control_is_exact && refused.is_err());
+    assert!(
+        outside_unchanged,
+        "substituted versions must refuse before any outside write"
+    );
+}
+
+fn with_staged_publication(
+    fixture: &mut Fixture,
+    check: impl FnOnce(&Fixture, &mut AdmittedSameStateLedgerLeaseV3<'_, '_>, &str),
+) {
+    let handle = fixture.handle.try_clone().unwrap();
+    let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+    let envelope = fixture.signed(&guard);
+    let envelope_sha = digest(&envelope);
+    let admission = guard.same_state_admission_v3(&envelope_sha, 1000).unwrap();
+    let resources =
+        SameStateInstallResources::acquire(fixture.grant(&admission, envelope)).unwrap();
+    let original = resources.grant().original_selection_bytes().unwrap();
+    let mut ledger = guard
+        .begin_same_state_v3(resources.grant(), &admission, &original)
+        .unwrap();
+    ledger
+        .record_phase(InstallPhaseV1::StageStarted, None)
+        .unwrap();
+    let store = Store::open_existing_writer(&fixture.state).unwrap();
+    {
+        let mut pins = resources.grant().pins_mut().unwrap();
+        materialize(
+            &store,
+            &mut pins.candidate,
+            &stage_name(&envelope_sha, "candidate"),
+            &fixture.policy,
+        )
+        .unwrap();
+        materialize(
+            &store,
+            &mut pins.previous,
+            &stage_name(&envelope_sha, "previous"),
+            &fixture.policy,
+        )
+        .unwrap();
+    }
+    ledger.record_phase(InstallPhaseV1::Staged, None).unwrap();
+    check(fixture, &mut ledger, &envelope_sha);
+    RuntimePackagePublicationV3::fixture_clear_hooks();
+    drop(ledger);
+    drop(resources);
+    drop(handle);
+}
+
+#[test]
+fn same_state_publication_retains_exact_bytes_through_relative_rename() {
+    let mut fixture = Fixture::new();
+    with_staged_publication(&mut fixture, |fixture, ledger, envelope_sha| {
+        let publication = RuntimePackagePublicationV3::prepare(
+            &fixture.state,
+            &fixture.payload,
+            envelope_sha,
+            ledger,
+            &fixture.policy,
+        )
+        .unwrap();
+        let stage = fixture
+            .state
+            .join("versions")
+            .join(stage_name(envelope_sha, "candidate"));
+        assert!(
+            OpenOptions::new()
+                .write(true)
+                .open(stage.join("adapter.py"))
+                .is_err()
+        );
+        ledger.record_publication_attempt().unwrap();
+        let pins = publication.publish(ledger).unwrap();
+        assert_eq!(pins.len(), 2);
+        assert!(
+            pins.iter()
+                .any(|p| p.manifest() == &fixture.payload.candidate.manifest)
+        );
+        assert!(
+            pins.iter()
+                .any(|p| p.manifest() == &fixture.payload.rollback_authority.release().manifest)
+        );
+        ledger
+            .record_phase(InstallPhaseV1::Published, None)
+            .unwrap();
+        for release in [
+            &fixture.payload.candidate,
+            fixture.payload.rollback_authority.release(),
+        ] {
+            let package = fixture
+                .state
+                .join("versions")
+                .join(&release.manifest.package_id);
+            assert!(
+                OpenOptions::new()
+                    .access_mode(0x00010000)
+                    .share_mode(7)
+                    .custom_flags(0x02200000)
+                    .open(&package)
+                    .is_err(),
+                "retained source capability must deny another DELETE handle, including parent DELETE_CHILD admission"
+            );
+            assert!(
+                std::fs::rename(&package, fixture.path.join("cannot-retire-published")).is_err()
+            );
+            assert!(std::fs::remove_dir(&package).is_err());
+            for artifact in &release.manifest.artifacts {
+                assert_eq!(
+                    digest(&std::fs::read(package.join(&artifact.name)).unwrap()),
+                    artifact.sha256
+                );
+                assert!(
+                    OpenOptions::new()
+                        .write(true)
+                        .open(package.join(&artifact.name))
+                        .is_err()
+                );
+            }
+        }
+        assert_eq!(
+            std::fs::read(fixture.state.join("current.json")).unwrap(),
+            fixture.before
+        );
+        drop(pins);
+        // PUBLISHED releases only this bounded transaction's capabilities.
+        // The user-owned fixture permits renaming after their explicit drop;
+        // it does not claim production owner/DACL or future package authority.
+        let package = fixture
+            .state
+            .join("versions")
+            .join(&fixture.payload.candidate.manifest.package_id);
+        let retired = fixture
+            .state
+            .join("versions")
+            .join("retired-after-published");
+        std::fs::rename(&package, &retired).unwrap();
+        std::fs::rename(&retired, &package).unwrap();
+    });
+    fixture.preserved();
+    fixture.cleanup();
+}
+
+#[test]
+fn same_state_publication_proven_destination_releases_children_at_protected_handoff() {
+    let mut fixture = Fixture::new();
+    let succeeded = std::sync::Arc::new(std::sync::Mutex::new(false));
+    let observed = succeeded.clone();
+    let children_closed = std::sync::Arc::new(std::sync::Mutex::new(false));
+    let closure_observed = children_closed.clone();
+    with_staged_publication(&mut fixture, |fixture, ledger, envelope_sha| {
+        let mut publication = RuntimePackagePublicationV3::prepare(
+            &fixture.state,
+            &fixture.payload,
+            envelope_sha,
+            ledger,
+            &fixture.policy,
+        )
+        .unwrap();
+        publication.fixture_use_proven_destination().unwrap();
+        let stage = fixture
+            .state
+            .join("versions")
+            .join(stage_name(envelope_sha, "previous"));
+        for name in [
+            "manifest.json",
+            "CatDeskWakeHost.exe",
+            "CatDeskBinagotchy.exe",
+            "adapter.py",
+            "wake_bridge.py",
+        ] {
+            assert!(
+                OpenOptions::new()
+                    .write(true)
+                    .open(stage.join(name))
+                    .is_err(),
+                "all five byte pins must remain retained"
+            );
+        }
+        RuntimePackagePublicationV3::fixture_hook(
+            false,
+            Box::new(move || {
+                // These are disposable user-owned fixture objects. Exclusive READ
+                // opens establish the real descendant-handle release, not a claim
+                // that this process has production SYSTEM ownership/ACL authority.
+                let closed = [
+                    "manifest.json",
+                    "CatDeskWakeHost.exe",
+                    "CatDeskBinagotchy.exe",
+                    "adapter.py",
+                    "wake_bridge.py",
+                ]
+                .into_iter()
+                .all(|name| {
+                    OpenOptions::new()
+                        .read(true)
+                        .share_mode(0)
+                        .open(stage.join(name))
+                        .is_ok()
+                });
+                *closure_observed.lock().unwrap() = closed;
+            }),
+        );
+        ledger.record_publication_attempt().unwrap();
+        let result = publication.publish(ledger);
+        eprintln!(
+            "V3_PUBLICATION_PROTECTED_HANDOFF access=0x1200a0 childReadPinsBeforeHandoff=5 childReadPinsAtRename=0 result={:?}",
+            result.as_ref().map(|pins| pins.len())
+        );
+        *observed.lock().unwrap() = result.is_ok();
+        assert_eq!(
+            std::fs::read(fixture.state.join("current.json")).unwrap(),
+            fixture.before
+        );
+        drop(result);
+    });
+    let succeeded = *succeeded.lock().unwrap();
+    let children_closed = *children_closed.lock().unwrap();
+    fixture.preserved();
+    fixture.cleanup();
+    assert!(
+        succeeded && children_closed,
+        "fresh V3 protected-handoff fixture refused; see exact native NTSTATUS"
+    );
+}
+
+#[test]
+fn same_state_publication_protected_mode_refuses_user_owned_stage() {
+    use crate::install_broker_stage_writer::StageSecurityMode;
+    let fixture = Fixture::new();
+    assert!(fixture.policy.is_fixture_root());
+    assert!(matches!(
+        StageSecurityMode::from_same_state_policy(&fixture.policy).unwrap(),
+        StageSecurityMode::Fixture
+    ));
+    let path = fixture
+        .state
+        .join("versions")
+        .join(".staging-v3-unprotected-control");
+    std::fs::create_dir(&path).unwrap();
+    let handle = OpenOptions::new()
+        .access_mode(0x00120081)
+        .share_mode(7)
+        .custom_flags(0x02200000)
+        .open(&path)
+        .unwrap();
+    let service = fixture.policy.checked_endpoint_sids().unwrap().0.to_owned();
+    let protected = StageSecurityMode::Protected(service);
+    // This calls the actual production owner/DACL validator on a real owned
+    // directory. The fixture never asks the OS to assign SYSTEM ownership.
+    let refused = protected.readback(&handle, true);
+    assert!(protected.creation_descriptor(true).unwrap().is_some());
+    assert!(protected.creation_descriptor(false).unwrap().is_some());
+    drop(handle);
+    fixture.preserved();
+    fixture.cleanup();
+    assert_eq!(refused.unwrap_err(), "WAKE_BROKER_PUBLICATION_ACL_MISMATCH");
+}
+
+#[test]
+fn same_state_publication_substitution_after_attempt_cannot_write_outside() {
+    let mut fixture = Fixture::new();
+    with_staged_publication(&mut fixture, |fixture, ledger, envelope_sha| {
+        let publication = RuntimePackagePublicationV3::prepare(
+            &fixture.state,
+            &fixture.payload,
+            envelope_sha,
+            ledger,
+            &fixture.policy,
+        )
+        .unwrap();
+        let stage = fixture
+            .state
+            .join("versions")
+            .join(stage_name(envelope_sha, "previous"));
+        let retired = fixture.path.join("retired-publication-stage");
+        let outside = fixture.path.join("outside-publication");
+        std::fs::create_dir(&outside).unwrap();
+        let substituted = std::sync::Arc::new(std::sync::Mutex::new(false));
+        let flag = substituted.clone();
+        let moved = retired.clone();
+        let path = stage.clone();
+        let target = outside.clone();
+        RuntimePackagePublicationV3::fixture_hook(
+            true,
+            Box::new(move || {
+                if std::fs::rename(&path, &moved).is_ok() {
+                    std::fs::create_dir(&path).unwrap();
+                    let handle = inert_directory_attributes(&path).unwrap();
+                    inert_junction(&handle, Some(&target)).unwrap();
+                    *flag.lock().unwrap() = true;
+                }
+            }),
+        );
+        ledger.record_publication_attempt().unwrap();
+        let result = publication.publish(ledger);
+        let replaced = *substituted.lock().unwrap();
+        if replaced {
+            let handle = inert_directory_attributes(&stage).unwrap();
+            inert_junction(&handle, None).unwrap();
+            drop(handle);
+            std::fs::remove_dir(&stage).unwrap();
+            std::fs::rename(&retired, &stage).unwrap();
+        }
+        let outside_unchanged = std::fs::read_dir(&outside).unwrap().next().is_none();
+        assert!(!replaced || result.is_err());
+        assert!(outside_unchanged);
+        assert!(ledger.publication_attempt_present().unwrap());
+        assert!(
+            RuntimePackagePublicationV3::prepare(
+                &fixture.state,
+                &fixture.payload,
+                envelope_sha,
+                ledger,
+                &fixture.policy,
+            )
+            .is_err()
+        );
+        drop(result);
+    });
+    fixture.preserved();
+    fixture.cleanup();
+}
+
+#[test]
+fn same_state_publication_metadata_mutation_cannot_redirect_native_effect() {
+    let mut fixture = Fixture::new();
+    with_staged_publication(&mut fixture, |fixture, ledger, envelope_sha| {
+        let outside = fixture.path.join("outside-publication");
+        let control = fixture.path.join("publication-junction-control");
+        std::fs::create_dir(&outside).unwrap();
+        std::fs::create_dir(&control).unwrap();
+        std::fs::write(outside.join("sentinel"), b"outside namespace remains exact").unwrap();
+        let handle = inert_directory_attributes(&control).unwrap();
+        inert_junction(&handle, Some(&outside)).unwrap();
+        assert_eq!(
+            control.canonicalize().unwrap(),
+            outside.canonicalize().unwrap()
+        );
+        inert_junction(&handle, None).unwrap();
+        drop(handle);
+        let publication = RuntimePackagePublicationV3::prepare(
+            &fixture.state,
+            &fixture.payload,
+            envelope_sha,
+            ledger,
+            &fixture.policy,
+        )
+        .unwrap();
+        let changed = std::sync::Arc::new(std::sync::Mutex::new(None::<File>));
+        let saved = changed.clone();
+        let versions = fixture.state.join("versions");
+        let target = outside.clone();
+        RuntimePackagePublicationV3::fixture_hook(
+            false,
+            Box::new(move || {
+                if let Ok(handle) = inert_directory_attributes(&versions)
+                    && inert_junction(&handle, Some(&target)).is_ok()
+                {
+                    *saved.lock().unwrap() = Some(handle);
+                }
+            }),
+        );
+        ledger.record_publication_attempt().unwrap();
+        let result = publication.publish(ledger);
+        if let Some(handle) = changed.lock().unwrap().take() {
+            inert_junction(&handle, None).unwrap();
+        }
+        let names = std::fs::read_dir(&outside)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect::<Vec<_>>();
+        assert_eq!(names, vec![std::ffi::OsString::from("sentinel")]);
+        assert_eq!(
+            std::fs::read(outside.join("sentinel")).unwrap(),
+            b"outside namespace remains exact"
+        );
+        assert!(ledger.publication_attempt_present().unwrap());
+        drop(result);
+    });
+    fixture.preserved();
+    fixture.cleanup();
+}
+
+#[test]
+fn same_state_publication_collision_and_interruption_are_no_replay() {
+    let mut fixture = Fixture::new();
+    with_staged_publication(&mut fixture, |fixture, ledger, envelope_sha| {
+        let publication = RuntimePackagePublicationV3::prepare(
+            &fixture.state,
+            &fixture.payload,
+            envelope_sha,
+            ledger,
+            &fixture.policy,
+        )
+        .unwrap();
+        let collision = fixture.state.join("versions").join(
+            fixture
+                .payload
+                .candidate
+                .manifest
+                .package_id
+                .to_ascii_uppercase(),
+        );
+        let path = collision.clone();
+        RuntimePackagePublicationV3::fixture_hook(
+            false,
+            Box::new(move || {
+                // Let the first approved package move, then collide with the
+                // second: a partial publication must remain attention, not replay.
+                RuntimePackagePublicationV3::fixture_hook(
+                    false,
+                    Box::new(move || {
+                        std::fs::create_dir(&path).unwrap();
+                        std::fs::write(path.join("sentinel"), b"must not replace").unwrap();
+                    }),
+                );
+            }),
+        );
+        ledger.record_publication_attempt().unwrap();
+        assert!(publication.publish(ledger).is_err());
+        assert_eq!(
+            std::fs::read(collision.join("sentinel")).unwrap(),
+            b"must not replace"
+        );
+        assert!(
+            fixture
+                .state
+                .join("versions")
+                .join(
+                    &fixture
+                        .payload
+                        .rollback_authority
+                        .release()
+                        .manifest
+                        .package_id
+                )
+                .is_dir()
+        );
+        let store = Store::open_read_only(&fixture.state).unwrap();
+        let source =
+            RuntimePackagePinsV3::isolated(&fixture.intake, RuntimeSourceRoleV3::Candidate)
+                .unwrap();
+        assert!(
+            verify_package(
+                &store,
+                &fixture.payload.candidate.manifest.package_id,
+                &source
+            )
+            .is_err()
+        );
+        assert!(
+            RuntimePackagePublicationV3::prepare(
+                &fixture.state,
+                &fixture.payload,
+                envelope_sha,
+                ledger,
+                &fixture.policy,
+            )
+            .is_err()
+        );
+    });
+    fixture.preserved();
+    fixture.cleanup();
+
+    let mut fixture = Fixture::new();
+    let handle = fixture.handle.try_clone().unwrap();
+    let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+    let envelope = fixture.signed(&guard);
+    let envelope_sha = digest(&envelope);
+    let admission = guard.same_state_admission_v3(&envelope_sha, 1000).unwrap();
+    let resources =
+        SameStateInstallResources::acquire(fixture.grant(&admission, envelope.clone())).unwrap();
+    let original = resources.grant().original_selection_bytes().unwrap();
+    let mut ledger = guard
+        .begin_same_state_v3(resources.grant(), &admission, &original)
+        .unwrap();
+    assert_eq!(
+        resources
+            .commit_selection_until_publication(&mut ledger)
+            .unwrap_err(),
+        "FIXTURE_SAME_STATE_COMMIT_INTERRUPTED"
+    );
+    assert_eq!(ledger.phase(), InstallPhaseV1::Staged);
+    assert!(ledger.publication_attempt_present().unwrap());
+    drop(ledger);
+    let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+    let admission = guard.same_state_admission_v3(&envelope_sha, 1001).unwrap();
+    let resources =
+        SameStateInstallResources::acquire(fixture.grant(&admission, envelope)).unwrap();
+    let original = resources.grant().original_selection_bytes().unwrap();
+    let mut ledger = guard
+        .begin_same_state_v3(resources.grant(), &admission, &original)
+        .unwrap();
+    RuntimePackagePublicationV3::fixture_hook(
+        false,
+        Box::new(|| panic!("retained attempt must never rename again")),
+    );
+    let result = resources.commit_selection(&mut ledger).unwrap();
+    RuntimePackagePublicationV3::fixture_clear_hooks();
+    assert_eq!(result["status"], "SELECTED_STOPPED");
+    assert_eq!(ledger.phase(), InstallPhaseV1::Complete);
+    drop(ledger);
+    drop(handle);
     fixture.preserved();
     fixture.cleanup();
 }

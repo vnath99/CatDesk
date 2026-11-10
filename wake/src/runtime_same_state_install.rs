@@ -14,7 +14,10 @@ use crate::{
     },
     install_broker_offline_pins::OfflineObjectPinV2,
     install_broker_policy::{BrokerProtectedPolicyV1, PolicyVerifiedSameStateSelectionV3},
-    install_broker_source::{RuntimePackagePinsV3, RuntimeSourceRoleV3},
+    install_broker_source::{
+        RuntimePackagePinsV3, RuntimePackagePublicationV3, RuntimePackageStageV3,
+        RuntimeSourceRoleV3,
+    },
 };
 use serde_json::{Value, json};
 
@@ -909,6 +912,13 @@ impl<'p> SameStateInstallResources<'p> {
         self.commit_selection_inner(ledger, None)
     }
     #[cfg(test)]
+    fn commit_selection_until_publication(
+        self,
+        ledger: &mut AdmittedSameStateLedgerLeaseV3<'_, 'p>,
+    ) -> Result<Value> {
+        self.commit_selection_inner(ledger, Some("after-publication"))
+    }
+    #[cfg(test)]
     fn commit_selection_until(
         self,
         ledger: &mut AdmittedSameStateLedgerLeaseV3<'_, 'p>,
@@ -993,6 +1003,7 @@ impl<'p> SameStateInstallResources<'p> {
                 &self.store,
                 &mut pins.candidate,
                 &stage_name(&envelope_sha, "candidate"),
+                self.grant.policy(),
             )?;
             if !self
                 .store
@@ -1005,6 +1016,7 @@ impl<'p> SameStateInstallResources<'p> {
                     &self.store,
                     &mut pins.previous,
                     &stage_name(&envelope_sha, "previous"),
+                    self.grant.policy(),
                 )?;
             }
         }
@@ -1036,38 +1048,28 @@ impl<'p> SameStateInstallResources<'p> {
         if ledger.phase() == InstallPhaseV1::Staged {
             // A publication attempt is sticky. After a crash, only two exact
             // complete destinations prove publication; never repeat a rename.
-            if ledger.publication_attempt_present()? {
+            let publication_pins = if ledger.publication_attempt_present()? {
                 let pins = self.grant.pins_mut()?;
                 verify_package(&self.store, &candidate_id, &pins.candidate)?;
                 verify_package(&self.store, &previous_id, &pins.previous)?;
+                Vec::new()
             } else {
-                ledger.record_publication_attempt()?;
-                let pins = self.grant.pins_mut()?;
-                let ids = [candidate_id.as_str(), previous_id.as_str()];
-                if !self
-                    .store
-                    .root()
-                    .join("versions")
-                    .join(&previous_id)
-                    .exists()
-                {
-                    publish_package(
-                        &self.store,
-                        &pins.previous,
-                        &stage_name(&envelope_sha, "previous"),
-                        &ids,
-                        &self._install,
-                    )?;
-                }
-                publish_package(
-                    &self.store,
-                    &pins.candidate,
-                    &stage_name(&envelope_sha, "candidate"),
-                    &ids,
-                    &self._install,
+                let publication = RuntimePackagePublicationV3::prepare(
+                    self.store.root(),
+                    &payload,
+                    &envelope_sha,
+                    ledger,
+                    self.grant.policy(),
                 )?;
+                self.grant.revalidate()?;
+                ledger.record_publication_attempt()?;
+                publication.publish(ledger)?
+            };
+            if stop_after == Some("after-publication") {
+                return Err("FIXTURE_SAME_STATE_COMMIT_INTERRUPTED".into());
             }
             ledger.record_phase(InstallPhaseV1::Published, None)?;
+            drop(publication_pins);
         }
         if ledger.phase() == InstallPhaseV1::Published {
             let pins = self.grant.pins_mut()?;
@@ -1189,45 +1191,19 @@ fn stage_name(envelope: &str, role: &str) -> String {
     format!(".staging-v3-{}-{role}", &envelope[..32])
 }
 
-fn materialize(store: &Store, source: &mut RuntimePackagePinsV3, name: &str) -> Result<()> {
+fn materialize(
+    store: &Store,
+    source: &mut RuntimePackagePinsV3,
+    name: &str,
+    policy: &BrokerProtectedPolicyV1,
+) -> Result<()> {
     source.revalidate()?;
-    let directory = store.root().join("versions").join(name);
-    std::fs::create_dir(&directory).map_err(|_| "WAKE_SAME_STATE_STAGE_ATTENTION")?;
-    use std::io::{Seek, SeekFrom, Write};
-    for index in 0..4 {
-        let description = source.manifest().artifacts[index].clone();
-        let mut target = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(directory.join(&description.name))
-            .map_err(|_| "WAKE_SAME_STATE_STAGE_ATTENTION")?;
-        let input = source.artifact_mut(index);
-        input
-            .seek(SeekFrom::Start(0))
-            .map_err(|_| "WAKE_SAME_STATE_STAGE_ATTENTION")?;
-        let copied = std::io::copy(&mut input.take(description.byte_length + 1), &mut target)
-            .map_err(|_| "WAKE_SAME_STATE_STAGE_ATTENTION")?;
-        if copied != description.byte_length {
-            return Err("WAKE_SAME_STATE_STAGE_ATTENTION".into());
-        }
-        target
-            .sync_all()
-            .map_err(|_| "WAKE_SAME_STATE_STAGE_ATTENTION")?;
-    }
-    let mut manifest = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(directory.join("manifest.json"))
-        .map_err(|_| "WAKE_SAME_STATE_STAGE_ATTENTION")?;
-    manifest
-        .write_all(source.runtime_manifest_bytes())
-        .and_then(|_| manifest.sync_all())
-        .map_err(|_| "WAKE_SAME_STATE_STAGE_ATTENTION")?;
-    // Native readback deliberately denies write sharing. Close our own stage
-    // writer before requiring that stronger immutable-source handle.
-    drop(manifest);
-    source.revalidate()?;
-    verify_package(store, name, source)
+    let security =
+        crate::install_broker_stage_writer::StageSecurityMode::from_same_state_policy(policy)?;
+    let stage = RuntimePackageStageV3::create(store.root(), name, security)?;
+    stage.copy_package(source)?;
+    verify_package(store, name, source)?;
+    stage.revalidate()
 }
 
 fn verify_package(store: &Store, id: &str, source: &RuntimePackagePinsV3) -> Result<()> {
@@ -1238,32 +1214,6 @@ fn verify_package(store: &Store, id: &str, source: &RuntimePackagePinsV3) -> Res
         return Err("WAKE_SAME_STATE_PUBLISHED_PACKAGE_MISMATCH".into());
     }
     Ok(())
-}
-
-fn publish_package(
-    store: &Store,
-    source: &RuntimePackagePinsV3,
-    stage: &str,
-    allowed: &[&str],
-    lease: &ReviewedInstallLease,
-) -> Result<()> {
-    let m = source.manifest();
-    let hashes = ReviewedInstallExpectedHashes::new(
-        &m.artifacts[0].sha256,
-        &m.artifacts[1].sha256,
-        &m.artifacts[2].sha256,
-        &m.artifacts[3].sha256,
-    )?;
-    publish_reviewed_install_owned(
-        store,
-        stage,
-        &m.package_id,
-        Some(&hashes),
-        &m.version,
-        allowed,
-        lease,
-    )?;
-    verify_package(store, &m.package_id, source)
 }
 
 #[cfg(test)]
