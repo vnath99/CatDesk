@@ -1,0 +1,72 @@
+fn valid_observation_metadata(value: &Value) -> bool {
+    let stage = value.get("stage").and_then(Value::as_str);
+    let controls_valid = value.get("completionControls").is_none_or(|controls| {
+        value.get("diagnosticReason").is_some()
+            && valid_completion_controls(controls)
+            && (stage != Some("RESPONSE_COMPLETE")
+                || (controls
+                    .get("assistantBodyPresent")
+                    .and_then(Value::as_bool)
+                    == Some(true)
+                    && controls
+                        .get("completionActionFound")
+                        .and_then(Value::as_bool)
+                        == Some(true)))
+    });
+    let expected_fields = 5 + usize::from(value.get("completionControls").is_some());
+    let diagnostic_valid = match value.get("diagnosticReason") {
+        None => value
+            .as_object()
+            .is_some_and(|map| map.len() == expected_fields),
+        Some(reason) => {
+            value
+                .as_object()
+                .is_some_and(|map| map.len() == expected_fields + 1)
+                && match stage {
+                    Some("RESPONSE_COMPLETE") => reason.as_str() == Some("COMPLETE"),
+                    Some("RESPONSE_PENDING") => matches!(
+                        reason.as_str(),
+                        Some(
+                            "DOCUMENT_LOADING"
+                                | "GENERATION_ACTIVE"
+                                | "EDITOR_NOT_READY"
+                                | "ASSISTANT_NOT_MOUNTED"
+                                | "ASSISTANT_BODY_UNPROVEN"
+                                | "ASSISTANT_COMPLETION_ACTION_UNPROVEN"
+                        )
+                    ),
+                    _ => false,
+                }
+        }
+    };
+    matches!(stage, Some("RESPONSE_PENDING" | "RESPONSE_COMPLETE"))
+        && diagnostic_valid
+        && controls_valid
+}
+
+pub(crate) fn canonical_observation(value: Value) -> Option<Value> {
+    let hex = |v: &Value| {
+        v.as_str().is_some_and(|s| {
+            s.len() == 64
+                && s.bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        })
+    };
+    if !valid_observation_metadata(&value)
+        || !value["eventId"].as_str().is_some_and(|id| {
+            id.strip_prefix("web-work-")
+                .or_else(|| id.strip_prefix("wake-intent-"))
+                .is_some_and(|v| {
+                    v.len() == 64
+                        && v.bytes()
+                            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                })
+        })
+        || !value["targetGeneration"].as_u64().is_some_and(|n| n > 0)
+        || !hex(&value["targetDigest"])
+        || !hex(&value["messageDigest"])
+    {
+        return None;
+    }
+    Some(value)
+}
