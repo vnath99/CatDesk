@@ -5498,3 +5498,13 @@ Exact identity, provenance and unchanged-state/cleanup evidence are recorded in
 checkpoint: the executable remains unexecuted, unapproved and uninstalled, with
 no whole-source, protected release, runtime-health or Web acceptance claim. The
 existing frozen candidate and original task fences remain unchanged.
+### 2026-11-10 — Reader privacy source checkpoint and real publication failure
+
+The observer fix covers all eleven admitted JSON families and has 29 passing
+readiness cases. Keep the native rename failure separate: the pending publication
+patch returned `0xc0000022` in a disposable actual-Windows fixture and is not ready
+for installation. Retain byte pins and use fresh isolated controls to establish
+the cause; never retry an uncertain production operation. The existing product
+Ed25519 issuer can technically support a fresh approved Wake-purpose signature;
+neither a new key nor automatic Wake enrollment is implied. See the lifecycle
+appendix and `../verification/WAKE_OBSERVER_PRIVACY_SOURCE_2026_11_10.json`.

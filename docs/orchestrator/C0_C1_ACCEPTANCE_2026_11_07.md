@@ -2744,3 +2744,11 @@ its exact build and read-only PE/checksum evidence are retained in the
 It was not run, approved or installed. No runtime health, protected authority or
 actual Web cycle follows from compilation; installed acceptance and C1 remain
 open, and the existing frozen candidate is preserved.
+### 2026-11-10 — Source privacy improvement does not close the Web cycle
+
+All eleven observer JSON frame families now emit validated canonical projections;
+29 readiness cases passed. The separate native publication control failed with
+`0xc0000022`; it remains unqualified. Original uncertain deliveries and native task
+fences remain held. No protected installation, Web edit, delivered self-Wake or
+independent two-conversation operation was demonstrated in this source checkpoint.
+See `../verification/WAKE_OBSERVER_PRIVACY_SOURCE_2026_11_10.json`.

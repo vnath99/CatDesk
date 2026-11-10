@@ -3971,3 +3971,14 @@ state and protected pins matched and build-owned processes exited. The executabl
 was not run, approved or installed; the frozen candidate remains unchanged. No
 Host/broker build, signing, runtime-health or Web acceptance is established. See
 `docs/verification/PROJECT_TASK_FS_001_SCOPE_SOURCE_2026_11_10.json`.
+### 2026-11-10 — Observer metadata privacy repair; publication qualification remains open
+
+All eleven accepted observer JSON families now return their existing validated
+projection. This removes shadowed duplicate-key values without changing admission
+or scalar states. Independent source review found no scoped issue; 29 readiness
+cases, three source-intake cases, formatting and strict Wake Clippy passed. Normal
+Python reporting is not known to emit duplicate keys; no live leak is claimed.
+The separate publication patch failed its actual native rename test with status
+`0xc0000022` and remains outside this checkpoint. All failure records are retained.
+See `docs/verification/WAKE_OBSERVER_PRIVACY_SOURCE_2026_11_10.json` for exact scope.
+No installation, signing, browser, send, binding change or Web acceptance occurred.

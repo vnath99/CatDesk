@@ -10098,3 +10098,11 @@ been run, approved or installed. Source qualification remains distinct from
 artifact approval, runtime health and Web acceptance; the old candidate is
 preserved. Exact evidence is in
 `docs/verification/PROJECT_TASK_FS_001_SCOPE_SOURCE_2026_11_10.json`.
+### 2026-11-10 — Observer projection source checkpoint
+
+The native observer now canonicalizes all eleven accepted JSON families after
+validation. The 29-case readiness suite and strict local checks passed; installed
+qualification remains open. The existing product signer is documented separately
+from fresh Wake-purpose authority. Same-state publication still fails an actual
+native rename control; no release readiness or Web/self-Wake acceptance is claimed.
+Evidence: `docs/verification/WAKE_OBSERVER_PRIVACY_SOURCE_2026_11_10.json`.

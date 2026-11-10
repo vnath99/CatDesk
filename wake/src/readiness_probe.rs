@@ -760,24 +760,171 @@ fn sanitized_rows(text: &str) -> Vec<String> {
             )
         })
         .take(64)
-        .map(|line| {
+        .filter_map(|line| {
             // Return canonical whitelisted values, never raw JSON containing
             // duplicate-key values or formatting from an untrusted helper.
-            if let Some(value) = surface_observation(line) {
+            let canonical = if let Some(value) = surface_observation(line) {
                 format!("PROBE:SURFACE:{value}")
+            } else if let Some(value) = composer_app_observation(line) {
+                format!("PROBE:APP:{value}")
+            } else if let Some(value) = app_menu_observation(line) {
+                format!("PROBE:APP_MENU:{value}")
+            } else if let Some(value) = trace_observation(line) {
+                format!("PROBE:TRACE:{value}")
+            } else if let Some(value) = trace_failure(line) {
+                format!("PROBE:TRACE_FAILURE:{value}")
             } else if let Some(value) = tab_observation(line) {
                 format!("PROBE:TAB:{value}")
             } else if let Some(value) = submission_observation(line) {
                 format!("PROBE:SUBMISSION:{value}")
+            } else if let Some(receipt) = persisted_receipt(line) {
+                let value = serde_json::to_value(receipt).ok()?;
+                format!("PROBE:RECEIPT:{value}")
+            } else if let Some(value) = sent_response_observation(line) {
+                format!("PROBE:RESPONSE:{value}")
+            } else if let Some(value) = historical_response_observation(line) {
+                format!("PROBE:HISTORY_RESPONSE:{value}")
+            } else if let Some(value) = task_response_diagnostics(line) {
+                format!("PROBE:TASK:{value}")
             } else {
                 line.to_owned()
-            }
+            };
+            Some(canonical)
         })
         .collect()
 }
 
 #[cfg(test)]
 mod tests {
+    fn accepted_json_frames() -> [(&'static str, serde_json::Value); 11] {
+        let response = serde_json::json!({"stage":"RESPONSE_COMPLETE",
+            "eventId":format!("web-work-{}", "a".repeat(64)),"targetGeneration":1,
+            "targetDigest":"b".repeat(64),"messageDigest":"c".repeat(64),"diagnosticReason":"COMPLETE"});
+        [
+            ("PROBE:SURFACE:", surface()),
+            ("PROBE:TAB:", tab()),
+            (
+                "PROBE:APP:",
+                serde_json::json!({"schemaVersion":1,"scope":"COMPOSER_FORM","editorCount":1,
+                "plusButtonCount":1,"plusButtonType":"BUTTON","plusButtonState":"ENABLED","plusExpanded":"CLOSED",
+                "v5MarkerCount":0,"basis":"PRESENTATION_ONLY_NOT_TOOL_CATALOG"}),
+            ),
+            (
+                "PROBE:APP_MENU:",
+                serde_json::json!({"schemaVersion":1,"basis":"TRANSIENT_MENU_ONLY_NOT_TOOL_CATALOG","state":"OBSERVED",
+                "openAttempted":true,"openRequested":true,"openOutcomeUnknown":false,"closeAttempted":true,"closedVerified":true,
+                "v5ItemCount":1,"v5DisabledCount":0,"appsItemCount":1,"moreItemCount":0}),
+            ),
+            (
+                "PROBE:TRACE:",
+                serde_json::json!({"schemaVersion":1,"basis":"TASK_BOUND_TRACE_UI_NOT_NATIVE_RECEIPT","state":"OBSERVED",
+                "openAttempted":true,"openRequested":true,"openOutcomeUnknown":false,"controlType":"BUTTON","controlCount":1,
+                "expandedState":"OPEN","panelKind":"FRESH_CHILD","panelCount":1,"knownCodes":["INVALID_ARGUMENT"],
+                "cachedInvariants":[],"mentionedTools":["RUN_COMMAND"],"requestMatchCount":1,
+                "argumentTypes":{"command":"EMPTY_RESERVED_PROBE","cwd":"NULL","timeout":"ABSENT","dry_run":"ABSENT",
+                    "include_full_output":"ABSENT","allow_without_plan":"ABSENT"},"unknownOuterFields":false,"scanTruncated":false}),
+            ),
+            (
+                "PROBE:TRACE_FAILURE:",
+                serde_json::json!({"schemaVersion":1,"phase":"READ","boundary":"PANEL_STABILITY","reason":"TRACE_READ_WINDOW_EXPIRED"}),
+            ),
+            (
+                "PROBE:SUBMISSION:",
+                serde_json::json!({"composerClass":"OTHER","composerBytes":4,
+                "legacyAvailable":false,"readersAgree":null,"legacyMatchesExpected":null,
+                "expectedUserCount":2,"lastUserMatches":true,"trustedMatches":2,"turnsAfter":1,
+                "stable":true,"coverage":"VISIBLE_BOUNDED_ONLY"}),
+            ),
+            (
+                "PROBE:RECEIPT:",
+                serde_json::json!({"schemaVersion":1,"eventId":format!("web-work-{}", "a".repeat(64)),
+                "targetGeneration":1,"targetDigest":"b".repeat(64),"messageDigest":"c".repeat(64),"sentUtc":1,"evidence":"EXACT_USER_MESSAGE_APPENDED"}),
+            ),
+            ("PROBE:RESPONSE:", response.clone()),
+            ("PROBE:HISTORY_RESPONSE:", response),
+            (
+                "PROBE:TASK:",
+                serde_json::json!({"toolDiagnostics":{"schemaVersion":1,
+                "basis":"VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT","scope":"EXACT_USER_EXCHANGE",
+                "selectorCoverage":"KNOWN_MARKERS_ONLY","callMarkers":0,"resultMarkers":0,
+                "errorMarkers":0,"busyMarkers":0,"countOverflow":false},"assistantHints":{"schemaVersion":1,
+                "basis":"ASSISTANT_TEXT_HINTS_ONLY_NOT_VERIFIED_EXECUTION","toolUnavailable":true,
+                "contextUnavailable":false,"approvalRequested":false,"nativeDispatchMentioned":false,"knownCodes":["HTTP_429"]}}),
+            ),
+        ]
+    }
+
+    #[test]
+    fn sanitized_json_frames_discard_shadowed_private_values_for_every_family() {
+        for (prefix, value) in accepted_json_frames() {
+            let canonical = value.to_string();
+            let key = value.as_object().unwrap().keys().next().unwrap();
+            let key_json = serde_json::to_string(key).unwrap();
+            let shadowed = format!("{{{key_json}:\"PRIVATE_CANARY\",{}", &canonical[1..]);
+            assert!(shadowed.contains("PRIVATE_CANARY"));
+            let rows = super::sanitized_rows(&format!("{prefix}{shadowed}"));
+            assert_eq!(rows, [format!("{prefix}{canonical}")], "{prefix}");
+            assert!(!rows[0].contains("PRIVATE_CANARY"), "{prefix}");
+        }
+    }
+
+    #[test]
+    fn sanitized_json_frames_reject_unknown_and_invalid_last_values_without_changing_plain_states()
+    {
+        for (prefix, value) in accepted_json_frames() {
+            let mut unknown = value.clone();
+            unknown["privateBody"] = serde_json::json!("PRIVATE_CANARY");
+            assert!(
+                super::sanitized_rows(&format!("{prefix}{unknown}")).is_empty(),
+                "{prefix}"
+            );
+            assert!(
+                super::sanitized_rows(&format!("{prefix}{{")).is_empty(),
+                "{prefix}"
+            );
+            let canonical = value.to_string();
+            let key = value.as_object().unwrap().keys().next().unwrap();
+            let key_json = serde_json::to_string(key).unwrap();
+            let invalid_last = format!(
+                "{},{key_json}:\"PRIVATE_CANARY\"}}",
+                &canonical[..canonical.len() - 1]
+            );
+            assert!(
+                super::sanitized_rows(&format!("{prefix}{invalid_last}")).is_empty(),
+                "{prefix}"
+            );
+        }
+        let plain = [
+            "PROBE:APP_STATE:UNPROVEN",
+            "PROBE:APP_MENU_STATE:UNPROVEN",
+            "PROBE:TRACE_STATE:UNPROVEN",
+            "PROBE:RECEIPT_STATE:UNPROVEN",
+            "PROBE:SUBMISSION_STATE:OBSERVATION_UNAVAILABLE",
+            "PROBE:PHASE:OBSERVING",
+            "PROBE:FINAL:EXACT_READY_IDLE",
+        ];
+        assert_eq!(super::sanitized_rows(&plain.join("\n")), plain);
+        assert!(super::sanitized_rows("PROBE:UNKNOWN:{\"body\":\"PRIVATE_CANARY\"}").is_empty());
+    }
+
+    #[test]
+    fn sanitized_task_frames_discard_nested_shadowed_private_values() {
+        let (_, value) = accepted_json_frames()
+            .into_iter()
+            .find(|(prefix, _)| *prefix == "PROBE:TASK:")
+            .unwrap();
+        let canonical = value.to_string();
+        let shadowed = canonical.replace(
+            "\"toolUnavailable\":true",
+            "\"toolUnavailable\":\"PRIVATE_CANARY\",\"toolUnavailable\":true",
+        );
+        assert!(shadowed.contains("PRIVATE_CANARY"));
+        assert_eq!(
+            super::sanitized_rows(&format!("PROBE:TASK:{shadowed}")),
+            [format!("PROBE:TASK:{canonical}")]
+        );
+    }
+
     #[test]
     fn response_protocol_accepts_capped_button_shape_without_accepting_arbitrary_large_rows() {
         let row = serde_json::json!({"aria":"COPY_MESSAGE","title":"COPY_RESPONSE","tooltip":"READ_ALOUD",

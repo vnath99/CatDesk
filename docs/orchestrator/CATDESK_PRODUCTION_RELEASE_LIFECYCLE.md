@@ -1186,3 +1186,51 @@ identity checks and a proven trusted predecessor first. Test interrupted selecti
 failed current release, bounded restoration, process ownership and state preservation
 before retiring any compatibility writer. Fixture success is source qualification;
 actual installed rollback and unattended operation remain separate acceptance gates.
+
+### 2026-11-10 — Existing product signer and Wake-purpose authority
+
+Read-only reconciliation found an existing product Ed25519 trust root and valid
+historical signed main-image envelopes. The compiled public key is
+`3bc6a2101687816dc8235efde562db93dbd0ad822d922286640ec5c985239545`;
+SHA-256 of its raw 32 public bytes is
+`25a0e9226e1eb836ee263d16eef7d8995855bb009a4d69309aca6f12841d0beb`.
+The explicitly public offline files match it. This establishes public-key
+identity, not current availability of its private signer. No private signing
+material was opened, queried, exported or hashed.
+
+`KEYGEN.ps1` generates and writes signing files; it is not a recovery or signing
+command and must not be rerun to repair release metadata. The established
+operator-only signing ceremony is documented in the T-0215 product-trust-root
+review bundle: freeze exact bytes, sign offline, return only the detached
+signature and independently verify it. No reviewed general-purpose signer
+executable was established by this reconciliation. `provision-catdesk-release.ps1`
+builds a separate candidate; `promote-reviewed-catdesk-build.ps1` consumes reviewed
+authority. The T-0368 script consumes its fixed historical signed rotation and is
+not a general signer or permission to repeat that rotation.
+
+The accepted epoch-one main-image receipt verifies and matches the observed
+protected image. A valid epoch-two envelope remains pending, with no installed
+rotation receipt. These observations neither apply the pending rotation nor
+authorize a new main image, Wake bootstrap or Wake package selection.
+This Program Files main-image authority is separate from the workspace backend
+and Wake package selection.
+
+Wake first-broker bootstrap signs the exact domain
+`CatDeskWakeFirstBrokerBootstrapV1`, followed by one NUL byte and the native
+canonical payload. Same-state selection uses the separate
+`CatDeskWakeSameStateRootSelectionApprovalV3` domain. Existing main-image
+signatures cannot be reused as either signature. The existing Ed25519 key can
+technically sign a new Wake-purpose payload if the operator explicitly approves
+that purpose and the exact expected public-key fingerprint. A new key is not
+inherently required; no Wake issuer is silently enrolled from the compiled
+main-image root.
+
+Unsigned-input collection, bootstrap review, package source review, actual
+working-previous evidence, native operator admission and signed selection are
+separate gates. Inconsistent physical path resolution must stop collection;
+never replace the fixed root with an alias to make it pass. An unsigned packet
+does not authorize signing, installation, service start or package selection.
+Source review also identified an unpinned same-state staging destination before
+absolute child writes. That release boundary must be repaired and qualified
+before claiming same-state promotion readiness. No installed Web acceptance
+follows from the signing reconciliation.

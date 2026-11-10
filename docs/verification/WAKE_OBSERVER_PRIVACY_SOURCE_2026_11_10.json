@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-10",
+  "scope": "NATIVE_OBSERVER_JSON_PROJECTION_ONLY",
+  "source": {
+    "path": "wake/src/readiness_probe.rs",
+    "sha256": "b8a43ba58b459dc0be9155b442f5bbe2709a99bd3513b225cd90f3238bd39fa8",
+    "baseCommit": "8a312b971eea9a15f01e512da5dd38b0ea884544"
+  },
+  "finding": {
+    "acceptedJsonFamilies": 11,
+    "previouslyCanonicalizedFamilies": 3,
+    "failure": "Some validated JSON frames returned the original line, retaining shadowed duplicate-key values.",
+    "liveLeakDemonstrated": false,
+    "normalPythonReporterProducesDuplicates": false
+  },
+  "change": {
+    "allAcceptedJsonFramesReserializeValidatedProjection": true,
+    "admissionValidatorsChanged": false,
+    "plainStateAllowlistChanged": false,
+    "rowLimitChanged": false,
+    "authorityGranted": false
+  },
+  "sourceEvidence": {
+    "workingSnapshotFenceSha256": "3f928e72448c2b9b94d7c832ddc523dd1667fd4e7943e6a440bae0d92aa0e598",
+    "resultSha256": "1d79fbf966a0861d3342264f97189b586503aabd3001bdeeb0f68fcd3373b8cc",
+    "ownerSha256": "46a128958e38e67a7776b833d309acc901d1af3d2db6b0d41a84cd6a5d54062a",
+    "narrowIndependentReviewSha256": "3801abb2555faf6d2e1051e7f33188562d7960f48080fa7272a03c454fa4352c",
+    "readinessCasesPassed": 29,
+    "newCasesPassed": 3,
+    "sourceIntakeCasesPassed": 3,
+    "wakeFormattingPassed": true,
+    "wakeStrictClippyPassed": true,
+    "sourceInputsUnchanged": 238,
+    "statePinsUnchanged": 1650,
+    "taskInventoryPaths": 1607,
+    "taskFilesAdded": 0,
+    "taskFilesRemoved": 0,
+    "scopedSourceProcessesRemaining": 0,
+    "overallDiagnosticPassed": false,
+    "overallFailure": "Separate unpublished publication change returned native status 0xc0000022; that failure remains preserved.",
+    "unpublishedPublicationFilesIncludedInThisCheckpoint": false,
+    "exactCommittedTreeQualification": "PENDING"
+  },
+  "acceptance": {
+    "fullSourceReviewEstablished": false,
+    "releaseAuthorityEstablished": false,
+    "productPrivateKeyReadOrGenerated": false,
+    "installedHostUpgraded": false,
+    "browserStarted": false,
+    "messageSent": false,
+    "projectBindingChanged": false,
+    "installedObservationQualified": false,
+    "actualWebEditVerifySelfWakeAccepted": false,
+    "twoProjectLiveAcceptance": false
+  }
+}
