@@ -1,3 +1,20 @@
+## 2026-11-10 12:58 UTC — D compatibility and development checks do not close C1
+
+Installed dev.84 actually refused the preserved store with `TARGET_INVALID_URL`.
+Newly built D parsed it read-only, then passed two PAUSED development starts and
+authenticated loopback health. Metadata, task inventory and profile preservation
+passed; protected selection and original unknown sends remain unchanged.
+
+C1 is still NOT_DEMONSTRATED: no actual authorized Web file edit, verification
+and delivered manual self-Wake was established by these checks. Native Codex
+and central coordination are optional. D's local verification record passed
+with 1,652 matching pins. Independent bootstrap artifact review passed for the
+exact D bytes; the broader source-review chain remains INCONCLUSIVE. No approved
+Wake issuer, signature or protected admission
+has been provided. Missing a selector alone was not the upgrade criterion;
+the actual installed URL-parser refusal is the concrete compatibility evidence.
+Evidence: [bounded D results and limits](../verification/WAKE_INSTALLED_URL_COMPATIBILITY_AND_D_QUALIFICATION_2026_11_10.json).
+
 # Current C0/C1 acceptance authority — 2026-11-10T01:51:38Z
 
 The user's latest direction supersedes the earlier requirement for a mandatory

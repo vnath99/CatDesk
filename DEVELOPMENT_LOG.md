@@ -1,3 +1,31 @@
+## 2026-11-10 12:58 UTC — D built, real-store parser checked and development health passed
+
+The exact `da1608a15b960cbce01a3cc75b2482a2d1a2e985` release build completed in
+750.156 seconds (bounded owner 751.530), with all source/protected checks matching.
+Installed dev.84 had refused the same real store with `TARGET_INVALID_URL` and
+no metadata change. D's one read-only `queue-health` exited 0: actionable 0,
+reconciliation 1, attention 2, stale 110, forensic 113; all 954 pins matched.
+The old failure is preserved. Before-event localization is a static inference
+from adjacent source, not exact old Host build attestation.
+
+D's isolated development health passed in 50.797 seconds (owner 55.418): two
+10-second PAUSED hosts, then 15-second local backend authentication 401/401/200,
+79-tool candidate-mode catalog and registered-project read. All 1,641 pins matched, task-file
+additions/removals were zero, profile identity was preserved, control was STOPPED,
+and owned runtime/profile processes and the endpoint were closed. Verified C is
+now the immediate development predecessor; A's bytes remain separately retained.
+
+D's metadata-only local verification then passed 1,652 preservation checks.
+Independent bootstrap artifact review subsequently passed for the exact D Host
+and broker, with zero findings or needed reads. It creates no whole-application
+release approval, approved issuer or signature.
+No protected cutover, signer enrollment, new project, browser message, tunnel,
+native-owner change or full Web edit/self-Wake acceptance occurred. The broader
+source chain remains INCONCLUSIVE. Direct v5 file work is primary; native Codex
+and central coordination are optional. The demonstrated URL-parser refusal,
+not absence of a newer selector alone, establishes the installed-package gap.
+Evidence: [compatibility and D qualification](docs/verification/WAKE_INSTALLED_URL_COMPATIBILITY_AND_D_QUALIFICATION_2026_11_10.json).
+
 ## 2026-11-10 — direct Web acceptance stays primary; corrected source checkpoint
 
 The operator has not provided an approved Wake signer. No signing identity,

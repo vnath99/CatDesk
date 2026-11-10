@@ -1,3 +1,29 @@
+## 2026-11-10 12:58 UTC — current handoff: D qualified in development; installed parser blocks normal admission
+
+Published source `da1608a15b960cbce01a3cc75b2482a2d1a2e985` / tree
+`28ed0e91664e7a1dfe14c73a1113865b0a26519f` built release D. Its actual read-only
+queue check passed on the unchanged installed store: 0 actionable, 1 reconciliation,
+2 attention, 110 stale, 113 forensic; all 954 pins matched. Installed dev.84's
+preserved prior check returned `TARGET_INVALID_URL` with 946 metadata pins and
+six protected pins unchanged. Static adjacent-source localization before events
+is not an exact old Host compilation attestation.
+
+D's two 10-second PAUSED starts and 15-second authenticated backend passed;
+1,641 pins and task inventory matched, profile identity was preserved, endpoint
+closed and all owned images/profile processes exited STOPPED. Verified C is the
+immediate development predecessor; A is separately retained. D's local verification
+record passed with 1,652 matching pins. Independent bootstrap artifact review
+passed for the exact D Host and broker; whole-application candidate/fallback
+release approval remains a separate prerequisite.
+
+No new project was registered, message replayed, native owner changed, browser,
+tunnel or SCM operation performed. Protected cutover requires genuine approved
+issuer, exact-purpose signatures, elevation and applicable release reviews.
+Existing v5 direct file work remains primary; native Codex and central coordination
+are optional. Installed/Web edit/verify/self-Wake acceptance remains false, and
+previous INCONCLUSIVE reviews/unknown sends remain preserved.
+Evidence: [current factual checkpoint](../verification/WAKE_INSTALLED_URL_COMPATIBILITY_AND_D_QUALIFICATION_2026_11_10.json).
+
 ## 2026-11-03T16:35:17.988364+00:00 — shared composer-structure diagnostics implemented,341 cases pass and exact held-event observation qualified
 
 ## 2026-11-03T19:31:34.880166+00:00 — finite ordinary Web work delivery source qualified; native assignment preparation complete

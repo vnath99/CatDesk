@@ -1,3 +1,25 @@
+## 2026-11-10 12:58 UTC — actual URL compatibility blocker and D development qualification
+
+Installed dev.84's read-only `queue-health` returned `TARGET_INVALID_URL`;
+946 metadata and six protected pins matched. Its exact compiled-source link is
+unlocated; adjacent source localizes the refusal before event parsing. Missing
+an exact-event selector alone was not a valid reason to require an upgrade.
+
+Release D from `da1608a15b960cbce01a3cc75b2482a2d1a2e985` built successfully.
+Its actual Host read the unchanged installed store: 0 actionable, 1 reconciliation,
+2 attention and 110 stale events; all 954 pins matched. Two 10-second PAUSED
+development hosts and a 15-second authenticated backend also passed, with
+1,641 preservation checks matching and complete cleanup. C is the immediate
+verified development predecessor; A remains separately preserved.
+
+Protected selection is unchanged. D's local verification record passed 1,652
+preservation checks. Independent bootstrap artifact review passed for the exact
+D bytes; whole-application release approval remains separate. No approved Wake issuer,
+protected admission or Web edit/verify/self-Wake acceptance is inferred. Native
+Codex and central coordination remain optional; existing v5 direct file work is
+primary. Earlier INCONCLUSIVE review and all unknown sends remain held.
+Evidence: [actual D results](docs/verification/WAKE_INSTALLED_URL_COMPATIBILITY_AND_D_QUALIFICATION_2026_11_10.json).
+
 ## 2026-11-10 — focused corrections verified; actual direct Web cycle remains open
 
 352 distinct Rust cases, formatting/strict Clippy and the separate 19-case

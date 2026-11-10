@@ -1,3 +1,27 @@
+## 2026-11-10 12:58 UTC — separate actual compatibility, development health and protected authority
+
+The installed-package dependency is now demonstrated: dev.84's read-only queue
+check returned `TARGET_INVALID_URL`, while release D's actual Host parsed the
+same unchanged store successfully. Lack of a newer exact-event selector alone
+had not established that dependency. Exact old Host/source attestation remains
+unlocated; the before-event explanation is based on adjacent source.
+
+D from `da1608a15b960cbce01a3cc75b2482a2d1a2e985` is built and passed two PAUSED
+starts plus authenticated local backend health. C is its immediate verified
+development predecessor; A remains separately byte-preserved. This is neither
+protected fallback authority nor installed/Web acceptance. D's local verification
+record passed with 1,652 matching pins. Independent bootstrap artifact review
+passed for the exact D Host and broker; whole-application release approval remains
+separate. The review identifier is the real existing reviewer's protocol-valid
+task name; no reviewer-enrollment registry is required by the native schema.
+
+Direct v5 file work remains primary; native Codex and central coordination are
+optional. The existing four-artifact installer remains the only conditional
+cutover path, requiring genuine approved external trust, exact-purpose signatures,
+elevation and release reviews. No issuer, signature or authority is inferred
+from local health. Earlier INCONCLUSIVE source review and held sends remain intact.
+Evidence: [D qualification](../verification/WAKE_INSTALLED_URL_COMPATIBILITY_AND_D_QUALIFICATION_2026_11_10.json).
+
 ## 2026-11-10 — keep direct Web work separate from conditional release enrollment
 
 No approved Wake signer was provided. The operator's priority remains direct

@@ -1,3 +1,23 @@
+## 2026-11-10 12:58 UTC — actual installed parser prerequisite; D remains development-only
+
+Do not start dev.84 against the current store or rewrite target/history URLs to
+make it parse. Its one read-only `queue-health` returned `TARGET_INVALID_URL`;
+946 metadata and six protected pins stayed unchanged. D's exact newly built
+Host ran `queue-health` once on that same store and exited 0 without writes:
+0 actionable, 1 reconciliation, 2 attention, 110 stale; all 954 pins matched.
+A queue-health read neither dispatches work nor proves a Web loop.
+
+D also passed finite PAUSED-host and authenticated backend checks in the existing
+development authority. Protected installation is unchanged; D's local verification
+record passed with 1,652 matching pins. Independent bootstrap artifact review
+passed for its exact Host and broker; whole-application release approval remains
+separate. Any indispensable four-artifact Wake cutover must use existing release review, genuine approved external issuer,
+exact-purpose signatures and elevated operator admission. None was created here.
+The existing v5 `CATDESK_WEB_TASK=` file alias has retained compiled/historical
+runtime evidence; native delegation and central coordination are optional.
+Do not replay unknown work or treat these checks as Web edit/self-Wake acceptance.
+Evidence: [actual compatibility results](../verification/WAKE_INSTALLED_URL_COMPATIBILITY_AND_D_QUALIFICATION_2026_11_10.json).
+
 ## 2026-11-10 — existing v5 direct route first; no assumed signing authority
 
 No approved Wake signer has been provided. Do not generate one or treat source
