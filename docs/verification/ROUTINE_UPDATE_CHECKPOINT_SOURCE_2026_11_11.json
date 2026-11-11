@@ -328,10 +328,11 @@
     "primaryToken": true,
     "protectedSidEqualityChecked": false,
     "localGateEligible": false,
-    "gap": "Historical filtering conflates ordinary UAC limitation with other restrictions. Zero restricting SIDs alone does not qualify a caller. Review a positive UAC distinction before enrollment; do not request per-update elevation."
+    "gap": "Historical filtering conflates ordinary UAC limitation with other restrictions. Zero restricting SIDs alone does not qualify a caller. Review a positive UAC distinction before enrollment; do not request per-update elevation.",
+    "historicalAtSourceCommit": "82d29852aa5273fe5ed923487d42bbd4731687bb",
+    "supersededBy": "canonicalUacCallerFollowup for source/current owned process only; not an installed eligibility claim"
   },
   "notQualified": [
-    "Ordinary UAC-limited caller admission in this execution context.",
     "Shared-host and installed task recovery beyond the existing qualified dedicated lifetime.",
     "Actual restricted SYSTEM service and intended medium-client process/token access.",
     "New exact artifact build/release review, one-time enrollment, protected installation and initial reconstruction.",
@@ -435,5 +436,140 @@
     "tokenAssignments": 0,
     "tokenDuplications": 0,
     "impersonations": 0
+  },
+  "canonicalUacCallerFollowup": {
+    "recordedUtc": "2026-11-11T03:52:52.985996+00:00",
+    "sourceBaseCommit": "fcedc69b371a50188ae8edd0b40ba1f0a2889b73",
+    "scope": "SOURCE_AND_ACTUAL_CURRENT_PROCESS_OWNED_PIPE_ONLY",
+    "files": [
+      {
+        "path": "wake/src/install_broker_operator.rs",
+        "physicalSourceSha256": "e8cb6d7d2a7fcd09524813eee4148dba5e796e749850705ffe88b914d7f0e7bf"
+      },
+      {
+        "path": "wake/src/install_broker_operator_uac.rs",
+        "physicalSourceSha256": "a48f1b7837350f19b27d5f7fd4753632ca05bc37a7bdc6062e8aa5e8e082fcc1"
+      }
+    ],
+    "rootCause": "The local caller gate conflated ordinary UAC historical filtering with further token restriction. The legacy signed/high gate is unchanged.",
+    "correction": "Private query-only OS-linked Full-to-Limited witnesses positively bind the actual caller to a stable canonical Limited security profile. Linked Identification handles are metadata only and never become actors.",
+    "exactProfileFields": [
+      "user SID and attributes",
+      "authentication identity of canonical Limited token",
+      "session",
+      "integrity",
+      "groups and attributes",
+      "privileges and attributes",
+      "restricting SIDs and attributes",
+      "mandatory policy",
+      "AppContainer",
+      "interactive membership",
+      "elevation state"
+    ],
+    "stability": "Each token retains its own TokenId and ModifiedId across observation. Different token IDs and Full/Limited authentication IDs are not incorrectly equated.",
+    "actorGatesRetained": [
+      "exact enrolled account",
+      "enabled INTERACTIVE",
+      "nonzero session",
+      "medium or higher integrity",
+      "not AppContainer",
+      "actual primary or pipe impersonation level at least Impersonation",
+      "deny-only user refused"
+    ],
+    "nativeTests": {
+      "ownerSha256": "808093aafa50a894b42120529a1b5ecee8ab0f7bde0f0aa3b669dea10fee9d2a",
+      "resultSha256": "9de4f22cea5250bac38abf88d47da208de483f5cb36c2d8d22481f9b33a46b34",
+      "startedUtc": "2026-11-11T03:43:56.1755972+00:00",
+      "finishedUtc": "2026-11-11T03:44:02.6262992+00:00",
+      "containment": "KILL_ON_JOB_CLOSE",
+      "stages": [
+        {
+          "name": "wake-uac-operator",
+          "startedUtc": "2026-11-11T03:43:56.5875782+00:00",
+          "finishedUtc": "2026-11-11T03:44:02.5252243+00:00",
+          "exitCode": 0,
+          "logSha256": "9787b5d6b101a9d1406634872f9eeab8233eefa74fe63c8d5c03b96a06c12132"
+        }
+      ]
+    },
+    "nativePassed": 24,
+    "currentPrimaryProfileMatched": true,
+    "actualClientQosPipeProfileMatched": true,
+    "furtherFilteredUnassignedCurrentTokenCasesRefused": 4,
+    "effectiveOnlyPipeRefused": true,
+    "brokerRegressions": {
+      "ownerSha256": "2a4372947a6e319c8eaa233194fbf1c3b5518564113c79ce5db64e267a30d545",
+      "resultSha256": "31012a64d6becdede6899b518261f0085e8cb9e87ddf0242e8a2542acf5ca350",
+      "startedUtc": "2026-11-11T03:50:10.6718986+00:00",
+      "finishedUtc": "2026-11-11T03:50:28.6099040+00:00",
+      "containment": "KILL_ON_JOB_CLOSE",
+      "stages": [
+        {
+          "name": "wake-uac-broker-regressions",
+          "startedUtc": "2026-11-11T03:50:11.0375682+00:00",
+          "finishedUtc": "2026-11-11T03:50:28.5192606+00:00",
+          "exitCode": 0,
+          "logSha256": "59f95fec21de4942f20a3d1fb0f752d75119e8d4ce5662f7abb05dea25254c11"
+        }
+      ]
+    },
+    "brokerRegressionPassed": 321,
+    "brokerRegressionIgnored": 1,
+    "ignoredReason": "Existing external WinHTTP probe is intentionally ignored; no external request made.",
+    "strictWakeClippy": {
+      "ownerSha256": "0611edc03933763cbbdad7cda6c83b52833d58bd97175571c2f4f0d0dbe52fa5",
+      "resultSha256": "aa82baaa3a9d60532a3ee47bc53df4721d087338ab4489feaa4516c8e581813c",
+      "startedUtc": "2026-11-11T03:45:17.8067789+00:00",
+      "finishedUtc": "2026-11-11T03:45:27.8379374+00:00",
+      "containment": "KILL_ON_JOB_CLOSE",
+      "stages": [
+        {
+          "name": "wake-clippy",
+          "startedUtc": "2026-11-11T03:45:18.1034988+00:00",
+          "finishedUtc": "2026-11-11T03:45:27.7329658+00:00",
+          "exitCode": 0,
+          "logSha256": "ac3b508dc73832573a7153f2e0018f7ee09737c90d89993cb5a9248da17b3128"
+        }
+      ]
+    },
+    "strictMainClippy": {
+      "ownerSha256": "b3c8c1a75703b2180b0edaeafaf718f0fdfd6007b4c192cb84a0a5be557924b1",
+      "resultSha256": "05fb0f9931698d543d2bc70e5d6e04c13fcfd41ebfeb3b3ad109b79b6797adf9",
+      "startedUtc": "2026-11-11T03:50:43.4291308+00:00",
+      "finishedUtc": "2026-11-11T03:51:35.2776060+00:00",
+      "containment": "KILL_ON_JOB_CLOSE",
+      "stages": [
+        {
+          "name": "main-clippy",
+          "startedUtc": "2026-11-11T03:50:43.7779374+00:00",
+          "finishedUtc": "2026-11-11T03:51:35.1464257+00:00",
+          "exitCode": 0,
+          "logSha256": "74407656a367dd9922d27cca1b2287f68bc2b9968b461d9dba68802ebd8db4fd"
+        }
+      ]
+    },
+    "peerReview": "Read-only independent peer inspected final exact file hashes and found no material issue; this is not artifact-bound release authority.",
+    "retainedFailures": [
+      {
+        "run": "wake-uac-tests-01",
+        "resultSha256": "731c93e6f3ad30e5a86ac683c0d4499cf906380c8a7dd1dafa47072df860c4ed",
+        "disposition": "22 passes and one owned-pipe failure; primary comparison and further-filter negatives passed. Not accepted as final qualification."
+      },
+      {
+        "run": "wake-uac-tests-02",
+        "resultSha256": "300211e430bb6655c32945cd9524a48d922273a5a9f15b3919343fd2ff292b66",
+        "disposition": "22 passes and one pipe privilege-profile mismatch. Fixture omitted production client explicit SQOS flags. Final positive uses SQOS_PRESENT|IMPERSONATION; separate EffectiveOnly case refuses. No privilege masking or subset acceptance added."
+      }
+    ],
+    "documentation": [
+      "https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew",
+      "https://learn.microsoft.com/en-us/windows/win32/ipc/impersonating-a-named-pipe-client"
+    ],
+    "diagnostics": "Closed classes, roles, error codes, field-equality booleans and counts only; no SID, LUID, profile, credential or draft export.",
+    "linkedTokenAssignmentsDuplicationsOrImpersonations": 0,
+    "privilegeEnables": 0,
+    "protectedInstallationOrPolicyChanged": false,
+    "installedSystemServiceMediumClientQualified": false,
+    "installedWebAcceptance": false
   }
 }

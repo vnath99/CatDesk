@@ -7715,3 +7715,14 @@ verification profiles must have successful unchanged-postimage receipts. The
 checkpoint-enabled manual Wake gate requires the latest exact checkpoint; GitHub
 sync may remain pending without erasing it. These flags do not extend existing
 grants or permit retrying held original requests.
+
+### 2026-11-11 — Canonical UAC caller qualification
+
+The proposed local commands retain their separate enrollment prerequisite.
+Current source now checks a filtered caller against stable OS-linked canonical
+Limited metadata without assigning or elevating those witness tokens. Actual
+current-primary and production-QoS pipe checks pass; extra filtering is refused.
+This does not make the commands available in the installed older Host. Build and
+review the exact new artifacts, then use the existing one-time protected lifecycle;
+do not repeat the refused collector or elevate each routine update as a workaround.
+No new operator command is ready until that migration contract is frozen.

@@ -1071,8 +1071,8 @@ retained old unsigned packet does not block independent source work.
 
 | Task | Current boundary and next action |
 |---|---|
-| Routine checkpoint/update source | RUNNING: qualify the opt-in task checkpoint/sync and existing-broker local-policy delta, then publish the reviewed source. No operator decision is needed for that work. |
-| Ordinary UAC caller eligibility | BLOCKED_BY_TECHNICAL_DEFECT: the actual medium, interactive, UAC-limited tool process reports historical filtering and is refused by the new local gate. Next work is a reviewed distinction from restricted workers, with bounded native qualification. Do not request per-update elevation or remove the guard to obtain a pass. |
+| Routine checkpoint/update source | QUALIFIED/PUBLISHED: scoped Git checkpoint/sync, publication recovery and dedicated cold-owner tests are published. The additional UAC source correction is qualified; publish its reviewed checkpoint, then build exact artifacts through the existing release tooling. |
+| Ordinary UAC caller eligibility | SOURCE_QUALIFIED: actual primary and production-QoS one-read pipe passed exact canonical-profile checks; further filtering and EffectiveOnly pipe were refused. Legacy signed/high admission is unchanged. Actual SYSTEM-service/medium-client operation remains an installed gate. |
 | One-time local-update enrollment | BLOCKED_BY_POLICY until exact new artifacts, declared-scope review and a frozen enrollment contract exist. Then one operator-controlled purpose approval/native bootstrap may enroll the exact Windows account. The retained old packet does not authorize this changed broker or policy. No new signing identity is required by the proposal. |
 | Installed broker and Web acceptance | Requires that qualified installation, actual intended-account process/token access, protected select/rollback/startup and registered Web edit/verify/checkpoint/self-Wake evidence. Source and disposable-object tests do not close these gates. |
 | Original uncertain work | Preserve original assignments, grants, journals, delivery witnesses and history. Do not replay or replace held requests to demonstrate the new path. |
@@ -1085,8 +1085,8 @@ Trust-root, broker/policy changes and initial reconstruction remain separate
 maintenance authority. Do not repeatedly ask for unchanged signing input or poll
 unchanged external services. See the simplified model and release lifecycle.
 
-The targeted source and disposable-object checks now pass, including strict
-Clippy. The UAC gap above still prevents claiming the proposed routine-update mode
-usable in this execution context. No new operator input is required for the next
-source investigation. Evidence:
+The targeted source and native owned-object checks now pass, including strict
+Clippy. The UAC source gap is closed for this current context; installed service
+readback and enrollment are still required. No new operator input is required for
+the next exact-artifact build/review preparation. Evidence:
 `docs/verification/ROUTINE_UPDATE_CHECKPOINT_SOURCE_2026_11_11.json`.

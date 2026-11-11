@@ -1328,3 +1328,19 @@ It does not authorize replacing the fixed broker, changing its ACL/policy/trust
 root, upgrading the protected main image or modifying external Secure MCP ownership.
 No new signer, tunnel, recurring process or alternative privileged installer is
 introduced. Full installed acceptance remains open until recorded live evidence.
+
+### 2026-11-11 — Canonical UAC caller qualification
+
+The proposed routine local mode now positively qualifies canonical UAC limitation
+instead of broadly rejecting every historically filtered token. Actual primary
+and production-QoS one-read pipe tests passed; further restriction and EffectiveOnly
+pipe contexts stayed refused. The elevated signed bootstrap/maintenance gate is
+unchanged. No per-update elevation workaround is introduced.
+
+Before migration, build the exact reviewed source into separate immutable broker
+and Host artifacts, retain checksums/provenance and complete the existing declared
+scope review. The old unsigned packet cannot authorize changed bytes or policy.
+One-time protected enrollment and initial reconstruction still require their
+existing purpose-bound authority. Do not install from a test binary or claim that
+owned-pipe tests prove actual SYSTEM-service client access. See the routine-update
+verification record and compatibility plan above.

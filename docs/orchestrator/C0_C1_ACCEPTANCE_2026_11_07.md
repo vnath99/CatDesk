@@ -2813,3 +2813,13 @@ or held original request was replayed, and no recurring browser/Wake owner start
 ### 2026-11-11T03:03Z — Dedicated checkpoint cold recovery source-qualified
 
 The previously open dedicated-owner process-death case now passed an actual Windows child-process regression for completed and post-CAS checkpoints, using normal task reopen and the existing native proof. Live-owner admission stayed refused; the exact commit, assignment, grant and synthetic credential remained unchanged, and replay was rejected. Verification receipts in this fixture are explicitly synthetic. Shared-host recovery, installed command execution and the real Web/self-Wake cycle remain separate acceptance gates. See the existing routine-update verification record for hashes and bounds.
+
+### 2026-11-11 — Canonical UAC caller qualification
+
+The local-update admission source gap is closed for the actual current primary
+and owned one-read pipe using production client QoS. Four further-filtered tokens
+and a separate EffectiveOnly pipe were refused; 321 broker regressions and strict
+Wake/main Clippy passed. This is native source qualification, not protected service,
+installation or Web acceptance. C1 still needs actual Web edit, verification,
+durable checkpoint and delivered self-Wake continuation. Original uncertain tasks
+remain held; no replacement or replay occurred.

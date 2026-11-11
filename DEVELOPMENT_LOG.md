@@ -4118,3 +4118,24 @@ The local-policy UAC caller gap remains a source task: the queried tool process 
 A native regression passed both completed-checkpoint and post-CAS interruption cases through the existing dedicated-child recovery path. It refused the live owner, proved exit, reopened the same task normally, preserved the frozen assignment/grant/synthetic key and exact commit, continued reading and refused checkpoint replay. The test took 39.80s; strict Clippy passed in 19.72s. Only test code changed; normalized production prefixes remain byte-identical to the preceding checkpoint. This does not qualify shared-host recovery, the installed command sandbox or live Web execution.
 
 A separate bounded query-only diagnostic established that Windows returns Identification impersonation handles for linked Full and Limited token metadata. All 22 data queries succeeded and all 3 handles closed. The earlier primary-role assumption was unsuitable for this observation. No token was impersonated, assigned or elevated; canonical security-profile equivalence and caller admission remain unproved. The next source correction must treat those linked objects as query-only witnesses and retain the actual caller requirements.
+
+### 2026-11-11 — Canonical UAC caller qualification
+
+The local gate now admits canonical UAC limitation only through exact stable
+query-only linked-profile evidence. It retains actual actor identity/type/level,
+user attributes and full group/privilege/mandatory-policy checks; linked metadata
+tokens are never actors. Legacy elevated/signed admission is unchanged.
+
+Actual primary and production-QoS pipe qualification passed, as did four further
+filtering negatives and explicit EffectiveOnly refusal. Initial pipe failures are
+retained: the fixture omitted the actual client's SQOS flags, causing privilege
+profile mismatch. No equality masking or permissive fallback was added. Final
+24-case native group and broader 321-case broker matrix passed; one external probe
+remains intentionally skipped. Strict Wake/main Clippy passed. Independent peer
+review found no material issue at the recorded final hashes.
+
+No protected enrollment, binary selection, service/browser/tunnel start, binding
+change or original-task replay occurred. The next independent work is exact-commit
+artifact build and existing artifact-bound review, before a concrete one-time
+migration contract. Installed SYSTEM-client and direct Web/self-Wake acceptance
+remain open; source tests do not replace them.

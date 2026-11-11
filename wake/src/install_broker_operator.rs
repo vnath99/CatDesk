@@ -159,7 +159,7 @@ mod windows {
         }
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, Eq, PartialEq)]
     struct TokenFacts {
         user_sid: Vec<u8>,
         integrity_rid: u32,
@@ -171,6 +171,10 @@ mod windows {
         restricted: bool,
     }
 
+    mod uac {
+        include!("install_broker_operator_uac.rs");
+    }
+
     /// Reads an impersonated pipe-client token, not a process PID or a JSON
     /// identity claim. The caller must retain the same pipe instance for the
     /// full request and must not cache this result for another connection.
@@ -178,22 +182,24 @@ mod windows {
         pipe: BorrowedHandle<'_>,
         protected_operator_sid: &[u8],
     ) -> Result<OperatorTokenEvidenceV1> {
-        inspect_pipe_client(pipe, protected_operator_sid, authorize_facts)
+        inspect_pipe_client(pipe, protected_operator_sid, |_, facts, sid| {
+            authorize_facts(facts, sid)
+        })
     }
 
     pub(crate) fn inspect_connected_pipe_local_user(
         pipe: BorrowedHandle<'_>,
         protected_user_sid: &[u8],
     ) -> Result<LocalUserTokenEvidenceV1> {
-        inspect_pipe_client(pipe, protected_user_sid, |facts, sid| {
-            authorize_local_user_facts(facts, sid, false)
+        inspect_pipe_client(pipe, protected_user_sid, |token, facts, sid| {
+            authorize_local_user_token(token, facts, sid, false)
         })
     }
 
     fn inspect_pipe_client<T>(
         pipe: BorrowedHandle<'_>,
         protected_operator_sid: &[u8],
-        authorize: impl FnOnce(&TokenFacts, &[u8]) -> Result<T>,
+        authorize: impl FnOnce(&OwnedHandle, &TokenFacts, &[u8]) -> Result<T>,
     ) -> Result<T> {
         valid_sid(protected_operator_sid)?;
         if protected_operator_sid == LOCAL_SYSTEM_SID {
@@ -224,7 +230,7 @@ mod windows {
         }
         let token = unsafe { OwnedHandle::from_raw_handle(raw_token) };
         let facts = token_facts(token.as_raw_handle(), false)?;
-        authorize(&facts, protected_operator_sid)
+        authorize(&token, &facts, protected_operator_sid)
     }
 
     /// This grants only current-process identity evidence. It never elevates,
@@ -232,7 +238,7 @@ mod windows {
     pub fn inspect_current_process_operator(
         protected_operator_sid: &[u8],
     ) -> Result<OperatorTokenEvidenceV1> {
-        inspect_current_process(protected_operator_sid, |facts, sid| {
+        inspect_current_process(protected_operator_sid, |_, facts, sid| {
             authorize_token_facts(facts, sid, true)
         })
     }
@@ -240,14 +246,14 @@ mod windows {
     pub(crate) fn inspect_current_process_local_user(
         protected_user_sid: &[u8],
     ) -> Result<LocalUserTokenEvidenceV1> {
-        inspect_current_process(protected_user_sid, |facts, sid| {
-            authorize_local_user_facts(facts, sid, true)
+        inspect_current_process(protected_user_sid, |token, facts, sid| {
+            authorize_local_user_token(token, facts, sid, true)
         })
     }
 
     fn inspect_current_process<T>(
         protected_operator_sid: &[u8],
-        authorize: impl FnOnce(&TokenFacts, &[u8]) -> Result<T>,
+        authorize: impl FnOnce(&OwnedHandle, &TokenFacts, &[u8]) -> Result<T>,
     ) -> Result<T> {
         valid_sid(protected_operator_sid)?;
         let mut prior = ptr::null_mut();
@@ -266,18 +272,31 @@ mod windows {
         }
         let token = unsafe { OwnedHandle::from_raw_handle(raw) };
         let facts = token_facts(token.as_raw_handle(), true)?;
-        authorize(&facts, protected_operator_sid)
+        authorize(&token, &facts, protected_operator_sid)
     }
 
     fn query_token_blob(token: *mut c_void, class: u32) -> Result<Vec<u8>> {
         let mut needed = 0_u32;
-        unsafe { GetTokenInformation(token, class, ptr::null_mut(), 0, &mut needed) };
+        let _size_result =
+            unsafe { GetTokenInformation(token, class, ptr::null_mut(), 0, &mut needed) };
         if needed == 0 || needed as usize > MAX_TOKEN_INFORMATION {
+            #[cfg(test)]
+            uac::diagnostic_query_failure(
+                class,
+                "SIZE_UNQUALIFIED",
+                if _size_result == 0 {
+                    unsafe { GetLastError() }
+                } else {
+                    0
+                },
+                needed,
+                0,
+            );
             return Err("WAKE_BROKER_OPERATOR_TOKEN_INVALID".into());
         }
         let mut bytes = vec![0_u8; needed as usize];
         let mut returned = 0_u32;
-        if unsafe {
+        let query_result = unsafe {
             GetTokenInformation(
                 token,
                 class,
@@ -285,10 +304,24 @@ mod windows {
                 needed,
                 &mut returned,
             )
-        } == 0
-            || returned == 0
-            || returned > needed
-        {
+        };
+        if query_result == 0 || returned == 0 || returned > needed {
+            #[cfg(test)]
+            uac::diagnostic_query_failure(
+                class,
+                if query_result == 0 {
+                    "DATA_QUERY_FAILED"
+                } else {
+                    "DATA_LENGTH_INVALID"
+                },
+                if query_result == 0 {
+                    unsafe { GetLastError() }
+                } else {
+                    0
+                },
+                needed,
+                returned,
+            );
             return Err("WAKE_BROKER_OPERATOR_TOKEN_INVALID".into());
         }
         bytes.truncate(returned as usize);
@@ -508,7 +541,71 @@ mod windows {
         })
     }
 
+    fn authorize_local_user_token(
+        token: &OwnedHandle,
+        facts: &TokenFacts,
+        protected_user_sid: &[u8],
+        primary: bool,
+    ) -> Result<LocalUserTokenEvidenceV1> {
+        if !facts.restricted {
+            return authorize_local_user_facts(facts, protected_user_sid, primary);
+        }
+        let identity = require_user_identity_facts(
+            facts,
+            protected_user_sid,
+            primary,
+            SECURITY_MANDATORY_MEDIUM_RID,
+            false,
+        );
+        #[cfg(test)]
+        if identity.is_err() {
+            eprintln!(
+                "CANONICAL_UAC_ACTOR_IDENTITY sidMatch={} integrityAllowed={} sessionAllowed={} interactiveAllowed={} actorLevelAllowed={} appContainerAllowed={}",
+                facts.user_sid == protected_user_sid,
+                facts.integrity_rid >= SECURITY_MANDATORY_MEDIUM_RID,
+                facts.session_id != 0,
+                facts.interactive_enabled,
+                if primary {
+                    facts.impersonation_level.is_none()
+                } else {
+                    facts
+                        .impersonation_level
+                        .is_some_and(|level| (2..=3).contains(&level))
+                },
+                !facts.app_container
+            );
+        }
+        identity?;
+        let _canonical = uac::verify(token, facts)?;
+        Ok(LocalUserTokenEvidenceV1 {
+            user_sid_sha256: format!("{:x}", Sha256::digest(&facts.user_sid)),
+            // Original actor facts only; a filtered caller and metadata-only
+            // linked witnesses can never provide elevated operator evidence.
+            operator: authorize_token_facts(facts, protected_user_sid, primary).ok(),
+        })
+    }
+
     fn require_user_facts(
+        facts: &TokenFacts,
+        protected_operator_sid: &[u8],
+        primary: bool,
+        minimum_integrity: u32,
+        require_elevation: bool,
+    ) -> Result<()> {
+        require_user_identity_facts(
+            facts,
+            protected_operator_sid,
+            primary,
+            minimum_integrity,
+            require_elevation,
+        )?;
+        if facts.restricted {
+            return Err("WAKE_BROKER_OPERATOR_TOKEN_DENIED".into());
+        }
+        Ok(())
+    }
+
+    fn require_user_identity_facts(
         facts: &TokenFacts,
         protected_operator_sid: &[u8],
         primary: bool,
@@ -530,7 +627,6 @@ mod windows {
                     .is_some_and(|level| (2..=3).contains(&level))
             }
             || facts.app_container
-            || facts.restricted
         {
             return Err("WAKE_BROKER_OPERATOR_TOKEN_DENIED".into());
         }
@@ -605,7 +701,7 @@ mod windows {
             }
         }
 
-        fn groups_blob(groups: &[(&[u8], u32)], prefix: usize) -> Vec<u8> {
+        pub(super) fn groups_blob(groups: &[(&[u8], u32)], prefix: usize) -> Vec<u8> {
             let table_start = std::mem::offset_of!(TokenGroupsHeader, groups);
             let stride = std::mem::size_of::<SidAndAttributes>();
             let sid_start = (prefix + table_start + groups.len() * stride + 3) & !3;
@@ -863,6 +959,15 @@ mod windows {
 
         #[test]
         fn connected_pipe_uses_the_client_token_and_reverts() {
+            connected_pipe_with_qos(0x0010_0000 | 0x0002_0000, true);
+        }
+
+        #[test]
+        fn connected_pipe_effective_only_context_does_not_gain_canonical_uac_admission() {
+            connected_pipe_with_qos(0x0010_0000 | 0x0002_0000 | 0x0008_0000, false);
+        }
+
+        fn connected_pipe_with_qos(client_qos: u32, require_complete_profile: bool) {
             let name = format!(
                 r"\\.\pipe\CatDeskWakeBrokerOperatorFixture-{}-{}",
                 unsafe { GetCurrentProcessId() },
@@ -895,7 +1000,9 @@ mod windows {
                         0,
                         ptr::null_mut(),
                         3,
-                        0,
+                        // Match the production client's SQOS bits. I/O stays
+                        // synchronous in this one-message fixture only.
+                        client_qos,
                         ptr::null_mut(),
                     )
                 };
@@ -960,7 +1067,62 @@ mod windows {
                 local_wrong.unwrap_err(),
                 "WAKE_BROKER_OPERATOR_TOKEN_DENIED"
             );
-            assert_eq!(local_own.is_ok(), primary_local.is_ok());
+            let actual_facts = token_facts(own_token.as_raw_handle(), true).unwrap();
+            if require_user_identity_facts(
+                &actual_facts,
+                &own_sid,
+                true,
+                SECURITY_MANDATORY_MEDIUM_RID,
+                false,
+            )
+            .is_ok()
+            {
+                assert!(
+                    primary_local.is_ok(),
+                    "actual primary local admission code={}",
+                    primary_local
+                        .as_ref()
+                        .err()
+                        .map(String::as_str)
+                        .unwrap_or("NONE")
+                );
+                if require_complete_profile {
+                    assert!(
+                        local_own.is_ok(),
+                        "actual one-read pipe local admission code={}; primaryCode={}",
+                        local_own
+                            .as_ref()
+                            .err()
+                            .map(String::as_str)
+                            .unwrap_or("NONE"),
+                        primary_local
+                            .as_ref()
+                            .err()
+                            .map(String::as_str)
+                            .unwrap_or("NONE")
+                    );
+                    if actual_facts.restricted {
+                        eprintln!("CANONICAL_UAC_ONE_READ_PIPE_PROFILE_MATCHED=true");
+                    }
+                } else if actual_facts.restricted {
+                    assert!(
+                        local_own.is_err(),
+                        "effective-only context must not gain canonical admission"
+                    );
+                    eprintln!(
+                        "CANONICAL_UAC_EFFECTIVE_ONLY_RESULT code={}",
+                        local_own
+                            .as_ref()
+                            .err()
+                            .map(String::as_str)
+                            .unwrap_or("NONE")
+                    );
+                    eprintln!("CANONICAL_UAC_EFFECTIVE_ONLY_REFUSED=true");
+                }
+            }
+            if require_complete_profile {
+                assert_eq!(local_own.is_ok(), primary_local.is_ok());
+            }
             if let Ok(local) = local_own {
                 assert_eq!(
                     local.user_sid_sha256(),

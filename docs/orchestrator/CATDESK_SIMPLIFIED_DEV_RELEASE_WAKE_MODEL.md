@@ -2858,3 +2858,27 @@ acceptance requirement.
 
 Source/disposable-object test results and exact remaining gaps:
 [`ROUTINE_UPDATE_CHECKPOINT_SOURCE_2026_11_11.json`](../verification/ROUTINE_UPDATE_CHECKPOINT_SOURCE_2026_11_11.json).
+
+### 2026-11-11 — Canonical UAC caller qualification
+
+The source-only caller gap above is corrected. Local enrollment can admit an
+ordinary UAC-limited caller only after query-only OS-linked metadata establishes
+an exact, stable canonical Limited security profile. Historical filtering or zero
+restricting SIDs alone grants nothing. User attributes, groups, privileges and
+mandatory policy remain exact; extra filtering is refused. Linked Full and Limited
+handles are witnesses only, never assigned, elevated or used as calling identities.
+The legacy signed/high gate is unchanged.
+
+Actual current-process and one-read pipe tests passed with the production client's
+explicit SQOS flags. Four further-filtered token cases and an EffectiveOnly pipe
+context were refused. The first pipe fixture omitted those flags and produced a
+privilege mismatch; fixing the fixture did not weaken profile equality. All 321
+broker regressions passed, with one existing external probe skipped, and strict
+Wake/main Clippy passed. This closes that native source qualification gap only.
+
+The next step is exact-commit artifact build and artifact-bound independent review,
+then the one-time protected enrollment contract. Actual restricted SYSTEM service
+to medium-client readback, protected selection/recovery/startup and Web edit,
+verification, checkpoint and delivered self-Wake remain unqualified. No protected
+installation or policy was changed. The existing verification record retains the
+failed runs, final hashes, limits and historical observations.

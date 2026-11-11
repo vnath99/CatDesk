@@ -10161,3 +10161,14 @@ durable local/GitHub checkpoints and delivered self-Wake continuation. The new
 broker binary, intended medium-user access, protected selection/rollback and
 runtime startup must be qualified before any old mechanism is retired. A tested
 development runtime is not a protected installation.
+
+### 2026-11-11 — Canonical UAC caller qualification
+
+Completed the local caller source correction and actual current-primary/owned-pipe
+qualification, including four further-filtering refusals and EffectiveOnly refusal.
+Broker regressions: 321 passed, one intentional external skip; strict Wake/main
+Clippy passed. Independent read-only peer review found no material issue.
+The already enrolled policy is not assumed: exact artifact build/review, one-time
+protected enrollment, actual SYSTEM-client access, installed recovery and the
+direct Web edit/verify/checkpoint/self-Wake cycle remain open. Evidence is in
+`docs/verification/ROUTINE_UPDATE_CHECKPOINT_SOURCE_2026_11_11.json`.
