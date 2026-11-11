@@ -332,7 +332,7 @@
   },
   "notQualified": [
     "Ordinary UAC-limited caller admission in this execution context.",
-    "New checkpoint cold-owner process-death integration.",
+    "Shared-host and installed task recovery beyond the existing qualified dedicated lifetime.",
     "Actual restricted SYSTEM service and intended medium-client process/token access.",
     "New exact artifact build/release review, one-time enrollment, protected installation and initial reconstruction.",
     "Installed selection/rollback/startup and actual ChatGPT Web edit/verification/checkpoint/self-Wake.",
@@ -355,5 +355,85 @@
     "observedUtc": "2026-11-11T02:43:51.5160285+00:00",
     "matchingOwnedExecutablesOrWorkers": 0,
     "observerExcluded": true
+  },
+  "dedicatedColdOwnerFollowup": {
+    "recordedUtc": "2026-11-11T03:11:03.768150+00:00",
+    "sourceBaseCommit": "6b76b9cb7e236ffc8e6203b9cd5a55821263a7cb",
+    "scope": "CFG_TEST_ONLY_ACTUAL_DEDICATED_WINDOWS_CHILD_RECOVERY",
+    "productionPrefixesUnchanged": true,
+    "files": [
+      {
+        "path": "src/project_task_git.rs",
+        "physicalSourceSha256": "4d94b1240fa57e56a183e440598d69d44f4ca65e48e82c308e79c617d5925356",
+        "productionPrefixSha256": "ba8841c949b2ee8cec3a97f2e95b80a2aff610726a1ce40b772ce2890c5fda7b"
+      },
+      {
+        "path": "src/project_task_recovery.rs",
+        "physicalSourceSha256": "d65beb3ac24916ea172dc1d044e5f0d50a24420620e69c12b31b359a51db94ba",
+        "productionPrefixSha256": "c37fce48030984cfeb4092e45289aa216b833a97e89428d37832a69d3626e407"
+      }
+    ],
+    "test": {
+      "ownerSha256": "9d4c67e0cb2e29539f0fec37f9e6d20582d944d6d98b097fcee5771e817f6995",
+      "resultSha256": "cf653cd033fb0ec8719b93379bc6607265cb4460505a72189379ee012288e41c",
+      "startedUtc": "2026-11-11T02:59:56.0320739+00:00",
+      "finishedUtc": "2026-11-11T03:01:44.9305300+00:00",
+      "stages": [
+        {
+          "name": "main-cold-checkpoint",
+          "exitCode": 0,
+          "logSha256": "a1e7cbe0ce3ac7a750ceca66d43e59603491b62663dad53c5d43d1cdd0dd04fb"
+        }
+      ]
+    },
+    "strictClippy": {
+      "ownerSha256": "f6d065672d38fc871030f7592dd155e32e6bf7b45dc9fa1b0aca1002afe6668b",
+      "resultSha256": "ca9eb8ce2281c31af1b971025109e411d6942f837d85513480174cb934477daa",
+      "startedUtc": "2026-11-11T03:02:56.8377324+00:00",
+      "finishedUtc": "2026-11-11T03:03:17.0907585+00:00",
+      "stages": [
+        {
+          "name": "main-clippy",
+          "exitCode": 0,
+          "logSha256": "da8719eff5c6665eb980fc4238dce9d7370370ba453f483b00a1655448f74028"
+        }
+      ]
+    },
+    "cases": [
+      "completed checkpoint",
+      "exact AFTER_HEAD_CAS pending journal"
+    ],
+    "assertions": [
+      "live owner refused",
+      "actual exited-owner proof",
+      "normal ProjectTask::open cold recovery",
+      "same frozen assignment/archive/grant/synthetic key",
+      "exact commit/intent preserved",
+      "next read succeeds",
+      "checkpoint replay refused",
+      "original claim retired exact checkpoint; new claim closed"
+    ],
+    "syntheticVerificationReceipt": true,
+    "commandSandboxQualification": false,
+    "sharedHostOrInstalledAcceptance": false
+  },
+  "linkedTokenObservation": {
+    "scope": "QUERY_ONLY_CURRENT_TOOL_PROCESS_METADATA",
+    "initialPrimaryChainProbe": "INCONCLUSIVE_UNAVAILABLE_NOT_ATTRIBUTE_MISMATCH",
+    "initialResultSha256": "3f100a0c9c0f3f3f40dcb2a933afa55cddfbd67dddeef241b39821eaa47234d7",
+    "roleProbeOutcome": "METADATA_OBSERVED",
+    "roleProbeResultSha256": "65db3fa4abb83d2d38d28cd30b8c8e5e72fc8522bfef50dbe8f768a882115c6d",
+    "roleProbeOwnerSha256": "a949005ca30613056c0727e36ef832174d1296f5430912270eb1a655f02a4a06",
+    "currentTokenType": "PRIMARY",
+    "linkedFullType": "IDENTIFICATION_IMPERSONATION",
+    "linkedLimitedType": "IDENTIFICATION_IMPERSONATION",
+    "successfulDataQueries": 22,
+    "allReturnedHandlesClosed": true,
+    "profileComparisonPerformed": false,
+    "admissionEstablished": false,
+    "privilegeChanges": 0,
+    "tokenAssignments": 0,
+    "tokenDuplications": 0,
+    "impersonations": 0
   }
 }

@@ -1251,16 +1251,16 @@ pub(super) fn recovery_snapshot(
 }
 
 #[cfg(all(test, windows))]
-mod tests {
+pub(super) mod tests {
     use super::*;
 
-    struct Fixture {
-        scope: ResolvedProjectScopeV1,
-        root: PathBuf,
-        assignment: PathBuf,
+    pub(in crate::project_mcp_task) struct Fixture {
+        pub(in crate::project_mcp_task) scope: ResolvedProjectScopeV1,
+        pub(in crate::project_mcp_task) root: PathBuf,
+        pub(in crate::project_mcp_task) assignment: PathBuf,
     }
     impl Fixture {
-        fn new() -> Self {
+        pub(in crate::project_mcp_task) fn new() -> Self {
             Self::configured(false)
         }
         fn configured(filter_sentinel: bool) -> Self {
@@ -1426,7 +1426,7 @@ mod tests {
             fs::remove_dir_all(parent).unwrap();
         }
     }
-    fn verified(task: &ProjectTask, id: &str, success: bool) {
+    pub(in crate::project_mcp_task) fn verified(task: &ProjectTask, id: &str, success: bool) {
         let run = RunId::new(&task.contract.task_id).unwrap();
         let call = ToolCallId::new(id).unwrap();
         let arguments_hash = hash(id.as_bytes());
@@ -1479,6 +1479,26 @@ mod tests {
             arguments_hash: stable_text_hash(&arguments.to_string()),
             arguments,
         }
+    }
+
+    /// Test-only transaction cutoff. The real dedicated owner exits with the
+    /// exact CAS witnessed, its original claim retained, and no receipt/index
+    /// reconciliation. This is not a command-sandbox verification fixture.
+    pub(in crate::project_mcp_task) fn leave_checkpoint_after_cas(task: &ProjectTask) {
+        let request = request(
+            "cold-checkpoint",
+            "git.checkpoint",
+            json!({"verificationCallIds":["cold-verify"]}),
+        );
+        let run = RunId::new("task-fixture").unwrap();
+        FAILURE_STAGE.with(|slot| slot.set(Some("AFTER_HEAD_CAS")));
+        let result = execute(task, &request, &run);
+        FAILURE_STAGE.with(|slot| slot.set(None));
+        assert_eq!(result.unwrap_err(), "PROJECT_TASK_GIT_TEST_AFTER_HEAD_CAS");
+        assert_ne!(
+            text(&task.root, &["rev-parse", "HEAD"], None).unwrap(),
+            task.original_base
+        );
     }
 
     #[tokio::test]

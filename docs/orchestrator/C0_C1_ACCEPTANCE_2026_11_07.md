@@ -2809,3 +2809,7 @@ objects. They do not demonstrate the actual SYSTEM broker's medium-user client,
 new checkpoint cold-owner recovery, protected rollback/startup, or a Web edit and
 delivered self-Wake. Those remain explicit qualification gaps. No completed canary
 or held original request was replayed, and no recurring browser/Wake owner started.
+
+### 2026-11-11T03:03Z — Dedicated checkpoint cold recovery source-qualified
+
+The previously open dedicated-owner process-death case now passed an actual Windows child-process regression for completed and post-CAS checkpoints, using normal task reopen and the existing native proof. Live-owner admission stayed refused; the exact commit, assignment, grant and synthetic credential remained unchanged, and replay was rejected. Verification receipts in this fixture are explicitly synthetic. Shared-host recovery, installed command execution and the real Web/self-Wake cycle remain separate acceptance gates. See the existing routine-update verification record for hashes and bounds.

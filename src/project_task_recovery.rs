@@ -662,6 +662,44 @@ mod tests {
         OwnedCandidateChild::enter_project_task_lifetime(&scope.control_workspace).unwrap();
         let task =
             ProjectTask::open(&scope, Path::new(config["assignment"].as_str().unwrap())).unwrap();
+        if let Some(mode) = config["checkpoint"].as_str() {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            let replay = if mode == "resume" {
+                runtime.block_on(task.execute(json!({"taskId":"task-fixture","callId":"read-after-cold-owner","tool":"read","arguments":{"path":"src/lib.rs"}}))).unwrap();
+                let replay = runtime.block_on(task.execute(json!({"taskId":"task-fixture","callId":"cold-checkpoint","tool":"git.checkpoint","arguments":{"verificationCallIds":["cold-verify"]}}))).unwrap_err();
+                runtime.block_on(task.close()).unwrap();
+                Some(replay)
+            } else {
+                assert!(matches!(mode, "complete" | "after-cas"));
+                let root = PathBuf::from(task.metadata()["executionWorkspace"].as_str().unwrap());
+                fs::write(
+                    root.join("src/lib.rs"),
+                    "COLD_OWNER_VERIFIED_SYNTHETIC_CHANGE\n",
+                )
+                .unwrap();
+                // This injected trusted receipt tests the transaction and
+                // recovery boundary; it never launches a command sandbox.
+                git_checkpoint::tests::verified(&task, "cold-verify", true);
+                if mode == "after-cas" {
+                    git_checkpoint::tests::leave_checkpoint_after_cas(&task);
+                } else {
+                    runtime.block_on(task.execute(json!({"taskId":"task-fixture","callId":"cold-checkpoint","tool":"git.checkpoint","arguments":{"verificationCallIds":["cold-verify"]}}))).unwrap();
+                }
+                None
+            };
+            println!(
+                "{}",
+                json!({"metadata":task.metadata(),"checkpointReplayError":replay,"commandSandboxQualified":false})
+            );
+            std::io::stdout().flush().unwrap();
+            // Parent controls the same bounded Job used by the old fixture.
+            // The initial child deliberately never closes its writer claim.
+            std::thread::sleep(Duration::from_secs(30));
+            return;
+        }
         if config["activity"] == true {
             tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -759,6 +797,207 @@ mod tests {
             .unwrap_or_default()
             .to_owned();
         (scope, root, assignment, claim)
+    }
+
+    fn checkpoint_owner(
+        fixture: &git_checkpoint::tests::Fixture,
+        mode: &str,
+    ) -> (OwnedCandidateChild, std::thread::JoinHandle<()>, Value) {
+        let input = fixture
+            .root
+            .parent()
+            .unwrap()
+            .join(format!("checkpoint-{mode}-input.json"));
+        fs::write(
+            &input,
+            serde_json::to_vec(&json!({"control":fixture.scope.control_workspace,
+            "project":fixture.scope.project,"assignment":fixture.assignment,"checkpoint":mode}))
+            .unwrap(),
+        )
+        .unwrap();
+        let mut command = Command::new(std::env::current_exe().unwrap());
+        command
+            .args([
+                "--exact",
+                "project_mcp_task::recovery::tests::task_owner_fixture_child",
+                "--ignored",
+                "--nocapture",
+            ])
+            .env(
+                "CATDESK_TASK_OWNER_FIXTURE",
+                uuid::Uuid::new_v4().simple().to_string(),
+            )
+            .env("CATDESK_TASK_FIXTURE_INPUT", input)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit());
+        let mut owner = OwnedCandidateChild::spawn(&mut command).unwrap();
+        let stdout = owner.child_mut().stdout.take().unwrap();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let reader = std::thread::spawn(move || {
+            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                if let Ok(value) = serde_json::from_str::<Value>(&line) {
+                    let _ = sender.send(value);
+                }
+            }
+        });
+        match receiver.recv_timeout(Duration::from_secs(35)) {
+            Ok(ready) => (owner, reader, ready),
+            Err(reason) => {
+                owner.terminate_tree_and_confirm_quiescent().unwrap();
+                reader.join().unwrap();
+                panic!("bounded checkpoint fixture failed to reach READY: {reason}");
+            }
+        }
+    }
+
+    #[test]
+    fn recovery_checkpoint_cold_owner_reopens_without_replay_and_refuses_live_owner() {
+        for mode in ["complete", "after-cas"] {
+            let fixture = git_checkpoint::tests::Fixture::new();
+            let directory = state_root(&fixture.scope, "task-fixture");
+            let grant_path = directory.join("execution-grant.json");
+            // A valid-shaped synthetic credential stays inside owned Temp;
+            // this test neither reads nor creates a real user credential.
+            let key = "a".repeat(64);
+            let key_path = fixture
+                .root
+                .parent()
+                .unwrap()
+                .join("synthetic-execution-key.json");
+            fs::write(&key_path, serde_json::to_vec(&key).unwrap()).unwrap();
+            let mut grant: WebExecutionGrant =
+                serde_json::from_slice(&fs::read(&grant_path).unwrap()).unwrap();
+            grant.key_sha256 = digest(key.as_bytes());
+            fs::write(&grant_path, serde_json::to_vec(&grant).unwrap()).unwrap();
+            let frozen: Vec<_> = [
+                &fixture.assignment,
+                &directory.join("assignment.json"),
+                &grant_path,
+                &key_path,
+            ]
+            .into_iter()
+            .map(|path| (path.to_path_buf(), fs::read(path).unwrap()))
+            .collect();
+            let original_base = web_task_worktree_witness(&fixture.root).unwrap().2;
+            let (mut owner, reader, ready) = checkpoint_owner(&fixture, mode);
+            let claim_id = ready["metadata"]["zeroCallRecoveryOwnerClaim"]
+                .as_str()
+                .unwrap()
+                .to_owned();
+            let claim_path = directory.join(format!("owner-{claim_id}.json"));
+            let claim_bytes = fs::read(&claim_path).unwrap();
+            let claim: Claim = serde_json::from_slice(&claim_bytes).unwrap();
+            let commit = web_task_worktree_witness(&fixture.root).unwrap().2;
+            let run = RunId::new("task-fixture").unwrap();
+            let journal = DelegatedJournal::open(directory.join("journal")).unwrap();
+            let before = journal.load_tool_calls(&run).unwrap();
+            let checkpoint_before = before["cold-checkpoint"].clone();
+            let verification_before = serde_json::to_vec(&before["cold-verify"]).unwrap();
+            // Neither a shared caller nor an exited-owner assertion may steal
+            // the live child's actual lease/claim. Save observations, then
+            // stop/reap the exact owned Job before asserting anything.
+            let live_proof = OwnedCandidateChild::prove_project_task_owner_exited(
+                &claim.lifetime_id,
+                &claim.owner_job,
+                claim.owner_session,
+                claim.owner_pid,
+                claim.owner_creation,
+            );
+            let live_open = ProjectTask::open(&fixture.scope, &fixture.assignment);
+            let retired_while_live = directory
+                .join(format!("recovery-{claim_id}-retired.json"))
+                .exists();
+            let claim_while_live = fs::read(&claim_path).unwrap();
+            owner.terminate_tree_and_confirm_quiescent().unwrap();
+            reader.join().unwrap();
+            assert!(live_proof.is_err());
+            assert!(live_open.is_err());
+            assert!(!retired_while_live);
+            assert_eq!(claim_while_live, claim_bytes);
+            assert!(
+                !directory
+                    .join(format!("owner-{claim_id}-closed.json"))
+                    .exists()
+            );
+            assert_eq!(
+                ready["metadata"]["coldRecoveryProfile"],
+                "DEDICATED_NAMED_JOB_EXACT_CHECKPOINT"
+            );
+            assert_eq!(ready["commandSandboxQualified"], false);
+            assert_ne!(commit, original_base);
+            assert_eq!(
+                checkpoint_before.status,
+                if mode == "after-cas" {
+                    ToolCallStatus::Executing
+                } else {
+                    ToolCallStatus::Completed
+                }
+            );
+            // A second invocation of the existing dedicated entry reaches
+            // ProjectTask::open -> native cold proof -> exact journal recovery.
+            let (mut resumed, resumed_reader, resumed_ready) = checkpoint_owner(&fixture, "resume");
+            resumed.terminate_tree_and_confirm_quiescent().unwrap();
+            resumed_reader.join().unwrap();
+            let after = journal.load_tool_calls(&run).unwrap();
+            let retired: Recovery =
+                read(&directory.join(format!("recovery-{claim_id}-retired.json"))).unwrap();
+            assert_eq!(
+                resumed_ready["checkpointReplayError"],
+                "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+            );
+            assert_eq!(resumed_ready["commandSandboxQualified"], false);
+            assert_eq!(retired.state, "RETIRED_EXACT_CHECKPOINT");
+            assert_eq!(fs::read(claim_path).unwrap(), claim_bytes);
+            for (path, bytes) in frozen {
+                assert_eq!(fs::read(path).unwrap(), bytes);
+            }
+            assert_eq!(web_task_worktree_witness(&fixture.root).unwrap().2, commit);
+            assert_eq!(
+                serde_json::to_vec(&after["cold-verify"]).unwrap(),
+                verification_before
+            );
+            assert_eq!(after["cold-checkpoint"].status, ToolCallStatus::Completed);
+            if mode == "complete" {
+                assert_eq!(
+                    serde_json::to_vec(&after["cold-checkpoint"]).unwrap(),
+                    serde_json::to_vec(&checkpoint_before).unwrap()
+                );
+            }
+            assert_eq!(
+                after["read-after-cold-owner"].status,
+                ToolCallStatus::Completed
+            );
+            assert_eq!(after.len(), 3);
+            let intents: Vec<_> = fs::read_dir(directory.join("git-checkpoints"))
+                .unwrap()
+                .filter_map(Result::ok)
+                .filter(|entry| {
+                    entry
+                        .file_name()
+                        .to_string_lossy()
+                        .ends_with(".intent.json")
+                })
+                .collect();
+            assert_eq!(intents.len(), 1);
+            let intent: Value =
+                serde_json::from_slice(&fs::read(intents[0].path()).unwrap()).unwrap();
+            assert_eq!(intent["parent"], original_base);
+            assert_eq!(intent["commit"], commit);
+            let new_claim = resumed_ready["metadata"]["zeroCallRecoveryOwnerClaim"]
+                .as_str()
+                .unwrap();
+            assert_ne!(new_claim, claim_id);
+            let closed: Value =
+                read(&directory.join(format!("owner-{new_claim}-closed.json"))).unwrap();
+            assert_eq!(closed["state"], "CLOSED");
+            assert!(
+                !fs::read_dir(&directory)
+                    .unwrap()
+                    .filter_map(Result::ok)
+                    .any(|entry| entry.file_name().to_string_lossy().starts_with("git-sync-"))
+            );
+            drop(acquire_project_writer_lock(&fixture.root).unwrap());
+        }
     }
 
     #[test]

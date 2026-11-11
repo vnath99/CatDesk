@@ -1,4 +1,4 @@
-## 2026-11-10 12:58 UTC — D built, real-store parser checked and development health passed
+## 2026-11-10 12:58 UTC â€” D built, real-store parser checked and development health passed
 
 The exact `da1608a15b960cbce01a3cc75b2482a2d1a2e985` release build completed in
 750.156 seconds (bounded owner 751.530), with all source/protected checks matching.
@@ -26,7 +26,7 @@ and central coordination are optional. The demonstrated URL-parser refusal,
 not absence of a newer selector alone, establishes the installed-package gap.
 Evidence: [compatibility and D qualification](docs/verification/WAKE_INSTALLED_URL_COMPATIBILITY_AND_D_QUALIFICATION_2026_11_10.json).
 
-## 2026-11-10 — direct Web acceptance stays primary; corrected source checkpoint
+## 2026-11-10 â€” direct Web acceptance stays primary; corrected source checkpoint
 
 The operator has not provided an approved Wake signer. No signing identity,
 enrollment or operational authority is assumed, and no further installation
@@ -50,7 +50,7 @@ receipts, so no new grant, replay or task replacement is permitted. Exact-event
 delivery and receipt recovery must be assessed separately from file capability.
 See [dated evidence](docs/verification/WAKE_BOOTSTRAP_CORRECTIONS_AND_C_DEVELOPMENT_2026_11_10.json).
 
-## 2026-11-10 — actual C release build, development health and review-driven corrections
+## 2026-11-10 â€” actual C release build, development health and review-driven corrections
 
 The exact published `9feface` release build completed in 687.937 seconds with
 all source/protected pins matching. The actual development qualification then
@@ -79,7 +79,7 @@ Its native qualification subsequently passed as recorded above. Retained C bytes
 unqualified for privileged bootstrap. No signature, trust enrollment, installed
 cutover, browser send, task replay or full Web acceptance has been produced.
 
-## 2026-11-10 — functional first broker bootstrap and explicit operator lifecycle (historical checkpoint)
+## 2026-11-10 â€” functional first broker bootstrap and explicit operator lifecycle (historical checkpoint)
 
 Implemented the existing installer's missing first-provisioning path and fixed
 its one-shot/demand-start restart gap. The signed bootstrap binds reviewed bytes,
@@ -107,7 +107,7 @@ rewriting; actual NT-relative create/collision and blocked-writer tests pass.
 Source and fixture evidence do not establish elevated production acceptance.
 Evidence: [bootstrap qualification](docs/verification/WAKE_BROKER_BOOTSTRAP_SOURCE_2026_11_10.json).
 
-## 2026-11-10 — exact build inputs and retained lifecycle evidence
+## 2026-11-10 â€” exact build inputs and retained lifecycle evidence
 
 Published source `f6a4054940e9a308ac3cbedc47d8d7ac6d4630c7` built separately:
 GUI, WakeHost and the existing install broker, locked/offline in debug mode.
@@ -130,7 +130,7 @@ required for that source work. Installed Web edit/verify/self-Wake remains open.
 Evidence: [exact build inputs](docs/verification/WAKE_PUBLISHED_BUILD_INPUTS_2026_11_10.json),
 [limited runtime facts](docs/verification/WAKE_RUNTIME_WORKING_FACTS_2026_11_10.json).
 
-## 2026-11-10 — same-state rollback writer qualified in native fixtures
+## 2026-11-10 â€” same-state rollback writer qualified in native fixtures
 
 The existing signed broker now supports rollback to the exact original,
 qualified predecessor. It reuses the protected policy, pipe, global ledger,
@@ -147,7 +147,7 @@ rollback or Web acceptance. Next: exact published artifact build and reviewed
 first provisioning of the existing broker with genuine signer enrollment.
 Evidence: [rollback source](docs/verification/SAME_STATE_WAKE_ROLLBACK_SOURCE_2026_11_10.json).
 
-## 2026-11-10 — actual bounded PAUSED Wake and development-backend health
+## 2026-11-10 â€” actual bounded PAUSED Wake and development-backend health
 
 Added a finite PAUSED option to the existing development foreground lifecycle.
 It keeps the current resource leases and refuses an unsupported Host before
@@ -172,7 +172,7 @@ Evidence:
 [actual development health](docs/verification/BOUNDED_PAUSED_WAKE_LIVE_DEVELOPMENT_2026_11_10.json),
 [paused startup source](docs/verification/BOUNDED_PAUSED_WAKE_STARTUP_SOURCE_2026_11_10.json).
 
-## 2026-11-10 — frozen build and finite development health; functional broker integration
+## 2026-11-10 â€” frozen build and finite development health; functional broker integration
 
 Built exact published source `5de26e8e9f9d60b8e823dd0a8278539231a1c897`
 in a detached checkout. Four artifacts and their original runtime MAP manifest
@@ -204,7 +204,7 @@ installed multi-project acceptance. Source and actual deployment are tracked
 separately. Evidence:
 [development health](docs/verification/FROZEN_WAKE_FALLBACK_DEVELOPMENT_HEALTH_2026_11_10.json).
 
-## 2026-11-08T20:00:47.515801+00:00 — reconciled identity clarification delivered; native execution still unattempted
+## 2026-11-08T20:00:47.515801+00:00 â€” reconciled identity clarification delivered; native execution still unattempted
 
 Source b67ee0254e385c001e053ad34a328bfcd57df4d7 built a separate controller fe22fa3e6435763d51047e81b5134aa69e676932e2f3c02ba2b7cb06a6e5e405 in46.453seconds with1064 pins preserved. The reviewed observer bytes were independently matched to the exact Git source and build. No installation, selection, protected fingerprint or release-authority change occurred. A stale private harness observer pin refused before any product action; its failed receipt was retained before correcting only that test pin.
 
@@ -214,7 +214,7 @@ The monitored serving window ended in391.063seconds inside its420-second bound, 
 
 The original operator question is answered and its digest-domain cause has been reconciled. One new question requests only the post-clarification assistant's brief redacted explanation because the installed dev.84 full-response snapshot capability remains unavailable. No extra approval, login, settings change or another send is requested. Preserve the READY original task/grant and every SENT message; do not repeat unchanged diagnostics or create equivalent requests. Current turn PROGRESS, goal ACTIVE; no live handles remain, no independent C1 source defect is identified without that explanation, and later gates remain NOT_RUN. Evidence: docs/verification/C1_RESPONSE_AND_PRIVATE_CONTEXT_2026_11_08.json.
 
-## 2026-11-08T19:45:22.114296+00:00 — original private-context digest domains reconciled; guarded clarification qualified
+## 2026-11-08T19:45:22.114296+00:00 â€” original private-context digest domains reconciled; guarded clarification qualified
 
 The operator identified the completed assistant's refusal as a private-context SHA-256 mismatch and confirmed dispatch was not attempted. A new read-only audit reconciled19 authoritative checks: original/archive assignment, exact payload bytes, capsule/full-context digest, normalized USER receipt digest, nativeCall fields/key/grant/selection, frozen prompt, original SENT continuation, READY never-claimed task, clean registered base/workspace and absent task journal. All1064 preservation pins match. The two valid values hash different objects: the capsule labels the full private context, while the continuation labelled the delivered USER text. No fingerprint, payload hash, assignment, key, grant or queue job was replaced.
 
@@ -222,7 +222,7 @@ New native continuations label fullPrivateContextSha256, deliveredUserMessageSha
 
 68 focused tests pass:3 identity/reconciliation,16 private context/recovery,43 closed CLI and6 central work/ownership tests, plus strict root all-target Clippy and formatting. The correction is source-qualified; its separate build, real clarification delivery and native execution remain NOT_RUN at this checkpoint. Next use the qualified separate controller for one bounded existing-backend/official-owner attempt under the original authorization. The earlier operator question is answered; no new operator decision is required at present. The full installed adapter snapshot limitation remains separate and unchanged. C1 remains incomplete; later gates remain NOT_RUN. Evidence: docs/verification/C1_RESPONSE_AND_PRIVATE_CONTEXT_2026_11_08.json.
 
-## 2026-11-08T18:44:36.013228+00:00 — exact completed continuation inspected; blocker explanation remains unclassified
+## 2026-11-08T18:44:36.013228+00:00 â€” exact completed continuation inspected; blocker explanation remains unclassified
 
 Source9ea39e6c6ea6d932cbf16a3b01fef3c570894b8b built a separate controller95c8ac20136db3cf0abcbc283ff8f1fdccb9b69c0f8a95ce2e95edee7e768740 with observer artifact3d8848e852b40a8d97e462559b706065b5b498b2cf8525c5f948486ff0cb35bf in43.391seconds, preserving1064 pins. It was neither installed nor selected. One read-only visit to the original completed continuation took36.031seconds. The exact USER/assistant exchange was independently COMPLETE in two stable samples, with current target/document/editor/composer idle and owned cleanup confirmed. No USER send, assistant Retry, native dispatch, backend/tunnel/WakeHost start or binding change occurred.
 
@@ -230,7 +230,7 @@ Known tool-card counts are all0 with KNOWN_MARKERS_ONLY coverage; all fixed assi
 
 All1064 preservation hashes match; profile/Wake process counts0, port3200 closed. Current source increment has190 focused tests, strict root/Wake all-target Clippy and formatting PASS, separate build PASS and exact-profile closed-diagnostic live canary PASS. Actual installed production feature qualification and Web-to-native code/test/Wake acceptance are separate and still incomplete. C1 is NOT COMPLETE; later gates remain NOT_RUN. No verified live wait remains and no independent C1 source defect is identified until the assistant explanation is available. Evidence: docs/verification/C1_RESPONSE_AND_PRIVATE_CONTEXT_2026_11_08.json.
 
-## 2026-11-08T18:40:23.138204+00:00 — content-free diagnostics for completed task continuations
+## 2026-11-08T18:40:23.138204+00:00 â€” content-free diagnostics for completed task continuations
 
 The existing read-only native profile owner now supports `operator web review inspect-response --project-id REGISTERED_PROJECT_ID --event-id EXACT_SENT_EVENT_ID` for an exact SENT ordinary invitation or semantic assigned-task continuation. This fills the observed diagnostic gap after the original continuation completed without a native attempt. It reuses the current receipt/timer, paired target, project lease, checksum-qualified shared browser primitives, START handshake, browser lock and exact owned-process cleanup. It sends nothing, creates no receipt, changes no task/timer/binding and starts no backend/tunnel/WakeHost.
 
@@ -238,7 +238,7 @@ Two identical receipt-bound completed-response samples can return capped known t
 
 190 focused tests pass:36 probe,74 actual DOM-script,17 native readiness/scope/privacy,43 Web CLI,5 response and15 reobservation tests. Strict root/Wake all-target Clippy and formatting pass. These are source/disposable-fixture results; the new separately built controller and exact completed-continuation live observation are next. No send or installed change occurred. The original invitation/context/continuation remain SENT and must not be replayed; actual native coding and C1 remain incomplete. The existing single operator response-summary question remains pending without another request. Evidence: docs/verification/C1_RESPONSE_AND_PRIVATE_CONTEXT_2026_11_08.json.
 
-## 2026-11-08T18:26:07.603687+00:00 — original continuation SENT; native callback absent; bounded cleanup PASS
+## 2026-11-08T18:26:07.603687+00:00 â€” original continuation SENT; native callback absent; bounded cleanup PASS
 
 Reviewed source ca3faf6302c14eba836e5fabb7f4919db60abb25 built a separate controller b5607541b3a88acb77ee01c362eebbd3646320e08f13cb90f0f16771e05b8499 in58.672seconds, with1060 preservation pins matching; no installed/selected artifact changed. The existing finite supervisor restored the canonical backend; authentication returned401/401/200 for missing/wrong/valid bearer, local tools/list returned200 with102 tools including the central task tool, and serving/canonical hashes matched. The existing official alias/profile became ready without new tunnels or persistent authentication changes. This local catalog does not prove the affected conversation's tool visibility, and no additional connector discovery probe was issued.
 
@@ -248,7 +248,7 @@ The installed dev.84 adapter has no source-snapshot handler, so the existing pro
 
 The monitored serving run ended in332.75seconds inside its360-second window. Public stop and existing-owner cleanup passed;1059 unrelated pins match, profile/Wake process counts0, port3200 closed, official profile unchanged, no recurring registration or binding changes. The new continuation receipt/archive/timer/submission witness are added to the private preservation baseline. WakeHost and all original native sessions remain untouched. Next resolve the single assistant-explanation dependency before selecting another task action; later gates remain NOT_RUN. Evidence: docs/verification/C1_RESPONSE_AND_PRIVATE_CONTEXT_2026_11_08.json.
 
-## 2026-11-08T18:14:37.480109+00:00 — continuation delivery lease handoff qualified in source
+## 2026-11-08T18:14:37.480109+00:00 â€” continuation delivery lease handoff qualified in source
 
 Before any continuation send, source inspection identified a real same-project deadlock: browser delivery retained the project rollover/work lease while the intended native MCP callback needed that same exclusive lease. The continuation remains unqueued and unsent. A source correction now retains the delivery lease through admission and browser preparation, persists SUBMITTING with its exact submission-start witness, revalidates the selected event/private context/paired target, and releases only that delivery lease before the sole submit acknowledgment. Browser/host ownership, durable delivery and no-replay fences remain intact. Native execution still takes its normal project lease; browser observation rechecks registration, paired target and original open assignment without attempting to reacquire that native-owned lease.
 
@@ -256,7 +256,7 @@ Before any continuation send, source inspection identified a real same-project d
 
 C1 remains incomplete. Next build this reviewed source as a separate controller, then deliver one original task continuation in a bounded existing-backend/existing-official-owner window and independently verify actual native edits, tests and task-specific Wake. Never resend the original SENT invitation or SENT private context. No operator action is currently required. Evidence: docs/verification/C1_RESPONSE_AND_PRIVATE_CONTEXT_2026_11_08.json.
 
-## 2026-11-08T17:54:39.733571+00:00 — private context delivered once; original native coding continuation is next
+## 2026-11-08T17:54:39.733571+00:00 â€” private context delivered once; original native coding continuation is next
 
 The exact850dcdd1f6097fecd5c92d67adc4fa36456eef68 controllerf58ad87e801d081aec6a2de7b0ce87293ead9c5e8027994c06dafbda8c021b6f built in25.265seconds with1060 pins matching. One guarded original private-context send completed in134.047seconds inside its180-second browser bound. The frozen normalized USER digest matched an EXACT_USER_MESSAGE_APPENDED receipt; private state is SENT, attempts1, with a durable submission fence. The original invitation was not resent. Full private context and frozen native task/grant remain unchanged;1059 unrelated pins matched. Context accounting recorded the delivered message as advisory, without raw text or claims of exact provider usage. Cleanup passed: profile/Wake process counts0, port3200 closed. Backend/tunnel/recurring automation were not started; native task execution remains0.
 
@@ -264,15 +264,15 @@ For the pending native-only capsule, its separate continuation now uses a short 
 
 C1 remains incomplete: next build this source and deliver that one continuation while the existing authenticated backend and official owner are available, observe the actual original native code/test turn, independently verify its artifacts and complete task-specific Wake. No operator action is currently required. Current limitation is that end-to-end execution remains untested; it is not a reported429, login or recovery-authority blocker. Later milestones remain NOT_RUN. Evidence: docs/verification/C1_RESPONSE_AND_PRIVATE_CONTEXT_2026_11_08.json.
 
-## 2026-11-08T17:45:38.147649+00:00 — original native context prepared; Enter/Tab-before-ACK hazard prevented
+## 2026-11-08T17:45:38.147649+00:00 â€” original native context prepared; Enter/Tab-before-ACK hazard prevented
 
 The b52ee622627d9a7383da96f561033674f2afd6e9 controller0f035ef22350fd997a0692b1ac44155cb4eacbd20bfd8a8999a8dbd7d1947c45 built in33.266seconds with1057 pins matching. The original context then prepared in1.172seconds as a1075-character native launch capsule, with full private context and exact native task/selection retained. All1057 prior/task/grant pins matched; no browser, send or native execution occurred. The reference, private payload and PREPARED state are frozen once; do not regenerate them or create another job/grant.
 
 Before sending, inspection of the installed SeleniumBase typing code found that real CR/LF/Tab characters become Enter/Tab key events. Private context messages contain formatting line breaks. The native private IPC builder now converts only those real control whitespace characters to spaces for typing, preserving the frozen payload, existing normalized message digest, literal escaped JSON newlines and repeated spaces. No implicit Enter/Tab can cross before the existing durable native submit ACK. The installed adapter and browser profile remain unchanged. All16 private-protocol tests pass, including the new control-keystroke regression, with strict root/Wake all-target Clippy and formatting.
 
-The corrected sender has not yet been built or used live at this checkpoint. Next send the exact prepared context once through that separately qualified controller under the180-second bound and verify receipt/cleanup, then use the existing separate continuation for actual Web→native execution. Original invitation is SENT/COMPLETE; actual code edit/test/Wake is still NOT_RUN and C1 remains incomplete. No operator action is currently required. Evidence: docs/verification/C1_RESPONSE_AND_PRIVATE_CONTEXT_2026_11_08.json.
+The corrected sender has not yet been built or used live at this checkpoint. Next send the exact prepared context once through that separately qualified controller under the180-second bound and verify receipt/cleanup, then use the existing separate continuation for actual Webâ†’native execution. Original invitation is SENT/COMPLETE; actual code edit/test/Wake is still NOT_RUN and C1 remains incomplete. No operator action is currently required. Evidence: docs/verification/C1_RESPONSE_AND_PRIVATE_CONTEXT_2026_11_08.json.
 
-## 2026-11-08T17:39:23.182415+00:00 — exact context size failure fixed for fresh native task transport
+## 2026-11-08T17:39:23.182415+00:00 â€” exact context size failure fixed for fresh native task transport
 
 The separately built2578ab71d5dc81ed1705885698395b81f0fe94e6 controller identified TASK_CONTEXT_REQUEST_TOO_LARGE in1.218seconds, before any browser/send or context reference. All1052 previous pins and5 new native-task/grant/key pins match. Existing installed SeleniumBase press_keys source also imposes a deliberate42ms minimum per character, so fitting an8KiB wire alone would not qualify a long context inside the bounded delivery window. No futile long-message send was attempted.
 
@@ -280,7 +280,7 @@ For a fresh explicitly granted native task with no prior call/patch history, the
 
 All15 context state/recovery tests, including bounded native-call scope/full-context retention and refusal to compact prior unknown work, pass with strict root all-target Clippy and formatting. Earlier132 focused component tests,8 exact-installed offline cases and the expanded fixed-error privacy test remain separately recorded. The new capsule has not yet been built/prepared/sent at this checkpoint. Original invitation remains SENT/COMPLETE, native task READY with its existing180-second grant, and C1 edit/test/Wake is NOT_RUN. Evidence: docs/verification/C1_RESPONSE_AND_PRIVATE_CONTEXT_2026_11_08.json.
 
-## 2026-11-08T17:24:54.148890+00:00 — original assistant completion verified; native task ready, context preparation refused
+## 2026-11-08T17:24:54.148890+00:00 â€” original assistant completion verified; native task ready, context preparation refused
 
 The exact5a6cf663d3ea28743e04d40e9445711db3930fb0 controller4def1ee2ba3647c7bc6aaa32e2e19ebed43684eb4f1d2be36b59267dcfc33600 built in67.187seconds with1052 pins matching. One bounded read-only response visit completed in37.812seconds. Two stable receipt-bound observations proved the selected assistant had a usable body, paired turn and completion action; existing response-reobservation CAS advanced the original timer to COMPLETE. Original SENT receipt/archive stayed intact,1051 unrelated pins matched, raw body export0, USER sends0, assistant retries0. Profile/Wake process counts0 and port3200 closed after cleanup. This proves that assistant turn completed, not that it completed a coding task or approved source/release changes.
 
@@ -288,7 +288,7 @@ The existing exact registered native task then passed preflight and was added on
 
 C1 remains incomplete: private assigned context/continuation and actual native edit/test/Wake are NOT_RUN. Next inspect the precise preparation reason with qualified diagnostics, address that actual prerequisite, and reuse the original READY task/grant. No operator action is currently required; no duplicate task, invitation or UNKNOWN replay is authorized. Evidence: docs/verification/C1_RESPONSE_AND_PRIVATE_CONTEXT_2026_11_08.json.
 
-## 2026-11-08T17:14:06.847940+00:00 — receipt-bound ordinary response and private-context compatibility qualified
+## 2026-11-08T17:14:06.847940+00:00 â€” receipt-bound ordinary response and private-context compatibility qualified
 
 The original invitation remains durably SENT and must never be resent. `operator web work response --project-id REGISTERED_PROJECT_ID --request-id ORIGINAL_REQUEST_ID` now routes that exact ordinary request through the existing response-reobservation transaction and bounded native profile owner. The shared bridge independently checks the receipt-bound USER/assistant sequence, usable body and completion controls in two stable observations. Only content-free closed metadata crosses the native boundary; no USER send, assistant Retry or arbitrary conversation snapshot is authorized. The existing registration/CAS commit occurs after browser cleanup; receipt and timer remain distinct facts.
 
@@ -296,25 +296,25 @@ Private assigned-task submission and its ordinary continuation no longer require
 
 132 focused tests pass (34 Python,15 readiness,5 response,15 reobservation,15 private-context,42 Web CLI,6 delivery), plus8 offline synthetic-browser cases of exact installed adapter bytes. Strict root/Wake all-target Clippy and formatting pass. These are source/isolated tests; the new controller and actual response/context delivery are NOT_RUN at this checkpoint. C1's native edit/test/Wake cycle is NOT_RUN; later gates are untouched. Evidence: docs/verification/C1_RESPONSE_AND_PRIVATE_CONTEXT_2026_11_08.json.
 
-## 2026-11-08T17:00:54.330705+00:00 — original invitation durably SENT through no-resend reconciliation
+## 2026-11-08T17:00:54.330705+00:00 â€” original invitation durably SENT through no-resend reconciliation
 
-Exact source/remote7c43e5aa042c7c585b7153ad6b9055bde087cb5a built a separate controller1e7559f4a56eb48e773e5d4eb8358e131665713b6de238e4d15e0ee1fdfecf4f in47.437seconds, with1052 preservation pins matching. It was neither selected nor installed. One bounded receipt-only run completed in35.078seconds, used the existing fresh-document/two-sample USER reader and committed the original SUBMITTING→SENT transition with EXACT_USER_MESSAGE_APPENDED. The exact original queue entry is archived, prior failure and submission witness remain retained, and1050 unrelated pins match. The recovery sent0 USER messages and performed0 assistant retries; no work resolution or native grant occurred. Owned native cleanup passed; installed-profile/Wake process counts0 and port3200 closed. Backend/tunnel/WakeHost/recurring automation stayed stopped during reconciliation.
+Exact source/remote7c43e5aa042c7c585b7153ad6b9055bde087cb5a built a separate controller1e7559f4a56eb48e773e5d4eb8358e131665713b6de238e4d15e0ee1fdfecf4f in47.437seconds, with1052 preservation pins matching. It was neither selected nor installed. One bounded receipt-only run completed in35.078seconds, used the existing fresh-document/two-sample USER reader and committed the original SUBMITTINGâ†’SENT transition with EXACT_USER_MESSAGE_APPENDED. The exact original queue entry is archived, prior failure and submission witness remain retained, and1050 unrelated pins match. The recovery sent0 USER messages and performed0 assistant retries; no work resolution or native grant occurred. Owned native cleanup passed; installed-profile/Wake process counts0 and port3200 closed. Backend/tunnel/WakeHost/recurring automation stayed stopped during reconciliation.
 
 The passive response timer remains OBSERVING. The actual assistant body/acknowledgment is not yet independently verified, and the original native edit/test/Wake cycle remains NOT_RUN. C1 is incomplete. Next executable work is the exact response readback and qualification of the existing assigned-task context/grant path; installed dev84's private-context/cooperative-reader capabilities are a separate prerequisite and must not be presumed from an ordinary receipt. No operator action or repeated sign-in is currently required. Later milestones remain NOT_RUN. Evidence: docs/verification/C1_ORDINARY_RECEIPT_RECOVERY_2026_11_08.json.
 
-## 2026-11-08T16:55:24.412945+00:00 — original USER accepted; ordinary receipt-only recovery added
+## 2026-11-08T16:55:24.412945+00:00 â€” original USER accepted; ordinary receipt-only recovery added
 
 The exact prior failure was preserved and guarded pre-submit CAS passed with1048 unrelated pins unchanged. One original frozen invitation then ran in a139-second existing-owner window: installed bearer401/401/200,102 authenticated tools and existing tunnel readiness passed. It crossed submission authorization and recorded an OBSERVING passive timer, but reached the120-second sender limit without an exact receipt. Original state remains SUBMITTING/SCOPED_REVIEW_TIMEOUT and cannot be rearmed or resent. Both serving owners stopped cleanly, preserving all1047 unrelated pins. A subsequent bounded no-send observation found one exact expected USER, one following turn, empty composer and idle exact top-frame conversation;1052 pins matched and profile/Wake process counts were0. That advisory observation created no receipt or completion authority.
 
 The missing ordinary-work receipt-reconciliation entry point now reuses the existing bounded native browser owner, original bridge two-sample persisted USER reader and Wake receipt/archive commit. `operator web work reconcile --project-id REGISTERED_PROJECT_ID --request-id ORIGINAL_REQUEST_ID` requires the original OPEN ordinary request, current exact pair, retained SUBMITTING witness, fresh document, fully exited owned tree and exact receipt identity before a short guarded local commit. There is no USER send, assistant Retry, native grant, task completion, browser-auth change or installed-package replacement. 152 focused tests pass (33 Python,13 native readiness,58 Store,42 Web CLI,6 delivery), strict root/Wake all-target Clippy and formatting pass. The initial private-method compilation error and collapsible-if lint are retained and corrected. Source qualification and actual receipt recovery remain separate; build/live work is pending at this checkpoint. C1's actual native edit/test/Wake cycle is NOT_RUN; no later milestone starts. Evidence: docs/verification/C1_ORDINARY_RECEIPT_RECOVERY_2026_11_08.json.
 
-## 2026-11-08T16:36:43.598064+00:00 — guarded ordinary pre-submit recovery implemented and source qualified
+## 2026-11-08T16:36:43.598064+00:00 â€” guarded ordinary pre-submit recovery implemented and source qualified
 
-The existing local CLI now exposes `operator web work retry-pre-submit --project-id REGISTERED_PROJECT_ID --request-id ORIGINAL_REQUEST_ID --expected-delivery-sha256 EXACT_PRIOR_FILE_SHA256`. It reuses Store recovery, requiring independent qualification of the original native acknowledgment protocol first. Central guards retain original OPEN ordinary request/event/message/paired target and project/registration/stopped-host/browser ownership. Store verifies exact delivery bytes/value and queue identity under its existing transaction lock; submission-start, timer, archive, receipt, target drift or changed scope refuse. Before ATTENTION→CLAIMED, it preserves the full prior failure in existing Wake logs. Matching interrupted prior evidence can resume; conflicting evidence cannot be overwritten. No browser, USER send, receipt, native grant, binding, production install or new registry/scheduler is part of this command.
+The existing local CLI now exposes `operator web work retry-pre-submit --project-id REGISTERED_PROJECT_ID --request-id ORIGINAL_REQUEST_ID --expected-delivery-sha256 EXACT_PRIOR_FILE_SHA256`. It reuses Store recovery, requiring independent qualification of the original native acknowledgment protocol first. Central guards retain original OPEN ordinary request/event/message/paired target and project/registration/stopped-host/browser ownership. Store verifies exact delivery bytes/value and queue identity under its existing transaction lock; submission-start, timer, archive, receipt, target drift or changed scope refuse. Before ATTENTIONâ†’CLAIMED, it preserves the full prior failure in existing Wake logs. Matching interrupted prior evidence can resume; conflicting evidence cannot be overwritten. No browser, USER send, receipt, native grant, binding, production install or new registry/scheduler is part of this command.
 
 103 focused tests pass:56 Store,41 Web CLI and6 delivery tests, with strict root/Wake all-target Clippy and formatting. Tests include two concurrent CAS callers with one winner, preserved old failure, interrupted log/transition recovery, witness refusal, stale identity/queue/target, foreign/closed requests and development isolation. The corrected concurrency-test compile error is retained, not counted as a passing result. Original live delivery remains unchanged; separate controller and live recovery are next. C1 edit/test/Wake cycle and later milestones remain NOT_RUN. Evidence: docs/verification/C1_ORDINARY_PRE_SUBMIT_CAS_2026_11_08.json.
 
-## 2026-11-08T16:25:03.342075+00:00 — C1 physical-profile access PASS; original pre-submit evidence established
+## 2026-11-08T16:25:03.342075+00:00 â€” C1 physical-profile access PASS; original pre-submit evidence established
 
 The corrected attended helper ended INTERRUPTED_OR_UNVERIFIED with0 matching profile/Wake processes; Enter failure cause remains unproved. The screenshot showed the right conversation. One subsequent bounded no-send check independently verified the exact registered top-frame tab, COMPLETE document, history/editor READY, EMPTY composer and IDLE generation in36.094s. All1049 preservation pins matched and owned Job cleanup passed with0 profile/Wake processes. The profile-access blocker is resolved; do not request another sign-in or screenshot. The legacy helper is not equivalent to the documented native development-login owner; its development isolation guard remains unchanged.
 
@@ -322,7 +322,7 @@ The visible original invitation count is0 under VISIBLE_BOUNDED_ONLY coverage, w
 
 Next executable engineering is guarded central ordinary-request pre-submit recovery over the existing Store method, with exact request/target/message/delivery comparison, prior-record preservation and witness refusal; then one original invitation attempt under the existing bounded owner. This does not authorize unknown replay, a replacement request, C49 changes or quarantine clearing. No operator action or new discretionary approval is currently required. Actual native edit/test/Wake cycle remains NOT_RUN, C1 incomplete, later milestones NOT_RUN. Detailed evidence: docs/verification/C1_PROFILE_ACCESS_AND_PRE_SUBMIT_EVIDENCE_2026_11_08.json.
 
-## 2026-11-08T16:00:00.462746+00:00 — post-sign-in cleanup verified; operator profile path corrected
+## 2026-11-08T16:00:00.462746+00:00 â€” post-sign-in cleanup verified; operator profile path corrected
 
 Operator reported sign-in, Enter not closing Chrome and a forced close. No sign-in helper or selected-profile process remained at preflight; closure-failure cause is unverified. One bounded post-auth no-send inspection completed33.859s, still HOME/editor MISSING/history ABSENT/composer UNKNOWN. Cleanup passed with0 profile/Wake processes and1049 matching preservation pins. This does not prove authentication failed, nor resolve the original uncertain invitation.
 
@@ -330,27 +330,27 @@ The issued manual command used the direct AppData spelling despite existing inde
 
 The navigation-comparison prototype was preserved privately and deferred; reviewed source was restored rather than shipping a speculative browser-mode change before resolving root identity. No installed/selected artifact or release authority changed. Evidence: docs/verification/POST_AUTH_PROFILE_PATH_RECONCILIATION_2026_11_08.json. Next is the corrected attended sign-in command, followed by bounded no-send verification; no unknown resend or additional discretionary approval.
 
-## 2026-11-08T15:39:03.714164+00:00 — resumed C1: first event-aware live inspection refuses document drift
+## 2026-11-08T15:39:03.714164+00:00 â€” resumed C1: first event-aware live inspection refuses document drift
 
 On explicit goal resumption, the qualified retained controller performed one first event-aware read-only inspection of the original OPEN invitation, without a new message or replay. It completed in35.188s and verified the selected delivery-file hash and before/after guards. Browser metadata contained one matching target, but its independently evaluated top-frame document was HOME; controlled document was also HOME, COMPLETE, editor MISSING, history ABSENT, composer UNKNOWN. The inspector returned TARGET_TAB_DRIFT and submissionObservationState TARGET_UNAVAILABLE, exported no message counts, and created no receipt, state change or retry permission. This is live negative route-guard qualification; it does not establish authentication failure, confirmed non-delivery, assistant completion or C1 success.
 
 All1049 preservation pins matched. Native Job cleanup passed, installed-profile/Wake process counts0, Wake STOPPED, port3200 closed. Backend/tunnel/connector/native execution/recurring automation were not started. Original ATTENTION and no-replay fences remain unchanged. The same existing attended account/conversation-access question is pending; no additional discretionary approval is needed and no automatic repeat is scheduled. C1 is incomplete; later gates remain NOT_RUN. Evidence: docs/verification/ORDINARY_INVITATION_READ_ONLY_INSPECTION_2026_11_08.json, resumedLiveQualification.
 
-## 2026-11-08T06:09:02.949422+00:00 — C1 event-aware observer built; pending operator command retained
+## 2026-11-08T06:09:02.949422+00:00 â€” C1 event-aware observer built; pending operator command retained
 
 Implementation a000ba3519daaaec11d193991f3b930dfd8e14e6 is source/remote verified. Its separate development controller bde8796da5a3e1ca3c5a99b38ebbd5941a6ef3a37b036431d3b779e776cb4f97 and retained observer artifact0ccc94a27ffc826627fcdcd75308e8179d99b7d3c1b1a6d17129457a105fb301 built in54.156s; all1049 preservation pins matched. No selected or installed artifact changed. The existing pending operator wrapper now uses those qualified adjacent artifacts; its previous bytes remain preserved. The command, project/workspace and browser-only read scope are unchanged. A pure artifact preflight passed with0 CatDesk commands/browser starts/writes. Source edits will no longer invalidate that wrapper's helper lookup; altered adjacent bytes fail closed.
 
 No new browser/connector check was run. Account/registered-chat access remains pending; the original uncertain delivery and every no-replay fence are unchanged. Event-aware installed-profile acceptance is NOT_RUN, actual native edit/test/Wake completion remains NOT_RUN, C1 is incomplete and later gates remain NOT_RUN. The existing question is sufficient; no new operator decision, terminal experiment or recurring retry is required. Evidence: docs/verification/ORDINARY_INVITATION_READ_ONLY_INSPECTION_2026_11_08.json.
 
-## 2026-11-08T06:05:13.870941+00:00 — C1 retained ordinary invitation has a no-send inspection path
+## 2026-11-08T06:05:13.870941+00:00 â€” C1 retained ordinary invitation has a no-send inspection path
 
 Added `operator web work inspect --project-id REGISTERED_PROJECT_ID --request-id EXISTING_REQUEST_ID` to the existing CLI. It selects the original OPEN ordinary WorkLedger request and exact paired Wake target, verifies retained CLAIMED/SUBMITTING/ATTENTION delivery identity and absent receipt, then reuses the stopped-host observer. The native-selected delivery file is hash-pinned; message text stays out of process arguments. Before/after guards retain registration, target, message and delivery identity. No event claim, receipt, task grant, state transition, send, assistant action or retry permission is created.
 
 The existing adapter comparison reader is now shared with wake_bridge; its native metadata validator is also reused. Only bounded visible counts, draft classifications and uncertainty leave the observer. HOME skips comparison. Zero or duplicate visible matches are advisory and cannot establish non-delivery, durable delivery or replay authority. The existing source-review/reconciliation and installed-package protocol checks remain strict; no unsupported request is sent to the old installed adapter. An optional controller-adjacent observer artifact must match its compiled hash; a bad adjacent artifact never falls back. This prevents later source edits from invalidating a qualified pending read-only command.
 
-148 focused tests pass (32 Python readiness,46 adapter,12 Wake readiness,14 existing review reconciliation,40 Web CLI,4 delivery), with root/Wake strict all-target Clippy and formatting. No new browser/connector test or privileged installation occurred. The earlier HOME/registered-tab-missing observation and single pending account/access check remain the live prerequisite; do not repeat that unchanged check automatically. C1 remains incomplete; C2–C5 NOT_RUN. Separate controller qualification is next. Evidence: docs/verification/ORDINARY_INVITATION_READ_ONLY_INSPECTION_2026_11_08.json.
+148 focused tests pass (32 Python readiness,46 adapter,12 Wake readiness,14 existing review reconciliation,40 Web CLI,4 delivery), with root/Wake strict all-target Clippy and formatting. No new browser/connector test or privileged installation occurred. The earlier HOME/registered-tab-missing observation and single pending account/access check remain the live prerequisite; do not repeat that unchanged check automatically. C1 remains incomplete; C2â€“C5 NOT_RUN. Separate controller qualification is next. Evidence: docs/verification/ORDINARY_INVITATION_READ_ONLY_INSPECTION_2026_11_08.json.
 
-## 2026-11-08T05:48:44.875124+00:00 — C1 actual registered-profile observation qualified; target access blocked
+## 2026-11-08T05:48:44.875124+00:00 â€” C1 actual registered-profile observation qualified; target access blocked
 
 Reviewed source6403a44f96b7d1fa9d5b114b4735262f0da4dafa is published with exact remote readback. Its separate controller40c4a52d6f7ab4a62b2d13883ab83cb59c92703585b0b05bacfbedb317b0c203 built in60.015s;1048 build-preservation pins matched. Nothing was installed or selected. One bounded read-only observation through the existing installed interpreter/profile and exact registered-project guard completed in34.859s. All startup phases reached BROWSER_CLOSED; Job cleanup passed. The actual page was HOME, document COMPLETE, editor/history ABSENT, generation IDLE, composer UNKNOWN; the one-tab inventory contained no registered target. This is successful diagnosis of an unusable route, not successful conversation access, authentication or delivery. No LOGIN/network/assistant-failure cause was established.
 
@@ -358,7 +358,7 @@ All1049 pins, including the original ATTENTION delivery, match; test-profile/Wak
 
 Next prerequisite once: confirm expected-account and registered-chat access in the existing installed profile. The qualified development controller supports only advisory read-only inspection; it does not authenticate, unlock unknown drafts or resolve delivery. Do not route installed targets through the isolated development login guard. Exact receipt reconciliation can proceed after genuine target access; no unchanged automatic audit/retry is scheduled. Evidence: docs/verification/REGISTERED_READ_ONLY_BROWSER_OBSERVATION_2026_11_08.json. Private owner receipts, bindings and messages remain outside Git.
 
-## 2026-11-08T05:43:41.328959+00:00 — C1 registered-project read-only observation implemented
+## 2026-11-08T05:43:41.328959+00:00 â€” C1 registered-project read-only observation implemented
 
 The existing readiness owner now supports `operator web browser inspect --project-id REGISTERED_PROJECT_ID` in installed-store scope. It resolves the existing paired registry/Wake target, holds the existing project, host and browser leases, requires STOPPED, and revalidates registration/target before and after observation. No shared metadata lock spans the browser wait. It reuses the installed interpreter/profile and build-bound existing observer/bridge; caller URL, profile, message, runtime and timeout overrides are refused. The legacy PAUSED profile probe and development-isolation inspector retain their separate guards. This is a source/development command, not an installed production upgrade.
 
@@ -366,7 +366,7 @@ The native probe now drains bounded stdout while the child runs, preventing pipe
 
 Qualification:29 Python readiness,9 Wake readiness,4 existing Windows profile-probe and39 coordinator Web CLI tests pass; strict root/Wake all-target Clippy passes. Actual Windows timeout, inherited-descendant pipe cleanup and over-limit output are tested. Retained fixture/filter/lint corrections are documented, not counted as passing runs. Separate controller build and actual profile observation are next; C1 is not complete and later gates remain NOT_RUN. No new operator action identified. Evidence: docs/verification/REGISTERED_READ_ONLY_BROWSER_OBSERVATION_2026_11_08.json.
 
-## 2026-11-08T05:26:10.509973+00:00 — actual serving/auth/connector PASS; original invitation times out, C1 remains open
+## 2026-11-08T05:26:10.509973+00:00 â€” actual serving/auth/connector PASS; original invitation times out, C1 remains open
 
 Published source9231a9fea7e04b792181ccc41f74a6b8156767e0 built a separate controller38f99ce65ae8db3b7bff79b425fc79a7cc489b9e02da09a227b40a69d1117613 in34.781seconds, preserving1048 pins. No installed or selected artifact was replaced. The existing finite supervisor restored the canonical backend using BackendOnly: RECOVERED then MONITORING_COMPLETE. Missing/wrong bearer401, valid initialize200 and authenticated102-tool catalog200; central task tool listed by the server. Actual serving/canonical hash0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901 matches. The existing official runtime connected with unchanged profile/key references and one v5 connector call returned structured content, not429. Transport's background CONFIGURED_UNVERIFIED field and cached client catalog remain distinct from this live response. Its existing run_command central-dispatch compatibility route was advertised, not executed; no C49 replay.
 
@@ -374,7 +374,7 @@ Two preserved local admission failures occurred before runtime connection: stale
 
 All1046 unrelated pins match after the selected attempt. Both native worktrees remain clean. Public lifecycle and existing owner stopped backend/runtime; final recorded test PID/profile-process counts0 and port3200 closed. Wake remains STOPPED; no recurring registration, binding, production promotion or later milestone. C1 is BLOCKED_BROWSER_OBSERVATION, not complete. Next qualify the existing profile-probe/observer path for bounded read-only project-specific navigation/editor/draft/response diagnosis before any supported recovery decision. No operator action is identified yet; do not request another discretionary approval or repeat connector tests absent changed prerequisites. Detailed sanitized evidence: docs/verification/C1_EXISTING_SERVING_AND_ORIGINAL_INVITATION_2026_11_08.json. Private journals and raw responses stay outside Git.
 
-## 2026-11-08T05:01:44.269511+00:00 — C1 ordinary delivery capability defect corrected in source
+## 2026-11-08T05:01:44.269511+00:00 â€” C1 ordinary delivery capability defect corrected in source
 
 The earlier C0 finding that installed dev84 lacks bootstrap remains true, but the inference that ordinary C1 delivery requires a protected Wake upgrade was too broad. The ordinary sender reused the new-chat bootstrap checker. It now shares unchanged pointer/host/adapter/bridge/manifest integrity checks and admits only the existing protocol-1 ordinary acknowledged-send/receipt contract. Bootstrap callers still require bootstrap capability. The installed package and every project/Wake/native identity are unchanged; no installer or broker guard changed.
 
@@ -382,41 +382,41 @@ The earlier C0 finding that installed dev84 lacks bootstrap remains true, but th
 
 Evidence: docs/verification/ORDINARY_WAKE_CAPABILITY_SEPARATION_2026_11_08.json. The existing protected broker transaction gap remains a separate release/rollover concern, not automatically a prerequisite for an ordinary wake.
 
-## 2026-11-08T04:47:48.257902+00:00 — C0 supervisor observation corrected; existing Wake transaction gap confirmed
+## 2026-11-08T04:47:48.257902+00:00 â€” C0 supervisor observation corrected; existing Wake transaction gap confirmed
 
 The canonical-owner doctor reports SUPERVISOR_REGISTERED_MONITOR_STOPPED, not a foreign registration. The earlier source-facade conflict compared a different launcher path and is retained as a scoped observation. Source doctor now reports UNVERIFIED/SUPERVISOR_OBSERVER_SCOPE_MISMATCH with RUN_CANONICAL_FACADE_DOCTOR before foreign-scope registration inspection. Same-scope ownership validators and startup/install behavior are unchanged.152 assertions pass; actual bounded source/canonical readbacks confirm both states, zero HTTP/runtime starts/repairs. No canonical helper was replaced.
 
 C1's Wake upgrade prerequisite is implementation as well as protected authority: the existing service deliberately returns WAKE_BROKER_TRANSACTION_GATES_UNAVAILABLE and native install guard remains closed. Fixed broker image/namespace are absent; provisioning alone would not solve this. No futile installer or external retry, operator signing request, new subsystem or guard bypass. Original queued requests and UNKNOWN effects remain preserved. Details and hashes: docs/verification/C0_C1_RECONCILIATION_2026_11_07.json. Next remains the smallest missing existing transaction wiring/admission needed for C1; later milestones not started.
 
-## 2026-11-08T04:42:12.777400+00:00 — architecture revision C0 reconciled; C1 blocked by serving/package prerequisites
+## 2026-11-08T04:42:12.777400+00:00 â€” architecture revision C0 reconciled; C1 blocked by serving/package prerequisites
 
-The operator activated only C0–C1 in the existing registered source worktree. Admission source e911c6dd9f37db28ca8446172bc32304bb6e8722 differs from the documented remote4da5c89 baseline; existing qualified f71a17b/CFE development selection and installed0c/dev84 artifacts were independently checksummed, not rebuilt or promoted. New read-only acceptance inventory joins existing records without a second registry or authority store. Current tests pass11 inventory,46 adapter,10 focused bridge recovery and144 doctor assertions. Full bridge run exceeded45seconds and remains incomplete; initial old-PowerShell-hash refusal is retained. Microsoft-signed7.6.9 was qualified for local tests only.
+The operator activated only C0â€“C1 in the existing registered source worktree. Admission source e911c6dd9f37db28ca8446172bc32304bb6e8722 differs from the documented remote4da5c89 baseline; existing qualified f71a17b/CFE development selection and installed0c/dev84 artifacts were independently checksummed, not rebuilt or promoted. New read-only acceptance inventory joins existing records without a second registry or authority store. Current tests pass11 inventory,46 adapter,10 focused bridge recovery and144 doctor assertions. Full bridge run exceeded45seconds and remains incomplete; initial old-PowerShell-hash refusal is retained. Microsoft-signed7.6.9 was qualified for local tests only.
 
 Passive doctor identifies no3200 listener and a supervisor-registration conflict; one v5 connector read returned upstream429. Installed dev84 lacks the bootstrap protocol required by the canonical ordinary sender; its public installer still refuses unprovisioned protected broker use. No incompatible send/install was attempted. Both original controlled requests remain OPEN/queued/associated, exact test project/Wake pairs remain generation1, clean native roots/threads remain preserved. No republish, reassociation, source receipt, execution grant, native edit, browser, WakeHost, tunnel or scheduler start. All1048 preservation pins match; recorded test PIDs and owned invocations are absent. C0 is truth reconciliation, not operational success. C1 and all later live gates remain unaccepted; later milestones NOT_RUN.
 
 Next: existing Wake broker/migration and lifecycle-owner admission evidence needed for C1; preserve every UNKNOWN and no-replay fence. No new discretionary approval or alternate terminal is requested. Do not repeat unchanged connector checks. Detailed statuses, commands and limitations: docs/orchestrator/C0_C1_ACCEPTANCE_2026_11_07.md and docs/verification/C0_C1_RECONCILIATION_2026_11_07.json. Private receipts and payloads remain outside Git.
 
-## 2026-11-04T05:18:53Z — manual diagnostic lifecycle records qualified at source
+## 2026-11-04T05:18:53Z â€” manual diagnostic lifecycle records qualified at source
 
 All three existing manual ignored Windows diagnostics now write bounded, create-new non-authoritative START/OUTCOME sidecars under their newly generated roots. Registration precedes source/cache materialization; retained workspace/root identities, parent attempt, immutable snapshot/lock and tool/policy digests are whitelisted. Unknown outcomes remain HOLD, and all records explicitly deny authority/cleanup. A fixed relative-root stderr hint supplies a no-scan reader handoff; existing stdout/Result, paths and command/environment policy are preserved. Production worker source outside these runners and the test-only module declaration is unchanged after LF normalization.
 
 An admitted tests-enabled typecheck passed on the earlier draft. The first full attempt caught a late fixture-export placement error before executing tests; its corrected, separately admitted rerun passed all 12 synthetic tests in 116.3 seconds. Previous developer test EXE/PDB bytes were independently copied and verified before normal compiler replacement; protected installed artifacts/pins remain unchanged. No real ignored diagnostic, cleanup, source backfill, runtime launch or general goal resume occurred. Synthetic reader handoff data stays private. Evidence: `docs/verification/DIAGNOSTIC_STORAGE_LIFECYCLE_SOURCE_2026_11_04.json`.
 
-## 2026-11-04T04:32:15Z (November 3 EST) — opt-in development storage observations
+## 2026-11-04T04:32:15Z (November 3 EST) â€” opt-in development storage observations
 
 Added source-only `storage-status` with configurable advisory free-space warnings (default 64 GiB), exact local-volume identity and a default source-target reference. Existing consumers specify fixed receipt fields, so storage data is a separate opt-in command; the original status/build/verify receipts, arguments, failures and environment restoration remain unchanged. Counter failure returns unavailable advisory data without exporting provider exceptions. No scan, allocation attribution, admission gate or automatic action is introduced.
 
 Focused synthetic coverage passes 32 cases on Desktop 5.1 and 36 on Core 7.6.5, with zero real Cargo or volume calls. The initial compatibility fixture had an extra newline; its correction retains the full original-source hash assertion. Published source behavior is not installed/live acceptance. Runtime, project/Wake state, unknown outcomes and the paused goal are preserved. See `docs/orchestrator/DEVELOPMENT_STORAGE_ADVISORY.md` and `docs/verification/DEVELOPMENT_STORAGE_ADVISORY_SOURCE_2026_11_03.json`.
 
-## 2026-11-04T04:17:52Z (November 3 EST) — disable incremental objects during source verification
+## 2026-11-04T04:17:52Z (November 3 EST) â€” disable incremental objects during source verification
 
 Integrated the reviewed resource-recovery fix into the ordinary source-only development facade. Only `verify` sets process-local `CARGO_INCREMENTAL=0` around the existing synchronous fmt/Clippy/test commands and restores the caller's prior value or absence in `finally`. Build/status, arguments, target paths and the closed reviewed-build worker policy are preserved.
 
 The integrated script is byte-equivalent after LF normalization to the reviewed proposal. Focused helper mocks passed 9 cases on Windows PowerShell 5.1 and 11 on Core 7.6.5, including failure restoration and representable empty values. Full-source round-trip checks passed; no actual Cargo command, production upgrade or runtime operation was performed for this patch. Earlier Cargo-check and installed recovery evidence retain their original source revisions. Goal remains paused; independent resource-recovery authorization supplies this narrow change. Evidence: `docs/verification/VERIFY_INCREMENTAL_POLICY_SOURCE_2026_11_03.json`.
 
-## 2026-11-03T16:35:17.988364+00:00 — shared composer-structure diagnostics implemented,341 cases pass and exact held-event observation qualified
+## 2026-11-03T16:35:17.988364+00:00 â€” shared composer-structure diagnostics implemented,341 cases pass and exact held-event observation qualified
 
-## 2026-11-03T19:31:34.880166+00:00 — finite ordinary Web work delivery source qualified; native assignment preparation complete
+## 2026-11-03T19:31:34.880166+00:00 â€” finite ordinary Web work delivery source qualified; native assignment preparation complete
 
 Source 722602a518e7785444a160c912fa78a0c3443fda adds `operator web work deliver --project-id REGISTERED_ID --request-id EXISTING_REQUEST` through the existing stopped-host sender, capped120seconds. The request journal chooses one ordinary invitation; no message/event/URL/key/runtime override, sibling queue scan, scheduler or native grant is added. Existing per-project lease, atomic paired-target/registration/work checks, browser ownership, draft, receipt and ambiguous-outcome fences remain. Shared metadata locks end before browser work. The command is SOURCE-QUALIFIED and is not yet present in the selected development or protected production executable.
 
@@ -429,7 +429,7 @@ The bounded development build-admission window expired without starting a compil
 Final process inventory: test-owned0, same verified canonical listener/backend and existing tunnel preserved, WakeHost STOPPED. A user-authorized benchmark quiet window deferred only new heavy work and was released early; a later request was canceled before acknowledgment. No goal pause, process control of other projects or recurring monitor was introduced. Evidence: docs/verification/SCOPED_ORDINARY_WEB_DELIVERY_SOURCE_2026_11_03.json.
 
 
-## 2026-11-03T18:55:17.607682+00:00 — bounded ordinary delivery implemented; partial tests and context calibration recorded
+## 2026-11-03T18:55:17.607682+00:00 â€” bounded ordinary delivery implemented; partial tests and context calibration recorded
 
 The existing stopped-host one-event sender now has a pending ordinary-work invitation path, selected only by an existing WorkLedger request. It reuses registration, per-project rollover lease, exact paired target/event/message, pre-submit guard and receipt/no-replay behavior. No message/destination override, global queue scan, scheduler, native grant or parallel browser owner is introduced. The Wake module passes22 cases, including3 new regressions: unknown Alpha does not block Beta, changed selection is refused before claim/browser, and lost owner gets no submit acknowledgment. Root/coordinator and CLI tests plus strict Clippy remain pending: their compilation admission refused below the retained4GiB threshold, without starting Cargo. Formatters pass. Five code paths are privately checkpointed but remain uncommitted/unpublished/uninstalled; selected and protected executables are unchanged. The proposed work-deliver syntax is not available in those existing binaries.
 
@@ -440,21 +440,21 @@ Offline calibration used the already-cached reference tokenizer and independentl
 Final inventory found0 test-owned processes and preserved the same verified canonical backend/listener and existing tunnel; WakeHost stays STOPPED. No operator action is currently required. Next qualify the pending coordinator/CLI/Clippy stages when resource admission changes, then qualify a separate development candidate and the exact Web invitation/assignment/native grant path. Do not replay held/unknown work or label partial source tests as installed/native acceptance. Evidence: docs/verification/CONTEXT_CALIBRATION_AND_WORK_DELIVERY_PROGRESS_2026_11_03.json.
 
 
-## 2026-11-03T18:45:30.153605+00:00 — two canonical Web contexts paired; text context accounting independently idempotent
+## 2026-11-03T18:45:30.153605+00:00 â€” two canonical Web contexts paired; text context accounting independently idempotent
 
 Two operator-created project chats selected the existing app. One frozen context-only follow-up per verified actual destination received a unique USER turn and completed scoped acknowledgment. Supported guarded binding paired both at generation1, preserving all4 original canonical registrations, old Wake targets/history and354 unrelated state pins. This is operator-assisted setup, not automatic first-chat initialization, Wake delivery or native coding acceptance. The history projection omitted exactly one trailing LF; no exact wire-byte receipt was fabricated.
 
 Each new context ledger received4 actual observed text events. Separate-process replay preserved identical outputs and ledger bytes. Proxy estimates729/757 remain UNKNOWN_OR_INCOMPLETE; raw MCP arguments/results and provider context were not observed. No raw text is stored in those ledgers, and automatic policies remain disabled. Import preserved399 unrelated pins. WakeHost, browser and native coding workers stayed stopped; existing serving/native owners, protected production, selected development, old unknown requests and completed canaries remain preserved. No further operator action is needed for this setup. Genuine two-project Web/native edits and verification, independent Wake delivery, current-source release authority, full context calibration and later provider-client acceptance remain OPEN. Evidence: docs/verification/CANONICAL_WEB_CONTEXT_PAIRING_2026_11_03.json.
 
 
-## 2026-11-03T17:37:50.847865+00:00 — fixed full-suite verification budget corrected in source
+## 2026-11-03T17:37:50.847865+00:00 â€” fixed full-suite verification budget corrected in source
 
 Source b06f02d518c2e0eed294b1ff8353bd588074f517 changes only src/operator_codex_cli/queue.rs: the existing exact python_uv_group_dev_touched_v2 full pytest command now has a finite90-minute bound instead of30. Retained same-source full-suite evidence exceeds the old bound. Test selection/commands, offline dependencies, other profiles, generic15-minute commands, writer leases, stream limits, cleanup and browser/connector limits remain unchanged. No caller timeout override or reduced test gate is introduced.
 
 Five existing profile-selection/environment regressions, including a native four-command verifier fixture, root strict all-target Clippy and fmt pass. Initial compiled admission refused below4GiB without starting Cargo; later admitted tests retain that resource gate. This proves source timeout selection, not a new full-suite pass, installed runtime correction or Web/native coding acceptance. Previous pre-edit recovery source f9f379f/184-case evidence remains distinct and was not needlessly rerun. Protected production, selected development, all project bindings/native owners, held16 and completed canaries remain unchanged. Applicable current91 cumulative review/ACK/snapshot/producer is still required before protected promotion; current source scope and exact blob deltas are in the evidence artifact. Next qualify useful independently owned Web/native tasks through existing guarded canonical scope and release procedures. Full A-F/T0484 and later CD-P7 remain OPEN. Evidence: docs/verification/NATIVE_VERIFICATION_BUDGET_SOURCE_2026_11_03.json.
 
 
-## 2026-11-03T17:18:45.307758+00:00 — exact pre-edit refusal retirement qualified in source; legacy held event remains unknown
+## 2026-11-03T17:18:45.307758+00:00 â€” exact pre-edit refusal retirement qualified in source; legacy held event remains unknown
 
 Implementation f9f379f32de7494b923587604350f6279ecd862e changes9 paths within the existing bridge/adapter/runtime/Store/WorkLedger. A new native before-input terminal frame carries only strict scope hashes, fixed composer-structure category/count and nativeInputAttempted=false. The live host persists it only after its original scoped dispatch boundary, under the exact owner/target/event/message and original submission marker. Retirement requires historical review dispatch, STOPPED/quiescent host, current paired target and absent receipt/acceptance timer; it resumes ordered partial commits and archives without deleting evidence. No retry, quota refund, fabricated SENT/COMPLETE, native completion or new registry/owner is introduced. Legacy string errors and later empty DOM cannot manufacture the witness.
 
@@ -473,7 +473,7 @@ Matched immutable developmentfb866e28/sourcea868 qualifies separately: unauthent
 
 Current scope remains91 paths:70 accepted unchanged,19 changed existing,2 new;82 blobs match a23 and all nine newer delta blobs are explicit. Existing a23/90 native claim/absolute expiry remains unchanged and unaccepted; source341/self-review/development evidence is not genuine cumulative review/ACK/snapshot/producer authority. Fresh 2026-11-03T16:33:36.8307030Z inventory finds zero test-owned processes, same intentional serving owners/production0c, WakeHost STOPPED/no login marker. No new tunnel/profile/authentication, protected promotion, native project task or binding change. Full A-F/T0484, actual two-Web useful edits/native verification, canonical/Wake authority, independent Wake/persistent recovery and later CD-P7 remain OPEN. Goal ACTIVE; no operator action currently established. Evidence: COMPOSER_STRUCTURE_DIAGNOSTICS_SOURCE, COMPOSER_STRUCTURE_DEVELOPMENT_QUALIFICATION and HELD16_COMPOSER_STRUCTURE_OBSERVATION, dated2026_11_03 in docs/verification.
 
-## 2026-11-03T16:07:27.348479+00:00 — recovered visibility and exact unused transfer verified; source15 complete,16 held before editor mutation
+## 2026-11-03T16:07:27.348479+00:00 â€” recovered visibility and exact unused transfer verified; source15 complete,16 held before editor mutation
 
 Existing context API reconciled completed23/continuation visibility:16 newly supported result records plus8 new arguments, without repeating8 previously recorded continuation arguments. Separate CLI repeat is byte-idempotent; generation5 proxy21519,args807/results18823, still UNKNOWN_OR_INCOMPLETE. Scope uses actual exact response/receipt and task-bound explicit visibility, not full arbitrary log files or provider-authenticated context. Raw text is not persisted; all sibling/history pins pass and no browser/send/binding/native/production effect occurs from import.
 
@@ -485,7 +485,7 @@ Next independent source increment is bounded content-free composer-structure ref
 
 Fresh 2026-11-03T16:07:26.5218360Z inventory: zero test-owned processes, existing intentional serving owners and production0c retained, WakeHost STOPPED/no login marker. No new compilation, hosted CI, production promotion or installed two-Web acceptance claimed. Current code dade/91 still needs applicable genuine global review/five delta assessment/report/ACK/snapshot/producer; existing a23/90 claim remains unaccepted and is not renewed or replaced. Canonical/Wake authority, actual two-Web edits/native verification, independent Wake/persistent recovery, full T-0484 and later CD-P7 remain OPEN. No operator action currently needed; root goal ACTIVE. Evidence: CURRENT_A23_GENERATION5_TRANSFER_SOURCE15_AND_HELD16_2026_11_03.json and CURRENT_A23_SOURCE15_PARTIAL_SEMANTICS_2026_11_03.json.
 
-## 2026-11-03T15:46:04.028502+00:00 — exact unknown submission recovered without resend; acceptance-timer defect fixed and qualified
+## 2026-11-03T15:46:04.028502+00:00 â€” exact unknown submission recovered without resend; acceptance-timer defect fixed and qualified
 
 Request23's original USER attempt and two earlier timeout records remain intact. Newly qualified phase-aware development controller9143b0ab observed one exact expected USER, stable matching readers and an empty composer; all533 pins passed. Supported receipt-only reconciliation recovered EXACT_USER_MESSAGE_APPENDED/SENT without another USER. Its harness reported one pin mismatch because the expected pending queue event was archived; independent read-only comparison proves byte-identical archive and all530 unrelated pins unchanged. Raw harness failure is preserved, not edited into PASS. The exact assistant response was then read and verified REVIEWED_PARTIAL with eight unique matching task-window source calls. Prior continuation batch4 visibility was explicitly clarified ALL_VISIBLE; this is not provider-authenticated context or cumulative source approval.
 
@@ -495,7 +495,7 @@ Matched immutable development8c4fdde9 qualifies: unauthenticated MCP401, authent
 
 Full pending source scope expands90 to91 because store_reobserve.rs was outside the prior declaration. Of91 paths,71 remain accepted unchanged,18 are changed existing and2 new;86 blobs match a23 and all five changed blobs are explicit. Earlier partial90-path evidence does not approve these deltas. Fresh cleanup 2026-11-03T15:45:28.3503045Z finds test-owned0, original intentional serving owners and production0c hash retained, WakeHost STOPPED/no login marker. Source/controlled development evidence is distinct from installed/unattended acceptance. No operator action currently needed. Next account only genuinely visible, deduplicated task results, transfer only untouched15-22 through the existing authorization registry, and finish applicable91-path review/ACK/snapshot/producer before protected promotion. Canonical/Wake authority, genuine installed two-Web edits/native verification, independent Wake/restart recovery, full T-0484 and later CD-P7 remain OPEN. Evidence: RECOVERED_RECEIPT_TIMER_SOURCE_SCOPE, RECOVERED_RECEIPT_TIMER_SCOPE_FIX and CONTINUITY23_RECEIPT_AND_RESPONSE_RECOVERY in docs/verification, dated2026_11_03.
 
-## 2026-11-03T15:21:47.706262+00:00 — unknown continuity submission preserved; phase-aware no-send diagnosis implemented and tested
+## 2026-11-03T15:21:47.706262+00:00 â€” unknown continuity submission preserved; phase-aware no-send diagnosis implemented and tested
 
 Continuity23 attempted once, timed out170.406sec in SUBMITTING/SUBMIT_CLEARED_NO_APPEND with no receipt. Eight matching source-command logs are execution evidence, not exact originating-conversation delivery proof. One metadata diagnosis returned SCOPED_DIAGNOSE_TIMEOUT104.719sec; one supported positive-receipt reconciliation returned SCOPED_RECONCILE_TIMEOUT103.422sec. All533/531 preservation checks pass and profile cleanup is quiescent. No USER replay, receipt fabrication, reset, quota refund, work resolution or binding/native-session change. Further unchanged attempts are not scheduled; this per-event hold does not stop source development. Covered request14 remains never dispatched and must not repeat completed continuation source work.
 
@@ -503,7 +503,7 @@ Independent source d21f98b09d04bcd90cd02cc94542f46e8171b0ba adds content-free fa
 
 Current scope remains90 code paths/72 accepted unchanged/16 changed existing/2 new;87 blobs match prior a23 and only3 diagnostic files changed. The active native source-review claim remains pinned to a23 with unknown23 preserved; no new code inherits its partial evidence or release authority. Selected d2b development controller and trusted production0c are unchanged. Fresh 2026-11-03T15:21:46.9201312Z inventory has zero test-owned processes, same intentional serving owners, WakeHost STOPPED/no login marker. Next use existing immutable development build/qualification procedures, retain prior versions and all journals, then obtain new bounded phase evidence for this exact event. No operator action currently needed. Current-source review/ACK/snapshot/producer/promotion, canonical/Wake authority, actual two-Web editing/native verification, independent Wake/persistent recovery, full T-0484 and later CD-P7 remain OPEN. Evidence: docs/verification/SUBMISSION_DIAGNOSIS_PHASES_SOURCE_2026_11_03.json and docs/verification/CONTINUITY23_UNKNOWN_SUBMISSION_HOLD_2026_11_03.json.
 
-## 2026-11-03T14:13:45.715324+00:00 — current review reaches real pressure; generation5 source-authored rollover and continuation verified
+## 2026-11-03T14:13:45.715324+00:00 â€” current review reaches real pressure; generation5 source-authored rollover and continuation verified
 
 Current a23 source checkpoint13 closed REVIEWED_PARTIAL with eleven individually correlated Git reads, no reported defect and no truncation. Its initial observer was PENDING; an exact final body was read, then one bounded read-only reobservation established durable COMPLETE before closure. No USER resend or false completion. Four current partials now have37 correlated calls. Their actual findings, invariants and needed reads are preserved in two sanitized bounded semantic artifacts; original private responses/digests retained. Generic no-action boilerplate is represented as structured scope, with substantive limitations unchanged. No privacy filter was weakened.
 
@@ -513,7 +513,7 @@ The successor autonomously completed source batch4 during continuation: seven so
 
 Fresh 2026-11-03T14:10:34.0731838Z inventory finds zero test-owned processes, unchanged trusted serving owners and production fingerprint, WakeHost STOPPED/no login marker. Original review claim/absolute expiry and all old unknown/C49 history remain intact. Next transfer only never-reserved15-22, restore partial semantic evidence and continue six unexecuted core batches/two scope packets and genuine cumulative judgment. Current-source review/ACK/snapshot/producer/promotion, canonical/Wake authority, actual two-Web edits/native verification, independent Wake/persistent recovery, full T-0484 and later CD-P7 remain OPEN. No operator action required. Evidence: docs/verification/CURRENT_A23_OBSERVED_PRESSURE_GENERATION5_2026_11_03.json.
 
-## 2026-11-03T13:36:31.636555+00:00 — second smaller source batch verified; visibility clarification and cleanup retained
+## 2026-11-03T13:36:31.636555+00:00 â€” second smaller source batch verified; visibility clarification and cleanup retained
 
 Current a23 source review checkpoint12 sent once, exact USER receipt, COMPLETE/exact body and coordinator-closed REVIEWED_PARTIAL. All eleven Git calls (manifest plus ten source reads) match one task-window execution each; reviewer reports no truncation or concrete defect in the inspected lifecycle/rollover ranges. Three current checkpoints10-12 now have26 corroborated Git calls. Remaining dependencies and the two omitted supporting artifacts stay pending; no cumulative source acceptance, ACK or producer authority exists.
 
@@ -521,7 +521,7 @@ The one privacy-filtered line in supervisor_lifecycle.rs215-277 is line229, a Ru
 
 Next frozen request13 is never dispatched and retains the same current report-only claim and original absolute expiry. Continue its full read/closure/accounting chain; if genuine observed pressure follows, use the existing source-authored handoff and exact-unused grant transfer, without lowering thresholds, replaying completed work or reusing the consumed incomplete-history guard. Installed two-Web coding, canonical/Wake authority, independent Wake/persistent recovery, full T-0484 and later CD-P7 remain OPEN. No operator action required. Evidence: docs/verification/CURRENT_A23_SECOND_BOUNDED_REVIEW_2026_11_03.json.
 
-## 2026-11-03T13:28:09.556077+00:00 — current90 bounded source review qualified; guidance delta and first dependency batch complete
+## 2026-11-03T13:28:09.556077+00:00 â€” current90 bounded source review qualified; guidance delta and first dependency batch complete
 
 Existing scoped review authorization, native contract/approval/direct claim and explicit supersession now cover current a23a52a source without reviving the cancelled oversized plan. Original absolute expiry and spent quota are preserved. The report-only owner checked 4754 preexisting files and preserved 582 accounting rows; exactly one new claim row, no provider/model start, report absent and natural finite server exit. Original project/native sessions, bindings, profiles and protected production are unchanged.
 
@@ -529,7 +529,7 @@ Two frozen reviews each sent once, exact USER receipt, COMPLETE/exact response a
 
 Actual generation4 accounting is 52529 proxy, args4039/results44507, repeat imports byte-idempotent. Origin, coverage and provider exactness remain unknown; full hidden logs are not model-visible proof. No threshold change, recurring host or protected promotion occurred. Next continue frozen bounded dependency batches through the same current claim and original expiry, account actual outputs, retain the two missing support reads, then obtain genuine global90-path judgment/report/ACK/snapshot/producer. Installed two-Web coding, canonical/Wake authority, independent Wake/persistent recovery, full T-0484 and later CD-P7 remain OPEN. Evidence: docs/verification/CURRENT_A23_BOUNDED_REVIEW_FIRST_LIVE_2026_11_03.json. No operator action currently required.
 
-## 2026-11-03T12:57:50.141780+00:00 — unsafe refusal-retry guidance corrected in source; existing API tests and Clippy pass
+## 2026-11-03T12:57:50.141780+00:00 â€” unsafe refusal-retry guidance corrected in source; existing API tests and Clippy pass
 
 One actual v5 operating-guidance lookup exposed an unconditional instruction to repeat a tool call after an OpenAI safety block. It was not followed. Source a23a52a5fc5cb9bc2d2a5ff64bbd037f92f0a176 replaces that text with stop/preserve/honor-required-approval guidance and requires exact receipt reconciliation before retrying an ambiguous or possibly completed operation. Transient retries still require current authorization and existing policy. Only the instruction string changed; runtime, authentication, owner, lease/CAS and release guards are untouched.
 
@@ -537,7 +537,7 @@ Three existing instruction API/widget/server-action tests passed in53.945sec, fo
 
 The new candidate remains90 code paths with72 unchanged accepted baseline blobs,16 changed existing and2 new. Exactly one code file differs from prior38be;89 full-file blobs are identical. All85 pending bounded core inputs reference files identical to the new source, so they can be reused by exact blob rather than restarting prior review. New scope/delta/test artifacts make this bridge explicit. Prior current38 partials and truncated5 remain historical evidence, never approval of these new bytes. The cancelled oversized native report plan will be replaced through existing scoped approval/supersession, preserving original expiry and quotas. No original project/native session, binding, browser profile or production installation changed. Evidence: docs/verification/GUIDANCE_REFUSAL_RETRY_FIX_SOURCE_2026_11_03.json.
 
-## 2026-11-03T12:24:02.595371+00:00 — real client tool/output limit; honest argument-only accounting; oversized plan replaced
+## 2026-11-03T12:24:02.595371+00:00 â€” real client tool/output limit; honest argument-only accounting; oversized plan replaced
 
 Checkpoint5 was sent once, observed COMPLETE, exact-body read and coordinator-closed REVIEWED_PARTIAL. Its response explicitly reports a tool-call limit,20/21 source reads and combined output truncation. Task-window logs corroborate21 Git calls including the manifest, with the final644-651 supervisor range absent. Execution logs prove execution, not complete model-visible source assessment. Findings and partial invariants remain preserved, without cumulative approval or pretending unread/truncated data was reviewed.
 
@@ -547,7 +547,7 @@ Unused oversized requests6-9 were revoked through existing registry commands; th
 
 Existing production/source authority, project bindings, histories, profiles and native owners remain intact. No production operation, credential/connection change, new browser owner, recurring worker or replay occurred. Next qualify the smaller-output source plan under existing standing authorization and explicit native supersession, retaining the same source90 scope and absolute expiry. Current source review/ACK/snapshot/producer, canonical/Wake authority, actual two-Web native edits, independent Wake/persistent recovery, full T-0484 and later CD-P7 remain OPEN. No operator action required. Evidence: docs/verification/CURRENT38_TRUNCATED_REVIEW_AND_BOUNDED_REPLAN_2026_11_03.json.
 
-## 2026-11-03T11:34:07.634501+00:00 — source followups complete; real idle/expiry recovery verified; remaining scope retained
+## 2026-11-03T11:34:07.634501+00:00 â€” source followups complete; real idle/expiry recovery verified; remaining scope retained
 
 Current38be checkpoints3/4 completed once with exact USER receipts and COMPLETE assistant snapshots, CLOSED REVIEWED_PARTIAL and18 independently corroborated Git calls. The current90-path source has4 partial observations/30 calls; older17 observations/133 calls remain evidence only for88 identical current blobs. New sanitized semantic parts retain actual current invariants and concrete pending reads. No independently established defect was reported; cumulative source judgment remains absent. WorkLedger.verify_review_reconciliation at276 onward is already included in remaining dependency batch2, not an invented extra review task.
 
@@ -559,7 +559,7 @@ CORRECTION: the earlier v5 Unicode/writer attribution was premature. Original in
 
 Fresh11:31:53 native inventory finds test-owned0, the same trusted backend and existing tunnel owners, and shared WakeHost STOPPED/no login marker. Protected source/install, all original project bindings/history/native owners and old C49/unknowns remain intact. Next finish the SAME source90 scope under fresh approved report-only continuation, then genuine cumulative judgment/ACK/snapshot/producer and guarded promotion. Canonical/Wake authority, actual two-Web native edits, independent Wake/persistent recovery, full T-0484 and later CD-P7 remain OPEN. No operator action required. Evidence: docs/verification/CURRENT38_FOLLOWUPS_RECOVERY_AND_REMAINING_SCOPE_2026_11_03.json.
 
-## 2026-11-03T03:58:50.211479+00:00 — same current90 follow-ups eligible; exact UTF-8 plan storage verified
+## 2026-11-03T03:58:50.211479+00:00 â€” same current90 follow-ups eligible; exact UTF-8 plan storage verified
 
 Two necessary continuity/authority messages are frozen under the SAME current90 report-only claim, same verified generation4 and original expiry. Existing standing review authorization and initial preflight3 passed21.235sec;4 will receive authoritative checks in its actual review run. Neither follow-up has been sent. Seven semantic parts retain17 actual predecessor observations/133 correlated Git calls; nine current-source authority reads and all artifact hashes/bounds were verified, with zero lines redacted by the unchanged gateway filter.
 
@@ -567,7 +567,7 @@ Actual v5 plan_read returned two UTF-8 em-dash headings as mojibake while the na
 
 Fresh cleanup finds test-owned0, existing trusted backend/tunnel preserved and shared WakeHost stopped. Next deliver3 once through the bounded existing owner, verify and account it, then4; cumulative review/ACK/snapshot/producer and installed multi-project acceptance remain OPEN. No operator action required. Evidence: docs/verification/CURRENT90_FOLLOWUP_PREFLIGHT_AND_UTF8_PLAN_READBACK_2026_11_03.json.
 
-## 2026-11-03T03:49:45.652885+00:00 — fresh90-path source claim; both changed dependencies reviewed live
+## 2026-11-03T03:49:45.652885+00:00 â€” fresh90-path source claim; both changed dependencies reviewed live
 
 After confirmed expired89-path claim cancellation and completed generation4 continuation, the existing contract/approval/direct-claim APIs established fresh report-only authority for exact38be source:90 paths,72 accepted unchanged baseline blobs,16 changed and2 new;88 blobs match prior partial inspections. All580 historical accounting rows and preexisting native files remain preserved, exactly one attributed claim row was added, no provider thread/model was started, and the finite loopback owner exited. A precontract wrapper comparison failed because plan_update formats Markdown; API text/file equality, retained prior plan and unchanged native/accounting pins established the exact completed effect before resuming without another plan_update or duplicate contract. No application or release guard changed.
 
@@ -575,7 +575,7 @@ Both frozen initial reviews completed once with exact USER receipts, COMPLETE sn
 
 Generation4 advisory context is independently accounted and repeat imports are byte-idempotent; predecessor ledgers and sibling state remain preserved. Coverage, origin and provider exactness remain UNKNOWN. Fresh cleanup finds no test-owned process, unchanged existing trusted serving owners, shared WakeHost stopped and no login marker. No protected promotion, native project edit, new tunnel/profile or recurring automation occurred. Next continue the SAME current90 claim with immutable continuity/authority inputs, then genuine cumulative judgment/ACK/snapshot/producer. Actual two-Web native coding, canonical/Wake authority, independent Wake/persistent recovery, full T-0484 and later CD-P7 remain OPEN. No operator action currently required. Evidence: docs/verification/CURRENT90_INITIAL_REVIEWS_AND_GENERATION4_CONTEXT_2026_11_03.json.
 
-## 2026-11-03T03:33:33.488179+00:00 — actual observed-pressure rollover completes; expired source claim closed safely
+## 2026-11-03T03:33:33.488179+00:00 â€” actual observed-pressure rollover completes; expired source claim closed safely
 
 Controlled generation3 reached75628 observed proxy tokens against the unchanged72000 trigger (arguments4054/results65950). Imports remain byte-idempotent, coverage/origin/provider exactness UNKNOWN. The existing source-authored OBSERVED_PRESSURE path completed handoff, verified replacement creation, paired registry/Wake generation4 and exact continuation response once. The4936-byte handoff retains semantic evidence references; predecessor/siblings/workspace/native ownership and all preservation pins remain intact. Original policy is restored. No repeated incomplete-history guard or completed USER submission, recurring host, protected installation or original project-native action occurred.
 
@@ -583,29 +583,29 @@ Dependency5 completed with8 independently corroborated Git calls; all17 successf
 
 Next is fresh authority for the actual90-path current source, retaining exact-blob partial observations and remaining semantic dependencies. The successor's canonical/control registry mismatch correctly holds native execution and remains a separate integration gap. Current-source review/ACK/snapshot/producer, actual two-Web native edits/verification, independent Wake/persistent recovery, full T-0484 and later CD-P7 remain OPEN. No operator action currently required. This is TESTED_CONTROLLED_LIVE, not installed or unattended acceptance. Evidence: docs/verification/OBSERVED_PRESSURE_GENERATION4_AND_EXPIRED_CLAIM_CLOSURE_2026_11_03.json.
 
-## 2026-11-03T02:42:56.426388+00:00 — semantic continuity verified live; two more dependency reviews; exact current scope prepared
+## 2026-11-03T02:42:56.426388+00:00 â€” semantic continuity verified live; two more dependency reviews; exact current scope prepared
 
 The current Web reviewer actually read all5 sanitized semantic artifacts and4 bounded context ranges, restoring13 predecessor partial observations without treating them as approval. Its exact receipt, COMPLETE response and10 declared Git calls are independently corroborated. Dependency batches3/4 each completed once with8 corroborated calls, exact receipts/COMPLETE bodies and CLOSED REVIEWED_PARTIAL; no reported defects. Total125 task-correlated Git calls. Prior task/rollover events were not replayed. Newly requested minimal follow-ups3741-3795 in wake_bridge.py and4161-4185 in mcp.rs remain recorded; conditional adjacent requests do not automatically create duplicate work.
 
-Generation3 tool imports are byte-idempotent. One qualified read-only capture completed97.672sec, moving66364→67984 observed proxy tokens with unchanged args3568/results59108. It reports RECENT_VISIBLE_EXCERPT_WITH_UNKNOWN_HISTORY, no identity gap, incomplete history/text/overflow coverage. No USER, policy, binding, native task or production change; all preservation pins/profile identity and unexpected-context-file checks pass. Threshold remains72000 and was not crossed; do not reuse the consumed incomplete-history lineage guard or force a new rollover. Next frozen dependency request18 remains eligible subject to existing authority/time checks.
+Generation3 tool imports are byte-idempotent. One qualified read-only capture completed97.672sec, moving66364â†’67984 observed proxy tokens with unchanged args3568/results59108. It reports RECENT_VISIBLE_EXCERPT_WITH_UNKNOWN_HISTORY, no identity gap, incomplete history/text/overflow coverage. No USER, policy, binding, native task or production change; all preservation pins/profile identity and unexpected-context-file checks pass. Threshold remains72000 and was not crossed; do not reuse the consumed incomplete-history lineage guard or force a new rollover. Next frozen dependency request18 remains eligible subject to existing authority/time checks.
 
 Prepared bounded CURRENT_38BE_SOURCE_REVIEW_SCOPE and2 delta manifests for the actual qualified executable's source:90 code paths,72 unchanged accepted baseline blobs and88 blobs identical to earlier inspected6d. Only operator_web_review.rs and runtime_review_reconcile.rs differ from6d; both need genuine current-source inspection and global assessment. This source map grants no approval. The older89-path native claim remains active/unaccepted with original expiry. Its qualified expired-and-quiescent cancellation procedure was inspected but not executed; no guard removal, cancellation, renewal, new native claim or producer authority. Existing observations can be retained by exact blob, never relabeled as approval of newer code.
 
 Fresh02:42:24 native inventory finds test-owned0 and unchanged trusted backend/tunnel owners; WakeHost STOPPED/no login marker. Full current-source review/ACK/snapshot/producer, canonical/Wake authority, actual two-Web native edits/verification, independent Wake/persistent recovery, full T-0484 and later CD-P7 remain OPEN. No operator action currently required. Evidence: docs/verification/SOURCE_CONTINUITY_DEPENDENCIES_3_4_AND_CURRENT_SCOPE_2026_11_03.json.
 
-## 2026-11-03T02:01:24.724972+00:00 — first two dependency reviews verified; partial semantic evidence made durable
+## 2026-11-03T02:01:24.724972+00:00 â€” first two dependency reviews verified; partial semantic evidence made durable
 
 Controlled generation3 dependency batches1/2 were each sent once, observed COMPLETE, exact-body verified and CLOSED REVIEWED_PARTIAL. Seventeen new declared Git calls match server logs; all successful source checkpoints now total99 corroborated calls and13 partial observations. No reported defect or cumulative source acceptance. Batch1 actually inspected current172pass/0fail/1ignore evidence and correctly preserved uncertainty about the historical failure. A task-derived marker suffix was retained verbatim; only the private partial-report parser accepts the exact frozen dependencyBatch form, preserving source/receipt/log checks and cumulativeSourceAccepted=false. No request/response rewrite, resend, application security change or producer authority.
 
 Sanitized immutable semantic-observation artifacts preserve actual invariant findings, inspected ranges, pending reads and response hashes across compaction. They exclude private conversation URLs, native session/authorization state and arbitrary transcript content. This permits later continuation to recover prior observations rather than treating counts alone as semantic evidence; these new artifacts have NOT yet been consumed by the Web reviewer. They are partial observations, not inherited cumulative approval. Sixteen frozen dependency batches remain before final assessment. Context imports remain byte-idempotent and advisory; fresh cleanup finds zero test-owned processes with existing trusted serving owners retained and shared WakeHost stopped. Full exact-source producer/promotion, canonical/Wake authority, actual two-Web native edits, independent Wake/persistent recovery, full T-0484 and later CD-P7 remain OPEN. Evidence: docs/verification/DEPENDENCY_REVIEWS_1_2_AND_SEMANTIC_CONTINUITY_2026_11_03.json.
 
-## 2026-11-03T01:38:38.455169+00:00 — source checkpoint12 verified; remaining semantic inputs frozen
+## 2026-11-03T01:38:38.455169+00:00 â€” source checkpoint12 verified; remaining semantic inputs frozen
 
 Controlled generation3 source review12 completed SENT/exact receipt, COMPLETE/exact-body and CLOSED REVIEWED_PARTIAL with no reported defect. Seven declared Git calls match one task-timed server log each; successful1-5/7-12 total82 corroborated calls. Retired6 stays uninspected, not passed or replayed. The14-event advisory import is byte-idempotent across separate processes: generation3 proxy21589,args906/results18599, coverage/origin/provider exactness still UNKNOWN/incomplete.
 
 Prepared18 bounded immutable dependency manifests cover5146 additional source lines/120 commands: explicit reviewer requests, named recovery/ownership functions, retired6 ranges and omitted changed lines. No dependency message or new native claim was sent/created by preparation. The first manifest includes the already published current full-module172pass/0fail/1ignore proof, retaining historical unexplained failure/timeout evidence. Coverage planning is not semantic approval. Cumulative13 remains untouched until necessary review is genuinely complete. Exact-source ACK/snapshot/producer, current38be additional coverage, canonical/Wake authority, actual two-Web native coding, independent Wake/persistent recovery, full T-0484 and later CD-P7 remain OPEN. Evidence: docs/verification/REVIEW12_AND_REMAINING_DEPENDENCY_INPUTS_2026_11_03.json.
 
-## 2026-11-03T01:27:26.554841+00:00 — real incomplete-history rollover completes; source work resumes in generation3
+## 2026-11-03T01:27:26.554841+00:00 â€” real incomplete-history rollover completes; source work resumes in generation3
 
 TESTED_CONTROLLED_LIVE: the source-authored task10 handoff advanced the controlled project from generation2 to3 using the existing bounded transaction. Actual trigger INCOMPLETE_HISTORY_GUARD at69836 observed proxy tokens, below the unchanged72000 observed trigger; no threshold crossing is claimed. The131.890-second creation verified the issued URL, one exact bootstrap USER receipt and completed response, rechecked the source live, paired registry/Wake and preserved predecessors, sibling projects and native owners. One continuation was delivered, observed COMPLETE and exact-body verified. Original context policy is restored; no shared WakeHost or recurring process started.
 
@@ -613,13 +613,13 @@ The qualified predecessor/request contained no explicit app-selection marker; fr
 
 Predecessor context remains71753 observed proxy tokens; successor starts with1332 observed handoff tokens, not inherited lifetime traffic. Coverage and authenticated origin remain UNKNOWN/incomplete. Fresh post-review cleanup finds zero test-owned processes, unchanged trusted production executable, and the existing backend/tunnel retained. This is controlled live rollover/source-tool evidence, not installed two-project coding or unattended recovery. Current-source producer, canonical/control/Wake publication, two-Web native edits/verification, independent Wake/persistent recovery, full T-0484 and later CD-P7 remain OPEN. Next: request12, remaining invariant-specific dependencies and genuine cumulative judgment; do not send cumulative13 prematurely. Evidence: docs/verification/GENERATION3_CONTEXT_GUARD_ROLLOVER_AND_REVIEW_2026_11_03.json.
 
-## 2026-11-03T00:56:16.620419+00:00 — three source checkpoints verified; full Web operator module passes; near-trigger context remains incomplete
+## 2026-11-03T00:56:16.620419+00:00 â€” three source checkpoints verified; full Web operator module passes; near-trigger context remains incomplete
 
 Frozen6d review checkpoints8/9/10 each have one exact USER receipt, COMPLETE response, exact-body verification and CLOSED REVIEWED_PARTIAL outcome, no reported defect. Twenty-one declared Git calls each match one task-timed server log. Successful1-5/7-10 total67 calls;6 remains retired and uninspected, not passed. Requested dependency reads remain mandatory before cumulative judgment. Same89-path administrative claim active WAITING_FOR_CHATGPT/version4, no provider thread, absent report, original2026-11-03T03:16:28Z expiry retained. Current38be1c8 implementation has90 paths; neither partials nor coordinator closures create its acceptance or producer authority.
 
 The correct full Web operator module ran173 cases on current source with4 threads:172 passed,0 failed,1 intentionally ignored bounded-child entry. Tests finished129.87sec, contained owner137.562sec under180sec, no timeout/termination failure. The historical writer-contention case passes within this full suite; its body/five-second assertion is unchanged from the accepted baseline, and the entire rollover blob matches frozen6d. Original expanded164-pass/1-fail/1-ignored and broad144-case timeout records remain unchanged; their sole cause is not established. This is new SOURCE regression evidence, not a retroactive pass or installed acceptance. No assertions/deadlines were weakened and no hosted CI run is claimed.
 
-After checkpoint9, one existing read-only browser context capture reconciled58378→59646 proxy tokens, with profile identity and all noncurrent ledgers/journals preserved. It still reports RECENT_VISIBLE_EXCERPT_WITH_UNKNOWN_HISTORY with initial-history/overflow/text gaps. Checkpoint10's actual eight-call import reaches68534,args3001/results60710. Repeat imports are byte-idempotent; old generation/siblings retained; raw text not stored. Coverage, originating-chat authentication and exact provider context remain UNKNOWN. The96k budget/24k headroom/72k observed trigger are local unchanged policy, not a provider capacity claim.
+After checkpoint9, one existing read-only browser context capture reconciled58378â†’59646 proxy tokens, with profile identity and all noncurrent ledgers/journals preserved. It still reports RECENT_VISIBLE_EXCERPT_WITH_UNKNOWN_HISTORY with initial-history/overflow/text gaps. Checkpoint10's actual eight-call import reaches68534,args3001/results60710. Repeat imports are byte-idempotent; old generation/siblings retained; raw text not stored. Coverage, originating-chat authentication and exact provider context remain UNKNOWN. The96k budget/24k headroom/72k observed trigger are local unchanged policy, not a provider capacity claim.
 
 Before another large input, prepare the existing project-scoped incomplete-history guard at this actual quiescent task10 boundary. Preserve the original disabled policy, change no threshold, record the actual trigger reason, and restore policy after any successful continuation. This is a genuine ongoing-review handoff, not replay of a completed rollout; no new source request, replacement or binding has yet been created. Preserve unread6, all requested dependencies, original grant/lease expiry and native owners. Only untouched11-13 may transfer after a verified successor.
 
@@ -627,7 +627,7 @@ An independent read-only reconciliation confirms the prepared native fixture sti
 
 Final00:55:05 native inventory records test-owned0, same trusted production backend/listener and existing tunnel, WakeHost STOPPED/no login marker. All reviewed state/history and completed rollovers preserved; no recurring process or protected promotion. Full current-source review/producer, canonical/control and reviewed Wake integration, actual two-Web edits/native verification, independent Wake/persistent recovery, full T-0484 and later CD-P7 remain open. No operator action currently required. Evidence: docs/verification/CURRENT_FULL_WEB_MODULE_REGRESSION_2026_11_03.json and CURRENT_SOURCE_REVIEWS_8_TO_10_2026_11_03.json.
 
-## 2026-11-03T00:22:41.003983+00:00 — qualified CLAIMED observation and supported retirement; controlled Web source work resumes
+## 2026-11-03T00:22:41.003983+00:00 â€” qualified CLAIMED observation and supported retirement; controlled Web source work resumes
 
 Implementation source38be1c8 built in46.031sec. Matched development controller d2bfe7796865152f530ca5c43495d9530625712ef5180e447584542de3c0e713 qualified in42.234sec: missing bearer401, authenticated initialize/catalog200 with79 tools and registered-project read. Its finite15-second backend/tree exited and endpoint closed. Existing verifiedff32608b becomes previous; older583acbc4 remains retained and verified. All old/older-package, project/journal/context/queue/delivery pins match; authenticated profile identity is unchanged. Protected production stays trusted0c19770e; development selection creates no protected authority.
 
@@ -643,7 +643,7 @@ Actual-traffic reconciliation reaches generation2 proxy37169,args1749/results327
 
 Next READY: continue untouched checkpoint8 through run-current6d-carrier38-review-owner-nov02.ps1, then its normal observe/read/resolve/corroboration/context accounting. Retain missing checkpoint6 and requested dependency reads before cumulative judgment. Do not rerun diagnosis, retirement, package selection or completed rollout steps. Evidence: docs/verification/CLAIMED_REVIEW_DIAGNOSIS_LIVE_RECOVERY_2026_11_03.json.
 
-## 2026-11-02T23:58:48.553960+00:00 — two source reviews verified; interrupted dispatch preserved; read-only CLAIMED diagnosis source-tested
+## 2026-11-02T23:58:48.553960+00:00 â€” two source reviews verified; interrupted dispatch preserved; read-only CLAIMED diagnosis source-tested
 
 Current frozen source6d737c9 review checkpoints4/5 each have one exact USER receipt, COMPLETE response, exact-body verification and coordinator closure. Sixteen declared Git calls match one task-timed server log each, bringing completed checkpoints1-5 to41 corroborated calls. Both verdicts remain REVIEWED_PARTIAL with no reported defect and explicit dependency reads; they grant no cumulative source or producer authority. Idempotent current-generation accounting reaches27333 proxy tokens (arguments1449/results23574), retains predecessor/sibling ledgers and UNKNOWN/incomplete coverage, and stores no raw transcript. This is controlled Web source-review evidence, not two-project native coding acceptance.
 
@@ -655,9 +655,9 @@ This concrete recovery gap required a new source increment. The old89-path6d737c
 
 Final native inventory records zero test-owned processes, the same trusted backend/listener and existing tunnel, WakeHost STOPPED and no login marker. All checkpoint6 preservation pins match; existing registrations/history/native ownership and C49 remain intact. No new operator action is required. Next qualify the changed development controller and run one bounded metadata-only diagnosis of the retained exact request; do not resume/reset/replay it. Then qualify a supported evidence-based recovery transition and complete current-source review/producer/promotion, canonical/control and reviewed Wake publication, actual two-Web editing/verification and independent Wake/restart acceptance. Full T-0484 calibration and later CD-P7 remain open. Evidence: docs/verification/CLAIMED_REVIEW_DIAGNOSIS_SOURCE_2026_11_02.json.
 
-## 2026-11-02T23:24:50.581570+00:00 — measured-pressure rollover paired; serving recovered; successor performs real source-tool work
+## 2026-11-02T23:24:50.581570+00:00 â€” measured-pressure rollover paired; serving recovered; successor performs real source-tool work
 
-The controlled review project completed generation1→2 through the existing journal. First creation hit its165-second bound after recording an independently issued URL and completed exact bootstrap receipt; original binding stayed active. Supported receipt-only resume performed no new submission, rechecked the live source, paired registry/Wake URL+digest+generation, preserved predecessor and sibling/native-owner fields, and queued continuation. Continuation was delivered once, observed COMPLETE and exact-body read; original controlled policy is restored and no recurring WakeHost started.
+The controlled review project completed generation1â†’2 through the existing journal. First creation hit its165-second bound after recording an independently issued URL and completed exact bootstrap receipt; original binding stayed active. Supported receipt-only resume performed no new submission, rechecked the live source, paired registry/Wake URL+digest+generation, preserved predecessor and sibling/native-owner fields, and queued continuation. Continuation was delivered once, observed COMPLETE and exact-body read; original controlled policy is restored and no recurring WakeHost started.
 
 The continuation reported two tool checks failing with McpServerError: Session terminated. A subsequent local inspection found both owners stopped/no3200 listener, while canonical EXE/fingerprint still matched trusted0c19770e. Exact stop time/cause remain UNKNOWN. Codex host replacement occurred within the observation window, but it is not proven causal; no Wake/browser-stop attribution is made. Existing public backend-only startup and retained tunnel alias/profile/key reference restored serving without a new binary/plugin/tunnel/auth change. Missing bearer401, authenticated initialize/catalog200,102 tools and server central dispatcher are verified. One Codex v5 discovery returned a structured capability response. Public autostart remains AUTOSTART_REGISTERED_MONITOR_STOPPED; persistent recovery is NOT accepted. Current-observer Job data does not establish serving outer ownership; no Job/guard was changed.
 
@@ -667,7 +667,7 @@ Context history is isolated: generation1 proxy75576,args2604/results65995 remain
 
 Final inventory found zero test-owned processes, the restored trusted backend and existing tunnel running, WakeHost STOPPED/no login marker. Original five project bindings/history/native owners and signed artifacts remain preserved; only the controlled rollover binding advanced. Next continue frozen checkpoint4 and requested dependencies using the generation2 review owner, then genuine cumulative source review and existing release gates. Qualified persistent supervision, canonical/control and reviewed Wake publication, actual two independent Web source edits/native verification, full meter calibration and later CD-P7 remain open. No operator action is currently required. Evidence: `docs/verification/CURRENT_REVIEW_LIVE_ROLLOVER_AND_SERVING_RECOVERY_2026_11_02.json`.
 
-## 2026-11-02T21:55:31.882423+00:00 — two actual review checkpoints closed; measured pressure produced a durable source handoff
+## 2026-11-02T21:55:31.882423+00:00 â€” two actual review checkpoints closed; measured pressure produced a durable source handoff
 
 The SAME frozen6d737c9 review retains89 code paths. Both Web checkpoints have exact single USER receipts, COMPLETE responses, verified bodies and coordinator closure;17 declared Git calls match task-timed server logs. Both verdicts remain REVIEWED_PARTIAL with no reported defect and explicit dependency gaps. The report-only native claim stays active WAITING_FOR_CHATGPT/version4, report absent; no cumulative source or producer authority is created.
 
@@ -677,7 +677,7 @@ Local test scopes are separate: the144-case broad name-filter attempt hit its180
 
 Final native inventory found zero test-owned processes, the same trusted production backend/tunnel owners, WakeHost STOPPED and no login marker. All source handoff preservation checks match; no native project task/goal pause, protected promotion, authentication/profile reset, production target change or completed-request replay occurred. Next qualify and execute this exact prepared transaction through existing guarded new-chat creation, independently verify the issued URL/response and paired commit, continue once, restore policy and transfer only eligible unused frozen reviews at original expiry. Then continue checkpoint3 and unresolved dependencies within this SAME managed claim. Full installed two-Web coding, canonical/control and reviewed Wake publication, persistent recovery, complete T-0484 and later CD-P7 remain open. Evidence: `docs/verification/CURRENT_REVIEW_OBSERVED_PRESSURE_HANDOFF_2026_11_02.json`. No operator action is currently required.
 
-## 2026-11-02T21:31:49.984969+00:00 — one current-source managed review active; first genuine checkpoint complete
+## 2026-11-02T21:31:49.984969+00:00 â€” one current-source managed review active; first genuine checkpoint complete
 
 The existing authorization registry accepted all13 individually frozen requests for source6d737c9, retaining89 code paths (72 unchanged accepted blobs,15 changed,2 new). One exact authenticated local MCP source read matched Git byte-for-byte. Supported contract/approval/direct-claim APIs created one report-only task, WAITING_FOR_CHATGPT/active/version4, report absent, no provider thread or native model start. All4730 preexisting files except the expected accounting addition were preserved;579 original accounting rows remain and exactly one new claim row belongs to this review. plan_required remains true; the finite local owner exited naturally.
 
@@ -687,7 +687,7 @@ The9 calls were imported as18 argument/result observations through the existing 
 
 No project source edit, native project task/goal pause, protected promotion, authentication/binding change, recurring automation or replay occurred. Implementation stays frozen while genuine review proceeds. Next continue the remaining checkpoints within this SAME managed claim, preserve requested dependency gaps and obtain an actual cumulative SOURCE verdict before existing ACK/snapshot/producer/promotion gates. Installed two-Web coding, canonical/control and reviewed Wake integration, persistent recovery, detailed T-0484 and later CD-P7 remain open. No operator action is currently required. Evidence: `docs/verification/CURRENT_SOURCE_MANAGED_REVIEW_FIRST_CHECKPOINT_2026_11_02.json`.
 
-## 2026-11-02T21:15:06.076035+00:00 — current implementation frozen for complete source review
+## 2026-11-02T21:15:06.076035+00:00 â€” current implementation frozen for complete source review
 
 Current implementation6d737c9a0f6f34496fc88b9fec02433bd1599117 is frozen while review proceeds. A fresh comparison against original reviewed base e4a99a8 and genuinely accepted313f6a3 finds89 code paths:72 accepted Git blobs unchanged,15 changed and2 new. The old86-path number does not describe this current source. The accepted313f6a3 report exists and its native session remains COMPLETED_VERIFIED/inactive/version7. C52 partials remain historical observations, not cumulative acceptance of later code.
 
@@ -695,7 +695,7 @@ Twelve bounded immutable input groups cover all current changed/new paths throug
 
 Evidence: `docs/verification/CURRENT_6D_SOURCE_REVIEW_SCOPE_2026_11_02.json` and twelve `CURRENT_6D_REVIEW_INPUTS_*_2026_11_02.json` packets. Existing serving owners and all project histories/native sessions are preserved; no unchanged connector check was repeated.
 
-## 2026-11-02T21:07:14.361515+00:00 — retained review completion recovered without another USER message
+## 2026-11-02T21:07:14.361515+00:00 â€” retained review completion recovered without another USER message
 
 Exact source 6d737c9a0f6f34496fc88b9fec02433bd1599117 built in 44.687 seconds; its matching immutable development package qualified in 45.032 seconds. Missing bearer returned401, authenticated initialize/catalog returned200 with79 tools and a registered-project read. The test backend exited naturally and its port closed. Controller ff32608bd32b81c0bf82eef2efc0e600f8992f79eb2aa9578f578a51598b3372 retains prior583acbc4; all prior-package/journal checks and profile identity passed. This is development qualification, not protected release authority.
 
@@ -705,7 +705,7 @@ The15 corroborated original tool calls were imported as30 arguments/result obser
 
 After all sent reviews closed, the exact expired obsolete report-only C52 claim was cancelled through its existing versioned API: inactive/CANCELLED/version5, old event prefix and other native files preserved,4708 preexisting files checked. No provider thread existed, no project goal was paused, no new claim or source acceptance was created, and unused C remains unsent under expired authority. Intentional production serving remains the reviewed0c19770e release; no recurring owner was activated. Final native inventory found zero test-owned processes, the same intentional backend/tunnel owners, WakeHost STOPPED and no login marker. Next prepare a genuinely current-source review using the accepted unchanged-blob evidence and complete changed-path scope, then existing producer/promotion gates and actual two-Web coding. Connector, canonical/control and reviewed Wake publication, installed persistent recovery, full meter and later CD-P7 remain distinct open acceptance. No operator action is currently required. Evidence: `docs/verification/RESPONSE_DOCUMENT_IDENTITY_LIVE_RECOVERY_2026_11_02.json`.
 
-## 2026-11-02T20:58:40.829995+00:00 — completion observation binds the actual document instead of driver metadata
+## 2026-11-02T20:58:40.829995+00:00 â€” completion observation binds the actual document instead of driver metadata
 
 Offline DOM regressions reproduced both errors: correct conversation DOM was rejected when driver URL metadata was stale, and foreign conversation DOM could be accepted when driver metadata still matched. A third regression exposed navigation after reading the response. The original three regression bodies are unchanged after correction. Completion now checks evaluated location.href through the existing exact conversation matcher and rechecks it after reading the response or before translating a probe failure. Unreadable identity fails closed with fixed diagnostic codes; no new navigation, send, Retry/Regenerate or browser owner is introduced.
 
@@ -713,7 +713,7 @@ All 72 DOM cases and 44 adapter cases pass (116 distinct); strict all-target Cli
 
 Next build and qualify a matching immutable development package, then perform one bounded no-send observation of that existing response. Preserve the production release and intentional serving owners, all project bindings/native sessions, C49 and completed rollovers. Connector failure remains a separate recorded dependency; no retry was made. Full installed two-Web coding, canonical/control and reviewed Wake publication, persistent recovery, complete T-0484 and later CD-P7 remain open. Evidence: `docs/verification/RESPONSE_DOCUMENT_IDENTITY_SOURCE_2026_11_02.json`.
 
-## 2026-11-02T20:45:27.500639+00:00 — stable-supervisor first-install circularity reproduced and corrected in source
+## 2026-11-02T20:45:27.500639+00:00 â€” stable-supervisor first-install circularity reproduced and corrected in source
 
 The installed ROOT_UNAVAILABLE gate exposed a source bootstrap gap: preflight required a current receipt that activation itself should install, and activation refused a missing root before its existing protected initializer could run. A new temporary-root first-install regression failed on the original ordering with RootUnavailable. Preflight now reports SUPERVISOR_PROTECTED_INITIALIZATION_REQUIRED separately from runtime readiness. This does not assert that an unavailable root is safe.
 
@@ -721,7 +721,7 @@ Activation checks reviewed image, principal/runtime/startup policy, startup defi
 
 All14 lifecycle cases pass, including first install/repeat and refusal tests; all29 protected-store/installer cases pass. Strict all-target Clippy, fmt and diff checks pass. These43 cases are TESTED_SOURCE, not an installed activation or unattended recovery claim. Production supervisor root remains absent; recovered trusted backend/tunnel owners were not changed, and no browser/connector/monitor operation occurred. Independent review, approved deployment and actual protected first-install/interruption recovery remain required before activation. Existing review B and all expired/unknown state remain untouched. Evidence: `docs/verification/SUPERVISOR_FIRST_INSTALL_SOURCE_2026_11_02.json`.
 
-## 2026-11-02T20:35:28.070065+00:00 — existing serving pipeline restored; connector and persistent recovery remain distinct
+## 2026-11-02T20:35:28.070065+00:00 â€” existing serving pipeline restored; connector and persistent recovery remain distinct
 
 Supported public backend-only startup restored the existing trusted release. Missing-bearer MCP returned401 and authenticated initialize/catalog returned200;102 tools include the central dispatcher. The existing tunnel alias/profile reports ready, with profile bytes unchanged. No release artifact, project binding, browser, Wake worker or new tunnel was introduced.
 
@@ -729,7 +729,7 @@ One connector capability call failed before receiving a tool response: HTTP requ
 
 All4893 preservation checks match. Final inventory shows zero test-owned processes, with only intentional backend/tunnel serving owners retained; recurring WakeHost stays STOPPED. Pending review B, its verified partial body, completion target-drift refusal, expired grant and unsent C remain preserved. Next investigate the existing supervisor first-install/root precondition with isolated source tests; continue canonical/control and reviewed Wake integration while connector acceptance is unavailable. Full two-Web native coding and unattended acceptance remain OPEN. Evidence: `docs/verification/EXISTING_SERVING_PIPELINE_RECOVERY_2026_11_02.json`.
 
-## 2026-11-02T20:25:02.145298+00:00 — existing review body verified; completion drift and newly stopped serving are separate
+## 2026-11-02T20:25:02.145298+00:00 â€” existing review body verified; completion drift and newly stopped serving are separate
 
 Exact source 3148f44721566493e4adad7a91372450db857a38 built in44.734sec and its matching development package qualified in45.750sec, with missing bearer401/auth initialize/catalog200/79 tools, preserved prior package/profile/journals and owned endpoint/tree exit. Controller 583acbc4fbd526280571dc2e8cc658659aa627fbc6a7dec3d09d7f3356fdea15 retains predecessor 54c5ea4eb471abe690e64f96b47ca0bc40a161438c51ebfca485cac9b2ec20e5. A bounded no-send diagnosis at 2026-11-02T11:29:51.465608+00:00 verified the existing response snapshot in65.438sec with4893 pins unchanged. A separate private read recovered the original C52 semantic B body: REVIEWED_PARTIAL, no reported defect, response SHA 336d8babf362fa6d8091f8752bf5353a2151e54b875571d2ea3716feaca61e3d, all15 frozen commands independently corroborated. This does not prove why the earlier body was absent or that the new offline error-card fix caused its recovery.
 
@@ -739,7 +739,7 @@ Fresh serving inventory at 2026-11-02T20:23:05.9369316+00:00 found no port3200 l
 
 Next prioritize the existing supported serving-owner recovery preflight, preserving authentication, projects, unknown sends and release authority. Do not create a new tunnel/plugin or blindly repeat the completion probe. No operator-only action has yet been established. Canonical/control scope, reviewed Wake publication, genuine two-Web native edits, full context meter and unattended recovery remain OPEN. Evidence: `docs/verification/UNMOUNTED_RESPONSE_LIVE_REVIEW_RECOVERY_2026_11_02.json`.
 
-## 2026-11-02T11:23:48.924376+00:00 — absent assistant-role error cards reproduced and classified without recovery actions
+## 2026-11-02T11:23:48.924376+00:00 â€” absent assistant-role error cards reproduced and classified without recovery actions
 
 Two real source gaps are reproduced offline: response loading failure cards without assistant-role/header nodes remain pending, and source_snapshot returns assistant-not-mounted before consulting its existing observer. The positive DOM regression and adapter regression failed before correction; their bodies are unchanged after correction. Detection now permits one visible exact error card only inside the verified current paired exchange after its USER, with no later turn. USER/code/quotation/control/semantic/tool content and ambiguous multiple cards are excluded. This observes failure only; it grants neither completion nor Retry.
 
@@ -747,7 +747,7 @@ The adapter reuses observe_cooperative_response on the missing-assistant path an
 
 Next qualify a matching development package and perform one bounded no-send diagnosis of the existing receipt, preserving B and its expired original grant. Do not resend B/C49, submit C, infer review acceptance or alter protected release authority. Independent two-Web coding, canonical/control and reviewed Wake publication remain OPEN. No operator action required. Evidence: `docs/verification/UNMOUNTED_RESPONSE_ERROR_SOURCE_2026_11_02.json`.
 
-## 2026-11-02T11:01:46.049007+00:00 — phase-correct SENT diagnosis qualified in the real retained browser profile
+## 2026-11-02T11:01:46.049007+00:00 â€” phase-correct SENT diagnosis qualified in the real retained browser profile
 
 Exact published source ef6815358965fe8458f01abca6807e820dbc5ceb built separately in51.015sec. Existing development package selection and verification completed in44.313sec: missing bearer401, authenticated initialize/catalog200,79 tools and a registered-project read. Current controller 54c5ea4eb471abe690e64f96b47ca0bc40a161438c51ebfca485cac9b2ec20e5 retains verified predecessor 40ca54cf759c8bf180068ceb25d7c7dd09f547e849f0efc5794bc0e8afce57cc. Owned endpoint/tree exit, old immutable package bytes, project journals and authenticated profile identity passed. This is isolated development qualification; protected production is unchanged.
 
@@ -755,7 +755,7 @@ One monitored no-send diagnosis of the existing confirmed SENT request completed
 
 Final inventory found zero test-owned processes; trusted sole backend listener and original tunnel retained, recurring WakeHost STOPPED, no login marker. No message, retry, task, binding, authentication or production change. Next inspect existing event-scoped missing-body/error-card selectors using deterministic fixtures, excluding USER/tool/code text and historical failed turns. Do not repeat unchanged live checks. Canonical/control and reviewed Wake publication, actual two-Web native edits, full meter and unattended acceptance remain OPEN. No operator action required. Evidence: `docs/verification/SENT_REVIEW_PHASE_DIAGNOSTICS_LIVE_2026_11_02.json`.
 
-## 2026-11-02T10:48:46.199460+00:00 — confirmed-delivery response diagnosis now has its own existing-reader path
+## 2026-11-02T10:48:46.199460+00:00 â€” confirmed-delivery response diagnosis now has its own existing-reader path
 
 The reproduced SCOPED_RECONCILE_DELIVERY_INVALID refusal came from routing a confirmed SENT review into unknown-submission diagnosis. Existing `operator web review diagnose --project-id <registered-id> --event-id <delivered-event>` now selects phase using read-only Store access. SENT uses the existing bounded snapshot reader under the project lease, with exact receipt, project, paired target and post-read checks. Output contains only closed codes and bounded telemetry; response text, private snapshot, composer and conversation URL are not exported. SNAPSHOT_VERIFIED is an observation, not a timer/task/source approval. SUBMITTING retains its original historical-dispatch/no-replay path. No new browser owner, sender, scheduler or recovery framework exists.
 
@@ -763,7 +763,7 @@ Four new Windows cases pass in17.92sec: current versus historical failure attrib
 
 Next build the exact published source separately, qualify with existing development release procedures and perform one bounded no-send SENT diagnosis if qualified. Preserve the pending request and every project owner/binding; do not repeat completed work or infer protected release authority. Genuine two-Web native editing, canonical/control and reviewed Wake publication remain open. No operator action required. Evidence: `docs/verification/SENT_REVIEW_PHASE_DIAGNOSTICS_SOURCE_2026_11_02.json`.
 
-## 2026-11-02T10:35:42.444058+00:00 — updated handoff reconciled; semantic review A verified, B response unverified
+## 2026-11-02T10:35:42.444058+00:00 â€” updated handoff reconciled; semantic review A verified, B response unverified
 
 Reread the canonical single-file handoff and its mandatory full context-meter, source-authored rollover, evidence-scope and later provider-client requirements. Existing source, controlled, installed and unattended results remain distinct; older snapshots do not override newer verified evidence. No new architecture, browser owner, registry or release candidate was introduced.
 
@@ -775,7 +775,7 @@ Corrected only the private evidence harness so future reads require a verified n
 
 No operator action is currently required. Preserve B until supported response evidence changes; do not replay it or run C behind pending work. Continue independently eligible canonical/control and reviewed Wake-publication implementation. Genuine cumulative source/release authority, actual two-project Web/native edits, installed independent Wake/rollover, unattended recovery, full T-0484 and later CD-P7 remain OPEN. Evidence: `docs/verification/C52_SEMANTIC_REVIEW_RESPONSE_DIAGNOSTIC_2026_11_02.json`.
 
-## 2026-11-02T09:46:07.727712+00:00 — first predecessor-free conversation and subsequent public-source MCP work verified
+## 2026-11-02T09:46:07.727712+00:00 â€” first predecessor-free conversation and subsequent public-source MCP work verified
 
 The existing qualified controller at source 9039ee9d89cbcf457160ac7e76fdfcd00fdb159e registered one new isolated Web-only fixture through the existing registry. Initial preparation had no predecessor or borrowed URL. One bounded creation reached BOUND: the ChatGPT-issued URL/digest, exact bootstrap USER receipt and exact initialization acknowledgment passed the qualified completion probe before paired generation1 binding. The project retains empty predecessor history, no native thread and no execution grant. Every original project row, binding, history and owner is preserved. No new profile, tunnel, scheduler or browser owner was introduced.
 
@@ -787,13 +787,13 @@ The new conversation's advisory proxy is3491, arguments179/results2371, with unk
 
 These are TESTED_CONTROLLED_LIVE results. Current C52 semantic review remains INCONCLUSIVE; later source increments inherit no authority. Next prepare actual cross-component semantic source reads using the now-working fresh conversation and existing claim/approval machinery, preserving all earlier evidence. Canonical/control reconciliation, reviewed installed Wake publication, two independent Web/native workspace edits, installed/unattended recovery, full T-0484 and later CD-P7 remain OPEN. No operator action is required. The initialized fixture and its records are retained for follow-up; do not replay it. Evidence: `docs/verification/PREDECESSOR_FREE_INITIALIZATION_LIVE_2026_11_02.json`.
 
-## 2026-11-02T09:10:16.665968+00:00 — diagnosed-read controller qualified in isolated development
+## 2026-11-02T09:10:16.665968+00:00 â€” diagnosed-read controller qualified in isolated development
 
 Exact source 9039ee9d89cbcf457160ac7e76fdfcd00fdb159e built in 34.094 seconds. The matching controller 40ca54cf759c8bf180068ceb25d7c7dd09f547e849f0efc5794bc0e8afce57cc passed finite development qualification in 43.562 seconds: missing bearer401, authenticated initialize/catalog200,79 scoped tools and a registered-project read. Its owned backend tree exited and endpoint closed. Previous verified controller 2e623e3cc08c274f778a6d74a805332fd21966de70eff81daaf94894ecef2cd0 and all retained artifact/project/journal pins match; authenticated profile identity is preserved. Fresh process inventory is zero for scoped browser/Wake/native-test processes; recurring WakeHost stays STOPPED and trusted production/tunnel owners are retained.
 
 This is isolated development verification, not independent source or installed acceptance. Original C52 semantic review remains INCONCLUSIVE; no report, source integration, ACK, snapshot, producer or protected promotion was created. Next exercise the never-tested predecessor-free initialization in a new isolated Web-only scope using the existing registry/profile/owner. Do not replay completed canaries, duplicate a production project workspace or infer native execution authority. No operator action is required. Evidence: `docs/verification/DIAGNOSED_PREPARATION_PACKAGE_2026_11_02.json`.
 
-## 2026-11-02T09:03:51.791755+00:00 — diagnosed target preparation no longer holds sibling binding reads; semantic review remains inconclusive
+## 2026-11-02T09:03:51.791755+00:00 â€” diagnosed target preparation no longer holds sibling binding reads; semantic review remains inconclusive
 
 The exact C52 reassessment completed INCONCLUSIVE, with five task-correlated Git calls and response SHA 03b12195117dfc59b2d845f49bd585df2eabcc7546e01110b505bc161ffef5f3. It independently resolved the eight-blob identity, parent-label and recorded-coverage questions. Semantic cross-component reconciliation and a timing-risk decision remain open; no source integration, native report, ACK, snapshot or producer was fabricated. All original requests and both inconclusive results are retained. This is an internal review gap, not a connector outage or operator-only blocker.
 
@@ -805,7 +805,7 @@ Generation8 advisory context is26,408, args809/results23,317, incomplete and una
 
 Next qualify a matching development controller and exercise the new predecessor-free initialization through the existing owner in a new isolated Web-only test scope. Read-only inventory confirms zero existing initial-conversation journals, so this tests a new feature rather than replaying a completed rollover. This controlled test cannot substitute for canonical two-Web coding. Canonical/control authority, reviewed Wake publication, genuine current-source semantic acceptance, installed multi-project operation, unattended/reboot, full T-0484 and later CD-P7 remain OPEN. No operator action is required. Evidence: `docs/verification/DIAGNOSED_TARGET_PREPARATION_ISOLATION_2026_11_02.json`.
 
-## 2026-11-02T08:39:08.629622+00:00 — original C52 review batch complete; cumulative judgment inconclusive and exact coverage evidence prepared
+## 2026-11-02T08:39:08.629622+00:00 â€” original C52 review batch complete; cumulative judgment inconclusive and exact coverage evidence prepared
 
 The existing managed C52 claim remains active at WAITING_FOR_CHATGPT/version 4. Supported parent revocation and unusedMessagesFromGrant transferred only original never-reserved requests 7/8 to paired generation 8, with unchanged wire bytes, identities, expiry and runtime limits. All 24 historical grants and 43 old work records were retained except the supported parent revocation. Both preflights passed. Requests7/8 were each sent once, observed, read and coordinator-closed; no request 1-8 remains unsent or is eligible for replay.
 
@@ -817,7 +817,7 @@ Generation 8 advisory accounting progressed 17,408 to 19,753, with argument/resu
 
 Next is one targeted reassessment using the requested durable predecessor, exact-blob/coverage and timing evidence under the same claim. Installed Wake publication, canonical/control scope, two-Web native editing, unattended recovery, full T-0484 and later CD-P7 remain OPEN. No new operator action is required. Evidence: `docs/verification/C52_GENERATION8_REVIEW_OUTCOME_2026_11_02.json` and `docs/verification/C52_EXACT_SOURCE_COVERAGE_WITNESS_2026_11_02.json`.
 
-## 2026-11-02T08:16:12.733780+00:00 — original completed handoff recovered; generation8 continuation verified
+## 2026-11-02T08:16:12.733780+00:00 â€” original completed handoff recovered; generation8 continuation verified
 
 The matching controller for exact source c1223edf580b3b388183216d327fd3297eeb87c2 passed the existing finite development qualification in 42.813 seconds: missing bearer 401, authenticated initialize/catalog 200, 79 scoped tools and a real registry read. Owned backend tree exit, closed endpoint, retained previous artifact and all project/journal pins passed. This qualifies an isolated development package, not an independent source review or protected promotion.
 
@@ -827,7 +827,7 @@ One existing guarded creation completed in 141.344 seconds: actual ChatGPT-issue
 
 Original temporary policy is restored. A fresh actual process inventory found zero test-owned processes; the trusted installed backend remains the sole expected listener, the original tunnel is retained and recurring WakeHost stays STOPPED. No production, authentication or native-session action occurred. This is TESTED_CONTROLLED_LIVE. The C52 review still has six genuine partial checkpoints and two original unsent requests; later controller increments cannot inherit C52 source authority. Next transfer only those never-reserved identities through the existing guarded authorization, continue the same review, then canonical first-chat/two-Web acceptance. Wake publication needs source integration, and full T-0484 and later CD-P7 remain mandatory. No new operator action is required. Evidence: `docs/verification/EVIDENCE_ONLY_GIT_HANDOFF_LIVE_RECOVERY_2026_11_02.json`.
 
-## 2026-11-02T07:53:27.573060+00:00 — evidence-only Git handoff compatibility source tested; original completed source remains held
+## 2026-11-02T07:53:27.573060+00:00 â€” evidence-only Git handoff compatibility source tested; original completed source remains held
 
 Checkpoint6 completed as REVIEWED_PARTIAL, with nine corroborated calls; six completed checkpoints now total56 actual task-timed calls. Generation7 proxy reached81,541, then82,866 after qualified read-only capture, above the unchanged72,000 trigger. The existing workflow queued OBSERVED_PRESSURE, delivered one handoff request and observed COMPLETE. Collection then correctly retained the source with WEB_HANDOFF_GIT_STATE_INVALID; no replacement or binding change occurred. Exact readback confirms a3,297-byte source reply, SHA256 5863469ea7db7774fd263612b5871db1b475171783908d0f6ad5cd996ff29006, with SOURCE_REPORTED basis, three source-evidence observations and null native branch/HEAD/worktree. No native Git fact was claimed. Original reply, receipt, refusal and pending intent remain preserved; original policy is restored while source qualification proceeds.
 
@@ -835,15 +835,15 @@ The narrow validator increment accepts source-evidence-only reports without inve
 
 Next build and qualify a matching isolated controller, then collect the SAME completed source reply without any new USER message; retain the original failed artifacts and use the existing guarded transaction. The current C52 claim remains scoped to C52 and cannot authorize this later increment. Native project owners, all bindings, production, authentication and recurring controls were not changed. Installed Wake publication remains source integration work, not a service restart request. No new operator action is required. Evidence: `docs/verification/EVIDENCE_ONLY_GIT_HANDOFF_SOURCE_2026_11_02.json`.
 
-## 2026-11-02T07:15:37.310288+00:00 — three further C52 checkpoints complete; current review continues near pressure threshold
+## 2026-11-02T07:15:37.310288+00:00 â€” three further C52 checkpoints complete; current review continues near pressure threshold
 
 Original frozen checkpoints3,4 and5 were each sent once, observed COMPLETE, read, coordinator-closed and independently corroborated by nine task-timed server logs. Their REVIEWED_PARTIAL verdicts retain all86 declared paths,78 accepted baseline blobs unchanged, six changed and two new paths. No concrete defect was reported in the scoped onboarding/admission/adapter/runtime ranges. All47 declared calls across the five completed checkpoints are now corroborated; this is not cumulative source acceptance, native task completion or release authority. The unchanged expanded-regression timing failure and installed limits remain recorded.
 
-Existing receipt/context APIs imported each completed checkpoint's known traffic, with separate-process repeated import byte-idempotent and other ledger/journal/binding pins unchanged. Generation7 proxies progressed35,654 →49,355 →66,137. Current argument/result proxy counts are1,836/61,632; coverage remains UNKNOWN_OR_INCOMPLETE, origin unauthenticated and provider context inexact. The unchanged trigger is72,000 under the local96,000 budget. Checkpoint6 has started once under the existing transferred grant; reconcile that exact attempt/receipt and traffic before checkpoint7, using the existing source-authored handoff if due. No new task IDs, claims or approval prompts were generated.
+Existing receipt/context APIs imported each completed checkpoint's known traffic, with separate-process repeated import byte-idempotent and other ledger/journal/binding pins unchanged. Generation7 proxies progressed35,654 â†’49,355 â†’66,137. Current argument/result proxy counts are1,836/61,632; coverage remains UNKNOWN_OR_INCOMPLETE, origin unauthenticated and provider context inexact. The unchanged trigger is72,000 under the local96,000 budget. Checkpoint6 has started once under the existing transferred grant; reconcile that exact attempt/receipt and traffic before checkpoint7, using the existing source-authored handoff if due. No new task IDs, claims or approval prompts were generated.
 
 Completed stage owners exited without timeout and preservation pins match. A final process inventory is intentionally not asserted while checkpoint6 is active. Native project execution, production, binding and recurring-automation changes remain zero for this slice. The same C52 managed claim is active; later6544 transfer code does not inherit its source authority. New source inspection separately identifies Wake publication as implementation work rather than a service-installation request, and the existing native acceptance scope has context-only preparation. Continue current review without replaying completed or active requests. Installed first-chat/two-Web coding and broader acceptance remain OPEN. Evidence: `docs/verification/C52_REVIEW3_5_PROGRESS_2026_11_02.json`.
 
-## 2026-11-02T07:04:48.052777+00:00 — publication is an implementation gap; exact prior timing failure preserved
+## 2026-11-02T07:04:48.052777+00:00 â€” publication is an implementation gap; exact prior timing failure preserved
 
 Read-only current-source inspection confirms two independent publication holds: wake/install.ps1 unconditionally refuses every non-BuildOnly invocation before build/stage, and the fixed broker service is explicitly unable to mutate an installation. Its binary supplies no provisioning mode. Installing or restarting that service alone is therefore not a qualified recovery procedure. No operator command is offered or attempted; this is SOURCE_PUBLICATION_INTEGRATION_REQUIRED. After current review, implement/qualify the existing reviewed Wake publication or reviewed migration path without bypassing holds or creating another framework.
 
@@ -851,7 +851,7 @@ The exact earlier expanded-regression failure is the five-second aggregate asser
 
 Independent preparation produced a2,733-byte context-only bootstrap input for one already registered clean isolated native acceptance worktree, preserving its existing thread and unbound state. It carries recorded scope/next verification and requires ownership revalidation plus an explicit task grant before any edit. A lexical-path preparation refusal was reconciled through native same-file identity before creating output; original helper remains preserved. No project registration, native probe, chat creation, message, key/grant, binding, service or production operation occurred. The private project details remain local. Continue current source checkpoints now; installed first-chat/two-Web/native acceptance remains OPEN. Evidence: `docs/verification/WAKE_PUBLICATION_SOURCE_AND_TIMING_INVESTIGATION_2026_11_02.json`.
 
-## 2026-11-02T06:32:31.024286+00:00 — successor source review advances under transferred authorization; generation7 context remains separate
+## 2026-11-02T06:32:31.024286+00:00 â€” successor source review advances under transferred authorization; generation7 context remains separate
 
 The original never-submitted checkpoint2 was delivered once to the verified generation7 successor, observed COMPLETE, read and coordinator-closed as REVIEWED_PARTIAL. Nine task-timed logs independently corroborate the packet and eight exact pinned source commands; UI marker counts are not execution proof. The reviewer inspected onboarding through line420 and a remaining CLI range, reported no concrete defect and retained scope/regression/installed limitations. The exact response hash isf765863a4c8e26d63f3e9e4d09d7ce478dbf9540dde8a8e91503831529f2fe65. Neither this partial nor coordinator closure grants cumulative source, native completion or release authority. Checkpoint1 is preserved and six original frozen requests remain untouched under the same86-path C52 claim.
 
@@ -859,7 +859,7 @@ The existing receipt and context APIs imported nine correlated calls/eighteen ad
 
 Final actual inventory found zero test-owned processes. The trusted installed backend/single listener and original tunnel retain their identities; shared WakeHost is STOPPED and no login marker or recurring automation exists. Next continue only checkpoint3 and the remaining bounded exact-source reviews, account traffic between slices, and use the existing handoff only if genuinely due. Canonical first-chat/two-Web native coding, installed Wake authority/provisioning, unattended recovery, full meter calibration and later providers remain OPEN. No new operator action is required. Evidence: `docs/verification/C52_SUCCESSOR_REVIEW2_CONTEXT_2026_11_02.json`.
 
-## 2026-11-02T06:20:28.436369+00:00 — matching transfer controller qualified; actual unused identities admitted without replacement tasks
+## 2026-11-02T06:20:28.436369+00:00 â€” matching transfer controller qualified; actual unused identities admitted without replacement tasks
 
 Published source6544f6b20aff7eb8ca13f58bd212b5ea6e5d3234 built in39.875 seconds. Its separately selected development controller6aadcc717872ac90fa4e53a9c6d41a1ab2a7840c6aaa49a892222806f52bce5a passed the existing finite package qualification in45.031 seconds: missing authentication401, authenticated initialize/catalog200,79 scoped tools and a registered-project read. The owned backend tree exited and endpoint closed. Previous verified92867fcb artifacts, all project/journal pins and authenticated profile identity are preserved; shared host remains STOPPED. This is development qualification, not protected promotion.
 
@@ -867,7 +867,7 @@ The existing authorization route accepted one explicit unused-message transfer a
 
 Compatibility is explicit: older strict controllers refuse a project ledger containing the transfer field. Keep the retained previous artifact and history; do not erase transfer records or pretend it is a compatible rollback for this new ledger. The production canonical backend and its separate ledger were not modified. Continue the genuine C52 checkpoints, then independently assess the later two-file transfer increment before any authority that requires that source. Canonical first-chat, installed Wake provisioning/authority, two-Web native coding, unattended recovery and full meter/provider acceptance remain OPEN. No new operator action is required. Evidence: `docs/verification/UNUSED_REVIEW_TRANSFER_DEVELOPMENT_QUALIFICATION_2026_11_02.json`.
 
-## 2026-11-02T06:10:17.699624+00:00 — unused review transfer implemented in existing ledger; live qualification next
+## 2026-11-02T06:10:17.699624+00:00 â€” unused review transfer implemented in existing ledger; live qualification next
 
 The seven successor requests were not sent: existing authorization refused WEB_REVIEW_GRANTS_INVALID because global identity uniqueness also covers revoked grants. That refusal and all old records remain intact. Renaming equivalent work or directly rewriting authorization would evade the intended history protections. The narrow source increment instead extends the existing review authorize request with optional `unusedMessagesFromGrant`. It transfers only an exact subset of a revoked, unexpired predecessor's never-reserved identities to a later current paired target, preserving message/request/event/review-key identity and old grant bytes. Expiry and execution limits cannot increase; forwarded messages consume the predecessor quota, and branching transfers are refused. Reserved, dispatched, existing-work and unknown outcomes remain non-transferable. Existing project lease, paired target and invitation preflight are unchanged; authorization starts no browser or task.
 
@@ -875,7 +875,7 @@ Eighteen authorization tests passed, including six new transfer cases for restar
 
 Absent optional fields preserve legacy serialized bytes. Once used, older strict ledger readers refuse the new field; select a matching qualified development controller before live use. Existing installed binaries, canonical authority, native owners and all historical reviews are unchanged. The same C52 report-only claim remains scoped to its original exact source; this later change does not inherit its eventual source acceptance. Next publish, build and qualify the minimal new development increment, then transfer only the seven unused frozen identities through the supported authorization path. Do not rerun the rejected batch or replay the completed first review. No operator action is required for this eligible development step. Evidence: `docs/verification/UNUSED_REVIEW_GRANT_TRANSFER_SOURCE_2026_11_02.json`.
 
-## 2026-11-02T06:00:00.208305+00:00 — same prepared rollover completed; exact continuation verified, authority scope remains distinct
+## 2026-11-02T06:00:00.208305+00:00 â€” same prepared rollover completed; exact continuation verified, authority scope remains distinct
 
 The existing prepared pressure transaction first refused with WEB_ROLLOVER_NOT_DUE_OR_DISABLED, retaining PREPARED without bootstrap progress or receipt. Source inspection places that policy check before browser admission. Restoring the original policy before execution was premature: the existing guard requires rollover enabled during execution. The supported policy command temporarily re-enabled only that existing flag, with unchanged thresholds and observation disabled. A separately recorded attempt retained the same intent and frozen bootstrap contract; original refusal and private preparation failures remain preserved. No product guard or transaction record was manually cleared.
 
@@ -885,7 +885,7 @@ The original policy is restored. All bounded owners exited without timeout; actu
 
 Next finish the remaining source checkpoints under the same claim, then the existing qualified release/publication path and canonical first-chat/two-Web native acceptance. Installed Wake provisioning, canonical/control scope, unattended recovery, full context calibration and later provider clients remain separate OPEN gates. No operator action is required for the next public-source review. Evidence: `docs/verification/C52_POLICY_RECONCILIATION_ROLLOVER_GENERATION7_2026_11_02.json`.
 
-## 2026-11-02T05:36:37.836011+00:00 — genuine first initialization review and pressure handoff; same claim remains active
+## 2026-11-02T05:36:37.836011+00:00 â€” genuine first initialization review and pressure handoff; same claim remains active
 
 The existing scoped registry authorized eight frozen read-only source-review requests and all eight preflights passed. One report-only native claim retains86 paths (78 accepted313 blobs unchanged,6 changed,2 new), preserving4,719 prior files and578 old accounting rows with one attributable row. The first checkpoint was sent once with exact receipt, observed COMPLETE, read and coordinator-closed as REVIEWED_PARTIAL/no findings. Eleven task-correlated server logs corroborate eight source ranges, two evidence reads and the packet; UI markers are not execution proof. No cumulative source acceptance, completion report, ACK, producer or native execution is inferred.
 
@@ -895,11 +895,11 @@ Final browser/Wake inventory found zero test-owned processes, the trusted backen
 
 Read-only inspection separately confirms the installed-Wake publication prerequisite: the source installer refuses non-BuildOnly operation with WAKE_INSTALL_BROKER_UNPROVISIONED, and SCM reports the fixed broker service ObjectNotFound. This does not imply backend or connector failure, and no blocked installation was attempted. Next execute the existing PREPARED rollover, verify URL/source/paired authority and continuation, then continue the seven untouched source checkpoints under the same claim with successor-bound authorization. Do not replay completed reviews/handoff sends or infer native acceptance. Full multi-project/Web coding, installed Wake/recovery, context calibration and later provider clients remain OPEN. No operator action is required for the next bounded transaction. Evidence: `docs/verification/C52_FIRST_REVIEW_CONTEXT_PRESSURE_HANDOFF_2026_11_02.json`.
 
-## 2026-11-02T04:46:08.085166+00:00 — bounded current-source review pages prepared
+## 2026-11-02T04:46:08.085166+00:00 â€” bounded current-source review pages prepared
 
 The immutable c52e9ef initialization review is split into seven metadata pages covering all55 bounded source reads, with86 paths retained (78 accepted baseline blobs unchanged,6 changed,2 new). Each page and declared evidence response fits the existing8KiB input profile. These are input references, not review verdicts. The prior313 managed session was read through the actual v5 connector as COMPLETED_VERIFIED/inactive version7. No equivalent active claim was reused or completed message replayed. Next freeze the existing report-only contract and scoped requests, preflight them, then conduct genuine review through the qualified owner. No native task, browser, binding, authentication or protected-release action occurred in this preparation.
 
-## 2026-11-02T04:39:10.017235+00:00 — matching initialization package qualified; installed Wake compatibility identified
+## 2026-11-02T04:39:10.017235+00:00 â€” matching initialization package qualified; installed Wake compatibility identified
 
 Exact source c52e9ef75490381becabaaf027f98f2845f1a183 built a matching controller, Wake host and Python pair in 82.312 seconds. The existing development-package update and verification workflow completed in 44.828 seconds, retaining its verified previous controller846b90b2. A finite 15-second backend rejected missing authentication401 and accepted initialize/catalog200 with79 scoped tools and a registered-project read. Its whole owned tree exited, readers closed and endpoint closed. All project/journal and old-package pins matched; the authenticated profile identity was preserved, the development Wake host stayed STOPPED and no login marker remains. This creates development verification only, not protected release authority.
 
@@ -907,7 +907,7 @@ Read-only installed-package evidence identifies the next concrete dependency: ca
 
 Exact current-source review inputs are prepared with86 declared paths:78 accepted baseline blobs unchanged, six modified and two new. Bounded immutable Git reads are recorded; no new managed claim, authorization, Web request or review acceptance exists yet. Next obtain genuine source review under the existing scoped workflow, then qualify the existing installed-Wake publication path. No operator action is required for review preparation. Two-Web coding, installed independent Wake/rollover, unattended recovery, full context calibration and later provider clients remain OPEN. Evidence: `docs/verification/FIRST_CONVERSATION_PACKAGE_QUALIFICATION_2026_11_02.json` and `docs/verification/FIRST_CONVERSATION_REVIEW_INPUTS_2026_11_02.json`.
 
-## 2026-11-02T04:25:33.629853+00:00 — first-conversation initialization implemented and source qualified
+## 2026-11-02T04:25:33.629853+00:00 â€” first-conversation initialization implemented and source qualified
 
 Registered projects without a ChatGPT target now have an explicit initialization path through the existing project lock, shared browser FIFO, qualified CDP owner and paired registry/Wake CAS. The frozen context has a null predecessor and registration digest. Empty Home/draft checks, durable text-entry/draft/Send acknowledgments, actual issued-URL receipt and exact project acknowledgment precede binding. Initialization changes no native owner and grants no execution. Pending initialization fences Web work; unknown Send is held without replay. Wake-first and post-binding/context crash checkpoints recover idempotently in source fixtures.
 
@@ -915,9 +915,9 @@ Verification: 136 Python regressions plus one additional Rust/Python Unicode wir
 
 This is TESTED_SOURCE. No browser, Wake, production, project-binding or native task operation occurred. Installed trusted serving evidence remains separate. Next qualify a matched controller/adapter package and perform bounded first-chat initialization before genuine two-Web coding. New explicit-purpose queue entries require matched readers; older strict controllers fail closed. Never replay completed registration, C49 or unknown sends. Full installed multi-project/Wake/rollover, unattended recovery, context calibration and later provider clients remain OPEN. No operator action is required for source work. Evidence: `docs/verification/FIRST_CONVERSATION_INITIALIZATION_SOURCE_2026_11_02.json`.
 
-## 2026-11-02T03:43:57.713464+00:00 — installed finite supervisor, existing cached dispatcher and isolated native scope
+## 2026-11-02T03:43:57.713464+00:00 â€” installed finite supervisor, existing cached dispatcher and isolated native scope
 
-The promoted installed backend passed its existing finite backend-only supervisor with RECOVERED → READY → MONITORING_COMPLETE after a controlled stop, in32.468 seconds. Missing bearer returned401, authenticated catalog200/102 tools, the monitor exited, and all recorded preservation pins matched. The replacement canonical daemon remains intentionally serving. No recurring registration, browser, Wake or tunnel restart was enabled; the original tunnel instance/profile are preserved. This qualifies bounded installed recovery, not reboot or unattended persistence.
+The promoted installed backend passed its existing finite backend-only supervisor with RECOVERED â†’ READY â†’ MONITORING_COMPLETE after a controlled stop, in32.468 seconds. Missing bearer returned401, authenticated catalog200/102 tools, the monitor exited, and all recorded preservation pins matched. The replacement canonical daemon remains intentionally serving. No recurring registration, browser, Wake or tunnel restart was enabled; the original tunnel instance/profile are preserved. This qualifies bounded installed recovery, not reboot or unattended persistence.
 
 The existing cached v5 `run_command` interface accepts only the reserved `CATDESK_WEB_TASK=` JSON adapter for central project calls, with the same bearer/mode/plan, key, task journal, native grant and ownership checks. It never runs that text as a shell command. One fresh malformed native-status probe reached the installed dispatcher and returned WEB_TASK_ARGUMENTS_INVALID before task admission. Therefore missing client catalog visibility is not itself an execution blocker for NEW authorized tasks through this already supported equivalent interface. C49 and all held/completed calls remain untouched. Optional Refresh of the existing app can improve discovery; no replacement plugin or authentication change is needed for this route.
 
@@ -925,7 +925,7 @@ Existing native project chats remain active. One owner reserved a useful offline
 
 Next source task: extend the SAME guarded browser transaction to initialize a first conversation for an unbound registered project. Existing prepare/browser APIs require a paired predecessor; do not borrow another project's URL, invent a predecessor, alter original owners or label an availability reply as two-Web coding. First-chat onboarding, actual two-Web edits/native verification, installed Wake/rollover, persistence, full meter calibration and later provider clients remain OPEN. No operator action is required for the next source implementation. Evidence: `docs/verification/INSTALLED_SUPERVISOR_CACHED_NATIVE_AND_ISOLATED_SCOPE_2026_11_02.json`.
 
-## 2026-11-02T03:12:06.017834+00:00 — retained reviewed release promoted; installed authentication, rollback and connector verified
+## 2026-11-02T03:12:06.017834+00:00 â€” retained reviewed release promoted; installed authentication, rollback and connector verified
 
 The existing supported reviewed promotion completed once for source `9ea9e7beedf986db95cd5bea7b750544e452caa8`, executable SHA-256 `0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901` (38,482,432 bytes). Qualified administrative controller `4e655bb132ba31dee783f598cf4d660593c70a6f561438eba15511a896df4911` remained separate from the payload. No rebuild, producer reconfirmation or manual fingerprint rewrite occurred. The prior completed handoff was first preserved by its supported exact-evidence metadata transition. Normal PREFLIGHT passed, CONFIRM ran once, and the application recorded PROMOTION_COMPLETED / STOPPED_AFTER_BOUNDED_OWNER. Trusted selection is slot B/generation 4; independently verified C254 remains slot A/generation 3. Prior rotating artifacts were copied and checksum-verified before mutation.
 
@@ -935,7 +935,7 @@ The installed rollback drill passed through public recover/stop commands. A tran
 
 This is installed promotion/recovery and a real read-only connector result, not two-Web native coding or unattended acceptance. This chat's loaded v5 catalog still omits the server's central dispatcher. One read-only plugin-management search failed at transport send with no HTTP status; it was not retried or mislabeled a CatDesk 429. Next reconcile canonical/control project authority and the existing client catalog through supported mechanisms, then perform two independent Web edits/native verification. Full meter, installed Wake/rollover/supervisor acceptance and later provider clients remain OPEN. No new operator action was required for this slice. Evidence: `docs/verification/INSTALLED_RETAINED_RELEASE_PROMOTION_ROLLBACK_2026_11_02.json`.
 
-## 2026-11-02T02:22:59.515499+00:00 — current-source review acknowledged; new administrative controller qualified
+## 2026-11-02T02:22:59.515499+00:00 â€” current-source review acknowledged; new administrative controller qualified
 
 The genuine cumulative review of313f6a3 passed with all84 paths retained,79 accepted unchanged blobs and five changed files assessed. Both requests are closed;20 exact source/evidence commands are independently corroborated. Original reviewer JSON bytes are preserved. Canonical tracked source advanced normally by19 paths, all20 existing untracked files and4726 preservation pins remained intact, and the EXE/fingerprint pair did not change. The native report session is COMPLETED_VERIFIED/inactive version7, acknowledged, with232 snapshot entries checked against saved objects and current bytes. Its finite owner exited naturally and closed its endpoint.
 
@@ -943,13 +943,13 @@ Administrative controller4e655bb1 passed capability, isolated authenticated comp
 
 Next is the bounded supported stopped inspection/exact-evidence retirement of the completed prior-canonical receipt, preserving its digest-named history and original journal, then normal guarded promotion of the retained payload. Installed startup, rollback, supervisor recovery, canonical/control pairing and genuine two-Web coding remain OPEN. No operator action is currently required. Evidence: `docs/verification/CURRENT_HANDOFF_NATIVE_ADMIN_QUALIFICATION_2026_11_02.json`.
 
-## 2026-11-02T01:21:28.035102+00:00 — exact review inputs and conversation accounting prepared
+## 2026-11-02T01:21:28.035102+00:00 â€” exact review inputs and conversation accounting prepared
 
 The published source delta retains all84 paths:79 accepted e6 blobs are unchanged and five files need reassessment. Two immutable input groups contain8/10 bounded source/evidence commands. No new native claim or Web message exists at preparation. The original e6 review, acknowledgment and retained payload authority remain intact.
 
 Seven prior task-correlated calls added14 observations through the existing context API. The generation6 advisory proxy is37598 with incomplete coverage; repeat import changed no ledger bytes and preservation checks passed. No browser, message, binding, production or native-session action occurred. One connected read-only capabilities probe after the earlier supported backend restart returned structured data, without429; that is not native Web editing acceptance. Next is the existing report-only managed review and two frozen bounded requests. Evidence: `docs/verification/REVIEW_INPUTS_AND_CONTEXT_CONTINUITY_2026_11_02.json`.
 
-## 2026-11-02T01:08:05.027518+00:00 — prior-canonical handoff recovery implemented in source; protected receipt unchanged
+## 2026-11-02T01:08:05.027518+00:00 â€” prior-canonical handoff recovery implemented in source; protected receipt unchanged
 
 Pre-promotion source inspection found that the normal helper would refuse the preserved completed prior-canonical handoff as an unsafe resume for a different candidate. No fresh promotion preflight or CONFIRM was attempted. The existing retirement component now has explicit exact-receipt inspection and evidence-CAS retirement: one native atomic rename preserves the original receipt under its digest, the completed journal and archived authority remain unchanged, and lost-response recovery never overwrites a new or ambiguous handoff. Existing producer, snapshot, trusted-pair, stopped-owner and lifecycle gates remain required.
 
@@ -957,7 +957,7 @@ Four focused tests, the broader 27-entry retirement suite (including two fixture
 
 Next: genuine current-source review of the exact deltas, qualify the administrative controller, then the supported receipt transition and normal promotion of the already attested payload. Do not install a debug controller or rebuild/reconfirm that payload unnecessarily. Actual new-payload startup/rollback, two-Web/native coding, complete meter and later provider-client acceptance remain OPEN. No operator action is currently required. Evidence: `docs/verification/COMPLETED_CANONICAL_HANDOFF_RETIREMENT_SOURCE_2026_11_02.json`.
 
-## 2026-11-02T00:51:10.412283+00:00 — completed promotion record retired; trusted backend restored; strict runtime diagnosis corrected
+## 2026-11-02T00:51:10.412283+00:00 â€” completed promotion record retired; trusted backend restored; strict runtime diagnosis corrected
 
 The existing reviewed completed-promotion/evidence-CAS procedure archived six original records and preserved prior retirement history. A supported public stop/start restored the same trusted C254 executable and fingerprint; authenticated MCP is READY (401/401/200/200), with 102 catalog tools. No new payload was installed. Eighteen preservation pins match, the existing tunnel/profile and project bindings are retained, recurring WakeHost remains stopped, and no test-owned process remains. All failed private-wrapper attempts remain recorded; retirement and startup were not replayed.
 
@@ -965,7 +965,7 @@ Actual tunnel status reported running/healthy/ready. A strict-mode optional-prop
 
 Next is the normal guarded promotion of the retained attested payload through the qualified administrative controller, followed by installed rollback/recovery and two-Web/native acceptance. No new candidate or producer confirmation is needed. No operator action is currently required. Evidence: `docs/verification/COMPLETED_RETIREMENT_RESTART_AND_RUNTIME_SHAPE_2026_11_02.json`.
 
-## 2026-11-01T23:57:47.678643+00:00 — genuine current-source PASS, native acknowledgment and qualified administrative controller
+## 2026-11-01T23:57:47.678643+00:00 â€” genuine current-source PASS, native acknowledgment and qualified administrative controller
 
 The focused main reassessment returned cumulative SOURCE PASS for e6a3e5e with all84 paths retained,81 accepted predecessor blobs unchanged and all three changed source paths reassessed. Seven exact source reads are independently corroborated; no findings were reported. Prior partial/inconclusive reports remain unchanged. The original contiguous JSON span was copied without field or whitespace rewriting; its SHA256 isdafaac833784f84be96d6f993f0ddbcc5f1f84130b8c8c1119e033828caae9d0. The raw assistant envelope remains separately preserved.
 
@@ -975,19 +975,19 @@ The separately reviewed administrative controller896e2c28 passed backend capabil
 
 Next use fresh existing trust/owner checks and the stopped completed-retirement/evidence-CAS procedure, then normal guarded preflight for the retained attested payload through the qualified current administrative controller. Do not replace production with the debug controller or treat development selection as promotion. Installed startup/rollback/recovery, canonical/control scope reconciliation, actual two-Web coding, full meter and later provider-client acceptance remain OPEN. No operator action is currently required. Evidence: `docs/verification/E6_NATIVE_ACCEPTANCE_AND_ADMIN_QUALIFICATION_2026_11_01.json`.
 
-## 2026-11-01T23:31:37.335119+00:00 — cumulative source review remains inconclusive; exact main-path gap isolated
+## 2026-11-01T23:31:37.335119+00:00 â€” cumulative source review remains inconclusive; exact main-path gap isolated
 
 The corrected mutation/CLI checkpoint is REVIEWED_PARTIAL with no findings, a verified full source identity and seven task-correlated Git reads. The next cumulative checkpoint is INCONCLUSIVE with no findings; six actual reads verify the remaining retirement/CLI regression source. Both exact responses are preserved and coordinator-closed. All84 paths remain declared,81 accepted baseline blobs unchanged. No current-source acceptance, ACK, producer or release authority is inferred.
 
 The reviewer specifically requests complete src/main.rs diagnostic/release-pair reassessment and correlation of the three changed paths with the accepted baseline. A six-command immutable input packet now supplies whole-commit changed names, full Git object differences, genuine prior source acceptance evidence and three bounded main ranges covering the new function, both failure branches and regression. Next perform that focused reassessment under the same existing managed claim; do not restart completed retirement reviews or create another source claim. Production, native sessions, bindings and recurring automation remain unchanged. Evidence/input: `docs/verification/E6_MAIN_CUMULATIVE_REASSESSMENT_INPUTS_2026_11_01.json`. Installed two-Web coding/recovery and later detailed meter/provider acceptance remain OPEN; no operator action is required.
 
-## 2026-11-01T23:20:36.578841+00:00 — partial retirement review preserved; remaining source identity made explicit
+## 2026-11-01T23:20:36.578841+00:00 â€” partial retirement review preserved; remaining source identity made explicit
 
 One new public-source owner/terminal-receipt checkpoint completed as REVIEWED_PARTIAL with no findings. All six reads are corroborated by task-timed logs. The reviewer explicitly did not establish the full source SHA; its null field and abbreviation remain unchanged. Coordinator Git-object and redacted-output verification supports the partial evidence only, not cumulative source acceptance. The coordinator work record closed; the same full84-path source claim remains active.
 
 Two unused requests were revoked without submission. The remaining two frozen requests add a full Git identity read, current84/81 scope evidence and retirement wrapper940-1080 coverage. Both new grant preflights passed under existing standing authorization; their review results are still pending. A1045-byte preparation was refused before batch creation, shortened before freezing/authorization, and sent nothing. No source code, native project owner, production release, binding, authentication or recurring automation changed. Next reconcile the current send and complete genuine cumulative review, then qualify the current controller and guarded promotion. Existing attested candidate is retained; installed two-Web coding and recovery remain OPEN. Evidence: `docs/verification/E6_REVIEW_SOURCE_IDENTITY_RECOVERY_2026_11_01.json`.
 
-## 2026-11-01T23:07:47.596421+00:00 — current diagnostic review preserved; observed-pressure rollover completed
+## 2026-11-01T23:07:47.596421+00:00 â€” current diagnostic review preserved; observed-pressure rollover completed
 
 The current e6a3e5e managed source review remains active with all84 paths retained and81 accepted predecessor blobs unchanged. Its exact diagnostic review is REVIEWED_PARTIAL with no findings, one task-correlated source read and a verified completed response. Coordinator closure is not cumulative source acceptance or producer authority. The old cancelled source claim and its partial evidence remain preserved.
 
@@ -995,7 +995,7 @@ New observed traffic raised the generation5 proxy to73,009 against the unchanged
 
 The separate continuation was delivered once and its exact completed response read. It correctly stopped normal work on canonical generation1 versus controlled generation6 and unproven native task authority; automatic project execution is not accepted. Original policy was restored. Final inventory found zero test-owned processes; the trusted backend/tunnel remain, shared WakeHost stays STOPPED, and no production/native-session action occurred. This is TESTED_CONTROLLED_LIVE, not installed two-Web coding or unattended acceptance. Three new destination-bound administrative public-source checkpoints are frozen under the same managed claim; no new native claim is created. Next finish the remaining retirement/CLI cumulative source review, then qualify the controller and use the existing guarded release chain. Detailed T-0484 and later CD-P7 remain mandatory. No operator action is currently required. Evidence: `docs/verification/E6_REVIEW_PRESSURE_ROLLOVER_2026_11_01.json`.
 
-## 2026-11-01T22:35:05.568960+00:00 — release refusal diagnostics qualified; obsolete source claim safely cancelled
+## 2026-11-01T22:35:05.568960+00:00 â€” release refusal diagnostics qualified; obsolete source claim safely cancelled
 
 One distinct bounded Web checkpoint reviewed the 57ab32f plan/binding changes and prior evidence as REVIEWED_PARTIAL, with no findings. Five task-correlated Git reads corroborate execution; no full source acceptance is inferred. Known context is now 71,327 under the unchanged local 72,000 trigger, with incomplete coverage and unverified provider context. Earlier 11 tool-result visibility remains unknown. The earlier new handoff request was correctly refused by the existing uncertainty anti-loop rule, sent nothing and restored policy; completed rollovers were not repeated.
 
@@ -1005,7 +1005,7 @@ The new privacy regression and existing Web privacy regression each passed one c
 
 Fresh cleanup found zero test-owned processes and the original trusted backend/tunnel owners remain. No protected release/lifecycle, native project turn, authentication or binding operation occurred. The genuine 9ea9e7b candidate remains attested and retained. Next freeze and genuinely review the updated source, then qualify the controller and use the guarded release procedure. Installed two-Web coding remains OPEN; no operator action is currently required. Evidence: `docs/verification/RELEASE_PAIR_ERROR_DIAGNOSTICS_2026_11_01.json`.
 
-## 2026-11-01T21:45:43.379260+00:00 — candidate attested and locally qualified; successful-promotion transition source tested
+## 2026-11-01T21:45:43.379260+00:00 â€” candidate attested and locally qualified; successful-promotion transition source tested
 
 The existing producer confirmed once and returned application-validated BUILD_ATTESTED for reviewed source `9ea9e7beedf986db95cd5bea7b750544e452caa8`. Candidate SHA-256 is `0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901` (38,482,432 bytes). Its entire build tree exited. The bounded candidate qualification rejected missing/wrong bearer credentials with401, accepted authenticated initialize/catalog with200, exposed the expected ten read-only tools and exited naturally with its listener closed. All5,229 preservation pins match. This candidate is not installed and does not contain the subsequent retirement correction.
 
@@ -1015,7 +1015,7 @@ Actual Windows source qualification passed18 retirement test entries (including 
 
 All84 prior review paths remain declared;82 Git blobs are unchanged and the two modified blobs require genuine independent reassessment. The9ea9e7b review/attestation does not authorize this later code. Next obtain exact-source review and qualify its controller before the existing stopped retirement/promotion gates. Installed two-Web/native coding and recovery remain OPEN. No operator action is currently required. Evidence: `docs/verification/ATTESTED_CANDIDATE_AND_COMPLETED_PROMOTION_SOURCE_2026_11_01.json`.
 
-## 2026-11-01T21:22:34.058071+00:00 — native review verified and acknowledged; reviewed producer prepared
+## 2026-11-01T21:22:34.058071+00:00 â€” native review verified and acknowledged; reviewed producer prepared
 
 The updated single-file operator roadmap was reread. Full per-conversation traffic/unique-pressure/uncertainty accounting and later provider-client MCP support remain mandatory; core installed two-Web acceptance remains first. The existing canonical branch advanced normally to reviewed source `9ea9e7beedf986db95cd5bea7b750544e452caa8` without changing its branch or installed executable. The exact independent report was created byte-for-byte. Native completion is COMPLETED_VERIFIED/version7, its 232 snapshot entries match both saved objects and current source, and its single final-review record is acknowledged.
 
@@ -1023,7 +1023,7 @@ The finite finalization client's timeout remains recorded. Actual application co
 
 No CONFIRM/build, new candidate attestation, protected promotion, installed health test, browser start, Web send or recurring automation occurred in this slice. No source tests were rerun. Next is CONFIRM of this exact prepared attempt, then actual attestation and whole-worker exit checks before existing promotion gates. Installed two-Web coding, authority-scope reconciliation, recovery and detailed context qualification remain OPEN; CD-P7 remains later. No operator action is currently required. Evidence: `docs/verification/REVIEWED_SOURCE_PRODUCER_PREPARATION_2026_11_01.json`.
 
-## 2026-11-01T20:58:57.906232+00:00 — genuine cumulative source PASS; protected chain remains next
+## 2026-11-01T20:58:57.906232+00:00 â€” genuine cumulative source PASS; protected chain remains next
 
 The registered controlled Web conversation returned an independently attributed cumulative PASS for source `9ea9e7beedf986db95cd5bea7b750544e452caa8`, retaining the declared84-path scope and prior evidence limitations. Its exact3,407-byte JSON response is preserved; all11 declared source reads are corroborated by task-timed server logs. No findings or remaining source reads were reported. This supports the existing guarded build/qualification procedure and does not constitute independent test execution, producer authority, installed health or MVP acceptance.
 
@@ -1031,49 +1031,49 @@ The initial completion observer refused USER representation. A fresh exact-event
 
 Next is guarded source-only integration and a byte-faithful canonical report, then existing completion/verification/ACK/snapshot/producer/promotion checks. The current native report remains absent and release authority is not fabricated. Updated operator requirements remain additive: core installed two-Web acceptance, full three-metric context qualification and later CD-P7 remain OPEN. Evidence: `docs/verification/CUMULATIVE_SOURCE_SUITABILITY_2026_11_01.json`.
 
-## 2026-11-01T20:41:13.683088+00:00 — updated operator roadmap reconciled; acceptance remains OPEN
+## 2026-11-01T20:41:13.683088+00:00 â€” updated operator roadmap reconciled; acceptance remains OPEN
 
 The updated one-file handoff is additive and retains requirements A-F and later G. T-0484 requires separate observed MCP traffic, unique active-conversation pressure and uncertainty; o200k_base and local 96k/24k/8k policy values are proxies rather than exact provider capacity. Attribution, revision/content deduplication, surfaced-result limits, unknown attachments/model metadata and calibration remain mandatory. Current controlled evidence is preserved and does not establish installed or unattended acceptance.
 
 Immediate order remains exact-source review/producer/promotion and canonical/control authority reconciliation, then actual two-project Web coding/Wake/rollover/recovery qualification. Remaining full meter acceptance follows; Gemini/DeepSeek and optional local MCP clients are later CD-P7 with separate identity and live capability evidence. Reuse existing components. No new registry, profile, plugin, tunnel, security framework or protected release permission is introduced. Existing action-specific authorization and gates continue to apply.
 
-## 2026-11-01T20:20:52.242649+00:00 — four material source checkpoints completed; cumulative judgment next
+## 2026-11-01T20:20:52.242649+00:00 â€” four material source checkpoints completed; cumulative judgment next
 
 All four individually frozen messages under one scoped batch authorization are COMPLETE, exact-event read, coordinator-closed and corroborated by 45 actual source-command logs. They cover collection guards, backend changed tests/prior lines, adapter changed tests/prior lines and the full installed-project production module1-767. None reports a concrete defect; all remain REVIEWED_PARTIAL. The source declaration retains all84 code/test paths. No report, ACK or producer authority has been fabricated.
 
 Generation5 advisory proxy is59,313 after the completed traffic imports, with byte-idempotent repeats and incomplete coverage. The last bounded task-context caller/producer and exact existing child-owner delta are prepared; two queried cleanup bodies are byte-identical to the trusted reviewed baseline. The next request will seek a genuine cumulative SOURCE judgment, allowing PASS, FAIL or INCONCLUSIVE with exact material needed reads. Existing protected release/installed acceptance gates remain separate. Evidence: `docs/verification/MATERIAL_SOURCE_FOUR_CHECKPOINTS_2026_11_01.json`; full scope: `docs/verification/CURRENT_SOURCE_CUMULATIVE_SCOPE_9EA9E7B_2026_11_01.json`.
 
-## 2026-11-01T20:06:47.213298+00:00 — two material checkpoints completed under one scoped batch
+## 2026-11-01T20:06:47.213298+00:00 â€” two material checkpoints completed under one scoped batch
 
 The receipt/collection/preparation guard checkpoint and backend changed-test/prior-line checkpoint are COMPLETE, exact-event read, coordinator-closed and corroborated by 8 and 17 actual server source-command logs. Both report no concrete defect and remain REVIEWED_PARTIAL. Coordinator tests, independent source inspection and future installed qualification remain distinct. No native task completion or producer authority is inferred.
 
 Generation 5 now has an advisory proxy of 36,377 tokens after the first 25 material source calls were imported; a separate CLI repeat changed no ledger bytes. Coverage and hidden/provider context remain unknown. Third and fourth frozen reviews continue under the same exact-source claim. A peer snapshot showed three native turns in progress with new revisions and one idle after a completed turn; no messages or ownership changes were made. Source remains `9ea9e7b`, selected development controller remains `846b90b2`, retained production remains C254, and recurring WakeHost stays stopped. Evidence: `docs/verification/MATERIAL_SOURCE_FIRST_TWO_2026_11_01.json`.
 
-## 2026-11-01T19:45:05.587332+00:00 — independent size-correction checkpoint corroborated
+## 2026-11-01T19:45:05.587332+00:00 â€” independent size-correction checkpoint corroborated
 
 The exact current-source review completed as REVIEWED_PARTIAL, finding no actionable defect in the inspected collector correction and supporting its source-level suitability. All five actual source inputs are corroborated by task-timed server command logs. The exact USER receipt and completed assistant body are verified, and the coordinator closed this request. It is not cumulative release approval.
 
 Remaining requested receipt/collector surroundings and the test execution record are prepared, alongside the earlier unread backend/adapter test sections and current installed-project owner production code. These use the same source-exact report claim. The test record explicitly distinguishes coordinator execution, retained initial formatting failure and matching development live recovery from protected/installed acceptance. No source change, native worker, binding or production operation was made for this review. Evidence: `docs/verification/HANDOFF_SIZE_INDEPENDENT_REVIEW_2026_11_01.json`.
 
-## 2026-11-01T19:36:27.639678+00:00 — exact current-source review scope retained
+## 2026-11-01T19:36:27.639678+00:00 â€” exact current-source review scope retained
 
 The superseded source claim was cancelled through its version-checked API after the material collector correction. Only that claim state and one appended event changed; old event bytes, protected pins and 573 other accounting rows were preserved. The initial local verifier used filename instead of exact session directory; its failed record and corrected path/prefix proof remain. A new report-only contract for source `9ea9e7beedf986db95cd5bea7b750544e452caa8` is WAITING_FOR_CHATGPT at version 4, with all 84 code/test paths declared. All 4,681 preexisting native files and 574 old accounting rows were preserved; one new row belongs to the report claim. No native model, accepted report, ACK or producer exists.
 
 The first frozen administrative review covers the one changed code file; 83 blobs are unchanged. Its five MCP input preflights matched exact bytes. Remaining backend and adapter test/prior-line inputs are carried forward with unchanged blob proof and current-source commands; they are prepared, not yet inspected. Old partial reviews retain their limits. Production/native ownership and installed acceptance remain separate.
 
-## 2026-11-01T19:22:21.394115+00:00 — completed handoff collected without resend; real rollover recovered
+## 2026-11-01T19:22:21.394115+00:00 â€” completed handoff collected without resend; real rollover recovered
 
 The matching development package passed finite authenticated health and retained its verified predecessor. The same completed source-authored handoff that previously failed size collection was collected through the corrected controller with zero new messages. The original failed result remains unchanged. One new-chat creation timed out after a verified issued URL and completed bootstrap receipt; its test-owned processes exited. Supported receipt-only resume then rechecked the source and paired registry/Wake at generation 5, preserving history without resubmission. One continuation was delivered and its exact completed response read.
 
 All preservation checks passed. The original context policy is restored, recurring WakeHost remains stopped, and final inventory found zero test-owned processes while the trusted production backend and existing tunnel remain. This is actual controlled development recovery, not protected promotion or two-Web/native coding acceptance. Canonical/control scope and installed native capability still require genuine current-source review, the existing producer/promotion procedure and installed testing. Evidence: `docs/verification/SOURCE_HANDOFF_SIZE_LIVE_RECOVERY_2026_11_01.json`. No operator action is required for the next eligible source-review work.
 
-## 2026-11-01T19:07:32.475193+00:00 — preserve completed source handoff while correcting collection size
+## 2026-11-01T19:07:32.475193+00:00 â€” preserve completed source handoff while correcting collection size
 
 A real completed source-handoff reply was refused with WEB_HANDOFF_TOO_LARGE: its valid JSON is 3,932 UTF-8 bytes (3,664 compact), above a separate 3,500-byte collector cap but below the existing 10 KiB handoff format bound. The collector now shares that bounded format limit. No source context is truncated and receipt, revision, task, route, app selection and native ownership checks remain. The delivered request is complete; do not resend it or rewrite its evidence.
 
 The old limit reproduced the failure. All 60 handoff cases pass, including three new regressions for complete context, oversized/padded input and task/native ownership refusal. Strict all-target Clippy passes. The initial formatting failure is retained; rustfmt and subsequent formatting/diff checks pass without repeating successful tests. Matching development-package qualification and read-only collection of the original completed response are next. Protected production and actual two-project Web/native coding acceptance remain open. Evidence: `docs/verification/SOURCE_HANDOFF_SIZE_RECOVERY_2026_11_01.json`.
 
-## 2026-11-01T18:11:39.091286+00:00 — fourteen current deltas reviewed; one response read recovered without resend
+## 2026-11-01T18:11:39.091286+00:00 â€” fourteen current deltas reviewed; one response read recovered without resend
 
 Two frozen checkpoints completed under one scoped authorization and the same84-path managed source claim. Fourteen requested current-path diffs were inspected without reported truncation. Task-timed source logs match pinned Git inputs under the existing privacy filter. Both verdicts remain REVIEWED_PARTIAL; no definite defect was reported and prior partial evidence is not inherited approval. Actual UTF-8 input totals were verified locally; the reviewer reported character counts and explicitly did not claim independent byte measurement.
 
@@ -1083,7 +1083,7 @@ The first task window had one additional matching read-only execution log. Conte
 
 Final inventory found zero test-owned processes. Trusted serving owners, project state and native sessions remain intact; shared WakeHost stays STOPPED. Two larger paths have38 prepared bounded code reads (including the backend's complete1231 production lines and prior changed ranges), not completed inspection. Next execute those reads before the genuine source verdict and guarded producer/promotion chain. Connected canonical/control authority, actual two-Web/native coding and installed persistent recovery remain OPEN. Evidence: `docs/verification/REMAINING_DELTA_REVIEWS_2026_11_01.json`. No operator action is required for the next eligible source review.
 
-## 2026-11-01T17:35:06.209749+00:00 — lease/atomic dependency review and generation-4 context qualified
+## 2026-11-01T17:35:06.209749+00:00 â€” lease/atomic dependency review and generation-4 context qualified
 
 Two bounded dependency reviews completed under one scoped authorization and the same84-path managed claim. Eight task-timed MCP input calls are corroborated, covering six code ranges and their pinned packet. The source supports a retained project OS-lock handle, continuation/target admission fences and synchronized atomic replacement. No confirmed new source defect was identified; both verdicts remain REVIEWED_PARTIAL. One first-checkpoint witness omitted a comma and another pointed to a blank line, so those requested nonblank boundaries remain unqualified; the original report, failed strict verifier and correction are retained. All three second-checkpoint boundaries match. Witness diagnostics do not prove comprehension or complete review.
 
@@ -1093,7 +1093,7 @@ One read-only generation-4 browser capture passed with four preserved conversati
 
 The remaining16 older changed-path references total103,749 context-free diff bytes; this targets further inspection without shrinking the84-path scope or inheriting approval. Protected promotion, connected canonical/control authority, actual two-Web/native edits and installed persistent recovery remain OPEN. Evidence: `docs/verification/SOURCE_LOCK_CONTEXT_QUALIFICATION_2026_11_01.json`. Next inspect the outstanding material source under the same managed claim; no operator action is currently required.
 
-## 2026-11-01T17:11:46.913628+00:00 — two post-rollover reviews and supported pre-dispatch recovery
+## 2026-11-01T17:11:46.913628+00:00 â€” two post-rollover reviews and supported pre-dispatch recovery
 
 Two frozen administrative public-source reviews completed in the generation-4 replacement under one scoped authorization and the same managed claim. Five task-timed source calls match pinned Git output; all five ranges have matching code boundaries and reviewer-reported complete visibility. Both assessments remain REVIEWED_PARTIAL. They support receipt identity, no-resend and layered target checks, while retaining explicit lease/OS-lock, receipt-producer and recovery questions. No new actionable defect or source change was established.
 
@@ -1101,7 +1101,7 @@ The second sender's private command timeout occurred before the dispatch boundar
 
 The context-delivery source matches its existing 14-test qualification exactly, including pinned source content and original log hash; those tests were not rerun. The 16 older changed-path references have 135,557 additional diff bytes, which target further inspection without shrinking the84-path scope or converting earlier partial reports into approval. Final inventory found zero test-owned processes; trusted serving owners remain and shared WakeHost stays STOPPED. Source acceptance, producer/promotion, connected canonical/control authority, two real Web/native edits and installed persistent recovery remain OPEN. Evidence: `docs/verification/POST_PRESSURE_SOURCE_REVIEWS_2026_11_01.json`; next bounded inputs: `docs/verification/REMAINING_MATERIAL_REVIEW_INPUTS_2026_11_01.json`. No operator action is required for the next eligible review.
 
-## 2026-11-01T16:40:00.296549+00:00 — productive source review crosses unchanged context trigger
+## 2026-11-01T16:40:00.296549+00:00 â€” productive source review crosses unchanged context trigger
 
 The same 84-path managed source review completed two bounded checkpoints with exact receipts and responses. Nine task-timed source calls corroborate the first checkpoint, whose combined display was truncated; no comprehensive inspection is claimed. A smaller 7,872-byte read qualified first, internal and physical-last-line visibility witnesses. Both verdicts remain REVIEWED_PARTIAL, with no accepted report or producer authority.
 
@@ -1111,7 +1111,7 @@ The exact continuation response confirmed v5 connectivity but correctly stopped 
 
 All preservation checks passed, the original context policy was restored, and final inventory found zero test-owned processes. Trusted serving owners remain; shared WakeHost and recurring automation stay stopped. Protected promotion, connector control scope, two actual Web/native coding callers and installed persistent recovery remain OPEN. Evidence: `docs/verification/FULL_SOURCE_CONTEXT_CONTINUATION_2026_11_01.json`. No operator action is currently required for the next eligible review checkpoint.
 
-## 2026-11-01T15:22:03.621737+00:00 — replacement-context accounting and full-scope review readiness
+## 2026-11-01T15:22:03.621737+00:00 â€” replacement-context accounting and full-scope review readiness
 
 The current generation-3 conversation was captured through the existing qualified browser owner with no send, binding or policy change. Its recent-visible excerpt remains incomplete. The existing advisory context API then imported 20 observations from ten task-correlated public-source calls. Known-content proxy is 27,319 tokens, including 669 tool-argument and 23,694 tool-result tokens; hidden/provider context is unknown. A second separate CLI invocation imported the same payload and changed no ledger bytes. All sibling/project/journal pins remained unchanged and the host stayed stopped. The initial private payload selection refused an overbroad hash-only match before runtime mutation; filtering to the verified task interval fixed selection without replay.
 
@@ -1119,7 +1119,7 @@ Read-only immutable source inspection confirms that the retained C254 session-st
 
 The prepared full-scope source-review input declares all 84 changed code/test paths and preserves prior partial/inconclusive reports. Its first bounded checkpoint targets twelve paths with no recorded inspection; the large private-context module is initially read through line 600, with its remainder explicitly pending. Eight source reads total 127,902 bytes; the packet sets an output budget and requires honest checkpointing before excess context. This is review preparation, not accepted source or installed acceptance. Evidence: `docs/verification/GENERATION3_CONTEXT_QUALIFICATION_2026_11_01.json`; input: `docs/verification/FULL_SOURCE_REVIEW_PACKET_2026_11_01.json`. Next use the existing source-exact managed review and scoped delivery workflow. No operator action is required.
 
-## 2026-11-01T14:55:40.734624+00:00 — transitive review and current-source coverage checkpoint
+## 2026-11-01T14:55:40.734624+00:00 â€” transitive review and current-source coverage checkpoint
 
 One new frozen Web reassessment completed as REVIEWED_PARTIAL. All eight actual source/evidence calls are corroborated by task-timed server logs, with one USER delivery and an exact completed response. The reviewer supports the inspected lock order and durable submission fence, finds no new actionable defect in those ranges, and retains broader concurrency and documented supervisor limits. No partial verdict is upgraded to release authority.
 
@@ -1127,13 +1127,13 @@ Twelve targeted response-recovery tests passed in Cargo, covering callback order
 
 Final inventory shows zero test-owned processes, retained trusted backend/tunnel, stopped recurring WakeHost and no login marker. Protected promotion, intended connector control scope, actual two-Web workspace edits/native verification and installed recovery remain OPEN. Evidence: `docs/verification/TRANSITIVE_REVIEW_REASSESSMENT_2026_11_01.json`; coverage: `docs/verification/CURRENT_SOURCE_REVIEW_COVERAGE_2026_11_01.json`. No operator action is required for the next eligible review work.
 
-## 2026-11-01T14:41:29.876223+00:00 — focused review-question qualification
+## 2026-11-01T14:41:29.876223+00:00 â€” focused review-question qualification
 
 Actual Windows PowerShell 5.1 and PowerShell 7.6.5 children confirm the frozen supervisor identity function keeps literal bracket names distinct from plain siblings, accepts spaces/plus/parentheses and agrees across case aliases/hosts. No monitor, backend, browser, binding or native session was started. Two initial private-harness failures are preserved: inherited PowerShell7 module paths prevented Windows PowerShell from loading Get-FileHash; child-only case-insensitive environment removal fixed the harness. The existing release helpers already use .NET hashes, so no product release regression or speculative source fix is claimed.
 
 The exact transitive reobservation path is now pinned for independent reassessment: retained project lock, final registration guard and Wake CAS, without paired-target locking under the registration transaction. Pre-submit checks and the durable unknown-outcome fence remain intact. Legacy pre-fix monitor coexistence and mutable trusted-script/directory boundaries remain explicit limitations; no automatic production activation is qualified. Evidence and seven bounded immutable source reads: `docs/verification/REVIEW_QUESTION_QUALIFICATION_2026_11_01.json`. Full 84-path source acceptance, protected promotion and installed two-project coding remain OPEN.
 
-## 2026-11-01T14:31:41.063022+00:00 — post-rollover Web source reviews and exact installed capability gap
+## 2026-11-01T14:31:41.063022+00:00 â€” post-rollover Web source reviews and exact installed capability gap
 
 The generation-3 conversation completed two individually frozen public-source reviews under one existing scoped authorization. Both exact USER receipts and completed assistant bodies are verified; task-timed server logs corroborate each immutable Git diff. These inspect the eight files changed since the prior frozen review; 76 source blobs remain unchanged and all 84 release paths remain declared. Both verdicts are REVIEWED_PARTIAL. No former cancelled native claim was resumed, accepted report created or producer authority inferred.
 
@@ -1143,7 +1143,7 @@ One new authenticated local catalog read returned 200 with 102 tools. The retain
 
 Evidence: `docs/verification/POST_ROLLOVER_SOURCE_REVIEWS_2026_11_01.json`. Next: inspect the specific transitive review questions and complete genuine current-source review, then the existing ACK/snapshot/producer/promotion chain. Installed two-Web workspace edits/native verification and supervisor recovery remain OPEN. No operator action is currently required.
 
-## 2026-11-01T13:59:39.265966+00:00 — source-authored context handoff and verified project rollover
+## 2026-11-01T13:59:39.265966+00:00 â€” source-authored context handoff and verified project rollover
 
 Source `6e97db1fdaaf91f9d6393997e930023a387f0403` adds journal-selected handoff delivery and read-only reobservation through the existing scoped Wake path while the shared host stays STOPPED. Local qualification passed 18 Wake and 57 controller tests, strict Clippy for both crates, formatting and diff checks. The initial compile error and corrected passing run are retained. A separately verified development package passed missing-authentication 401 and authenticated initialize/catalog 200 checks; the previous immutable package remains available. This is not protected production promotion.
 
@@ -1153,25 +1153,25 @@ The actual continuation response correctly stopped before task resumption: its v
 
 Evidence: `docs/verification/SOURCE_AUTHORED_ROLLOVER_2026_11_01.json`. Current-source independent review, managed acceptance/producer authority, protected promotion, actual two-Web workspace edits/native verification and installed supervisor restart remain OPEN. Prior partial reviews and old unknown outcomes remain preserved. No operator action is currently required.
 
-## 2026-11-01T12:31:04.074114+00:00 — supervisor case-alias duplicate reproduced and fixed in source
+## 2026-11-01T12:31:04.074114+00:00 â€” supervisor case-alias duplicate reproduced and fixed in source
 
 Source `4fb0285c340402f333b6b71d4212b0edb1c4000c` fixes a real Windows singleton defect: differently cased spellings of one workspace could acquire separate supervisor mutexes. A second actual Windows process reproduced the failure before the fix. The existing owner now uses stored directory-component spelling, retains its matching legacy reservation, and shares its identity function with the public facade. Existing Task Scheduler/Run names and launch arguments remain unchanged. The supervisor and public lifecycle suites pass under both the actual Windows PowerShell 5.1 launcher host and PowerShell 7.6.5; test children exited and the trusted serving owner remains intact. No production, persistence, browser, Wake-binding or native-session changes occurred.
 
 This is source qualification, not installed/autostart/reboot acceptance. The historical shutdown cause remains unestablished. Four code files differ from the frozen `2876ea3` review, while 80 of its 84 declared code paths retain identical Git blobs. The original frozen-source managed review was cancelled through its supported version-checked API after the material source change; status confirms CANCELLED at version 5. All 4,819 pinned preexisting files, accounting, project state and prior event prefixes were preserved. No project goal was paused and no replacement review claim was created. Carry forward prior reports and unchanged blobs, but obtain exact current-source review before release; no producer authority is inherited. Both controlled review conversations have substantial incomplete context estimates; plan the existing handoff path before adding large source reads. Evidence: `docs/verification/SUPERVISOR_DIRECTORY_CASE_2026_11_01.json`. No new operator action is required.
 
-## 2026-11-01T12:03:24.874674+00:00 — independent follow-up mitigates three concerns; remaining source coverage mapped
+## 2026-11-01T12:03:24.874674+00:00 â€” independent follow-up mitigates three concerns; remaining source coverage mapped
 
 One distinct read-only follow-up was sent once through the existing initialized PortfolioDesk Web conversation. Its completed exact-event response is **REVIEWED_PARTIAL**. All 12 source-tool calls are corroborated by task-timed server logs matching pinned Git output under existing privacy redaction. The reviewer identifies existing shared project locking, activated-child lineage recovery, and native journal/queue replay fences as mitigations for all three earlier concerns. No source fix or safeguard relaxation was justified. Full 84-path acceptance remains open; the managed task was not finalized and no accepted artifact, ACK, snapshot or producer authority was created.
 
 The evidence now collates 18 actual review reports and compares their referenced Git blobs with current source. Counts: {"CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW": 50, "NO_REFERENCED_INSPECTION_IN_COLLATED_RECORDS": 16, "PRIOR_REFERENCED_BLOB_CHANGED": 18}. These are references to partial or inconclusive inspections, never complete-file acceptance. Use the map to target genuinely unread or changed code. Known-content context proxies are now Bug Bounty 69,883 and PortfolioDesk 68,718; coverage remains unknown/incomplete, with idempotent advisory imports and wrong-project refusal verified. Avoid further large review traffic without planning the existing context/handoff path. Cleanup found zero test-owned processes; the trusted backend/tunnel and port 3200 owner remain intact. Evidence: `docs/verification/CUMULATIVE_REVIEW_FOLLOWUP_2026_11_01.json`. No new operator action is required.
 
-## 2026-11-01T11:50:24.696736+00:00 — cumulative review concerns investigated; 11 Windows regressions passed
+## 2026-11-01T11:50:24.696736+00:00 â€” cumulative review concerns investigated; 11 Windows regressions passed
 
 The actual cumulative Web review of source `2876ea3e2b4a094307b06ff35801ee4dce2606bf` remains **INCONCLUSIVE**, with all 84 changed code paths retained. Its nine task-timed Git reads match pinned source through existing privacy redaction. The delivered assessment alone was closed; the native managed review, ACK, snapshot and producer remain pending. No request was resent.
 
 Inspection located the omitted project OS lock around initialization, durable parent-link recovery after child activation, and call-ID plus exact queue-claim fences around native dispatch. No defect or need to relax a safeguard was established by those three concerns. Eleven existing Windows fixture regressions passed in 122.312 seconds, including all three continuation interruption boundaries; the earlier 27 dispatcher cases remain separate evidence. This is coordinator source investigation and local qualification, requiring independent reassessment; it does not turn the Web verdict into acceptance. No production upgrade, browser start, native model turn or binding change occurred. Evidence: `docs/verification/CUMULATIVE_SOURCE_CONCERNS_2026_11_01.json`. Next: focused independent reassessment and remaining cumulative source coverage, then the guarded producer/promotion chain and installed two-Web coding acceptance. No new operator action is required.
 
-## 2026-11-01 — corrected-source reviews, two real context captures and native dispatcher qualification
+## 2026-11-01 â€” corrected-source reviews, two real context captures and native dispatcher qualification
 
 Two frozen reviews of the four corrected files completed under one existing scoped authorization. Both exact deliveries, responses and source-call logs are verified; verdicts remain REVIEWED_PARTIAL. All 84 changed code paths remain declared. No genuine cumulative acceptance, ACK, producer or protected promotion is claimed. Canonical tracked source remains clean and can fast-forward from its preserved base after acceptance.
 
@@ -1179,7 +1179,7 @@ Both existing generation-2 project chats were captured through the qualified bro
 
 All 27 existing native-dispatch regressions passed across two bounded Windows fixture runs: ten before the initial 240-second caller deadline and the remaining seventeen in 343.891 seconds, with completed cases excluded. This covers two-project HTTP patch isolation, independent peer progress, native grant/replay/rollover fences and cancellation cleanup. It is fixture evidence, not installed native Codex acceptance. Next obtain a genuine cumulative source decision using these evidence inputs, then follow the existing source-integration/ACK/snapshot/producer/promotion chain and actual two-project Web coding checks. Evidence: `docs/verification/CORRECTED_RUNTIME_REVIEW_INPUTS_2026_11_01.json`.
 
-## 2026-11-01 — six real component reviews under one standing-scoped grant
+## 2026-11-01 â€” six real component reviews under one standing-scoped grant
 
 The existing six-message authorization completed six distinct frozen read-only reviews, each with one exact delivery, completed response and coordinator closure. Thirteen separate public-source tool calls are corroborated by task-timed server logs; output matches the existing privacy redaction of the frozen Git inputs. No UI-marker-only execution claim is used. The four remaining requests used the newly qualified crash-corrected delivery controller; all 15 referenced component-blob comparisons matched, without changing payloads or grants. All verdicts are REVIEWED_PARTIAL. No cumulative acceptance, producer authority, native task execution or protected promotion is implied.
 
@@ -1187,19 +1187,19 @@ The original source claim remains cancelled after the real crash defect. Next in
 
 The sixth cooperative observation initially refused RESPONSE_USER_REPRESENTATION_MISMATCH. Its independent exact-event snapshot was valid, but closure correctly remained blocked. After the canonical USER fallback regression fix and matching package qualification, one no-send normal observation proved COMPLETE in 71.39 seconds; the unchanged frozen closure then succeeded. The prior failures remain preserved. A private closure wrapper also stopped before invoking CatDesk on an LF/CRLF assertion; hash-pinned use of the same file corrected that preparation error. No USER resend or forced completion occurred. The exact live DOM cause was not captured, so subsequent success is not claimed as sole causal proof. The current development artifact is qualified from source `2876ea3`; protected production remains unchanged.
 
-## 2026-11-01 — canonical USER-body fallback corrected after live observer mismatch
+## 2026-11-01 â€” canonical USER-body fallback corrected after live observer mismatch
 
 The sixth frozen source review was delivered exactly once. Cooperative observation returned RESPONSE_USER_REPRESENTATION_MISMATCH, while the independent receipt-bound snapshot verified the exact USER and assistant response. The normal closure correctly refused WEB_WORK_COMPLETED_RESPONSE_REQUIRED. Neither the response timer nor work row was forced, and no message was resent. Five batch items are closed; the sixth remains open pending supported observation.
 
 Source inspection found that the digest reader used raw container text when no dedicated USER body selector existed, while the trusted-turn reader stripped presentation controls from a clone. The fallback now uses the same canonical body reader. A deterministic JavaScript DOM fixture fails before the fix and passes after it; all 65 DOM cases, six focused bridge cases and 43 adapter cases pass (the two new cases overlap the DOM total). Authored text, unknown suffixes, duplicates and exact sequence/digest checks remain protected; no DOM mutation or new selector is introduced. Initial broader tests hit the private harness deadline and are preserved as incomplete. The observed live cause is not yet established. Next qualify the matching development package and reobserve this exact existing delivery without sending. Evidence: `docs/verification/USER_BODY_FALLBACK_2026_11_01.json`.
 
-## 2026-11-01 — corrected package qualified; independent receipt accounting passed
+## 2026-11-01 â€” corrected package qualified; independent receipt accounting passed
 
 Source `6cff7dd25164875ffcf55f2070c3559a53437572` was pushed with exact remote SHA verification, separately built and selected through the existing development release mechanism. Its finite live backend rejected missing authentication (401), accepted authenticated initialization/catalog (200), and read the registry. This capability-scoped development catalog has 79 tools; it is separate from the installed/v5 catalogs. The temporary backend tree exited and endpoint closed. Previous verified package, profile identity and project/journal pins were preserved. No protected production promotion or new producer authority occurred.
 
 Existing advisory receipt reconciliation then completed for both real generation-2 project conversations in 60.579 seconds. Bug Bounty preserved five already-known deliveries; PortfolioDesk recorded six. A second pass added zero for either project, both registration guards released, all preservation pins matched, and no browser, message, native task or binding action occurred. Token proxies are 2546 and 2915 respectively, with UNKNOWN_OR_INCOMPLETE coverage; public-source tool traffic is not represented as authenticated project traffic. This is actual controlled development-runtime qualification, not two-Web coding/native execution or normal unattended acceptance. The broader October milestone remains OPEN after its deadline. Evidence: `docs/verification/MATCHED_REGISTRATION_PACKAGE_CONTEXT_2026_11_01.json`.
 
-## 2026-11-01 — real registration crash defect fixed; controlled scope recovered
+## 2026-11-01 â€” real registration crash defect fixed; controlled scope recovered
 
 A 15-second caller cutoff during local receipt reconciliation left the legacy registration sentinel behind after recording five confirmed USER deliveries. The marker then blocked unrelated registration-protected project operations; one completed review closure returned generic WEB_OPERATION_REFUSED. A real Windows process-kill regression reproduced the stranded marker. The same mechanism exists in trusted reviewed base e4a, so this is a pre-existing defect exposed by the test, not proof of a new connector or production-daemon failure.
 
@@ -1207,61 +1207,61 @@ The existing Windows guard now retains its exclusive CREATE_NEW handle with dele
 
 Exact owned-test cleanup verified the failure window, owner exit, quiescence and 126 project/journal pins, then preserved the same file identity and bytes in private quarantine. The unchanged completed-review closure then succeeded in 8.172 seconds, with unrelated records preserved and no new message/browser/native action. All project bindings, native sessions and serving owners remain intact. The old source 4090 managed claim was cancelled through its supported API without acceptance; its partial evidence remains reusable for unchanged components. Two further actual dependency reviews completed under one six-message grant; the remaining four are still unsent. Next qualify the corrected development package, finish bounded context accounting, then obtain genuine current-source producer/promotion evidence. No operator action is currently required. Evidence: `docs/verification/REGISTRATION_OWNER_CRASH_RECOVERY_2026_11_01.json`.
 
-## 2026-11-01 — current native release review claimed; two real inspections completed
+## 2026-11-01 â€” current native release review claimed; two real inspections completed
 
 The existing contract/approval/direct-claim APIs established a current-source managed review with all84 changed code paths declared.4657 prior native files were accounted for:4656 remain byte-identical, while the accounting store preserves every old row and adds exactly one row for this claim. Source `4090a39` is frozen for review. Two immutable requests under one scoped grant were sent once, completed and read with exact receipts. Four production ranges were inspected through separate v5 Git line-range calls, corroborated by task-timed server logs. Both verdicts are REVIEWED_PARTIAL; no cumulative acceptance, snapshot, acknowledgement or producer authority is asserted.
 
 Four targeted regressions pass, including actual Windows fixture descendant cleanup/cancellation and unknown-outcome lease/marker retention. These are source tests, not installed native Codex acceptance. Final inventory found zero test-owned browser/Python/Wake/pipe-fixture processes; the trusted backend and existing tunnel remain serving. Existing Wake2 development was contacted under prior human coordination authorization for an exclusive future allocation; no worktree/thread or original task was changed. Next inspect durable claim/finalization, process-owner, central authorization/journal and continuation recovery dependencies within the same frozen scope. No operator action is currently required. Evidence: `docs/verification/CURRENT_NATIVE_MANAGED_REVIEW_2026_11_01.json`.
 
-## 2026-11-01 — matched package qualified; old live initialization receipts remain valid
+## 2026-11-01 â€” matched package qualified; old live initialization receipts remain valid
 
-Source `b10823de3bba98a38e6809db81d9f6fd3c901192` built controller `7c0f6d1a…` and passed the existing finite development-package health procedure in44.594 seconds. The verified prior package remains retained. Two cold local status reads completed in13.562 seconds: both existing project initialization proofs are VERIFIED and their receipt hashes are unchanged. All pinned project/journal files, profile identity and previous-package bytes were preserved. No browser, message, native task, binding change or protected upgrade occurred. Final inventory found zero test-owned processes; the trusted installed backend and existing tunnel remain running. This proves matched development compatibility, not live automatic rollover or two-project native coding.
+Source `b10823de3bba98a38e6809db81d9f6fd3c901192` built controller `7c0f6d1aâ€¦` and passed the existing finite development-package health procedure in44.594 seconds. The verified prior package remains retained. Two cold local status reads completed in13.562 seconds: both existing project initialization proofs are VERIFIED and their receipt hashes are unchanged. All pinned project/journal files, profile identity and previous-package bytes were preserved. No browser, message, native task, binding change or protected upgrade occurred. Final inventory found zero test-owned processes; the trusted installed backend and existing tunnel remain running. This proves matched development compatibility, not live automatic rollover or two-project native coding.
 
 The remaining release prerequisite is genuine cumulative managed review/acknowledgement, exact source snapshot and controlled producer authority for the later runtime source. Existing partial Web reviews do not satisfy it. Continue that existing workflow, then protected promotion and two-project execution; do not repeat completed chats, receipts or held unknown sends. No new operator decision is currently required. Evidence: `docs/verification/APP_HANDOFF_CARRY_FORWARD_2026_11_01.json`.
 
-## 2026-11-01 — preserve v5 app selection during source compaction
+## 2026-11-01 â€” preserve v5 app selection during source compaction
 
 The existing rollover protocol now carries a verified completed bootstrap's v5 presentation selection into the next source handoff. It requires the same project, exact bootstrap digest, paired current target and completed continuation proof. The source must echo the requested selection; legacy frozen requests retain their bytes. This metadata grants no execution permission. Two focused cases, 154 Web cases (four test threads), strict all-target Clippy and formatting pass. The original parallel contention timing failure is preserved; the same test passed in isolation without relaxing its deadline. This feature is source-qualified, not installed/live accepted.
 
 The previously truncated rollover patch has now been inspected in three exact small Git inputs by the real project Web caller. One changed-input request was sent once and completed; verdict REVIEWED_PARTIAL, with no cumulative release acceptance or producer authority. No old unknown send was replayed. A single read-only observation of another already-delivered review remains PENDING / ASSISTANT_COMPLETION_ACTION_UNPROVEN; it did not send a wake. Two real Web callers have performed public-source reads, while workspace edits/native verification remain OPEN. Next qualify the matching development package and verify old initialization receipts remain valid. No operator action is currently required. Evidence: `docs/verification/APP_HANDOFF_CARRY_FORWARD_2026_11_01.json`.
 
-## 2026-11-01 — second Web caller executed source tools; oversized review input held
+## 2026-11-01 â€” second Web caller executed source tools; oversized review input held
 
 The second freshly initialized project conversation made real v5 public-source calls, verified by exact event/response receipts and task-correlated server logs. Two distinct registered Web conversations have now used the serving pipeline. The additional web_work review is REVIEWED_PARTIAL; the 40,264-byte rollover review is INCONCLUSIVE because the delivered output was truncated. It stopped without a resend. Existing verified patch windows were prepared as three small Git blobs; native byte reconstruction passed, and their actual MCP read preflight is next. No runtime guard, profile, production executable or native owner changed.
 
 This proves two read-only public-source callers while other project work holds remain isolated. It does not prove source edits/native verification in two assigned workspaces or cumulative release acceptance. Evidence: `docs/verification/TWO_WEB_CALLERS_SOURCE_REVIEW_2026_11_01.json`. No operator action is required for the bounded input preflight.
 
-## 2026-11-01 — second fresh project paired, continued and admitted for new tasks
+## 2026-11-01 â€” second fresh project paired, continued and admitted for new tasks
 
 A second real controlled project conversation was created through the existing authenticated browser owner. The actual issued URL was verified; registry and Wake advanced together to generation 2, with predecessor history preserved. Its one queued continuation has an exact receipt and a verified COMPLETE response. The supported local initialization transition passed for NEW tasks only, without an execution grant or native resumption. This is explicit project initialization, not automatic near-capacity acceptance. Sibling registrations, old work, native sessions and the original context policy were preserved.
 
 The initial helper used an MCP envelope where the CLI expects a policy object; it was refused before browser startup or state mutation. The existing corrected input procedure retained the exact frozen handoff. Final inventory found zero test-owned browser/Python/Wake processes. The intentional existing backend and tunnel remain serving, port 3200 has its expected owner, and installed fingerprint parity holds. Two-project Web coding/native verification, broader release review/producer promotion and installed reboot recovery remain OPEN. Evidence: `docs/verification/SECOND_FRESH_WEB_PROJECT_2026_11_01.json`. No operator action is currently required.
 
-## 2026-11-01 — two real Web source reviews under one scoped authorization
+## 2026-11-01 â€” two real Web source reviews under one scoped authorization
 
 One initialized project conversation performed two distinct read-only public CatDesk patch reviews under a single existing project-scoped grant. Both frozen requests were sent once, have exact USER receipts and completed response reads, and correlate to separate server command logs. Both verdicts are REVIEWED_PARTIAL; dependencies, independent Web-side hashes and cumulative release acceptance remain open. Coordinator-only task closure grants no producer authority. Zero visible UI tool markers did not mean zero execution: the actual server logs independently establish the reads. This is one Web caller reading public CatDesk source, not two-project workspace coding/native acceptance.
 
 The apparent Unicode connector mismatch was a diagnostic mistake: Python opened saved UTF-8 JSON with the Windows default encoding. Explicit UTF-8 decoding proves connector and local HTTP output both match the full32401-byte Git patch. No serving fix was required; an uncommitted header candidate was withdrawn without installation. Retained source adds an actual Windows-process Unicode/exit-code regression; all18 command tests and strict all-target Clippy pass. All review preservation checks passed; the existing backend/tunnel owners remain intentionally serving. No operator action is needed for eligible follow-up work. Evidence: `docs/verification/TWO_SCOPED_WEB_SOURCE_REVIEWS_2026_11_01.json`.
 
-## 2026-11-01 — live initialization accepted; simple Git source read verified
+## 2026-11-01 â€” live initialization accepted; simple Git source read verified
 
 The exact `5498178` matched development package passed finite authenticated health and cleanup. The fresh controlled project then completed its supported `accept-initialization` transition in23.406 seconds: continuation proof VERIFIED, NEW tasks only, no execution grant or predecessor/native resumption. All preserved pins matched. No browser/send, binding change, production upgrade or recurring owner was started for this local transition. This supersedes the earlier pending local-admission note below; canonical authority transfer remains separate.
 
 Actual v5 MCP read-only Git calls verified the exact published source blob (9847 bytes) and simple diff (10369 bytes). The pipe-based window was refused before execution with SHELL_MODE_BLOCKED; the plan-required and shell allowlist guards remain intact. Review-input metadata now specifies simple whole-path reads and reports larger-read qualification as open. These coordinator calls are not proof that two Web conversations edited source or ran native Codex. Later-source independent review/ACK/producer promotion, canonical transfer and installed persistent/reboot recovery remain open. No current operator action is required for the next bounded read-only review. Evidence: `docs/verification/FRESH_WEB_INITIALIZATION_ADMISSION_2026_11_01.json`.
 
-## 2026-11-01 — explicit fresh-chat NEW-task admission source-qualified
+## 2026-11-01 â€” explicit fresh-chat NEW-task admission source-qualified
 
 Implemented local intent/generation/digest-checked initialization acceptance using existing rollover, registry and quiescent Wake transactions. It admits new work only, seals actual completion/scope evidence and preserves predecessor/native resumption fences and all old journals. Three focused tests and 152 broader Web tests pass; strict Clippy/formatting pass. All 27 central dispatcher regressions pass; matching development build/live local acceptance is next. Private authoritative handoff updated without discarding original bytes; intentional PUBLIC publication policy clarified. No protected runtime or existing binding changed. Evidence: `docs/verification/FRESH_WEB_INITIALIZATION_ADMISSION_2026_11_01.json`.
 
-## 2026-11-01 — scoped continuation live-qualified from published source7782a94
+## 2026-11-01 â€” scoped continuation live-qualified from published source7782a94
 
 Matched development build health passed. One exact queued continuation was delivered in53.687 seconds, observed COMPLETE read-only in64.235 seconds and its925-byte task-marked response verified in44.25 seconds. No bootstrap replay, global host/scheduler, native task, protected promotion or preservation mismatch occurred. The assistant reports v5 available and waits for a task grant. Actual two-Web coding, canonical authority transfer and normal fresh-initialization work admission remain separate work. All149 Web,17 scoped sender and12 response-recovery tests passed; strict root/Wake Clippy and formatting passed. Evidence: `docs/verification/V5_PROJECT_CHAT_BOOTSTRAP_2026_11_01.json`.
 
-## 2026-11-01 — new project Web chat and no-resend timeout recovery
+## 2026-11-01 â€” new project Web chat and no-resend timeout recovery
 
 Implemented opt-in v5-prefixed frozen bootstrap and User bearer-reference fallback in `1650438`; corrected latest-assistant excerpt bounds in `d828a4c`. Qualified a matching development rebuild after the embedded-script integrity guard correctly refused mixed bytes. Actual controlled bootstrap created one ChatGPT conversation, verified its URL/response, paired generation 2 and preserved history/siblings. An outer timeout after BOUND recovered locally to CONTINUATION_QUEUED without replay. Read-only source-response recovery retained the exact 6,019-byte INCONCLUSIVE review, not new promotion authority. Scoped continuation delivery/observation now reuse existing runtime components; source qualification passed; matched-build/live qualification is pending. Full October 31 multi-project acceptance remains OPEN. See `docs/verification/V5_PROJECT_CHAT_BOOTSTRAP_2026_11_01.json`.
 
-## 2026-10-31 22:46 EDT — authenticated v5 serving checkpoint
+## 2026-10-31 22:46 EDT â€” authenticated v5 serving checkpoint
 
 Source `ed4e2a4e65dd850a9a66a0566ac674d033e6dc25` fixes helper load order and adds narrow existing-supervisor recovery plus19-layer diagnosis. Seven suites pass; actual bearer401/200,102-tool publication, structured connector response, two unchanged-URL initial pairs and35.016-second finite installed-backend recovery are recorded in `docs/verification/V5_AUTHENTICATED_SERVING_2026_10_31.json`. No EXE promotion, Web task, Wake delivery or recurring startup acceptance is inferred. See the latest execution log/acceptance/handoff for exact remaining gates. All native sessions and held C49/history remain preserved.
 
@@ -1274,7 +1274,7 @@ The current dated development record is [the October execution log](docs/OCT22_3
 This file supplies the entry point named by the self-contained handoff; it does not replace or duplicate the established history.
 
 
-## 2026-11-08T20:41:03.892841+00:00 — receipt-bound autonomous failure observation — TESTED_SOURCE
+## 2026-11-08T20:41:03.892841+00:00 â€” receipt-bound autonomous failure observation â€” TESTED_SOURCE
 
 Installed dev.84 lacks source snapshots and response observation; the source
 reader also discarded the reported cached-envelope error because its closed
@@ -1318,7 +1318,7 @@ NOT COMPLETE. Other project bindings, native sessions, unknown sends and protect
 release authority are preserved.
 
 
-## 2026-11-08T20:47:17.776256+00:00 — automatic live readback and body-coverage correction
+## 2026-11-08T20:47:17.776256+00:00 â€” automatic live readback and body-coverage correction
 
 A matched source controller inspected the existing completed task response in
 36.985 seconds, with the original receipt, task, assignment and generation
@@ -1339,7 +1339,7 @@ no unchanged browser audit or resend is authorized by this correction. Installed
 dev.84/broker gates and the original native dispatch hold remain unchanged.
 
 
-## 2026-11-08T20:53:26.937128+00:00 — autonomous readback live result and exact remaining gates
+## 2026-11-08T20:53:26.937128+00:00 â€” autonomous readback live result and exact remaining gates
 
 The source controller at `7158b962dbe2f139eabda50266927b8144970ca7`
 (SHA-256 `386a1587bdf0c14fda721b14c7d653985e26d65ca221921aafe4198b50c73afb`) performed one changed-parser
@@ -1368,7 +1368,7 @@ remains CLOSED pending authoritative original-wire recovery; native execution,
 new installed send/readback acceptance and C1 are NOT COMPLETE.
 
 
-## 2026-11-08T21:27:19.817173+00:00 — original C1 cached-transport recovery — TESTED_SOURCE
+## 2026-11-08T21:27:19.817173+00:00 â€” original C1 cached-transport recovery â€” TESTED_SOURCE
 
 A single connected-v5 probe sent only `command: CATDESK_WEB_TASK={}`. It
 returned `WEB_TASK_ARGUMENTS_INVALID`, proving the reserved outer envelope
@@ -1405,7 +1405,7 @@ unfinished protected Wake upgrade remains separate and is not a blanket C1
 prerequisite. C1 and installed automatic-readback acceptance remain incomplete.
 
 
-## 2026-11-08T22:00:06.532166+00:00 — task-bound pending submission observation — TESTED_SOURCE
+## 2026-11-08T22:00:06.532166+00:00 â€” task-bound pending submission observation â€” TESTED_SOURCE
 
 The one original-task transport clarification reached SUBMITTING and timed out
 with SCOPED_REVIEW_TIMEOUT. No receipt, native attempt or task journal was
@@ -1437,7 +1437,7 @@ new grant or native call is authorized by this diagnostic. Installed dev.84
 remains unchanged; installed automatic response acceptance and C1 are incomplete.
 
 
-## 2026-11-08T22:10:59.411621+00:00 — autonomous pending-task observation and receipt recovery
+## 2026-11-08T22:10:59.411621+00:00 â€” autonomous pending-task observation and receipt recovery
 
 LIVE SOURCE CONTROLLER: the new read-only inspector observed one exact matching
 USER followed by one turn on the registered target. The final document was
@@ -1470,7 +1470,7 @@ qualification; installed dev.84 and protected release authority are unchanged.
 C1 native editing and installed autonomous response acceptance remain incomplete.
 
 
-## 2026-11-08T22:16:33.576229+00:00 — semantic receipt parser correction
+## 2026-11-08T22:16:33.576229+00:00 â€” semantic receipt parser correction
 
 The first fresh-receipt live attempt returned WEB_WORK_RECEIPT_UNPROVEN after
 35.109 seconds, committed nothing and did not start response inspection. Its
@@ -1496,7 +1496,7 @@ changed-parser observation of the same pending event, never another message.
 Installed dev.84, protected release authority and C1 remain unchanged.
 
 
-## 2026-11-08T22:24:28.390113+00:00 — automatic task refusal readback — LIVE DEVELOPMENT PASS
+## 2026-11-08T22:24:28.390113+00:00 â€” automatic task refusal readback â€” LIVE DEVELOPMENT PASS
 
 The corrected matching development controller recovered the original pending
 USER receipt through two fresh exact observations and the existing guarded CAS.
@@ -1541,7 +1541,7 @@ No operator relay/sign-in action is pending. Source/live development evidence,
 installed qualification and actual native C1 work remain separately classified.
 
 
-## 2026-11-08T22:28:44.873252+00:00 — retained-owner semantic response flag
+## 2026-11-08T22:28:44.873252+00:00 â€” retained-owner semantic response flag
 
 The first passive-timer attempt stopped in 3.422 seconds with
 RESPONSE_PROBE_UNPROVEN before observation, preserving the SENT receipt and
@@ -1556,7 +1556,7 @@ retained-owner timer observation of the same SENT event. No message, receipt
 or native call is replayed. Earlier failed evidence remains preserved.
 
 
-## 2026-11-08T22:32:07.092644+00:00 — recovered task response and passive timer — checkpoint
+## 2026-11-08T22:32:07.092644+00:00 â€” recovered task response and passive timer â€” checkpoint
 
 PASS LIVE DEVELOPMENT: the original pending clarification is SENT with its
 exact recovered USER receipt. Automatic receipt-bound readback returned a
@@ -1588,7 +1588,7 @@ inspection is requested. All failed attempts, predecessor histories and
 receipts remain preserved. No later milestone or recurring automation began.
 
 
-## 2026-11-08T22:41:38.483233+00:00 — distinguish missing caller tools from missing frozen context
+## 2026-11-08T22:41:38.483233+00:00 â€” distinguish missing caller tools from missing frozen context
 
 The previous goal turn made authoritative progress: the same original USER
 receipt was recovered and its task-attributed response timer is COMPLETE.
@@ -1615,7 +1615,7 @@ Sources: [custom MCP server](https://developers.openai.com/api/docs/guides/custo
 [plugin selection](https://learn.chatgpt.com/docs/migrate-custom-gpts).
 
 
-## 2026-11-08T22:55:15.979599+00:00 — exact composer app-control observation
+## 2026-11-08T22:55:15.979599+00:00 â€” exact composer app-control observation
 
 The changed-parser completed-turn read passed in 36.391 seconds with exact
 task/receipt attribution and all 1,076 pins preserved, but returned no specific
@@ -1638,7 +1638,7 @@ failed receipt is preserved; the fixture now traces clicks without adding an
 editor. Next: one same-event read through the matched existing owner.
 
 
-## 2026-11-08T23:02:44.345028+00:00 — composer-control compatibility
+## 2026-11-08T23:02:44.345028+00:00 â€” composer-control compatibility
 
 The exact-task app-presentation read passed in 34.031 seconds: unique editor,
 composer form, completed idle response, no known plus selector or v5 marker in
@@ -1652,7 +1652,7 @@ all-target Clippy and formatting pass. Next is one changed-control read of the
 same completed event; no resend, dispatch or connection-setting change.
 
 
-## 2026-11-08T23:10:18.099505+00:00 — known composer control identified live
+## 2026-11-08T23:10:18.099505+00:00 â€” known composer control identified live
 
 PASS LIVE DEVELOPMENT: the changed-control observer identifies one enabled,
 closed, type=button menu candidate in the unique composer form on the exact
@@ -1682,7 +1682,7 @@ Native C1 code execution and installed dev.84 response/lifecycle acceptance
 remain incomplete; their separate existing gates are unchanged.
 
 
-## 2026-11-08T23:31:00.551708+00:00 — task-bound transient menu inspection
+## 2026-11-08T23:31:00.551708+00:00 â€” task-bound transient menu inspection
 
 The existing response-observation owner now supports an explicit local
 inspect-app-menu command for a SENT task with a COMPLETE response timer. It
@@ -1704,7 +1704,7 @@ acceptance remain incomplete. The original task, grant, key and completed
 messages are preserved; no retry is authorized by these diagnostics.
 
 
-## 2026-11-08T23:34:51.499365+00:00 — autonomous exact-task menu qualification
+## 2026-11-08T23:34:51.499365+00:00 â€” autonomous exact-task menu qualification
 
 LIVE_MENU_FAIL_CLOSED_DRAFT_PRESENT: the existing registered-profile owner completed one task/receipt-bound
 observation in 35.078 seconds. The original assistant response
@@ -1729,7 +1729,7 @@ precedes native execution; the precise originally rejected field is unrecorded.
 Keep the frozen task/key/grant and completed messages unchanged.
 
 
-## 2026-11-08T23:35:34.788336+00:00 — distinguish structural composer controls from draft evidence
+## 2026-11-08T23:35:34.788336+00:00 â€” distinguish structural composer controls from draft evidence
 
 The first bounded menu inspection refused before any click because the new
 menu guard treated every form input/image as draft evidence. The existing
@@ -1744,7 +1744,7 @@ no existing send, draft, lease, route or native-dispatch guard was relaxed.
 A fresh matched controller and one bounded inspection remain required.
 
 
-## 2026-11-08T23:38:56.743620+00:00 — structural-control exact-task menu qualification
+## 2026-11-08T23:38:56.743620+00:00 â€” structural-control exact-task menu qualification
 
 LIVE_MENU_FAIL_CLOSED_UNSUPPORTED_MENU: the existing registered-profile owner completed one task/receipt-bound
 observation in 34.5 seconds. The original assistant response
@@ -1769,7 +1769,7 @@ precedes native execution; the precise originally rejected field is unrecorded.
 Keep the frozen task/key/grant and completed messages unchanged.
 
 
-## 2026-11-08T23:40:59.049886+00:00 — cached transport catalog guidance and acceptance boundary
+## 2026-11-08T23:40:59.049886+00:00 â€” cached transport catalog guidance and acceptance boundary
 
 The existing run_command catalog description now explains its reserved
 CATDESK_WEB_TASK envelope: omit cwd/timeout entirely, including null; optional
@@ -1805,7 +1805,7 @@ prerequisite for installed end-to-end acceptance. No operator action or secret
 is currently requested. C1 native edit/test/Wake remains NOT COMPLETE.
 
 
-## 2026-11-08T23:44:29.115058+00:00 — explain unsupported composer semantics without UI action
+## 2026-11-08T23:44:29.115058+00:00 â€” explain unsupported composer semantics without UI action
 
 The existing passive composer observer now returns schema 2 with two fixed
 categories: plusPopup and plusControlReference. It reads only the qualified
@@ -1822,7 +1822,7 @@ dialog, boolean and unknown popup attributes plus absent/invalid references.
 Live popup classification is pending; installed readback and C1 remain incomplete.
 
 
-## 2026-11-08T23:48:06.215595+00:00 — exact-chat popup metadata observed without operator relay
+## 2026-11-08T23:48:06.215595+00:00 â€” exact-chat popup metadata observed without operator relay
 
 PASS LIVE DEVELOPMENT: the passive registered-profile observer returned
 plusPopup=ABSENT, plusControlReference=ABSENT,
@@ -1850,7 +1850,7 @@ promotion. The original native task remains unattempted READY and C1 is not
 complete. No manual assistant-response relay or sign-in action is requested.
 
 
-## 2026-11-08T23:54:03.235807+00:00 — qualify a fresh-menu transition from the actual known control
+## 2026-11-08T23:54:03.235807+00:00 â€” qualify a fresh-menu transition from the actual known control
 
 The exact-chat read proved the unique known composer button has CLOSED state
 but lacks aria-haspopup/aria-controls. Requiring those attributes in every
@@ -1873,7 +1873,7 @@ scheduler, task, grant or release mechanism is introduced. Live qualification
 of this new variant is pending; installed and C1 acceptance remain incomplete.
 
 
-## 2026-11-08T23:59:21.760477+00:00 — retain recognized semantic control identity through menu observation
+## 2026-11-08T23:59:21.760477+00:00 â€” retain recognized semantic control identity through menu observation
 
 The first fresh-transition live test completed in 36.25 seconds,
 returned UNSUPPORTED_MENU before clicking, preserved all 1,076 pins and cleaned
@@ -1893,7 +1893,7 @@ semantic variant and identity drift before OPEN. A matched live test remains
 required; installed dev.84 and C1 native coding acceptance remain incomplete.
 
 
-## 2026-11-09T00:07:44.583808+00:00 — preserve exact popup failure instead of generic MENU_UNPROVEN
+## 2026-11-09T00:07:44.583808+00:00 â€” preserve exact popup failure instead of generic MENU_UNPROVEN
 
 The witnessed semantic-control live test opened the known composer control
 once, but ownership of the resulting popup was unproven. No item was selected
@@ -1914,7 +1914,7 @@ shape failures without selection/retry. A matched live diagnostic is pending;
 installed dev.84 and C1 native coding acceptance remain incomplete.
 
 
-## 2026-11-09T00:14:27.517178+00:00 — live composer failure classified without operator relay
+## 2026-11-09T00:14:27.517178+00:00 â€” live composer failure classified without operator relay
 
 PASS LIVE DIAGNOSTIC, NOT APP/CODING ACCEPTANCE: the task/receipt-bound
 observer returned MENU_ABSENT, expandedState=OPEN, menuCount=0, dialogCount=0
@@ -1950,7 +1950,7 @@ message/native call. No operator response relay, screenshot or sign-in is
 requested. The goal remains ACTIVE; this turn made source/live progress.
 
 
-## 2026-11-09T00:35:39.887198+00:00 — qualify non-ARIA composer panels through the existing owner
+## 2026-11-09T00:35:39.887198+00:00 â€” qualify non-ARIA composer panels through the existing owner
 
 The existing bounded menu observer now distinguishes ROLE_MENU, standard
 open HTML_POPOVER, a known fresh popup portal, and INLINE_COMPOSER actions.
@@ -1964,14 +1964,14 @@ competing panel, draft, generation or wrong task/document refuses the action.
 The same exclusive owner opens/closes at most once, with no item selection,
 text entry, USER submission, native call, settings or binding change. Schema 4
 adds only closed panel kind/count metadata; internal identities/baselines and
-unknown labels remain excluded. Native schemas 1–3 remain supported. Tests
+unknown labels remain excluded. Native schemas 1â€“3 remain supported. Tests
 exercise all three non-ARIA variants, ambiguous portals, unchanged chips,
 privacy and exact task/route guards. Fixture visibility now respects hidden
 ancestors. Live qualification and installed acceptance remain separate; C1
 native coding has not executed and no completed message/call is replayed.
 
 
-## 2026-11-09T00:52:01.099652+00:00 — non-ARIA panel remains unproven; prioritize original C1 serving path
+## 2026-11-09T00:52:01.099652+00:00 â€” non-ARIA panel remains unproven; prioritize original C1 serving path
 
 LIVE DIAGNOSTIC ONLY: the bounded original-task observer returned MENU_ABSENT
 with control OPEN, zero recognized popup roles and no qualified HTML popover,
@@ -2016,7 +2016,7 @@ formatting and strict root/Wake Clippy pass. Prior failed fixture expectations
 are retained; the existing guard correctly refused before clicking.
 
 
-## 2026-11-09T01:17:46.034145+00:00 — guarded original-task serving recovery
+## 2026-11-09T01:17:46.034145+00:00 â€” guarded original-task serving recovery
 
 SOURCE VERIFIED; LIVE NOT RUN for this transition. The existing private-context
 continuation now supports one later serving-window advisory after its transport
@@ -2053,7 +2053,7 @@ them from popup markup. C1 and installed end-to-end response acceptance remain
 incomplete. No operator response relay is requested, and C2 is not started.
 
 
-## 2026-11-09T01:26:44.926119+00:00 — original-task send and automatic readback live result
+## 2026-11-09T01:26:44.926119+00:00 â€” original-task send and automatic readback live result
 
 PASS for the bounded source-controller workflow: one new original-task serving
 continuation was delivered with an exact durable SENT receipt. The selected
@@ -2093,7 +2093,7 @@ package-promotion prerequisites remain unchanged. C1 coding and task-specific
 result Wake remain incomplete; C2 is not started. No operator relay is pending.
 
 
-## 2026-11-09T01:35:13.266601+00:00 — bounded argument-failure readback
+## 2026-11-09T01:35:13.266601+00:00 â€” bounded argument-failure readback
 
 SOURCE PASS, LIVE NOT RUN for this extension. The existing exact-exchange
 response classifier now emits assistant-hint schema 4 with closed lists of
@@ -2101,7 +2101,7 @@ four known tool names, six argument-failure categories and twelve public cached-
 envelope invariants. It exports no error excerpt, unknown field name, argument
 value, private context, draft or key. Empty lists remain unproved causes; text
 mentions never prove a fresh call, tool availability, execution or retry grant.
-Native readers retain schemas 1–3 and reject unknown/duplicate/out-of-order
+Native readers retain schemas 1â€“3 and reject unknown/duplicate/out-of-order
 labels or added content. No browser action, sender, scheduler or authority was
 added; `operator web review inspect-response` is the same read-only operation.
 
@@ -2115,7 +2115,7 @@ remain incomplete; the observed INVALID_ARGUMENT is not assigned an invented
 specific cause. Existing protected promotion gates remain unchanged.
 
 
-## 2026-11-09T01:41:42.775777+00:00 — completed-response argument diagnosis, live
+## 2026-11-09T01:41:42.775777+00:00 â€” completed-response argument diagnosis, live
 
 PASS: the matched controller observed the same already-SENT task exchange
 COMPLETE in 36.578 seconds. Schema 4 captured INVALID_ARGUMENT;
@@ -2153,7 +2153,7 @@ the original call/grant and existing release gates. C1 remains incomplete;
 C2 is not started and no operator response relay is requested.
 
 
-## 2026-11-09T01:48:32.721600+00:00 — passive completed-work trace identity
+## 2026-11-09T01:48:32.721600+00:00 â€” passive completed-work trace identity
 
 SOURCE PASS; LIVE NOT RUN. The existing response observer now reports optional
 closed trace metadata in schema-4 task hints: known completed-work control count,
@@ -2172,7 +2172,7 @@ serving continuation; no sender, backend, tunnel or Wake start is required.
 C1 remains incomplete; no original native call or USER message is replayed.
 
 
-## 2026-11-09T01:54:49.200658+00:00 — exact-exchange trace observation, live
+## 2026-11-09T01:54:49.200658+00:00 â€” exact-exchange trace observation, live
 
 PASS for passive observation: the completed original exchange remained COMPLETE
 with INVALID_ARGUMENT. No known completed-work trace control qualified; counts
@@ -2206,7 +2206,7 @@ No operator response relay or discretionary approval is pending. Do not expand
 unqualified traces, add more speculative selectors or bypass release authority.
 
 
-## 2026-11-09T02:08:25.774687+00:00 — original-task no-effect Web-caller probe
+## 2026-11-09T02:08:25.774687+00:00 â€” original-task no-effect Web-caller probe
 
 SOURCE PASS; LIVE NOT RUN. Existing task-context commands now include
 `context-prepare-route-probe` and `context-deliver-route-probe`, using the same
@@ -2238,7 +2238,7 @@ unknown delivery, original grant preservation and lease handoff are covered.
 C1 coding and installed response-readback acceptance remain incomplete.
 
 
-## 2026-11-09T02:18:51.570397+00:00 — actual Web-caller no-effect probe, live
+## 2026-11-09T02:18:51.570397+00:00 â€” actual Web-caller no-effect probe, live
 
 PASS for delivery/readback; transport cause INCONCLUSIVE. The corrected reader
 first re-read the old completed response without sending and still found only
@@ -2282,7 +2282,7 @@ replacement task or manual response relay is authorized by this result. C2 is
 not started. Existing release authority remains unchanged.
 
 
-## 2026-11-09T02:47:36.956264+00:00 — one-shot task-bound trace inspection
+## 2026-11-09T02:47:36.956264+00:00 â€” one-shot task-bound trace inspection
 
 SOURCE PASS; LIVE NOT RUN. `operator web review inspect-trace --project-id PROJECT
 --event-id EVENT` reuses the existing stopped-host browser owner. It requires a
@@ -2314,7 +2314,7 @@ focused cases successfully. No product workaround or installation change.
 C1 native coding and installed automatic-readback acceptance remain incomplete.
 
 
-### 2026-11-09T02:55:24.746663+00:00 — bounded trace-loading qualification
+### 2026-11-09T02:55:24.746663+00:00 â€” bounded trace-loading qualification
 
 The one-shot task-bound trace observer waits for nonempty, non-busy panel
 content to stabilize before exporting closed diagnostic labels. Eight bounded
@@ -2326,7 +2326,7 @@ This is source qualification; installed/live acceptance remains incomplete.
 No new USER send, native call, installation or binding change.
 
 
-### 2026-11-09T03:03:47.443150+00:00 — actual automatic response readback; trace outcome unknown
+### 2026-11-09T03:03:47.443150+00:00 â€” actual automatic response readback; trace outcome unknown
 
 A single 38.891-second bounded observation through the existing authenticated
 profile and qualified owner read the exact completed diagnostic exchange. It
@@ -2378,7 +2378,7 @@ sign-in, new send or settings change is requested. C1 native coding, independent
 verification and result Wake are incomplete; C2 has not started.
 
 
-### 2026-11-09T03:17:36.393876+00:00 — exact historical response inspection
+### 2026-11-09T03:17:36.393876+00:00 â€” exact historical response inspection
 
 The original rejected dispatch is no longer the latest exchange. Added passive
 `operator web review inspect-history-response --project-id PROJECT --event-id EVENT`
@@ -2407,7 +2407,7 @@ Source only at this checkpoint: separate matched build/live historical read is
 next, not installed acceptance. No original dispatch or trace action repeated.
 
 
-### 2026-11-09T03:24:05.666621+00:00 — historical admission diagnostic clarity
+### 2026-11-09T03:24:05.666621+00:00 â€” historical admission diagnostic clarity
 
 The first bounded original-dispatch historical read returned only
 WEB_OPERATION_REFUSED, with no response observation. All 1,088 preservation
@@ -2425,7 +2425,7 @@ unchanged. A matched diagnostic controller may now establish the actual refusal;
 this is not successful historical readback or installed acceptance.
 
 
-### 2026-11-09T03:31:35.470864+00:00 — distinguish historical admission layers
+### 2026-11-09T03:31:35.470864+00:00 â€” distinguish historical admission layers
 
 The diagnostic-only follow-up still returned WEB_OPERATION_REFUSED with no
 response observation. Thus none of the twelve newly exposed readiness codes
@@ -2439,7 +2439,7 @@ identify which boundary rejects the passive read. Installed and C1 acceptance
 remain incomplete.
 
 
-### 2026-11-09T03:39:16.898752+00:00 — bounded observer launch-size correction
+### 2026-11-09T03:39:16.898752+00:00 â€” bounded observer launch-size correction
 
 Historical receipt/timer admission passed; the next live result was
 RESPONSE_HISTORY_BROWSER_OWNER_OR_ADMISSION_REFUSED, with no response data.
@@ -2463,7 +2463,7 @@ The no-START check is actual Windows process evidence, not live assistant or
 installed acceptance. A matched bounded historical read remains to qualify.
 
 
-### 2026-11-09T03:43:03.329349+00:00 — original historical response readback, live
+### 2026-11-09T03:43:03.329349+00:00 â€” original historical response readback, live
 
 LIVE PASS for passive exact historical response classification through the
 qualified separate controller, NOT installed acceptance. The 35.844-second run
@@ -2500,7 +2500,7 @@ evidence-based cached-envelope recovery and legitimate reader qualification/
 promotion; no unchanged browser inspection retry or new diagnostic send.
 
 
-### 2026-11-09T03:54:22.574752+00:00 — explicitly fenced historical trace inspection
+### 2026-11-09T03:54:22.574752+00:00 â€” explicitly fenced historical trace inspection
 
 The original completed historical exchange has its own known collapsed work
 trace, separate from the later diagnostic's unknown fenced trace. Added explicit
@@ -2526,7 +2526,7 @@ installed acceptance are NOT_RUN at this checkpoint. Preserve the separate
 already-unknown trace and all original native state.
 
 
-### 2026-11-09T04:01:58.979869+00:00 — historical trace deadline, no repeat
+### 2026-11-09T04:01:58.979869+00:00 â€” historical trace deadline, no repeat
 
 LIVE: exact original historical response classification passed again, but
 trace-panel recovery FAILED/UNKNOWN. One 38.000-second owned run acknowledged
@@ -2563,7 +2563,7 @@ verification and result Wake remain incomplete; C2 not started. No operator
 response relay, sign-in, new diagnostic message or changed connection requested.
 
 
-### 2026-11-09T04:09:58.168371+00:00 — C1 blocked disposition, scope preserved
+### 2026-11-09T04:09:58.168371+00:00 â€” C1 blocked disposition, scope preserved
 
 C1 BLOCKED after three consecutive no-progress continuations following the
 last actual source/test/live progress. Local revalidation found no changed
@@ -2591,7 +2591,7 @@ is satisfied; use the goal's BLOCKED transition instead of an unchanged audit
 loop. A later explicit resume starts a fresh blocked audit.
 
 
-### 2026-11-09T10:11:14.388483+00:00 — resumed C1 recovery engineering; four-artifact reader closure
+### 2026-11-09T10:11:14.388483+00:00 â€” resumed C1 recovery engineering; four-artifact reader closure
 
 The explicit recovery-development resume supersedes the earlier disposition
 that no independent product work remained. The original native task remains
@@ -2647,7 +2647,7 @@ source/real-process tests, not installed browser or native coding acceptance.
 No message, browser, service, tunnel, native task or binding change was needed.
 
 
-### 2026-11-09T10:24:50.404589+00:00 — four-artifact development build and passive reader qualification
+### 2026-11-09T10:24:50.404589+00:00 â€” four-artifact development build and passive reader qualification
 
 Development-profile GUI and WakeHost built offline/locked from exact published source
 `6e159e3dbd6dc8b1033c1fcf0aa134bb2e977e73` with unchanged lockfiles. The inert, unsigned package is
@@ -2682,7 +2682,7 @@ established. C1 native coding, independent code verification and result Wake
 remain INCOMPLETE. No C2 work or unattended serving is enabled.
 
 
-### 2026-11-09T10:37:37.646811+00:00 — retained selected-image execution exclusion, source qualified
+### 2026-11-09T10:37:37.646811+00:00 â€” retained selected-image execution exclusion, source qualified
 
 The existing offline transaction now reacquires its exact predecessor image with
 no read/write/delete sharing and retains that handle with its role pins. Full
@@ -2726,7 +2726,7 @@ pins before replacing the unconditional quarantine hold; then wire the fixed
 service transaction and qualify release/installation through existing authority.
 
 
-### 2026-11-09T10:55:41.007335+00:00 — exact-source release artifacts built and reader qualified, unselected
+### 2026-11-09T10:55:41.007335+00:00 â€” exact-source release artifacts built and reader qualified, unselected
 
 Local release-profile GUI and WakeHost build PASS from published source
 `5c553eaec4c29c8ce4b7b1101abb38f472c629ed` with locked/offline Cargo and unchanged lockfiles. GUI
@@ -2779,7 +2779,7 @@ code, independent verification and result Wake remain INCOMPLETE. No later gate
 is opened and no recurring automation is enabled.
 
 
-### 2026-11-09T11:55:10.393420+00:00 — separate readable review snapshots from durable completion
+### 2026-11-09T11:55:10.393420+00:00 â€” separate readable review snapshots from durable completion
 
 Reused the existing selected **development** adapter (source `f71a17be`) rather
 than duplicating its full response reader. With the separately built source
@@ -2824,7 +2824,7 @@ registered lane. No operator action is requested for this checkpoint. C1 remains
 INCOMPLETE; no new build/install/production acceptance is claimed.
 
 
-### 2026-11-09T12:06:53.820463+00:00 — passive source-review completion-control inspection
+### 2026-11-09T12:06:53.820463+00:00 â€” passive source-review completion-control inspection
 
 Extended the EXISTING GUI-owned response inspector to accept an exact SENT
 `source_review` only in passive SentDiagnostics mode. Admission retains the exact
@@ -2854,7 +2854,7 @@ All 1,090 protected pins match. Original cached RPC field remains unrecovered;
 C1 still requires the original authorized native code/verification/result-Wake loop.
 
 
-### 2026-11-09T12:12:57.698936+00:00 — qualified isolated control-shape read changes the next diagnosis
+### 2026-11-09T12:12:57.698936+00:00 â€” qualified isolated control-shape read changes the next diagnosis
 
 Exact source `00508b54e3c0e1898c95bf713fd3b31541bf5aeb` was built locked/offline
 as a separate **unselected debug observation package**, preserving the existing
@@ -2887,7 +2887,7 @@ Historical INCONCLUSIVE text, this source review and debug build cannot supply t
 authority. No new operator action is requested by this diagnostic result.
 
 
-### 2026-11-09T12:18:41.403524+00:00 — original independent C1 reservation passes candidate-only admission
+### 2026-11-09T12:18:41.403524+00:00 â€” original independent C1 reservation passes candidate-only admission
 
 The unchanged original BYOVD acceptance reservation passed the supported local
 queue preflight: CANDIDATE_ONLY, clean Git, valid tracked verification inputs,
@@ -2909,7 +2909,7 @@ proves none of those later gates. No blind send while its required execution
 connection is known unavailable, no original Bug retry, no C2 acceptance claim.
 
 
-### 2026-11-09T12:48:24.065096+00:00 — authenticated serving restored; original C1 delivery reconciled
+### 2026-11-09T12:48:24.065096+00:00 â€” authenticated serving restored; original C1 delivery reconciled
 
 The existing installed canonical executable/fingerprint pair was restored through
 its existing finite supervisor and existing Secure MCP owner in a bounded no-send
@@ -2959,7 +2959,7 @@ from the original targeted-task contract and must never be inferred from a targe
 pass or manual result Wake. C1 code/independent verification/result Wake is INCOMPLETE.
 
 
-### 2026-11-09T13:08:16.249348+00:00 — fix premature response-settling refusal
+### 2026-11-09T13:08:16.249348+00:00 â€” fix premature response-settling refusal
 
 The unselected source4793 observer was exercised against the original delivered
 BYOVD task while the canonical backend and existing tunnel were ready. Its local
@@ -2986,7 +2986,7 @@ is preserved. C1 remains INCOMPLETE; no operator action is required for the next
 bounded, receipt-bound read-only qualification.
 
 
-### 2026-11-09T13:23:57.963201+00:00 — original BYOVD context and continuation delivered; native refusal classified automatically
+### 2026-11-09T13:23:57.963201+00:00 â€” original BYOVD context and continuation delivered; native refusal classified automatically
 
 The corrected response observer from source `cbbc21a5b86e9c2f768583412341379724294b75`
 passed one bounded live wait in 30.782 seconds. It completed only
@@ -3034,7 +3034,7 @@ is required at this checkpoint. A new source-only refinement must obtain its own
 qualification and cannot inherit this package's live result.
 
 
-### 2026-11-09T13:45:11.813843+00:00 — bounded refusal details without a human response relay
+### 2026-11-09T13:45:11.813843+00:00 â€” bounded refusal details without a human response relay
 
 The original modern BYOVD continuation is delivered and its assistant is complete,
 but native execution remains NOT_RUN. The automatic reader recovered only the
@@ -3052,7 +3052,7 @@ selection-marked body. USER/tool ancestors and descendants are excluded. Origina
 body/completion-control authority stays unchanged; this diagnostic text cannot
 complete an otherwise unproved body. Optional fixed bodyCoverage metadata exposes
 unknown text outside selected bodies. No body prose, hash values, keys, drafts or
-unknown labels leave this path. Native validators accept old v1–4 layouts and
+unknown labels leave this path. Native validators accept old v1â€“4 layouts and
 strictly validate v5;4096-byte TASK rows still use the closed vocabulary.
 
 Independent source review caught tool-ancestor contamination and a negated
@@ -3064,7 +3064,7 @@ receipt without sending, clicking the unknown trace, or replaying a native call.
 Full C1 code/independent verification/result Wake remains INCOMPLETE.
 
 
-### 2026-11-09T13:50:19.666103+00:00 — v5 refusal reader live-qualified; precise cause remains unresolved
+### 2026-11-09T13:50:19.666103+00:00 â€” v5 refusal reader live-qualified; precise cause remains unresolved
 
 Source `2da7b956af7179d7701fc94511262f8511921f11` has 384 passing source tests
 and strict root/Wake Clippy PASS. Its locked, offline debug build completed in
@@ -3099,7 +3099,7 @@ export or retry is authorized by the new diagnostic work. No operator action is
 required at this checkpoint.
 
 
-### 2026-11-09T14:02:22.146981+00:00 — closed refusal projection after a qualified but nonspecific read
+### 2026-11-09T14:02:22.146981+00:00 â€” closed refusal projection after a qualified but nonspecific read
 
 The v5 live reader proved complete diagnostic body coverage for the original
 receipt but recovered no more specific cause than DISPATCH_REJECTED. Native
@@ -3127,7 +3127,7 @@ It does not authorize a retry, unknown trace reopen, legacy clarification or
 protected promotion. C1 code/verification/result Wake is still INCOMPLETE.
 
 
-### 2026-11-09T14:19:01.725799+00:00 — v6 redacted refusal projection live PASS; no precise cause or retry authority
+### 2026-11-09T14:19:01.725799+00:00 â€” v6 redacted refusal projection live PASS; no precise cause or retry authority
 
 Source `321fdbc5d6f90df2926889d4b7cf14f051575f5a` passed 264 current targeted
 source tests and strict root/Wake Clippy. The retained 127-test legacy bridge
@@ -3148,8 +3148,8 @@ terms are not evidence that no tool call occurred, that no effect was possible,
 or that the original request may be retried. No human relay, additional message
 or native queue attempt occurred. The native job remains READY.
 
-Retained telemetry contains three forwarding records at 13:17:12–13:17:13 UTC,
-within the separately audited 13:15:06–13:17:34 UTC serving window. It retains no
+Retained telemetry contains three forwarding records at 13:17:12â€“13:17:13 UTC,
+within the separately audited 13:15:06â€“13:17:34 UTC serving window. It retains no
 method, arguments, tool result or exact invariant; RPC coverage is incomplete and
 the exited daemon's memory-only summaries are unavailable. These records are
 neither no-call/no-effect proof nor a reason to replay the native request. The
@@ -3169,7 +3169,7 @@ v6's live result. No arbitrary body or term export and no retry is authorized by
 these diagnostics. No operator action is required at this checkpoint.
 
 
-### 2026-11-09T14:27:34.887359+00:00 — distinguish structured refusal reports from prose
+### 2026-11-09T14:27:34.887359+00:00 â€” distinguish structured refusal reports from prose
 
 The last qualified live read returned no safe refusal terms, so it still does not
 establish a precise cause or authorize native replay. V7 now distinguishes bounded
@@ -3183,7 +3183,7 @@ explicit omitted/unproven result. A code example is not a report.
 Closed refusalReport metadata records only PROSE/STRUCTURED/NONE, a fixed refusal
 state, qualified reason presence and projection omission. Native/Python validators
 agree: NONE has no terms, and empty terms require the omitted witness. Existing
-schemas1–6 remain valid. Completion, grant, lease, scope, no-replay and native
+schemas1â€“6 remain valid. Completion, grant, lease, scope, no-replay and native
 execution authority are unchanged.269 relevant tests and strict root/Wake Clippy
 PASS; limited independent source review PASS. A stale empty-projection test was
 corrected without relaxing the production guard. Package/live qualification and
@@ -3197,7 +3197,7 @@ chain. Neither a public commit nor this local review creates producer authority.
 The old Wake adapter and all project/native histories remain preserved.
 
 
-### 2026-11-09T14:39:36.436610+00:00 — published v7 read qualified; refusal report remains NONE/UNPROVEN
+### 2026-11-09T14:39:36.436610+00:00 â€” published v7 read qualified; refusal report remains NONE/UNPROVEN
 
 Published source `bb7487c4e36fa53280b8d08c1d2f762131573639` has 269 passing targeted source tests
 and strict root/Wake Clippy PASS. Its unsigned, unselected debug package
@@ -3234,7 +3234,7 @@ and release acceptance must follow their existing procedures; this live read
 supplies none of their missing authority.
 
 
-### 2026-11-09T15:21:34Z — focused observer release prepared; source-read qualification remains open
+### 2026-11-09T15:21:34Z â€” focused observer release prepared; source-read qualification remains open
 
 The isolated release source `ae3f81445dc543d236732060e8d02e54b8c3a978` contains
 18 focused code paths over the genuinely accepted `313f6a31` baseline. Its source
@@ -3259,7 +3259,7 @@ use the existing review, acknowledgment, snapshot, producer and guarded promotio
 chain. C1 and both original task fences remain incomplete; no replay is authorized.
 
 
-### 2026-11-09T15:51:11.662850+00:00 — focused review admission and committed claim reconciled
+### 2026-11-09T15:51:11.662850+00:00 â€” focused review admission and committed claim reconciled
 
 The twelve frozen public-source review messages passed normal scoped admission
 using the already selected compatible development controller. The focused main
@@ -3278,7 +3278,7 @@ bounded source-review delivery through the existing serving owners, followed by
 actual source-read corroboration. No operator action is presently required.
 
 
-### 2026-11-09T16:16:18Z — DEV response-wait qualification passed; review stopped at browser readiness
+### 2026-11-09T16:16:18Z â€” DEV response-wait qualification passed; review stopped at browser readiness
 
 The existing full response-reader development package was selected through the
 normal isolated update-package procedure. Its 269 source checks remain separate
@@ -3326,7 +3326,7 @@ diagnosed. Preserve the OPEN/reserved attempt and use its existing guarded
 reconciliation after readiness recovery; do not replay it or recreate profiles.
 
 
-### 2026-11-09T16:21:41.385017+00:00 — supported login owner qualified; awaiting availability
+### 2026-11-09T16:21:41.385017+00:00 â€” supported login owner qualified; awaiting availability
 
 A read-only terminal probe confirmed interactive input/output in the current
 qualified owner context. The existing selected controller can therefore use
@@ -3343,7 +3343,7 @@ Neither first-send wrapper may be rerun. No message, production promotion or C1
 completion is established by this prerequisite check.
 
 
-### 2026-11-09T16:31:59.242675+00:00 — scoped readiness diagnostics retained in source
+### 2026-11-09T16:31:59.242675+00:00 â€” scoped readiness diagnostics retained in source
 
 Fixed a demonstrated diagnostic propagation gap using the existing browser owner
 and readiness journal. Terminal LOGIN/CAPTCHA now emits fixed route/reason metadata
@@ -3362,7 +3362,7 @@ historical failed browser route was not reconstructed, and authentication expiry
 is not inferred. Deploy/qualify this patch through existing procedures separately.
 
 
-### 2026-11-09T16:58:30.4567247+00:00 — DEV inspector launch qualified; authentication remains unverified
+### 2026-11-09T16:58:30.4567247+00:00 â€” DEV inspector launch qualified; authentication remains unverified
 
 An actual Windows launch of the old full command line reproduced WinError 206:
 36,511 quoted UTF-16 code units, no START token, no real profile and no child or
@@ -3374,8 +3374,8 @@ rerun or added to the current count. See the [evidence record](docs/verification
 The exact-source locked/offline build completed in 109.609s. Normal DEV selection
 and a finite 15s authenticated loopback qualification completed in 47.187s:
 401/401/200 authentication, a 79-tool catalog, registry read, natural owned-tree
-and reader closure, and actual TCP refusal 10061. GUI `671d526e…` is selected;
-verified `d46ba664…` remains previous and older f71 bytes remain preserved.
+and reader closure, and actual TCP refusal 10061. GUI `671d526eâ€¦` is selected;
+verified `d46ba664â€¦` remains previous and older f71 bytes remain preserved.
 The 45 critical selection pins and both retained-package checks had zero
 mismatches; the existing profile identity and pending review/claim stayed intact.
 
@@ -3397,14 +3397,14 @@ unchanged. Protected promotion and installed-reader acceptance are not establish
 **C1 remains INCOMPLETE**.
 
 
-### 2026-11-09T21:10:20Z — original review resumed once; automatic response readback qualified in DEV
+### 2026-11-09T21:10:20Z â€” original review resumed once; automatic response readback qualified in DEV
 
 After supported same-profile authentication and exact-target readiness, the
 original reserved review used the existing metadata-only `retry-pre-submit` and
 one `resume`. The 276.519s monitored owner passed: exact SENT receipt, one original
 reservation with its timestamp preserved, COMPLETE timer, persisted-readback
 protocol and automatic capture of the same 1,933-byte response without a human
-relay. The selected DEV controller remains GUI `671d526e…`; this does not qualify
+relay. The selected DEV controller remains GUI `671d526eâ€¦`; this does not qualify
 the protected MAIN or installed response reader. See the [dated evidence](docs/verification/FOCUSED_OBSERVER_REVIEW_RESUME_2026_11_09.json).
 
 The response is schema-valid **INCONCLUSIVE**, claiming three of four required
@@ -3437,7 +3437,7 @@ source/producer authority remain false. The frozen final-review contract require
 complete partial reports; local corroboration cannot substitute for the missing
 review judgment. Remaining messages are held while legitimate recovery is assessed.
 
-### 2026-11-09T21:22:20Z — captured command-output identity; source qualification only
+### 2026-11-09T21:22:20Z â€” captured command-output identity; source qualification only
 
 Existing full-output `run_command` results now report captured UTF-8 byte lengths
 and SHA-256 for stdout/stderr. Summary-only results return null metadata, retaining
@@ -3452,7 +3452,7 @@ and strict root all-target Clippy passed. [Source evidence](docs/verification/CA
 distinguishes these checks from protected installation and live acceptance, neither
 of which occurred. Original frozen review and C1 tasks remain preserved.
 
-### 2026-11-09T21:23:02Z — auxiliary review claim cancelled through its normal CAS route
+### 2026-11-09T21:23:02Z â€” auxiliary review claim cancelled through its normal CAS route
 
 After the completed communication closed, fresh authenticated status and contract
 checks permitted one normal cancellation of this auxiliary report-only claim.
@@ -3468,7 +3468,7 @@ unchanged; accounting completion is not claimed. A corrective review must use th
 supported authorization workflow with new immutable identities, preserving the
 completed message, old grant and failed review evidence. The old lease is not renewed.
 
-### 2026-11-09T22:54:20Z — disk recovery, reconciled claim and first corrective partial
+### 2026-11-09T22:54:20Z â€” disk recovery, reconciled claim and first corrective partial
 
 After the operator restored disk space, read-only reconciliation passed in
 83.888s with two status/validation calls. It verified the committed report-only
@@ -3507,7 +3507,7 @@ Closure passed in 8.811s with 1,203 pins unchanged. Both groups retain their
 context needs for final resolution. Nine of 50 fragments and two of eleven
 partial groups are qualified; cumulative review and native C1 remain incomplete.
 
-### 2026-11-09T23:10:49Z — third review held after post-submit disagreement
+### 2026-11-09T23:10:49Z â€” third review held after post-submit disagreement
 
 The third frozen review stopped with `RESPONSE_USER_REPRESENTATION_MISMATCH`
 after submission began. Delivery remains SUBMITTING without a receipt, and the
@@ -3527,7 +3527,7 @@ inapplicable. After genuine cumulative review, snapshot acknowledgment and build
 attestation, use the existing healthy-pair reviewed-build promotion preflight,
 confirmation and result procedure. No production action was performed.
 
-### 2026-11-09T23:22:20Z — no-send receipt recovery and tested reader consistency fix
+### 2026-11-09T23:22:20Z â€” no-send receipt recovery and tested reader consistency fix
 
 The original third delivery was reconciled through the existing guarded path,
 without resending. A 72.798s read-only diagnostic first established stable exact
@@ -3581,7 +3581,7 @@ integration/finalization steps passed 33 file-only checks and independent review
 but require actual final proof hashes and have not run. No production authority
 or native coding acceptance is implied.
 
-### 2026-11-10T00:01:42Z — eighth partial passed; ninth finding held for reassessment
+### 2026-11-10T00:01:42Z â€” eighth partial passed; ninth finding held for reassessment
 
 The eighth review qualified and closed with all five assigned fragments, eight
 matching source reads, no findings, a 230.114s owner and verified cleanup. Eight
@@ -3601,7 +3601,7 @@ explicit evidence disposition are required before it can supply source coverage.
 Neither local tests nor a new communication authorization can manufacture review
 or release authority. C1, cumulative acceptance and promotion remain incomplete.
 
-### 2026-11-10T00:30:20Z — simple Git reads qualified; reassessment admitted without sending
+### 2026-11-10T00:30:20Z â€” simple Git reads qualified; reassessment admitted without sending
 
 The first bounded local read-compatibility attempt failed in 103.792s because
 the 205,157-byte catalog exceeded its 131,072-byte envelope limit. No source
@@ -3637,7 +3637,7 @@ reassessment and its explicit evidence disposition are still required before
 cumulative review, source integration, producer authority or promotion. C1 remains
 incomplete, with no verified native edit, verification or result Wake.
 
-### 2026-11-10T00:44:33Z — reassessment delivered once; preservation discrepancy holds qualification
+### 2026-11-10T00:44:33Z â€” reassessment delivered once; preservation discrepancy holds qualification
 
 The admitted reassessment ran once and obtained an exact SENT receipt, completed
 assistant turn, persisted-page readback and automatic event-bound response read
@@ -3665,7 +3665,7 @@ later original messages, integration and promotion remain held. The delivered
 request must not be replayed. Source acceptance, producer authority and the native
 C1 cycle remain incomplete.
 
-### 2026-11-10T00:52:31Z — source reads corroborated; communication closed without review selection
+### 2026-11-10T00:52:31Z â€” source reads corroborated; communication closed without review selection
 
 The 0.531s file-only evidence audit validated the reassessment schema and matched
 all eleven source-read logs once each, including the reported RETRACTED disposition.
@@ -3684,7 +3684,7 @@ no effective revision, source acceptance or producer authority has been selected
 Coverage stays eight of eleven groups and 35 of 50 fragments. Promotion and C1
 remain incomplete.
 
-### 2026-11-10T01:01:42Z — explicit source-only Group 9 mapping; operational limitation retained
+### 2026-11-10T01:01:42Z â€” explicit source-only Group 9 mapping; operational limitation retained
 
 An independently reviewed source-only rule, supported by 53 passing pure-data
 checks in 0.037s, now maps the closed reassessment to logical Group 9 using its
@@ -3705,7 +3705,7 @@ metadata. No candidate change or review restart occurred. Final cumulative revie
 source acceptance, producer authority, installed qualification, promotion and C1
 remain incomplete; the mapping made no product call, send or native action.
 
-### 2026-11-10T01:29:24Z — all partial source coverage complete; cumulative judgment pending
+### 2026-11-10T01:29:24Z â€” all partial source coverage complete; cumulative judgment pending
 
 Original reviews ten and eleven each delivered once, completed and returned an
 automatic event-bound response. Their 280.649s/223.962s owners passed with
@@ -3729,10 +3729,10 @@ judgment. Cumulative review, source acceptance, producer authority, installed
 qualification, promotion and the native C1 cycle remain incomplete.
 
 
-## 2026-11-10T01:51:38Z — user prioritizes direct Web file work and manual self-Wake
+## 2026-11-10T01:51:38Z â€” user prioritizes direct Web file work and manual self-Wake
 
-The user clarified the required first acceptance loop as ChatGPT Web → CatDesk
-v5 → authorized project-file edit and verification → project-specific manual
+The user clarified the required first acceptance loop as ChatGPT Web â†’ CatDesk
+v5 â†’ authorized project-file edit and verification â†’ project-specific manual
 self-Wake. Codex/native execution is optional. Updated the canonical architecture
 and current C0/C1 authority to make this the primary branch while preserving all
 historical native evidence and the still-unpassed optional native experiment.
@@ -3760,7 +3760,7 @@ project binding, native session, source implementation or Git operation occurred
 The full multi-project MVP is not complete.
 
 
-## 2026-11-10 — exact manual self-Wake source path for direct Web tasks
+## 2026-11-10 â€” exact manual self-Wake source path for direct Web tasks
 
 Implemented a narrow extension of the existing sender for one already completed
 manual-Wake task call. It checks the original assignment, explicit grant,
@@ -3789,7 +3789,7 @@ separate from the primary direct Web workflow. Actual live edit, verification
 and self-Wake are still pending. See
 `docs/verification/DIRECT_WEB_MANUAL_WAKE_2026_11_10.json`.
 
-## 2026-11-10 03:40 UTC — scoped submission deadline and actual delivery outcome
+## 2026-11-10 03:40 UTC â€” scoped submission deadline and actual delivery outcome
 
 Fixed three demonstrated source gaps in the existing bounded sender: the clock
 is checked after a slow metadata callback, under the Store transaction lock
@@ -3824,7 +3824,7 @@ native tasks, project bindings and protected release authority are preserved.
 No operator authentication action is required by the latest observation.
 See `docs/verification/SCOPED_SUBMISSION_DEADLINE_2026_11_10.json`.
 
-## 2026-11-10 — retain ordinary receipt diagnostics within one observation budget
+## 2026-11-10 â€” retain ordinary receipt diagnostics within one observation budget
 
 Ordinary receipt reconciliation now retains a closed, content-free diagnosis
 when no persisted receipt is proven. Identity comes from the original ledger,
@@ -3854,7 +3854,7 @@ and the original failed evidence remains. The earlier unknown invitation stays
 fenced; there is no new installed, Web-edit or self-Wake acceptance yet.
 See `docs/verification/ORDINARY_RECEIPT_DIAGNOSTICS_2026_11_10.json`.
 
-## 2026-11-10 — refuse unsupported entry and prepare one compatible Wake selection
+## 2026-11-10 â€” refuse unsupported entry and prepare one compatible Wake selection
 
 New bounded work/manual sends check supported installed adapter/bridge identities
 before claim or browser start, after existing package integrity verification.
@@ -3902,7 +3902,7 @@ image authority after acquisition before composing activation. Installed legacy
 package provenance remains a separate qualification requirement; do not assume
 new source checks already exist in its executable.
 
-## 2026-11-10 — close Wake lifecycle races and preserve interrupted STOP intent
+## 2026-11-10 â€” close Wake lifecycle races and preserve interrupted STOP intent
 
 The actual host entry functions now recheck the selected image after acquiring
 their host lease and before owner proof, status, journals or dispatch. Existing
@@ -3936,7 +3936,7 @@ dispatch, trusted package admission and installed/live qualification are next.
 Actual Web edit/verification/self-Wake is still unaccepted. Evidence:
 `docs/verification/WAKE_LIFECYCLE_SELECTION_RACES_2026_11_10.json`.
 
-## 2026-11-10 — FS-001 scoped file access and diff source qualification
+## 2026-11-10 â€” FS-001 scoped file access and diff source qualification
 
 The task-scoped correction shares resolved path checks, filters forbidden files
 before opening them, and keeps diff/patch paths literal and scoped. It also
@@ -3961,7 +3961,7 @@ edit/verify/self-Wake remains unaccepted; native Codex and a central coordinator
 are optional. Installed Wake route compatibility and approved Wake signing
 authority remain separate gates. No signer or protected authority was created.
 
-## 2026-11-10 — BUILT_CANDIDATE_ONLY: FS-001 main executable
+## 2026-11-10 â€” BUILT_CANDIDATE_ONLY: FS-001 main executable
 
 One separate main release candidate was built from published source `9e412601`
 with retained build provenance and exact artifact identity. Read-only AMD64/PE32+
@@ -3971,7 +3971,7 @@ state and protected pins matched and build-owned processes exited. The executabl
 was not run, approved or installed; the frozen candidate remains unchanged. No
 Host/broker build, signing, runtime-health or Web acceptance is established. See
 `docs/verification/PROJECT_TASK_FS_001_SCOPE_SOURCE_2026_11_10.json`.
-### 2026-11-10 — Observer metadata privacy repair; publication qualification remains open
+### 2026-11-10 â€” Observer metadata privacy repair; publication qualification remains open
 
 All eleven accepted observer JSON families now return their existing validated
 projection. This removes shadowed duplicate-key values without changing admission
@@ -3983,7 +3983,7 @@ The separate publication patch failed its actual native rename test with status
 See `docs/verification/WAKE_OBSERVER_PRIVACY_SOURCE_2026_11_10.json` for exact scope.
 No installation, signing, browser, send, binding change or Web acceptance occurred.
 
-### 2026-11-10 — Exact reader commit qualified independently
+### 2026-11-10 â€” Exact reader commit qualified independently
 
 A clean detached checkout of `9c521ba5d287c0f6646886d24c57ffdee3d912b9`
 passed all 29 readiness cases, formatting and strict Wake Clippy. All 238 source
@@ -3994,7 +3994,7 @@ per-command long-path option, with no repository configuration change.
 The separate native control succeeds with zero child opens and returns
 `0xc0000022` with five read handles; destination rights alone do not resolve it.
 Installation and actual Web/self-Wake acceptance remain open.
-### 2026-11-10 — Protected-stage native handoff qualified in disposable Windows fixtures
+### 2026-11-10 â€” Protected-stage native handoff qualified in disposable Windows fixtures
 
 Fixed the unpinned absolute-path stage writer using existing handle-relative
 creation and canonical protected descriptors. Actual controls established that
@@ -4008,7 +4008,7 @@ source/state/inventory preservation and cleanup. Standard-user fixtures do not
 qualify SYSTEM-service execution or installation. Historical failures remain.
 See `docs/verification/WAKE_PROTECTED_STAGE_HANDOFF_SOURCE_2026_11_10.json`.
 
-### 2026-11-10 — GUI consumer verification and rebuild applicability
+### 2026-11-10 â€” GUI consumer verification and rebuild applicability
 
 Six exact readonly CLI parser/identity tests now pass under their compiled
 `operator_facade::web::tests` names; root formatting and strict all-target Clippy
@@ -4019,7 +4019,7 @@ A new GUI, Host and broker build is therefore required for the corrected candida
 with the GUI retained as a distinct Wake companion rather than an implicit
 canonical-backend promotion. Native81 and GUI6 evidence share the same source fence.
 
-### 2026-11-10 19:36 UTC — Corrected candidate artifacts built and read back
+### 2026-11-10 19:36 UTC â€” Corrected candidate artifacts built and read back
 
 The bounded, sequential release build from published `a5f3cd496e8cab6e3a265da47c3cb25b897f857d`
 completed in 676 seconds. Independent readback verified the GUI, Host and broker,
@@ -4033,7 +4033,7 @@ system line-ending policy differed from the explicit LF checkout policy; preserv
 that refusal and use per-command checkout settings, without resetting source or
 changing Git configuration. Existing unknown Web submissions remain fenced.
 
-### 2026-11-10 20:31 UTC — Event polling no longer repairs a live journal
+### 2026-11-10 20:31 UTC â€” Event polling no longer repairs a live journal
 
 Fixed a source-confirmed race in legacy status observation: polling could truncate
 an event tail while its writer held the mutation lock. Polling now parses without
@@ -4048,7 +4048,7 @@ Verified Host/broker inputs are disjoint from this file and can be retained with
 their original provenance. Protected installation and live Web acceptance remain open.
 Evidence: `docs/verification/AUTONOMY_EVENT_POLL_READONLY_SOURCE_2026_11_10.json`.
 
-### 2026-11-10 21:47 UTC — Corrected GUI pair and local development health verified
+### 2026-11-10 21:47 UTC â€” Corrected GUI pair and local development health verified
 
 Fresh GUIs from candidate `4293fa29` and fallback `8cb928f5` now contain the
 event-reader fix. Exact four-artifact source review and unsigned local source
@@ -4060,7 +4060,7 @@ fallback is retained, and candidate development verification metadata is recorde
 Protected installation and actual per-project Web edit/verify/delivered self-Wake
 remain open. Evidence: `docs/verification/AUTONOMY_EVENT_POLL_READONLY_SOURCE_2026_11_10.json`.
 
-### 2026-11-11T00:06Z — Unsigned Wake bootstrap packet prepared
+### 2026-11-11T00:06Z â€” Unsigned Wake bootstrap packet prepared
 
 The original PowerShell refusal stopped at the directory identity comparison.
 The retained native file reader verified the existing direct root and all three
@@ -4071,7 +4071,7 @@ length and pinned hash and saved the unsigned packet. The Wake-purpose signature
 and native elevated admission are pending. The original Web delivery records
 retain their holds, and both worktrees show no tracked changes.
 
-### 2026-11-11 — Routine local-update policy and durable Git checkpoints
+### 2026-11-11 â€” Routine local-update policy and durable Git checkpoints
 
 The active goal removes routine per-version signing through an optional one-time
 enrollment in the existing fixed broker. Source adds explicit local request mode,
@@ -4107,8 +4107,14 @@ gap; no policy was changed to hide it. See
 `docs/verification/ROUTINE_UPDATE_CHECKPOINT_SOURCE_2026_11_11.json` for exact scope,
 prior guard regressions, omissions and remaining installed acceptance requirements.
 
-### 2026-11-11T02:45Z — Reviewed source published
+### 2026-11-11T02:45Z â€” Reviewed source published
 
 Source checkpoint `82d29852aa5273fe5ed923487d42bbd4731687bb` was pushed normally to `codex/web-rollover-oct17`; exact remote SHA was read back. The 35-file audit covered source, tests and sanitized operating records. All four final bounded qualification owners exited successfully, both strict Clippy runs passed, and the final test-process inventory found no matching owned executable or worker. No browser, Wake, service or tunnel was started.
 
 The local-policy UAC caller gap remains a source task: the queried tool process is Limited with historical filtering, but those flags do not prove that UAC is its only restriction. Qualify a query-only linked-token/canonical-limited comparison with further-filtering negatives before changing admission. Keep signed/high gates and worker restrictions unchanged. No operator input is required for that investigation. This publication record changes documentation only and requires no artifact rebuild or repeated regression run.
+
+### 2026-11-11T03:03Z â€” Dedicated cold checkpoint recovery qualified
+
+A native regression passed both completed-checkpoint and post-CAS interruption cases through the existing dedicated-child recovery path. It refused the live owner, proved exit, reopened the same task normally, preserved the frozen assignment/grant/synthetic key and exact commit, continued reading and refused checkpoint replay. The test took 39.80s; strict Clippy passed in 19.72s. Only test code changed; normalized production prefixes remain byte-identical to the preceding checkpoint. This does not qualify shared-host recovery, the installed command sandbox or live Web execution.
+
+A separate bounded query-only diagnostic established that Windows returns Identification impersonation handles for linked Full and Limited token metadata. All 22 data queries succeeded and all 3 handles closed. The earlier primary-role assumption was unsuitable for this observation. No token was impersonated, assigned or elevated; canonical security-profile equivalence and caller admission remain unproved. The next source correction must treat those linked objects as query-only witnesses and retain the actual caller requirements.
