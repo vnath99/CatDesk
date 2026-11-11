@@ -4106,3 +4106,9 @@ The actual current-process token query exposed an open UAC-limited caller admiss
 gap; no policy was changed to hide it. See
 `docs/verification/ROUTINE_UPDATE_CHECKPOINT_SOURCE_2026_11_11.json` for exact scope,
 prior guard regressions, omissions and remaining installed acceptance requirements.
+
+### 2026-11-11T02:45Z — Reviewed source published
+
+Source checkpoint `82d29852aa5273fe5ed923487d42bbd4731687bb` was pushed normally to `codex/web-rollover-oct17`; exact remote SHA was read back. The 35-file audit covered source, tests and sanitized operating records. All four final bounded qualification owners exited successfully, both strict Clippy runs passed, and the final test-process inventory found no matching owned executable or worker. No browser, Wake, service or tunnel was started.
+
+The local-policy UAC caller gap remains a source task: the queried tool process is Limited with historical filtering, but those flags do not prove that UAC is its only restriction. Qualify a query-only linked-token/canonical-limited comparison with further-filtering negatives before changing admission. Keep signed/high gates and worker restrictions unchanged. No operator input is required for that investigation. This publication record changes documentation only and requires no artifact rebuild or repeated regression run.

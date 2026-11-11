@@ -347,5 +347,13 @@
   "wakeStarts": 0,
   "externalTunnelChanges": false,
   "recurringAutomationEnabled": false,
-  "reviewScope": "Changed production boundaries reviewed with peer agents; test authorship overlap disclosed. This record creates no FULL_SOURCE, producer, signing or installation authority."
+  "reviewScope": "Changed production boundaries reviewed with peer agents; test authorship overlap disclosed. This record creates no FULL_SOURCE, producer, signing or installation authority.",
+  "publishedSourceCommit": "82d29852aa5273fe5ed923487d42bbd4731687bb",
+  "publishedSourceRemoteShaVerified": true,
+  "publishedSourceRemoteObservedUtc": "2026-11-11T02:45:53.614503+00:00",
+  "finalTestProcessInventory": {
+    "observedUtc": "2026-11-11T02:43:51.5160285+00:00",
+    "matchingOwnedExecutablesOrWorkers": 0,
+    "observerExcluded": true
+  }
 }
