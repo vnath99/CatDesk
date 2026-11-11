@@ -938,6 +938,67 @@ impl FixedBrokerApprovalClient<'_> {
         // operator request is hidden behind result observation.
         Ok(result)
     }
+
+    /// One enrolled local-user request on the same attested fixed instance.
+    /// Client encoding checks supply no transaction authority; the broker must
+    /// independently derive state, caller and protected-policy admission.
+    pub fn submit_local_user_selection_v1(mut self, request: &[u8]) -> Result<serde_json::Value> {
+        use std::os::windows::io::AsHandle;
+        let payload = local_user_request_payload(request)?;
+        self.policy.current_process_local_updater()?;
+        self.revalidate()?;
+        // Recheck the enrolled policy and exact interactive user immediately
+        // before the only write; a timeout never grants replay authority.
+        self.policy.current_process_local_updater()?;
+        write_one_message(&self.pipe, request)?;
+        let raw = crate::install_broker_pipe_io::read_once(
+            self.pipe.as_handle(),
+            8192,
+            std::time::Duration::from_secs(180),
+            &std::sync::atomic::AtomicBool::new(false),
+        )
+        .map_err(|_| "WAKE_SAME_STATE_RESULT_UNKNOWN_NO_RETRY")?;
+        let result: serde_json::Value =
+            serde_json::from_slice(&raw).map_err(|_| "WAKE_SAME_STATE_RESULT_UNKNOWN_NO_RETRY")?;
+        if !local_user_complete_reply_matches(
+            &result,
+            &payload,
+            &format!("{:x}", Sha256::digest(request)),
+        ) {
+            return Err("WAKE_SAME_STATE_RESULT_UNKNOWN_NO_RETRY".into());
+        }
+        Ok(result)
+    }
+}
+
+fn local_user_request_payload(request: &[u8]) -> Result<serde_json::Value> {
+    use crate::install_broker_approval::same_state::{
+        SameStateRootSelectionApprovalV3, encode_local_user_selection_request_v1,
+    };
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Request {
+        authorization: String,
+        payload: SameStateRootSelectionApprovalV3,
+    }
+    if request.is_empty() || request.len() > MAX_APPROVAL_BYTES {
+        return Err("WAKE_BROKER_CLIENT_APPROVAL_SIZE_INVALID".into());
+    }
+    let decoded: Request =
+        serde_json::from_slice(request).map_err(|_| "WAKE_SAME_STATE_REQUEST_INVALID")?;
+    if decoded.authorization != "LOCAL_USER_POLICY"
+        || encode_local_user_selection_request_v1(&decoded.payload)? != request
+        || decoded.payload.schema_version != 3
+        || !matches!(
+            decoded.payload.operation.as_str(),
+            "SELECT_SAME_STATE_RELEASE" | "ROLLBACK_SAME_STATE_RELEASE"
+        )
+        || !crate::protocol::valid_id(&decoded.payload.approval_id)
+        || decoded.payload.install_generation == 0
+    {
+        return Err("WAKE_SAME_STATE_REQUEST_INVALID".into());
+    }
+    serde_json::to_value(decoded.payload).map_err(|_| "WAKE_SAME_STATE_REQUEST_INVALID".into())
 }
 
 pub(crate) fn same_state_complete_reply_matches(
@@ -1027,6 +1088,30 @@ pub(crate) fn same_state_complete_reply_matches(
         && value["runtimeState"] == "STOPPED"
         && value["browserOrWakeStarted"] == false
         && value["liveAcceptanceVerified"] == false
+}
+
+pub(crate) fn local_user_complete_reply_matches(
+    value: &serde_json::Value,
+    payload: &serde_json::Value,
+    request_sha256: &str,
+) -> bool {
+    let Some(fields) = value.as_object() else {
+        return false;
+    };
+    if fields.contains_key("signedEnvelopeSha256")
+        || value["authorization"] != "LOCAL_USER_POLICY"
+        || value["requestSha256"] != request_sha256
+    {
+        return false;
+    }
+    // Only translate the closed mode-specific commitment fields. The unchanged
+    // matcher retains exact COMPLETE, STOPPED, selected bytes and rollback
+    // diagnostic checks, including rejection of every other unknown member.
+    let mut common = fields.clone();
+    common.remove("authorization");
+    common.remove("requestSha256");
+    common.insert("signedEnvelopeSha256".into(), request_sha256.into());
+    same_state_complete_reply_matches(&serde_json::Value::Object(common), payload, request_sha256)
 }
 
 /// Connect only to the compiled local pipe. No request data is sent here.
@@ -1269,6 +1354,170 @@ mod tests {
             &payload,
             &"b".repeat(64)
         ));
+    }
+
+    #[test]
+    fn local_user_reply_requires_exact_mode_request_and_complete_stopped_readback() {
+        let payload = serde_json::json!({"operation":"SELECT_SAME_STATE_RELEASE",
+            "approvalId":"local-one","installGeneration":1,"plannedSelectionSha256":"a".repeat(64)});
+        let result = serde_json::json!({"schemaVersion":3,"operation":"SELECT_SAME_STATE_RELEASE",
+            "approvalId":"local-one","installGeneration":1,"phase":"COMPLETE",
+            "authorization":"LOCAL_USER_POLICY","requestSha256":"b".repeat(64),
+            "selectedSha256":"a".repeat(64),"completeRecordSha256":"c".repeat(64),
+            "runtimeState":"STOPPED","browserOrWakeStarted":false,"liveAcceptanceVerified":false});
+        assert!(local_user_complete_reply_matches(
+            &result,
+            &payload,
+            &"b".repeat(64)
+        ));
+        assert!(!same_state_complete_reply_matches(
+            &result,
+            &payload,
+            &"b".repeat(64)
+        ));
+        for (key, bad) in [
+            ("authorization", serde_json::json!("SIGNED_APPROVAL")),
+            ("requestSha256", serde_json::json!("d".repeat(64))),
+            ("signedEnvelopeSha256", serde_json::json!("b".repeat(64))),
+            ("phase", serde_json::json!("POINTER_SWITCHED")),
+            ("selectedSha256", serde_json::json!("d".repeat(64))),
+            ("installGeneration", serde_json::json!(2)),
+            ("approvalId", serde_json::json!("other")),
+            (
+                "operation",
+                serde_json::json!("ROLLBACK_SAME_STATE_RELEASE"),
+            ),
+            ("runtimeState", serde_json::json!("RUNNING")),
+            ("browserOrWakeStarted", serde_json::json!(true)),
+            ("liveAcceptanceVerified", serde_json::json!(true)),
+            ("privateBody", serde_json::json!("refused")),
+        ] {
+            let mut changed = result.clone();
+            changed[key] = bad;
+            assert!(
+                !local_user_complete_reply_matches(&changed, &payload, &"b".repeat(64)),
+                "{key}"
+            );
+        }
+        for key in ["authorization", "requestSha256", "completeRecordSha256"] {
+            let mut changed = result.clone();
+            changed.as_object_mut().unwrap().remove(key);
+            assert!(!local_user_complete_reply_matches(
+                &changed,
+                &payload,
+                &"b".repeat(64)
+            ));
+        }
+        let mut signed = result;
+        let fields = signed.as_object_mut().unwrap();
+        fields.remove("authorization");
+        fields.remove("requestSha256");
+        fields.insert("signedEnvelopeSha256".into(), "b".repeat(64).into());
+        assert!(same_state_complete_reply_matches(
+            &signed,
+            &payload,
+            &"b".repeat(64)
+        ));
+        assert!(!local_user_complete_reply_matches(
+            &signed,
+            &payload,
+            &"b".repeat(64)
+        ));
+    }
+
+    #[test]
+    fn local_user_rollback_reply_retains_closed_failed_image_diagnostics() {
+        let payload = serde_json::json!({"operation":"ROLLBACK_SAME_STATE_RELEASE",
+            "approvalId":"local-rollback","installGeneration":2,"plannedSelectionSha256":"a".repeat(64),
+            "stateSnapshot":{"root":{"volumeSerial":1}}});
+        let result = serde_json::json!({"schemaVersion":3,"operation":"ROLLBACK_SAME_STATE_RELEASE",
+            "approvalId":"local-rollback","installGeneration":2,"phase":"COMPLETE",
+            "authorization":"LOCAL_USER_POLICY","requestSha256":"b".repeat(64),
+            "selectedSha256":"a".repeat(64),"completeRecordSha256":"c".repeat(64),
+            "runtimeState":"STOPPED","browserOrWakeStarted":false,"liveAcceptanceVerified":false,
+            "failedCurrentImages":[{"name":"CatDeskWakeHost.exe","actualSha256":null,"byteLength":null,"identity":null},
+                {"name":"CatDeskBinagotchy.exe","actualSha256":null,"byteLength":null,"identity":null}]});
+        assert!(local_user_complete_reply_matches(
+            &result,
+            &payload,
+            &"b".repeat(64)
+        ));
+        for variant in 0..4 {
+            let mut changed = result.clone();
+            match variant {
+                0 => {
+                    changed
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("failedCurrentImages");
+                }
+                1 => changed["failedCurrentImages"] = serde_json::json!([]),
+                2 => changed["failedCurrentImages"][0]["privateBody"] = "refused".into(),
+                _ => changed["failedCurrentImages"][0]["name"] = "CatDeskInstallBroker.exe".into(),
+            }
+            assert!(!local_user_complete_reply_matches(
+                &changed,
+                &payload,
+                &"b".repeat(64)
+            ));
+        }
+        assert!(!local_user_complete_reply_matches(
+            &result,
+            &payload,
+            &"d".repeat(64)
+        ));
+    }
+
+    #[test]
+    fn local_user_client_request_admission_refuses_signed_noncanonical_and_maintenance_shapes() {
+        use crate::install_broker_approval::same_state::{
+            SameStateRollbackAuthorityV3, encode_local_user_selection_request_v1,
+            tests::{envelope, fixture},
+        };
+        let (payload, _, key) = fixture();
+        let request = encode_local_user_selection_request_v1(&payload).unwrap();
+        assert_eq!(
+            local_user_request_payload(&request).unwrap(),
+            serde_json::to_value(&payload).unwrap()
+        );
+        assert!(local_user_request_payload(&envelope(&payload, &key)).is_err());
+        let mut pretty = request.clone();
+        pretty.push(b'\n');
+        assert!(local_user_request_payload(&pretty).is_err());
+        assert!(local_user_request_payload(&[]).is_err());
+        assert!(local_user_request_payload(&vec![b'x'; MAX_APPROVAL_BYTES + 1]).is_err());
+        for variant in 0..6 {
+            let mut changed = payload.clone();
+            match variant {
+                0 => changed.operation = "INSTALL_BROKER".into(),
+                1 => changed.install_generation = 0,
+                2 => changed.approval_id = "invalid/id".into(),
+                3 => changed.schema_version = 2,
+                4 => {
+                    changed.rollback_authority =
+                        SameStateRollbackAuthorityV3::ReviewedSourceReconstruction {
+                            release: payload.rollback_authority.release().clone(),
+                            old_raw_selection_escrow_sha256: payload
+                                .state_snapshot
+                                .current
+                                .sha256
+                                .clone(),
+                            reconstruction_receipt_sha256: "f".repeat(64),
+                        }
+                }
+                _ => {
+                    let text = String::from_utf8(request.clone()).unwrap();
+                    let dual = text.replacen('{', "{\"signatureHex\":\"00\",", 1);
+                    assert!(local_user_request_payload(dual.as_bytes()).is_err());
+                    continue;
+                }
+            }
+            let raw = format!(
+                "{{\"authorization\":\"LOCAL_USER_POLICY\",\"payload\":{}}}",
+                serde_json::to_string(&changed).unwrap()
+            );
+            assert!(local_user_request_payload(raw.as_bytes()).is_err());
+        }
     }
     use std::sync::atomic::{AtomicU64, Ordering};
 

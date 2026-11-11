@@ -47,6 +47,7 @@ fn fixture() -> (BootstrapManifestV1, SigningKey) {
             },
             allow_reviewed_reconstruction: false,
             allow_operator_service_start: true,
+            allow_local_user_updates: None,
         },
         key,
     )
@@ -82,6 +83,47 @@ fn first_bootstrap_signature_is_purpose_and_external_fingerprint_bound() {
     let last = changed.len() - 4;
     changed[last] ^= 1;
     assert!(verify_bootstrap(&changed, &digest(&changed), &fp, 1000).is_err());
+}
+
+#[test]
+fn first_bootstrap_local_update_delegation_is_explicit_and_signature_bound() {
+    let (mut manifest, key) = fixture();
+    let fingerprint = manifest.approval_public_key_sha256.clone();
+    let legacy = envelope(manifest.clone(), &key);
+    assert!(
+        !String::from_utf8(legacy.clone())
+            .unwrap()
+            .contains("allowLocalUserUpdates")
+    );
+    assert_eq!(
+        verify_bootstrap(&legacy, &digest(&legacy), &fingerprint, 1000)
+            .unwrap()
+            .manifest
+            .allow_local_user_updates,
+        None
+    );
+    manifest.allow_local_user_updates = Some(true);
+    let enrolled = envelope(manifest, &key);
+    assert_eq!(
+        verify_bootstrap(&enrolled, &digest(&enrolled), &fingerprint, 1000)
+            .unwrap()
+            .manifest
+            .allow_local_user_updates,
+        Some(true)
+    );
+    let text = String::from_utf8(enrolled).unwrap().replace(
+        "\"allowLocalUserUpdates\":true",
+        "\"allowLocalUserUpdates\":false",
+    );
+    assert!(
+        verify_bootstrap(
+            text.as_bytes(),
+            &digest(text.as_bytes()),
+            &fingerprint,
+            1000
+        )
+        .is_err()
+    );
 }
 #[test]
 fn first_bootstrap_closed_scope_refuses_paths_flags_zero_identity_and_release_purposes() {

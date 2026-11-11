@@ -7675,3 +7675,43 @@ is to review the proposed account and scope, obtain the genuine Wake-purpose
 signature for the frozen preimage, and use native preflight in the intended
 elevated interactive process. See the current procedure in
 `CATDESK_PRODUCTION_RELEASE_LIFECYCLE.md`.
+
+### 2026-11-11 — Proposed enrolled routine-update commands
+
+The source adds these explicit entry points to the existing qualified Host:
+
+```text
+CatDeskWakeHost.exe install-broker preflight
+CatDeskWakeHost.exe install-broker start-local-once
+CatDeskWakeHost.exe install-broker submit-local --request-file <absolute-frozen-request.json>
+```
+
+These are not installed-command claims. `preflight` is read-only; it reports
+`localUserUpdatesAuthorized`. The other two require separately enrolled protected
+policy and the exact qualified interactive Windows account. Start remains bounded
+and one-request; submit sends one canonical `LOCAL_USER_POLICY` request to the
+attested existing fixed broker. The file contains the existing V3 selection facts,
+not arbitrary paths, executable commands or installation authority. An unknown
+result requires original-transaction observation, never another submit.
+
+Legacy `start-once` and `submit --approval-file` retain elevated/signed admission.
+The original unsigned bootstrap packet does not enroll this new capability and
+must not be silently rewritten. See the migration and security tradeoffs in
+`CATDESK_SIMPLIFIED_DEV_RELEASE_WAKE_MODEL.md`. Qualification and installed
+availability must be recorded before using the new commands on protected state.
+
+For a newly reviewed assignment with literal `checkpointPaths`, the existing
+execution-grant command gains explicit opt-in flags:
+
+```text
+<qualified-controller> operator web work execution-grant --project-id <registered-project> --input-file <frozen-work-request.json> --allow-git-checkpoint --allow-git-sync --allow-manual-wake
+```
+
+Sync requires checkpoint permission and the registered origin. The task-scoped
+tools accept only `git.checkpoint {"verificationCallIds":["<completed-successful-check>"]}`
+and `git.sync {"checkpointCallId":"<saved-checkpoint-call>"}`. They select no
+caller-supplied branch, remote, author, shell command or file list. All assigned
+verification profiles must have successful unchanged-postimage receipts. The
+checkpoint-enabled manual Wake gate requires the latest exact checkpoint; GitHub
+sync may remain pending without erasing it. These flags do not extend existing
+grants or permit retrying held original requests.

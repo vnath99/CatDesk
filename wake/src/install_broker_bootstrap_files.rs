@@ -814,6 +814,7 @@ impl FixedBootstrapFiles {
                 allow_reviewed_reconstruction: m.allow_reviewed_reconstruction,
             },
             m.allow_operator_service_start,
+            m.allow_local_user_updates.unwrap_or(false),
         )?;
         policy
             .file

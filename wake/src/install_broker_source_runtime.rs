@@ -70,7 +70,13 @@ impl RuntimePackagePublicationV3 {
         {
             return Err("WAKE_SAME_STATE_PUBLICATION_BINDING_INVALID".into());
         }
-        let mut signed_payload = b"CatDeskWakeSameStateRootSelectionApprovalV3\0".to_vec();
+        // Retained signed records keep their historical commitment domain.
+        // Delegated local updates use a separate, explicitly unsigned domain.
+        let mut signed_payload = if ledger.binding().local_user_authorized() {
+            b"CatDeskWakeLocalUserSelectionV1\0".to_vec()
+        } else {
+            b"CatDeskWakeSameStateRootSelectionApprovalV3\0".to_vec()
+        };
         signed_payload.extend(
             serde_json::to_vec(payload)
                 .map_err(|_| "WAKE_SAME_STATE_PUBLICATION_BINDING_INVALID")?,

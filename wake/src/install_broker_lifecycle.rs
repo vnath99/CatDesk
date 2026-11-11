@@ -3,7 +3,7 @@
 use crate::{
     Result,
     install_broker_offline_pins::OfflineObjectPinV2,
-    install_broker_policy::load_fixed_broker_policy_read_only,
+    install_broker_policy::{BrokerProtectedPolicyV1, load_fixed_broker_policy_read_only},
     install_broker_preflight::{
         SERVICE_IMAGE, SERVICE_NAME, inspect_fixed_broker_with_policy,
         verify_fixed_broker_service_handle,
@@ -69,6 +69,32 @@ fn require_start_authorized(allowed: bool) -> Result<()> {
     Ok(())
 }
 
+fn require_start_mode_authorized(
+    start_allowed: bool,
+    local_update: bool,
+    local_updates_enrolled: bool,
+) -> Result<()> {
+    require_start_authorized(start_allowed)?;
+    if local_update && !local_updates_enrolled {
+        return Err("WAKE_LOCAL_UPDATE_POLICY_REQUIRED".into());
+    }
+    Ok(())
+}
+
+fn current_start_caller(policy: &BrokerProtectedPolicyV1, local_update: bool) -> Result<String> {
+    if local_update {
+        Ok(policy
+            .current_process_local_updater()?
+            .user_sid_sha256()
+            .into())
+    } else {
+        Ok(policy
+            .current_process_operator()?
+            .operator_sid_sha256()
+            .into())
+    }
+}
+
 fn valid_status(status: ServiceStatus) -> Result<u32> {
     if status.service_type != 0x10
         || status.service_flags != 0
@@ -108,9 +134,23 @@ fn status(service: &ServiceHandle) -> Result<ServiceStatus> {
 /// The fixed polling window does not cancel a synchronous Windows SCM call;
 /// the qualified enclosing operator owner supplies the hard execution bound.
 pub fn start_fixed_broker_once() -> Result<Value> {
+    start_fixed_broker(false)
+}
+
+/// Start only the existing fixed one-request service under enrolled local-user
+/// update policy. This supplies no install, selection or maintenance authority.
+pub fn start_fixed_broker_for_local_update() -> Result<Value> {
+    start_fixed_broker(true)
+}
+
+fn start_fixed_broker(local_update: bool) -> Result<Value> {
     let policy = load_fixed_broker_policy_read_only()?;
-    require_start_authorized(policy.operator_service_start_sid()?.is_some())?;
-    let operator = policy.current_process_operator()?;
+    require_start_mode_authorized(
+        policy.operator_service_start_sid()?.is_some(),
+        local_update,
+        local_update && policy.local_user_updates_enabled()?,
+    )?;
+    let caller_sid_sha256 = current_start_caller(&policy, local_update)?;
     let before = inspect_fixed_broker_with_policy(&policy)?;
     let image_path = Path::new(SERVICE_IMAGE);
     let _image_parents = image_path
@@ -145,7 +185,7 @@ pub fn start_fixed_broker_once() -> Result<Value> {
     let initial = status(&service)?;
     let started = match valid_status(initial)? {
         SERVICE_STOPPED => {
-            policy.current_process_operator()?;
+            current_start_caller(&policy, local_update)?;
             if unsafe { StartServiceW(service.0, 0, ptr::null()) } == 0 {
                 return Err("WAKE_BROKER_START_FAILED_NO_RETRY".into());
             }
@@ -173,13 +213,20 @@ pub fn start_fixed_broker_once() -> Result<Value> {
     if inspect_fixed_broker_with_policy(&policy)? != before {
         return Err("WAKE_BROKER_START_AUTHORITY_CHANGED".into());
     }
-    Ok(
-        json!({"action":"start_fixed_install_broker", "status":"SCM_RUNNING_ONLY",
+    let mut result = json!({"action":"start_fixed_install_broker", "status":"SCM_RUNNING_ONLY",
         "serviceName":SERVICE_NAME,"serviceStarted":started,"processId":current.process_id,
-        "statusPollMaximumSeconds":POLL_SECONDS,"operatorSidSha256":operator.operator_sid_sha256(),
+        "statusPollMaximumSeconds":POLL_SECONDS,"operatorSidSha256":caller_sid_sha256,
         "serviceImageSha256":before.service_image_sha256,"installationAttempted":false,
-        "settingsChanged":false,"approvalSubmitted":false,"transactionReadyVerified":false}),
-    )
+        "settingsChanged":false,"approvalSubmitted":false,"transactionReadyVerified":false});
+    if local_update {
+        let fields = result.as_object_mut().expect("fixed result object");
+        let user_sid = fields
+            .remove("operatorSidSha256")
+            .expect("fixed caller digest");
+        fields.insert("userSidSha256".into(), user_sid);
+        fields.insert("authorization".into(), "LOCAL_USER_POLICY".into());
+    }
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -200,6 +247,20 @@ mod tests {
             "WAKE_BROKER_START_NOT_AUTHORIZED"
         );
         assert!(require_start_authorized(true).is_ok());
+    }
+    #[test]
+    fn lifecycle_local_start_requires_both_enrollment_and_existing_start_permission() {
+        assert_eq!(
+            require_start_mode_authorized(false, true, true).unwrap_err(),
+            "WAKE_BROKER_START_NOT_AUTHORIZED"
+        );
+        assert_eq!(
+            require_start_mode_authorized(true, true, false).unwrap_err(),
+            "WAKE_LOCAL_UPDATE_POLICY_REQUIRED"
+        );
+        assert!(require_start_mode_authorized(true, true, true).is_ok());
+        assert!(require_start_mode_authorized(true, false, false).is_ok());
+        assert!(require_start_mode_authorized(false, false, true).is_err());
     }
     #[test]
     fn lifecycle_start_status_refuses_unknown_shared_and_inconsistent_owner() {

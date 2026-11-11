@@ -10139,3 +10139,25 @@ fallback is retained; candidate development verification metadata is recorded.
 This does not establish protected installation, Web editing, delivered self-Wake
 or two-project acceptance. Native Codex and a coordinator remain optional. See
 `docs/verification/AUTONOMY_EVENT_POLL_READONLY_SOURCE_2026_11_10.json`.
+
+### 2026-11-11 — Routine-update and Git-checkpoint source increment
+
+The active goal now removes routine per-version manual signing through an
+explicit one-time policy enrollment in the existing fixed Wake broker. Legacy
+signed/high admission remains the default. Source adds account-scoped local
+requests, separate commitments, exact previous-version recovery and read-only
+broker-process/token attestation access; it does not install or enroll this mode.
+
+The existing direct-task path gains opt-in verified local commits and exact-SHA
+Git synchronization. Existing publication recovery now records commit intent
+before execution and reconciles the saved commit independently of later HEAD.
+Uncertain remote results never authorize another push. Old grants and held tasks
+are preserved. See the current simplified model and lifecycle for the same-account
+trust tradeoff, one-time migration and remaining installed acceptance gates.
+
+Source/disposable-object qualification is recorded separately. Full acceptance
+still requires actual registered Web project edits, independent verification,
+durable local/GitHub checkpoints and delivered self-Wake continuation. The new
+broker binary, intended medium-user access, protected selection/rollback and
+runtime startup must be qualified before any old mechanism is retired. A tested
+development runtime is not a protected installation.

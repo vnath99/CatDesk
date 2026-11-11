@@ -1062,3 +1062,31 @@ new nondelegable prerequisite is established. Record exact UTC action times and
 private evidence hashes in the established audit trail; publish sanitized results
 and verified remote commit readbacks. Other projects retain their native sessions,
 bindings, histories and assigned work throughout.
+
+## 2026-11-11 — Current routine-update goal
+
+This entry updates the work queue for the new goal; the October table remains
+historical evidence, not a fresh runtime observation. Missing authority for the
+retained old unsigned packet does not block independent source work.
+
+| Task | Current boundary and next action |
+|---|---|
+| Routine checkpoint/update source | RUNNING: qualify the opt-in task checkpoint/sync and existing-broker local-policy delta, then publish the reviewed source. No operator decision is needed for that work. |
+| Ordinary UAC caller eligibility | BLOCKED_BY_TECHNICAL_DEFECT: the actual medium, interactive, UAC-limited tool process reports historical filtering and is refused by the new local gate. Next work is a reviewed distinction from restricted workers, with bounded native qualification. Do not request per-update elevation or remove the guard to obtain a pass. |
+| One-time local-update enrollment | BLOCKED_BY_POLICY until exact new artifacts, declared-scope review and a frozen enrollment contract exist. Then one operator-controlled purpose approval/native bootstrap may enroll the exact Windows account. The retained old packet does not authorize this changed broker or policy. No new signing identity is required by the proposal. |
+| Installed broker and Web acceptance | Requires that qualified installation, actual intended-account process/token access, protected select/rollback/startup and registered Web edit/verify/checkpoint/self-Wake evidence. Source and disposable-object tests do not close these gates. |
+| Original uncertain work | Preserve original assignments, grants, journals, delivery witnesses and history. Do not replay or replace held requests to demonstrate the new path. |
+
+No new protected-install command is ready for the operator at this source
+checkpoint. Prepare the exact reviewable migration first. Routine local updates
+after explicit enrollment use the fixed broker and retain integrity, previous
+version and exact-transaction checks without a per-version manual signature.
+Trust-root, broker/policy changes and initial reconstruction remain separate
+maintenance authority. Do not repeatedly ask for unchanged signing input or poll
+unchanged external services. See the simplified model and release lifecycle.
+
+The targeted source and disposable-object checks now pass, including strict
+Clippy. The UAC gap above still prevents claiming the proposed routine-update mode
+usable in this execution context. No new operator input is required for the next
+source investigation. Evidence:
+`docs/verification/ROUTINE_UPDATE_CHECKPOINT_SOURCE_2026_11_11.json`.

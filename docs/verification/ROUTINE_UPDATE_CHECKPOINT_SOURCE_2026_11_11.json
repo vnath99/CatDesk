@@ -1,0 +1,351 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-11T02:41:33.633753+00:00",
+  "qualification": "SOURCE_AND_DISPOSABLE_WINDOWS_OBJECTS_ONLY",
+  "sourceBaseCommit": "56578a41b4bb83750929a43e170b991e4516cb3b",
+  "branch": "codex/web-rollover-oct17",
+  "sourceFiles": [
+    {
+      "path": "src/delegated/autonomy_supervisor.rs",
+      "physicalSourceSha256": "57c9c91564df60c930ad2747ec037999023f859b0ff617a472e7f21b968aa953"
+    },
+    {
+      "path": "src/delegated/github_publication.rs",
+      "physicalSourceSha256": "003960f2415fce9e3c57ed4178ad56c05a7413274666747947f5e112911f3c50"
+    },
+    {
+      "path": "src/delegated/github_publication_executor.rs",
+      "physicalSourceSha256": "2237bcd4c371352b2e3eede1d34084dac676e723c1c01bb95023e5b6fab0991b"
+    },
+    {
+      "path": "src/operator_web_cli.rs",
+      "physicalSourceSha256": "ad04b603105f1917a58b7540feb0013620ff7e487e5b6610d155ab0374807f91"
+    },
+    {
+      "path": "src/project_mcp_task.rs",
+      "physicalSourceSha256": "6c3f5795250cefc4cc78df5a59636860dac08743bb0b29fade23cef37149e2ac"
+    },
+    {
+      "path": "src/project_task_git.rs",
+      "physicalSourceSha256": "13d8385f44c9440958af46efe1d824bcff3ee45b48fb530d75e895e164420803"
+    },
+    {
+      "path": "src/project_task_recovery.rs",
+      "physicalSourceSha256": "04813bcd950f23072bdc05b8bfae2188d62a961cb9ae13f2b88e896d961bdcbb"
+    },
+    {
+      "path": "src/web_task_dispatch.rs",
+      "physicalSourceSha256": "e5f0cb7b4923091707f28bff5e988f4b18b6b841797720551ab14f1b2620bec5"
+    },
+    {
+      "path": "src/web_work.rs",
+      "physicalSourceSha256": "8a358a692ed5f7b66e1957a0a349f2976c0798ca37918e6c71f11d3cd1c21e34"
+    },
+    {
+      "path": "wake/src/bin/CatDeskWakeHost.rs",
+      "physicalSourceSha256": "c87eedcda9f494aa4b0640c1a3f779ec6d852687f2075e9429cbf2922c9508f4"
+    },
+    {
+      "path": "wake/src/install_broker_bootstrap.rs",
+      "physicalSourceSha256": "ef494ca145dba72f6eab2a364fb1241869faa8cb8c68afd0f826e812f58befb6"
+    },
+    {
+      "path": "wake/src/install_broker_bootstrap_files.rs",
+      "physicalSourceSha256": "735f173a68f26a5ad7821c64f596ffe4bca2ed3791df1c7a31c78baee8d8030c"
+    },
+    {
+      "path": "wake/src/install_broker_bootstrap_tests.rs",
+      "physicalSourceSha256": "55b1c47bee86d365a950e6e7cb1d760c01920545d6c138c95ac6f548c4d3dfb3"
+    },
+    {
+      "path": "wake/src/install_broker_client.rs",
+      "physicalSourceSha256": "91152efdaa2dda5ffd356c2e3c2b005d96b6e68e2fa63790dc55b47b8252f279"
+    },
+    {
+      "path": "wake/src/install_broker_ledger_same_state.rs",
+      "physicalSourceSha256": "4c97dbbe2e576ac6e460aecc3990f7447df5ab45d279c89c66e08584607cdee7"
+    },
+    {
+      "path": "wake/src/install_broker_lifecycle.rs",
+      "physicalSourceSha256": "71ea4f74e7c884eed6b417b0d1e188b3fa86f305632dbe9e0e8b84a2393149bc"
+    },
+    {
+      "path": "wake/src/install_broker_local_access.rs",
+      "physicalSourceSha256": "0c31be17ad6e81d1b0948979a1f4910b64b8cfc63a99022957e2605d18715f95"
+    },
+    {
+      "path": "wake/src/install_broker_operator.rs",
+      "physicalSourceSha256": "572f3d27cb12c92e145021b58d05ae6d04b1fa7f7628c6799b49ac59d721182d"
+    },
+    {
+      "path": "wake/src/install_broker_policy.rs",
+      "physicalSourceSha256": "9ee12277d4616fb26aef3eacd5dbb505a827b967c0345c0b6dc4d00a81456a57"
+    },
+    {
+      "path": "wake/src/install_broker_request.rs",
+      "physicalSourceSha256": "35c4042182799999b71f8bbc3249be49649b4a6c605fd9411ac5f2aa913ccf36"
+    },
+    {
+      "path": "wake/src/install_broker_same_state_approval.rs",
+      "physicalSourceSha256": "794a826be9752f344d6fb4a63f420b2ed0787ca3c8c1ad962344831784b5fa8b"
+    },
+    {
+      "path": "wake/src/install_broker_service_core.rs",
+      "physicalSourceSha256": "00cf11543e87ebf79ccdab01830885c8fc73ee4df13fc6da500a8c6e50c7a2e6"
+    },
+    {
+      "path": "wake/src/install_broker_service_runtime.rs",
+      "physicalSourceSha256": "7bfeff3d23e7719e87abe28f3063ef691ae7eb3bc8b7000551829943ebd44034"
+    },
+    {
+      "path": "wake/src/install_broker_source_runtime.rs",
+      "physicalSourceSha256": "9dafb484a80d91145c986469238562b69e1c426e901877458681f9505d641b2d"
+    },
+    {
+      "path": "wake/src/lib.rs",
+      "physicalSourceSha256": "79320b410016019f285e6779ae06f21d74096725dda40e36d7c59a11dc9ad2e1"
+    },
+    {
+      "path": "wake/src/runtime_same_state_install.rs",
+      "physicalSourceSha256": "741ceb47e0d58c992c70d9d95b6ac2cf7536012cfdb840809133029348474a56"
+    },
+    {
+      "path": "wake/src/runtime_same_state_install_tests.rs",
+      "physicalSourceSha256": "aeb895e5f4818654e80e9ec85bef7222fcd7b4aada69fce0f06aa6bebeadf4ca"
+    }
+  ],
+  "implemented": [
+    "Opt-in literal task checkpoint paths and checkpoint/sync grant permissions; old omitted fields retain original encoding.",
+    "Verification-bound raw file postimages, alternate index, durable exact commit intent, feature-ref CAS and exact interrupted checkpoint recovery.",
+    "Fixed-origin exact-SHA push attempt, remote readback, no unknown-outcome replay, revocation and process-cleanup writer fencing.",
+    "Existing publication journal saves precommit intent and expected remote commit independently of later HEAD.",
+    "Existing Wake broker optional local-account request mode, separated commitment/ledger/reply identity and retained selection/rollback checks.",
+    "One-time signed bootstrap may explicitly propose local-account delegation; legacy signed/high behavior remains default.",
+    "Fixed-service-only ephemeral process observation and token-query access; no process mutation, token duplication or impersonation rights granted to client."
+  ],
+  "securityTradeoff": "Explicit same-account delegation, not resistance to a malicious same-SID process. Actual independent review/test workflow and exact artifact binding remain required; writable semantic receipts are not cryptographic reviewer provenance.",
+  "finalRuns": [
+    {
+      "mode": "main-tests",
+      "ownerSha256": "2d958090a9b2924c0b7d6de376e186f7c57ea1d4d41abd2d971da37b021fcbe0",
+      "resultSha256": "edd2ff64f4fa87dbcd576c87c96e518d42435a7b459ed7f38f71e62ebb9ac0f0",
+      "startedUtc": "2026-11-11T02:20:41.1189168+00:00",
+      "finishedUtc": "2026-11-11T02:33:44.6618223+00:00",
+      "exitCode": 0,
+      "timedOut": false,
+      "terminationFailed": false,
+      "containment": "KILL_ON_JOB_CLOSE",
+      "stages": [
+        {
+          "name": "project_mcp_task--git_checkpoint--tests",
+          "exitCode": 0,
+          "passed": 10,
+          "failed": 0,
+          "ignored": 0,
+          "logSha256": "a098d9e0e8b3502cfd7abe4c633e61ea0590a1b233e65a2172145bbed4ea1126",
+          "startedUtc": "2026-11-11T02:20:41.4515721+00:00",
+          "finishedUtc": "2026-11-11T02:22:47.5076303+00:00"
+        },
+        {
+          "name": "web_task_dispatch--",
+          "exitCode": 0,
+          "passed": 30,
+          "failed": 0,
+          "ignored": 0,
+          "logSha256": "e3b3c260864195a8cb69d19db94aaa4a2b958929769d9392fd8bf9c0f2f3d99b",
+          "startedUtc": "2026-11-11T02:22:47.5555989+00:00",
+          "finishedUtc": "2026-11-11T02:33:16.9910377+00:00"
+        },
+        {
+          "name": "github_publication",
+          "exitCode": 0,
+          "passed": 31,
+          "failed": 0,
+          "ignored": 0,
+          "logSha256": "a7d049d6b8be462312b04bff56c9b756600bd5f6423cbad8891d378ebc26e5ff",
+          "startedUtc": "2026-11-11T02:33:17.0158425+00:00",
+          "finishedUtc": "2026-11-11T02:33:38.0785977+00:00"
+        },
+        {
+          "name": "delegated--autonomy_supervisor--tests",
+          "exitCode": 0,
+          "passed": 43,
+          "failed": 0,
+          "ignored": 0,
+          "logSha256": "223321bd9190aa998bb3522fbe3c0b99d6d91917832500eb8281ad933668c996",
+          "startedUtc": "2026-11-11T02:33:38.1050263+00:00",
+          "finishedUtc": "2026-11-11T02:33:41.5356322+00:00"
+        },
+        {
+          "name": "operator_facade--web--tests",
+          "exitCode": 0,
+          "passed": 48,
+          "failed": 0,
+          "ignored": 0,
+          "logSha256": "8e25e4f18018a8632c972b31906581c1005a88a10af17ddf8e4f1c266195513a",
+          "startedUtc": "2026-11-11T02:33:41.5599438+00:00",
+          "finishedUtc": "2026-11-11T02:33:44.5878046+00:00"
+        }
+      ]
+    },
+    {
+      "mode": "wake-tests",
+      "ownerSha256": "a0deefa8835ddfcf4849e958c41e57b3655f12df9916ea1cf522ac54a74c68b6",
+      "resultSha256": "cc6093f302e92e8a5971c01c5af6a7ee397233095bb7a5a935f0ca318b642248",
+      "startedUtc": "2026-11-11T02:19:01.3944085+00:00",
+      "finishedUtc": "2026-11-11T02:21:46.2514756+00:00",
+      "exitCode": 0,
+      "timedOut": false,
+      "terminationFailed": false,
+      "containment": "KILL_ON_JOB_CLOSE",
+      "stages": [
+        {
+          "name": "install_broker_local_access",
+          "exitCode": 0,
+          "passed": 5,
+          "failed": 0,
+          "ignored": 0,
+          "logSha256": "70d80318f4f68af3799581720fd63bee54fb20bf258a67788e80965ea30744de",
+          "startedUtc": "2026-11-11T02:19:01.7120927+00:00",
+          "finishedUtc": "2026-11-11T02:19:06.4379015+00:00"
+        },
+        {
+          "name": "runtime--same_state_install--tests--same_state_local_user_",
+          "exitCode": 0,
+          "passed": 5,
+          "failed": 0,
+          "ignored": 0,
+          "logSha256": "53cc0f3d4d469407ab786c5d48bd3fb8d41eacb9bfc8e79763347eab49fe1b6a",
+          "startedUtc": "2026-11-11T02:19:06.4858699+00:00",
+          "finishedUtc": "2026-11-11T02:21:39.9856847+00:00"
+        },
+        {
+          "name": "fixed_native_broker_cli_has_no_root_service_or_signing_override",
+          "exitCode": 0,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "logSha256": "46812959c29e7e84bbc5326b41a3f3a7a79214b7183412cef621b2075c6398f7",
+          "startedUtc": "2026-11-11T02:21:40.0184987+00:00",
+          "finishedUtc": "2026-11-11T02:21:46.1618833+00:00"
+        }
+      ]
+    },
+    {
+      "mode": "main-clippy",
+      "ownerSha256": "2336344ba026c7448f0e1a3af69443c17e968f425ae17ce7622c091bf7c7c205",
+      "resultSha256": "4ff096e0daa3433bdbdb205ec702e98c97b2b43e260cc190ce8e3ea88756505a",
+      "startedUtc": "2026-11-11T02:38:09.4826351+00:00",
+      "finishedUtc": "2026-11-11T02:39:03.3809057+00:00",
+      "exitCode": 0,
+      "timedOut": false,
+      "terminationFailed": false,
+      "containment": "KILL_ON_JOB_CLOSE",
+      "stages": [
+        {
+          "name": "main-clippy",
+          "exitCode": 0,
+          "passed": null,
+          "failed": null,
+          "ignored": null,
+          "logSha256": "ce359642c94dec09474a8d4dc7b15ac60993cbace9810cdbbe17bd4c402e0ad0",
+          "startedUtc": "2026-11-11T02:38:09.8411967+00:00",
+          "finishedUtc": "2026-11-11T02:39:03.3025089+00:00"
+        }
+      ]
+    },
+    {
+      "mode": "wake-clippy",
+      "ownerSha256": "6b96cc98fa4f29148212ffcf0d8008f11ed44fe0b8c3ee623a463ed984fdd6a8",
+      "resultSha256": "578becb38b5a55bde7e8ac0a9fed0db7f6a2a83adb5bad020c60563a2d493a9f",
+      "startedUtc": "2026-11-11T02:22:51.0948936+00:00",
+      "finishedUtc": "2026-11-11T02:23:06.3972561+00:00",
+      "exitCode": 0,
+      "timedOut": false,
+      "terminationFailed": false,
+      "containment": "KILL_ON_JOB_CLOSE",
+      "stages": [
+        {
+          "name": "wake-clippy",
+          "exitCode": 0,
+          "passed": null,
+          "failed": null,
+          "ignored": null,
+          "logSha256": "c30e4815eaf7aef926a14fc16316e36d8ac1ffa66f80680aec90816eb94eb2ad",
+          "startedUtc": "2026-11-11T02:22:51.5270208+00:00",
+          "finishedUtc": "2026-11-11T02:23:06.3082550+00:00"
+        }
+      ]
+    }
+  ],
+  "earlierCoverage": [
+    {
+      "group": "legacy task/context/recovery cases",
+      "passedExcludingNewGitCases": 56,
+      "ignored": 3,
+      "rawGroupResult": {
+        "passed": 61,
+        "failed": 4,
+        "ignored": 3
+      },
+      "rawLogSha256": "5c1a6827bef4bb338c4d761069cd810ac74514ee14c9186c8dc6f53b575293ef",
+      "resolution": "Four new Git positive failures resolved in final ten-case group; three native sandbox/child fixtures remain explicit skips."
+    },
+    {
+      "group": "existing broker guards excluding new local-access module",
+      "passed": 309,
+      "ignored": 1,
+      "rawLogSha256": "ea32c9ebca3cc7ab515f6a3f50f965b134965607c333d2c7cf3f0f98f9a08644",
+      "resolution": "Four new ACL fixture failures resolved in final five-case disposable-token group; external WinHTTP probe remains ignored."
+    },
+    {
+      "group": "same-state real-file transaction matrix",
+      "rawGroupResult": {
+        "passed": 24,
+        "failed": 1
+      },
+      "rawLogSha256": "1710f152b54e572b90dd5fd421a5447c5619bc892988b9d60ca0cb227dcf239a",
+      "resolution": "Missing SELECT test-only interruption hook corrected; all five affected local transaction/recovery cases pass in final run. Production execution without a test stop is unchanged."
+    }
+  ],
+  "retainedFailureFindings": [
+    "Original operator collector refused fixed-root identity before output creation; no fingerprint or root pin rewritten.",
+    "Initial private test owner created empty Git variables on .NET 10; owner now removes environment entries. Failed evidence retained.",
+    "Git extended Windows path spelling failed in bare-clone fixture and alternate-index environment; only external Git operand spelling normalized, not physical authority.",
+    "Default unnamed event returned empty security descriptor; explicit owner creation was refused with Win32 1314. No privilege enabled. Reused disposable unassigned token fixtures.",
+    "Process read-mask preparation is ACL geometry coverage only; it is not applied to a token or reported as process/SYSTEM access acceptance."
+  ],
+  "currentCallerObservation": {
+    "scope": "TOOL_LAUNCHED_CURRENT_POWERSHELL_PROCESS_ONLY",
+    "integrityRid": 8192,
+    "interactive": true,
+    "nonzeroSession": true,
+    "elevated": false,
+    "elevationType": "LIMITED",
+    "hasRestrictions": true,
+    "restrictingSidCount": 0,
+    "appContainer": false,
+    "primaryToken": true,
+    "protectedSidEqualityChecked": false,
+    "localGateEligible": false,
+    "gap": "Historical filtering conflates ordinary UAC limitation with other restrictions. Zero restricting SIDs alone does not qualify a caller. Review a positive UAC distinction before enrollment; do not request per-update elevation."
+  },
+  "notQualified": [
+    "Ordinary UAC-limited caller admission in this execution context.",
+    "New checkpoint cold-owner process-death integration.",
+    "Actual restricted SYSTEM service and intended medium-client process/token access.",
+    "New exact artifact build/release review, one-time enrollment, protected installation and initial reconstruction.",
+    "Installed selection/rollback/startup and actual ChatGPT Web edit/verification/checkpoint/self-Wake.",
+    "Normal unattended multi-project operation."
+  ],
+  "protectedInstallationChanged": false,
+  "signerCreated": false,
+  "privateSigningMaterialRead": false,
+  "projectBindingsChanged": false,
+  "originalRequestsReplayed": false,
+  "browserStarts": 0,
+  "wakeStarts": 0,
+  "externalTunnelChanges": false,
+  "recurringAutomationEnabled": false,
+  "reviewScope": "Changed production boundaries reviewed with peer agents; test authorship overlap disclosed. This record creates no FULL_SOURCE, producer, signing or installation authority."
+}

@@ -296,7 +296,33 @@ pub(crate) fn execution_permission_with_capabilities(
     allow_manual_wake: bool,
     native_queue_task_id: Option<&str>,
 ) -> Result<Value, String> {
-    if revoke && (allow_manual_wake || native_queue_task_id.is_some()) {
+    execution_permission_with_git_capabilities(
+        workspace,
+        args,
+        revoke,
+        allow_manual_wake,
+        native_queue_task_id,
+        false,
+        false,
+    )
+}
+
+pub(crate) fn execution_permission_with_git_capabilities(
+    workspace: &Path,
+    args: Value,
+    revoke: bool,
+    allow_manual_wake: bool,
+    native_queue_task_id: Option<&str>,
+    allow_git_checkpoint: bool,
+    allow_git_sync: bool,
+) -> Result<Value, String> {
+    if (revoke
+        && (allow_manual_wake
+            || native_queue_task_id.is_some()
+            || allow_git_checkpoint
+            || allow_git_sync))
+        || (allow_git_sync && !allow_git_checkpoint)
+    {
         return Err("WEB_TASK_GRANT_ARGUMENTS_INVALID".into());
     }
     assigned_action(
@@ -305,6 +331,8 @@ pub(crate) fn execution_permission_with_capabilities(
         AssignmentAction::Permission {
             revoke,
             allow_manual_wake,
+            allow_git_checkpoint,
+            allow_git_sync,
             native_queue_task_id,
         },
     )
@@ -725,6 +753,8 @@ enum AssignmentAction<'a> {
     Permission {
         revoke: bool,
         allow_manual_wake: bool,
+        allow_git_checkpoint: bool,
+        allow_git_sync: bool,
         native_queue_task_id: Option<&'a str>,
     },
     Authorize(&'a str),
@@ -800,9 +830,24 @@ fn assigned_action(
                 AssignmentAction::Permission {
                     revoke,
                     allow_manual_wake,
+                    allow_git_checkpoint,
+                    allow_git_sync,
                     native_queue_task_id,
                 } => {
-                    if native_queue_task_id.is_some() {
+                    if allow_git_checkpoint || allow_git_sync {
+                        crate::project_mcp_task::grant_web_execution_with_git_capabilities(
+                            scope,
+                            &record,
+                            &current,
+                            revoke,
+                            allow_manual_wake,
+                            native_queue_task_id,
+                            crate::project_mcp_task::GitPermissions {
+                                checkpoint: allow_git_checkpoint,
+                                sync: allow_git_sync,
+                            },
+                        )
+                    } else if native_queue_task_id.is_some() {
                         crate::project_mcp_task::grant_web_execution_with_capabilities(
                             scope,
                             &record,

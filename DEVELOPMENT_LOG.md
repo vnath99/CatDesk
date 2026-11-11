@@ -4070,3 +4070,39 @@ operator record before creating output. The corrected attempt verified its exact
 length and pinned hash and saved the unsigned packet. The Wake-purpose signature
 and native elevated admission are pending. The original Web delivery records
 retain their holds, and both worktrees show no tracked changes.
+
+### 2026-11-11 — Routine local-update policy and durable Git checkpoints
+
+The active goal removes routine per-version signing through an optional one-time
+enrollment in the existing fixed broker. Source adds explicit local request mode,
+protected-account admission, separated commitments and exact interrupted selection
+recovery. Actual process/token attestation remains mandatory; ephemeral grants are
+limited to process query/synchronize and token query. Legacy signed/high behavior
+and original signed bytes remain the default. No protected enrollment, installation
+or runtime activation occurred.
+
+The existing task route now supports explicitly granted, verification-bound local
+checkpoints and exact-SHA synchronization. Assignment identity remains immutable,
+the commit intent precedes HEAD CAS, and unknown pushes are never blindly replayed.
+Git clean/process filters and filesystem monitors are suppressed in this narrow
+route; committed raw bytes match tested postimages. The existing publication
+journal also retains exact precommit intent and remote commit identity across
+interruption. Public commit trailers carry a permit digest, not the permit.
+
+Qualification found and corrected Windows Git path spelling in private index
+operands, test-owner empty-environment handling, disposable-object fixture limits
+and the missing test-only SELECT interruption point. Private failed-run evidence
+is retained. Source-only/disposable-object results, strict checks and remaining
+installed gaps are recorded in the current verification record. No held original
+request, completed canary, native session, browser profile or project binding was
+changed. GitHub remains the reviewed public source-history destination.
+
+Final targeted groups passed: ten task Git cases, thirty dispatcher cases,
+thirty-one publication cases, forty-three supervisor cases, forty-eight Web CLI
+cases, five local selection/recovery cases, five disposable-token cases and the
+fixed Host CLI contract case. Main and Wake strict Clippy passed. Earlier failed
+groups and their specific corrections remain auditable rather than being erased.
+The actual current-process token query exposed an open UAC-limited caller admission
+gap; no policy was changed to hide it. See
+`docs/verification/ROUTINE_UPDATE_CHECKPOINT_SOURCE_2026_11_11.json` for exact scope,
+prior guard regressions, omissions and remaining installed acceptance requirements.

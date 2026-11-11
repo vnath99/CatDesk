@@ -2797,3 +2797,64 @@ bootstrap and same-state selection procedures after genuine purpose-bound signin
 and operator admission. The [qualification record](../verification/AUTONOMY_EVENT_POLL_READONLY_SOURCE_2026_11_10.json)
 keeps artifact origins, retained-component equivalence, local checks, independent
 review, development health and the remaining installed/Web gates separate.
+
+## 2026-11-11 — Routine update and checkpoint simplification
+
+The current goal removes routine per-version manual signing. Git remains source
+history; immutable artifact checksums and exact source commits remain release
+identity. Reuse the existing broker, versioned current/previous selection and
+protected transaction journal. Do not add another release manager or signer.
+
+The source increment adds an explicitly enrolled `allowLocalUserUpdates` policy.
+Absent enrollment, the existing signed/high-integrity operator procedure remains
+unchanged. With enrollment, the fixed broker may accept an unsigned canonical
+`LOCAL_USER_POLICY` request from the exact delegated Windows account. It still
+independently checks retained resource identities, artifact bytes, full declared
+review and test receipts, qualified previous release, generation, selection CAS,
+durable phases and exact recovery. Initial legacy reconstruction, broker/policy
+changes, trust-root changes and protected main-image maintenance remain outside
+routine update authority. No protected enforcement or installed policy has changed.
+
+This is the existing single-user workstation trust model made explicit. Another
+process with that account's unrestricted interactive medium-or-higher token can
+request an update. Semantic receipt checks do not cryptographically prove reviewer
+independence against a malicious process running as that same user. Independent
+review and tests remain required workflow evidence. Choose this delegation only
+with that tradeoff understood; it is not an equivalent claim to offline signing.
+The coding agent receives no private key or general installation privilege.
+
+The broker client retains actual process/token attestation. Service START and pipe
+access alone do not establish those read permissions. The proposed enrolled mode
+must qualify exact-account process/token readback before it can be called usable.
+It must grant no process mutation, token duplication, impersonation or adjustment.
+
+A bounded current-process query found medium integrity, enabled INTERACTIVE,
+limited UAC elevation type, `HasRestrictions=true` and zero restricting SIDs. The
+current local gate rejects that execution context. `HasRestrictions` also records
+historical filtering; zero restricting SIDs alone does not prove absence of other
+restrictions. This is a concrete source qualification gap, not an instruction to
+elevate every update or remove the restriction check. Positively qualify ordinary
+UAC callers against the existing worker restrictions before enrolling this mode.
+
+New project assignments can explicitly allow literal `checkpointPaths` and grant
+`git.checkpoint`/`git.sync`. A checkpoint binds successful verification to the exact
+current file postimages and saves a commit intent before advancing the feature
+branch by CAS. The original assignment/base/grant remain immutable. A saved exact
+commit can be reconciled after interruption. Sync saves an attempt before pushing
+that commit, reads back the exact remote SHA, and suppresses push replay after an
+unknown outcome. GitHub unavailability does not erase a durable local checkpoint.
+Legacy grants acquire none of these permissions automatically.
+
+Migration and installed qualification remain separate from source implementation:
+build and independently review the new broker/Host from an exact commit; obtain
+one-time purpose-bound enrollment through the existing bootstrap and native
+operator procedure; preserve any pending transaction and perform the existing
+signed initial reconstruction where required. Then test enrolled update, failed
+candidate, interrupted selection, exact previous-version rollback and normal
+startup before retiring any old mechanism. Keep legacy signed artifacts and
+history. Development compilation and Web work do not require that privileged
+migration. The direct Web edit/verify/checkpoint/self-Wake cycle remains the final
+acceptance requirement.
+
+Source/disposable-object test results and exact remaining gaps:
+[`ROUTINE_UPDATE_CHECKPOINT_SOURCE_2026_11_11.json`](../verification/ROUTINE_UPDATE_CHECKPOINT_SOURCE_2026_11_11.json).

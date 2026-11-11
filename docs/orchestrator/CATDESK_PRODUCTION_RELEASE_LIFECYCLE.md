@@ -1294,3 +1294,37 @@ preparer created one unsigned packet using the existing reviewed artifacts and
 proposed operator scope. The original-window comparison is available to diagnose
 an admission refusal. The next protected steps are genuine purpose signing and
 native preflight under the intended elevated interactive operator.
+
+### 2026-11-11 — Compatibility plan for routine local updates
+
+The routine-signing simplification is source work, not an installation approval.
+The existing unsigned packet and its exact old artifact origins remain preserved.
+A manifest for different broker bytes or new delegated policy needs its own exact
+review and one-time operator approval; old signatures cannot authorize it.
+
+1. Review and commit the new broker/Host source and retain test evidence. Build
+   immutable artifacts separately, record source SHA and checksums, and review the
+   actual artifact-bound bootstrap scope through existing mechanisms.
+2. Preflight the existing state and protected namespace through the supported native
+   bootstrap procedure. Preserve uncertain transactions and original selection
+   escrow. Do not replace a fingerprint or transplant development metadata.
+3. If the operator chooses local-account delegation, enroll
+   `allowLocalUserUpdates: true` in the purpose-bound bootstrap manifest. Existing
+   signature verification and elevated native admission still apply to this
+   one-time trust/policy operation. Missing/false retains the signed-only policy.
+4. Establish the first genuinely qualified current/previous pair. Initial flat-state
+   reconstruction remains the existing distinct signed maintenance operation;
+   local requests explicitly refuse reconstruction.
+5. Qualify the actual enrolled account's START, pipe and broker process/token
+   readback, then select a reviewed routine candidate without a per-version
+   signature. Test interruption, lost reply and rollback to the exact retained
+   previous version. A COMPLETE selection remains STOPPED and is not runtime health.
+6. Use the supported runtime owner for bounded startup, restart, authenticated MCP
+   and project-specific Web/self-Wake tests. Commit sanitized results and exact
+   remote SHA. Retain the old signed mechanisms until these checks pass.
+
+Routine delegation covers only the existing four-artifact Wake package transaction.
+It does not authorize replacing the fixed broker, changing its ACL/policy/trust
+root, upgrading the protected main image or modifying external Secure MCP ownership.
+No new signer, tunnel, recurring process or alternative privileged installer is
+introduced. Full installed acceptance remains open until recorded live evidence.

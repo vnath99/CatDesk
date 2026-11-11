@@ -165,7 +165,10 @@ fn check_claim(
     inspected: &AssignmentInspection,
 ) -> Result<(), String> {
     if claim.schema_version != 1
-        || claim.purpose != "PROJECT_TASK_ZERO_CALLS_V1"
+        || !matches!(
+            claim.purpose.as_str(),
+            "PROJECT_TASK_ZERO_CALLS_V1" | "PROJECT_TASK_CHECKPOINT_V1"
+        )
         || !id_ok(&claim.claim_id)
         || !id_ok(&claim.lifetime_id)
         || claim.project_id != project.project.project_id
@@ -174,7 +177,17 @@ fn check_claim(
         || claim.assignment_sha256 != digest(&inspected.bytes)
         || claim.contract_sha256 != digest(&encoded(&inspected.contract)?)
         || claim.workspace != inspected.root
-        || claim.base_commit != inspected.witness.2
+        || !(claim.base_commit == inspected.witness.2
+            || (git_checkpoint::load_policy(
+                &state_root(project, &inspected.contract.task_id),
+                &digest(&inspected.bytes),
+            )?
+            .checkpoint
+                && git_checkpoint::prior_head(
+                    &state_root(project, &inspected.contract.task_id),
+                    &claim.base_commit,
+                    &inspected.original_base,
+                )?))
         || claim.branch != inspected.witness.3
         || claim.marker_nonce_sha256 != digest(claim.claim_id.as_bytes())
         || !digest_ok(&claim.executable_sha256)
@@ -353,6 +366,39 @@ fn zero_journal(
     Ok(files)
 }
 
+fn task_clean(
+    project: &ResolvedProjectScopeV1,
+    inspected: &AssignmentInspection,
+) -> Result<(), String> {
+    let directory = state_root(project, &inspected.contract.task_id);
+    if git_checkpoint::load_policy(&directory, &digest(&inspected.bytes))?.checkpoint {
+        git_checkpoint::require_recovery_state(project, inspected)
+    } else {
+        clean(&inspected.root)
+    }
+}
+
+fn recoverable_journal(
+    directory: &Path,
+    inspected: &AssignmentInspection,
+) -> Result<Vec<(String, String)>, String> {
+    if git_checkpoint::load_policy(directory, &digest(&inspected.bytes))?.checkpoint
+        && git_checkpoint::has_checkpoint(directory)?
+    {
+        git_checkpoint::reconcile_saved(
+            &inspected.root,
+            directory,
+            &inspected.contract,
+            &digest(&inspected.bytes),
+            &inspected.original_base,
+            &inspected.witness.3,
+        )?;
+        git_checkpoint::recovery_snapshot(directory, inspected)
+    } else {
+        zero_journal(directory, inspected)
+    }
+}
+
 pub(super) fn lock_and_recover(
     project: &ResolvedProjectScopeV1,
     inspected: &AssignmentInspection,
@@ -416,7 +462,8 @@ pub(super) fn lock_and_recover(
             claim.owner_pid,
             claim.owner_creation,
         )?;
-        clean(&inspected.root)?;
+        let journal = recoverable_journal(&directory, inspected)?;
+        task_clean(project, inspected)?;
         Recovery {
             schema_version: 1,
             claim_id: id.clone(),
@@ -425,7 +472,7 @@ pub(super) fn lock_and_recover(
             assignment_sha256: claim.assignment_sha256.clone(),
             claim_sha256: digest(&read_assignment_bytes(&claim_path)?),
             marker_sha256: digest(&expected_marker),
-            journal: zero_journal(&directory, inspected)?,
+            journal,
             recoverer_sha256: current_executable_hash()?,
             state: "PREPARED".into(),
         }
@@ -457,8 +504,8 @@ pub(super) fn lock_and_recover(
             claim.owner_pid,
             claim.owner_creation,
         )?;
-        clean(&inspected.root)?;
-        if zero_journal(&directory, inspected)? != prepared.journal {
+        task_clean(project, inspected)?;
+        if recoverable_journal(&directory, inspected)? != prepared.journal {
             return Err("PROJECT_TASK_RECOVERY_JOURNAL_CHANGED".into());
         }
         if pending.as_deref() != Some(expected_marker.as_slice()) {
@@ -479,8 +526,8 @@ pub(super) fn lock_and_recover(
             claim.owner_pid,
             claim.owner_creation,
         )?;
-        clean(&inspected.root)?;
-        if zero_journal(&directory, inspected)? != prepared.journal {
+        task_clean(project, inspected)?;
+        if recoverable_journal(&directory, inspected)? != prepared.journal {
             return Err("PROJECT_TASK_RECOVERY_JOURNAL_CHANGED".into());
         }
     }
@@ -490,7 +537,12 @@ pub(super) fn lock_and_recover(
         .map_err(|_| "PROJECT_TASK_RECOVERY_ARCHIVE_UNPROVEN")?;
     failpoint("ARCHIVED")?;
     let mut retired = authorized;
-    retired.state = "RETIRED_ZERO_CALLS".into();
+    retired.state = if claim.purpose == "PROJECT_TASK_CHECKPOINT_V1" {
+        "RETIRED_EXACT_CHECKPOINT"
+    } else {
+        "RETIRED_ZERO_CALLS"
+    }
+    .into();
     retired.recoverer_sha256 = current_executable_hash()?;
     if retired_path.exists() {
         let prior: Recovery = read(&retired_path)?;
@@ -519,8 +571,11 @@ pub(super) fn begin(
     let directory = task_directory(project, &inspected.contract.task_id, true)?;
     // Eligibility for additional crash recovery must never narrow ordinary
     // warm resumption. Unknown or oversized status stays on the legacy gate.
-    if !matches!(is_clean(&inspected.root), Ok(true))
-        || zero_journal(&directory, inspected).is_err()
+    let checkpoint_owner =
+        git_checkpoint::load_policy(&directory, &digest(&inspected.bytes))?.checkpoint;
+    if !checkpoint_owner
+        && (!matches!(is_clean(&inspected.root), Ok(true))
+            || zero_journal(&directory, inspected).is_err())
     {
         writer
             .begin_writer_turn()
@@ -530,7 +585,12 @@ pub(super) fn begin(
     let id = uuid::Uuid::new_v4().simple().to_string();
     let claim = Claim {
         schema_version: 1,
-        purpose: "PROJECT_TASK_ZERO_CALLS_V1".into(),
+        purpose: if checkpoint_owner {
+            "PROJECT_TASK_CHECKPOINT_V1"
+        } else {
+            "PROJECT_TASK_ZERO_CALLS_V1"
+        }
+        .into(),
         claim_id: id.clone(),
         project_id: project.project.project_id.clone(),
         task_id: inspected.contract.task_id.clone(),

@@ -23,7 +23,7 @@ use crate::install_broker_ledger::BrokerLedgerGuard;
 use crate::install_broker_pipe_io::{connect_once, write_once};
 use crate::install_broker_policy::load_fixed_broker_policy_read_only;
 use crate::install_broker_preflight::{SERVICE_NAME, acquire_fixed_protected_root_for_reader};
-use crate::install_broker_request::read_admitted_approval_frame;
+use crate::install_broker_request::read_admitted_update_frame;
 
 const SERVICE_WIN32_OWN_PROCESS: u32 = 0x10;
 const SERVICE_STOPPED: u32 = 1;
@@ -177,10 +177,15 @@ fn run_one_service_submission() -> Result<()> {
     let ledger = BrokerLedgerGuard::acquire(root.root())?;
     let mut clock = BrokerSelfClockPin::acquire(&root, &ledger, &policy)?;
     clock.readback()?;
+    // The enrolled account must still attest the actual restricted SYSTEM
+    // process and token. Establish only those ephemeral read rights before
+    // exposing the endpoint; partial failure exits this one-request service.
+    if policy.local_user_updates_enabled()? {
+        crate::install_broker_local_access::authorize_enrolled_client_readback(&policy)?;
+    }
     let mut endpoint = create_fixed_broker_endpoint_from_protected_policy(&policy)?;
     connect_once(endpoint.as_handle(), CONNECT_DEADLINE, &STOP_REQUESTED)?;
-    let frame =
-        read_admitted_approval_frame(&mut endpoint, &policy, READ_DEADLINE, &STOP_REQUESTED)?;
+    let frame = read_admitted_update_frame(&mut endpoint, &policy, READ_DEADLINE, &STOP_REQUESTED)?;
     // Keep every pin and the global lock live after the admitted last read.
     let observed = clock.readback()?;
     policy.revalidate()?;
@@ -223,6 +228,17 @@ fn run_one_service_submission() -> Result<()> {
             "signedEnvelopeSha256":binding.signed_envelope_sha256,"selectedSha256":binding.planned_selection_sha256,
             "completeRecordSha256":complete_sha256,"runtimeState":"STOPPED",
             "browserOrWakeStarted":false,"liveAcceptanceVerified":false});
+        if binding.local_user_authorized() {
+            let object = reply
+                .as_object_mut()
+                .ok_or("WAKE_SAME_STATE_RESULT_ENCODING_INVALID")?;
+            object.remove("signedEnvelopeSha256");
+            object.insert("authorization".into(), "LOCAL_USER_POLICY".into());
+            object.insert(
+                "requestSha256".into(),
+                binding.signed_envelope_sha256.clone().into(),
+            );
+        }
         if operation == "ROLLBACK_SAME_STATE_RELEASE" {
             reply["failedCurrentImages"] = outcome["failedCurrentImages"].clone();
         }
@@ -230,11 +246,20 @@ fn run_one_service_submission() -> Result<()> {
             serde_json::from_slice::<serde_json::Value>(frame.approval_envelope())
                 .map_err(|_| "WAKE_BROKER_REQUEST_ENCODING_INVALID")?["payload"]
                 .clone();
-        if !crate::install_broker_client::same_state_complete_reply_matches(
-            &reply,
-            &payload,
-            &envelope_sha256,
-        ) {
+        let reply_matches = if binding.local_user_authorized() {
+            crate::install_broker_client::local_user_complete_reply_matches(
+                &reply,
+                &payload,
+                &envelope_sha256,
+            )
+        } else {
+            crate::install_broker_client::same_state_complete_reply_matches(
+                &reply,
+                &payload,
+                &envelope_sha256,
+            )
+        };
+        if !reply_matches {
             return Err("WAKE_SAME_STATE_RESULT_BINDING_INVALID".into());
         }
         // A lost reply never rolls back a durable COMPLETE or permits a new

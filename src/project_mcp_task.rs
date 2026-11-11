@@ -35,6 +35,9 @@ pub(crate) use context_delivery::{
     run_initial_context_handoff,
 };
 
+#[path = "project_task_git.rs"]
+mod git_checkpoint;
+
 pub(crate) const TOOL: &str = "catdesk_project_task_tool";
 const TOOLS: &[&str] = &[
     "read",
@@ -44,13 +47,17 @@ const TOOLS: &[&str] = &[
     "patch.compare",
     "diff.actual",
     "verify.command",
+    "git.checkpoint",
+    "git.sync",
 ];
 
 fn effective_tools(profiles: &[CommandProfile]) -> Vec<&'static str> {
     TOOLS
         .iter()
         .copied()
-        .filter(|tool| *tool != "verify.command" || !profiles.is_empty())
+        .filter(|tool| {
+            !tool.starts_with("git.") && (*tool != "verify.command" || !profiles.is_empty())
+        })
         .collect()
 }
 
@@ -63,6 +70,8 @@ struct Assignment {
     contract: ExecutionContractV1,
     #[serde(default)]
     command_profiles: Vec<CommandProfile>,
+    #[serde(default)]
+    checkpoint_paths: Vec<String>,
     #[serde(default)]
     web_work: Option<AssignmentWork>,
 }
@@ -77,6 +86,8 @@ struct AssignmentWork {
 #[derive(Clone)]
 struct AssignmentInspection {
     bytes: Vec<u8>,
+    original_base: String,
+    checkpoint_paths: Vec<String>,
     contract: ExecutionContractV1,
     command_profiles: Vec<CommandProfile>,
     root: PathBuf,
@@ -86,7 +97,7 @@ struct AssignmentInspection {
 
 fn continuation_contract(inspected: &AssignmentInspection) -> Value {
     let contract = &inspected.contract;
-    json!({"objective":contract.objective,"allowedPaths":contract.allowed_paths,
+    let mut value = json!({"objective":contract.objective,"allowedPaths":contract.allowed_paths,
         "forbiddenPaths":contract.forbidden_paths,"allowedTools":effective_tools(&inspected.command_profiles),
         "orderedSteps":contract.ordered_steps,"acceptanceCriteria":contract.acceptance_criteria,
         "expectedArtifacts":contract.expected_artifacts,"escalationConditions":contract.escalation_conditions,
@@ -95,7 +106,12 @@ fn continuation_contract(inspected: &AssignmentInspection) -> Value {
             "timeoutSeconds":profile.timeout_seconds})).collect::<Vec<_>>(),
         "contractLimits":{"maxToolCalls":contract.max_tool_calls,"maxElapsedSeconds":contract.max_elapsed_seconds,
             "maxTurns":contract.max_turns,"retryBudget":contract.retry_budget},
-        "limitsRestartedByRollover":false})
+        "limitsRestartedByRollover":false});
+    if !inspected.checkpoint_paths.is_empty() {
+        value["checkpointPaths"] = json!(inspected.checkpoint_paths);
+        value["gitCheckpointPolicy"] = json!({"localGrantRequired":true,"checkpointTool":"git.checkpoint","checkpointArguments":{"verificationCallIds":["successful-verify-call-id"]},"allAssignedCommandProfilesMustPass":true,"syncTool":"git.sync","syncArguments":{"checkpointCallId":"completed-checkpoint-call-id"},"manualEndTurnRequiresCurrentCheckpointWhenGranted":true,"pendingSyncBlocksManualWake":false});
+    }
+    value
 }
 
 /// Conversation URLs and generations are deliberately excluded: a proved
@@ -124,6 +140,11 @@ struct TaskState {
 
 pub(crate) struct ProjectTask {
     project: ResolvedProjectScopeV1,
+    directory: PathBuf,
+    original_base: String,
+    assignment_sha256: String,
+    checkpoint_paths: Vec<String>,
+    git_policy: git_checkpoint::Policy,
     root: PathBuf,
     recovery_claim: Option<String>,
     witness: (PathBuf, PathBuf, String, String),
@@ -187,6 +208,9 @@ fn inspect_assignment(
     assignment: &Path,
     connection_seconds: u64,
 ) -> Result<AssignmentInspection, String> {
+    let _git_deadline = git_checkpoint::deadline_at(
+        std::time::Instant::now() + std::time::Duration::from_secs(connection_seconds.min(180)),
+    );
     if !regular(assignment) {
         return Err("PROJECT_TASK_ASSIGNMENT_UNAVAILABLE".into());
     }
@@ -204,6 +228,7 @@ fn inspect_assignment(
     let web_work = assignment.web_work;
     let contract = assignment.contract;
     let command_profiles = assignment.command_profiles;
+    let checkpoint_paths = assignment.checkpoint_paths;
     validate_contract(&contract).map_err(|_| "PROJECT_TASK_CONTRACT_INVALID")?;
     if assignment.schema_version != 1
         || assignment.project_id != project.project.project_id
@@ -241,10 +266,31 @@ fn inspect_assignment(
     unregistered_task_root(project, &root)?;
     let witness = web_task_worktree_witness(&root)?;
     let source = web_task_worktree_witness(&project.project.workspace)?;
+    git_checkpoint::validate_paths(&root, &contract, &checkpoint_paths)?;
+    let expected_head = if checkpoint_paths.is_empty() {
+        assignment.base_commit.clone()
+    } else {
+        let directory = state_root(project, &contract.task_id);
+        let digest = catdesk_wake::protocol::digest(
+            std::str::from_utf8(&bytes).map_err(|_| "PROJECT_TASK_ASSIGNMENT_INVALID")?,
+        );
+        let policy = git_checkpoint::load_policy(&directory, &digest)?;
+        if policy.checkpoint {
+            git_checkpoint::accepted_head(
+                &root,
+                &directory,
+                &digest,
+                &assignment.base_commit,
+                &contract.feature_branch,
+            )?
+        } else {
+            assignment.base_commit.clone()
+        }
+    };
     if witness.0 != source.0
         || witness.1 == witness.0
         || witness.1 == source.1
-        || witness.2 != assignment.base_commit
+        || witness.2 != expected_head
         || witness.3 != contract.feature_branch
         || witness.3 == source.3
     {
@@ -267,6 +313,8 @@ fn inspect_assignment(
     }
     Ok(AssignmentInspection {
         bytes,
+        original_base: assignment.base_commit,
+        checkpoint_paths,
         contract,
         command_profiles,
         root,
@@ -447,6 +495,12 @@ struct WebExecutionGrant {
     key_sha256: String,
     #[serde(default, skip_serializing_if = "manual_wake_disabled")]
     allow_manual_wake: bool,
+    #[serde(default, skip_serializing_if = "manual_wake_disabled")]
+    allow_git_checkpoint: bool,
+    #[serde(default, skip_serializing_if = "manual_wake_disabled")]
+    allow_git_sync: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    git_origin: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     native_queue: Option<crate::operator_codex_cli::NativeQueueSelection>,
 }
@@ -484,7 +538,43 @@ pub(crate) fn grant_web_execution_with_capabilities(
     allow_manual_wake: bool,
     native_queue_task_id: Option<&str>,
 ) -> Result<Value, String> {
-    if revoke && (allow_manual_wake || native_queue_task_id.is_some()) {
+    grant_web_execution_with_git_capabilities(
+        project,
+        record,
+        current,
+        revoke,
+        allow_manual_wake,
+        native_queue_task_id,
+        GitPermissions::default(),
+    )
+}
+
+#[derive(Clone, Copy, Default)]
+pub(crate) struct GitPermissions {
+    pub checkpoint: bool,
+    pub sync: bool,
+}
+
+pub(crate) fn grant_web_execution_with_git_capabilities(
+    project: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    current: &catdesk_wake::protocol::Target,
+    revoke: bool,
+    allow_manual_wake: bool,
+    native_queue_task_id: Option<&str>,
+    git_permissions: GitPermissions,
+) -> Result<Value, String> {
+    let GitPermissions {
+        checkpoint: allow_git_checkpoint,
+        sync: allow_git_sync,
+    } = git_permissions;
+    if (revoke
+        && (allow_manual_wake
+            || native_queue_task_id.is_some()
+            || allow_git_checkpoint
+            || allow_git_sync))
+        || (allow_git_sync && !allow_git_checkpoint)
+    {
         return Err("WEB_TASK_GRANT_ARGUMENTS_INVALID".into());
     }
     let prepared = prepare_work_resume(project, record, current)?;
@@ -507,6 +597,18 @@ pub(crate) fn grant_web_execution_with_capabilities(
     {
         return Err("WEB_TASK_GRANT_REVOKED".into());
     }
+    let inspected = inspect_assignment(project, &directory.join("assignment.json"), 180)?;
+    if allow_git_checkpoint && inspected.checkpoint_paths.is_empty() {
+        return Err("PROJECT_TASK_CHECKPOINT_PATHS_REQUIRED".into());
+    }
+    let git_origin = if allow_git_sync {
+        Some(git_checkpoint::freeze_origin(
+            &inspected.root,
+            &project.project.workspace,
+        )?)
+    } else {
+        None
+    };
     let native_queue = native_queue_task_id
         .map(|id| {
             let grant_path = directory.join("execution-grant.json");
@@ -567,6 +669,9 @@ pub(crate) fn grant_web_execution_with_capabilities(
         assignment: link.clone(),
         key_sha256: catdesk_wake::protocol::digest(&key),
         allow_manual_wake,
+        allow_git_checkpoint,
+        allow_git_sync,
+        git_origin,
         native_queue: native_queue.clone(),
     };
     exact_file(
@@ -581,6 +686,11 @@ pub(crate) fn grant_web_execution_with_capabilities(
         "executionBudgetSeconds":180,"executionAuthorized":true,"workerStarted":false,"nativeSessionAction":"NONE"});
     if allow_manual_wake {
         result["manualWakeAllowed"] = json!(true);
+    }
+    if allow_git_checkpoint {
+        result["gitCheckpointAllowed"] = json!(true);
+        result["gitSyncAllowed"] = json!(allow_git_sync);
+        result["checkpointPaths"] = json!(inspected.checkpoint_paths);
     }
     if let Some(selection) = native_queue {
         result["nativeQueue"] = json!({"selection":selection,"registeredWorkspace":project.project.workspace,
@@ -645,7 +755,17 @@ pub(crate) fn granted_handoff_context(
     )?)?)
     .map_err(|_| "WEB_TASK_GRANT_INVALID")?;
     let (_, allow_manual_wake, native_queue) = authorized_web_grant(project, record, &key)?;
-    let prepared = prepare_work_resume(project, record, current)?;
+    let mut prepared = prepare_work_resume(project, record, current)?;
+    let git_policy = git_checkpoint::load_policy(&directory, &link.assignment_sha256)?;
+    if git_policy.checkpoint {
+        let tools = prepared["taskContract"]["allowedTools"]
+            .as_array_mut()
+            .ok_or("PROJECT_TASK_CONTRACT_INVALID")?;
+        tools.push(json!("git.checkpoint"));
+        if git_policy.sync {
+            tools.push(json!("git.sync"));
+        }
+    }
     let journal_root = directory.join("journal");
     let (calls, proposals, applications) = if journal_root
         .try_exists()
@@ -787,6 +907,9 @@ fn authorized_web_grant(
         assignment: link.clone(),
         key_sha256: catdesk_wake::protocol::digest(key),
         allow_manual_wake: grant.allow_manual_wake,
+        allow_git_checkpoint: grant.allow_git_checkpoint,
+        allow_git_sync: grant.allow_git_sync,
+        git_origin: grant.git_origin.clone(),
         native_queue: grant.native_queue.clone(),
     };
     // Compare fixed-size digests without exposing the key in errors or status.
@@ -800,7 +923,12 @@ fn authorized_web_grant(
             |diff, (a, b)| diff | usize::from(a ^ b),
         )
         == 0;
-    if !key_matches || grant != expected || link.scope_sha256 != assignment_scope_sha256(project) {
+    if !key_matches
+        || grant != expected
+        || link.scope_sha256 != assignment_scope_sha256(project)
+        || (grant.allow_git_sync && (!grant.allow_git_checkpoint || grant.git_origin.is_none()))
+        || (!grant.allow_git_sync && grant.git_origin.is_some())
+    {
         return Err("WEB_TASK_GRANT_SCOPE_MISMATCH".into());
     }
     let archive = directory.join("assignment.json");
@@ -978,6 +1106,7 @@ pub(crate) fn journal_manual_wake(
     let archive = authorized_manual_wake_assignment(project, record, key)?;
     let inspected = inspect_assignment(project, &archive, 180)?;
     check_record_assignment(project, &inspected, record)?;
+    git_checkpoint::require_end_turn_checkpoint(project, &inspected)?;
     let arguments_hash =
         stable_text_hash(&serde_json::to_string(request).map_err(|_| "PROJECT_TASK_CALL_INVALID")?);
     let JournaledTaskCall {
@@ -1322,7 +1451,7 @@ pub(crate) fn prepare_work_resume(
         "taskId":link.task_id,"assignmentSha256":link.assignment_sha256,"scopeSha256":link.scope_sha256,
         "originalTargetGeneration":record.target.generation,"originalTargetSha256":record.target.digest,
         "targetGeneration":current.generation,"targetSha256":current.digest,
-        "executionWorkspace":inspected.root,"baseCommit":inspected.witness.2,"branch":inspected.witness.3});
+        "executionWorkspace":inspected.root,"baseCommit":inspected.original_base,"branch":inspected.witness.3});
     exact_file(
         &directory.join(format!(
             "resume-prepared-{}-{}.json",
@@ -1383,6 +1512,13 @@ impl ProjectTask {
         #[cfg(not(windows))]
         let mut writer = acquire_project_writer_lock(&inspected.root)
             .map_err(|_| "PROJECT_TASK_WRITER_BUSY_OR_UNRESOLVED")?;
+        let original_base = inspected.original_base.clone();
+        let assignment_sha256 = catdesk_wake::protocol::digest(
+            std::str::from_utf8(&inspected.bytes).map_err(|_| "PROJECT_TASK_ASSIGNMENT_INVALID")?,
+        );
+        let checkpoint_paths = inspected.checkpoint_paths.clone();
+        let directory = state_root(project, &inspected.contract.task_id);
+        let git_policy = git_checkpoint::load_policy(&directory, &assignment_sha256)?;
         let AssignmentInspection {
             contract,
             command_profiles,
@@ -1415,7 +1551,12 @@ impl ProjectTask {
                 .load_tool_calls(&run)
                 .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?
                 .values()
-                .any(|r| !matches!(r.status, ToolCallStatus::Completed | ToolCallStatus::Failed))
+                .any(|r| {
+                    !matches!(r.status, ToolCallStatus::Completed | ToolCallStatus::Failed)
+                        && !(git_policy.checkpoint
+                            && matches!(r.tool_name.as_str(), "git.checkpoint" | "git.sync")
+                            && r.status == ToolCallStatus::Executing)
+                })
             {
                 return Err("PROJECT_TASK_RECOVERY_REQUIRED".into());
             }
@@ -1488,8 +1629,13 @@ impl ProjectTask {
             .map_err(|_| "PROJECT_TASK_START_UNCERTAIN_MARKER_RETAINED")?;
         let connection_budget =
             std::time::Duration::from_secs(connection_seconds.min(contract.max_elapsed_seconds));
-        Ok(Arc::new(Self {
+        let task = Arc::new(Self {
             project: project.clone(),
+            directory,
+            original_base,
+            assignment_sha256,
+            checkpoint_paths,
+            git_policy,
             root,
             recovery_claim,
             witness,
@@ -1506,19 +1652,21 @@ impl ProjectTask {
                 closed: false,
                 uncertain: false,
             }),
-        }))
+        });
+        git_checkpoint::reconcile(&task)?;
+        Ok(task)
     }
 
     pub(crate) fn metadata(&self) -> Value {
         json!({"taskId":self.contract.task_id,"executionWorkspace":self.root,
             "zeroCallRecoveryOwnerClaim":self.recovery_claim,
-            "coldRecoveryProfile":if self.recovery_claim.is_some(){"DEDICATED_NAMED_JOB_ZERO_CALLS"}else{"LEGACY_NO_AUTORECOVERY"},
+            "coldRecoveryProfile":if self.recovery_claim.is_some(){if self.git_policy.checkpoint {"DEDICATED_NAMED_JOB_EXACT_CHECKPOINT"} else {"DEDICATED_NAMED_JOB_ZERO_CALLS"}}else{"LEGACY_NO_AUTORECOVERY"},
             "registeredWorkspace":self.project.project.workspace,"access":if self.command_profiles.is_empty() {"CONTRACT_PATCH_TOOLS"} else {"CONTRACT_PATCH_AND_COMMAND_PROFILES"},
             "nativeWriterClaimed":false,"isolatedWorktreeWriterClaimed":true,
             "allowedPaths":self.contract.allowed_paths,"allowedTools":self.allowed_tools(),
             "commandsEnabled":!self.command_profiles.is_empty(),
             "commandProfiles":self.command_profiles.iter().map(|p|json!({"id":p.id,"timeoutSeconds":p.timeout_seconds})).collect::<Vec<_>>(),
-            "baseCommit":self.witness.2,"branch":self.witness.3})
+            "baseCommit":self.original_base,"branch":self.witness.3})
     }
 
     pub(crate) fn commands_enabled(&self) -> bool {
@@ -1526,7 +1674,14 @@ impl ProjectTask {
     }
 
     fn allowed_tools(&self) -> Vec<&'static str> {
-        effective_tools(&self.command_profiles)
+        let mut tools = effective_tools(&self.command_profiles);
+        if self.git_policy.checkpoint {
+            tools.push("git.checkpoint");
+        }
+        if self.git_policy.sync {
+            tools.push("git.sync");
+        }
+        tools
     }
 
     pub(crate) fn schema(&self) -> Value {
@@ -1597,7 +1752,9 @@ impl ProjectTask {
             arguments: Value,
         }
         let call: Call = serde_json::from_value(args).map_err(|_| "PROJECT_TASK_CALL_INVALID")?;
-        if call.task_id != self.contract.task_id || !TOOLS.contains(&call.tool.as_str()) {
+        if call.task_id != self.contract.task_id
+            || !self.allowed_tools().contains(&call.tool.as_str())
+        {
             return Err("PROJECT_TASK_CALL_NOT_ASSIGNED".into());
         }
         self.validate_paths(&call.tool, &call.arguments)?;
@@ -1615,6 +1772,7 @@ impl ProjectTask {
             if state.closed || state.uncertain {
                 return Err("PROJECT_TASK_RECOVERY_REQUIRED".into());
             }
+            let _git_deadline = git_checkpoint::deadline_at(task.started + task.connection_budget);
             if let Some(assignment) = &task.linked_assignment {
                 check_linked_assignment(
                     &task.project,
@@ -1629,7 +1787,17 @@ impl ProjectTask {
             if task.started.elapsed() >= task.connection_budget {
                 return Err("PROJECT_TASK_CONNECTION_BUDGET_EXPIRED".into());
             }
-            if web_task_worktree_witness(&task.root)? != task.witness {
+            let mut expected = task.witness.clone();
+            if task.git_policy.checkpoint {
+                expected.2 = git_checkpoint::accepted_head(
+                    &task.root,
+                    &task.directory,
+                    &task.assignment_sha256,
+                    &task.original_base,
+                    &task.witness.3,
+                )?;
+            }
+            if web_task_worktree_witness(&task.root)? != expected {
                 return Err("PROJECT_TASK_WORKTREE_CHANGED".into());
             }
             let run =
@@ -1661,6 +1829,26 @@ impl ProjectTask {
                 arguments: call.arguments,
                 arguments_hash,
             };
+            if request.tool_name.starts_with("git.") {
+                state.uncertain = true;
+                let result = git_checkpoint::execute(&task, &request, &run);
+                state.uncertain = result
+                    .as_ref()
+                    .is_err_and(|reason| reason == "PROJECT_TASK_GIT_CLEANUP_UNPROVEN")
+                    || task
+                        .journal
+                        .load_tool_calls(&run)
+                        .map(|calls| {
+                            calls.values().any(|r| {
+                                !matches!(
+                                    r.status,
+                                    ToolCallStatus::Completed | ToolCallStatus::Failed
+                                )
+                            })
+                        })
+                        .unwrap_or(true);
+                return result;
+            }
             if request.tool_name == "verify.command" {
                 #[derive(Deserialize)]
                 #[serde(deny_unknown_fields)]
@@ -1685,15 +1873,21 @@ impl ProjectTask {
                 // any unexpected failure must retain the existing writer marker.
                 state.uncertain = true;
                 let result = task.execute_command(&request, &run, profile, budget);
-                state.uncertain = task
-                    .journal
-                    .load_tool_calls(&run)
-                    .map(|calls| {
-                        calls.values().any(|r| {
-                            !matches!(r.status, ToolCallStatus::Completed | ToolCallStatus::Failed)
+                state.uncertain = result
+                    .as_ref()
+                    .is_err_and(|reason| reason == "PROJECT_TASK_GIT_CLEANUP_UNPROVEN")
+                    || task
+                        .journal
+                        .load_tool_calls(&run)
+                        .map(|calls| {
+                            calls.values().any(|r| {
+                                !matches!(
+                                    r.status,
+                                    ToolCallStatus::Completed | ToolCallStatus::Failed
+                                )
+                            })
                         })
-                    })
-                    .unwrap_or(true);
+                        .unwrap_or(true);
                 return result;
             }
             // Recheck under the existing per-task execution mutex: a queued
@@ -1731,6 +1925,15 @@ impl ProjectTask {
         budget: std::time::Duration,
     ) -> Result<Value, String> {
         use crate::delegated::journal::{ToolCallRecordV1, ToolMutationKind};
+        let checkpoint_before = if self.git_policy.checkpoint {
+            Some(git_checkpoint::snapshot(
+                &self.root,
+                &self.contract,
+                &self.checkpoint_paths,
+            )?)
+        } else {
+            None
+        };
         self.journal
             .record_tool_call_requested(ToolCallRecordV1 {
                 schema_version: 1,
@@ -1785,9 +1988,22 @@ impl ProjectTask {
             "schemaVersion":1,"projectId":self.project.project.project_id,
             "taskId":self.contract.task_id,"callId":request.tool_call_id,
             "requestSha256":request.arguments_hash,"executionWorkspace":self.root,
-            "baseCommit":self.witness.2,"branch":self.witness.3,
+            "baseCommit":self.original_base,"branch":self.witness.3,
             "startedUtc":started_utc,"finishedUtc":time::OffsetDateTime::now_utc().to_string()
         });
+        if let Some(before) = checkpoint_before {
+            if result.success
+                && result.exit_code == Some(0)
+                && !result.timed_out
+                && result.cleanup_proved
+                && git_checkpoint::snapshot(&self.root, &self.contract, &self.checkpoint_paths)
+                    .as_ref()
+                    == Ok(&before)
+            {
+                receipt["checkpointSnapshot"] = serde_json::to_value(before)
+                    .map_err(|_| "PROJECT_TASK_COMMAND_RESULT_UNAVAILABLE")?;
+            }
+        }
         let encoded =
             serde_json::to_vec(&receipt).map_err(|_| "PROJECT_TASK_COMMAND_RESULT_UNAVAILABLE")?;
         let digest = catdesk_wake::protocol::digest(&String::from_utf8_lossy(&encoded));

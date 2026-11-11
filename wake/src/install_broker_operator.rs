@@ -33,6 +33,26 @@ impl OperatorTokenEvidenceV1 {
     }
 }
 
+/// Identity evidence for an account delegated by protected local-update policy.
+/// This carries an elevated-operator proof only when those stronger checks pass.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg(windows)]
+pub(crate) struct LocalUserTokenEvidenceV1 {
+    user_sid_sha256: String,
+    operator: Option<OperatorTokenEvidenceV1>,
+}
+
+#[cfg(windows)]
+impl LocalUserTokenEvidenceV1 {
+    pub(crate) fn user_sid_sha256(&self) -> &str {
+        &self.user_sid_sha256
+    }
+
+    pub(crate) fn operator(&self) -> Option<&OperatorTokenEvidenceV1> {
+        self.operator.as_ref()
+    }
+}
+
 #[cfg(test)]
 pub(crate) fn isolated_same_state_operator_fixture(sid_sha256: &str) -> OperatorTokenEvidenceV1 {
     assert_eq!(sid_sha256.len(), 64);
@@ -84,6 +104,7 @@ mod windows {
     const SE_GROUP_USE_FOR_DENY_ONLY: u32 = 0x0000_0010;
     const INTERACTIVE_SID: [u8; 12] = [1, 1, 0, 0, 0, 0, 0, 5, 4, 0, 0, 0];
     const SECURITY_MANDATORY_HIGH_RID: u32 = 0x3000;
+    const SECURITY_MANDATORY_MEDIUM_RID: u32 = 0x2000;
     const MANDATORY_LABEL_AUTHORITY: [u8; 6] = [0, 0, 0, 0, 0, 16];
     const LOCAL_SYSTEM_SID: [u8; 12] = [1, 1, 0, 0, 0, 0, 0, 5, 18, 0, 0, 0];
 
@@ -157,6 +178,23 @@ mod windows {
         pipe: BorrowedHandle<'_>,
         protected_operator_sid: &[u8],
     ) -> Result<OperatorTokenEvidenceV1> {
+        inspect_pipe_client(pipe, protected_operator_sid, authorize_facts)
+    }
+
+    pub(crate) fn inspect_connected_pipe_local_user(
+        pipe: BorrowedHandle<'_>,
+        protected_user_sid: &[u8],
+    ) -> Result<LocalUserTokenEvidenceV1> {
+        inspect_pipe_client(pipe, protected_user_sid, |facts, sid| {
+            authorize_local_user_facts(facts, sid, false)
+        })
+    }
+
+    fn inspect_pipe_client<T>(
+        pipe: BorrowedHandle<'_>,
+        protected_operator_sid: &[u8],
+        authorize: impl FnOnce(&TokenFacts, &[u8]) -> Result<T>,
+    ) -> Result<T> {
         valid_sid(protected_operator_sid)?;
         if protected_operator_sid == LOCAL_SYSTEM_SID {
             return Err("WAKE_BROKER_OPERATOR_POLICY_INVALID".into());
@@ -186,7 +224,7 @@ mod windows {
         }
         let token = unsafe { OwnedHandle::from_raw_handle(raw_token) };
         let facts = token_facts(token.as_raw_handle(), false)?;
-        authorize_facts(&facts, protected_operator_sid)
+        authorize(&facts, protected_operator_sid)
     }
 
     /// This grants only current-process identity evidence. It never elevates,
@@ -194,6 +232,23 @@ mod windows {
     pub fn inspect_current_process_operator(
         protected_operator_sid: &[u8],
     ) -> Result<OperatorTokenEvidenceV1> {
+        inspect_current_process(protected_operator_sid, |facts, sid| {
+            authorize_token_facts(facts, sid, true)
+        })
+    }
+
+    pub(crate) fn inspect_current_process_local_user(
+        protected_user_sid: &[u8],
+    ) -> Result<LocalUserTokenEvidenceV1> {
+        inspect_current_process(protected_user_sid, |facts, sid| {
+            authorize_local_user_facts(facts, sid, true)
+        })
+    }
+
+    fn inspect_current_process<T>(
+        protected_operator_sid: &[u8],
+        authorize: impl FnOnce(&TokenFacts, &[u8]) -> Result<T>,
+    ) -> Result<T> {
         valid_sid(protected_operator_sid)?;
         let mut prior = ptr::null_mut();
         if unsafe { OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, 1, &mut prior) } != 0 {
@@ -211,7 +266,7 @@ mod windows {
         }
         let token = unsafe { OwnedHandle::from_raw_handle(raw) };
         let facts = token_facts(token.as_raw_handle(), true)?;
-        authorize_token_facts(&facts, protected_operator_sid, true)
+        authorize(&facts, protected_operator_sid)
     }
 
     fn query_token_blob(token: *mut c_void, class: u32) -> Result<Vec<u8>> {
@@ -421,13 +476,52 @@ mod windows {
         protected_operator_sid: &[u8],
         primary: bool,
     ) -> Result<OperatorTokenEvidenceV1> {
+        require_user_facts(
+            facts,
+            protected_operator_sid,
+            primary,
+            SECURITY_MANDATORY_HIGH_RID,
+            true,
+        )?;
+        Ok(OperatorTokenEvidenceV1 {
+            operator_sid_sha256: format!("{:x}", Sha256::digest(&facts.user_sid)),
+            integrity_rid: facts.integrity_rid,
+            session_id: facts.session_id,
+        })
+    }
+
+    fn authorize_local_user_facts(
+        facts: &TokenFacts,
+        protected_user_sid: &[u8],
+        primary: bool,
+    ) -> Result<LocalUserTokenEvidenceV1> {
+        require_user_facts(
+            facts,
+            protected_user_sid,
+            primary,
+            SECURITY_MANDATORY_MEDIUM_RID,
+            false,
+        )?;
+        Ok(LocalUserTokenEvidenceV1 {
+            user_sid_sha256: format!("{:x}", Sha256::digest(&facts.user_sid)),
+            operator: authorize_token_facts(facts, protected_user_sid, primary).ok(),
+        })
+    }
+
+    fn require_user_facts(
+        facts: &TokenFacts,
+        protected_operator_sid: &[u8],
+        primary: bool,
+        minimum_integrity: u32,
+        require_elevation: bool,
+    ) -> Result<()> {
         valid_sid(protected_operator_sid)?;
         if protected_operator_sid == LOCAL_SYSTEM_SID
             || facts.user_sid != protected_operator_sid
-            || facts.integrity_rid < SECURITY_MANDATORY_HIGH_RID
+            || facts.integrity_rid < minimum_integrity
             || facts.session_id == 0
             || !facts.interactive_enabled
-            || !facts.elevated
+            || (require_elevation && !facts.elevated)
             || if primary {
                 facts.impersonation_level.is_some()
             } else {
@@ -440,11 +534,7 @@ mod windows {
         {
             return Err("WAKE_BROKER_OPERATOR_TOKEN_DENIED".into());
         }
-        Ok(OperatorTokenEvidenceV1 {
-            operator_sid_sha256: format!("{:x}", Sha256::digest(&facts.user_sid)),
-            integrity_rid: facts.integrity_rid,
-            session_id: facts.session_id,
-        })
+        Ok(())
     }
 
     #[cfg(test)]
@@ -661,6 +751,49 @@ mod windows {
         }
 
         #[test]
+        fn local_update_medium_interactive_user_does_not_gain_operator_authority() {
+            let mut facts = allowed();
+            facts.integrity_rid = SECURITY_MANDATORY_MEDIUM_RID;
+            facts.elevated = false;
+            let user = authorize_local_user_facts(&facts, &USER, false).unwrap();
+            assert_eq!(user.user_sid_sha256().len(), 64);
+            assert!(user.operator().is_none());
+            assert!(authorize_facts(&facts, &USER).is_err());
+            facts.impersonation_level = None;
+            assert!(authorize_local_user_facts(&facts, &USER, true).is_ok());
+            assert!(authorize_local_user_facts(&facts, &USER, false).is_err());
+            assert!(
+                authorize_local_user_facts(&allowed(), &USER, false)
+                    .unwrap()
+                    .operator()
+                    .is_some()
+            );
+        }
+
+        #[test]
+        fn local_update_refuses_other_account_low_restricted_and_noninteractive_tokens() {
+            for case in 0..9 {
+                let mut facts = allowed();
+                match case {
+                    0 => facts.user_sid = OTHER.to_vec(),
+                    1 => facts.integrity_rid = 0x1000,
+                    2 => facts.session_id = 0,
+                    3 => facts.interactive_enabled = false,
+                    4 => facts.app_container = true,
+                    5 => facts.restricted = true,
+                    6 => facts.impersonation_level = Some(1),
+                    7 => facts.impersonation_level = Some(4),
+                    _ => facts.impersonation_level = None,
+                }
+                assert!(
+                    authorize_local_user_facts(&facts, &USER, false).is_err(),
+                    "case {case}"
+                );
+            }
+            assert!(authorize_local_user_facts(&allowed(), &LOCAL_SYSTEM_SID, false).is_err());
+        }
+
+        #[test]
         fn current_primary_operator_reuses_identity_gates_without_impersonation_level_claim() {
             let mut facts = allowed();
             facts.impersonation_level = None;
@@ -816,10 +949,24 @@ mod windows {
             *wrong_sid.last_mut().unwrap() ^= 1;
             let wrong = inspect_connected_pipe_operator(server.as_handle(), &wrong_sid);
             let own = inspect_connected_pipe_operator(server.as_handle(), &own_sid);
+            let local_wrong = inspect_connected_pipe_local_user(server.as_handle(), &wrong_sid);
+            let local_own = inspect_connected_pipe_local_user(server.as_handle(), &own_sid);
+            let primary_local = inspect_current_process_local_user(&own_sid);
             release_tx.send(()).unwrap();
             client.join().unwrap();
             assert_eq!(wrong.unwrap_err(), "WAKE_BROKER_OPERATOR_TOKEN_DENIED");
             assert!(own.is_ok() || own.unwrap_err() == "WAKE_BROKER_OPERATOR_TOKEN_DENIED");
+            assert_eq!(
+                local_wrong.unwrap_err(),
+                "WAKE_BROKER_OPERATOR_TOKEN_DENIED"
+            );
+            assert_eq!(local_own.is_ok(), primary_local.is_ok());
+            if let Ok(local) = local_own {
+                assert_eq!(
+                    local.user_sid_sha256(),
+                    primary_local.unwrap().user_sid_sha256()
+                );
+            }
 
             // A completed admission check must not leave this test thread
             // impersonating the connected client.
@@ -835,6 +982,9 @@ mod windows {
 
 #[cfg(windows)]
 pub use windows::{inspect_connected_pipe_operator, inspect_current_process_operator};
+
+#[cfg(windows)]
+pub(crate) use windows::{inspect_connected_pipe_local_user, inspect_current_process_local_user};
 
 #[cfg(windows)]
 pub(crate) fn admit_bootstrap_operator(expected_sid: &str) -> Result<OperatorTokenEvidenceV1> {

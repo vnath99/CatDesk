@@ -199,6 +199,9 @@ struct PolicyWireV2 {
     same_state_root: SameStateRootPolicyV2,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     allow_operator_service_start: Option<bool>,
+    /// One-time protected delegation to the existing operator account.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    allow_local_user_updates: Option<bool>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -240,6 +243,7 @@ pub struct BrokerProtectedPolicyV1 {
     same_state_root: Option<SameStateRootPolicyV2>,
     same_state_reviewer_identity: Option<String>,
     allow_operator_service_start: bool,
+    allow_local_user_updates: bool,
 }
 
 /// Opaque proof that this envelope was verified by the pinned, independently
@@ -256,11 +260,52 @@ pub struct PolicyVerifiedApprovalV1<'p> {
 /// journal's generation/clock admission. Pure signature proof is insufficient.
 pub(crate) struct PolicyVerifiedSameStateSelectionV3<'p> {
     policy: &'p BrokerProtectedPolicyV1,
-    verified: crate::install_broker_approval::same_state::VerifiedSameStateSelectionApprovalV3,
+    authorization: SameStateAuthorization,
     readback: BrokerProtectedPolicyReadbackV1,
     pins: RefCell<crate::runtime::SameStateReadPinsV3>,
     envelope: Vec<u8>,
     fresh_admission: bool,
+}
+
+enum SameStateAuthorization {
+    Signed(crate::install_broker_approval::same_state::VerifiedSameStateSelectionApprovalV3),
+    LocalUser(crate::install_broker_approval::same_state::VerifiedLocalUserSelectionV1),
+}
+
+impl SameStateAuthorization {
+    fn payload(
+        &self,
+    ) -> &crate::install_broker_approval::same_state::SameStateRootSelectionApprovalV3 {
+        match self {
+            Self::Signed(proof) => proof.payload(),
+            Self::LocalUser(proof) => proof.payload(),
+        }
+    }
+
+    fn payload_sha256(&self) -> &str {
+        match self {
+            Self::Signed(proof) => proof.signed_payload_sha256(),
+            Self::LocalUser(proof) => proof.payload_sha256(),
+        }
+    }
+
+    fn request_sha256(&self) -> &str {
+        match self {
+            Self::Signed(proof) => proof.signed_envelope_sha256(),
+            Self::LocalUser(proof) => proof.request_sha256(),
+        }
+    }
+
+    fn accepted_at(&self) -> u64 {
+        match self {
+            Self::Signed(proof) => proof.verified_at_utc_seconds(),
+            Self::LocalUser(proof) => proof.verified_at_utc_seconds(),
+        }
+    }
+
+    fn local_user(&self) -> bool {
+        matches!(self, Self::LocalUser(_))
+    }
 }
 
 impl<'p> PolicyVerifiedSameStateSelectionV3<'p> {
@@ -270,7 +315,7 @@ impl<'p> PolicyVerifiedSameStateSelectionV3<'p> {
     pub(crate) fn payload(
         &self,
     ) -> &crate::install_broker_approval::same_state::SameStateRootSelectionApprovalV3 {
-        self.verified.payload()
+        self.authorization.payload()
     }
     pub(crate) fn pins_mut(
         &self,
@@ -295,16 +340,27 @@ impl<'p> PolicyVerifiedSameStateSelectionV3<'p> {
         Ok(raw)
     }
     pub(crate) fn revalidate(&self) -> Result<()> {
-        if self.policy.readback()? != self.readback
-            || self.verified.verification_key_sha256() != self.readback.approval_public_key_sha256
-        {
+        if self.policy.readback()? != self.readback {
             return Err("WAKE_SAME_STATE_PROTECTED_POLICY_CHANGED".into());
+        }
+        match &self.authorization {
+            SameStateAuthorization::Signed(proof)
+                if proof.verification_key_sha256() != self.readback.approval_public_key_sha256 =>
+            {
+                return Err("WAKE_SAME_STATE_PROTECTED_POLICY_CHANGED".into());
+            }
+            SameStateAuthorization::LocalUser(_)
+                if !self.policy.local_user_updates_enabled()? =>
+            {
+                return Err("WAKE_LOCAL_UPDATE_POLICY_REQUIRED".into());
+            }
+            _ => {}
         }
         self.pins_mut()?.revalidate_for_payload(self.payload())
     }
     pub(crate) fn require_acceptance_time(&self, now: u64) -> Result<()> {
         let p = self.payload();
-        if now < self.verified.verified_at_utc_seconds()
+        if now < self.authorization.accepted_at()
             || (self.fresh_admission && (now < p.issued_utc_seconds || now > p.expires_utc_seconds))
         {
             return Err("WAKE_SAME_STATE_ACCEPTANCE_CLOCK_INVALID".into());
@@ -316,18 +372,26 @@ impl<'p> PolicyVerifiedSameStateSelectionV3<'p> {
         accepted: u64,
     ) -> Result<crate::install_broker_ledger::SameStateLedgerBindingV3> {
         self.revalidate()?;
-        if accepted != self.verified.verified_at_utc_seconds() {
+        if accepted != self.authorization.accepted_at() {
             return Err("WAKE_SAME_STATE_ACCEPTANCE_CLOCK_INVALID".into());
         }
         let p = self.payload();
         Ok(crate::install_broker_ledger::SameStateLedgerBindingV3 {
             operation: (p.operation == "ROLLBACK_SAME_STATE_RELEASE").then(|| p.operation.clone()),
+            authorization: self
+                .authorization
+                .local_user()
+                .then(|| "LOCAL_USER_POLICY".into()),
             install_generation: p.install_generation,
             approval_id: p.approval_id.clone(),
-            signed_payload_sha256: self.verified.signed_payload_sha256().into(),
-            signed_envelope_sha256: self.verified.signed_envelope_sha256().into(),
+            signed_payload_sha256: self.authorization.payload_sha256().into(),
+            signed_envelope_sha256: self.authorization.request_sha256().into(),
             policy_sha256: self.readback.policy_sha256.clone(),
-            verification_key_sha256: self.readback.approval_public_key_sha256.clone(),
+            verification_key_sha256: if self.authorization.local_user() {
+                self.readback.policy_sha256.clone()
+            } else {
+                self.readback.approval_public_key_sha256.clone()
+            },
             protected_root: self.readback.protected_root.clone(),
             state_root: p.state_snapshot.root.clone(),
             accepted_at_utc_seconds: accepted,
@@ -656,7 +720,7 @@ type ParsedVersionedPolicy = (
     PolicyWireV1,
     VerifyingKey,
     Vec<u8>,
-    Option<(SameStateRootPolicyV2, String, bool)>,
+    Option<(SameStateRootPolicyV2, String, bool, bool)>,
 );
 
 fn parse_policy_versioned(
@@ -730,6 +794,7 @@ fn parse_policy_versioned(
             wire.same_state_root,
             wire.same_state_reviewer_identity,
             wire.allow_operator_service_start.unwrap_or(false),
+            wire.allow_local_user_updates.unwrap_or(false),
         )),
     ))
 }
@@ -755,11 +820,17 @@ fn load_pinned(
     }
     let (wire, approval_key, operator_sid_bytes, same_state) =
         parse_policy_versioned(&bytes, &root_id, &file_id, &service_sid)?;
-    let (same_state_root, same_state_reviewer_identity, allow_operator_service_start) =
-        match same_state {
-            Some((root, reviewer, allow_start)) => (Some(root), Some(reviewer), allow_start),
-            None => (None, None, false),
-        };
+    let (
+        same_state_root,
+        same_state_reviewer_identity,
+        allow_operator_service_start,
+        allow_local_user_updates,
+    ) = match same_state {
+        Some((root, reviewer, allow_start, local_updates)) => {
+            (Some(root), Some(reviewer), allow_start, local_updates)
+        }
+        None => (None, None, false, false),
+    };
     let value = BrokerProtectedPolicyV1 {
         root,
         file: Mutex::new(file),
@@ -775,6 +846,7 @@ fn load_pinned(
         same_state_root,
         same_state_reviewer_identity,
         allow_operator_service_start,
+        allow_local_user_updates,
     };
     value.revalidate()?;
     Ok(value)
@@ -791,6 +863,20 @@ impl BrokerProtectedPolicyV1 {
     pub(crate) fn current_process_operator(&self) -> Result<OperatorTokenEvidenceV1> {
         self.revalidate()?;
         crate::install_broker_operator::inspect_current_process_operator(&self.operator_sid_bytes)
+    }
+
+    pub(crate) fn local_user_updates_enabled(&self) -> Result<bool> {
+        self.revalidate()?;
+        Ok(self.allow_local_user_updates)
+    }
+
+    pub(crate) fn current_process_local_updater(
+        &self,
+    ) -> Result<crate::install_broker_operator::LocalUserTokenEvidenceV1> {
+        if !self.local_user_updates_enabled()? {
+            return Err("WAKE_LOCAL_UPDATE_POLICY_REQUIRED".into());
+        }
+        crate::install_broker_operator::inspect_current_process_local_user(&self.operator_sid_bytes)
     }
 
     pub(crate) fn same_state_resource_v2(&self) -> Result<&SameStateRootPolicyV2> {
@@ -815,6 +901,7 @@ impl BrokerProtectedPolicyV1 {
             "reviewedReconstructionEnabled":self.same_state_root.as_ref()
                 .is_some_and(|r| r.allow_reviewed_reconstruction),
             "operatorServiceStartAuthorized":self.allow_operator_service_start,
+            "localUserUpdatesAuthorized":self.allow_local_user_updates,
             "resourceQualificationPerformed":false,"installationAuthorized":false}))
     }
 
@@ -831,7 +918,7 @@ impl BrokerProtectedPolicyV1 {
         let before = self.readback()?;
         self.same_state_resource_v2()?;
         let envelope = frame.approval_envelope();
-        if frame.operator_evidence().operator_sid_sha256() != before.operator_sid_sha256
+        if frame.authenticated_user_sid_sha256() != before.operator_sid_sha256
             || format!("{:x}", Sha256::digest(envelope)) != admission.envelope_sha256()
         {
             return Err("WAKE_SAME_STATE_ADMITTED_OPERATOR_MISMATCH".into());
@@ -870,16 +957,29 @@ impl BrokerProtectedPolicyV1 {
         } else {
             None
         };
-        let verified =
-            verify_same_state_selection_approval_v3(envelope, &self.approval_key, &observed)?;
-        if self.readback()? != before
-            || verified.verification_key_sha256() != before.approval_public_key_sha256
-        {
+        let authorization = if outer.get("authorization").is_some() {
+            if !self.local_user_updates_enabled()? {
+                return Err("WAKE_LOCAL_UPDATE_POLICY_REQUIRED".into());
+            }
+            SameStateAuthorization::LocalUser(
+                crate::install_broker_approval::same_state::verify_local_user_selection_request_v1(
+                    envelope, &observed,
+                )?,
+            )
+        } else {
+            frame.operator_evidence()?;
+            SameStateAuthorization::Signed(verify_same_state_selection_approval_v3(
+                envelope,
+                &self.approval_key,
+                &observed,
+            )?)
+        };
+        if self.readback()? != before {
             return Err("WAKE_SAME_STATE_PROTECTED_POLICY_CHANGED".into());
         }
         let grant = PolicyVerifiedSameStateSelectionV3 {
             policy: self,
-            verified,
+            authorization,
             readback: before,
             pins: RefCell::new(pins),
             envelope: envelope.to_vec(),
@@ -992,6 +1092,21 @@ impl BrokerProtectedPolicyV1 {
         pipe: BorrowedHandle<'_>,
     ) -> Result<OperatorTokenEvidenceV1> {
         inspect_connected_pipe_operator(pipe, &self.operator_sid_bytes)
+    }
+
+    pub(crate) fn inspect_connected_local_user_immediately_after_read(
+        &self,
+        pipe: BorrowedHandle<'_>,
+    ) -> Result<crate::install_broker_operator::LocalUserTokenEvidenceV1> {
+        // No policy I/O may precede impersonating the last message sender.
+        // The receive boundary already revalidated these retained bytes.
+        if !self.allow_local_user_updates {
+            return Err("WAKE_LOCAL_UPDATE_POLICY_REQUIRED".into());
+        }
+        crate::install_broker_operator::inspect_connected_pipe_local_user(
+            pipe,
+            &self.operator_sid_bytes,
+        )
     }
 
     /// Verify only with the independently installed key read from this pinned
@@ -1154,6 +1269,7 @@ pub(crate) fn encode_same_state_bootstrap_policy(
     reviewer: &str,
     state: SameStateRootPolicyV2,
     allow_start: bool,
+    allow_local_updates: bool,
 ) -> Result<Vec<u8>> {
     let wire = PolicyWireV2 {
         schema_version: 2,
@@ -1166,6 +1282,7 @@ pub(crate) fn encode_same_state_bootstrap_policy(
         same_state_reviewer_identity: reviewer.into(),
         same_state_root: state,
         allow_operator_service_start: allow_start.then_some(true),
+        allow_local_user_updates: allow_local_updates.then_some(true),
     };
     let bytes = serde_json::to_vec(&wire).map_err(|_| "WAKE_BROKER_POLICY_ENCODING_INVALID")?;
     if bytes.len() > MAX_POLICY_BYTES {
@@ -1428,6 +1545,7 @@ pub(crate) mod tests {
                 "reviewer",
                 state.clone(),
                 allow,
+                false,
             )
             .unwrap()
         };
@@ -1662,6 +1780,7 @@ pub(crate) mod tests {
             same_state_reviewer_identity: "independent-reviewer".into(),
             same_state_root: root.clone(),
             allow_operator_service_start: None,
+            allow_local_user_updates: None,
         };
         let raw = serde_json::to_vec(&wire).unwrap();
         let (_, _, _, resource) = parse_policy_versioned(
@@ -1671,7 +1790,10 @@ pub(crate) mod tests {
             &fixture.service_sid,
         )
         .unwrap();
-        assert_eq!(resource, Some((root, "independent-reviewer".into(), false)));
+        assert_eq!(
+            resource,
+            Some((root, "independent-reviewer".into(), false, false))
+        );
         assert!(
             parse_policy(
                 &raw,
@@ -1744,7 +1866,7 @@ pub(crate) mod tests {
         root_id: &ObjectIdentityV1,
         state_path: &std::path::Path,
         state_identity: FullFileIdentityV2,
-        allow_reconstruction: bool,
+        capabilities: (bool, bool),
         reviewer: &str,
     ) -> Result<BrokerProtectedPolicyV1> {
         let temporary =
@@ -1766,9 +1888,10 @@ pub(crate) mod tests {
                 SameStateRootPolicyV2 {
                     path: state_path.to_string_lossy().into_owned(),
                     identity: state_identity,
-                    allow_reviewed_reconstruction: allow_reconstruction,
+                    allow_reviewed_reconstruction: capabilities.0,
                 },
                 reviewer.into(),
+                capabilities.1,
             )),
         )
     }
@@ -1777,7 +1900,7 @@ pub(crate) mod tests {
         path: &std::path::Path,
         root: &OwnedHandle,
         root_id: &ObjectIdentityV1,
-        same_state: Option<(SameStateRootPolicyV2, String)>,
+        same_state: Option<(SameStateRootPolicyV2, String, bool)>,
     ) -> Result<BrokerProtectedPolicyV1> {
         let policy_path = path.join(FIXED_BROKER_POLICY_FILE);
         std::fs::write(&policy_path, b"initial").expect("initial fixture policy");
@@ -1801,7 +1924,7 @@ pub(crate) mod tests {
                 .map(|byte| format!("{byte:02x}"))
                 .collect(),
         };
-        let raw = if let Some((state, reviewer)) = same_state {
+        let raw = if let Some((state, reviewer, local_updates)) = same_state {
             serde_json::to_vec(&PolicyWireV2 {
                 schema_version: 2,
                 purpose: wire.purpose,
@@ -1813,6 +1936,7 @@ pub(crate) mod tests {
                 same_state_reviewer_identity: reviewer,
                 same_state_root: state,
                 allow_operator_service_start: None,
+                allow_local_user_updates: local_updates.then_some(true),
             })
         } else {
             serde_json::to_vec(&wire)

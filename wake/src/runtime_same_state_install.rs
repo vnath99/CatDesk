@@ -1079,6 +1079,10 @@ impl<'p> SameStateInstallResources<'p> {
             self.grant.revalidate()?;
             // Actual stopped singleton/browser leases remain owned by self.
             ledger.record_phase(InstallPhaseV1::OldOwnerStopped, None)?;
+            #[cfg(test)]
+            if stop_after == Some("before-pointer") {
+                return Err("FIXTURE_SAME_STATE_COMMIT_INTERRUPTED".into());
+            }
         }
         if ledger.phase() == InstallPhaseV1::OldOwnerStopped {
             self.grant.revalidate()?;

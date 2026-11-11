@@ -11,6 +11,7 @@ use std::path::Path;
 enum InstallBrokerAction {
     Preflight,
     StartOnce,
+    StartLocalOnce,
     Bootstrap {
         preflight_only: bool,
         approval: std::path::PathBuf,
@@ -18,6 +19,7 @@ enum InstallBrokerAction {
         public_key_sha256: String,
     },
     Submit(std::path::PathBuf),
+    SubmitLocal(std::path::PathBuf),
 }
 
 #[cfg(windows)]
@@ -28,6 +30,9 @@ fn parse_install_broker_action(args: &[String]) -> Result<Option<InstallBrokerAc
     match args {
         [_, action] if action == "preflight" => Ok(Some(InstallBrokerAction::Preflight)),
         [_, action] if action == "start-once" => Ok(Some(InstallBrokerAction::StartOnce)),
+        [_, action] if action == "start-local-once" => {
+            Ok(Some(InstallBrokerAction::StartLocalOnce))
+        }
         [
             _,
             action,
@@ -59,13 +64,17 @@ fn parse_install_broker_action(args: &[String]) -> Result<Option<InstallBrokerAc
             }))
         }
         [_, action, flag, path]
-            if action == "submit"
-                && flag == "--approval-file"
+            if ((action == "submit" && flag == "--approval-file")
+                || (action == "submit-local" && flag == "--request-file"))
                 && !path.is_empty()
                 && !path.chars().any(char::is_control)
                 && Path::new(path).is_absolute() =>
         {
-            Ok(Some(InstallBrokerAction::Submit(path.into())))
+            Ok(Some(if action == "submit-local" {
+                InstallBrokerAction::SubmitLocal(path.into())
+            } else {
+                InstallBrokerAction::Submit(path.into())
+            }))
         }
         _ => Err("WAKE_INSTALL_BROKER_ARGUMENTS_INVALID".into()),
     }
@@ -105,15 +114,20 @@ fn install_broker_action(args: &[String]) -> Result<Option<serde_json::Value>> {
     if action == InstallBrokerAction::StartOnce {
         return catdesk_wake::install_broker_lifecycle::start_fixed_broker_once().map(Some);
     }
+    if action == InstallBrokerAction::StartLocalOnce {
+        return catdesk_wake::install_broker_lifecycle::start_fixed_broker_for_local_update()
+            .map(Some);
+    }
     let preflight = inspect_fixed_broker_read_only()?;
     let policy = load_fixed_broker_policy_read_only()?;
+    let local_update = matches!(action, InstallBrokerAction::SubmitLocal(_));
     match action {
         InstallBrokerAction::Preflight => Ok(Some(
             serde_json::json!({"action":"install_broker_preflight",
             "broker":preflight,"policy":policy.readback()?,"sameState":policy.same_state_configuration_status()?,
             "stateStoreOpened":false,"serviceStarted":false,"installationAttempted":false}),
         )),
-        InstallBrokerAction::Submit(path) => {
+        InstallBrokerAction::Submit(path) | InstallBrokerAction::SubmitLocal(path) => {
             let metadata = std::fs::symlink_metadata(&path)
                 .map_err(|_| "WAKE_INSTALL_APPROVAL_UNAVAILABLE")?;
             use std::os::windows::fs::MetadataExt;
@@ -140,9 +154,12 @@ fn install_broker_action(args: &[String]) -> Result<Option<serde_json::Value>> {
             }
             // Fixed policy/service/pipe attestation precedes the one write.
             // No state-root, service-start, signing or settings argument exists.
-            connect_fixed_broker_for_approval(&policy)?
-                .submit_same_state_approval_v3(&bytes)
-                .map(Some)
+            let client = connect_fixed_broker_for_approval(&policy)?;
+            if local_update {
+                client.submit_local_user_selection_v1(&bytes).map(Some)
+            } else {
+                client.submit_same_state_approval_v3(&bytes).map(Some)
+            }
         }
         _ => Err("WAKE_INSTALL_BROKER_ARGUMENTS_INVALID".into()),
     }
@@ -457,6 +474,20 @@ mod install_broker_cli_tests {
             parse_install_broker_action(&args(&["install-broker", "start-once"])).unwrap(),
             Some(InstallBrokerAction::StartOnce)
         );
+        assert_eq!(
+            parse_install_broker_action(&args(&["install-broker", "start-local-once"])).unwrap(),
+            Some(InstallBrokerAction::StartLocalOnce)
+        );
+        assert!(matches!(
+            parse_install_broker_action(&args(&[
+                "install-broker",
+                "submit-local",
+                "--request-file",
+                r"C:\frozen.json"
+            ]))
+            .unwrap(),
+            Some(InstallBrokerAction::SubmitLocal(_))
+        ));
         assert!(matches!(
             parse_install_broker_action(&args(&[
                 "install-broker",
@@ -477,6 +508,25 @@ mod install_broker_cli_tests {
                 "relative.json",
             ],
             vec!["install-broker", "submit", "--root", r"C:\state"],
+            vec![
+                "install-broker",
+                "submit-local",
+                "--approval-file",
+                r"C:\frozen.json",
+            ],
+            vec![
+                "install-broker",
+                "submit",
+                "--request-file",
+                r"C:\frozen.json",
+            ],
+            vec![
+                "install-broker",
+                "submit-local",
+                "--request-file",
+                "relative.json",
+            ],
+            vec!["install-broker", "start-local-once", "--root", r"C:\state"],
             vec![
                 "install-broker",
                 "submit",

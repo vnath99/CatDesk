@@ -78,6 +78,10 @@ pub(crate) struct SameStateLedgerBindingV3 {
     /// signed purpose is required for the shorter, existing-package rollback.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) operation: Option<String>,
+    /// Absent for legacy signed records. The digest field names below retain
+    /// their historical wire spelling for compatible replay of those records.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) authorization: Option<String>,
     pub(crate) install_generation: u64,
     pub(crate) approval_id: String,
     pub(crate) signed_payload_sha256: String,
@@ -98,6 +102,10 @@ impl SameStateLedgerBindingV3 {
     pub(crate) fn is_rollback(&self) -> bool {
         self.operation.as_deref() == Some("ROLLBACK_SAME_STATE_RELEASE")
     }
+
+    pub(crate) fn local_user_authorized(&self) -> bool {
+        self.authorization.as_deref() == Some("LOCAL_USER_POLICY")
+    }
     fn order(&self) -> &[InstallPhaseV1] {
         if self.is_rollback() {
             &[
@@ -113,6 +121,8 @@ impl SameStateLedgerBindingV3 {
     }
     fn validate(&self, root: &ObjectIdentityV1) -> Result<()> {
         if (self.operation.is_some() && !self.is_rollback())
+            || (self.authorization.is_some() && !self.local_user_authorized())
+            || (self.local_user_authorized() && self.verification_key_sha256 != self.policy_sha256)
             || self.install_generation == 0
             || self.accepted_at_utc_seconds == 0
             || !crate::protocol::valid_id(&self.approval_id)
@@ -936,6 +946,7 @@ mod tests {
 
     fn binding(raw: &[u8]) -> SameStateLedgerBindingV3 {
         SameStateLedgerBindingV3 {
+            authorization: None,
             operation: None,
             install_generation: 1,
             approval_id: "signed-selection-one".into(),

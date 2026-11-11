@@ -1,4 +1,4 @@
-//! Signed same-state-root selection evidence. Signature proof is read-only;
+//! Same-state-root selection evidence. Signed and local request proofs are read-only;
 //! only the fixed policy, admitted native operator and retained physical pins
 //! may turn it into the separate policy-owned transaction capability.
 
@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 const DOMAIN: &[u8] = b"CatDeskWakeSameStateRootSelectionApprovalV3\0";
+const LOCAL_USER_DOMAIN: &[u8] = b"CatDeskWakeLocalUserSelectionV1\0";
+const LOCAL_USER_AUTHORIZATION: &str = "LOCAL_USER_POLICY";
 const MAX_ENVELOPE_BYTES: usize = 16 * 1024;
 const MAX_AGE_SECONDS: u64 = 7 * 24 * 60 * 60;
 
@@ -211,6 +213,38 @@ impl VerifiedSameStateSelectionApprovalV3 {
 struct SignedEnvelopeV3 {
     payload: SameStateRootSelectionApprovalV3,
     signature_hex: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LocalUserSelectionEnvelopeV1 {
+    authorization: String,
+    payload: SameStateRootSelectionApprovalV3,
+}
+
+/// Validated local request data, never a policy-owned transaction capability.
+/// The protected policy and retained caller/state pins must separately admit it.
+#[derive(Debug)]
+pub(crate) struct VerifiedLocalUserSelectionV1 {
+    payload: SameStateRootSelectionApprovalV3,
+    payload_sha256: String,
+    request_sha256: String,
+    verified_at_utc_seconds: u64,
+}
+
+impl VerifiedLocalUserSelectionV1 {
+    pub(crate) fn payload(&self) -> &SameStateRootSelectionApprovalV3 {
+        &self.payload
+    }
+    pub(crate) fn payload_sha256(&self) -> &str {
+        &self.payload_sha256
+    }
+    pub(crate) fn request_sha256(&self) -> &str {
+        &self.request_sha256
+    }
+    pub(crate) fn verified_at_utc_seconds(&self) -> u64 {
+        self.verified_at_utc_seconds
+    }
 }
 
 fn hex(value: &str, length: usize) -> bool {
@@ -476,6 +510,61 @@ pub fn verify_same_state_selection_approval_v3(
         signed_payload_sha256: format!("{:x}", Sha256::digest(signed)),
         signed_envelope_sha256: format!("{:x}", Sha256::digest(envelope_bytes)),
         verification_key_sha256: format!("{:x}", Sha256::digest(key.as_bytes())),
+        verified_at_utc_seconds: observed.now_utc_seconds,
+    })
+}
+
+/// Prepare the closed local wire shape without supplying policy admission or
+/// claiming that the caller's observations and release evidence were verified.
+pub(crate) fn encode_local_user_selection_request_v1(
+    payload: &SameStateRootSelectionApprovalV3,
+) -> Result<Vec<u8>> {
+    if payload.rollback_authority.is_reconstruction() {
+        return Err("WAKE_LOCAL_USER_SELECTION_RECONSTRUCTION_REFUSED".into());
+    }
+    let bytes = serde_json::to_vec(&LocalUserSelectionEnvelopeV1 {
+        authorization: LOCAL_USER_AUTHORIZATION.into(),
+        payload: payload.clone(),
+    })
+    .map_err(|_| "WAKE_SELECTION_ENCODING_INVALID")?;
+    if bytes.len() > MAX_ENVELOPE_BYTES {
+        return Err("WAKE_SELECTION_ENCODING_INVALID".into());
+    }
+    Ok(bytes)
+}
+
+/// Validate unsigned request data only. Production must obtain local-user
+/// authority from the protected enrolled policy, not from this wire tag or proof.
+pub(crate) fn verify_local_user_selection_request_v1(
+    request_bytes: &[u8],
+    observed: &SameStateObservedV3,
+) -> Result<VerifiedLocalUserSelectionV1> {
+    if request_bytes.is_empty() || request_bytes.len() > MAX_ENVELOPE_BYTES {
+        return Err("WAKE_SELECTION_ENCODING_INVALID".into());
+    }
+    let envelope: LocalUserSelectionEnvelopeV1 =
+        serde_json::from_slice(request_bytes).map_err(|_| "WAKE_SELECTION_ENCODING_INVALID")?;
+    if serde_json::to_vec(&envelope).map_err(|_| "WAKE_SELECTION_ENCODING_INVALID")?
+        != request_bytes
+    {
+        return Err("WAKE_SELECTION_ENCODING_INVALID".into());
+    }
+    if envelope.authorization != LOCAL_USER_AUTHORIZATION {
+        return Err("WAKE_LOCAL_USER_SELECTION_AUTHORIZATION_INVALID".into());
+    }
+    if envelope.payload.rollback_authority.is_reconstruction() {
+        return Err("WAKE_LOCAL_USER_SELECTION_RECONSTRUCTION_REFUSED".into());
+    }
+    validate_payload(&envelope.payload, observed)?;
+    let mut commitment = Sha256::new();
+    commitment.update(LOCAL_USER_DOMAIN);
+    commitment.update(
+        serde_json::to_vec(&envelope.payload).map_err(|_| "WAKE_SELECTION_ENCODING_INVALID")?,
+    );
+    Ok(VerifiedLocalUserSelectionV1 {
+        payload: envelope.payload,
+        payload_sha256: format!("{:x}", commitment.finalize()),
+        request_sha256: format!("{:x}", Sha256::digest(request_bytes)),
         verified_at_utc_seconds: observed.now_utc_seconds,
     })
 }
@@ -1247,5 +1336,293 @@ pub(crate) mod tests {
             )
             .is_err()
         );
+    }
+
+    fn local_request(payload: &SameStateRootSelectionApprovalV3) -> Vec<u8> {
+        serde_json::to_vec(&LocalUserSelectionEnvelopeV1 {
+            authorization: LOCAL_USER_AUTHORIZATION.into(),
+            payload: payload.clone(),
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn same_state_local_user_request_is_read_only_canonical_and_domain_separated() {
+        let (payload, observed, key) = fixture();
+        let before = (payload.clone(), observed.clone());
+        let request = encode_local_user_selection_request_v1(&payload).unwrap();
+        assert_eq!(request, local_request(&payload));
+        assert!(request.starts_with(b"{\"authorization\":\"LOCAL_USER_POLICY\",\"payload\":"));
+        let proof = verify_local_user_selection_request_v1(&request, &observed).unwrap();
+        assert_eq!(proof.payload(), &payload);
+        let mut committed = b"CatDeskWakeLocalUserSelectionV1\0".to_vec();
+        committed.extend(serde_json::to_vec(&payload).unwrap());
+        assert_eq!(
+            proof.payload_sha256(),
+            format!("{:x}", Sha256::digest(committed))
+        );
+        assert_eq!(
+            proof.request_sha256(),
+            format!("{:x}", Sha256::digest(&request))
+        );
+        assert_eq!(proof.verified_at_utc_seconds(), observed.now_utc_seconds);
+        let signed = verify_same_state_selection_approval_v3(
+            &envelope(&payload, &key),
+            &key.verifying_key(),
+            &observed,
+        )
+        .unwrap();
+        assert_ne!(proof.payload_sha256(), signed.signed_payload_sha256());
+        assert_ne!(proof.request_sha256(), signed.signed_envelope_sha256());
+        assert_eq!((payload, observed), before);
+    }
+
+    #[test]
+    fn same_state_local_user_and_signed_envelopes_cannot_substitute_for_each_other() {
+        let (payload, observed, key) = fixture();
+        let request = encode_local_user_selection_request_v1(&payload).unwrap();
+        assert_eq!(
+            verify_same_state_selection_approval_v3(&request, &key.verifying_key(), &observed)
+                .unwrap_err(),
+            "WAKE_SELECTION_ENCODING_INVALID"
+        );
+        assert_eq!(
+            verify_local_user_selection_request_v1(&envelope(&payload, &key), &observed)
+                .unwrap_err(),
+            "WAKE_SELECTION_ENCODING_INVALID"
+        );
+        let mut wrong_domain = LOCAL_USER_DOMAIN.to_vec();
+        wrong_domain.extend(serde_json::to_vec(&payload).unwrap());
+        let signed_local_domain = serde_json::to_vec(&SignedEnvelopeV3 {
+            payload: payload.clone(),
+            signature_hex: key
+                .sign(&wrong_domain)
+                .to_bytes()
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect(),
+        })
+        .unwrap();
+        assert_eq!(
+            verify_same_state_selection_approval_v3(
+                &signed_local_domain,
+                &key.verifying_key(),
+                &observed
+            )
+            .unwrap_err(),
+            "WAKE_SELECTION_SIGNATURE_INVALID"
+        );
+        let mut dual = String::from_utf8(request).unwrap();
+        dual.pop();
+        dual.push_str(&format!(",\"signatureHex\":\"{}\"}}", "0".repeat(128)));
+        assert_eq!(
+            verify_local_user_selection_request_v1(dual.as_bytes(), &observed).unwrap_err(),
+            "WAKE_SELECTION_ENCODING_INVALID"
+        );
+        let wrong_authorization = serde_json::to_vec(&LocalUserSelectionEnvelopeV1 {
+            authorization: "SIGNED_APPROVAL".into(),
+            payload,
+        })
+        .unwrap();
+        assert_eq!(
+            verify_local_user_selection_request_v1(&wrong_authorization, &observed).unwrap_err(),
+            "WAKE_LOCAL_USER_SELECTION_AUTHORIZATION_INVALID"
+        );
+    }
+
+    #[test]
+    fn same_state_local_user_request_refuses_noncanonical_unknown_duplicate_and_oversized_data() {
+        let (payload, observed, _) = fixture();
+        let text = String::from_utf8(local_request(&payload)).unwrap();
+        let body = serde_json::to_string(&payload).unwrap();
+        let mut bom = vec![0xef, 0xbb, 0xbf];
+        bom.extend(text.as_bytes());
+        let cases = [
+            Vec::new(),
+            vec![b'x'; MAX_ENVELOPE_BYTES + 1],
+            format!("{text}\n").into_bytes(),
+            bom,
+            format!("{{\"payload\":{body},\"authorization\":\"LOCAL_USER_POLICY\"}}").into_bytes(),
+            text.replacen('{', "{\"unexpected\":null,", 1).into_bytes(),
+            text.replacen(
+                "\"authorization\":",
+                "\"authorization\":\"LOCAL_USER_POLICY\",\"authorization\":",
+                1,
+            )
+            .into_bytes(),
+            format!(
+                "{{\"authorization\":\"LOCAL_USER_POLICY\",\"payload\":{body},\"payload\":{body}}}"
+            )
+            .into_bytes(),
+            text.replacen(
+                "\"schemaVersion\":3,",
+                "\"schemaVersion\":3,\"unexpected\":0,",
+                1,
+            )
+            .into_bytes(),
+        ];
+        for bytes in cases {
+            assert_eq!(
+                verify_local_user_selection_request_v1(&bytes, &observed).unwrap_err(),
+                "WAKE_SELECTION_ENCODING_INVALID"
+            );
+        }
+        let mut oversized = payload;
+        oversized.approval_id = "a".repeat(MAX_ENVELOPE_BYTES);
+        assert_eq!(
+            encode_local_user_selection_request_v1(&oversized).unwrap_err(),
+            "WAKE_SELECTION_ENCODING_INVALID"
+        );
+    }
+
+    #[test]
+    fn same_state_local_user_request_preserves_time_state_source_and_evidence_checks() {
+        let (payload, observed, key) = fixture();
+        for variant in 0..16 {
+            let mut bad = payload.clone();
+            match variant {
+                0 => bad.expires_utc_seconds = observed.now_utc_seconds - 1,
+                1 => bad.issued_utc_seconds = observed.now_utc_seconds + 1,
+                2 => bad.expires_utc_seconds = bad.issued_utc_seconds + MAX_AGE_SECONDS + 1,
+                3 => bad.install_generation += 1,
+                4 => bad.policy_sha256 = "f".repeat(64),
+                5 => bad.reviewer_identity = "other-reviewer".into(),
+                6 => bad.state_snapshot.current.identity.file_id_hex = "f".repeat(32),
+                7 => bad.state_snapshot.desired = "RUNNING".into(),
+                8 => bad.planned_selection_sha256 = "f".repeat(64),
+                9 => bad.candidate.source_commit = "f".repeat(40),
+                10 => {
+                    bad.candidate.local_qualification.verdict =
+                        SameStateEvidenceVerdictV3::Inconclusive
+                }
+                11 => bad.candidate.independent_review.manifest_sha256 = "f".repeat(64),
+                12 => bad.candidate.independent_review.verdict = SameStateEvidenceVerdictV3::Fail,
+                13 => bad.candidate.runtime_manifest_sha256 = "f".repeat(64),
+                14 => {
+                    let SameStateRollbackAuthorityV3::VerifiedWorkingPrevious { release } =
+                        &mut bad.rollback_authority
+                    else {
+                        unreachable!()
+                    };
+                    release.working_evidence = None;
+                }
+                _ => bad.operation = "INSTALL_BROKER".into(),
+            }
+            let legacy_error = verify_same_state_selection_approval_v3(
+                &envelope(&bad, &key),
+                &key.verifying_key(),
+                &observed,
+            )
+            .unwrap_err();
+            assert_eq!(
+                verify_local_user_selection_request_v1(&local_request(&bad), &observed)
+                    .unwrap_err(),
+                legacy_error,
+                "variant {variant} must retain the signed mode's payload checks"
+            );
+        }
+    }
+
+    #[test]
+    fn same_state_local_user_request_refuses_reconstruction_even_when_signed_mode_admits_it() {
+        let (mut payload, mut observed, key) = fixture();
+        payload.rollback_authority = SameStateRollbackAuthorityV3::ReviewedSourceReconstruction {
+            release: payload.rollback_authority.release().clone(),
+            old_raw_selection_escrow_sha256: payload.state_snapshot.current.sha256.clone(),
+            reconstruction_receipt_sha256: "f".repeat(64),
+        };
+        observed.legacy_current_package_id = Some("unqualified-dev84".into());
+        observed.allow_reviewed_reconstruction = true;
+        verify_same_state_selection_approval_v3(
+            &envelope(&payload, &key),
+            &key.verifying_key(),
+            &observed,
+        )
+        .unwrap();
+        assert_eq!(
+            encode_local_user_selection_request_v1(&payload).unwrap_err(),
+            "WAKE_LOCAL_USER_SELECTION_RECONSTRUCTION_REFUSED"
+        );
+        assert_eq!(
+            verify_local_user_selection_request_v1(&local_request(&payload), &observed)
+                .unwrap_err(),
+            "WAKE_LOCAL_USER_SELECTION_RECONSTRUCTION_REFUSED"
+        );
+    }
+
+    #[test]
+    fn same_state_local_user_rollback_requires_exact_working_original_previous() {
+        let (payload, observed, key) = rollback_fixture();
+        let request = encode_local_user_selection_request_v1(&payload).unwrap();
+        let proof = verify_local_user_selection_request_v1(&request, &observed).unwrap();
+        assert_eq!(proof.payload().operation, SAME_STATE_ROLLBACK_OPERATION);
+        for variant in 0..5 {
+            let mut bad = observed.clone();
+            match variant {
+                0 => bad.original_previous = None,
+                1 => {
+                    bad.original_previous.as_mut().unwrap().pointer["hostSha256"] =
+                        "f".repeat(64).into()
+                }
+                2 => bad.original_previous.as_mut().unwrap().qualification_sha256 = "f".repeat(64),
+                3 => bad.legacy_current_package_id = Some("unqualified-dev84".into()),
+                _ => bad.previous_runtime_manifest_sha256 = "f".repeat(64),
+            }
+            let legacy_error = verify_same_state_selection_approval_v3(
+                &envelope(&payload, &key),
+                &key.verifying_key(),
+                &bad,
+            )
+            .unwrap_err();
+            assert_eq!(
+                verify_local_user_selection_request_v1(&request, &bad).unwrap_err(),
+                legacy_error
+            );
+        }
+    }
+
+    #[test]
+    fn same_state_local_user_resume_requires_retained_attempt_and_exact_original_snapshot() {
+        let (payload, mut observed, _) = fixture();
+        let request = encode_local_user_selection_request_v1(&payload).unwrap();
+        observed.state_snapshot.current.identity.file_id_hex = "a".repeat(32);
+        observed.state_snapshot.current.sha256 = payload.planned_selection_sha256.clone();
+        assert_eq!(
+            verify_local_user_selection_request_v1(&request, &observed).unwrap_err(),
+            "WAKE_SELECTION_STATE_MISMATCH"
+        );
+        observed.retained_resume = Some(SameStateRetainedResumeV3 {
+            original_snapshot_sha256: format!(
+                "{:x}",
+                Sha256::digest(serde_json::to_vec(&payload.state_snapshot).unwrap())
+            ),
+            before_selection_sha256: payload.state_snapshot.current.sha256.clone(),
+            planned_selection_sha256: payload.planned_selection_sha256.clone(),
+            original_escrow_sha256: payload.state_snapshot.current.sha256.clone(),
+            selection_attempt_present: true,
+        });
+        verify_local_user_selection_request_v1(&request, &observed).unwrap();
+        for variant in 0..3 {
+            let mut bad = observed.clone();
+            match variant {
+                0 => {
+                    bad.retained_resume
+                        .as_mut()
+                        .unwrap()
+                        .selection_attempt_present = false
+                }
+                1 => {
+                    bad.retained_resume
+                        .as_mut()
+                        .unwrap()
+                        .original_snapshot_sha256 = "f".repeat(64)
+                }
+                _ => bad.state_snapshot.config.sha256 = "f".repeat(64),
+            }
+            assert_eq!(
+                verify_local_user_selection_request_v1(&request, &bad).unwrap_err(),
+                "WAKE_SELECTION_STATE_MISMATCH"
+            );
+        }
     }
 }

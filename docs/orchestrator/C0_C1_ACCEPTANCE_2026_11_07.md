@@ -2791,3 +2791,21 @@ canonical backend/protected-Wake bindings and cannot be rerouted through DEV. Th
 existing unsigned collector awaits fresh purpose signature and high interactive
 operator admission. No replacement task/grant or mandatory native/coordinator hop
 is introduced. Evidence: `../verification/AUTONOMY_EVENT_POLL_READONLY_SOURCE_2026_11_10.json`.
+
+### 2026-11-11 — Source simplification is not installed C1 acceptance
+
+The current goal explicitly permits independently eligible routine development
+without a new manual signature for every version. The source increment reuses
+the fixed broker with an optional one-time local-account policy enrollment,
+retained exact artifact/review/previous-version checks and durable selection
+recovery. Existing signed bootstrap and initial reconstruction remain separate.
+No policy was enrolled, no signer created and no protected install was modified.
+
+Direct task checkpoints bind successful verification to raw file postimages and
+an exact task-owned commit; uncertain Git synchronization is observation-only.
+Legacy permissions, original assignments and unknown-delivery fences are retained.
+Source tests include real disposable Git repositories, files and unassigned token
+objects. They do not demonstrate the actual SYSTEM broker's medium-user client,
+new checkpoint cold-owner recovery, protected rollback/startup, or a Web edit and
+delivered self-Wake. Those remain explicit qualification gaps. No completed canary
+or held original request was replayed, and no recurring browser/Wake owner started.

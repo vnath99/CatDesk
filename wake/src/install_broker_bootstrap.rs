@@ -57,6 +57,8 @@ pub(crate) struct BootstrapManifestV1 {
     pub(crate) state_root: BootstrapStateV1,
     pub(crate) allow_reviewed_reconstruction: bool,
     pub(crate) allow_operator_service_start: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) allow_local_user_updates: Option<bool>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -249,6 +251,7 @@ fn readback(verified: &VerifiedBootstrapV1) -> Value {
         "envelopeSha256":verified.envelope_sha256,"sourceCommit":verified.manifest.source_commit,
         "brokerArtifactSha256":verified.manifest.broker_artifact.sha256,
         "approvalPublicKeySha256":verified.manifest.approval_public_key_sha256,
+        "localUserUpdatesProposed":verified.manifest.allow_local_user_updates.unwrap_or(false),
         "releaseApprovalCreated":false,"releaseReviewAuthorityCreated":false,
         "workingReleaseQualified":false,"selectionChanged":false,"serviceStarted":false,
         "namespacePowerLossQualified":false})

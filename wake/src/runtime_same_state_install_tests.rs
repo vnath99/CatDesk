@@ -210,6 +210,9 @@ struct Fixture {
 }
 impl Fixture {
     fn new() -> Self {
+        Self::with_local_updates(false)
+    }
+    fn with_local_updates(local_updates: bool) -> Self {
         let path = std::env::temp_dir().join(format!(
             "catdesk-same-state-v3-{}-{}",
             std::process::id(),
@@ -281,7 +284,7 @@ impl Fixture {
                 &broker_id,
                 &state,
                 state_id,
-                true,
+                (true, local_updates),
                 "release-reviewer",
             )
             .unwrap();
@@ -382,16 +385,35 @@ impl Fixture {
         .unwrap()
     }
     fn rollback() -> Self {
-        let mut fixture = Self::new();
+        Self::qualified_selection(false, true)
+    }
+    fn qualified_selection(local_updates: bool, rollback: bool) -> Self {
+        let mut fixture = Self::with_local_updates(local_updates);
         let previous = fixture.payload.rollback_authority.release().clone();
-        std::fs::rename(
-            fixture.intake.join("previous"),
-            fixture
-                .state
-                .join("versions")
-                .join(&previous.manifest.package_id),
-        )
-        .unwrap();
+        let published_previous = fixture
+            .state
+            .join("versions")
+            .join(&previous.manifest.package_id);
+        if rollback {
+            std::fs::rename(fixture.intake.join("previous"), &published_previous).unwrap();
+        } else {
+            // SELECT still consumes the fixed previous input while validating
+            // the same already-published predecessor in the current document.
+            std::fs::create_dir(&published_previous).unwrap();
+            for name in [
+                "CatDeskWakeHost.exe",
+                "CatDeskBinagotchy.exe",
+                "adapter.py",
+                "wake_bridge.py",
+                "manifest.json",
+            ] {
+                std::fs::copy(
+                    fixture.intake.join("previous").join(name),
+                    published_previous.join(name),
+                )
+                .unwrap();
+            }
+        }
         let target =
             crate::install_broker_approval::same_state::same_state_release_pointer_v3(&previous)
                 .unwrap();
@@ -406,9 +428,11 @@ impl Fixture {
             "previous":{"pointer":target,"qualificationSha256":qualification}});
         fixture.before = serde_json::to_vec(&current).unwrap();
         std::fs::write(fixture.state.join("current.json"), &fixture.before).unwrap();
-        fixture.payload.operation = "ROLLBACK_SAME_STATE_RELEASE".into();
-        fixture.payload.approval_id = "rollback-fixture-one".into();
-        fixture.payload.candidate = previous.clone();
+        if rollback {
+            fixture.payload.operation = "ROLLBACK_SAME_STATE_RELEASE".into();
+            fixture.payload.approval_id = "rollback-fixture-one".into();
+            fixture.payload.candidate = previous.clone();
+        }
         fixture.payload.rollback_authority =
             SameStateRollbackAuthorityV3::VerifiedWorkingPrevious { release: previous };
         let guard = BrokerLedgerGuard::acquire(&fixture.handle).unwrap();
@@ -420,6 +444,17 @@ impl Fixture {
         fixture
     }
     fn signed(&mut self, guard: &BrokerLedgerGuard<'_>) -> Vec<u8> {
+        self.bind_planned_selection(guard);
+        crate::install_broker_approval::same_state::tests::envelope(
+            &self.payload,
+            &SigningKey::from_bytes(&[7; 32]),
+        )
+    }
+    fn local_request(&mut self, guard: &BrokerLedgerGuard<'_>) -> Vec<u8> {
+        self.bind_planned_selection(guard);
+        encode_local_user_selection_request_v1(&self.payload).unwrap()
+    }
+    fn bind_planned_selection(&mut self, guard: &BrokerLedgerGuard<'_>) {
         let prospective = guard
             .same_state_admission_v3(&"0".repeat(64), 1000)
             .unwrap();
@@ -433,10 +468,6 @@ impl Fixture {
             self.payload.planned_selection_sha256
         );
         drop(pins);
-        crate::install_broker_approval::same_state::tests::envelope(
-            &self.payload,
-            &SigningKey::from_bytes(&[7; 32]),
-        )
     }
     fn grant<'p>(
         &'p self,
@@ -462,6 +493,277 @@ impl Fixture {
         drop(self);
         std::fs::remove_dir_all(path).unwrap();
     }
+}
+
+#[test]
+fn same_state_local_user_unenrolled_policy_refuses_before_intent() {
+    let mut fixture = Fixture::qualified_selection(false, false);
+    let handle = fixture.handle.try_clone().unwrap();
+    let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+    let request = fixture.local_request(&guard);
+    let admission = guard
+        .same_state_admission_v3(&digest(&request), 1000)
+        .unwrap();
+    let operator = crate::install_broker_operator::isolated_same_state_operator_fixture(
+        &fixture.policy.readback().unwrap().operator_sid_sha256,
+    );
+    let frame = crate::install_broker_request::isolated_same_state_frame_fixture(request, operator);
+    assert_eq!(
+        fixture
+            .policy
+            .verify_same_state_selection_v3(&frame, fixture.pins(&admission), &admission)
+            .err()
+            .unwrap(),
+        "WAKE_LOCAL_UPDATE_POLICY_REQUIRED"
+    );
+    assert_eq!(
+        std::fs::read(fixture.state.join("current.json")).unwrap(),
+        fixture.before
+    );
+    assert_eq!(std::fs::read_dir(&fixture.broker).unwrap().count(), 2);
+    fixture.preserved();
+    drop(guard);
+    drop(handle);
+    fixture.cleanup();
+}
+
+#[test]
+fn same_state_local_user_enrolled_select_and_rollback_preserve_state() {
+    for rollback in [false, true] {
+        let mut fixture = Fixture::qualified_selection(true, rollback);
+        let handle = fixture.handle.try_clone().unwrap();
+        let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+        let request = fixture.local_request(&guard);
+        let wire: Value = serde_json::from_slice(&request).unwrap();
+        assert_eq!(wire["authorization"], "LOCAL_USER_POLICY");
+        assert!(wire.get("signatureHex").is_none());
+        let admission = guard
+            .same_state_admission_v3(&digest(&request), 1000)
+            .unwrap();
+        let resources =
+            SameStateInstallResources::acquire(fixture.grant(&admission, request)).unwrap();
+        let original = resources.grant().original_selection_bytes().unwrap();
+        let mut ledger = guard
+            .begin_same_state_v3(resources.grant(), &admission, &original)
+            .unwrap();
+        assert!(ledger.binding().local_user_authorized());
+        assert_eq!(
+            ledger.binding().verification_key_sha256,
+            ledger.binding().policy_sha256
+        );
+        let result = resources.commit_selection(&mut ledger).unwrap();
+        assert_eq!(
+            result["status"],
+            if rollback {
+                "ROLLED_BACK_STOPPED"
+            } else {
+                "SELECTED_STOPPED"
+            }
+        );
+        assert_eq!(result["workingAcceptance"], false);
+        assert_eq!(ledger.phase(), InstallPhaseV1::Complete);
+        assert_eq!(
+            digest(&std::fs::read(fixture.state.join("current.json")).unwrap()),
+            fixture.payload.planned_selection_sha256
+        );
+        fixture.preserved();
+        drop(ledger);
+        drop(handle);
+        fixture.cleanup();
+    }
+}
+
+#[test]
+fn same_state_local_user_pointer_interruptions_resume_only_the_original_request() {
+    for rollback in [false, true] {
+        for stop in [
+            InstallPhaseV1::OldOwnerStopped,
+            InstallPhaseV1::PointerSwitched,
+        ] {
+            let mut fixture = Fixture::qualified_selection(true, rollback);
+            let handle = fixture.handle.try_clone().unwrap();
+            let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+            let request = fixture.local_request(&guard);
+            let admission = guard
+                .same_state_admission_v3(&digest(&request), 1000)
+                .unwrap();
+            let resources =
+                SameStateInstallResources::acquire(fixture.grant(&admission, request.clone()))
+                    .unwrap();
+            let original = resources.grant().original_selection_bytes().unwrap();
+            let mut ledger = guard
+                .begin_same_state_v3(resources.grant(), &admission, &original)
+                .unwrap();
+            assert_eq!(
+                resources
+                    .commit_selection_until(&mut ledger, stop)
+                    .err()
+                    .unwrap(),
+                "FIXTURE_SAME_STATE_COMMIT_INTERRUPTED"
+            );
+            assert_eq!(ledger.phase(), InstallPhaseV1::OldOwnerStopped);
+            let interrupted = std::fs::read(fixture.state.join("current.json")).unwrap();
+            if stop == InstallPhaseV1::OldOwnerStopped {
+                assert_eq!(interrupted, fixture.before);
+            } else {
+                assert_eq!(
+                    digest(&interrupted),
+                    fixture.payload.planned_selection_sha256
+                );
+            }
+            drop(ledger);
+
+            let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+            assert!(
+                guard
+                    .same_state_admission_v3(&"f".repeat(64), 1001)
+                    .is_err()
+            );
+            let admission = guard
+                .same_state_admission_v3(&digest(&request), 1001)
+                .unwrap();
+            assert_eq!(admission.accepted_at_utc_seconds, 1000);
+            assert_eq!(
+                admission.selection_attempt_present,
+                stop == InstallPhaseV1::PointerSwitched
+            );
+            assert!(
+                admission
+                    .resume_binding
+                    .as_ref()
+                    .unwrap()
+                    .local_user_authorized()
+            );
+            let resources =
+                SameStateInstallResources::acquire(fixture.grant(&admission, request.clone()))
+                    .unwrap();
+            let original = resources.grant().original_selection_bytes().unwrap();
+            let mut ledger = guard
+                .begin_same_state_v3(resources.grant(), &admission, &original)
+                .unwrap();
+            resources.commit_selection(&mut ledger).unwrap();
+            let complete = ledger.complete_record_sha256().unwrap().to_owned();
+            let selected = std::fs::read(fixture.state.join("current.json")).unwrap();
+            drop(ledger);
+
+            // A lost reply can read only the same COMPLETE; it cannot produce
+            // a second generation or repeat package publication/selection.
+            let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+            let admission = guard
+                .same_state_admission_v3(&digest(&request), 1002)
+                .unwrap();
+            assert_eq!(admission.install_generation, 1);
+            let resources =
+                SameStateInstallResources::acquire(fixture.grant(&admission, request)).unwrap();
+            let original = resources.grant().original_selection_bytes().unwrap();
+            let mut ledger = guard
+                .begin_same_state_v3(resources.grant(), &admission, &original)
+                .unwrap();
+            resources.commit_selection(&mut ledger).unwrap();
+            assert_eq!(ledger.complete_record_sha256().unwrap(), complete);
+            assert_eq!(
+                std::fs::read(fixture.state.join("current.json")).unwrap(),
+                selected
+            );
+            fixture.preserved();
+            drop(ledger);
+            drop(handle);
+            fixture.cleanup();
+        }
+    }
+}
+
+#[test]
+fn same_state_local_user_unknown_pointer_is_preserved_after_interruption() {
+    let mut fixture = Fixture::qualified_selection(true, true);
+    let handle = fixture.handle.try_clone().unwrap();
+    let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+    let request = fixture.local_request(&guard);
+    let admission = guard
+        .same_state_admission_v3(&digest(&request), 1000)
+        .unwrap();
+    let resources =
+        SameStateInstallResources::acquire(fixture.grant(&admission, request.clone())).unwrap();
+    let original = resources.grant().original_selection_bytes().unwrap();
+    let mut ledger = guard
+        .begin_same_state_v3(resources.grant(), &admission, &original)
+        .unwrap();
+    assert!(
+        resources
+            .commit_selection_until(&mut ledger, InstallPhaseV1::OldOwnerStopped)
+            .is_err()
+    );
+    drop(ledger);
+    let unknown = b"unrelated current bytes must be preserved";
+    std::fs::write(fixture.state.join("current.json"), unknown).unwrap();
+    let count = std::fs::read_dir(&fixture.broker).unwrap().count();
+    let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+    let admission = guard
+        .same_state_admission_v3(&digest(&request), 1001)
+        .unwrap();
+    assert_eq!(
+        SameStateReadPinsV3::observe_with_mode(
+            &fixture.policy,
+            &admission,
+            SameStateIntakeV3::Isolated(fixture.intake.clone()),
+            true
+        )
+        .err()
+        .unwrap(),
+        "WAKE_SAME_STATE_SELECTION_UNKNOWN"
+    );
+    assert_eq!(
+        std::fs::read(fixture.state.join("current.json")).unwrap(),
+        unknown
+    );
+    assert_eq!(std::fs::read_dir(&fixture.broker).unwrap().count(), count);
+    fixture.preserved();
+    drop(guard);
+    drop(handle);
+    fixture.cleanup();
+}
+
+#[test]
+fn same_state_local_user_reconstruction_refuses_before_intent() {
+    let mut fixture = Fixture::with_local_updates(true);
+    let handle = fixture.handle.try_clone().unwrap();
+    let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+    fixture.bind_planned_selection(&guard);
+    assert_eq!(
+        encode_local_user_selection_request_v1(&fixture.payload)
+            .err()
+            .unwrap(),
+        "WAKE_LOCAL_USER_SELECTION_RECONSTRUCTION_REFUSED"
+    );
+    let request = format!(
+        "{{\"authorization\":\"LOCAL_USER_POLICY\",\"payload\":{}}}",
+        serde_json::to_string(&fixture.payload).unwrap()
+    )
+    .into_bytes();
+    let admission = guard
+        .same_state_admission_v3(&digest(&request), 1000)
+        .unwrap();
+    let operator = crate::install_broker_operator::isolated_same_state_operator_fixture(
+        &fixture.policy.readback().unwrap().operator_sid_sha256,
+    );
+    let frame = crate::install_broker_request::isolated_same_state_frame_fixture(request, operator);
+    assert_eq!(
+        fixture
+            .policy
+            .verify_same_state_selection_v3(&frame, fixture.pins(&admission), &admission)
+            .err()
+            .unwrap(),
+        "WAKE_LOCAL_USER_SELECTION_RECONSTRUCTION_REFUSED"
+    );
+    assert_eq!(
+        std::fs::read(fixture.state.join("current.json")).unwrap(),
+        fixture.before
+    );
+    assert_eq!(std::fs::read_dir(&fixture.broker).unwrap().count(), 2);
+    fixture.preserved();
+    drop(guard);
+    drop(handle);
+    fixture.cleanup();
 }
 
 #[test]

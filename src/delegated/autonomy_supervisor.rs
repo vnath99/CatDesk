@@ -68,7 +68,9 @@ use super::github_publication::{
 };
 use super::github_publication_executor::{
     PublicationReviewAuthorityV1, SystemGithubPublicationGitRunnerV1,
-    confirm_local_commit as confirm_github_publication_local_commit,
+    begin_local_commit as begin_github_publication_local_commit,
+    begin_push as begin_github_publication_push,
+    execute_local_commit as execute_github_publication_local_commit,
     prepare as prepare_github_publication, push as push_github_publication,
     reconcile as reconcile_github_publication,
 };
@@ -2320,6 +2322,8 @@ impl AutonomousSupervisorV1 {
         {
             return Err("GitHub publication request is invalid".into());
         }
+        let _writer = super::autonomy_runtime::acquire_project_writer_lock(&self.workspace)
+            .map_err(|_| "GitHub publication project writer is unavailable".to_string())?;
         let runner = SystemGithubPublicationGitRunnerV1 {
             workspace: self.workspace.clone(),
         };
@@ -2383,20 +2387,40 @@ impl AutonomousSupervisorV1 {
                 json!({"state":state,"detail":"bounded remote-ref reconciliation completed"}),
             );
         }
-        let permit = confirm_github_publication_local_commit(
-            &self.workspace,
-            &snapshot.github_publication_journal,
-            token,
-            &review,
-            &runner,
-            now_unix(),
-        )
-        .map_err(|error| error.reason_code().to_string())?;
-        // This durable write intentionally precedes the only remote dispatch.
-        snapshot
+        let (_, permit) = snapshot
             .github_publication_journal
-            .mark_remote_dispatch_started(&permit)
-            .map_err(|_| "GitHub publication journal transition was rejected".to_string())?;
+            .prepared(token)
+            .map_err(|_| "GitHub publication confirmation is unavailable".to_string())?;
+        let state = snapshot
+            .github_publication_journal
+            .state_for(&permit)
+            .map_err(|_| "GitHub publication confirmation is unavailable".to_string())?;
+        if state == super::github_publication::GithubPublicationRecordStateV1::Prepared {
+            begin_github_publication_local_commit(
+                &self.workspace,
+                &mut snapshot.github_publication_journal,
+                token,
+                &review,
+                &runner,
+                now_unix(),
+            )
+            .map_err(|error| error.reason_code().to_string())?;
+            self.store.save_session(&snapshot).map_err(|_| {
+                "GitHub publication local intent could not be persisted".to_string()
+            })?;
+            execute_github_publication_local_commit(
+                &mut snapshot.github_publication_journal,
+                token,
+                &runner,
+            )
+            .map_err(|error| error.reason_code().to_string())?;
+            self.store.save_session(&snapshot).map_err(|_| {
+                "GitHub publication local receipt could not be persisted".to_string()
+            })?;
+        }
+        begin_github_publication_push(&mut snapshot.github_publication_journal, token, &runner)
+            .map_err(|error| error.reason_code().to_string())?;
+        // Persist the exact commit and unknown remote outcome before push.
         self.store
             .save_session(&snapshot)
             .map_err(|_| "GitHub publication remote intent could not be persisted".to_string())?;

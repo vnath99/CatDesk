@@ -204,6 +204,8 @@ pub(crate) enum WebAction {
         input_file: PathBuf,
         revoke: bool,
         allow_manual_wake: bool,
+        allow_git_checkpoint: bool,
+        allow_git_sync: bool,
         native_queue_task_id: Option<String>,
     },
     ContextConfigure {
@@ -317,9 +319,31 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         return Err("WEB_USAGE: manual wake permission is execution-grant only".into());
     }
     let allow_manual_wake = manual_flags == 1;
+    let mut git_flags = [false; 2];
+    for (index, flag) in ["--allow-git-checkpoint", "--allow-git-sync"]
+        .into_iter()
+        .enumerate()
+    {
+        let count = tail.iter().filter(|value| value.as_str() == flag).count();
+        if count > 1 || (count == 1 && (group != "work" || verb != "execution-grant")) {
+            return Err("WEB_USAGE: Git permissions are execution-grant only".into());
+        }
+        git_flags[index] = count == 1;
+    }
+    let [allow_git_checkpoint, allow_git_sync] = git_flags;
+    if allow_git_sync && !allow_git_checkpoint {
+        return Err("WEB_USAGE: Git sync requires checkpoint permission".into());
+    }
     let tail: Vec<_> = tail
         .iter()
-        .filter(|value| value.as_str() != "--allow-manual-wake")
+        .filter(|value| {
+            ![
+                "--allow-manual-wake",
+                "--allow-git-checkpoint",
+                "--allow-git-sync",
+            ]
+            .contains(&value.as_str())
+        })
         .collect();
     if !tail.len().is_multiple_of(2) {
         return Err("WEB_USAGE: each option requires one value".into());
@@ -541,6 +565,8 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                     input_file: input_file.into(),
                     revoke: verb == "execution-revoke",
                     allow_manual_wake,
+                    allow_git_checkpoint,
+                    allow_git_sync,
                     native_queue_task_id,
                 })
             } else if let Some(assignment_file) = assignment_file {
@@ -2130,16 +2156,20 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             input_file,
             revoke,
             allow_manual_wake,
+            allow_git_checkpoint,
+            allow_git_sync,
             native_queue_task_id,
         } => {
             let input = read_work_input(&input_file, &project_id)?;
-            if native_queue_task_id.is_some() {
-                crate::web_work::execution_permission_with_capabilities(
+            if native_queue_task_id.is_some() || allow_git_checkpoint || allow_git_sync {
+                crate::web_work::execution_permission_with_git_capabilities(
                     &workspace,
                     input,
                     revoke,
                     allow_manual_wake,
                     native_queue_task_id.as_deref(),
+                    allow_git_checkpoint,
+                    allow_git_sync,
                 )
             } else if allow_manual_wake {
                 crate::web_work::execution_permission_with_manual_wake(
@@ -3528,6 +3558,8 @@ mod tests {
                     input_file: "pins.json".into(),
                     revoke,
                     allow_manual_wake: false,
+                    allow_git_checkpoint: false,
+                    allow_git_sync: false,
                     native_queue_task_id: None,
                 }
             );
@@ -3689,6 +3721,39 @@ mod tests {
         assert!(parse(&refused).is_err());
         permitted.push("false".into());
         assert!(parse(&permitted).is_err());
+    }
+
+    #[test]
+    fn work_execution_git_permissions_are_explicit_and_sync_requires_checkpoint() {
+        let base = args(&[
+            "operator",
+            "web",
+            "work",
+            "execution-grant",
+            "--project-id",
+            "alpha",
+            "--input-file",
+            "pins.json",
+        ]);
+        let mut both = base.clone();
+        both.extend(args(&["--allow-git-checkpoint", "--allow-git-sync"]));
+        assert!(matches!(
+            parse(&both),
+            Ok(WebAction::WorkExecutionPermission {
+                allow_git_checkpoint: true,
+                allow_git_sync: true,
+                ..
+            })
+        ));
+        let mut only_sync = base.clone();
+        only_sync.push("--allow-git-sync".into());
+        assert!(parse(&only_sync).is_err());
+        let mut duplicate = both.clone();
+        duplicate.push("--allow-git-checkpoint".into());
+        assert!(parse(&duplicate).is_err());
+        let mut revoke = both;
+        revoke[3] = "execution-revoke".into();
+        assert!(parse(&revoke).is_err());
     }
 
     #[test]

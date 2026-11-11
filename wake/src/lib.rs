@@ -29,6 +29,8 @@ pub mod install_broker_legacy_owner;
 #[cfg(windows)]
 pub mod install_broker_lifecycle;
 #[cfg(windows)]
+pub(crate) mod install_broker_local_access;
+#[cfg(windows)]
 pub mod install_broker_offline_pins;
 pub mod install_broker_offline_v2;
 pub mod install_broker_operator;
