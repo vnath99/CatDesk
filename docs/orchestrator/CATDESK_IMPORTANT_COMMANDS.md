@@ -7726,3 +7726,22 @@ This does not make the commands available in the installed older Host. Build and
 review the exact new artifacts, then use the existing one-time protected lifecycle;
 do not repeat the refused collector or elevate each routine update as a workaround.
 No new operator command is ready until that migration contract is frozen.
+
+### 2026-11-11 — Reviewed local-update artifacts and development health
+
+The new exact-source artifacts passed the existing DEV-only sequence:
+
+```text
+operator web-dev-runtime update-package --package <reviewed-four-artifact-intake>
+operator web-dev-runtime run-paused --max-runtime-seconds 10
+operator web-dev-runtime run-paused --max-runtime-seconds 10
+operator web-dev-runtime run-backend --max-runtime-seconds 15
+operator web-dev-runtime record-verification --input-file <frozen-qualified-input.json>
+```
+
+These were bounded, owner-monitored development operations. They did not enroll
+the protected policy or make `submit-local` usable in the installed older Host.
+The one-time unsigned proposal still requires genuine purpose signing and native
+high-interactive preflight. Do not rerun the refused old collector, rewrite an
+identity/fingerprint or reuse an old signature. See the current release lifecycle
+and routine-update artifact record before any protected operator action.

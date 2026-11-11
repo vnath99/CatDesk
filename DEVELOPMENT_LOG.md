@@ -4139,3 +4139,36 @@ change or original-task replay occurred. The next independent work is exact-comm
 artifact build and existing artifact-bound review, before a concrete one-time
 migration contract. Installed SYSTEM-client and direct Web/self-Wake acceptance
 remain open; source tests do not replace them.
+
+### 2026-11-11 — Reviewed local-update artifacts and development health
+
+Published source `0d6c1074e1fae3cd1fa3fdd8abe2937cd881a99d` built separate
+GUI, Host and fixed broker artifacts with locked offline release commands. Actual
+compiler inputs, checksums and provenance were retained; the prior artifacts were
+preserved. Fresh independent bootstrap and four-file runtime reviews bind the new
+bytes under their separate defined purposes. They grant no operator signature,
+protected installation or canonical backend authority.
+
+The new development tuple passed two 10-second PAUSED Host cycles and one 15-second
+loopback backend check: missing/wrong bearer 401; authenticated initialize/catalog
+200 with 79 tools, central dispatcher and registered-project read. All owned
+processes exited and the endpoint closed. All 1,682 health preservation checks
+passed. The existing normal verification command then recorded this exact package;
+all 1,695 verification checks and six protected pins passed. Verified N remains the
+immediate previous version; F/D/C/A and original task/project/profile state remain
+preserved. Control is STOPPED. No browser, Web send, native project task, tunnel or
+protected broker ran.
+
+A fresh unsigned one-time proposal now binds the new Host/broker, genuine
+bootstrap review and explicit proposed local-account delegation. It preserves the
+old packet and remains unsigned and unapproved. The ordinary-terminal root mismatch
+is unresolved until independent elevated native preflight. No fingerprint or root
+pin was rewritten. Initial enrollment and initial reconstruction remain distinct
+protected procedures; subsequent eligible local updates need no per-version manual
+signature after actual enrollment and qualification.
+
+Installed SYSTEM-client access, protected selection/recovery and the real Web
+edit/verify/checkpoint/delivered self-Wake cycle remain open. This is development
+qualification, not installed acceptance. Exact hashes, audit times and scope are in
+`docs/verification/ROUTINE_UPDATE_ARTIFACTS_2026_11_11.json`. Documentation-only
+successors retain the artifact's actual source origin and require no rebuild.

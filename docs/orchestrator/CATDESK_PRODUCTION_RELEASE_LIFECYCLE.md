@@ -1344,3 +1344,20 @@ One-time protected enrollment and initial reconstruction still require their
 existing purpose-bound authority. Do not install from a test binary or claim that
 owned-pipe tests prove actual SYSTEM-service client access. See the routine-update
 verification record and compatibility plan above.
+
+### 2026-11-11 — Reviewed local-update artifacts and development health
+
+The exact `0d6c1074` GUI/Host/broker artifacts are built, source-reviewed for their
+declared separate runtime/bootstrap purposes and qualified through bounded DEV
+startup/stop and authenticated loopback MCP. The new package's normal development
+verification is recorded, with the last verified N package retained. No protected
+enrollment or installation occurred; no main-image production authority follows.
+
+The new unsigned proposal supersedes neither the old packet nor its history. It
+requires explicit one-time account/capability review, genuine raw-preimage purpose
+signing with the existing approved public issuer and elevated native bootstrap
+preflight. The ordinary-terminal physical-root mismatch must pass that existing
+gate; do not replace its recorded identity. Initial reconstruction remains a
+separate signed transaction with qualified candidate/previous evidence. Keep the
+legacy mechanism until actual installed update, interruption, rollback and startup
+checks pass. See the routine-update artifact verification record for hashes/limits.

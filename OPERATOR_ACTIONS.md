@@ -1071,14 +1071,15 @@ retained old unsigned packet does not block independent source work.
 
 | Task | Current boundary and next action |
 |---|---|
-| Routine checkpoint/update source | QUALIFIED/PUBLISHED: scoped Git checkpoint/sync, publication recovery and dedicated cold-owner tests are published. The additional UAC source correction is qualified; publish its reviewed checkpoint, then build exact artifacts through the existing release tooling. |
+| Routine checkpoint/update source | PUBLISHED/DEV_QUALIFIED: source 0d6c1074, new exact artifacts and separate runtime/bootstrap reviews; bounded PAUSED/loopback health and normal development verification passed. No routine source build or operator decision is pending. |
 | Ordinary UAC caller eligibility | SOURCE_QUALIFIED: actual primary and production-QoS one-read pipe passed exact canonical-profile checks; further filtering and EffectiveOnly pipe were refused. Legacy signed/high admission is unchanged. Actual SYSTEM-service/medium-client operation remains an installed gate. |
-| One-time local-update enrollment | BLOCKED_BY_POLICY until exact new artifacts, declared-scope review and a frozen enrollment contract exist. Then one operator-controlled purpose approval/native bootstrap may enroll the exact Windows account. The retained old packet does not authorize this changed broker or policy. No new signing identity is required by the proposal. |
+| One-time local-update enrollment | UNSIGNED_PROPOSAL_READY: exact new artifacts, separate genuine reviews and frozen raw preimage are prepared. Requires explicit one-time existing-issuer purpose signature and elevated native preflight; the ordinary-terminal root mismatch remains unresolved. The old packet/signature cannot authorize changed bytes or policy. No new signing identity was generated. |
 | Installed broker and Web acceptance | Requires that qualified installation, actual intended-account process/token access, protected select/rollback/startup and registered Web edit/verify/checkpoint/self-Wake evidence. Source and disposable-object tests do not close these gates. |
 | Original uncertain work | Preserve original assignments, grants, journals, delivery witnesses and history. Do not replay or replace held requests to demonstrate the new path. |
 
-No new protected-install command is ready for the operator at this source
-checkpoint. Prepare the exact reviewable migration first. Routine local updates
+The exact unsigned enrollment proposal is prepared for review. It is not a
+signed executable installation authorization. Complete genuine purpose signing
+and the existing elevated native preflight before protected bootstrap. Routine local updates
 after explicit enrollment use the fixed broker and retain integrity, previous
 version and exact-transaction checks without a per-version manual signature.
 Trust-root, broker/policy changes and initial reconstruction remain separate
@@ -1087,6 +1088,6 @@ unchanged external services. See the simplified model and release lifecycle.
 
 The targeted source and native owned-object checks now pass, including strict
 Clippy. The UAC source gap is closed for this current context; installed service
-readback and enrollment are still required. No new operator input is required for
-the next exact-artifact build/review preparation. Evidence:
+readback and enrollment are still required. The remaining nondelegable input is the one-time purpose signature and native
+operator admission; no per-version signing decision is requested. Evidence:
 `docs/verification/ROUTINE_UPDATE_CHECKPOINT_SOURCE_2026_11_11.json`.
