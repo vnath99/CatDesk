@@ -1270,14 +1270,27 @@ development verification/selection mechanism. See the
 for exact hashes and limits; these reviews do not approve every canonical
 application entry point.
 
-This preparation does not provision or start the protected broker. Complete the
-existing fixed-root unsigned-input collection in the qualified operator context,
-obtain the genuine explicit Wake-purpose signature, then use the supported
-`wake/install.ps1 -Bootstrap` preflight and separately authorized execution with
-the frozen Host/envelope/public-key hashes. Same-state selection remains a
+Prepare unsigned inputs from a retained native observation of the recorded
+physical root and its three exact state files. Have the operator review the
+proposed account, scope and payload, then obtain the genuine Wake-purpose
+signature. Run the supported `wake/install.ps1 -Bootstrap` preflight in the
+intended elevated interactive process with the frozen Host, envelope and public
+key hashes. Native preflight validates that process and its view of the state
+before execution. Same-state selection remains a
 separate signed transaction requiring exact physical state, protected policy,
 candidate/previous receipts and any applicable legacy reconstruction evidence.
 Do not substitute development metadata for those native observations. No original
 uncertain Web task may be replayed or moved to another route while these gates
 remain unmet. Installed reader observation, direct file work, delivered self-Wake
 and independent two-project isolation are still live acceptance requirements.
+
+### 2026-11-11T00:06Z — Unsigned bootstrap input prepared from retained state
+
+The ordinary PowerShell collector stopped at the directory identity check. In the
+Codex context, retained native reads of the direct path verified the recorded
+directory, all three reference hashes and STOPPED control. Absolute reopens
+matched the relative file handles through preparation and readback. The corrected
+preparer created one unsigned packet using the existing reviewed artifacts and
+proposed operator scope. The original-window comparison is available to diagnose
+an admission refusal. The next protected steps are genuine purpose signing and
+native preflight under the intended elevated interactive operator.

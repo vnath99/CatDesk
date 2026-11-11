@@ -7669,5 +7669,9 @@ install a protected package or authorize a Web send. Use the exact artifact and
 manifest evidence in the [runtime qualification record](../verification/AUTONOMY_EVENT_POLL_READONLY_SOURCE_2026_11_10.json).
 The original uncertain tasks remain bound to the protected installation. Do not
 move them into development or replay them to work around installation authority.
-The next operator step remains the already frozen unsigned-input collector,
-followed by a genuine approved Wake-purpose signature and native admission.
+The unsigned bootstrap packet was prepared on November 11 UTC using retained
+native reads of the recorded root and exact STOPPED state. The next operator step
+is to review the proposed account and scope, obtain the genuine Wake-purpose
+signature for the frozen preimage, and use native preflight in the intended
+elevated interactive process. See the current procedure in
+`CATDESK_PRODUCTION_RELEASE_LIFECYCLE.md`.

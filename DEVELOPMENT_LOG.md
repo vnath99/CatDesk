@@ -4059,3 +4059,14 @@ cleanup, zero owned images and preserved task/profile evidence. The verified
 fallback is retained, and candidate development verification metadata is recorded.
 Protected installation and actual per-project Web edit/verify/delivered self-Wake
 remain open. Evidence: `docs/verification/AUTONOMY_EVENT_POLL_READONLY_SOURCE_2026_11_10.json`.
+
+### 2026-11-11T00:06Z — Unsigned Wake bootstrap packet prepared
+
+The original PowerShell refusal stopped at the directory identity comparison.
+The retained native file reader verified the existing direct root and all three
+expected state hashes in Codex, with STOPPED control and stable file reopens.
+The first preparation attempt refused an undersized read bound on a historical
+operator record before creating output. The corrected attempt verified its exact
+length and pinned hash and saved the unsigned packet. The Wake-purpose signature
+and native elevated admission are pending. The original Web delivery records
+retain their holds, and both worktrees show no tracked changes.
