@@ -4330,3 +4330,20 @@ Clippy passed with the source hash stable; rustfmt/diff checks passed. The new
 code is uninstalled and does not alter any approval or execution gate. Existing
 d22 and Wake artifacts retain their exact origins. See the controlled-restart/
 Wake-status verification record for actual timestamps, hashes and scope limits.
+
+
+### 2026-11-13 UTC — Candidate review intake prepared without new authority
+
+Collected the exact historical source for the existing d22 candidate rather than
+reviewing the later mutable working tree as if it produced that binary. Frozen
+Git bytes and raw build checkout bytes are both retained and verified: 476 input
+files, 217 compiler-reported inputs, unchanged candidate SHA. Initial LF/CRLF
+reconstruction refused two mixed-ending tests. The preserved failed collection
+was followed by a separate successor using only their unchanged, exact hash-proven
+current bytes. Collection and second readback passed under bounded ownership.
+
+These private review inputs use the existing unsigned input-binding convention;
+they do not replace the approved native contract, independent review, acknowledgment
+or producer chain. No key, signature, browser, protected installation, task/grant
+or new candidate was created. No completed serving/restart tests were repeated.
+See `docs/verification/FROZEN_BACKEND_REVIEW_INPUTS_2026_11_13.json`.

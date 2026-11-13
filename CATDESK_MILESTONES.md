@@ -10372,3 +10372,20 @@ SOURCE_IMPLEMENTED/SOURCE_TESTED only; it is not in the installed binary or the
 retained d22 candidate. No redundant release artifact was built. Protected
 migration and real Web checkpoint/self-Wake acceptance remain open. Evidence:
 `docs/verification/CONTROLLED_RESTART_AND_WAKE_STATUS_EVIDENCE_2026_11_13.json`.
+
+
+### 2026-11-13 UTC — Exact candidate source collected for independent review
+
+Prepared a frozen intake for the retained d22 backend candidate without rebuilding
+or executing it. Verified all 476 committed source files against build provenance
+and recovered all 476 exact raw build inputs, including 217 compiler-reported
+inputs. Committed and checkout bytes remain distinct; two mixed-line-ending test
+files were accepted only after exact frozen raw and normalized hash matches. A
+second readback passed. The failed initial collection and partial outputs remain
+preserved. Current source and the candidate checksum are unchanged.
+
+This is unsigned input binding only. No native review contract was approved,
+independent verdict supplied, record acknowledged, producer attested or release
+authorized. The existing review/producer chain and one pending operator root
+comparison remain required. No task, browser, service or protected operation ran.
+Evidence: `docs/verification/FROZEN_BACKEND_REVIEW_INPUTS_2026_11_13.json`.

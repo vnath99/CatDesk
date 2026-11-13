@@ -1421,3 +1421,15 @@ failed-release rollback or persistent supervisor. The new source status-file
 qualifier is not in the retained d22 artifact; that artifact remains review/
 producer-gated at its exact original bytes. No promotion, rebuild or protected
 Wake change occurred. See the controlled-restart/Wake-status evidence record.
+
+
+### 2026-11-13 — Frozen unsigned backend review inputs
+
+The retained d22 candidate now has exact committed-source and raw build-input
+snapshots with second readback (476 files, 217 compiler inputs). They exclude
+later source changes and bind the existing candidate checksum/provenance. This
+collection is not an approved native contract or completed review. Only genuine
+independent evidence admitted through the existing acknowledgment/source-snapshot
+and reviewed-build producer chain can advance authority. Do not install from
+these unsigned intake files or treat the preserved initial collection failure
+as a reason to rewrite any source/fingerprint. See the frozen-review-input record.

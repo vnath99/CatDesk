@@ -7785,3 +7785,14 @@ can lack this qualifier; use their timestamp/provenance and qualified owner
 checks rather than treating cached RUNNING or SUBMITTING fields as live facts.
 Controlled public backend stop/start passed separately; automatic rollback and
 unattended serving remain unqualified. See the restart/status verification record.
+
+
+### 2026-11-13 — Review the candidate's frozen source
+
+For retained d22 candidate review, use its frozen committed-source and exact raw
+build-input snapshots referenced in the private handoff. The current branch has
+advanced and must not be relabeled as that binary's source. The intake is unsigned
+and supplies no approved contract, acknowledgment or producer authority. Keep the
+existing reviewed-build commands and their real record/token prerequisites; do
+not invent identifiers, rerun consumed producers or install from the intake.
+See `FROZEN_BACKEND_REVIEW_INPUTS_2026_11_13.json` for evidence and limitations.
