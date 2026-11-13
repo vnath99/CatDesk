@@ -7773,3 +7773,15 @@ product type to accommodate a stale caller. The qualified window passed actual
 readiness, one v5 status call, 401/401 authentication rejection and cleanup; it did
 not enable indefinite serving or qualify Web task execution. See the pipeline
 verification record and private handoff for the exact frozen test identities.
+
+
+### 2026-11-13 — Status-file fields are not live host authority
+
+In qualified source, `independentWake.observation` labels status-file evidence
+and age; `liveProcessVerified` is false even for RECENT_STATUS_FILE. Stale,
+future, invalid and unavailable-clock categories must not authorize starts,
+resends, binding changes or clearing unknown outcomes. Older installed binaries
+can lack this qualifier; use their timestamp/provenance and qualified owner
+checks rather than treating cached RUNNING or SUBMITTING fields as live facts.
+Controlled public backend stop/start passed separately; automatic rollback and
+unattended serving remain unqualified. See the restart/status verification record.

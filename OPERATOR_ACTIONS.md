@@ -1142,3 +1142,12 @@ test, preserving all task/profile state. No new operator request is added; the
 one pending expiry-aware root comparison remains necessary for protected Wake
 migration. Do not restart recurring services or replay old Web requests on the
 strength of this status result. See the current pipeline verification record.
+
+
+## 2026-11-13 UTC — Controlled restart passed; no new operator request
+
+Existing-backend stop/start, authenticated health and cleanup are qualified.
+The new read-only Wake status qualifier is source-tested, not installed. The
+one already supplied operator root comparison remains pending before fresh
+Wake signing inputs. Do not rerun old collectors, sign expired packets or infer
+current host liveness from historical status. No additional action is requested.

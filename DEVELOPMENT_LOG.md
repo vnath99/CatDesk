@@ -4313,3 +4313,20 @@ self-Wake remain separate gates. The pending operator-view comparison is unchang
 do not retry old collectors or sign expired inputs. New backend candidate review/
 producer authority remains required. Evidence:
 `docs/verification/EXISTING_PIPELINE_CONNECTOR_ACCEPTANCE_2026_11_13.json`.
+
+
+### 2026-11-13 UTC — Installed restart and read-only status evidence
+
+Qualified a controlled restart of the unchanged installed backend with two
+actual process instances, authenticated health, 401/401 bearer rejection and
+complete cleanup/state preservation. The second instance followed confirmed
+first-instance exit. No connector or original Web task was retried.
+
+Fixed the observed source diagnostic gap in transport_status_payload: raw Wake
+status-file fields now carry an observation qualifier and age. A recent file
+still explicitly does not verify process liveness. Future/missing timestamps
+remain uncertain; historical status is preserved. Six targeted tests and strict
+Clippy passed with the source hash stable; rustfmt/diff checks passed. The new
+code is uninstalled and does not alter any approval or execution gate. Existing
+d22 and Wake artifacts retain their exact origins. See the controlled-restart/
+Wake-status verification record for actual timestamps, hashes and scope limits.

@@ -1410,3 +1410,14 @@ already qualified namespaced runner; this did not change product trust or releas
 authority. This evidence is not a substitute for candidate review, protected
 migration, rollback or real Web task acceptance. See
 `docs/verification/EXISTING_PIPELINE_CONNECTOR_ACCEPTANCE_2026_11_13.json`.
+
+
+### 2026-11-13 — Existing-backend controlled restart qualified
+
+Two public start/stop cycles proved ordered old-instance exit and fresh-instance
+creation, authenticated MCP, unauthorized-request rejection and cleanup while
+retaining the canonical pair and all project state. This does not qualify a
+failed-release rollback or persistent supervisor. The new source status-file
+qualifier is not in the retained d22 artifact; that artifact remains review/
+producer-gated at its exact original bytes. No promotion, rebuild or protected
+Wake change occurred. See the controlled-restart/Wake-status evidence record.

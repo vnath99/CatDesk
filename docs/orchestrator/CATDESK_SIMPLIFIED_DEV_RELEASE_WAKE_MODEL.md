@@ -3028,3 +3028,14 @@ installation. The original profile remained unchanged. CONFIGURED_UNVERIFIED and
 unproven Web authorization remain explicit; no project work or self-Wake occurred.
 Protected migration, candidate release authority and unattended serving remain
 separate. Evidence: `docs/verification/EXISTING_PIPELINE_CONNECTOR_ACCEPTANCE_2026_11_13.json`.
+
+
+### 2026-11-13 — Restart and status evidence remain distinct
+
+Controlled restart of the existing installed backend passed with new process
+identity, authenticated health and preservation. A source-only transport status
+qualifier now labels Wake heartbeat age and uncertainty without acquiring a
+lease or claiming live process proof. It is not an installer, recovery owner or
+new release authority. Protected migration, binary rollback and actual Web
+project work/self-Wake still require their own acceptance. See the current
+controlled-restart/Wake-status verification record.

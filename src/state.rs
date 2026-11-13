@@ -945,6 +945,77 @@ fn now_hms() -> String {
     format!("{h:02}:{m:02}:{s:02}")
 }
 
+fn independent_wake_status_observation(
+    updated_utc: u64,
+    observed_utc: Option<u64>,
+) -> serde_json::Value {
+    // Match runtime::status's ten-second heartbeat window for presentation.
+    // Reading this file never acquires the host lease or verifies a process;
+    // even a recent heartbeat must not become live execution authority.
+    let age = observed_utc.and_then(|now| now.checked_sub(updated_utc));
+    let state = if updated_utc == 0 {
+        "INVALID_STATUS_TIMESTAMP"
+    } else if observed_utc.is_none() {
+        "OBSERVATION_TIME_UNAVAILABLE"
+    } else if age.is_none() {
+        "FUTURE_STATUS_TIMESTAMP"
+    } else if age.is_some_and(|seconds| seconds > 10) {
+        "STALE_STATUS_FILE"
+    } else {
+        "RECENT_STATUS_FILE"
+    };
+    serde_json::json!({
+        "source": "STATUS_FILE_ONLY",
+        "state": state,
+        "observedUtcSeconds": observed_utc,
+        "reportedUpdatedUtcSeconds": updated_utc,
+        "ageSeconds": if updated_utc == 0 { None } else { age },
+        "liveProcessVerified": false,
+    })
+}
+
+#[cfg(test)]
+mod independent_wake_status_observation_tests {
+    use super::independent_wake_status_observation;
+
+    #[test]
+    fn historical_and_recent_status_files_never_prove_host_liveness() {
+        for (updated, now, state) in [
+            (100, 100, "RECENT_STATUS_FILE"),
+            (100, 110, "RECENT_STATUS_FILE"),
+            (100, 111, "STALE_STATUS_FILE"),
+            (100, 2_000_000, "STALE_STATUS_FILE"),
+        ] {
+            let observation = independent_wake_status_observation(updated, Some(now));
+            assert_eq!(observation["state"], state);
+            assert_eq!(observation["source"], "STATUS_FILE_ONLY");
+            assert_eq!(observation["ageSeconds"], now - updated);
+            assert_eq!(observation["liveProcessVerified"], false);
+        }
+    }
+
+    #[test]
+    fn future_or_unavailable_clock_does_not_make_a_heartbeat_recent() {
+        for (now, state) in [
+            (Some(99), "FUTURE_STATUS_TIMESTAMP"),
+            (None, "OBSERVATION_TIME_UNAVAILABLE"),
+        ] {
+            let observation = independent_wake_status_observation(100, now);
+            assert_eq!(observation["state"], state);
+            assert!(observation["ageSeconds"].is_null());
+            assert_eq!(observation["liveProcessVerified"], false);
+        }
+    }
+
+    #[test]
+    fn missing_heartbeat_timestamp_has_no_invented_age() {
+        let observation = independent_wake_status_observation(0, Some(100));
+        assert_eq!(observation["state"], "INVALID_STATUS_TIMESTAMP");
+        assert!(observation["ageSeconds"].is_null());
+        assert_eq!(observation["liveProcessVerified"], false);
+    }
+}
+
 fn now_unix_millis() -> u128 {
     SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
@@ -1494,6 +1565,13 @@ impl AppState {
             match serde_json::from_slice::<catdesk_wake::runtime::Status>(&bytes) {
                 Ok(status) => serde_json::json!({
                     "available": true,
+                    "observation": independent_wake_status_observation(
+                        status.updated_utc,
+                        SystemTime::now()
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .ok()
+                            .map(|elapsed| elapsed.as_secs()),
+                    ),
                     "status": status,
                 }),
                 Err(_) => serde_json::json!({

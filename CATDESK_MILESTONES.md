@@ -10351,3 +10351,24 @@ self-Wake remain separate gates. The pending operator-view comparison is unchang
 do not retry old collectors or sign expired inputs. New backend candidate review/
 producer authority remains required. Evidence:
 `docs/verification/EXISTING_PIPELINE_CONNECTOR_ACCEPTANCE_2026_11_13.json`.
+
+
+### 2026-11-13 UTC — Controlled installed restart; source Wake-status qualifier
+
+The existing verified backend passed two public startup/health/stop cycles under
+one 180-second owner (10:40:04Z–10:40:39Z). The second process instance was created
+after the first stopped. Both passed authenticated MCP and returned 401 for
+missing/wrong bearer. Each preserved all 1,685 pins, task inventory and profile
+identities; the final listener/daemon inventory was empty. This is installed
+controlled stop/start acceptance, not crash recovery, automatic supervision or
+binary rollback. No Wake, browser, tunnel or project task started.
+
+The live connector evidence exposed an unqualified historical Wake status.
+Source now adds status-file provenance, heartbeat age, stale/future/unavailable
+and invalid timestamp categories, always with liveProcessVerified=false. It
+preserves history and grants no authority. Three new regressions, three existing
+transport-status tests, strict Clippy and formatting passed. This qualifier is
+SOURCE_IMPLEMENTED/SOURCE_TESTED only; it is not in the installed binary or the
+retained d22 candidate. No redundant release artifact was built. Protected
+migration and real Web checkpoint/self-Wake acceptance remain open. Evidence:
+`docs/verification/CONTROLLED_RESTART_AND_WAKE_STATUS_EVIDENCE_2026_11_13.json`.
