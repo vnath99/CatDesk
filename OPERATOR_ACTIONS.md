@@ -1120,3 +1120,15 @@ no replacement tunnel/authentication or recurring automation is authorized by a
 green build. The source candidate needs its own genuine independent canonical
 review/producer authority. One operator-view request remains pending; do not repeat
 it or sign the expired Wake proposal.
+
+
+## 2026-11-13 UTC — Local backend health independently verified
+
+The existing installed backend now has bounded startup/authenticated MCP/stop
+evidence, including 102 local tools and the central dispatcher. It was returned
+to its initial stopped state; no recurring owner was enabled. This does not clear
+the Wake-root mismatch or qualify the external connector. No new operator request
+is added. Keep the one existing expiry-aware environment comparison pending; do
+not rerun the old collector or sign the expired packet. Existing official-owner
+qualification and missing release-review evidence can proceed independently.
+See `docs/verification/EXISTING_BACKEND_BOUNDED_HEALTH_2026_11_13.json`.

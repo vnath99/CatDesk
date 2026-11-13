@@ -4241,3 +4241,39 @@ binaries, create a tunnel or change authentication. The new candidate's independ
 review/producer requirements remain open. Operator root reconciliation and actual
 Web/multi-project acceptance remain separate. Evidence:
 `docs/verification/BACKEND_CANDIDATE_AND_CURRENT_LAYERS_2026_11_13.json`.
+
+
+### 2026-11-13 UTC — Existing installed backend passed bounded lifecycle health
+
+The existing verified canonical binary, SHA256
+`0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901`,
+passed public `catdesk.ps1 start -BackendOnly`, local authenticated MCP initialize/
+catalog, and public `catdesk.ps1 stop`. The 180-second contained test ran from
+02:50:33Z to 02:50:57Z, exiting normally without timeout or termination failure.
+It proved exact launched-process identity before shutdown. The final listener and
+daemon inventories were empty, restoring the initial stopped state. All 1,685
+preservation pins, task inventory and authenticated-profile directory identities
+matched. No Wake, browser, tunnel, project task or message was started.
+
+Actual local configuration used bearer authentication. The installed local catalog
+contained 102 tools, including `catdesk_web_task_tool`, `catdesk_web_work_request`
+and `catdesk_web_work_resolve`. This is current local-server publication evidence;
+it does not establish the catalog or successful execution in any ChatGPT Web chat.
+Negative bearer requests and controlled restart were not part of this test. The
+separate official runtime was not started or verified, and the earlier upstream
+429 was not retried. The new d22 candidate remains built, uninstalled and subject
+to genuine independent canonical review and the existing producer chain.
+
+The old collector's `FIXED_DIRECT_WAKE_ROOT_IDENTITY_CHANGED` refusal is a native
+directory-identity check, not a PowerShell-version or wrapper-hash failure. Exact
+frozen source order and absent packet directory confirm it stopped before packet
+writes. No recorded identity was rewritten. The already supplied expiry-aware
+operator comparison remains the one external prerequisite before fresh Wake
+inputs; the expired proposal must not be signed or blindly rerun.
+
+This is LIVE_ACCEPTED only for the existing local backend startup/health/stop
+scope. Protected Wake migration, installed update/rollback, genuine Web work and
+self-Wake, and two-project acceptance remain open. Next independent operation is
+qualification of the existing official runtime owner against current identities;
+do not execute stale consumed wrappers, create a tunnel or change authentication.
+Evidence: `docs/verification/EXISTING_BACKEND_BOUNDED_HEALTH_2026_11_13.json`.
