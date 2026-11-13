@@ -2952,3 +2952,32 @@ new canonical-backend build, independent release review and installed acceptance
 remain separate gates. The one required operator-view JSON is still pending; no
 operator action was repeated. Evidence:
 `docs/verification/GIT_CLEANUP_ERROR_PRIORITY_2026_11_13.json`.
+
+### 2026-11-13 UTC — Backend candidate built; current serving layers diagnosed
+
+Exact source `d22e96ca8df48786737ca0a7b78e3e7439531e5a` built a separate
+locked/offline release backend candidate, SHA256
+`625feffdd31dfaa33a22c15f91b4b5d1560074be71eedcc0586e771b79896ab1`.
+Actual compiler dependencies and committed/raw source hashes were retained and
+rechecked. Build ownership closed normally with zero compilers left. The candidate
+is BUILT only: it was not executed, independently reviewed for the whole canonical
+backend, producer-attested or installed. Existing Wake artifacts and development
+selection were preserved; no redundant Host/broker build occurred.
+
+One v5 transport-status request returned exactly `MCP SSE probe returned 429 from
+openai.org`; no correlation ID was supplied and no second connector call occurred.
+Separately, supported read-only `catdesk.ps1 diagnose` reported canonical release,
+lifecycle engine and local MCP configuration READY; LOCAL_DAEMON failed with
+LOCAL_MCP_LISTENER_MISSING, and OFFICIAL_RUNTIME failed RUNTIME_STATUS_NOT_READY.
+Local MCP protocol was untested because its listener was absent. WAKE_RUNTIME
+readiness does not establish that the proposed broker migration is installed.
+No daemon, official runtime, browser or protected installer was started.
+
+Next independently eligible operational work is qualified bounded startup/health/
+stop of the existing trusted installed backend through its public lifecycle, with
+exact identity/owner gates. Existing official-owner preflight is separate and must
+pass before any bounded reconnect; do not run consumed wrappers pinned to obsolete
+binaries, create a tunnel or change authentication. The new candidate's independent
+review/producer requirements remain open. Operator root reconciliation and actual
+Web/multi-project acceptance remain separate. Evidence:
+`docs/verification/BACKEND_CANDIDATE_AND_CURRENT_LAYERS_2026_11_13.json`.

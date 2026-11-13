@@ -1104,3 +1104,19 @@ artifacts and development qualification remain retained; installation, routine
 unsigned updates and actual Web edit/checkpoint/verification/self-Wake are not
 accepted until their own evidence exists. CatDesk's existing public-repository
 exception remains; other projects' private data must not be published.
+
+
+## 2026-11-13 UTC — Current backend layers and independent work
+
+The separate d22 backend candidate is BUILT, not reviewed/installed/live-accepted.
+The existing installed release/config passed public read-only diagnosis, but its
+daemon listener is absent and official runtime is not ready. The one connector
+probe returned upstream429; local listener absence was established separately.
+Do not repeat that probe without a meaningful dependency change. Prepare qualified
+bounded public backend startup/health/stop using the existing trusted installation;
+operator Wake-root reconciliation does not block that independent operation.
+Current identities/leases and existing official-owner checks remain mandatory;
+no replacement tunnel/authentication or recurring automation is authorized by a
+green build. The source candidate needs its own genuine independent canonical
+review/producer authority. One operator-view request remains pending; do not repeat
+it or sign the expired Wake proposal.
