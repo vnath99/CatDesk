@@ -258,17 +258,29 @@ fn git_process(
         }
         owned_child.wait().is_ok()
     };
-    let bytes = reader
-        .join()
-        .map_err(|_| "PROJECT_TASK_GIT_OUTCOME_UNKNOWN")?
-        .map_err(|_| "PROJECT_TASK_GIT_OUTCOME_UNKNOWN")?;
-    if !cleanup {
-        return Err("PROJECT_TASK_GIT_CLEANUP_UNPROVEN".into());
-    }
+    let bytes = after_git_cleanup(cleanup, || {
+        reader
+            .join()
+            .map_err(|_| "PROJECT_TASK_GIT_OUTCOME_UNKNOWN".to_owned())?
+            .map_err(|_| "PROJECT_TASK_GIT_OUTCOME_UNKNOWN".to_owned())
+    })?;
     if bytes.len() > 1024 * 1024 || !status.is_some_and(|s| s.success()) {
         return Err("PROJECT_TASK_GIT_OUTCOME_UNKNOWN".into());
     }
     Ok(bytes)
+}
+
+fn after_git_cleanup(
+    cleanup_proved: bool,
+    readback: impl FnOnce() -> Result<Vec<u8>, String>,
+) -> Result<Vec<u8>, String> {
+    // An unproved tree exit must retain the task's writer fence even when
+    // readback also fails. Do not join a pipe reader that may still have a
+    // surviving writer; the cleanup refusal takes precedence.
+    if !cleanup_proved {
+        return Err("PROJECT_TASK_GIT_CLEANUP_UNPROVEN".into());
+    }
+    readback()
 }
 fn text(root: &Path, args: &[&str], index: Option<&Path>) -> Result<String, String> {
     String::from_utf8(git(root, args, index, 10)?)
@@ -1253,6 +1265,29 @@ pub(super) fn recovery_snapshot(
 #[cfg(all(test, windows))]
 pub(super) mod tests {
     use super::*;
+
+    #[test]
+    fn task_git_cleanup_unproved_precedes_readback_and_does_not_wait_for_it() {
+        let called = std::cell::Cell::new(false);
+        let result = after_git_cleanup(false, || {
+            called.set(true);
+            panic!("unproved cleanup must not wait for a potentially blocked pipe reader");
+        });
+        assert_eq!(result.unwrap_err(), "PROJECT_TASK_GIT_CLEANUP_UNPROVEN");
+        assert!(!called.get());
+    }
+
+    #[test]
+    fn task_git_cleanup_proved_preserves_stdout_and_readback_failure() {
+        assert_eq!(
+            after_git_cleanup(true, || Ok(b"exact receipt".to_vec())).unwrap(),
+            b"exact receipt"
+        );
+        assert_eq!(
+            after_git_cleanup(true, || Err("PROJECT_TASK_GIT_OUTCOME_UNKNOWN".into())).unwrap_err(),
+            "PROJECT_TASK_GIT_OUTCOME_UNKNOWN"
+        );
+    }
 
     pub(in crate::project_mcp_task) struct Fixture {
         pub(in crate::project_mcp_task) scope: ResolvedProjectScopeV1,

@@ -4191,3 +4191,24 @@ existing issuer and explicit one-time delegation approval. The expired packet is
 retained, never overwritten or signed. No browser/service/tunnel/task started.
 The dated verification record separates tested diagnostic source from actual
 operator observation, protected installation and live Web acceptance.
+
+### 2026-11-13 UTC — Git cleanup refusal retains precedence
+
+Source review found a concrete error-ordering defect in the task-scoped Git
+runner: stdout readback failure could hide unproved process cleanup before an
+intent existed. That secondary error could let the journal/writer fence close.
+The runner now preserves CLEANUP_UNPROVEN before joining the pipe reader. Existing
+task callers retain their uncertain-state and no-replay protection on that refusal.
+
+All twelve task-Git regressions passed, including two new cleanup/readback cases
+and the existing writer-retention/unknown-push tests. Strict Clippy passed. The
+initial formatting refusal and subsequent test-layout-only correction are retained
+in the evidence; production bytes did not change after the test run. No live
+cleanup failure, browser, service, original task or protected operation was induced.
+
+This closes the reviewed source defect only. No release artifact was rebuilt or
+installed; retained runtime artifacts keep their actual source0d6 provenance. A
+new canonical-backend build, independent release review and installed acceptance
+remain separate gates. The one required operator-view JSON is still pending; no
+operator action was repeated. Evidence:
+`docs/verification/GIT_CLEANUP_ERROR_PRIORITY_2026_11_13.json`.
