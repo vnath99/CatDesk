@@ -989,6 +989,18 @@ but independent review, ACK and producer authority remain outstanding. Its exact
 work-start authorization is separate from any verdict or release approval. See
 `docs/verification/INDEPENDENT_REVIEW_AND_DIRECT_WEB_TRACKS_2026_11_13.json`.
 
+November 13 source adds `startReadiness` while retaining validation's `valid` and
+`contractHash`. Schema validity is not live lease or start permission. The added
+diagnostic distinguishes future/expired leases, unavailable session state, exact
+approval, inactive state and contract-level readiness; it never verifies runtime
+admission. Missing session files keep the existing refusal. This is source-tested,
+not installed: older qualified binaries still require direct frozen-lease checks.
+Late approval cannot resurrect an expired nonrenewable contract. Retain consent
+and history; use supported cancellation and a newly authorized successor only
+after downstream admission. Actual November 13 no-send preflight refused
+WEB_REVIEW_HOST_NOT_STOPPED, so no replacement approval was requested. See the
+approved-review lease/start-readiness verification record.
+
 ### 3. Build separately through the reviewed producer
 
 ```text

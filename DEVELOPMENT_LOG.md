@@ -4379,3 +4379,29 @@ Git command or out-of-band commit evaded task fences. Completed serving/restart/
 connector evidence remains valid. No source regression suite was repeated for
 these documentation and contract-preparation changes. The dated independent-tracks
 record contains exact proof hashes, preservation exceptions and remaining gates.
+
+### 2026-11-13 UTC — Exact consent retained; contract start-readiness gap repaired
+
+Both user answers arrived; only the source-bound contract is relevant. Its lease
+had expired before the first post-answer check and cannot renew. Retained exact
+bytes and approval evidence; no expired claim, carrier reuse or substitute hash.
+
+The validation API previously returned valid=true for an expired but structurally
+valid contract without explaining its start refusal. Added read-only startReadiness
+while preserving valid/contractHash. No lease, approval or execution gate changed.
+Corrupt state cannot report CONTRACT_READY, and missing state retains the existing
+contract-unavailable error. Three new tests cover clock boundaries, no mutation,
+exact approval, terminal state, malformed state and missing-session refusal. Two
+existing approval/capability regressions and strict main Clippy passed. A negative
+test initially assumed that missing state would permit schema validation; its
+failure correctly exposed the existing guard. Corrected that test expectation and
+retained the failed run rather than altering the guard.
+
+The qualified installed controller's no-send review preflight refused
+WEB_REVIEW_HOST_NOT_STOPPED before grant admission. Selected intent RUNNING differs
+from the subsequent zero-Host process observation; protected bytes were preserved.
+All 1,685 checks matched. The first private harness stopped before product invocation
+due to its snapshot helper's relative-directory requirement; the separate corrected
+successor retained capture logs. No browser, service, grant or delivery started.
+No new contract/card is prepared while the route is known blocked. The approved
+review readiness record contains exact source/proof hashes and next prerequisites.

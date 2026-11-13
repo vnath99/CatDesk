@@ -10425,3 +10425,36 @@ the original raw-pin failure remains recorded. No browser, Wake, tunnel, recurri
 automation, candidate execution, protected installation or release change occurred.
 Real Web edit/checkpoint/self-Wake and independent second-project acceptance remain
 open. Evidence: `docs/verification/INDEPENDENT_REVIEW_AND_DIRECT_WEB_TRACKS_2026_11_13.json`.
+
+### 2026-11-13 UTC — Approval received; expired lease and host intent distinguished
+
+The exact source-bound work authorization arrived after its unchanged,
+nonrenewable lease expired at 14:13:09 UTC (09:13:09 Eastern). User consent is
+retained; native approval/claim was not applied to a known expired session.
+Neither frozen contract was renewed, edited, claimed or replaced. The older
+carrier remains superseded. No replacement approval is requested while delivery
+admission is blocked.
+
+One bounded, no-send preflight returned WEB_REVIEW_HOST_NOT_STOPPED. Selected
+control has schema 1 and desired RUNNING, but a separate process observation
+found zero WakeHost processes. Intent is not live-owner proof; protected state
+was not changed to make the guard pass. All 1,685 pins, task inventory and profile
+identities matched. No grant, task, message, browser or service was created. Full
+route/grant admission remains unproved. A preliminary private probe stopped before
+product invocation because the snapshot helper required a sibling output directory;
+the corrected successor and original refusal are retained.
+
+Separately authorized development adds read-only startReadiness to contract
+validation, distinguishing valid schema/hash from a live lease, exact approval
+and ready session. Corrupt state stays unready; missing session files retain their
+existing refusal. Observation changes no lease, approval, queue or runtime gate
+and explicitly disclaims runtime admission. Three new tests and two existing
+approval/capability regressions passed with strict main Clippy, format and diff
+checks. This is SOURCE_IMPLEMENTED/SOURCE_TESTED only, not a built or installed
+release, independent review or live Web acceptance. The d22 candidate and prior
+installed backend/restart/authenticated MCP/connector results remain preserved.
+
+Next reconcile the already pending operator root comparison and intended host
+ownership. Once review is executable, use supported cancellation/history retention
+and a newly authorized source-bound successor; never extend expired bytes.
+Evidence: `docs/verification/APPROVED_REVIEW_LEASE_AND_START_READINESS_2026_11_13.json`.

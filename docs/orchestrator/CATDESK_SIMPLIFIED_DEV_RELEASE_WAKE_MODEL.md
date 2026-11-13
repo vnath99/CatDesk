@@ -3059,3 +3059,24 @@ Git capability gap. Neither erases accepted backend/restart/auth/connector evide
 A generic serving-workspace Git tool does not prove an assigned-worktree checkpoint.
 No browser, Wake, tunnel or recurring owner started. See the independent-tracks
 verification record for actual operations and the remaining authority gates.
+
+### 2026-11-13 UTC — Consent, contract validity and executable readiness differ
+
+Exact source-bound user approval arrived after the nonrenewable absolute lease
+expired. Original bytes and consent are retained; neither permits lease extension
+or another contract hash. Use the existing cancel/successor workflow only after
+real route admission. Do not ask for replacement consent while another known
+guard prevents execution.
+
+Actual no-send preflight refused WEB_REVIEW_HOST_NOT_STOPPED: desired RUNNING is
+distinct from a subsequent zero-Host process observation. Protected control was
+not reset. The pending root comparison must reconcile intended views/ownership;
+development selection cannot substitute. All previous installed serving/restart/
+authentication/connector acceptance remains valid for its recorded scope.
+
+Source validation adds startReadiness without mutating authority or relaxing a
+guard. Schema/hash validity remains separate from lease/session/approval readiness
+and from runtime admission, which is explicitly unverified. Corrupt state stays
+unready; missing session files retain the existing refusal. Focused tests and
+strict Clippy pass; no release was rebuilt or installed. Independent review and
+producer evidence remain outstanding. See the approved-review readiness record.

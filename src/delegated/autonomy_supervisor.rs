@@ -2735,9 +2735,51 @@ impl AutonomousSupervisorV1 {
     }
 
     fn validate_contract(&self, session_id: &str) -> Result<Value, String> {
+        self.validate_contract_at(session_id, now_unix())
+    }
+
+    fn validate_contract_at(&self, session_id: &str, observed_at: u64) -> Result<Value, String> {
         let contract = self.load_policy(session_id)?;
         self.validate_graph_materialization(session_id, &contract)?;
-        Ok(json!({"valid":true,"contractHash":contract.contract_hash()}))
+        let snapshot = self.snapshot(session_id).ok();
+        let lease = &contract.contract().autonomy_lease;
+        let approval_required =
+            lease.start_approval_required || contract.contract().is_direct_chatgpt();
+        let approval_matches = snapshot.as_ref().is_some_and(|state| {
+            state.approved_contract_hash.as_deref() == Some(contract.contract_hash())
+        });
+        let readiness = if observed_at < lease.issued_at_unix {
+            "LEASE_NOT_YET_VALID"
+        } else if !lease.valid_at(observed_at) {
+            "LEASE_EXPIRED"
+        } else if snapshot.is_none() {
+            "SESSION_STATE_UNAVAILABLE"
+        } else if snapshot.as_ref().is_some_and(|state| {
+            !state.active
+                || !matches!(
+                    state.state,
+                    AutonomousSessionStateV1::Draft | AutonomousSessionStateV1::Queued
+                )
+        }) {
+            "SESSION_NOT_READY"
+        } else if approval_required && !approval_matches {
+            "APPROVAL_REQUIRED"
+        } else if snapshot
+            .as_ref()
+            .is_some_and(|state| state.state != AutonomousSessionStateV1::Queued)
+        {
+            "SESSION_NOT_READY"
+        } else {
+            "CONTRACT_READY"
+        };
+        // Schema/hash validity is not permission to claim an expired session.
+        // This observation changes no lease, approval, queue or runtime gate.
+        Ok(json!({"valid":true,"contractHash":contract.contract_hash(),
+            "startReadiness":{"state":readiness,"observedAtUnix":observed_at,
+                "leaseValid":lease.valid_at(observed_at),"leaseExpiresAtUnix":lease.expires_at_unix,
+                "leaseRenewalAllowed":lease.renewal_allowed,"approvalMatchesContract":approval_matches,
+                "sessionStateAvailable":snapshot.is_some(),
+                "basis":"CONTRACT_AND_SESSION_ONLY","runtimeAdmissionVerified":false}}))
     }
 
     fn approve(
@@ -4548,6 +4590,127 @@ mod tests {
         );
         assert!(store.all_review_inbox().unwrap().is_empty());
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn contract_start_readiness_distinguishes_valid_hash_from_expired_lease_without_mutation() {
+        let root = std::env::temp_dir().join(format!("catdesk-lease-readiness-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        let created = handle_tool(
+            "autonomy_contract_create",
+            json!({"contract":contract(&root)}),
+            &root,
+        )
+        .unwrap();
+        let supervisor = AutonomousSupervisorV1::open(&root).unwrap();
+        let session = root.join(".catdesk/autonomy/session-1");
+        let before_contract = fs::read(session.join("contract.json")).unwrap();
+        let before_state = fs::read(session.join("state.json")).unwrap();
+        for (at, expected) in [
+            (0, "LEASE_NOT_YET_VALID"),
+            (1, "APPROVAL_REQUIRED"),
+            (99, "APPROVAL_REQUIRED"),
+            (100, "LEASE_EXPIRED"),
+            (101, "LEASE_EXPIRED"),
+        ] {
+            let result = supervisor.validate_contract_at("session-1", at).unwrap();
+            assert_eq!(result["valid"], true);
+            assert_eq!(result["contractHash"], created["contractHash"]);
+            assert_eq!(result["startReadiness"]["state"], expected);
+            assert_eq!(
+                result["startReadiness"]["leaseValid"],
+                (1..100).contains(&at)
+            );
+            assert_eq!(result["startReadiness"]["runtimeAdmissionVerified"], false);
+        }
+        let live = handle_tool(
+            "autonomy_contract_validate",
+            json!({"sessionId":"session-1"}),
+            &root,
+        )
+        .unwrap();
+        assert_eq!(live["startReadiness"]["state"], "LEASE_EXPIRED");
+        assert_eq!(
+            fs::read(session.join("contract.json")).unwrap(),
+            before_contract
+        );
+        assert_eq!(fs::read(session.join("state.json")).unwrap(), before_state);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn contract_start_readiness_requires_exact_approval_and_queued_active_state() {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-approval-readiness-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        let created = handle_tool(
+            "autonomy_contract_create",
+            json!({"contract":contract(&root)}),
+            &root,
+        )
+        .unwrap();
+        handle_tool(
+            "autonomy_contract_approve",
+            json!({"sessionId":"session-1","expectedStateVersion":1,
+            "idempotencyKey":"readiness-approval","approvalId":"fixture-approval",
+            "decisionHash":created["contractHash"]}),
+            &root,
+        )
+        .unwrap();
+        let supervisor = AutonomousSupervisorV1::open(&root).unwrap();
+        let ready = supervisor.validate_contract_at("session-1", 20).unwrap();
+        assert_eq!(ready["startReadiness"]["state"], "CONTRACT_READY");
+        assert_eq!(ready["startReadiness"]["runtimeAdmissionVerified"], false);
+        let mut state = supervisor.store.load_session("session-1").unwrap();
+        state.approved_contract_hash = Some("different-contract".into());
+        supervisor.store.save_session(&state).unwrap();
+        assert_eq!(
+            supervisor.validate_contract_at("session-1", 20).unwrap()["startReadiness"]["state"],
+            "APPROVAL_REQUIRED"
+        );
+        state.approved_contract_hash = created["contractHash"].as_str().map(str::to_owned);
+        state.state = AutonomousSessionStateV1::Cancelled;
+        state.active = false;
+        supervisor.store.save_session(&state).unwrap();
+        assert_eq!(
+            supervisor.validate_contract_at("session-1", 20).unwrap()["startReadiness"]["state"],
+            "SESSION_NOT_READY"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn contract_start_readiness_preserves_corrupt_state_diagnosis_and_missing_session_refusal() {
+        let root = std::env::temp_dir().join(format!("catdesk-state-readiness-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        let created = handle_tool(
+            "autonomy_contract_create",
+            json!({"contract":contract(&root)}),
+            &root,
+        )
+        .unwrap();
+        let supervisor = AutonomousSupervisorV1::open(&root).unwrap();
+        let state = root.join(".catdesk/autonomy/session-1/state.json");
+        fs::write(&state, b"malformed fixture state").unwrap();
+        let result = supervisor.validate_contract_at("session-1", 20).unwrap();
+        assert_eq!(result["valid"], true);
+        assert_eq!(result["contractHash"], created["contractHash"]);
+        assert_eq!(
+            result["startReadiness"]["state"],
+            "SESSION_STATE_UNAVAILABLE"
+        );
+        assert_eq!(result["startReadiness"]["approvalMatchesContract"], false);
+        assert_eq!(result["startReadiness"]["sessionStateAvailable"], false);
+        assert_eq!(result["startReadiness"]["runtimeAdmissionVerified"], false);
+        fs::remove_file(&state).unwrap();
+        assert_eq!(
+            supervisor
+                .validate_contract_at("session-1", 20)
+                .unwrap_err(),
+            "autonomous contract is unavailable"
+        );
+        assert!(!state.exists());
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

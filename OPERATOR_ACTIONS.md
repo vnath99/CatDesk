@@ -1172,3 +1172,19 @@ is not sufficient. Reconcile authority first, qualify that scope once after its
 prerequisite changes, then admit a new task when its full path is executable.
 Preserve every uncertain historical delivery. No periodic retry is scheduled.
 See `docs/verification/INDEPENDENT_REVIEW_AND_DIRECT_WEB_TRACKS_2026_11_13.json`.
+
+## 2026-11-13 UTC — Review approvals received; do not repeat the cards
+
+The source-bound answer was received, but its nonrenewable lease expired before
+the post-answer check. Preserve exact bytes and consent evidence. Do not claim,
+renew or silently substitute another hash. The older carrier remains unclaimed.
+
+No-send review preflight also returned WEB_REVIEW_HOST_NOT_STOPPED. Its selected
+control says RUNNING; zero observed Host processes does not authorize rewriting
+intent or changing an unverified owner. Do not request another approval while
+this admission guard is unresolved. The already requested operator root comparison
+remains the prerequisite to reconciling protected views/ownership; no new command
+or signature request is added. After actual admission, use the documented
+cancellation/successor path with retained history and genuine work authorization.
+The new source readiness diagnostic is tested but uninstalled. See the approved
+review lease/start-readiness verification record.
