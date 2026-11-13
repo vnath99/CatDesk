@@ -4172,3 +4172,22 @@ edit/verify/checkpoint/delivered self-Wake cycle remain open. This is developmen
 qualification, not installed acceptance. Exact hashes, audit times and scope are in
 `docs/verification/ROUTINE_UPDATE_ARTIFACTS_2026_11_11.json`. Documentation-only
 successors retain the artifact's actual source origin and require no rebuild.
+
+### 2026-11-13 UTC — Expiry-aware operator observation
+
+Read the new objective attachment and authoritative milestone/operator/model
+records. Local and remote development branch matched `1d6b224`. Found a specific
+remaining diagnostic defect: expired proposals were rejected before read-only root
+observation, creating an avoidable prerequisite loop. Prepared a successor of the
+existing private comparison, preserving the original frozen file and all packet
+bytes. Expired matches are now observable while signing eligibility remains false;
+unproven/mismatching observations fail closed. All native identity and authority
+checks are retained. Eight deterministic cases and parser/ordering checks passed,
+with zero native-reader calls. No application artifact rebuild was needed.
+
+Protected migration and Web acceptance remain incomplete. Request only the one
+intended elevated operator comparison; after reconciliation use fresh inputs,
+existing issuer and explicit one-time delegation approval. The expired packet is
+retained, never overwritten or signed. No browser/service/tunnel/task started.
+The dated verification record separates tested diagnostic source from actual
+operator observation, protected installation and live Web acceptance.

@@ -2915,3 +2915,19 @@ edit/verify/checkpoint/delivered self-Wake cycle remain open. This is developmen
 qualification, not installed acceptance. Exact hashes, audit times and scope are in
 `docs/verification/ROUTINE_UPDATE_ARTIFACTS_2026_11_11.json`. Documentation-only
 successors retain the artifact's actual source origin and require no rebuild.
+
+### 2026-11-13 UTC — Expiry-aware operator observation
+
+Signing expiry and retained-state observation are separate checks. Expiry forbids
+using the old proposal for authorization, but does not erase its recorded physical
+identity or prevent a read-only comparison. The comparison successor reports an
+expired matching observation explicitly and keeps signing eligibility false. It
+preserves the elevated-account requirement, original root/three-file checks,
+same-buffer SHA verification, native revalidation and redacted output.
+
+Do not renew timestamps or generate another signing request before reconciliation.
+A matching operator observation is not native bootstrap-preflight or delegation
+approval. After reconciliation revalidate current state and retained artifacts,
+prepare fresh inputs and obtain genuine one-time authorization through the
+existing issuer/native installer. Signed-only remains the installed default.
+This diagnostic-only correction needs no executable rebuild.

@@ -1073,7 +1073,7 @@ retained old unsigned packet does not block independent source work.
 |---|---|
 | Routine checkpoint/update source | PUBLISHED/DEV_QUALIFIED: source 0d6c1074, new exact artifacts and separate runtime/bootstrap reviews; bounded PAUSED/loopback health and normal development verification passed. No routine source build or operator decision is pending. |
 | Ordinary UAC caller eligibility | SOURCE_QUALIFIED: actual primary and production-QoS one-read pipe passed exact canonical-profile checks; further filtering and EffectiveOnly pipe were refused. Legacy signed/high admission is unchanged. Actual SYSTEM-service/medium-client operation remains an installed gate. |
-| One-time local-update enrollment | UNSIGNED_PROPOSAL_READY: exact new artifacts, separate genuine reviews and frozen raw preimage are prepared. Requires explicit one-time existing-issuer purpose signature and elevated native preflight; the ordinary-terminal root mismatch remains unresolved. The old packet/signature cannot authorize changed bytes or policy. No new signing identity was generated. |
+| One-time local-update enrollment | WAITING_FOR_OPERATOR: the retained proposal expired on November 12 at 04:33:04 UTC. Run the expiry-aware read-only operator comparison once; do not sign or refresh the expired packet. After reconciliation, revalidate artifacts/state and prepare fresh one-time inputs. The old packet/signature cannot authorize changed bytes or policy. No new signing identity was generated. |
 | Installed broker and Web acceptance | Requires that qualified installation, actual intended-account process/token access, protected select/rollback/startup and registered Web edit/verify/checkpoint/self-Wake evidence. Source and disposable-object tests do not close these gates. |
 | Original uncertain work | Preserve original assignments, grants, journals, delivery witnesses and history. Do not replay or replace held requests to demonstrate the new path. |
 
@@ -1091,3 +1091,16 @@ Clippy. The UAC source gap is closed for this current context; installed service
 readback and enrollment are still required. The remaining nondelegable input is the one-time purpose signature and native
 operator admission; no per-version signing decision is requested. Evidence:
 `docs/verification/ROUTINE_UPDATE_CHECKPOINT_SOURCE_2026_11_11.json`.
+
+## 2026-11-13 UTC — Expiry-aware operator observation
+
+The sole current operator prerequisite is one read-only comparison in the intended
+elevated PowerShell 7 environment, using the frozen successor and hash in the
+private handoff. The old command is superseded because expiry prevented identity
+observation. Return its redacted JSON once; no private context or credentials are
+needed. The successor cannot sign, install, change guards or overwrite state.
+Do not poll this unchanged dependency in subsequent turns. Existing tested/built
+artifacts and development qualification remain retained; installation, routine
+unsigned updates and actual Web edit/checkpoint/verification/self-Wake are not
+accepted until their own evidence exists. CatDesk's existing public-repository
+exception remains; other projects' private data must not be published.

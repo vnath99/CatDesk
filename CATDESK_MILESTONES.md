@@ -10205,3 +10205,27 @@ edit/verify/checkpoint/delivered self-Wake cycle remain open. This is developmen
 qualification, not installed acceptance. Exact hashes, audit times and scope are in
 `docs/verification/ROUTINE_UPDATE_ARTIFACTS_2026_11_11.json`. Documentation-only
 successors retain the artifact's actual source origin and require no rebuild.
+
+### 2026-11-13 UTC — Expiry-aware operator observation
+
+The resumed objective retains the protected migration and real Web cycle as the
+definition of done. Local/remote branch readback matched `1d6b224`; no completed
+build or runtime test was repeated. The old unsigned proposal expired November 12
+at 04:33:04 UTC and must not be signed or silently refreshed.
+
+| Capability | Verified stage | Remaining acceptance |
+|---|---|---|
+| Local-account broker policy and UAC admission | SOURCE_IMPLEMENTED, SOURCE_TESTED, BUILT | Protected INSTALLED and LIVE_ACCEPTED remain BLOCKED by one-time migration. |
+| Task checkpoint/sync and interrupted checkpoint recovery | SOURCE_IMPLEMENTED, SOURCE_TESTED, BUILT | Actual registered Web checkpoint/sync remains unaccepted. |
+| Exact new GUI/Host/broker artifacts | BUILT; scoped source reviews retained | No protected installation follows from development selection. |
+| Isolated development runtime | LIVE_ACCEPTED for bounded PAUSED startup/stop and authenticated loopback only | Installed operation and Web delivery remain separate. |
+| Operator root comparison | Successor SOURCE_IMPLEMENTED and SOURCE_TESTED | Intended elevated operator result remains BLOCKED. |
+| Protected update/rollback and two-project Web cycle | BLOCKED | Actual installed and independently attributable live evidence required. |
+
+The prior diagnostic stopped at expiry before observing the directory. Its
+successor preserves that file and packet, still verifies the exact original
+account/root/three-file observations, and reports expired matches with signing
+eligibility false. Eight pure disposition cases and parser/ordering checks passed;
+no native state query, privilege change or installation occurred. Fresh signing
+inputs wait for successful reconciliation. Evidence:
+`docs/verification/OPERATOR_VIEW_EXPIRY_SEPARATION_2026_11_13.json`.

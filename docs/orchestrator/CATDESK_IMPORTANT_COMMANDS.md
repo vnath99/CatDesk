@@ -7745,3 +7745,15 @@ The one-time unsigned proposal still requires genuine purpose signing and native
 high-interactive preflight. Do not rerun the refused old collector, rewrite an
 identity/fingerprint or reuse an old signature. See the current release lifecycle
 and routine-update artifact record before any protected operator action.
+
+### 2026-11-13 UTC — Expiry-aware operator observation
+
+The old comparison refuses the now-expired proposal before querying identity.
+Use the frozen expiry-aware successor supplied in the private handoff, once in
+the intended elevated PowerShell 7 environment. Verify its supplied SHA before
+invocation. `OPERATOR_VIEW_MATCHES_RETAINED_STATE_PROPOSAL_EXPIRED` means only that
+the recorded account/root/three-file facts matched; signing eligibility must stay
+false and fresh signing inputs are still required. A refusal/mismatch calls for
+reconciliation of that exact result, never a repeated collector, identity rewrite
+or blind refresh. No protected bootstrap command is authorized by this comparison.
+See `OPERATOR_VIEW_EXPIRY_SEPARATION_2026_11_13.json` for the source-test limits.
