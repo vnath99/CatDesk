@@ -1151,3 +1151,24 @@ The new read-only Wake status qualifier is source-tested, not installed. The
 one already supplied operator root comparison remains pending before fresh
 Wake signing inputs. Do not rerun old collectors, sign expired packets or infer
 current host liveness from historical status. No additional action is requested.
+
+## 2026-11-13 UTC — Migration, review authorization and Web acceptance are separate
+
+Wake migration: keep the single existing root-comparison request pending. Do not
+rerun collectors, sign expired inputs or reset protected state.
+
+Backend review: native creation/validation succeeded. The current work-start card
+concerns the exact source-bound contract in an isolated d22 checkout. It supersedes
+the earlier canonical report-carrier question, which cannot authorize d22 producer
+source. This authorizes work only, never a verdict, producer or release. After
+authorization, read current state/version, approve the exact contract decision
+hash and claim direct work before genuine review. Never edit a nonrenewable lease
+or regenerate approved bytes. No reviewer currently runs in the background.
+
+Direct Web MVP: do not request new chats, authentication or task sends while the
+intended control scope refuses DEV_PRODUCTION_ROOT_MISMATCH. The installed task
+interface also needs a safely scoped Git checkpoint path; generic Git publication
+is not sufficient. Reconcile authority first, qualify that scope once after its
+prerequisite changes, then admit a new task when its full path is executable.
+Preserve every uncertain historical delivery. No periodic retry is scheduled.
+See `docs/verification/INDEPENDENT_REVIEW_AND_DIRECT_WEB_TRACKS_2026_11_13.json`.

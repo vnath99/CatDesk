@@ -978,6 +978,17 @@ is task initialization; it does not establish that a ChatGPT Web client performe
 MCP coding. A completed source review is likewise distinct from installed health
 or two-project Web execution acceptance.
 
+The session workspace is also the source-snapshot boundary. Before approval or
+claim, bind review to the exact checkout the producer must capture; compare its
+commit/tree and distinguish committed bytes from raw build inputs. Naming another
+commit/artifact in a report does not redirect that snapshot. Use an isolated Git
+worktree where modifying the canonical checkout could disturb existing work.
+Preserve earlier unapproved carrier drafts; never claim them as source authority
+for another checkout. A source-bound d22 DRAFT was created/validated November 13,
+but independent review, ACK and producer authority remain outstanding. Its exact
+work-start authorization is separate from any verdict or release approval. See
+`docs/verification/INDEPENDENT_REVIEW_AND_DIRECT_WEB_TRACKS_2026_11_13.json`.
+
 ### 3. Build separately through the reviewed producer
 
 ```text

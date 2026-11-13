@@ -10389,3 +10389,39 @@ independent verdict supplied, record acknowledged, producer attested or release
 authorized. The existing review/producer chain and one pending operator root
 comparison remain required. No task, browser, service or protected operation ran.
 Evidence: `docs/verification/FROZEN_BACKEND_REVIEW_INPUTS_2026_11_13.json`.
+
+### 2026-11-13 UTC — Independent review initiated; acceptance tracks separated
+
+Existing installed-backend, controlled-restart, authenticated MCP and one genuine
+v5 connector result remain accepted for their recorded scopes. Those tests were
+not repeated. Protected Wake migration remains BLOCKED on the single operator
+root comparison; expired proposals and protected state remain unchanged.
+
+Independent backend review is ACTIVE at native contract admission, not a verdict.
+Actual installed-backend MCP created and validated a report-only DRAFT. Inspection
+then established that the producer snapshots the actual session workspace: the
+older canonical checkout cannot authorize d22 merely by naming it in a report.
+That carrier draft remains unapproved. A separate official Git worktree now has
+the exact d22 commit/tree, with raw build inputs retained separately. Its own
+source-bound DRAFT was genuinely created and validated through the installed
+bounded headless backend. Neither draft is approved or claimed; no reviewer ran.
+Next: exact source-bound work authorization, current-version approval/direct
+claim, genuine independent review, then finalization/ACK/snapshot/producer.
+An empty inbox was not treated as a barrier to initiating work.
+
+Direct Web MVP is separately BLOCKED. The qualified control owner actually refused
+DEV_PRODUCTION_ROOT_MISMATCH before readiness. Its relevant root guards and owner
+source are identical in the newer qualified controller; no futile retry occurred.
+Installed assigned-task tools support scoped edit/verification but lack scoped
+Git checkpoint/sync. Generic git_commit_verified uses the serving workspace and
+is not a demonstrated assigned-worktree substitute. No new full-cycle task was
+launched into these known refusals; original C1/C49 and uncertain sends remain.
+
+Source-bound draft admission exited normally under a 150-second contained owner
+with a 40-second backend, closing its ephemeral endpoint. All 1,684 non-config
+pins, task inventory and profile identities match. Existing configuration authority
+also matches after excluding only its four already-approved lifetime counters;
+the original raw-pin failure remains recorded. No browser, Wake, tunnel, recurring
+automation, candidate execution, protected installation or release change occurred.
+Real Web edit/checkpoint/self-Wake and independent second-project acceptance remain
+open. Evidence: `docs/verification/INDEPENDENT_REVIEW_AND_DIRECT_WEB_TRACKS_2026_11_13.json`.

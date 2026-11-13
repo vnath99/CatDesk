@@ -3039,3 +3039,23 @@ lease or claiming live process proof. It is not an installer, recovery owner or
 new release authority. Protected migration, binary rollback and actual Web
 project work/self-Wake still require their own acceptance. See the current
 controlled-restart/Wake-status verification record.
+
+### 2026-11-13 UTC — Native review can start; source workspace remains authoritative
+
+Actual contract create/validate succeeded through the existing installed backend.
+The completed inbox is an output of genuine work, not a prerequisite to initiating
+a contract. Work approval, independent verdict, producer and installation remain
+separate. The initial unclaimed report-carrier draft uses an older checkout and
+cannot authorize d22 simply by naming its commit. Native completion snapshots the
+actual session workspace. An isolated exact d22 Git checkout and its source-bound
+DRAFT are now prepared and validated; raw build inputs remain separately frozen.
+No existing checkout, installation, fingerprint or release authority changed.
+The producer must build its own genuinely reviewed snapshot rather than adopt
+the unsigned draft binary by checksum alone.
+
+Wake migration remains blocked on the operator comparison. Direct Web acceptance
+separately encountered an actual control-root refusal and an installed task-scoped
+Git capability gap. Neither erases accepted backend/restart/auth/connector evidence.
+A generic serving-workspace Git tool does not prove an assigned-worktree checkpoint.
+No browser, Wake, tunnel or recurring owner started. See the independent-tracks
+verification record for actual operations and the remaining authority gates.

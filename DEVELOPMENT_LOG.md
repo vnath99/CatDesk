@@ -4347,3 +4347,35 @@ they do not replace the approved native contract, independent review, acknowledg
 or producer chain. No key, signature, browser, protected installation, task/grant
 or new candidate was created. No completed serving/restart tests were repeated.
 See `docs/verification/FROZEN_BACKEND_REVIEW_INPUTS_2026_11_13.json`.
+
+### 2026-11-13 UTC — Native review admission and source binding; no release approval
+
+Created/validated real native review work instead of inferring impossibility from
+an empty inbox. Initial carrier admission refused an absent allowed report directory
+before persistence; the unchanged contract then succeeded after creating that empty
+directory. Raw preservation correctly retained the actual usage-counter mismatch;
+the existing approved configuration-authority rule passed separately.
+
+Before claim, found that native completion captures the session's actual workspace,
+which was older than d22. Prepared an isolated detached d22 worktree through Git,
+preserving both existing checkouts. All 476 inputs were compared; committed checkout
+and frozen raw build bytes remain distinct. An attempted raw-line-ending alignment
+made only the new checkout dirty; its 165 freshly generated changes were restored
+through Git. Frozen raw inputs remain retained; no existing checkout was restored.
+
+Created/validated a source-bound successor through installed bounded headless MCP.
+Its first private caller rejected Windows' extended workspace spelling before API
+calls. The corrected caller compared actual directory identity and reused the frozen
+payload; no product guard changed. All finite backends exited. No approval, claim,
+independent verdict, ACK, producer attestation or promotion was manufactured. The
+current source-bound work-start card supersedes the carrier question; it does not
+approve a future verdict. Failed preparation/read-helper attempts remain recorded.
+
+One qualified installed control-scope attempt refused DEV_PRODUCTION_ROOT_MISMATCH
+before readiness, preserving all 1,685 pins. Source comparison confirms the newer
+controller retains the relevant guards; no unchanged retry occurred. Installed
+edit/verify support is distinct from missing task-scoped Git checkpoint. No generic
+Git command or out-of-band commit evaded task fences. Completed serving/restart/
+connector evidence remains valid. No source regression suite was repeated for
+these documentation and contract-preparation changes. The dated independent-tracks
+record contains exact proof hashes, preservation exceptions and remaining gates.
