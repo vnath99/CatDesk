@@ -7757,3 +7757,19 @@ false and fresh signing inputs are still required. A refusal/mismatch calls for
 reconciliation of that exact result, never a repeated collector, identity rewrite
 or blind refresh. No protected bootstrap command is authorized by this comparison.
 See `OPERATOR_VIEW_EXPIRY_SEPARATION_2026_11_13.json` for the source-test limits.
+
+
+### 2026-11-13 — Existing-owner runner compatibility and live scope
+
+For an approved bounded reconnect, retain the existing alias/profile/tunnel and
+key reference, with the qualified child-only local bearer forwarder. Do not execute
+consumed historical test wrappers or substitute a new endpoint/authentication.
+The current lifecycle runner is `CatDesk.BoundedNativeProcess` with four arguments;
+the separate Secure MCP runner is `CatDesk.SecureMcp.BoundedNativeProcess` with four
+and five arguments. Initialize the lifecycle type before importing the Secure MCP
+initializer into the same shell, and use the Secure MCP five-argument overload for
+child-only bearer forwarding. Never introduce an old-name alias or modify the
+product type to accommodate a stale caller. The qualified window passed actual
+readiness, one v5 status call, 401/401 authentication rejection and cleanup; it did
+not enable indefinite serving or qualify Web task execution. See the pipeline
+verification record and private handoff for the exact frozen test identities.

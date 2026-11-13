@@ -1397,3 +1397,16 @@ self-Wake, and two-project acceptance remain open. Next independent operation is
 qualification of the existing official runtime owner against current identities;
 do not execute stale consumed wrappers, create a tunnel or change authentication.
 Evidence: `docs/verification/EXISTING_BACKEND_BOUNDED_HEALTH_2026_11_13.json`.
+
+
+### 2026-11-13 — Bounded existing-owner qualification
+
+The current trusted installation passed backend startup, 401 for missing/wrong
+bearer, authenticated MCP, existing official-owner readiness, one live v5 status
+call and cleanup. It remains the installed release; the new candidate was not
+executed or promoted. Original profile/authentication and protected state were
+preserved. A historical private caller required compatibility correction to the
+already qualified namespaced runner; this did not change product trust or release
+authority. This evidence is not a substitute for candidate review, protected
+migration, rollback or real Web task acceptance. See
+`docs/verification/EXISTING_PIPELINE_CONNECTOR_ACCEPTANCE_2026_11_13.json`.

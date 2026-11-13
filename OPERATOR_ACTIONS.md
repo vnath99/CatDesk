@@ -1132,3 +1132,13 @@ is added. Keep the one existing expiry-aware environment comparison pending; do
 not rerun the old collector or sign the expired packet. Existing official-owner
 qualification and missing release-review evidence can proceed independently.
 See `docs/verification/EXISTING_BACKEND_BOUNDED_HEALTH_2026_11_13.json`.
+
+
+## 2026-11-13 UTC — Existing connector worked in bounded qualification
+
+The existing backend and official runtime reached READY together, and one v5
+status call returned structured content without 429. Both were stopped after the
+test, preserving all task/profile state. No new operator request is added; the
+one pending expiry-aware root comparison remains necessary for protected Wake
+migration. Do not restart recurring services or replay old Web requests on the
+strength of this status result. See the current pipeline verification record.

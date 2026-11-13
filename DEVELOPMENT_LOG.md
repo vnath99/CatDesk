@@ -4277,3 +4277,39 @@ self-Wake, and two-project acceptance remain open. Next independent operation is
 qualification of the existing official runtime owner against current identities;
 do not execute stale consumed wrappers, create a tunnel or change authentication.
 Evidence: `docs/verification/EXISTING_BACKEND_BOUNDED_HEALTH_2026_11_13.json`.
+
+
+### 2026-11-13 UTC — Existing serving pipeline and one v5 connector call passed
+
+The bounded existing-owner window passed from 03:02:52Z to 03:03:36Z under a
+180-second KILL_ON_JOB_CLOSE owner. Public backend-only startup used the unchanged
+verified installed release. Missing and incorrect bearer requests both returned
+401; authenticated MCP readiness and its 102-tool catalog passed. The existing
+official alias/profile/tunnel reached READY through its supported owner and
+qualified health/readiness checks. Exactly one v5 transport-status call returned
+actual structured content with matching canonical/serving hashes and
+BEARER_REQUIRED. HTTP 429 did not recur in this window. This does not establish
+the cause of older 429 responses or guarantee future connector availability.
+
+The response still reports CONFIGURED_UNVERIFIED; Web execution authorization,
+provider-conversation identity and client catalog verification remain unproven.
+Historical Wake status returned from disk is not live process evidence. No Web
+message, project task, browser or Wake was started. The official owner and backend
+were stopped afterward; all 1,685 preservation pins, task inventory and profile
+identities matched. No tunnel creation, persistent authentication/configuration,
+recurring automation, protected installation or release authority changed.
+
+Two failed preliminary diagnostics are preserved: an optional status-field parser
+used state instead of runtime_state, and the stale private reconnect caller did
+not initialize the lifecycle runner before loading the qualified Secure MCP
+runner. The latter failed before connecting. The corrected caller initializes
+both existing types and uses the Secure MCP five-argument overload; actual
+Windows-loaded interfaces were checked. No product namespace or trust gate was
+changed. See the evidence for hashes and limits.
+
+This is LIVE_ACCEPTED for bounded serving/connector status only. Controlled
+restart, protected Wake migration/update/rollback and real Web project work plus
+self-Wake remain separate gates. The pending operator-view comparison is unchanged;
+do not retry old collectors or sign expired inputs. New backend candidate review/
+producer authority remains required. Evidence:
+`docs/verification/EXISTING_PIPELINE_CONNECTOR_ACCEPTANCE_2026_11_13.json`.

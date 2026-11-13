@@ -3017,3 +3017,14 @@ self-Wake, and two-project acceptance remain open. Next independent operation is
 qualification of the existing official runtime owner against current identities;
 do not execute stale consumed wrappers, create a tunnel or change authentication.
 Evidence: `docs/verification/EXISTING_BACKEND_BOUNDED_HEALTH_2026_11_13.json`.
+
+
+### 2026-11-13 — Existing serving works independently of Wake migration
+
+The unchanged installed backend and retained official Secure MCP owner passed a
+bounded bearer-authenticated serving test and one actual v5 status call. Startup
+and cleanup did not require a new candidate, tunnel, plugin or protected Wake
+installation. The original profile remained unchanged. CONFIGURED_UNVERIFIED and
+unproven Web authorization remain explicit; no project work or self-Wake occurred.
+Protected migration, candidate release authority and unattended serving remain
+separate. Evidence: `docs/verification/EXISTING_PIPELINE_CONNECTOR_ACCEPTANCE_2026_11_13.json`.
