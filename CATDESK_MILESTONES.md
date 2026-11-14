@@ -10685,3 +10685,25 @@ the original failed regression and intermediate fixture failures are recorded.
 Final full Wake bridge regression: 143 tests passed. No installed binary or Wake
 package changed; the desktop reader is diagnostic evidence, not protected release
 authority or Phase 1 acceptance.
+
+### 2026-11-14 Eastern - Independent review admission narrowed without bypass
+
+The original Bug Bounty and BYOVD registrations each retain a separate OPEN
+assigned task. Their recorded-store attempts timed out without receipts, in
+SUBMITTING and ATTENTION respectively. Neither is a free review route or proven
+unsent task. No target repair, retirement or resend was attempted. The current
+Wake2 registration has no target; historical lowercase review scope is distinct.
+
+The supplied optional coordinator conversation was readable and idle, but this
+does not establish current registration or its v5 connection. No message was sent.
+One prospective source-bound contract creation through the actual central v5 MCP
+was refused before session creation: autonomous contract workspace must match the
+MCP workspace. The source worktree remains clean at the exact candidate commit;
+its declared report remains absent. The existing central server's canonical root
+must not be substituted for that source or globally changed to pass the guard.
+
+Next reuse the retained source-bound local admission procedure before requesting
+a new review/start decision. Destination approval alone is insufficient. No new
+session, claim, review verdict, ACK, producer, installation or source change is
+claimed. Evidence:
+`docs/verification/INDEPENDENT_REVIEW_ROUTE_ADMISSION_2026_11_14.json`.
