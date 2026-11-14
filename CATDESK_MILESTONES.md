@@ -10619,3 +10619,33 @@ binary, installation or signing operation ran. BYOVD recovery was not attempted
 in this bounded task. This accepts native pairing readback only; the actual Web
 edit/checkpoint/self-Wake cycle and genuine review/producer remain incomplete.
 Evidence: `docs/verification/RETAINED_ROOT_AND_EXACT_TARGET_RECOVERY_2026_11_14.json`.
+
+### 2026-11-14 Eastern — Both controlled targets paired; actual review gates identified
+
+One fresh, exact prebound-URL native CAS restored BYOVD's missing counterpart at
+its retained generation 1. Independent readback reports both controlled projects
+PAIRED. Bug was not rebound. Registry, recorded store, siblings, history and task
+journals remain unchanged. Qualified preservation accepts only the intended config
+delta and existing usage counters; the original raw mismatch result is retained.
+
+Actual published v5 Host status verified STOPPED/PID 0. Supported Stop then changed
+the stale RUNNING intent to STOPPED without starting a host/browser or stopping the
+serving backend/tunnel. No plan bypass was requested. A new no-send preflight now
+returns WEB_WORK_ACTIVE_REQUEST for each controlled project. Read-only ledger
+metadata proves distinct original requests in distinct project ledgers, rather than
+a global lock. CatDesk's separate no-send route returns WEB_REVIEW_PROJECT_BUSY.
+No request, timer, grant, approval or review verdict was changed to pass those gates.
+
+The original controlled-task SENT delivery receipts remain in the recorded store;
+their COMPLETE timers are in the selected store, which lacks those delivery files.
+This observation is not body/native/task-completion proof or permission to copy
+records, close work or resend. Review/task authority and installed scoped Git remain
+open. Both target repairs accept native pairing metadata only, not Phase 1.
+
+Each preservation scope retained 1,685 pins: target recovery changed only its
+verified target config plus permitted usage totals; lifecycle reconciliation changed
+only supported control intent plus those counters. Existing pinned config-authority
+checks passed. No source test, build, install, new service/tunnel, browser, native
+project task or message ran. Next inspect independent registered review-route
+eligibility without disturbing either held request or native session. Evidence:
+`docs/verification/BOTH_TARGETS_AND_REVIEW_ADMISSION_2026_11_14.json`.

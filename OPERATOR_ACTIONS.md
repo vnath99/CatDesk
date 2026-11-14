@@ -1293,3 +1293,19 @@ supported guards, then assess actual task/review admission. No operator action i
 currently required for that next eligible operation. This does not authorize a
 new project URL, old-task replay, release promotion, signing or installation.
 See `docs/verification/RETAINED_ROOT_AND_EXACT_TARGET_RECOVERY_2026_11_14.json`.
+
+## 2026-11-14 Eastern — Both counterpart repairs complete; no repeated operator step
+
+Bug and BYOVD now both have PAIRED native readback at their retained URL/digest/
+generation. Do not repeat the bind operations or elevated comparison. Supported
+Stop reconciled the stale host intent; no recurring worker was started, and normal
+backend/tunnel serving was preserved.
+
+Fresh no-send review checks reached actual project-specific gates: each controlled
+project has its own OPEN original work request; CatDesk's route has incomplete
+timers. Preserve them. No replacement review approval is requested behind these
+known refusals. The historical SENT receipts and COMPLETE timers span stores;
+neither copying them nor inferring task completion is authorized by pairing repair.
+Inspect independent registered review routes next under their own exact admission,
+without changing native ownership. No operator action is currently requested.
+See `docs/verification/BOTH_TARGETS_AND_REVIEW_ADMISSION_2026_11_14.json`.

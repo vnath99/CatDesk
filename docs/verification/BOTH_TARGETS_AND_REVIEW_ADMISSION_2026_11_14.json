@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-14T14:49:24.880186+00:00",
+  "userFacingDateZone": "America/New_York",
+  "taskId": "nov14-peer-pairing-and-review-admission",
+  "documentationParent": "b0b84c4ff92ab065b320e444860147ed570c583e",
+  "pairingRecovery": {
+    "recordedUtc": "2026-11-14T14:29:12.959004+00:00",
+    "state": "EXACT_COUNTERPART_RECOVERED",
+    "projectId": "catdesk-web-native-byovd",
+    "nativeExitCode": 0,
+    "pairedReadback": "PAIRED",
+    "bothControlledProjectsPaired": true,
+    "sameRegisteredUrlDigestAndRetainedGeneration": true,
+    "generation": 1,
+    "recordedStoreConfigUnchanged": true,
+    "siblingTargetsAndExistingHistoryPreserved": true,
+    "messagesSent": 0,
+    "nativeTaskActions": 0,
+    "rootIdentityOrGrantRewrites": 0
+  },
+  "pairingPreservation": {
+    "recordedUtc": "2026-11-14T14:33:31.535467+00:00",
+    "pinsChecked": 1685,
+    "rawPinMismatches": 2,
+    "expectedChangesOnly": true,
+    "changedRoles": [
+      "SELECTED_WAKE_CONFIG_EXACT_BYOVD_TARGET",
+      "GLOBAL_USAGE_TOTALS_COUNTERS_ONLY_EXISTING_AUTHORITY"
+    ],
+    "allOtherPinsUnchanged": true,
+    "pinSetUnchanged": true,
+    "profileIdentitiesUnchanged": true,
+    "taskInventoryUnchanged": true,
+    "missingSeedPathsUnchanged": true,
+    "rawMismatchRetainedNotRelabeled": true,
+    "passedForAuthorizedRecovery": true,
+    "initialQualificationRefusalRetained": "Expected one config delta; actual read-only MCP status also updated existing usage totals. Stop/control action had not run. Existing pinned authority check independently passed before accepting that second delta."
+  },
+  "supportedHostLifecycle": {
+    "before": "STOPPED_PID_0_WITH_STALE_RUNNING_CONTROL_INTENT",
+    "ownerEvidence": "Actual published v5 status command using the existing Host lease semantics",
+    "action": "Published v5 catdesk_binagotchy_command stop with default safeguards",
+    "result": "STOPPED",
+    "controlAfter": "STOPPED",
+    "hostOrBrowserStarted": false,
+    "planBypassRequested": false,
+    "normalBackendAndTunnelNotStopped": true
+  },
+  "reviewRouteChecks": {
+    "changedDependency": "Both controlled targets paired and stale host intent reconciled through supported Stop",
+    "controlledBug": {
+      "readOnly": true,
+      "result": "WEB_WORK_ACTIVE_REQUEST"
+    },
+    "controlledByovd": {
+      "readOnly": true,
+      "result": "WEB_WORK_ACTIVE_REQUEST"
+    },
+    "catdesk": {
+      "readOnly": true,
+      "result": "WEB_REVIEW_PROJECT_BUSY"
+    },
+    "separateProjectLedgersVerified": true,
+    "activeRequestOrHistoricalTimerCleared": false,
+    "newReviewGrantContractClaimOrMessageCreated": false,
+    "completeAdmissionNotClaimed": true
+  },
+  "originalTaskEvidence": {
+    "controlledProjectRequestsRemainOpen": true,
+    "recordedStoreOriginalDeliveries": "SENT_WITH_RECEIPTS",
+    "selectedStoreOriginalTimers": "COMPLETE",
+    "selectedStoreDeliveryRecords": "ABSENT",
+    "scope": "Closed metadata observation; exact-body/native execution/task-completion authority not inferred",
+    "retainedRecordsCopiedOrRewritten": false,
+    "historicalSendsReplayed": false
+  },
+  "hostReconciliationPreservation": {
+    "recordedUtc": "2026-11-14T14:47:12.161834+00:00",
+    "pinsChecked": 1685,
+    "rawPinMismatches": 2,
+    "expectedChangesOnly": true,
+    "changedRoles": [
+      "SELECTED_WAKE_CONTROL_SUPPORTED_STOP",
+      "GLOBAL_USAGE_TOTALS_COUNTERS_ONLY_EXISTING_AUTHORITY"
+    ],
+    "allOtherPinsUnchanged": true,
+    "pinSetUnchanged": true,
+    "profileIdentitiesUnchanged": true,
+    "taskInventoryUnchanged": true,
+    "missingSeedPathsUnchanged": true,
+    "rawMismatchRetainedNotRelabeled": true,
+    "passedForAuthorizedRecovery": true,
+    "noGrantRequestOrMessageCreatedByPreflight": true,
+    "controlAfter": "STOPPED"
+  },
+  "acceptance": {
+    "bothControlledTargetCounterparts": "LIVE_ACCEPTED_NATIVE_CAS_AND_PAIRED_READBACK_ONLY",
+    "hostStoppedIntent": "LIVE_ACCEPTED_SUPPORTED_LIFECYCLE_ONLY",
+    "freshWebExecutionTask": "NOT_ADMITTED_ACTIVE_ORIGINAL_WORK_PRESERVED",
+    "reviewProducerRelease": "NOT_APPROVED_OR_EXECUTED",
+    "fullWebEditCheckpointSelfWake": "INCOMPLETE"
+  },
+  "unchangedScopes": {
+    "registeredUrlsDigestsAndRetainedGenerations": true,
+    "recordedStore": true,
+    "siblingTargetsAndPriorHistory": true,
+    "taskJournalsAndNoReplayFences": true,
+    "browserProfilesAndCredentials": true,
+    "sourceCodeAndInstalledImages": true,
+    "oldApprovalLeasesNotRenewed": true,
+    "noOriginalComparisonOrCollectorRetry": true
+  },
+  "nextTask": "Inspect the independently registered original review projects for exact retained target and project-specific work/timer admission; preserve both held C1 requests and native sessions. Do not request another review approval or send until its own route is executable.",
+  "proofHashes": {
+    "nov14-byovd-target-repair/frozen-repair-plan.private.json": "7ae9fd701954990588f66a6c04e624c9869ab8800ec10eeac54ab2cf79578ab8",
+    "nov14-byovd-target-repair/result.private.json": "c849e4ef9d0e9d9e85b57bf23cb9a581f626d66cf8e2d05c423331a0e27412bd",
+    "nov14-byovd-target-repair/qualified-preservation.private.json": "01d0bbda454f5cf65e0e0a6e17577b4561792f3e98601470051f287f3bec9926",
+    "nov14-byovd-target-repair/config-authority.private.json": "817702b747469327c0a559a6ed19204877e157e6b5f77d1db948e00765f23820",
+    "nov14-review-owner-reconciliation/supported-stop.raw-private.json": "f6a6544efecd5d90f3fde58459d34dc0406e5316660f65fc3298f7392e52ec32",
+    "nov14-review-owner-reconciliation/route-result.private.json": "f0ed06be7fd5df4a1460462118d56e5e092627b1f0a9e1f7a6beb8d4150f1cf2",
+    "nov14-review-owner-reconciliation/byovd-route-result.private.json": "32d82bbafb7d9366b2c27803d3df9dd613f80129456123bb05c2f9ac6e537090",
+    "nov14-review-owner-reconciliation/catdesk-route-result.private.json": "6d7f4b98607555bef36de24dbf5641d55cb104f9564ede6528e6e93547e439d8",
+    "nov14-review-owner-reconciliation/active-work-metadata.private.json": "5220d54707a9348e8882164693bfc13991b216433a1ccea5638db160edc4b841",
+    "nov14-review-owner-reconciliation/original-active-delivery-metadata.private.json": "485c9461b268619b4ed1b656d085ee55a42c66c689d043434ad4154106252c22",
+    "nov14-review-owner-reconciliation/qualified-preservation.private.json": "40a871cebbbd50f1f875b99303ce37171862ca1627b48338ffde2b08e7f05e36"
+  }
+}
