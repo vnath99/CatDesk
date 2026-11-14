@@ -32,7 +32,7 @@ fn marker_target(path: &Path, expected: &str) -> Result<LoginMarker> {
     Ok(value)
 }
 
-fn observe_profile(root: &Path) -> Result<()> {
+pub(super) fn observe_profile(root: &Path) -> Result<()> {
     let python = runtime::browser_process_root(&root.join("runtime/python.exe"))?;
     let profile = runtime::browser_process_root(&root.join("browser-profile"))?;
     plain(&profile, true)?;

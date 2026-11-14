@@ -45,3 +45,11 @@ PR #5 merged through GitHub without administrator override at 23e26e9. Its tree 
 ## 2026-11-14T18:21:50.654059+00:00 — DOC-CONTINUITY final qualification
 
 Actual development and primary folders each pass 23 focused tests and 475 documentation checks. A fresh GitHub clone of integrated 78b6c98 also passes all 23 tests without CatDesk or a local object cache. Two fresh-context AI exercises answer all ten resumption questions from the final integrated source; minor checkpoint/ref wording findings are corrected here. All 1,685 protected pins match exactly, with unchanged profiles/task inventory; all 23 original primary untracked files retain their hashes. Primary application and developer facade are byte-equivalent to baseline 313f6a3; its branch was not switched, and the old named remote was not advanced or retracked. Runtime, credentials, bindings, journals and unknown deliveries were not changed. Documentation goal is complete; architecture review is the separate next task and remains unstarted. [Evidence](docs/verification/DOC_SYNC_STATE_2026_11_14.json).
+
+<!-- catdesk-activity:nov14-dev-root-view-source-qualified sha256:55f9174f1e85756749de53953eb8f74518d11da3335f834c6ebf447f6a49fdc5 -->
+
+## 2026-11-14T21:56:49.742251+00:00 — WAKE-LIFECYCLE
+
+Agent: Current product owner. Source: 2ee39c5ebff763cef1d220d2b0dd70380e10f82c. Outcome: partial. Known package-alias split now has an explicit development-only hash-bound reconciliation candidate; 61 runtime and 13 facade/project tests pass; no retained runtime mutation or fresh send. Next: Build an immutable development controller and run the retained runtime read-only root-view preflight; keep protected migration and unknown deliveries fenced.
+
+Evidence: [docs/verification/DEV_ROOT_VIEW_RECONCILIATION_2026_11_14.json](docs/verification/DEV_ROOT_VIEW_RECONCILIATION_2026_11_14.json); command: Bounded offline development-runtime and facade regression suites; exit 0; SHA-256 e14165e528df6212596dd3fd1f12d137ba874e4f2e54e074a3878d9081c2acf6.

@@ -49,5 +49,5 @@ Without a connector: clone GitHub, check out the canonical development branch, i
 The machine `source_sha` identifies the qualified integration checkpoint, not the self-referential publication SHA of this document. Read actual checkout HEAD and remote refs before work.
 
 ```json
-{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"9d1c9db08b86754da7a1b2e2662d9538a80025df","branch":"codex/web-rollover-oct17","status":"IN_PROGRESS","runtime_status":"UNVERIFIED","blocker":"FRESH_CANARY_OWNER_AND_TARGET_NOT_QUALIFIED; CONNECTOR_HTTP_SEND_FAILED_WITHOUT_STATUS","next_action":"Qualify the existing profile and owner for one isolated new Wake canary; preserve held events and protected root identities"}
+{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"9d1c9db08b86754da7a1b2e2662d9538a80025df","branch":"codex/web-rollover-oct17","status":"IN_PROGRESS","runtime_status":"UNVERIFIED","blocker":"FRESH_CANARY_OWNER_AND_TARGET_NOT_QUALIFIED; CONNECTOR_HTTP_SEND_FAILED_WITHOUT_STATUS","next_action":"Build an immutable development controller and run the retained runtime read-only root-view preflight; keep protected migration and unknown deliveries fenced"}
 ```

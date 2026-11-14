@@ -176,6 +176,11 @@ pub(crate) enum WebDevelopmentAction {
         marker_sha256: String,
         execute: bool,
     },
+    ReconcileRootView {
+        authority_sha256: String,
+        root_view_sha256: Option<String>,
+        execute: bool,
+    },
     Status,
     Start,
     Stop,
@@ -325,6 +330,23 @@ pub(crate) fn parse_operator_action(
 
 fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction, String> {
     match args.get(2).map(String::as_str) {
+        Some("reconcile-root-view") => {
+            let hash = |v: &str| v.len() == 64
+                && v.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+            match &args[3..] {
+                [authority_flag, authority] if authority_flag == "--expected-authority-sha256"
+                    && hash(authority) => Ok(WebDevelopmentAction::ReconcileRootView {
+                        authority_sha256: authority.clone(), root_view_sha256: None, execute: false,
+                    }),
+                [authority_flag, authority, view_flag, view, execute]
+                    if authority_flag == "--expected-authority-sha256" && hash(authority)
+                    && view_flag == "--expected-root-view-sha256" && hash(view)
+                    && execute == "--execute" => Ok(WebDevelopmentAction::ReconcileRootView {
+                        authority_sha256: authority.clone(), root_view_sha256: Some(view.clone()), execute: true,
+                    }),
+                _ => Err("reconcile-root-view requires --expected-authority-sha256 <sha256>; execution additionally requires --expected-root-view-sha256 <sha256> --execute".into()),
+            }
+        }
         Some("reconcile-login") if matches!(args.len(), 7 | 8)
             && args[3] == "--project-id" && args[5] == "--expected-marker-sha256"
             && catdesk_wake::protocol::valid_id(&args[4])
@@ -1095,6 +1117,9 @@ pub(crate) async fn execute_operator_action(
                     execute,
                 } => {
                     reconcile_web_development_login(workspace, &project_id, &marker_sha256, execute)
+                }
+                WebDevelopmentAction::ReconcileRootView { authority_sha256, root_view_sha256, execute } => {
+                    development_runtime::reconcile_root_view(workspace, &authority_sha256, root_view_sha256.as_deref(), execute)
                 }
                 WebDevelopmentAction::Status => development_runtime::status(workspace),
                 WebDevelopmentAction::Start => development_runtime::start(workspace),
@@ -2984,6 +3009,26 @@ mod tests {
             args.extend([flag.into(), "override".into()]);
             assert!(parse_operator_action(args).is_err());
         }
+    }
+
+    #[test]
+    fn web_development_root_view_reconciliation_requires_two_hashes_for_commit() {
+        let mut args = vec!["operator".into(), "web-dev-runtime".into(),
+            "reconcile-root-view".into(), "--expected-authority-sha256".into(), "a".repeat(64)];
+        assert!(matches!(parse_operator_action(args.clone()), Ok(Some(OperatorAction::WebDevelopment(
+            WebDevelopmentAction::ReconcileRootView { execute: false, .. })) )));
+        args.push("--execute".into());
+        assert!(parse_operator_action(args.clone()).is_err());
+        args.pop();
+        args.extend(["--expected-root-view-sha256".into(), "b".repeat(64), "--execute".into()]);
+        assert!(matches!(parse_operator_action(args.clone()), Ok(Some(OperatorAction::WebDevelopment(
+            WebDevelopmentAction::ReconcileRootView { execute: true, .. })) )));
+        for flag in ["--force", "--profile", "--url", "--package", "--send"] {
+            let mut invalid = args.clone(); invalid.push(flag.into());
+            assert!(parse_operator_action(invalid).is_err());
+        }
+        args[6] = "A".repeat(64);
+        assert!(parse_operator_action(args).is_err());
     }
 
     #[test]

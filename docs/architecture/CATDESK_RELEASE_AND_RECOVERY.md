@@ -92,6 +92,12 @@ The [architecture historical evidence](CATDESK_ARCHITECTURE.md#historical-accept
 
 **QA review 2026-11-14T19:07:55Z:** This is a dated diagnostic interpretation, not a protected repair authorization. The supported command spellings and correct owner must be established from the selected installed runtime, not an old Markdown command example.
 
+### Development-only exclusion-root view reconciliation
+
+**Decision, 2026-11-14T21:56:49Z:** a nonprivileged development runtime may reconcile the precise known package-alias split without promoting a binary or repairing either protected installation. Admission requires that both recorded spellings originally identified one directory, the explicit package-cache path still identifies that retained object, and the direct spelling now identifies a different directory outside the development workspace/runtime. A lost anchor, missing root, arbitrary root replacement, changed package, active owner or unknown profile owner must refuse. Ordinary selection keeps its strict identity check.
+
+The existing development operator facade provides a hash-bound preflight and explicit execution transition. Reuse backend/project/host/browser leases and the bounded profile-quiescence observer. Freeze the original authority hash and observed root-view hash; atomically replace only the unprotected development authority's exclusion-root list, retaining its original bytes under their hash. Package pointer, executable/manifest fingerprints, profile, authentication, targets, task journals and protected roots remain unchanged. Recognize an exact already-committed result read-only after interruption; never infer authority from a newly matching checksum. This is not T-0485 migration, signer enrollment, protected release approval or live Wake acceptance. Source and actual runtime qualification are recorded separately in the root activity log.
+
 ## 6. Crash and interruption contracts
 
 | Failure moment | Safe recovery | Must not happen |
