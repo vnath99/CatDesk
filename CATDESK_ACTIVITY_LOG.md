@@ -27,3 +27,7 @@ Next: existing C1-UI-002 host-bridge source qualification. Widget client renderi
 ## 2026-11-14T17:31:15.250721+00:00 — final published clone confirmation
 
 GitHub-only clone fast-forwarded through the reviewed source fixes to b69f5b3a9d14217b1405cd23b611d3dee9128ff1. All 20 tests and 475 internal-link/status/authority checks pass with no CatDesk connector or local runtime state. Source fixtures use explicit UTF-8 on Windows; the preceding decoder refusal is retained. Test owner exited naturally without timeout or termination failure. The following publication only records evidence and does not alter the tested helper or fixtures.
+
+## 2026-11-14T17:59:33.923208+00:00 — DOC-CONTINUITY integration review
+
+User clarified that prior source publication is not completed integration/local usability. Reopened only that remaining documentation scope. Reviewed all 25 PR paths, actual maintenance/hook/authority diffs, seven published historical blob hashes and preserved legacy bodies. No application runtime or protected authority changes. Found and corrected malformed-event type handling; 22 focused tests pass. PR is mergeable; no required hosted checks or protection rule reported. Primary remains an operational older checkout with 23 untracked files; ten retained active flags all have expired leases and no provider handle, which is not evidence of running work. Existing native states remain untouched. Next ordinary GitHub merge and separately reviewed documentation-only primary backport. [Review](docs/verification/DOC_INTEGRATION_REVIEW_2026_11_14.json).

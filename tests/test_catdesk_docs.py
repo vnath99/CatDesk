@@ -65,6 +65,25 @@ class ContinuityTests(unittest.TestCase):
         self.assertEqual(r["state"], "VALIDATED_PREVIEW")
         self.assertEqual(self.baseline, {p:(self.root/p).read_bytes() for p in docs.PRIMARY})
 
+    def test_malformed_event_types_refused_without_writes(self):
+        cases=[[], [dict(self.event)]]
+        for key,value in [("event_id",None),("timestamp_utc",7),("status",[]),("source_sha",{})]:
+            event=copy.deepcopy(self.event);event[key]=value;cases.append(event)
+        for event in cases:
+            with self.subTest(event_type=type(event).__name__):
+                self.event_path.write_text(json.dumps(event),encoding="utf-8")
+                with self.assertRaisesRegex(ValueError,"EVENT_SCHEMA_MISMATCH"):
+                    docs.record(self.root,self.event_path,True)
+                self.assertEqual(self.baseline,{p:(self.root/p).read_bytes() for p in docs.PRIMARY})
+
+    def test_malformed_evidence_types_refused_without_writes(self):
+        for evidence in [None,[],{"path":[],"sha256":"0"*64,"command":"check","exit_status":0}]:
+            with self.subTest(evidence_type=type(evidence).__name__):
+                self.event["evidence"]=[evidence];self.write_event()
+                with self.assertRaisesRegex(ValueError,"EVIDENCE_SCHEMA_INVALID"):
+                    docs.record(self.root,self.event_path,True)
+                self.assertEqual(self.baseline,{p:(self.root/p).read_bytes() for p in docs.PRIMARY})
+
     def test_apply_updates_four_documents_and_exact_repeat_is_noop(self):
         self.write_event(); result = docs.record(self.root, self.event_path, True)
         self.assertEqual(len(result["changedFiles"]), 4)

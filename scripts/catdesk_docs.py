@@ -145,7 +145,9 @@ def record(root, event_path, apply=False):
     event = json.loads(raw); digest = hashlib.sha256(raw).hexdigest()
     required = {"event_id", "timestamp_utc", "agent", "ticket", "milestone", "source_sha",
                 "status", "milestone_status", "maturity", "outcome", "summary", "next_action", "evidence"}
-    if set(event) != required: raise ValueError("EVENT_SCHEMA_MISMATCH")
+    if not isinstance(event, dict) or set(event) != required: raise ValueError("EVENT_SCHEMA_MISMATCH")
+    if any(not isinstance(event[key], str) for key in required - {"evidence"}):
+        raise ValueError("EVENT_SCHEMA_MISMATCH")
     eid = event["event_id"]
     if not re.fullmatch(r"[a-zA-Z0-9_-]{1,80}", eid): raise ValueError("EVENT_ID_INVALID")
     when = datetime.datetime.fromisoformat(event["timestamp_utc"].replace("Z", "+00:00"))
@@ -160,7 +162,9 @@ def record(root, event_path, apply=False):
     if not isinstance(event["evidence"], list) or not 1 <= len(event["evidence"]) <= 12: raise ValueError("EVIDENCE_REQUIRED")
     references = []
     for evidence in event["evidence"]:
-        if set(evidence) != {"path", "sha256", "command", "exit_status"}: raise ValueError("EVIDENCE_SCHEMA_INVALID")
+        if not isinstance(evidence, dict) or set(evidence) != {"path", "sha256", "command", "exit_status"}: raise ValueError("EVIDENCE_SCHEMA_INVALID")
+        if not isinstance(evidence["path"], str) or not evidence["path"] or not isinstance(evidence["sha256"], str) or not re.fullmatch(r"[a-f0-9]{64}", evidence["sha256"]):
+            raise ValueError("EVIDENCE_SCHEMA_INVALID")
         path = pathlib.Path(evidence["path"])
         resolved = (root / path).resolve()
         if path.is_absolute() or resolved == root.resolve() or not resolved.is_relative_to(root.resolve()) or path.parts[0] in {".git", ".catdesk"}:

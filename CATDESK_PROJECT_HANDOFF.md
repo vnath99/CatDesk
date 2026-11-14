@@ -4,7 +4,7 @@ Single resumption entry point. Reconciled 2026-11-14T17:26:20.749796+00:00. Sour
 
 ## Mission and priority
 
-CatDesk lets independent ChatGPT Web project conversations use authenticated v5 tools to edit their assigned local files, verify work, checkpoint Git, wake themselves and roll over with durable context. Native Codex delegation and a central coordinator are optional. The five-document continuity goal is source-qualified and published with draft PR #5. The highest-priority unfinished milestone is M-WEB: restore useful, trustworthy direct Web work and its display without bypassing held operations.
+CatDesk lets independent ChatGPT Web project conversations use authenticated v5 tools to edit their assigned local files, verify work, checkpoint Git, wake themselves and roll over with durable context. Native Codex delegation and a central coordinator are optional. The five-document implementation is source-qualified. The current P0 continuation is DOC-CONTINUITY: review and integrate PR #5, synchronize development, and safely expose the five documents in the primary operational checkout. Architecture, UI, Wake and native-dispatch work are excluded from this task.
 
 ## Source identity
 
@@ -25,7 +25,7 @@ Registry/scoped routing/context ledgers and actual controlled rollovers have evi
 
 | Work / owner | State / evidence | Next eligible action |
 | --- | --- | --- |
-| DOC-CONTINUITY / Codex documentation owner, separate worktree | DONE / SOURCE_TESTED; 20 tests, both fresh-AI exercises and real GitHub clone pass | Review draft PR #5; no automatic merge |
+| DOC-CONTINUITY / Codex documentation owner, separate worktree | IN_PROGRESS / SOURCE_TESTED; original implementation qualified; integration/local usability remain | Integrate reviewed PR #5 through GitHub, then validate a primary documentation-only backport |
 | C1-UI-002 / existing feature owner; resume ownership check required | IN_PROGRESS / SOURCE_TESTED; exact HTML serves locally, client times out; fallback is not installed | On existing UI feature branch, qualify a standard host-bridge fixture; do not replay a mutating tool to test UI |
 | Original C1 and C49 / original task owners | Held original task/grant/journals; cached native refusal not safely replayable | Reconcile authoritative receipts before any original operation; never replace grant/fences |
 | REVIEW-D22 / original authorized reviewer workflow | f410 contract QUEUED v3, zero provider turns; external batch prompt delivery UNKNOWN, no attributable new USER/response | Preserve original request; do not resend external batch or fabricate review/producer evidence |
@@ -43,5 +43,5 @@ No force-push, reset, blind pull/rebase, bulk staging, main merge, protected ins
 Without a connector: clone GitHub, check out this documentation branch, inspect the exact integration SHA and run offline checks. This permits source work only; runtime health is UNVERIFIED and no task effects may be inferred. The [GitHub-only procedure](CATDESK_IMPORTANT_COMMANDS.md#git-and-github-only-recovery) requires no CatDesk daemon.
 
 ```json
-{"schemaVersion":1,"milestone":"M-WEB","ticket":"C1-UI-002","source_sha":"5d51a1dd9d176f94ac8e1ec04f44d6c91d18d4e5","branch":"codex/docs-consolidation-nov14","status":"IN_PROGRESS","runtime_status":"UNVERIFIED","blocker":"CLIENT_RENDER_UNQUALIFIED; ORIGINAL_C1_C49_AND_EXTERNAL_REVIEW_UNKNOWN_OUTCOMES_HELD","next_action":"Revalidate existing UI feature ownership and qualify the standard MCP Apps host-bridge fixture; no production deployment"}
+{"schemaVersion":1,"milestone":"M-CONTINUITY","ticket":"DOC-CONTINUITY","source_sha":"5d51a1dd9d176f94ac8e1ec04f44d6c91d18d4e5","branch":"codex/docs-consolidation-nov14","status":"IN_PROGRESS","runtime_status":"UNVERIFIED","blocker":"NONE_FOR_REVIEW; PRIMARY_RUNTIME_AND_RETAINED_STATE_MUST_BE_PRESERVED","next_action":"Merge reviewed PR5 through ordinary development PR workflow; qualify primary documentation-only backport; do not start architecture or runtime work"}
 ```
