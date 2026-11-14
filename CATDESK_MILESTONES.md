@@ -10554,3 +10554,39 @@ its startup definition absent. No activation or broader recovery was attempted.
 Wake migration/review/scoped-Git gates remain separate and did not block this
 restoration. Evidence:
 `docs/verification/V5_SESSION_CONNECTIVITY_RESTORATION_2026_11_13.json`.
+
+### 2026-11-14 Eastern — Web connectivity confirmed; operational phases retained
+
+The operator answered Succeeded to the exact fresh read-only v5 status-call check
+in the affected ChatGPT Web conversation. This closes the pending client-specific
+connectivity check as operator-verified live evidence. No response body, auth/parity
+values or independent browser receipt was supplied; project identity and execution
+authority are not inferred. Earlier Codex connector/local auth evidence remains
+separately scoped. No repeat connector call or recovery was needed.
+
+The replacement goal prioritizes one registered Web edit/verification/task-Git/
+manual-Wake/continuation cycle, then two-project independence, then new automatic
+rollover qualification. Historical completed canaries remain preserved. Codex is
+the implementation worker; its completion is not independent ChatGPT acceptance.
+Tasks target 15–17 minutes, with a 19-minute ChatGPT turn limit and durable WIP
+checkpointing rather than uncertain-operation replay.
+
+One supported installed read-only registry observation found both preferred test
+projects present with existing workspaces but REGISTRY_WAKE_MISMATCH. No task,
+binding, grant, checkpoint or Wake request was changed. Installed task-scoped Git
+capability remains a separate gap. The existing published UI compatibility WIP
+branch is under source qualification in its own checkout, without merge/install;
+it is not presumed a prerequisite for the first operational cycle. Protected Wake
+migration remains independent except where exact target/owner authority is actually
+needed. Evidence:
+`docs/verification/WEB_CLIENT_CONNECTIVITY_CONFIRMATION_2026_11_14.json`.
+
+The existing UI source at b357931 is now SOURCE_TESTED: 25 focused tests across
+eight filters, strict main/test Clippy with warnings denied, and rustfmt pass.
+Both contained owners exited cleanly; source hashes remained exact and credentials
+were removed from test-worker environments. No backend/Wake/browser/native-task
+operation ran. Qualification evidence is published on the isolated feature branch
+at 53e9f4d, with exact remote SHA readback. This is a compiled test target, not a
+production release build, genuine independent review, merge, installation or live
+UI acceptance. Preserve the WIP branch until those separate gates pass; do not
+spend further turns repeating the same UI tests while Phase 1 routing remains open.

@@ -1257,3 +1257,20 @@ root and absent startup definition. No new service, task registration or monitor
 activation was performed. The broader legacy autostart monitor can invoke full
 recovery; do not use it as an undocumented backend-only repair that changes Wake.
 See `docs/verification/V5_SESSION_CONNECTIVITY_RESTORATION_2026_11_13.json`.
+
+## 2026-11-14 Eastern — Web status check succeeded; do not request it again
+
+The operator confirmed Succeeded for the fresh read-only status call in the
+affected ChatGPT Web client. The preceding client-check request is fulfilled.
+No additional status-call, sign-in, plugin creation or serving restart is requested.
+Retain this as operator-verified connectivity, not a project execution grant or a
+full Web edit/checkpoint/Wake acceptance receipt.
+
+The new goal retains the existing root-comparison prerequisite for protected
+migration and any dependent pairing reconciliation. Current installed registry
+observation reports REGISTRY_WAKE_MISMATCH for both preferred controlled projects;
+do not route a new task or Wake into that known refusal. Do not rewrite identities,
+copy pointers between stores, reuse expired work approvals or replay old tasks.
+Source UI qualification proceeds independently on its existing WIP branch; no
+merge or installation is authorized by a successful test alone. See the current
+Web connectivity confirmation record.

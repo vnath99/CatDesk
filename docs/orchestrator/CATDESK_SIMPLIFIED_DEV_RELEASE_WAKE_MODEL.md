@@ -3114,3 +3114,21 @@ requires actual state reconciliation before fresh inputs and separate delegation
 approval. Backend review/producer and installed scoped-Git capability remain separate
 gates; prior bounded serving/restart/authenticated connector evidence is preserved.
 See the recorded-root diagnostic verification record.
+
+### 2026-11-14 Eastern — Operational acceptance order
+
+The current goal requires one real registered Web file edit, verification,
+task-scoped Git checkpoint/synchronization, manual Wake and verified continuation
+before expanding to two independent projects and new automatic rollover runs.
+Keep completed controlled rollover evidence; do not replay it. Native Codex is the
+implementation worker, with independent ChatGPT review/acceptance remaining separate.
+Use bounded 15–17-minute work assignments and a 19-minute ChatGPT turn limit;
+preserve partial work/unknown effects and publish verified WIP checkpoints.
+
+Operator confirmation of the fresh v5 Web status call closes connectivity only.
+It supplies no project grant, target pairing or task/checkpoint/Wake receipt.
+Installed read-only status currently reports REGISTRY_WAKE_MISMATCH for both
+preferred test projects. Resolve that actual routing gate without assuming the
+separate protected update migration must precede all useful development. The UI
+compatibility branch remains isolated pending tests, strict checks and independent
+review; no merge or installation follows from local source qualification alone.
