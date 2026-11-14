@@ -60,6 +60,10 @@ mod foreground;
 mod login_recovery;
 pub use login_recovery::reconcile_login;
 
+#[path = "development_root_view.rs"]
+mod root_view;
+pub use root_view::reconcile_root_view;
+
 #[link(name = "kernel32")]
 unsafe extern "system" {
     fn CreateFileW(
@@ -1361,6 +1365,24 @@ fn validated_authority_for_login_recovery(
     allow_retiring_package_files: bool,
     expected_login_marker: Option<&str>,
 ) -> Result<Option<(PathBuf, Authority)>> {
+    validated_authority_for_root_view(
+        workspace,
+        allow_package_update,
+        allow_retiring_package_files,
+        expected_login_marker,
+        None,
+    )
+}
+
+// Only the explicit, hash-bound development reconciliation may admit this
+// observed root view. Ordinary selection retains the original identity fence.
+fn validated_authority_for_root_view(
+    workspace: &Path,
+    allow_package_update: bool,
+    allow_retiring_package_files: bool,
+    expected_login_marker: Option<&str>,
+    expected_root_view: Option<&[ProductionRoot]>,
+) -> Result<Option<(PathBuf, Authority)>> {
     let workspace = canonical_workspace(workspace)?;
     let dev = dev_dir(&workspace);
     if !present(&dev)? {
@@ -1496,6 +1518,12 @@ fn validated_authority_for_login_recovery(
     {
         return Err("DEV_RUNTIME_ACTIVATION_INVALID".into());
     }
+    if let Some(expected) = expected_root_view {
+        root_view::require_known_alias_split(&authority, expected)?;
+        if production_roots()? != expected {
+            return Err("DEV_ROOT_VIEW_OBSERVATION_CHANGED".into());
+        }
+    }
     for item in &authority.production_roots {
         let path = Path::new(&item.path);
         let observed = match fs::symlink_metadata(path) {
@@ -1503,7 +1531,7 @@ fn validated_authority_for_login_recovery(
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
             Err(_) => return Err("DEV_PRODUCTION_ROOT_UNAVAILABLE".into()),
         };
-        if item.identity.is_some() && item.identity != observed
+        if (expected_root_view.is_none() && item.identity.is_some() && item.identity != observed)
             || observed.as_ref() == Some(&authority.runtime_identity)
         {
             return Err("DEV_PRODUCTION_ROOT_MISMATCH".into());
@@ -2539,7 +2567,7 @@ mod tests {
 
     static NEXT: AtomicU64 = AtomicU64::new(0);
 
-    fn fixture() -> (PathBuf, PathBuf, PathBuf, PathBuf) {
+    pub(super) fn fixture() -> (PathBuf, PathBuf, PathBuf, PathBuf) {
         let parent = std::env::temp_dir().join(format!(
             "catdesk-wake-dev-runtime-{}-{}-{}",
             std::process::id(),
@@ -2574,7 +2602,7 @@ mod tests {
         (parent, workspace, package, python)
     }
 
-    fn cleanup(parent: &Path) {
+    pub(super) fn cleanup(parent: &Path) {
         let canonical = fs::canonicalize(parent).unwrap();
         assert!(canonical.starts_with(fs::canonicalize(std::env::temp_dir()).unwrap()));
         assert!(
@@ -2587,7 +2615,7 @@ mod tests {
         fs::remove_dir_all(parent).unwrap();
     }
 
-    fn prepare_fixture(workspace: &Path, package: &Path, python: &Path) -> Value {
+    pub(super) fn prepare_fixture(workspace: &Path, package: &Path, python: &Path) -> Value {
         prepare(workspace, package, python).unwrap()
     }
 

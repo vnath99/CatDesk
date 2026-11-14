@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-14T21:56:49.742251+00:00",
+  "sourceBase": "2ee39c5ebff763cef1d220d2b0dd70380e10f82c",
+  "maturity": "SOURCE_TESTED",
+  "retainedRuntimePreflight": "NOT_ATTEMPTED",
+  "protectedMigration": "UNCHANGED_BLOCKED",
+  "productionAuthorityCreated": false,
+  "suiteResults": {
+    "developmentRuntime": 61,
+    "developmentFacadeAndProjectFixtures": 13,
+    "failed": 0
+  },
+  "boundedOwner": {
+    "startedUtc": "2026-11-14T21:52:18.4244213+00:00",
+    "finishedUtc": "2026-11-14T21:55:38.8909034+00:00",
+    "maximumSeconds": 600,
+    "exitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false
+  },
+  "sourceFileSha256": {
+    "wake/src/development_runtime.rs": "5a69f0e974ecf7a2e0ae23f8f8ac3633e4b5a8ca8a31aa2cd04288e988bf0ce4",
+    "wake/src/development_root_view.rs": "387ad4b4b1a9810f017f2b79ea6231b6b977cc2d2417d0d72cc2e36f6643609f",
+    "wake/src/development_login_recovery.rs": "a497466177927f9573e5793a296ca32a94350edfe2efdeff60de87ce7cfedfb7",
+    "src/operator_facade.rs": "19980c8593f7e034d1d9143e47e6b83b20a262d3e0265f27c835b05882b61b6d"
+  },
+  "privateLogSha256": {
+    "wake-tests.private.log": "2abb8ea0fb82bcee6b20e38c3e24424b3658cc9af1ca193d8880bd8c82da58fc",
+    "facade-tests.private.log": "0fc8879eb511410003275ada02013a56e9e38cc8201d9fee2e21bd92a06b44ca"
+  },
+  "qualifiedCases": [
+    "Exact package-alias split with retained anchor",
+    "Missing or changed anchor refused",
+    "Development-root alias refused",
+    "Old authority and new view hashes required",
+    "Active backend, project, host and browser leases refused",
+    "Unproven profile quiescence refused",
+    "Stopped control and immutable package guards retained",
+    "Pending login and package-update markers retained",
+    "Interrupted staging resumes exact bytes",
+    "Committed lost reply recognized without another mutation",
+    "Pointer, profile identity, config and control preserved in Windows fixtures"
+  ],
+  "browserStarts": 0,
+  "messagesSent": 0,
+  "fullWebWakeAcceptance": "OPEN"
+}

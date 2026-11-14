@@ -36,6 +36,10 @@ The native catalog publishes `catdesk_turn_timer`, but its current handler start
 
 ## Development, release and rollback
 
+The source-tested development operator action `operator web-dev-runtime reconcile-root-view --expected-authority-sha256 <sha256>` performs a bounded preflight against the workspace selected by the existing `WORKSPACE_ROOT` mechanism. Use only a qualified immutable development controller, not an arbitrary executable from PATH. Expected output is `ROOT_VIEW_PREFLIGHT_ONLY` with old-authority, observed-root-view and proposed-authority hashes. Retained-runtime qualification is still pending; this syntax is not a claim of installed availability.
+
+The explicit commit additionally requires `--expected-root-view-sha256 <preflight-hash> --execute`. It admits only the known package-alias split, requires stopped/exclusive owners and profile quiescence, retains the original development authority, and atomically changes only that authority's exclusion-root list. `ROOT_VIEW_RECONCILED_STOPPED` means this metadata transition passed; `ROOT_VIEW_ALREADY_RECONCILED` is a read-only exact-result recognition. Neither starts a browser/host, changes a package/profile/binding, nor repairs protected T-0485 state. Changed hashes, lost anchors, active owners, altered artifacts and pending login/package markers refuse. [Qualification](docs/verification/DEV_ROOT_VIEW_RECONCILIATION_2026_11_14.json).
+
 | Command | Availability / prerequisites / effect | Expected result and failure |
 | --- | --- | --- |
 | `.\scripts\catdesk-dev-lane.ps1 status` | Source-only developer facade; read-only | Source/debug identity; not runtime selection or installation |
