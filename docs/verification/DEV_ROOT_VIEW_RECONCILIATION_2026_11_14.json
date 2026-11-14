@@ -3,7 +3,7 @@
   "observedUtc": "2026-11-14T21:56:49.742251+00:00",
   "sourceBase": "2ee39c5ebff763cef1d220d2b0dd70380e10f82c",
   "maturity": "SOURCE_TESTED",
-  "retainedRuntimePreflight": "NOT_ATTEMPTED",
+  "retainedRuntimePreflight": "PASSED",
   "protectedMigration": "UNCHANGED_BLOCKED",
   "productionAuthorityCreated": false,
   "suiteResults": {
@@ -44,5 +44,21 @@
   ],
   "browserStarts": 0,
   "messagesSent": 0,
-  "fullWebWakeAcceptance": "OPEN"
+  "fullWebWakeAcceptance": "OPEN",
+  "actualDevelopmentTransition": {
+    "observedUtc": "2026-11-14T22:13:50.572148+00:00",
+    "status": "ROOT_VIEW_RECONCILED_STOPPED",
+    "sourceCommit": "0f6adeb8cff47a3aaa8a2edb65bc8f6e19e29e5a",
+    "controllerSha256": "36f6591eb4f41987e487ebd7fe6254de5389261240f42de89d7b3947d717687d",
+    "onlyExclusionRootListChanged": true,
+    "originalAuthorityRetained": true,
+    "lostReplyRecognitionReadOnly": true,
+    "unchangedRetainedPackageStatusPassed": true,
+    "retainedSourceCommit": "0d6c1074e1fae3cd1fa3fdd8abe2937cd881a99d",
+    "pinsChecked": 1685,
+    "allOtherPinsPreserved": true,
+    "protectedWrites": 0,
+    "packageUpgrade": false,
+    "profileChanged": false
+  }
 }

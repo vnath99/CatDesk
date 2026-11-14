@@ -53,3 +53,11 @@ Actual development and primary folders each pass 23 focused tests and 475 docume
 Agent: Current product owner. Source: 2ee39c5ebff763cef1d220d2b0dd70380e10f82c. Outcome: partial. Known package-alias split now has an explicit development-only hash-bound reconciliation candidate; 61 runtime and 13 facade/project tests pass; no retained runtime mutation or fresh send. Next: Build an immutable development controller and run the retained runtime read-only root-view preflight; keep protected migration and unknown deliveries fenced.
 
 Evidence: [docs/verification/DEV_ROOT_VIEW_RECONCILIATION_2026_11_14.json](docs/verification/DEV_ROOT_VIEW_RECONCILIATION_2026_11_14.json); command: Bounded offline development-runtime and facade regression suites; exit 0; SHA-256 e14165e528df6212596dd3fd1f12d137ba874e4f2e54e074a3878d9081c2acf6.
+
+<!-- catdesk-activity:nov14-dev-root-view-live-and-new-init-unknown sha256:f373d05ba082a5458bb4492b95246d87a2a635d331a266cc38b3d0b98437e889 -->
+
+## 2026-11-14T22:35:56.444257+00:00 — WAKE-LIFECYCLE
+
+Agent: Current product owner. Source: 6f3b45ba25d44435a106dd12b0c80eed00d61413. Outcome: partial. Development root-view recovery passed without a package upgrade; three exact orphan drivers cleaned up; one fresh initialization is SEND_ATTEMPTED with outcome unknown and no replay; post-test profile quiescence verified. Next: Repair cooperative idle-before-refresh behavior and initialization readback diagnostics through the existing adapter and journal; do not resend the pending canary.
+
+Evidence: [docs/verification/WAKE_LIFECYCLE_LIVE_RECOVERY_2026_11_14.json](docs/verification/WAKE_LIFECYCLE_LIVE_RECOVERY_2026_11_14.json); command: Bounded native-owner preflight, development reconciliation, orphan cleanup and one fresh initialization attempt; exit 2; SHA-256 e2372e7faf53feb03e66f91db820a037af6dd6d75f1285e0f8eb9c14c9ab0176.

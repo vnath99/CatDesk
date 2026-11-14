@@ -28,7 +28,7 @@ Fresh read-only baseline on November 14: authenticated loopback catalog has 102 
 
 | Work / owner | State / evidence | Next eligible action |
 | --- | --- | --- |
-| WAKE-LIFECYCLE / current product owner | IN_PROGRESS / UNVERIFIED for fresh end-to-end acceptance; baseline and architecture review recorded | Establish an eligible fresh canary using the existing authenticated profile and owner. The retained development root identity fence and default-only timer binding must be resolved without changing protected roots or held events |
+| WAKE-LIFECYCLE / current product owner | IN_PROGRESS / SOURCE_TESTED; retained development metadata recovery passed, fresh initialization outcome UNKNOWN | Fix cooperative idle-before-refresh and initialization readback using existing adapter/journal. Preserve the exact new SEND_ATTEMPTED intent; no resend or equivalent replacement |
 | DOC-CONTINUITY / Codex documentation owner | DONE / SOURCE_TESTED; development and primary synchronized, 23 tests each, both fresh-AI exercises pass | Review the recorded sync evidence; separate architecture task may begin only under its own scope |
 | C1-UI-002 / existing feature owner; resume ownership check required | IN_PROGRESS / SOURCE_TESTED; exact HTML serves locally, client times out; fallback is not installed | On existing UI feature branch, qualify a standard host-bridge fixture; do not replay a mutating tool to test UI |
 | Original C1 and C49 / original task owners | Held original task/grant/journals; cached native refusal not safely replayable | Reconcile authoritative receipts before any original operation; never replace grant/fences |
@@ -37,6 +37,10 @@ Fresh read-only baseline on November 14: authenticated loopback catalog has 102 
 | Other project native sessions / existing owners | Ownership retained; current activity UNKNOWN | Do not pause/steal sessions or write their checkouts from this docs task |
 
 The pending external public-review prompt is one attempt in the frozen November 14 batch; desktop handler success is not delivery proof. Other unknown submissions, drafts, historical C49/native calls and predecessor conversations remain preserved. Source-tested response diagnostics and text fallback do not prove installed reader/UI acceptance. Protected supervisor startup/reboot policy and unattended serving remain UNVERIFIED. [Exact UI observation](docs/verification/WIDGET_RESOURCE_DIAGNOSTIC_2026_11_14.json).
+
+At 2026-11-14T22:31:43Z, PR #9 is merged into development at `6f3b45ba25d44435a106dd12b0c80eed00d61413`. The explicit development-only root-view transition passed, retaining the original authority and unchanged dev.85 package from `0d6c1074e1fae3cd1fa3fdd8abe2937cd881a99d`. Three exact November 8 orphan UC drivers and their Windows console hosts were cleaned up after identity/session checks. This does not repair protected T-0485 state.
+
+The newly registered disposable project `catdesk-wake-turn-canary-nov14`, task `nov14-wake-two-turn-1`, initialization intent `nov14-wake-turn-init-1` made one original attempt. It is now `SUBMITTING` / `SEND_ATTEMPTED`, with `BOOTSTRAP_OUTCOME_UNKNOWN`, no receipt and no verified destination. Existing project registrations, targets and original task journals remain unchanged. The profile is `PROFILE_QUIESCENT` after cleanup. Do not execute initialization again or substitute another task to bypass this uncertainty. Source inspection found that cooperative bootstrap reloads without awaiting response completion and discards specific post-submit diagnostics; this violates the requested lifecycle ordering, but the exact cause of this attempt was not retained. [Actual recovery and attempt evidence](docs/verification/WAKE_LIFECYCLE_LIVE_RECOVERY_2026_11_14.json).
 
 ## Resume procedure and safety
 
@@ -49,5 +53,5 @@ Without a connector: clone GitHub, check out the canonical development branch, i
 The machine `source_sha` identifies the qualified integration checkpoint, not the self-referential publication SHA of this document. Read actual checkout HEAD and remote refs before work.
 
 ```json
-{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"9d1c9db08b86754da7a1b2e2662d9538a80025df","branch":"codex/web-rollover-oct17","status":"IN_PROGRESS","runtime_status":"UNVERIFIED","blocker":"FRESH_CANARY_OWNER_AND_TARGET_NOT_QUALIFIED; CONNECTOR_HTTP_SEND_FAILED_WITHOUT_STATUS","next_action":"Build an immutable development controller and run the retained runtime read-only root-view preflight; keep protected migration and unknown deliveries fenced"}
+{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"6f3b45ba25d44435a106dd12b0c80eed00d61413","branch":"codex/web-rollover-oct17","status":"IN_PROGRESS","runtime_status":"UNVERIFIED","blocker":"INITIALIZATION_SEND_ATTEMPTED_OUTCOME_UNKNOWN_WITHOUT_RECEIPT_OR_VERIFIED_URL","next_action":"Repair cooperative idle-before-refresh behavior and initialization readback diagnostics through the existing adapter and journal; do not resend the pending canary"}
 ```
