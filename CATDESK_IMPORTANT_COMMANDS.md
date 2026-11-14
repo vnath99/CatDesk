@@ -58,7 +58,7 @@ Set-Location CatDesk-recovery
 git status --short --branch
 git fetch --no-tags origin
 git rev-parse HEAD
-git ls-remote origin refs/heads/codex/web-rollover-oct17 refs/heads/codex/web-rollover-oct17 refs/heads/main
+git ls-remote origin refs/heads/codex/web-rollover-oct17 refs/heads/codex/docs-primary-sync-nov14 refs/heads/main
 python scripts/catdesk_docs.py check
 ```
 
@@ -84,3 +84,5 @@ The existing source-only `.\scripts\catdesk-dev-lane.ps1 verify` now runs the do
 | FIXED_DIRECT_WAKE_ROOT_IDENTITY_CHANGED | Physical root mismatch; do not rewrite IDs or sign expired proposal |
 | CatDesk app view timed out | Client/resource/rendering evidence needed; does not itself prove tool failure; never replay mutating call to test UI |
 | HTTP 429 / Session terminated | Connector/upstream/session; diagnose once after serving/auth ready and preserve exact error |
+
+For completed integration, primary edition differences and preservation evidence, read the [final synchronization record](docs/verification/DOC_SYNC_STATE_2026_11_14.json). These are documentation/source checks, not fresh runtime health or installed product acceptance.

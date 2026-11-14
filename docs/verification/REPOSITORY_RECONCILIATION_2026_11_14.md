@@ -1,3 +1,5 @@
+> HISTORICAL PRE-INTEGRATION SNAPSHOT. Branch-selection instructions below applied before PR #5 merged. Current canonical development and primary compatibility roles are in the [root handoff](../../CATDESK_PROJECT_HANDOFF.md) and [sync record](DOC_SYNC_STATE_2026_11_14.json).
+
 # Repository reconciliation â€” 2026-11-14T16:50:51.082837+00:00
 
 | Reference | Exact SHA | Main-only / ref-only | Integration-only / ref-only | Role |

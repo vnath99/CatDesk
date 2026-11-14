@@ -1,40 +1,111 @@
 {
-  "observedUtc": "2026-11-14T18:12:15.426663+00:00",
+  "observedUtc": "2026-11-14T18:21:50.654059+00:00",
+  "scope": "DOCUMENTATION_CONSOLIDATION_INTEGRATION_AND_LOCAL_SYNC_ONLY",
+  "status": "COMPLETED_VERIFIED",
+  "maturity": "SOURCE_TESTED",
   "pr5": {
     "state": "MERGED",
-    "head": "14b2c8d1c749ffa85d35ec593d49b8e8de8a3232",
     "merge": "23e26e9afdb560cfe447cd8f6454cc952b4e3702",
-    "mergedAt": "2026-11-14T18:00:30Z",
     "url": "https://github.com/vnath99/CatDesk/pull/5"
   },
-  "development": {
-    "branch": "codex/web-rollover-oct17",
-    "lastVerifiedLocalAndRemote": "23e26e9afdb560cfe447cd8f6454cc952b4e3702",
-    "directory": "CatDesk-web-rollover-oct17",
-    "subsequentHead": "Resolve actual branch ref; this is a dated synchronization receipt"
+  "followupPr6": {
+    "state": "MERGED",
+    "merge": "78b6c98c6fdc84b98a019c3ea254e196a278d564",
+    "url": "https://github.com/vnath99/CatDesk/pull/6"
   },
-  "primary": {
-    "localBranch": "orchestrator/chatgpt-codex-autonomous-loop",
+  "qualifiedDevelopment": {
+    "branch": "codex/web-rollover-oct17",
+    "head": "78b6c98c6fdc84b98a019c3ea254e196a278d564",
+    "directory": "CatDesk-web-rollover-oct17",
+    "localMatchedRemote": true,
+    "allFiveRootDocuments": true,
+    "testsPassed": 23,
+    "internalLinksChecked": 475
+  },
+  "qualifiedPrimary": {
+    "branch": "orchestrator/chatgpt-codex-autonomous-loop",
+    "head": "0fbdccbc25edda9bdb5ca31840270e48b25f57e6",
     "publicationBranch": "codex/docs-primary-sync-nov14",
-    "documentationCheckpoint": "79f09ccb7191f30c704785c37232c74414790e37",
-    "applicationBaseline": "313f6a31f13c04c90d6098fad57f1e6a6c99cfd7",
     "directory": "CatDesk-codex-loop",
-    "fiveRootDocumentsPresent": true,
-    "backportPaths": 23,
-    "validationPassed": true,
-    "linkChecks": 473,
-    "sourceFilesChanged": false,
-    "developerFacadeChanged": false,
-    "originalNamedRemote": "Retained at its historical head; not silently advanced or retracked"
+    "localMatchedPublication": true,
+    "allFiveRootDocuments": true,
+    "applicationBaseline": "313f6a31f13c04c90d6098fad57f1e6a6c99cfd7",
+    "testsPassed": 23,
+    "internalLinksChecked": 475,
+    "developerFacade": "Original retained; manual documentation checking",
+    "originalNamedRemote": "Not advanced or retracked"
+  },
+  "currentHeadRule": "These are dated qualified checkpoints; resolve subsequent documentation-only publication heads from Git refs. Final exact heads are also recorded in PR metadata and the private publication audit.",
+  "editionDifferences": [
+    "Primary source/branch identity and predecessor archive",
+    "Primary manual checking and retained-facade test; development automatic hook",
+    "Local edition activity and operating instructions"
+  ],
+  "preservation": {
+    "pinnedObjectsChecked": 1685,
+    "pinMismatches": 0,
+    "profileIdentitiesUnchanged": true,
+    "taskInventoryUnchanged": true,
+    "untrackedFilesPreserved": 23,
+    "allUntrackedHashesMatch": true,
+    "applicationSourceAndFacadeUnchangedInPrimary": true
+  },
+  "cleanGithubRecovery": {
+    "startedUtc": "2026-11-14T18:16:59.050070+00:00",
+    "connectorUsed": false,
+    "localObjectCacheUsed": false,
+    "runtimeActions": 0,
+    "failure": null,
+    "source": "78b6c98c6fdc84b98a019c3ea254e196a278d564",
+    "testsPassed": 23,
+    "check": {
+      "errors": [],
+      "internalLinksChecked": 475,
+      "milestones": 4,
+      "passed": true,
+      "primaryDocuments": 5,
+      "scope": "FIVE_PRIMARY_AND_NEW_SUPPORTING_DOCS; LEGACY_LINKS_GRANDFATHERED_NOT_SILENTLY_FIXED",
+      "tickets": 441
+    },
+    "clean": true,
+    "passed": true,
+    "finishedUtc": "2026-11-14T18:17:22.791509+00:00"
+  },
+  "freshAIExercises": {
+    "localCleanClone": {
+      "source": "78b6c98c6fdc84b98a019c3ea254e196a278d564",
+      "tenQuestionsAnswered": true,
+      "result": "PASS"
+    },
+    "githubOnly": {
+      "source": "78b6c98c6fdc84b98a019c3ea254e196a278d564",
+      "tenQuestionsAnswered": true,
+      "result": "PASS",
+      "localProjectFilesUsed": false,
+      "connectorUsed": false
+    },
+    "wordingCorrections": [
+      "Reconciliation timestamp and checkpoint labels",
+      "Duplicate development remote ref replaced by primary publication",
+      "Historical reconciliation branch direction explicitly superseded",
+      "Primary/global documentation roles distinguished",
+      "Historical activity next-actions explicitly non-authoritative"
+    ]
   },
   "maintenance": {
-    "helper": "Same existing scripts/catdesk_docs.py",
-    "development": "Existing developer verify hook plus manual CLI",
-    "primary": "Manual CLI; old facade deliberately retained",
-    "tests": "Same suite; one primary-specific compatibility assertion replaces the integration hook assertion",
-    "fixtureCorrection": "Tracked overlays only; unrelated untracked files never copied"
+    "existingHelperReused": true,
+    "malformedTypeRefusalTested": true,
+    "idempotentCurrentAndPostCommitRepeatTested": true,
+    "changedIdAndIncompleteUpdatesRefused": true,
+    "unverifiedAcceptanceEscalationRefused": true,
+    "privateUntrackedFixtureInputsExcluded": true,
+    "installedRuntimeHookClaimed": false
   },
-  "protectedState": "Final preservation comparison pending; no protected operation performed",
-  "finalQualification": "Pending current integrated/primary suites and both final-state fresh-AI exercises",
-  "excludedArchitectureWork": "NOT_STARTED"
+  "hostedCI": "No hosted checks reported; local verification used. No CI or settings bypass.",
+  "mainUnchanged": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+  "productionDeployment": false,
+  "protectedRuntimeActions": 0,
+  "architectureSemanticReview": "NOT_STARTED_EXCLUDED",
+  "nextTask": "Separate architecture documentation review under a new task; no architecture/UI/Wake/native-dispatch work performed here",
+  "remainingDocumentationBlockers": []
 }
