@@ -1,7 +1,7 @@
 {
   "observedUtc": "2026-11-14T17:26:20.749796+00:00",
   "scope": "DOCUMENTATION_CONTINUITY_NOT_PRODUCT_MVP_ACCEPTANCE",
-  "codeAndVerificationCheckpoint": "077e954de2c7ad399425f2272b8145cbe4a508e5",
+  "codeAndVerificationCheckpoint": "b69f5b3a9d14217b1405cd23b611d3dee9128ff1",
   "branch": "codex/docs-consolidation-nov14",
   "pullRequest": "https://github.com/vnath99/CatDesk/pull/5",
   "mainMerged": false,
@@ -14,7 +14,7 @@
     "hostedCI": "NOT_CLAIMED"
   },
   "githubOnlyRecovery": {
-    "startedUtc": "2026-11-14T17:23:41.831714+00:00",
+    "startedUtc": "2026-11-14T17:31:01.535767+00:00",
     "usesCatDeskConnector": false,
     "usesLocalObjectCache": false,
     "browserStarts": 0,
@@ -22,11 +22,11 @@
     "runtimeActions": 0,
     "failure": null,
     "firstAttemptRetained": true,
-    "cloneSha": "077e954de2c7ad399425f2272b8145cbe4a508e5",
+    "cloneSha": "b69f5b3a9d14217b1405cd23b611d3dee9128ff1",
     "cloneClean": true,
     "docsCheck": {
       "errors": [],
-      "internalLinksChecked": 472,
+      "internalLinksChecked": 475,
       "milestones": 4,
       "passed": true,
       "primaryDocuments": 5,
@@ -37,7 +37,7 @@
     "localRuntimeStatePresent": false,
     "evidenceLFStable": true,
     "successfulSourceRecovery": true,
-    "finishedUtc": "2026-11-14T17:24:03.486730+00:00"
+    "finishedUtc": "2026-11-14T17:31:15.250721+00:00"
   },
   "freshAIExercises": [
     {
@@ -106,5 +106,9 @@
     "wakeHostProcesses": 0,
     "browserStarts": 0,
     "processActions": 0
+  },
+  "verifiedSourceFileSha256": {
+    "scripts/catdesk_docs.py": "cf13a1fd3eb98c5744132c014a27dff93430f4a4dc450e7f3fe52ca21ca00de2",
+    "tests/test_catdesk_docs.py": "b6f4a7fe7db469178b43206cb22ba1d52db4543762f2918e31eb40b5737b64b1"
   }
 }
