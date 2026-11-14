@@ -1,3 +1,5 @@
+> SUPERSEDED AS CURRENT AUTHORITY — primary documentation compatibility edition. Start with [the root CATDESK_PROJECT_HANDOFF.md](../../CATDESK_PROJECT_HANDOFF.md). The original local historical body below is preserved.
+
 ## 2026-11-02T01:08:05.027518+00:00 — prior-canonical handoff recovery implemented in source; protected receipt unchanged
 
 Pre-promotion source inspection found that the normal helper would refuse the preserved completed prior-canonical handoff as an unsafe resume for a different candidate. No fresh promotion preflight or CONFIRM was attempted. The existing retirement component now has explicit exact-receipt inspection and evidence-CAS retirement: one native atomic rename preserves the original receipt under its digest, the completed journal and archived authority remain unchanged, and lost-response recovery never overwrites a new or ambiguous handoff. Existing producer, snapshot, trusted-pair, stopped-owner and lifecycle gates remain required.

@@ -1,5 +1,7 @@
 # CatDesk
 
+> Primary documentation compatibility edition: [Handoff](CATDESK_PROJECT_HANDOFF.md), [Milestones](CATDESK_MILESTONES.md), [Commands](CATDESK_IMPORTANT_COMMANDS.md), [Activity](CATDESK_ACTIVITY_LOG.md), [Tickets](CATDESK_TICKETS.md). Application code remains on its older operational baseline; current development is the separate integration worktree.
+
 > Current dated checkpoint: [October 29, 2026 source, validation and remaining work](docs/SYNC_STATUS_2026-10-29.md). Earlier status entries retain their historical scope.
 
 
@@ -7,18 +9,7 @@ An open-source tool that turns ChatGPT Web into a coding agent. No reverse engin
 
 ## Current project handoff
 
-For the current accepted milestone state, operational ownership boundaries, and
-the safe procedure for resuming work in a new ChatGPT conversation, start with
-[the canonical project handoff](docs/orchestrator/CATDESK_PROJECT_HANDOFF.md).
-For operational shortcuts and the guarded chat/Wake target rollover procedure,
-see [CatDesk Important Commands](docs/orchestrator/CATDESK_IMPORTANT_COMMANDS.md).
-It reconciles the durable [milestone tracker](CATDESK_MILESTONES.md),
-[current plan](.catdesk/current_plan.md), and [work queue](.catdesk/todo.md).
-Those sources take precedence over historical review bundles and this README's
-general product documentation.
-
-For the current trust, ownership, and document-status map, see the
-[canonical architecture and security model](docs/orchestrator/CANONICAL_CURRENT_ARCHITECTURE.md).
+Begin with [the root handoff](CATDESK_PROJECT_HANDOFF.md). It identifies this checkout as a documentation-only compatibility backport. The separate development branch owns current global project documentation. Original runtime journals, untracked handoffs and historical records remain unchanged.
 
 <p align="center">
   <img src="docs/images/catdesk_preview.gif" alt="CatDesk in ChatGPT Web"><br>
