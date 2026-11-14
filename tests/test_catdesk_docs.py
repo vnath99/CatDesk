@@ -15,14 +15,19 @@ docs = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(docs)
 
 
+def fixture_overlay_paths(root):
+    # An operational checkout can contain retained private/unowned files.
+    # A test may overlay tracked changes, never all untracked user data.
+    return subprocess.run(["git", "diff", "--name-only", "HEAD"], cwd=root, check=True, capture_output=True).stdout.decode().splitlines()
+
+
 class ContinuityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory(prefix="catdesk-docs-test-")
         cls.root = pathlib.Path(cls.temp.name) / "source"
         subprocess.run(["git", "clone", "--quiet", "--shared", str(ROOT), str(cls.root)], check=True, capture_output=True, timeout=45)
-        paths = subprocess.run(["git", "diff", "--name-only", "HEAD"], cwd=ROOT, check=True, capture_output=True).stdout.decode().splitlines()
-        paths += subprocess.run(["git", "ls-files", "--others", "--exclude-standard"], cwd=ROOT, check=True, capture_output=True).stdout.decode().splitlines()
+        paths = fixture_overlay_paths(ROOT)
         for name in paths:
             if name.startswith("tests/") or name == "scripts/catdesk_docs.py": continue
             p = ROOT / name
@@ -59,6 +64,15 @@ class ContinuityTests(unittest.TestCase):
         result = docs.inspect(self.root)
         self.assertTrue(result["passed"], result)
         self.assertGreater(result["tickets"], 430)
+
+    def test_private_untracked_files_are_not_fixture_inputs(self):
+        sentinel=self.root/'docs/orchestrator/review_bundles/UNTRACKED_PRIVATE_FIXTURE_SENTINEL.md'
+        self.assertFalse(sentinel.exists())
+        sentinel.write_text('Synthetic sentinel, not real private data',encoding='utf-8')
+        try:
+            self.assertNotIn(sentinel.relative_to(self.root).as_posix(),fixture_overlay_paths(self.root))
+        finally:
+            sentinel.unlink()
 
     def test_preview_writes_nothing(self):
         self.write_event(); r = docs.record(self.root, self.event_path)
