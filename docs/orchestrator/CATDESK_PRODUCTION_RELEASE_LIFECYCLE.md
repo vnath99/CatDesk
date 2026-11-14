@@ -1001,6 +1001,24 @@ after downstream admission. Actual November 13 no-send preflight refused
 WEB_REVIEW_HOST_NOT_STOPPED, so no replacement approval was requested. See the
 approved-review lease/start-readiness verification record.
 
+### 2026-11-13 Eastern — Establish the required operator security context
+
+The reviewed comparison requires elevated 64-bit PowerShell 7 under the approved
+account. Codex's measured token is not elevated; account match and actual local
+Administrator membership are verified. All comparison/dependency hashes still
+match. Do not remove its guard, impersonate or assume another tool supplies
+elevation. The private handoff contains the complete verified command, expected
+expired-proposal success state and safe JSON-return instructions. A match grants
+neither signing nor installation authority.
+
+Fresh canonical diagnosis is healthy for installed integrity but stopped for
+serving. Supported qualified Host status proves an unowned lease in its observed
+store; saved October 15 RUNNING status and current RUNNING intent are separate.
+Its control/config differ from frozen intended-operator observations, proving why
+correct-view reconciliation precedes control recovery. No protected state or
+authority changed. Review/producer and enrollment remain separate gates. See
+`docs/verification/AUTONOMOUS_BLOCKER_RECONCILIATION_2026_11_13.json`.
+
 ### 3. Build separately through the reviewed producer
 
 ```text

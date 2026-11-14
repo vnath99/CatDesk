@@ -1188,3 +1188,24 @@ or signature request is added. After actual admission, use the documented
 cancellation/successor path with retained history and genuine work authorization.
 The new source readiness diagnostic is tested but uninstalled. See the approved
 review lease/start-readiness verification record.
+
+## 2026-11-13 Eastern — First action: elevated read-only comparison
+
+The comparison and pinned inputs remain exact. Codex's token lacks elevation;
+the approved account's local Administrator membership is verified. Open 64-bit
+PowerShell 7 **as Administrator**, outside Codex, under that same account. Use the
+complete hash-guarded command in the current private handoff/user response. Do not
+switch accounts, change groups or weaken the elevation check. No signing or
+installation command is required at this stage.
+
+Expected success: OPERATOR_VIEW_MATCHES_RETAINED_STATE_PROPOSAL_EXPIRED,
+operatorViewMatches=true, proposalExpired=true, readyForPurposeSigning=false.
+Return the complete bounded JSON, then close the terminal after it returns. Any
+hash failure or other state: stop and return that error/JSON without rerunning,
+resetting state or signing. This comparison changes no protected state and a match
+does not authorize installation. The native Host lease is free in Codex's observed
+view, but its control/config differ from frozen operator observations; do not force
+STOPPED based only on process absence. After receiving the comparison, reconcile
+the correct view, revalidate ownership/journals, and execute eligible supported
+recovery before preparing a fresh review successor. Do not present later operator
+steps prematurely. See the autonomous-blocker reconciliation record.

@@ -3080,3 +3080,18 @@ and from runtime admission, which is explicitly unverified. Corrupt state stays
 unready; missing session files retain the existing refusal. Focused tests and
 strict Clippy pass; no release was rebuilt or installed. Independent review and
 producer evidence remain outstanding. See the approved-review readiness record.
+
+### 2026-11-13 Eastern — Measured operator context; no recovery bypass
+
+Read-only checks verified that the approved account can elevate while the Codex
+token is not elevated. The retained comparison requires that intended elevated
+view; no unverified child/connector substitutes. All pinned inputs match. Exact
+private instructions provide the Administrator PowerShell 7 hash-checked command
+and JSON classifications, without requesting a signature or installation.
+
+Supported Host metadata proved an available lease and STOPPED/PID 0 despite old
+RUNNING status/intent. Observed control/config do not match frozen operator inputs;
+current.json does. No reviewed-install handoff exists in this view. Thus correct
+view precedes control recovery, without making healthy backend source integrity
+depend on Wake enrollment. No state, signer, installer, contract, build or test was
+recreated. Existing stage distinctions remain; see the autonomous-blocker record.

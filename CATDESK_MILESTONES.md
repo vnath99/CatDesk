@@ -10458,3 +10458,38 @@ Next reconcile the already pending operator root comparison and intended host
 ownership. Once review is executable, use supported cancellation/history retention
 and a newly authorized source-bound successor; never extend expired bytes.
 Evidence: `docs/verification/APPROVED_REVIEW_LEASE_AND_START_READINESS_2026_11_13.json`.
+
+### 2026-11-13 Eastern — Autonomous checks completed; precise elevation prerequisite
+
+Local/remote HEAD matched 60199ec. The authorized expiry-aware comparison and all
+four pinned inputs remain exact. Codex matches the approved account but its token
+is not elevated; that account's local Administrator membership was independently
+verified. The comparison explicitly requires elevation, so it was not executed
+under the wrong token or by extracting away its guard. Exact Administrator-terminal
+instructions and a complete hash-checked command are retained in the private handoff.
+
+Public diagnosis confirms a healthy installed canonical pair/configuration, but no
+local listener and an unready official runtime. Prior bounded restart/auth/MCP/v5
+acceptance is preserved; no connector discovery or completed test was repeated.
+The qualified development Host's existing status operation acquired/released the
+normal Host lease and reported STOPPED/PID 0. Saved status says RUNNING but is dated
+October 15; desired control remains RUNNING. No reviewed-install handoff exists in
+this view. This proves an unowned intent in the observed store, not the original
+shutdown cause or intended elevated-view identity.
+
+Observed control/config hashes differ from frozen operator observations; only
+current.json matches. Fresh development status separately refused
+DEV_PRODUCTION_ROOT_MISMATCH. These establish why protected-view reconciliation
+precedes control recovery. No identity, intent, lock, binding or protected byte was
+rewritten. Broker service/image/namespace queries returned ObjectNotFound.
+
+Routine update policy remains SOURCE_TESTED/BUILT, protected enrollment BLOCKED.
+The exact d22 candidate remains BUILT, genuine review/producer BLOCKED. Existing
+backend is INSTALLED with prior bounded LIVE_ACCEPTED scope; current serving is
+stopped. Direct Web edit/checkpoint/self-Wake remains BLOCKED: installed scoped
+read/patch/verify does not provide the missing task-scoped Git checkpoint. No new
+contract, grant, signature, browser, Wake, backend, tunnel or historical send ran.
+All 1,685 preservation checks matched and bounded owner cleanup passed. The first
+manual action is the reviewed read-only comparison in elevated PowerShell 7 under
+the same account; expected expired-match classification grants no signing authority.
+Evidence: `docs/verification/AUTONOMOUS_BLOCKER_RECONCILIATION_2026_11_13.json`.

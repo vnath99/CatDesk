@@ -4405,3 +4405,25 @@ due to its snapshot helper's relative-directory requirement; the separate correc
 successor retained capture logs. No browser, service, grant or delivery started.
 No new contract/card is prepared while the route is known blocked. The approved
 review readiness record contains exact source/proof hashes and next prerequisites.
+
+### 2026-11-13 Eastern — Supported owner diagnostics before actionable operator handoff
+
+The new autonomous-blocker directive triggered fresh bounded read-only work, not
+a periodic retry. Verified source/remote, comparison60a4 and every pinned input.
+Current token is non-elevated despite matching the approved account; independently
+verified local Administrator membership rather than interpreting stripped token
+groups as lack of account privilege. No UAC automation, impersonation or guard
+removal attempted. Prepared/parsed the complete one-line operator command without
+executing it in this context.
+
+Public diagnose confirms healthy installed pair but stopped serving. Existing
+qualified Host metadata status proves an available Host lease and STOPPED/PID 0
+in the observed store. Raw status is October 15 RUNNING; intent remains RUNNING.
+Observed control/config differ from frozen operator observations; current pointer
+matches. The actual handoff path is reviewed-install-handoff.json and is absent;
+an initial private field checked another filename and is not used as authority.
+Fresh development status confirms root mismatch. All 1,685 pins matched and the
+contained owner exited normally. No state reset, source fix, new build, repeated
+regression, message or service was needed. Private instructions specify actual
+account/application/elevation, exact command, expected classifications, safe JSON
+return and next supported operations. Public audit omits machine-specific details.
