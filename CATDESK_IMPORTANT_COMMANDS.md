@@ -50,21 +50,21 @@ Manual Wake uses existing bounded event/receipt APIs; queue admission is not SEN
 
 ## Git and GitHub-only recovery
 
-These require Git/network access, not CatDesk. `main` is stable source; development is `codex/web-rollover-oct17`; docs are `codex/docs-consolidation-nov14`. Clone into a new unused destination, never over another owner's checkout.
+These require Git/network access, not CatDesk. `main` is stable source; canonical development/docs are `codex/web-rollover-oct17`. The primary compatibility publication is `codex/docs-primary-sync-nov14`. Clone into a new unused destination, never over another owner's checkout.
 
 ```powershell
-git clone --branch codex/docs-consolidation-nov14 https://github.com/vnath99/CatDesk.git CatDesk-recovery
+git clone --branch codex/web-rollover-oct17 https://github.com/vnath99/CatDesk.git CatDesk-recovery
 Set-Location CatDesk-recovery
 git status --short --branch
 git fetch --no-tags origin
 git rev-parse HEAD
-git ls-remote origin refs/heads/codex/docs-consolidation-nov14 refs/heads/codex/web-rollover-oct17 refs/heads/main
+git ls-remote origin refs/heads/codex/web-rollover-oct17 refs/heads/codex/web-rollover-oct17 refs/heads/main
 python scripts/catdesk_docs.py check
 ```
 
-Inspect development without changing active files: `git log -5 --oneline origin/codex/web-rollover-oct17`. Before synchronization: `git rev-list --left-right --count HEAD...origin/codex/docs-consolidation-nov14`. Zero local-only commits permits an ownership-checked fast-forward; any divergence requires review, not blind pull/rebase/reset. Preserve all stashes/untracked/ignored work and do not prune other worktrees.
+Inspect development without changing active files: `git log -5 --oneline origin/codex/web-rollover-oct17`. Before synchronization: `git rev-list --left-right --count HEAD...origin/codex/web-rollover-oct17`. Zero local-only commits permits an ownership-checked fast-forward; any divergence requires review, not blind pull/rebase/reset. Preserve all stashes/untracked/ignored work and do not prune other worktrees.
 
-After explicit scoped staging/review and local checks, `git push origin HEAD:refs/heads/codex/docs-consolidation-nov14`, then `git ls-remote origin refs/heads/codex/docs-consolidation-nov14` and compare full SHA to `git rev-parse HEAD`. A commit alone is not publication. No direct main push, force push or automatic merge. Keep private journals, signing/profile data and machine-specific logs out of commits.
+After explicit scoped staging/review and local checks on an owned feature branch, publish that branch and integrate through the ordinary GitHub PR workflow. Read back its exact remote SHA and compare with local HEAD. Do not blindly push a feature HEAD over canonical development. A commit alone is not publication. No direct main push, force push or automatic merge. Keep private journals, signing/profile data and machine-specific logs out of commits.
 
 ## Documentation maintenance
 
