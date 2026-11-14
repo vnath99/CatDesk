@@ -1,6 +1,6 @@
 # CatDesk — Security and Authority Model
 
-> **Revision timestamp (UTC):** `2026-11-14T18:47:56Z` · **Status:** Finalized consolidation candidate; defensive design reference, not a grant to execute local commands, select releases, change browser state or send messages.  
+> **Revision timestamp (UTC):** `2026-11-14T18:47:56Z` · **Status:** Reviewed consolidation reference; defensive design reference, not a grant to execute local commands, select releases, change browser state or send messages.
 > **Security objective:** Give ChatGPT Web useful *bounded* local capabilities while preserving project isolation, exact task attribution, idempotent side-effect handling and externally owned trust boundaries.
 
 ## 1. Threat and trust assumptions
@@ -54,7 +54,7 @@ A tool/API timeout does not mean no effect occurred. Preserve the exact event, c
 
 - SeleniumBase uses a dedicated, operator-authenticated local profile under its existing owner; no browser cookies, tokens, local storage, profile snapshots or ChatGPT drafts in GitHub, logs, handoff or MCP status.
 - A ChatGPT URL may be exposed to the operator in a trusted local GUI, but persistent/remote reports should prefer project ID, generation and digest rather than arbitrary full private routes or message contents.
-- Validate exact expected `https://chatgpt.com/c/...` destination, associated project, digest/generation and active composer before any submit. Login/CAPTCHA, draft present, editor missing, unknown click outcome and generation drift are all **ATTENTION/UNKNOWN**, not reasons to bypass checks.
+- Validate exact expected ChatGPT conversation destination, associated project, digest/generation and active composer before any submit. Login/CAPTCHA, draft present, editor missing, unknown click outcome and generation drift are all **ATTENTION/UNKNOWN**, not reasons to bypass checks.
 - Manual Wake may be initiated only on an eligible task/turn boundary; the timer neither grants file-execution rights nor excuses unknown results. Do not use silent hourly deadmen as a substitute for the user-approved manual Wake model.
 - Context ledger keeps safe hashes/counts/attribution, not raw private conversation text by default. Unknown hidden/model context and incomplete capture stay unknown; summaries for rollover must be task-bound and disclose only authorized content.
 - The successor chat starts as **unverified** until its URL and actual initialization receipt are observed, then locally owned target state transitions under CAS. Old chat and task history remain retained.

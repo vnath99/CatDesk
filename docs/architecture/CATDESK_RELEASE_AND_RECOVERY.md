@@ -1,18 +1,18 @@
 # CatDesk — Release, Diagnostics and Recovery
 
-> **Revision timestamp (UTC):** `2026-11-14T18:47:56Z` · **Status:** Finalized consolidation candidate; does not authorize an installation, privileged broker operation, signer creation or recovery action.  
+> **Revision timestamp (UTC):** `2026-11-14T18:47:56Z` · **Status:** Reviewed consolidation reference; does not authorize an installation, privileged broker operation, signer creation or recovery action.
 > **Contract:** Simple operator experience with conservative, evidence-driven restore. For architecture see [CATDESK_ARCHITECTURE.md](CATDESK_ARCHITECTURE.md); for security and journal prohibitions see [CATDESK_SECURITY_MODEL.md](CATDESK_SECURITY_MODEL.md).
 
 ## 1. User experience: `recover` and `diagnose`
 
-The desired public interface is deliberately simple:
+The existing Windows lifecycle entry point is deliberately reused:
 
 ```text
-./diagnose      # identify which layer is failing; read-only by default
-./recover       # check eligible layers and safely restore what can be restored
+.\catdesk.ps1 diagnose   # identify the failed layer; read-only
+.\catdesk.ps1 recover    # existing guarded recovery; authorization still required
 ```
 
-**These names are target UX, not verified commands available in the currently installed Windows build.** On Windows, final copy-ready invocations may use `./recover.ps1`, `./diagnose.ps1`, `catdesk.ps1` wrappers or another qualified launcher. Publish the *actual* tested invocation only in root [CATDESK_IMPORTANT_COMMANDS.md](../../CATDESK_IMPORTANT_COMMANDS.md), including whether PowerShell uses `./` or `.\` and whether `diagnose` is spelled differently by the existing implementation. Do not add a conflicting second lifecycle implementation just to match the examples.
+Use the qualified checkout, executable fingerprint and parameters in root [CATDESK_IMPORTANT_COMMANDS.md](../../CATDESK_IMPORTANT_COMMANDS.md). These command names identify the existing interface; they do not establish current readiness or grant recovery authority. Do not introduce a second launcher to match a proposed UX.
 
 **Operator expectation:** A failed instance should either (a) resume automatically/with one command through an existing trusted release and supported owner transitions, or (b) print a concise, actionable failing-layer report without hidden resets or repeated manual incantations. An upstream 429, absent browser editor, mismatched release manifest and stale project target are distinct errors and must not all be called “CatDesk down.”
 
@@ -24,7 +24,7 @@ Diagnostics should run from a trusted launcher even when the normal CatDesk back
 |---|---|---|---|
 | 0. Source/launcher | Qualified launcher, selected script and repository identity | Use vetted installed launcher or standalone diagnostic | Unknown script identity; source checkout ≠ selected binary |
 | 1. Installed release | Current pointer, immutable image/manifest SHA, LKG record and trusted receipt | Existing reviewed release/rollback transaction only | `LKG_AUTHORITY_MISSING`, hash/physical identity drift |
-| 2. Local backend | Running owner, port/endpoint, `/healthz`, `/readyz`, process/job handle | Bounded authorized stop/start, no competing owner | Owner mismatch, port contention, protected state uncertain |
+| 2. Local backend | Running owner, configured loopback endpoint, authenticated MCP initialize/catalog and process/job handle | Bounded authorized stop/start, no competing owner | Owner mismatch, port contention, protected state uncertain |
 | 3. MCP authentication | Bearer matrix, initialize/catalog, declared tool availability | Fix known local config through supported path only | Wrong/missing bearer; unsupported installed catalog |
 | 4. Official tunnel | Existing external runtime process/alias/route health, upstream reachability | **Operator/external runtime owns restart**; no duplicate tunnel | Upstream 429, 424, transient connector rejection |
 | 5. Project registry | Project ID, workspace, target URL/digest/generation, original task grant | Existing guarded paired-target CAS only | Registry/Wake mismatch, invalid URL, stale generation |
@@ -36,6 +36,8 @@ Diagnostics should run from a trusted launcher even when the normal CatDesk back
 | 11. Operator GUI | UI owner, displayed projects/status, stale readback | Open/refresh qualified GUI without altering Wake | Backend healthy but GUI absent or frozen |
 
 A diagnostic report should include at least `{timestampUtc, layer, status, reasonCode, checkedOwner, selectedArtifact, evidenceRef, recoveryEligibility, nextAction}`. Redact credentials, private routes and personal paths. Overall status is **not healthy** if a required layer is unknown. Distinguish an intentionally stopped optional component from a failed required component.
+
+The standalone backend and official tunnel runtime have different routers. Inspect `/healthz` and `/readyz` only on an owner that actually publishes them; their historical official-runtime success is not evidence that the standalone port exposes those paths. A stale Wake `status.json` is an observation, not proof of a live host lease. Current source annotates its age separately; older installed binaries may return only the historical projection.
 
 ## 3. Recovery flow and stop conditions
 

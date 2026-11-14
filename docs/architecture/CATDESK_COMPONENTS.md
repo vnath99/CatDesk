@@ -1,6 +1,6 @@
 # CatDesk — Components and Interface Contracts
 
-> **Revision timestamp (UTC):** `2026-11-14T18:47:56Z` · **Status:** Finalized consolidation candidate; source paths verified against the November 14 development inventory, not a claim of deployed qualification.  
+> **Revision timestamp (UTC):** `2026-11-14T18:47:56Z` · **Status:** Reviewed consolidation reference; source paths verified against the November 14 development inventory, not a claim of deployed qualification.
 > **Authority:** [System architecture](CATDESK_ARCHITECTURE.md) determines product flow; [security](CATDESK_SECURITY_MODEL.md) governs authorization; [release/recovery](CATDESK_RELEASE_AND_RECOVERY.md) governs operational lifecycle. Live capability status comes from the [project handoff](../../CATDESK_PROJECT_HANDOFF.md) and original journals.
 
 ## 1. Component map and evidence vocabulary

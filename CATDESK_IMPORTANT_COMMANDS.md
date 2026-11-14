@@ -28,6 +28,12 @@ Run shell examples in an ordinary PowerShell terminal from the intended checkout
 
 Restart uses supported stop â†’ status â†’ start, with verified owner and original release metadata. Do not run it merely because a client UI timed out. Stable supervisor automatic reboot/failure restoration is NOT qualified. External Secure MCP is separately owned; this document does not authorize its settings or replacement.
 
+### Interpreting Wake and connector status
+
+On November 14, the supported Wake lifecycle status returned STOPPED/PID 0, while the older installed transport tool returned an October 15 RUNNING snapshot with an absent PID. Check the host lease/process and observation timestamp before treating a stored projection as live. Current source annotates file age; the older installed binary does not. Do not clear old errors or resume a held queue to make status green.
+
+The native catalog publishes `catdesk_turn_timer`, but its current handler starts timers on the default `catdesk` target. It is not a caller-selected project timer. Verify the exact target before START; a timer is bookkeeping, not send authority. No fresh timer/Wake was started during the [November 14 baseline](docs/verification/WAKE_LIFECYCLE_BASELINE_2026_11_14.json). A healthy official owner and local authenticated catalog do not establish that a particular ChatGPT connector works; preserve the exact outer error without inventing an HTTP status.
+
 ## Development, release and rollback
 
 | Command | Availability / prerequisites / effect | Expected result and failure |

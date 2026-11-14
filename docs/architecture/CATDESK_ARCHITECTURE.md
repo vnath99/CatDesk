@@ -1,7 +1,7 @@
 # CatDesk — System Architecture
 
 > **Architecture baseline:** 2026-11-14 · **Revision timestamp (UTC):** `2026-11-14T18:47:56Z`  
-> **Document status:** Finalized consolidation candidate; becomes the repository's canonical architecture only after reviewed integration. It is **not** an operational authorization.  
+> **Document status:** Reviewed consolidation; canonical design on integration of PR #8 into development. It is **not** an operational authorization.
 > **Product owner requirements:** November 14, 2026. **Code/evidence basis:** the existing `codex/web-rollover-oct17` development line and the documentation consolidation branch, checked November 14, 2026.  
 > **Status rule:** Design intent ≠ source implementation ≠ selected binary ≠ installed/live acceptance. The repository's current [handoff](../../CATDESK_PROJECT_HANDOFF.md), [milestones](../../CATDESK_MILESTONES.md), [tickets](../../CATDESK_TICKETS.md), original execution journals and live readbacks determine *current* status.
 
@@ -144,12 +144,13 @@ Do not transpose original dates into claims of present runtime success. Each tra
 
 ### QA revision record
 
+- **2026-11-14T21:28:42Z:** Review for PR #8 corrected Windows lifecycle syntax and backend/tunnel endpoint attribution. Root status tracks the ACTIVE product goal; no installed or live gate is newly accepted.
 - **2026-11-14T19:07:55Z:** Preserved historical TurnTimer and exact single-chat Wake evidence, documented conflicting current WakeHost status projections, and added a concise provenance timeline. No new runtime authority or acceptance claim.
 
-### Adoption checklist (not performed by this document)
+### Adoption and retained history
 
-1. Review these four files against the active documentation integration branch and live evidence.
-2. Update `docs/orchestrator/ARCHITECTURE_DOCUMENT_INDEX.md` to designate this file as primary and the other three as focused references.
+1. All four files reviewed against development `a1fbd1a` and the November 14 read-only baseline; 51 architecture links checked. The integration adds no runtime authority.
+2. The architecture index now designates this file as primary and the other three as focused references; the prior canonical file retains its content behind a supersession notice.
 3. Preserve `docs/orchestrator/CANONICAL_CURRENT_ARCHITECTURE.md`, the November 7 proposed revision, old worker decisions, release and Wake documents as appropriately categorized historical/supporting sources; replace obsolete *current authority* claims with compatibility notices and link pointers. Do not discard original journals or large verification evidence.
 4. Add matching milestones for new user requirements with original November 14 request date; do not silently close tickets or rewrite earlier scope.
 5. Review and merge in a separate documentation-only Git branch; no production deployment, browser send, signing or Wake target mutation.

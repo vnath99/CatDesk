@@ -16,7 +16,16 @@ The five root documents are the only primary continuity references:
 | [Activity](../../CATDESK_ACTIVITY_LOG.md) | Chronological audited actions |
 | [Tickets](../../CATDESK_TICKETS.md) | Compact status/evidence index |
 
-[CANONICAL_CURRENT_ARCHITECTURE.md](CANONICAL_CURRENT_ARCHITECTURE.md) remains the supporting technical design/security authority. Local `.catdesk/current_plan.md`, `.catdesk/session.md` and `.catdesk/todo.md` retain native runtime compatibility and original journals; they are not competing master documentation and may be absent in a clone. Old handoff/commands below their compatibility notices are HISTORICAL. [Inventory/migration](../verification/REPOSITORY_RECONCILIATION_2026_11_14.md).
+The November 14 consolidation design is the primary architecture reference:
+
+| Artifact | Design responsibility |
+| --- | --- |
+| [Architecture](../architecture/CATDESK_ARCHITECTURE.md) | Direct Web loop, serial MVP and future boundaries |
+| [Components](../architecture/CATDESK_COMPONENTS.md) | Existing implementation and ownership map |
+| [Release and recovery](../architecture/CATDESK_RELEASE_AND_RECOVERY.md) | Layer diagnosis and supported recovery boundaries |
+| [Security](../architecture/CATDESK_SECURITY_MODEL.md) | Project scope, no-replay and trust boundaries |
+
+These documents describe design, not installed acceptance or runtime grants. [Prior canonical architecture](CANONICAL_CURRENT_ARCHITECTURE.md) remains retained technical/history evidence. Local `.catdesk/current_plan.md`, `.catdesk/session.md` and `.catdesk/todo.md` retain native runtime compatibility and original journals; they are not competing master documentation and may be absent in a clone. Old handoff/commands below their compatibility notices are HISTORICAL. [Inventory/migration](../verification/REPOSITORY_RECONCILIATION_2026_11_14.md).
 
 ## SUPERSEDED
 
