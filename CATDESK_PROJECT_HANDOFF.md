@@ -28,7 +28,7 @@ Fresh read-only baseline on November 14: authenticated loopback catalog has 102 
 
 | Work / owner | State / evidence | Next eligible action |
 | --- | --- | --- |
-| WAKE-LIFECYCLE / current product owner | IN_PROGRESS / SOURCE_TESTED; retained development metadata recovery passed, fresh initialization outcome UNKNOWN | Fix cooperative idle-before-refresh and initialization readback using existing adapter/journal. Preserve the exact new SEND_ATTEMPTED intent; no resend or equivalent replacement |
+| WAKE-LIFECYCLE / current product owner | IN_PROGRESS / SOURCE_TESTED; original USER and acknowledgment found through native history; development readback package selected; browser readback refused RESPONSE_TARGET_DRIFT | Retain bounded route class and readback phase, then reconcile the same original intent without any resend. Two-turn Wake and direct Web work remain OPEN |
 | DOC-CONTINUITY / Codex documentation owner | DONE / SOURCE_TESTED; development and primary synchronized, 23 tests each, both fresh-AI exercises pass | Review the recorded sync evidence; separate architecture task may begin only under its own scope |
 | C1-UI-002 / existing feature owner; resume ownership check required | IN_PROGRESS / SOURCE_TESTED; exact HTML serves locally, client times out; fallback is not installed | On existing UI feature branch, qualify a standard host-bridge fixture; do not replay a mutating tool to test UI |
 | Original C1 and C49 / original task owners | Held original task/grant/journals; cached native refusal not safely replayable | Reconcile authoritative receipts before any original operation; never replace grant/fences |
@@ -44,6 +44,10 @@ The newly registered disposable project `catdesk-wake-turn-canary-nov14`, task `
 
 ## Resume procedure and safety
 
+At 2026-11-14T23:34:28Z, the matched package from feature source `cc7b9aac8d920975125a5079fc9b69383d6490fb` was selected through the existing **unprotected development** update procedure. Its verified predecessor remains intact. Native ChatGPT history independently shows exactly one original matching USER and one completed acknowledgment; raw Markdown contains a known escape in the acknowledgment prefix. This is a candidate witness, not a browser receipt or release-review authority. One no-send browser recovery refused `RESPONSE_TARGET_DRIFT`; no receipt or binding was committed, and the original journal remains fenced. The failing observation's route class and phase were not retained, so the underlying navigation cause is not established. Cleanup passed; protected production, other bindings, profiles and task inventories are preserved. [Source and actual readback evidence](docs/verification/BOOTSTRAP_READBACK_RECOVERY_2026_11_14.json). Next: improve those bounded diagnostics through the same adapter/runtime and retry only the permitted read-only observation after a material correction. Do not resubmit initialization or replace its task.
+
+The operator's current local execution specification is in the primary checkout's `docs/handoffs` directory under `CATDESK_WAKE_LIFECYCLE_AND_PRODUCT_PROGRESS_GOAL_2026-11-14.md`. Its dated baseline statements are historical; current journals and the verification records above govern observed execution.
+
 Read this file, [tickets](CATDESK_TICKETS.md), the active [milestone](CATDESK_MILESTONES.md), then only the cited task evidence. Run read-only Git inspection and supported diagnostics in [commands](CATDESK_IMPORTANT_COMMANDS.md). Check owners, original leases, bindings and unknown outcomes before mutation. Runtime local `.catdesk` journals override prose about actual execution; their absence in a clone is expected. Do not publish them.
 
 No force-push, reset, blind pull/rebase, bulk staging, main merge, protected install/fingerprint change, key generation, new tunnel/profile or recurring Wake/browser launch. An UNKNOWN send never authorizes resend. Keep source tests, controlled live results, installed qualification and unattended acceptance separate. [Recent audited activity](CATDESK_ACTIVITY_LOG.md); [historical records](docs/archive/PRE_CONSOLIDATION_2026_11_14.md).
@@ -53,5 +57,5 @@ Without a connector: clone GitHub, check out the canonical development branch, i
 The machine `source_sha` identifies the qualified integration checkpoint, not the self-referential publication SHA of this document. Read actual checkout HEAD and remote refs before work.
 
 ```json
-{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"6f3b45ba25d44435a106dd12b0c80eed00d61413","branch":"codex/web-rollover-oct17","status":"IN_PROGRESS","runtime_status":"UNVERIFIED","blocker":"INITIALIZATION_SEND_ATTEMPTED_OUTCOME_UNKNOWN_WITHOUT_RECEIPT_OR_VERIFIED_URL","next_action":"Repair cooperative idle-before-refresh behavior and initialization readback diagnostics through the existing adapter and journal; do not resend the pending canary"}
+{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"cc7b9aac8d920975125a5079fc9b69383d6490fb","branch":"codex/wake-lifecycle-nov14","status":"IN_PROGRESS","runtime_status":"UNVERIFIED","blocker":"ORIGINAL_READBACK_RESPONSE_TARGET_DRIFT_ROUTE_CLASS_AND_PHASE_NOT_RETAINED","next_action":"Add bounded route-class and observation-phase diagnostics, then recover the original exchange without resending before the two-turn Wake test"}
 ```

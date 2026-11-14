@@ -61,3 +61,11 @@ Evidence: [docs/verification/DEV_ROOT_VIEW_RECONCILIATION_2026_11_14.json](docs/
 Agent: Current product owner. Source: 6f3b45ba25d44435a106dd12b0c80eed00d61413. Outcome: partial. Development root-view recovery passed without a package upgrade; three exact orphan drivers cleaned up; one fresh initialization is SEND_ATTEMPTED with outcome unknown and no replay; post-test profile quiescence verified. Next: Repair cooperative idle-before-refresh behavior and initialization readback diagnostics through the existing adapter and journal; do not resend the pending canary.
 
 Evidence: [docs/verification/WAKE_LIFECYCLE_LIVE_RECOVERY_2026_11_14.json](docs/verification/WAKE_LIFECYCLE_LIVE_RECOVERY_2026_11_14.json); command: Bounded native-owner preflight, development reconciliation, orphan cleanup and one fresh initialization attempt; exit 2; SHA-256 e2372e7faf53feb03e66f91db820a037af6dd6d75f1285e0f8eb9c14c9ab0176.
+
+<!-- catdesk-activity:wake-bootstrap-readback-nov14 sha256:0d7b61cc558bbc00a7de4fd5ac4f4b743eb6a4c25f49cc1a0e62921aff6835b1 -->
+
+## 2026-11-14T23:37:25Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: cc7b9aac8d920975125a5079fc9b69383d6490fb. Outcome: partial. Original USER and completed acknowledgment recovered through native history; matched development package selected, no-send browser readback refused RESPONSE_TARGET_DRIFT and retained original fence. Next: Add bounded route-class and observation-phase diagnostics, then recover the original exchange without resending before the two-turn Wake test.
+
+Evidence: [docs/verification/BOOTSTRAP_READBACK_RECOVERY_2026_11_14.json](docs/verification/BOOTSTRAP_READBACK_RECOVERY_2026_11_14.json); command: Local Rust and Python checks; existing development update-package and one no-send initialize recover; exit 2; SHA-256 a17e496d003207c313e851da7087eb6200124314acf946e9d7d9522a0338faec.
