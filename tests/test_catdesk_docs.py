@@ -29,7 +29,7 @@ class ContinuityTests(unittest.TestCase):
             if p.is_file():
                 target = cls.root / name; target.parent.mkdir(parents=True, exist_ok=True); shutil.copyfile(p, target)
         subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "add", "--", *docs.PRIMARY, "docs", "README.md", ".gitattributes"], cwd=cls.root, check=True, capture_output=True)
-        subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "Isolated documentation fixture"], cwd=cls.root, check=True, capture_output=True)
+        subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "--allow-empty", "-qm", "Isolated documentation fixture"], cwd=cls.root, check=True, capture_output=True)
         cls.baseline = {p: (cls.root / p).read_bytes() for p in docs.PRIMARY}
         cls.head = docs.git(cls.root, "rev-parse", "HEAD").decode().strip()
 
