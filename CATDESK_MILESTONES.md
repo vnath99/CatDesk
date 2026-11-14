@@ -10707,3 +10707,29 @@ a new review/start decision. Destination approval alone is insufficient. No new
 session, claim, review verdict, ACK, producer, installation or source change is
 claimed. Evidence:
 `docs/verification/INDEPENDENT_REVIEW_ROUTE_ADMISSION_2026_11_14.json`.
+
+### 2026-11-14 Eastern - Source-bound review draft admitted through existing owner
+
+The retained November 13 procedure was reused with the installed verified binary,
+an authenticated loopback ephemeral endpoint and the actual isolated d22 checkout.
+The same frozen prospective contract that the canonical-root v5 call correctly
+refused is now DRAFT and valid, hash fnv1a64:f41066fe9e6bf47f. No workspace guard
+was weakened or global serving root changed. No approval, claim, review or producer
+authority is inferred from schema validity.
+
+The backend exited after its 40-second window; the outer existing kill-on-close
+Job exited successfully within its 120-second bound and the endpoint closed.
+All six original isolated review files remain exact and the source is clean.
+Of 1,685 preservation pins, only the expected global usage counters changed.
+The original raw one-mismatch result is retained; the existing pinned authority
+normalizer passed without new exclusions. Profiles and task inventories match.
+The official backend/tunnel stayed serving; no browser, Wake, binding or task ran.
+
+Eight public-source-only review messages are frozen before consent. They retain
+exact source identity, bounded requested turns, partial-coverage reporting and
+no-replay rules. Explicit new-destination and exact-contract work-start consent
+remain required; neither review verdict nor promotion is authorized by this draft.
+Actual source review must still precede finalization, ACK, source snapshot and
+producer. This is concrete source-bound admission, not a replacement installation
+or Web-to-Wake acceptance. Evidence:
+`docs/verification/SOURCE_BOUND_REVIEW_DRAFT_ADMISSION_2026_11_14.json`.
