@@ -65,6 +65,16 @@ def inspect(root):
         if not (root / p).is_file(): errors.append("MISSING_PRIMARY:" + p)
     if errors: return {"passed": False, "errors": errors}
     docs = {p: (root / p).read_text(encoding="utf-8") for p in PRIMARY}
+    readme = root / "README.md"
+    if not readme.is_file() or any(f"]({p})" not in readme.read_text(encoding="utf-8") for p in PRIMARY):
+        errors.append("README_PRIMARY_AUTHORITY_LINKS_MISSING")
+    for name in ("CATDESK_PROJECT_HANDOFF.md", "CATDESK_IMPORTANT_COMMANDS.md"):
+        prior = root / "docs/orchestrator" / name
+        if not prior.is_file() or "SUPERSEDED AS CURRENT AUTHORITY" not in prior.read_text(encoding="utf-8")[:500]:
+            errors.append("LEGACY_AUTHORITY_CONFLICT:" + name)
+    for sha in set(re.findall(r"(?<![0-9a-f])[0-9a-f]{40}(?![0-9a-f])", docs[PRIMARY[0]])):
+        try: git(root, "cat-file", "-e", sha + "^{commit}")
+        except ValueError: errors.append("HANDOFF_COMMIT_UNRESOLVED:" + sha)
     tickets = table(docs[PRIMARY[4]], "")
     tickets = [r for r in tickets if r[0] not in {"ID", "---"}]
     milestones = table(docs[PRIMARY[1]], "M-")

@@ -31,6 +31,7 @@ class ContinuityTests(unittest.TestCase):
         subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "add", "--", *docs.PRIMARY, "docs", "README.md", ".gitattributes"], cwd=cls.root, check=True, capture_output=True)
         subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "--allow-empty", "-qm", "Isolated documentation fixture"], cwd=cls.root, check=True, capture_output=True)
         cls.baseline = {p: (cls.root / p).read_bytes() for p in docs.PRIMARY}
+        cls.supporting_baseline = {p:(cls.root/p).read_bytes() for p in ["README.md","docs/orchestrator/CATDESK_PROJECT_HANDOFF.md","docs/orchestrator/CATDESK_IMPORTANT_COMMANDS.md"]}
         cls.head = docs.git(cls.root, "rev-parse", "HEAD").decode().strip()
 
     @classmethod
@@ -41,10 +42,12 @@ class ContinuityTests(unittest.TestCase):
 
     def setUp(self):
         for p, raw in self.baseline.items(): (self.root / p).write_bytes(raw)
+        for p, raw in self.supporting_baseline.items(): (self.root / p).write_bytes(raw)
         self.event_path = pathlib.Path(self.temp.name) / "event.json"
         evidence = "docs/verification/WIDGET_RESOURCE_DIAGNOSTIC_2026_11_14.json"
+        current=docs.machine_handoff((self.root/docs.PRIMARY[0]).read_text())
         self.event = dict(event_id="test-progress", timestamp_utc="2026-11-14T17:00:00Z", agent="Fixture",
-            ticket="DOC-CONTINUITY", milestone="M-CONTINUITY", source_sha=self.head,
+            ticket=current["ticket"], milestone=current["milestone"], source_sha=self.head,
             status="IN_PROGRESS", milestone_status="ACTIVE", maturity="SOURCE_TESTED", outcome="partial",
             summary="Mechanical source checks passed; installed acceptance unchanged", next_action="Review documentation and verify publication",
             evidence=[dict(path=evidence, sha256=hashlib.sha256((self.root / evidence).read_bytes()).hexdigest(), command="readonly resource observation", exit_status=0)])
@@ -132,6 +135,18 @@ class ContinuityTests(unittest.TestCase):
     def test_unknown_handoff_commit_detected(self):
         p=self.root/docs.PRIMARY[0];p.write_text(p.read_text().replace('"source_sha":"'+docs.machine_handoff(p.read_text())["source_sha"]+'"','"source_sha":"'+'0'*40+'"'))
         self.assertIn("HANDOFF_IDENTITY_UNPROVEN", docs.inspect(self.root)["errors"])
+
+    def test_unknown_commit_in_human_handoff_is_detected(self):
+        p=self.root/docs.PRIMARY[0];p.write_text(p.read_text()+'\nClaimed source: '+'1'*40+'\n')
+        self.assertIn("HANDOFF_COMMIT_UNRESOLVED:"+'1'*40,docs.inspect(self.root)["errors"])
+
+    def test_legacy_master_cannot_compete_with_primary_authority(self):
+        p=self.root/'docs/orchestrator/CATDESK_PROJECT_HANDOFF.md';p.write_text('# Current master handoff\n')
+        self.assertIn("LEGACY_AUTHORITY_CONFLICT:CATDESK_PROJECT_HANDOFF.md",docs.inspect(self.root)["errors"])
+
+    def test_readme_must_advertise_all_five_primary_documents(self):
+        p=self.root/'README.md';p.write_text('# CatDesk\n')
+        self.assertIn("README_PRIMARY_AUTHORITY_LINKS_MISSING",docs.inspect(self.root)["errors"])
 
     @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 unavailable")
     def test_existing_development_hook_checks_docs_before_unchanged_rust_commands(self):
