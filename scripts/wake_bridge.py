@@ -270,6 +270,78 @@ TASK_RESPONSE_CODES = (
     "WEB_TASK_ARGUMENTS_INVALID", "WEB_TASK_NATIVE_ARGUMENTS_INVALID", "WEB_TASK_REQUEST_ID_REQUIRED",
     "WEB_TASK_CENTRAL_MODE_REQUIRED", "WEB_TASK_CENTRAL_AUTH_REQUIRED", "PLAN_REQUIRED",
 )
+
+
+def classify_readonly_chat_response(readback: Any, conversation_id: str,
+                                   expected_message: str) -> dict[str, Any]:
+    """Classify an exact delivered exchange from a first-party desktop readback.
+
+    This pure reader grants no browser, task or installation authority. Its
+    caller must independently bind the frozen message to the project, task,
+    generation and SENT receipt. Assistant prose is not a native tool receipt.
+    No conversation text, identifiers, unknown error names or keys leave here.
+    """
+    def result(state: str, codes: list[str] | None = None) -> dict[str, Any]:
+        return {"schemaVersion": 1, "basis": "DESKTOP_READBACK_NOT_NATIVE_RECEIPT",
+                "state": state, "knownCodes": codes or [], "retryAuthorized": False,
+                "taskCompletionVerified": False}
+
+    if (not isinstance(conversation_id, str) or not conversation_id
+            or not isinstance(expected_message, str) or not expected_message
+            or len(expected_message) > 32768):
+        return result("IDENTITY_INPUT_INVALID")
+    if (not isinstance(readback, dict) or type(readback.get("schemaVersion")) is not int
+            or readback["schemaVersion"] != 1):
+        return result("READBACK_SHAPE_UNSUPPORTED")
+    thread = readback.get("thread")
+    if (not isinstance(thread, dict) or thread.get("id") != conversation_id
+            or thread.get("kind") != "chatgpt"):
+        return result("CONVERSATION_MISMATCH")
+    page, turns = readback.get("page"), readback.get("turns")
+    if (not isinstance(page, dict) or type(page.get("hasMore")) is not bool
+            or not isinstance(turns, list) or len(turns) > 50):
+        return result("READBACK_SHAPE_UNSUPPORTED")
+    # A page alone cannot establish uniqueness in the returned conversation.
+    if page["hasMore"] or page.get("nextCursor") is not None:
+        return result("HISTORY_COVERAGE_INCOMPLETE")
+    matches = []
+    for turn in turns:
+        if not isinstance(turn, dict) or not isinstance(turn.get("items"), list):
+            return result("READBACK_SHAPE_UNSUPPORTED")
+        for item in turn["items"]:
+            if not isinstance(item, dict):
+                return result("READBACK_SHAPE_UNSUPPORTED")
+            if item.get("type") != "userMessage":
+                continue
+            content = item.get("content")
+            if (item.get("truncated") or not isinstance(content, list)
+                    or len(content) != 1 or not isinstance(content[0], dict)
+                    or content[0].get("type") != "text"
+                    or not isinstance(content[0].get("text"), str)
+                    or content[0].get("truncated")):
+                return result("USER_MESSAGE_COVERAGE_UNPROVEN")
+            if content[0]["text"] == expected_message:
+                matches.append(turn)
+    if len(matches) != 1:
+        return result("USER_MESSAGE_NOT_FOUND" if not matches else "USER_MESSAGE_DUPLICATED")
+    turn = matches[0]
+    if turn.get("status") != "completed" or turn.get("error") is not None:
+        return result("RESPONSE_COMPLETION_UNPROVEN")
+    items = turn["items"]
+    if (len(items) != 2 or items[0].get("type") != "userMessage"
+            or items[1].get("type") != "agentMessage"):
+        return result("RESPONSE_SEQUENCE_UNPROVEN")
+    assistant = items[1]
+    body = assistant.get("text")
+    if (assistant.get("truncated") or not isinstance(body, str)
+            or not body.strip() or len(body) > 32768):
+        return result("RESPONSE_BODY_UNPROVEN")
+    codes = [code for code in TASK_RESPONSE_CODES
+             if re.search(r"(?<![A-Za-z0-9_])" + re.escape(code)
+                          + r"(?![A-Za-z0-9_])", body)]
+    return result("ERROR_REPORTED" if codes else "NO_ALLOWLISTED_ERROR_REPORTED", codes)
+
+
 TASK_REFUSAL_CATEGORIES = ("IDENTITY_MISMATCH", "TOOL_UNAVAILABLE", "CONTEXT_UNAVAILABLE",
                            "AUTHORIZATION_REQUIRED", "DISPATCH_REJECTED")
 TASK_UNAVAILABLE_SUBJECTS = ("RUN_COMMAND", "CENTRAL_TASK_TOOL", "NATIVE_CALL",

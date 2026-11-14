@@ -10649,3 +10649,39 @@ checks passed. No source test, build, install, new service/tunnel, browser, nati
 project task or message ran. Next inspect independent registered review-route
 eligibility without disturbing either held request or native session. Evidence:
 `docs/verification/BOTH_TARGETS_AND_REVIEW_ADMISSION_2026_11_14.json`.
+
+### 2026-11-14 Eastern - Exact task response read autonomously without replay
+
+The first-party desktop read-only chat interface returned the exact registered
+controlled conversation. Bounded pagination found the completed clarification
+exchange and matched its USER message byte-for-byte against the frozen delivery.
+The SENT receipt, message digest, original task/source event and current paired
+target generation/digest were independently reconciled. No operator message relay,
+browser launch, task execution or message submission was needed.
+
+The assistant reports WEB_TASK_CACHED_ARGUMENTS_INVALID and INVALID_ARGUMENT.
+This is assistant-reported evidence, not a native execution receipt or the missing
+outer arguments. A later empty-envelope diagnostic reports WEB_TASK_ARGUMENTS_INVALID
+and remains separately attributed. The installed attested source puts the cached
+error before task execution; the exact rejected field is still not established.
+No OPEN request, original argument, grant, key or uncertainty fence was changed.
+
+The existing Wake bridge now has a pure bounded readback classifier using the
+existing error allowlist. Wrong identity, incomplete history, duplicate messages,
+truncated content, unproved completion and changed sequence fail closed. Unknown
+text and secrets cannot enter its closed output; completed prose never grants
+task success or retry authority. Focused tests pass. This source helper and the
+actual desktop diagnostic do not qualify the protected installed browser reader
+or the full Web edit/checkpoint/self-Wake cycle. Evidence:
+`docs/verification/AUTONOMOUS_TASK_RESPONSE_READBACK_2026_11_14.json`.
+
+The second registered controlled conversation was independently read once. Its
+original message and SENT receipt matched the project/task and paired target; the
+completed answer contained no allowlisted error. This is not proof of task success.
+Three old network-recovery test fakes were corrected to model the required native
+editor and its precise post-edit uncertainty error. Production guards were retained;
+the original failed regression and intermediate fixture failures are recorded.
+
+Final full Wake bridge regression: 143 tests passed. No installed binary or Wake
+package changed; the desktop reader is diagnostic evidence, not protected release
+authority or Phase 1 acceptance.

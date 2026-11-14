@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-14",
+  "task": "nov14-autonomous-task-response-readback",
+  "sourceBase": "b86025d1f0c6489df2a2b8e0649157524ca98620",
+  "implementation": {
+    "state": "SOURCE_TESTED",
+    "component": "scripts/wake_bridge.py",
+    "entryPoint": "classify_readonly_chat_response",
+    "purpose": "Pure allowlisted classification of an exact delivered exchange from a first-party desktop readback; caller retains project/task/receipt authority.",
+    "newBrowserOwnerOrService": false,
+    "installed": false
+  },
+  "liveObservation": {
+    "state": "LIVE_OBSERVED_DIAGNOSTIC_NOT_INSTALLED_READER_ACCEPTANCE",
+    "method": "First-party desktop read_thread; no browser opening or message submission",
+    "readOnlyCalls": 4,
+    "returnedConversationTurns": 5,
+    "completeReturnedPage": true,
+    "registeredConversationVerified": true,
+    "exactFrozenUserMessageMatched": true,
+    "sentReceiptMessageDigestVerified": true,
+    "originalProjectTaskAndSourceEventVerified": true,
+    "currentRegistryWakeDigestAndGenerationVerified": true,
+    "completedAssistantResponseObserved": true,
+    "classification": "ERROR_REPORTED",
+    "knownCodes": [
+      "WEB_TASK_CACHED_ARGUMENTS_INVALID",
+      "INVALID_ARGUMENT"
+    ],
+    "basis": "DESKTOP_READBACK_NOT_NATIVE_RECEIPT",
+    "rejectedInvariantEstablished": false,
+    "nativeExecutionReceiptObserved": false,
+    "laterEmptyEnvelopeProbeKeptSeparate": true,
+    "laterProbeReportedCode": "WEB_TASK_ARGUMENTS_INVALID"
+  },
+  "tests": {
+    "focusedCommand": "python -m unittest tests.test_wake_bridge.ReadonlyChatResponseTests -v",
+    "focusedPassed": 11,
+    "regressionCommand": "python -m unittest tests.test_wake_bridge -q",
+    "regressionState": "PASS",
+    "cases": [
+      "exact completed exchange",
+      "allowlisted errors only",
+      "prose is not tool success",
+      "code boundaries",
+      "wrong conversation/provider",
+      "incomplete history",
+      "missing/duplicate message",
+      "truncated user",
+      "running/interrupted/error turn",
+      "missing/oversized/truncated body",
+      "changed shape/sequence",
+      "independent observations"
+    ],
+    "initialRegression": {
+      "run": 143,
+      "failures": 1,
+      "errors": 2,
+      "reason": "Three pre-existing network-recovery fakes lacked the required native editor evaluator. The post-edit network error is now wrapped by the native-entry uncertainty guard."
+    },
+    "fixtureCorrection": "Model the existing native editor primitive and require its precise post-verify refusal; production native-entry guards are unchanged.",
+    "correctedFocusedPassed": 14,
+    "attempts": [
+      {
+        "scope": "new classifier",
+        "run": 11,
+        "failures": 0,
+        "errors": 0,
+        "elapsedSeconds": 0.001
+      },
+      {
+        "scope": "initial full suite",
+        "run": 143,
+        "failures": 1,
+        "errors": 2,
+        "elapsedSeconds": 175.988
+      },
+      {
+        "scope": "first fixture correction",
+        "run": 14,
+        "failures": 2,
+        "errors": 2,
+        "elapsedSeconds": 10.073
+      },
+      {
+        "scope": "native editor state fixture correction",
+        "run": 14,
+        "failures": 1,
+        "errors": 0,
+        "elapsedSeconds": 10.093
+      },
+      {
+        "scope": "precise post-edit uncertainty assertion",
+        "run": 14,
+        "failures": 0,
+        "errors": 0,
+        "elapsedSeconds": 10.064
+      },
+      {
+        "scope": "final full suite",
+        "run": 143,
+        "failures": 0,
+        "errors": 0,
+        "elapsedSeconds": 175.814
+      }
+    ],
+    "regressionPassed": 143,
+    "regressionElapsedSeconds": 175.814,
+    "regressionLogSha256": "37a9e63198d732c268d8384365995846942fdcd2aa5c460cb7bae63958df6bd5"
+  },
+  "preservation": {
+    "messagesSent": 0,
+    "nativeTasksDispatchedOrReplayed": 0,
+    "grantsOrFencesChanged": 0,
+    "bindingsChanged": 0,
+    "browserOrWakeProcessesStarted": 0,
+    "productionOrProtectedInstallationChanges": 0
+  },
+  "remaining": [
+    "Original cached outer arguments and exact rejected field are not present in this assistant readback; do not infer or rewrite them.",
+    "In the attested installed source, this error corresponds to cached-envelope validation before central task execution; assistant prose alone is not a native receipt.",
+    "Original OPEN work and uncertain deliveries remain preserved; observation does not authorize replay or closure.",
+    "Installed task-scoped Git, genuine independent review/producer authority and protected reader promotion remain separate gaps.",
+    "No full Web edit/checkpoint/manual-Wake acceptance is claimed."
+  ],
+  "operatorActionRequiredForThisObservation": false,
+  "observedUtc": "2026-11-14T15:00:55.128419+00:00",
+  "peerObservation": {
+    "method": "One additional read-only desktop read_thread call for the second registered controlled project",
+    "completeReturnedPage": true,
+    "returnedConversationTurns": 5,
+    "exactOriginalMessageAndSentReceiptMatched": true,
+    "currentRegistryWakeAndTaskMatched": true,
+    "classification": "NO_ALLOWLISTED_ERROR_REPORTED",
+    "taskSuccessInferred": false,
+    "messagesSent": 0,
+    "observedUtc": "2026-11-14T15:05:25.891747+00:00"
+  },
+  "verificationRecordedUtc": "2026-11-14T15:09:43.817338+00:00"
+}

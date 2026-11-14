@@ -1309,3 +1309,14 @@ neither copying them nor inferring task completion is authorized by pairing repa
 Inspect independent registered review routes next under their own exact admission,
 without changing native ownership. No operator action is currently requested.
 See `docs/verification/BOTH_TARGETS_AND_REVIEW_ADMISSION_2026_11_14.json`.
+# 2026-11-14 - Task-bound response diagnosis no longer requires manual relay
+
+The original controlled clarification response was retrieved through the existing
+first-party desktop read-only chat interface and matched to its frozen message,
+SENT receipt, project/task/source event and paired target generation/digest.
+No operator action is required to obtain this diagnostic. It reports
+WEB_TASK_CACHED_ARGUMENTS_INVALID; the exact original rejected argument remains
+unavailable. Do not retry, replace values or close the OPEN task from this prose.
+The later empty-envelope probe has a distinct error and is not original-task proof.
+This does not enroll the Wake broker or qualify an installed response-reader upgrade.
+See `docs/verification/AUTONOMOUS_TASK_RESPONSE_READBACK_2026_11_14.json`.

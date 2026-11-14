@@ -15,6 +15,88 @@ sys.modules[SPEC.name] = wake_bridge
 SPEC.loader.exec_module(wake_bridge)
 
 
+class ReadonlyChatResponseTests(unittest.TestCase):
+    def document(self, body="WEB_TASK_CACHED_ARGUMENTS_INVALID"):
+        return {"schemaVersion": 1, "thread": {"id": "registered-chat", "kind": "chatgpt"},
+                "page": {"hasMore": False, "nextCursor": None}, "turns": [
+                    {"status": "completed", "error": None, "items": [
+                        {"type": "userMessage", "content": [{"type": "text", "text": "FROZEN_PRIVATE_MESSAGE"}]},
+                        {"type": "agentMessage", "text": body}]}]}
+
+    def observe(self, document):
+        return wake_bridge.classify_readonly_chat_response(
+            document, "registered-chat", "FROZEN_PRIVATE_MESSAGE")
+
+    def test_exact_response_reports_only_allowlisted_codes_without_authority(self):
+        value = self.observe(self.document("secret execution key; INVALID_ARGUMENT; "
+                                          "WEB_TASK_CACHED_ARGUMENTS_INVALID; UNKNOWN_SECRET_ERROR"))
+        self.assertEqual(value["state"], "ERROR_REPORTED")
+        self.assertEqual(value["knownCodes"], ["WEB_TASK_CACHED_ARGUMENTS_INVALID", "INVALID_ARGUMENT"])
+        self.assertFalse(value["retryAuthorized"])
+        self.assertFalse(value["taskCompletionVerified"])
+        self.assertNotIn("secret", json.dumps(value).lower())
+        self.assertNotIn("FROZEN_PRIVATE_MESSAGE", json.dumps(value))
+
+    def test_completed_prose_never_proves_tool_or_task_success(self):
+        value = self.observe(self.document("Everything succeeded."))
+        self.assertEqual(value["state"], "NO_ALLOWLISTED_ERROR_REPORTED")
+        self.assertFalse(value["taskCompletionVerified"])
+
+    def test_code_substrings_are_not_error_names(self):
+        self.assertEqual(self.observe(self.document("PREFIX_WEB_TASK_ARGUMENTS_INVALID_SUFFIX"))["knownCodes"], [])
+
+    def test_wrong_conversation_or_provider_is_refused(self):
+        for field, value in [("id", "other-chat"), ("kind", "codex")]:
+            with self.subTest(field=field):
+                document = self.document()
+                document["thread"][field] = value
+                self.assertEqual(self.observe(document)["state"], "CONVERSATION_MISMATCH")
+
+    def test_incomplete_page_cannot_prove_message_uniqueness(self):
+        document = self.document()
+        document["page"].update(hasMore=True, nextCursor="older")
+        self.assertEqual(self.observe(document)["state"], "HISTORY_COVERAGE_INCOMPLETE")
+
+    def test_missing_or_duplicate_message_fails_closed(self):
+        document = self.document()
+        document["turns"][0]["items"][0]["content"][0]["text"] = "other message"
+        self.assertEqual(self.observe(document)["state"], "USER_MESSAGE_NOT_FOUND")
+        document = self.document()
+        document["turns"].append(document["turns"][0])
+        self.assertEqual(self.observe(document)["state"], "USER_MESSAGE_DUPLICATED")
+
+    def test_truncated_user_message_is_not_identity(self):
+        document = self.document()
+        document["turns"][0]["items"][0]["content"][0]["truncated"] = True
+        self.assertEqual(self.observe(document)["state"], "USER_MESSAGE_COVERAGE_UNPROVEN")
+
+    def test_running_interrupted_and_error_turns_fail_closed(self):
+        for status, error in [("inProgress", None), ("interrupted", None), ("completed", {"error": "expired"})]:
+            with self.subTest(status=status, error=error):
+                document = self.document()
+                document["turns"][0].update(status=status, error=error)
+                self.assertEqual(self.observe(document)["state"], "RESPONSE_COMPLETION_UNPROVEN")
+
+    def test_missing_oversized_or_truncated_response_body_fails_closed(self):
+        for body, truncated in [(None, False), ("", False), ("x" * 32769, False), ("ERROR", True)]:
+            with self.subTest(bodySize=len(body) if body is not None else None, truncated=truncated):
+                document = self.document(body)
+                document["turns"][0]["items"][1]["truncated"] = truncated
+                self.assertEqual(self.observe(document)["state"], "RESPONSE_BODY_UNPROVEN")
+
+    def test_changed_structure_and_additional_assistants_fail_closed(self):
+        self.assertEqual(self.observe({"error": "LOGIN_REQUIRED"})["state"], "READBACK_SHAPE_UNSUPPORTED")
+        document = self.document()
+        document["turns"][0]["items"].append({"type": "agentMessage", "text": "second"})
+        self.assertEqual(self.observe(document)["state"], "RESPONSE_SEQUENCE_UNPROVEN")
+
+    def test_unrelated_project_observation_remains_independent(self):
+        bad = self.document()
+        bad["thread"]["id"] = "blocked-project"
+        self.assertEqual(self.observe(bad)["state"], "CONVERSATION_MISMATCH")
+        self.assertEqual(self.observe(self.document())["state"], "ERROR_REPORTED")
+
+
 class FakeSink:
     def __init__(self, behavior, calls, target_url):
         self.behavior = behavior
@@ -1144,6 +1226,15 @@ class WakeBridgeTests(unittest.TestCase):
                 return "https://chatgpt.com/c/review-one"
             def send_keys(self, _selector, text, timeout):
                 self.writes.append((text, timeout))
+            def evaluate(self, script):
+                # Model the required native editor primitive, never keyboard fallback.
+                if "document.execCommand('insertText'" not in script:
+                    if "#prompt-textarea" in script:
+                        return ["ready", True]
+                    raise AssertionError("unexpected native-entry evaluation")
+                text, _ = json.JSONDecoder().raw_decode(script.rsplit("const text = ", 1)[1])
+                self.send_keys(wake_bridge.EDITOR, text, timeout=1)
+                return "INSERTED"
             def press_keys(self, *_args, **_kwargs):
                 raise AssertionError("human-speed message typing is forbidden")
 
@@ -1254,6 +1345,15 @@ class WakeBridgeTests(unittest.TestCase):
                 return "https://chatgpt.com/c/review-one"
             def send_keys(self, _selector, text, timeout):
                 writes.append((text, timeout))
+            def evaluate(self, script):
+                # Model the required native editor primitive, never keyboard fallback.
+                if "document.execCommand('insertText'" not in script:
+                    if "#prompt-textarea" in script:
+                        return ["ready", True]
+                    raise AssertionError("unexpected native-entry evaluation")
+                text, _ = json.JSONDecoder().raw_decode(script.rsplit("const text = ", 1)[1])
+                self.send_keys(wake_bridge.EDITOR, text, timeout=1)
+                return "INSERTED"
             def press_keys(self, *_args, **_kwargs):
                 raise AssertionError("human-speed message typing is forbidden")
 
@@ -1288,7 +1388,8 @@ class WakeBridgeTests(unittest.TestCase):
                 ), patch.object(sink, "best_effort_present_browser"), patch.object(
                     sink, "text", side_effect=wake_bridge.Attention("BROWSER_NETWORK_ERROR")
                 ):
-                    with self.assertRaisesRegex(wake_bridge.Attention, "BROWSER_NETWORK_ERROR"):
+                    expected = "BROWSER_NETWORK_ERROR" if fail_at_checkpoint else "CONVERSATION_DRAFT_INSERT_UNVERIFIED_POST_VERIFY"
+                    with self.assertRaisesRegex(wake_bridge.Attention, expected):
                         sink.wake(self.record_id, message, lambda: True, before_submit)
 
                 self.assertEqual(["submission-boundary"], checkpoints)
@@ -2921,6 +3022,15 @@ class WakeBridgeTests(unittest.TestCase):
                 def reload(self, ignore_cache): pass
                 def get_current_url(self): return "https://chatgpt.com/c/review-one"
                 def send_keys(self, *_args, **_kwargs): pass
+                def evaluate(self, script):
+                    # Model the required native editor primitive, never keyboard fallback.
+                    if "document.execCommand('insertText'" not in script:
+                        if "#prompt-textarea" in script:
+                            return ["ready", True]
+                        raise AssertionError("unexpected native-entry evaluation")
+                    text, _ = json.JSONDecoder().raw_decode(script.rsplit("const text = ", 1)[1])
+                    self.send_keys(wake_bridge.EDITOR, text, timeout=1)
+                    return "INSERTED"
                 def press_keys(self, *_args, **_kwargs): raise AssertionError("human-speed message typing is forbidden")
             real_cdp = ReloadingCdp()
             class SB:
