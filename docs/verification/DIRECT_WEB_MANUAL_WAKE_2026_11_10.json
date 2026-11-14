@@ -1,0 +1,178 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-10T02:37:28.352419+00:00",
+  "classification": "SOURCE_QUALIFIED_NOT_INSTALLED_OR_LIVE_ACCEPTANCE",
+  "primaryWorkflow": "CHATGPT_WEB_V5_SCOPED_FILES_VERIFICATION_MANUAL_SELF_WAKE",
+  "nativeCodingRequired": false,
+  "implementation": "Exact completed manual-Wake task call selected through existing bounded sender; no new browser owner or scheduler",
+  "sourcePaths": [
+    "src/wake_protocol_client.rs",
+    "src/project_mcp_task.rs",
+    "src/project_task_manual_wake.rs",
+    "src/delegated/journal.rs",
+    "src/web_work.rs",
+    "src/web_work_state.rs",
+    "src/web_work_manual_delivery.rs",
+    "src/operator_web_cli.rs",
+    "wake/src/runtime.rs",
+    "wake/src/runtime_scoped_review.rs"
+  ],
+  "newDeterministicTests": 6,
+  "uniqueFocusedPassingTests": 34,
+  "passingChecks": [
+    {
+      "command": "cargo test --manifest-path Cargo.toml --bin catdesk manual_wake_delivery -- --test-threads=1",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "compileSeconds": 37.43,
+      "testSeconds": 5.09,
+      "coverage": [
+        "closed CLI options",
+        "exact grant/journal/task/message/event/hash validation without creating missing journal",
+        "prior unknown refused; selected call always exact after fence",
+        "real disposable Store/project lease proves no release before SUBMITTING and one release afterward",
+        "new Requested scoped task call after fence does not cancel its own continuation"
+      ]
+    },
+    {
+      "command": "cargo test --manifest-path wake/Cargo.toml --lib runtime::scoped_review::tests:: -- --test-threads=1",
+      "exitCode": 0,
+      "passed": 31,
+      "failed": 0,
+      "compileSeconds": 4.57,
+      "testSeconds": 12.62,
+      "coverage": [
+        "existing Review/NewTask/WorkRequest/rollover behavior",
+        "manual unknown project does not block sibling",
+        "manual exactness/expiry/target and role rejection",
+        "manual durable fence precedes sole ACK; interrupted handoff cannot replay"
+      ],
+      "sourceNote": "Full module passed before final equivalent checked-subtraction style correction; final three touched manual tests reran afterward."
+    },
+    {
+      "command": "cargo test --manifest-path wake/Cargo.toml --lib manual_end_turn -- --test-threads=1",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "compileSeconds": 3.91,
+      "testSeconds": 0.41,
+      "startedUtc": "2026-11-10T02:33:36.5905517+00:00",
+      "finishedUtc": "2026-11-10T02:33:41.3900627+00:00"
+    },
+    {
+      "command": "cargo fmt --all -- --check",
+      "exitCode": 0,
+      "startedUtc": "2026-11-10T02:33:50.7556996+00:00",
+      "finishedUtc": "2026-11-10T02:33:55.9563760+00:00"
+    },
+    {
+      "command": "cargo fmt --manifest-path wake/Cargo.toml --all -- --check",
+      "exitCode": 0,
+      "startedUtc": "2026-11-10T02:33:50.7556996+00:00",
+      "finishedUtc": "2026-11-10T02:33:55.9563760+00:00"
+    },
+    {
+      "command": "cargo clippy --all-targets -- -D warnings",
+      "exitCode": 0,
+      "compileSeconds": 18.67,
+      "startedUtc": "2026-11-10T02:33:50.7560893+00:00",
+      "finishedUtc": "2026-11-10T02:34:09.5878909+00:00"
+    },
+    {
+      "command": "cargo clippy --manifest-path wake/Cargo.toml --all-targets -- -D warnings",
+      "exitCode": 0,
+      "compileSeconds": 9.9,
+      "startedUtc": "2026-11-10T02:33:50.7557404+00:00",
+      "finishedUtc": "2026-11-10T02:34:00.8167638+00:00"
+    }
+  ],
+  "earlierFailuresAndCorrections": [
+    {
+      "order": 1,
+      "command": "cargo test --manifest-path Cargo.toml manual_wake_delivery -- --test-threads=1",
+      "exitCodeObserved": 1,
+      "phase": "COMPILE",
+      "diagnostic": "E0308 x3: CLI option values were &str, action fields require String",
+      "correction": "Explicit .into() conversions",
+      "entryUtc": null
+    },
+    {
+      "order": 2,
+      "command": "cargo test --manifest-path Cargo.toml manual_wake_delivery -- --test-threads=1",
+      "exitCodeObserved": 1,
+      "passed": 1,
+      "failed": 1,
+      "compileSeconds": 60.0,
+      "testSeconds": 1.55,
+      "diagnostic": "Fixture used taskId directory instead of existing hashed delegated run segment",
+      "correction": "Reuse pure existing DelegatedJournal::run_dir path constructor; visibility-only pub(crate) change",
+      "entryUtc": null
+    },
+    {
+      "order": 3,
+      "command": "cargo test --manifest-path Cargo.toml --bin catdesk manual_wake_delivery -- --test-threads=1",
+      "exitCodeObserved": 1,
+      "passed": 2,
+      "failed": 1,
+      "compileSeconds": 39.8,
+      "testSeconds": 2.7,
+      "diagnostic": "TIMER_COMPLETION_REQUIRES_SENT: fixture incorrectly used generic response-state setter for COMPLETE",
+      "correction": "Use existing complete_timer API for fixture exact SENT receipt",
+      "entryUtc": null
+    },
+    {
+      "order": 4,
+      "command": "cargo clippy --manifest-path wake/Cargo.toml --all-targets -- -D warnings",
+      "exitCodeObserved": 101,
+      "startedUtc": "2026-11-10T02:32:45.5312669+00:00",
+      "finishedUtc": "2026-11-10T02:32:59.7701584+00:00",
+      "diagnostic": "clippy::manual_saturating_arithmetic",
+      "correction": "Preserve checked subtraction with explicit fail-closed let Some(ttl_seconds) else return false"
+    }
+  ],
+  "timestampLimitation": "Earlier targeted test command entry timestamps were not captured by their shell wrapper; ordered failures and exact tool-reported durations are retained without inventing times. Final checks record UTC explicitly.",
+  "scope": {
+    "existingOptInGrantRequired": true,
+    "exactCompletedManualJournalCallRequired": true,
+    "exactArgumentAndResultHashesRequired": true,
+    "exactFixedMessageAndWakeIntentRequired": true,
+    "existingProvedRolloverCarryRequired": true,
+    "originalWorkRecordRevalidated": true,
+    "noUnknownPriorCallsBeforeFence": true,
+    "postFenceNewTaskCallsAllowed": true,
+    "selectedManualCallAlwaysImmutable": true,
+    "projectLeaseReleasedOnlyAfterDurableSubmittingWitness": true,
+    "existingHostAndBrowserLocksRetained": true,
+    "senderNeverScansSiblingQueues": true,
+    "unknownOrCompletedSubmissionNeverResent": true,
+    "newGrantCreatedByDelivery": false
+  },
+  "qualificationEvidenceSha256": "02d31bd3a97f8b6277e2ce5a478802e28dadb9f520220e1cb3002b167c690dcb",
+  "firstFreshTaskAdmission": {
+    "outcome": "FAILED_READ_ONLY_PREFLIGHT_BEFORE_PRODUCT_MUTATION",
+    "failureCode": "LOCAL_ADMISSION_BOUND_EXPIRED_NO_RETRY",
+    "elapsedSeconds": 141.0630562,
+    "cause": "Overbroad recursive preservation scan exceeded test preparation budget",
+    "independentlyVerifiedNoWorktreeTaskGrantOrMessageCreated": true,
+    "registeredBindingsUnchanged": true,
+    "recordedTestProcessIdentitiesRemaining": 0,
+    "oldAttemptPreserved": true,
+    "nextStep": "Narrow existing metadata snapshot; require reconciled non-submission before a new bounded attempt"
+  },
+  "actualWebEditVerified": false,
+  "actualManualWakeDeliveryVerified": false,
+  "installedResponseReaderPromoted": false,
+  "protectedProductionChanged": false,
+  "nativeRequestsReplayed": false,
+  "newTunnelOrProfileCreated": false,
+  "installedAcceptance": false,
+  "unattendedAcceptance": false,
+  "fullMvpComplete": false,
+  "remainingGates": [
+    "Source-qualified bounded development-controller invocation for fresh ordinary invitation",
+    "Actual scoped Web edit and fixed offline verification",
+    "Actual exact manual-Wake delivery, completed continuation and cleanup",
+    "Existing reviewed release and installed response-reader qualification remain separate"
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "observedUtc": "2026-11-01T19:22:21.394115+00:00",
+  "classification": "ACTUAL_CONTROLLED_DEVELOPMENT_RECOVERY_NOT_PRODUCTION_ACCEPTANCE",
+  "sourceCommit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+  "controllerSha256": "846b90b2150288b2e240e1443bfe794d8a9752a6f3743f6eda492a0ee2344bcf",
+  "previousVerifiedControllerSha256": "f460a47d38788d41d2bef2e092550d7c7726561ac64fe94cb1deebc9d738dc2f",
+  "sourceCollectorCorrection": {
+    "failurePreserved": true,
+    "rawReplyBytes": 3932,
+    "sourceRequestResent": false,
+    "sameConfirmedResponseCollected": true,
+    "collectionElapsedSeconds": 67.094
+  },
+  "package": {
+    "finiteAuthenticatedHealth": "PASS",
+    "unauthorizedRejected": true,
+    "ownedTreeExitAndEndpointClosure": true,
+    "previousPackagePreserved": true,
+    "projectAndJournalPinMismatches": 0
+  },
+  "transaction": {
+    "initialCreateCommand": "TIMEOUT_AFTER_CONFIRMED_CREATED_COMPLETED_RECEIPT",
+    "initialCreateElapsedSeconds": 165.172,
+    "testOwnedProcessesAfterTimeout": 0,
+    "receiptOnlyResume": true,
+    "bootstrapResubmitted": false,
+    "sourceRecheck": true,
+    "pairedNewGeneration": 5,
+    "predecessorPreserved": true,
+    "continuationReceipt": "EXACT_USER_MESSAGE_APPENDED",
+    "continuationResponse": "COMPLETE",
+    "continuationResponseSha256": "d902b020d7dbb7fe506a3a61e6de60cd7a28bc994a32f93661f3a26a0b8442e1",
+    "continuationResponseBytes": 1071,
+    "originalContextPolicyRestored": true
+  },
+  "cleanup": {
+    "testOwnedProcesses": 0,
+    "sharedWakeHostStopped": true,
+    "loginMarkerPresent": false,
+    "trustedProductionBackendRetained": true
+  },
+  "limits": [
+    "Controlled development registry/Wake qualification is separate from canonical connector scope and native ownership.",
+    "A completed continuation does not establish authorized native task execution or two-project source edits.",
+    "Current-source independent cumulative review and existing producer/promotion checks remain required.",
+    "Context figures are incomplete advisory estimates, not exact provider usage."
+  ]
+}

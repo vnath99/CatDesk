@@ -1,0 +1,79 @@
+{
+  "c249UnknownOutcome": "PRESERVED_NO_REPLAY",
+  "acceptedBaseCommit": "98248023c8cd359476e5943d991c960354c5e168",
+  "development": {
+    "protectedPinsPreservedDuringRead": 8219,
+    "readOwnedProcessesRemaining": 0,
+    "boundedHealthHttpStatuses": [
+      401,
+      200
+    ],
+    "selectedPackage": "1.0.0-dev.85-cacb37c01df21c442448e11c4456f1739121051252499002c75bb17326ac6e33",
+    "browserProfilePreserved": true,
+    "sourceCommit": "073f4dfd0f21a988dcc453428a13c2a45ecd4758",
+    "failureShapeBranchLiveObserved": false,
+    "uniqueTools": 79,
+    "instrumentedReadEventVerified": true,
+    "appSha256": "9da194faf6aa6d06432e91fe973122d40c0f53af76ce344e322f0ce21bcdeb09",
+    "naturalExit": true
+  },
+  "integration": {
+    "historicalUntrackedFilesPreserved": 14,
+    "byteFaithfulPrivateReport": true,
+    "exactFastForward": true
+  },
+  "classification": "GENUINE_WEB_STATIC_REVIEW_ACKNOWLEDGED_EXACT_SOURCE_PRODUCER_ACTIVE",
+  "acceptedSourceCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "date": "2026-10-28",
+  "milestoneComplete": false,
+  "producer": {
+    "trustedC208ArtifactRetained": true,
+    "priorFailureHistoryRetained": true,
+    "elapsedSeconds": 424.545391,
+    "freshSupportedPrepareVerified": true,
+    "observedUtc": "2026-10-28T11:16:26.0160498+00:00",
+    "sourceCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+    "newArtifactQualified": false,
+    "liveMonitoredProcesses": 4,
+    "newBuildAttestationClaimed": false,
+    "terminalObserved": false,
+    "workerMaximumSeconds": 900,
+    "ownerMaximumSeconds": 1020
+  },
+  "nativeFinalization": {
+    "acknowledged": true,
+    "snapshotEntries": 217,
+    "fullTrackedRustBuildSourceCovered": true,
+    "stateVersion": 7,
+    "active": false,
+    "state": "COMPLETED_VERIFIED",
+    "priorInboxAndOtherAccountingRecordsPreserved": true,
+    "snapshotSchema": 4,
+    "snapshotManifestSha256": "380ed990da4939ff27ccc546516db12be13eda77f9ba771c3423c95a1542df71"
+  },
+  "previousUiLoadErrorCause": "UNPROVEN_RESPONSE_RECOVERED_ON_DISTINCT_INSTRUMENTED_READ",
+  "sourceCi": "UNVERIFIED",
+  "recurringAutomationEnabled": false,
+  "twoIndependentWebCodingAcceptance": "OPEN",
+  "review": {
+    "additionalMessagesSent": 0,
+    "checkpoint": "C254",
+    "responseSha256": "6cdf59c7824d9ecbebac5c02cbafbef177609a8fedb4c599974d84179aab5f5e",
+    "inspectedFocusPaths": 6,
+    "c252DefectExplicitlyResolved": true,
+    "eventBound": true,
+    "cumulativeTargetAccepted": true,
+    "limitations": 28,
+    "staleRuntimeStatementsReconciledWithSeparateLiveEvidence": true,
+    "laterC255C256Excluded": true,
+    "originalMessagesSent": 1,
+    "rawResponseBytes": 4540,
+    "capture": "STRICT_UTF8_NO_REPAIR",
+    "findings": 0,
+    "schemaValid": true,
+    "verdict": "PASS",
+    "scope": "STATIC_SOURCE_ONLY_EXACT_ACCEPTED_COMMIT"
+  },
+  "productionPromotion": "NOT_PERFORMED",
+  "checkpoint": "C257"
+}

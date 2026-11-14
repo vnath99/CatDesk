@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-29T22:29:16.702389+00:00",
+  "classification": "ACTUAL_SELECTED_DEVELOPMENT_RUNTIME_LOCAL_MCP_QUALIFICATION",
+  "sourceInspectionCommit": "cf423dec65bd051d86d7d1731de7b8629ea7c145",
+  "sourceBranch": "codex/web-rollover-oct17",
+  "workflow": "operator web-dev-runtime run-backend --max-runtime-seconds 25",
+  "runs": [
+    {
+      "classification": "ACTUAL_SELECTED_DEVELOPMENT_BACKEND_LOOPBACK_ONLY",
+      "maximumRuntimeSeconds": 25,
+      "controllerSha256": "ead16003f89ec23b511b8d1310d001b9ccf58b42d2f5097c2b85d546c9272b77",
+      "failure": "AssertionError: ",
+      "ownerExitCode": 0,
+      "ownedTreeExitProved": true,
+      "protectedMetadataChecked": 11,
+      "changedMetadataCount": 0,
+      "onlyDevUsageConfigMayChange": true,
+      "observedUtc": "2026-10-29T22:22:53.369906+00:00"
+    },
+    {
+      "classification": "ACTUAL_SELECTED_DEVELOPMENT_BACKEND_LOOPBACK_ONLY",
+      "maximumRuntimeSeconds": 25,
+      "controllerSha256": "ead16003f89ec23b511b8d1310d001b9ccf58b42d2f5097c2b85d546c9272b77",
+      "ready": true,
+      "selectedAppSha256": "df0cab8196c889b72fa3fd3c7dc0b5c1ccc1b202897d8c161655ce7a0593496b",
+      "noAuthStatus": 401,
+      "initializeStatus": 200,
+      "catalogStatus": 200,
+      "toolCount": 79,
+      "centralTaskAdvertised": true,
+      "rawShellAdvertised": false,
+      "rawWriteAdvertised": false,
+      "registeredUrlMatchesInRead": 10,
+      "ungrantedTaskRefused": true,
+      "ownerExitCode": 0,
+      "ownedTreeExitProved": true,
+      "endpointClosed": true,
+      "protectedMetadataChecked": 11,
+      "changedMetadataCount": 1,
+      "onlyDevUsageConfigMayChange": true,
+      "observedUtc": "2026-10-29T22:23:52.931628+00:00"
+    },
+    {
+      "classification": "ACTUAL_SELECTED_DEVELOPMENT_BACKEND_LOOPBACK_ONLY",
+      "maximumRuntimeSeconds": 25,
+      "controllerSha256": "ead16003f89ec23b511b8d1310d001b9ccf58b42d2f5097c2b85d546c9272b77",
+      "ready": true,
+      "selectedAppSha256": "df0cab8196c889b72fa3fd3c7dc0b5c1ccc1b202897d8c161655ce7a0593496b",
+      "noAuthStatus": 401,
+      "initializeStatus": 200,
+      "catalogStatus": 200,
+      "toolCount": 79,
+      "centralTaskAdvertised": true,
+      "rawShellAdvertised": false,
+      "rawWriteAdvertised": false,
+      "registeredUrlMatchesInRead": 10,
+      "ungrantedTaskRefused": true,
+      "ownerExitCode": 0,
+      "ownedTreeExitProved": true,
+      "endpointClosed": true,
+      "protectedMetadataChecked": 11,
+      "changedMetadataCount": 1,
+      "onlyDevUsageConfigMayChange": true,
+      "observedUtc": "2026-10-29T22:28:03.647615+00:00"
+    }
+  ],
+  "accountingProof": {
+    "secondRunOnlyUsageChanged": true,
+    "delta": {
+      "inputTokens": 17,
+      "outputTokens": 2641,
+      "totalTokens": 2658,
+      "toolCallCount": 1
+    },
+    "firstRunPriorByteHashReconstructed": true,
+    "reconstructedSha256": "021dac97d89a84e2bb82f65fdc80abeb5198a0b3c8026afd1d9a8e9ae81cd284",
+    "noConfigRewritten": true,
+    "responseUsage": null
+  },
+  "privateResultHashes": [
+    "3f49a9e64eea1eea84db8bea2d6ff4634bacfcfbbb9ab8d06286bf5edce3e88a",
+    "28a75eb3ef7b5af0ed751c3bbcd974eb6e13178a4ed85147ff594c4db8cdacc2",
+    "caed14aa63ba93dde2540567a0f7c11e5e2bfdb22ac9de7e229ac8ebe2875abf"
+  ],
+  "scope": [
+    "Existing selected development package and exact existing control workspace; no package/build/release change",
+    "Process-local fresh bearer, loopback ephemeral port, supervisor-only central route, no automatic Web/Wake",
+    "401 without auth, initialize/catalog200, central task advertised, raw shell/write absent",
+    "Exact registry read contains all10 current bound URLs; no grant means no execution",
+    "Two completed runs leave10 pinned metadata files unchanged; only development config usage counters change",
+    "Exact pre-test byte-hash reconstruction validates first accounting delta; no fingerprints/config restoration performed"
+  ],
+  "limitations": [
+    "Not installed production serving, not a ChatGPT connector/client proof",
+    "Current selected package predates newest source-only manual-wake/traffic changes",
+    "Full normal native Codex pathway from Web remains unestablished; do not substitute fixed contract tools as its acceptance",
+    "Official connector429 and profile editor dependency unchanged; no provider/tunnel/browser action",
+    "Unattended operation and real-project latency remain open"
+  ],
+  "nextReadyTask": "CD-P3 normal native Codex tool reachability audit and supported scoped integration"
+}

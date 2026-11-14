@@ -1,0 +1,98 @@
+{
+  "sourceCommit": "313f6a31f13c04c90d6098fad57f1e6a6c99cfd7",
+  "acceptedBase": "e6a3e5e86843a41c74261a821dbb9cd0748477b7",
+  "fullDeclaredPaths": 84,
+  "unchangedAcceptedBlobs": 79,
+  "allChangedPaths": [
+    "scripts/start-catdesk-stack.ps1",
+    "scripts/test-start-catdesk-stack.ps1",
+    "src/main.rs",
+    "src/operator_facade.rs",
+    "src/promotion_retirement.rs"
+  ],
+  "group": 1,
+  "scope": "PUBLIC_SOURCE_ONLY_NO_INSTALLED_OR_RELEASE_AUTHORITY",
+  "purpose": "Receipt validation, owner gates, atomic archive and lost-response recovery",
+  "inputs": [
+    {
+      "path": "src/promotion_retirement.rs",
+      "range": [
+        90,
+        119
+      ],
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 90,119 313f6a31f13c04c90d6098fad57f1e6a6c99cfd7 -- src/promotion_retirement.rs",
+      "utf8Bytes": 1229,
+      "sha256": "6e0a0abaf89389b53b169267c3c05cb7c7f5f3d43af306386ef3036059a0a4cf"
+    },
+    {
+      "path": "src/promotion_retirement.rs",
+      "range": [
+        337,
+        357
+      ],
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 337,357 313f6a31f13c04c90d6098fad57f1e6a6c99cfd7 -- src/promotion_retirement.rs",
+      "utf8Bytes": 2029,
+      "sha256": "45fed8ec159c0351b48956199ac1fcc04cf4f01e0a31d74e3a443e7ea09f8aab"
+    },
+    {
+      "path": "src/promotion_retirement.rs",
+      "range": [
+        389,
+        414
+      ],
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 389,414 313f6a31f13c04c90d6098fad57f1e6a6c99cfd7 -- src/promotion_retirement.rs",
+      "utf8Bytes": 1203,
+      "sha256": "6f5585d01bce393d2aaadff4177ccc73c9504394106efc6ea2daf4970e1842ca"
+    },
+    {
+      "path": "src/promotion_retirement.rs",
+      "range": [
+        438,
+        448
+      ],
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 438,448 313f6a31f13c04c90d6098fad57f1e6a6c99cfd7 -- src/promotion_retirement.rs",
+      "utf8Bytes": 1236,
+      "sha256": "6bdabcbbc8fbd0d512b6c5fa2b0d898cf37a6b88869901e41c72be5d54a8bd56"
+    },
+    {
+      "path": "src/promotion_retirement.rs",
+      "range": [
+        775,
+        785
+      ],
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 775,785 313f6a31f13c04c90d6098fad57f1e6a6c99cfd7 -- src/promotion_retirement.rs",
+      "utf8Bytes": 484,
+      "sha256": "7438e4fbc165d2aaa1f77c5906bd0d99687a5c27553414f8beed93dcfab519e2"
+    },
+    {
+      "path": "src/promotion_retirement.rs",
+      "range": [
+        1111,
+        1220
+      ],
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 1111,1220 313f6a31f13c04c90d6098fad57f1e6a6c99cfd7 -- src/promotion_retirement.rs",
+      "utf8Bytes": 6166,
+      "sha256": "e1526c24f73e1abf12966fa1f5770247b15bc31fee5401314d7b07f847422af3"
+    },
+    {
+      "path": "src/promotion_retirement.rs",
+      "range": [
+        1221,
+        1330
+      ],
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 1221,1330 313f6a31f13c04c90d6098fad57f1e6a6c99cfd7 -- src/promotion_retirement.rs",
+      "utf8Bytes": 5988,
+      "sha256": "fa8fe1880d688e4d4f6bc556023d145c88c830f6ef8a497f7647ceee34241daf"
+    },
+    {
+      "path": "src/promotion_retirement.rs",
+      "range": [
+        1407,
+        1521
+      ],
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 1407,1521 313f6a31f13c04c90d6098fad57f1e6a6c99cfd7 -- src/promotion_retirement.rs",
+      "utf8Bytes": 7247,
+      "sha256": "9398961a0296b3a044eba793028fc40966ec64ae0d8b0251b1da41fb2e777030"
+    }
+  ]
+}

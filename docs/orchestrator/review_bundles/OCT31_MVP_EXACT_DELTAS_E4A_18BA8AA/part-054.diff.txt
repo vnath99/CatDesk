@@ -1,0 +1,205 @@
++    fn only_exact_local_intent_for_the_failed_attempt_can_be_reconciled() {
++        let (root, _) = fixture();
++        fs::create_dir(root.join("candidate")).unwrap();
++        let candidate = root.join("candidate/catdesk.exe");
++        fs::write(&candidate, b"disposable fixture, no executable authority").unwrap();
++        let (mut auth, _, _, _) = terminal_fixture();
++        auth.generation = 100;
++        auth.expires_at_unix = 200;
++        let intent = BackendOnlyIntent {
++            schema_version: 4,
++            status: "INTENT_RECORDED".into(),
++            created_at_utc: "1970-01-01T00:02:30.0000000Z".into(),
++            old_pid: 42,
++            old_listener_ports: vec![3200],
++            mcp_port: 3200,
++            old_owns_configured_port: true,
++            workspace_path: root.to_string_lossy().into(),
++            build_path: candidate.to_string_lossy().into(),
++            build_sha256: auth.candidate_sha256.clone(),
++            startup_delay_seconds: 3,
++            recovery: "fixture history retained".into(),
++            profile: "LOCAL_BACKEND_ONLY".into(),
++            mcp_authenticated: false,
++        };
++        let proof = serde_json::json!({"intentCreatedUnix":150});
++        validate_failed_intent(&root, &auth, &intent, &proof).unwrap();
++        for scenario in [
++            "schema",
++            "status",
++            "profile",
++            "authenticated",
++            "pid",
++            "port",
++            "ports",
++            "owned",
++            "delay",
++            "candidate",
++            "workspace",
++        ] {
++            let mut bad = intent.clone();
++            match scenario {
++                "schema" => bad.schema_version = 3,
++                "status" => bad.status = "RECOVERED_PENDING_TRANSPORT_CHECK".into(),
++                "profile" => bad.profile = "UNKNOWN".into(),
++                "authenticated" => bad.mcp_authenticated = true,
++                "pid" => bad.old_pid = 0,
++                "port" => bad.mcp_port = 3201,
++                "ports" => bad.old_listener_ports.push(3201),
++                "owned" => bad.old_owns_configured_port = false,
++                "delay" => bad.startup_delay_seconds = 31,
++                "candidate" => bad.build_sha256 = "f".repeat(64),
++                _ => bad.workspace_path = root.parent().unwrap().to_string_lossy().into(),
++            }
++            assert!(
++                validate_failed_intent(&root, &auth, &bad, &proof).is_err(),
++                "{scenario}"
++            );
++        }
++        for time in [69, 231] {
++            assert!(
++                validate_failed_intent(
++                    &root,
++                    &auth,
++                    &intent,
++                    &serde_json::json!({"intentCreatedUnix":time})
++                )
++                .is_err()
++            );
++        }
++        assert!(validate_failed_intent(&root, &auth, &intent, &serde_json::json!({})).is_err());
++        let mut raw = serde_json::to_value(&intent).unwrap();
++        raw["unknownReceiptFlag"] = true.into();
++        assert!(serde_json::from_value::<BackendOnlyIntent>(raw).is_err());
++        cleanup_fixture(root);
++    }
++
++    #[test]
++    fn every_interruption_boundary_resumes_without_repeating_a_move() {
++        for stop in ["PROMOTION_RENAMED", "HANDOFF_RENAMED"] {
++            let (root, mut value) = fixture();
++            let parent = metadata(&root).unwrap();
++            assert!(
++                archive_locked(&parent, &mut value, |point| if point == stop {
++                    Err("controlled interruption".into())
++                } else {
++                    Ok(())
++                })
++                .is_err()
++            );
++            assert!(ensure_ready(&root).is_err());
++            let mut recovered = journal(&parent).unwrap().unwrap();
++            archive_locked(&parent, &mut recovered, |_| Ok(())).unwrap();
++            ensure_ready(&root).unwrap();
++            drop(parent);
++            cleanup_fixture(root);
++        }
++    }
++
++    #[test]
++    fn promotion_source_requires_completed_matching_retirement_and_no_new_handoff() {
++        let (root, mut value) = fixture();
++        let (mut auth, _, _, _) = terminal_fixture();
++        auth.prior_canonical_sha256 = value.plan.prior_sha256.clone();
++        auth.candidate_sha256 = value.plan.candidate_sha256.clone();
++        assert!(admit_stopped_source(&root, &auth).is_err());
++        let parent = metadata(&root).unwrap();
++        archive_locked(&parent, &mut value, |_| Ok(())).unwrap();
++        let mut changed = auth.clone();
++        changed.candidate_sha256 = "f".repeat(64);
++        assert!(admit_stopped_source(&root, &changed).is_err());
++        changed = auth.clone();
++        changed.prior_canonical_sha256 = "f".repeat(64);
++        assert!(admit_stopped_source(&root, &changed).is_err());
++        fs::write(
++            root.join(".catdesk/restart-handoff/latest.json"),
++            b"unknown new handoff",
++        )
++        .unwrap();
++        assert!(admit_stopped_source(&root, &auth).is_err());
++        assert_eq!(
++            fs::read(root.join(".catdesk/restart-handoff/latest.json")).unwrap(),
++            b"unknown new handoff"
++        );
++        drop(parent);
++        cleanup_fixture(root);
++    }
++
++    #[test]
++    fn changed_records_archive_collision_and_unknown_receipts_remain_quarantined() {
++        for scenario in ["record", "collision", "receipt", "unexpected"] {
++            let (root, mut value) = fixture();
++            let parent = metadata(&root).unwrap();
++            match scenario {
++                "record" => fs::write(
++                    root.join(".catdesk/promotion-control/claim.json"),
++                    b"changed",
++                )
++                .unwrap(),
++                "collision" => fs::create_dir(
++                    root.join(".catdesk")
++                        .join(archive_name(&value.plan.transaction_id).unwrap()),
++                )
++                .unwrap(),
++                "receipt" => fs::write(
++                    root.join(".catdesk/restart-handoff/latest.json"),
++                    b"unrelated current receipt",
++                )
++                .unwrap(),
++                _ => fs::write(
++                    root.join(".catdesk/promotion-control/unrelated.json"),
++                    b"unknown",
++                )
++                .unwrap(),
++            }
++            assert!(
++                archive_locked(&parent, &mut value, |_| Ok(())).is_err(),
++                "{scenario}"
++            );
++            assert!(ensure_ready(&root).is_err());
++            if scenario == "receipt" {
++                assert_eq!(
++                    fs::read(root.join(".catdesk/restart-handoff/latest.json")).unwrap(),
++                    b"unrelated current receipt"
++                )
++            }
++            drop(parent);
++            cleanup_fixture(root);
++        }
++    }
++
++    #[test]
++    fn release_operation_lock_is_exclusive_and_does_not_block_another_workspace() {
++        let (a, _) = fixture();
++        let (b, _) = fixture();
++        let lease = mutation_lease(&a).unwrap();
++        assert!(mutation_lease(&a).is_err());
++        drop(mutation_lease(&b).unwrap());
++        drop(lease);
++        drop(mutation_lease(&a).unwrap());
++        cleanup_fixture(a);
++        cleanup_fixture(b);
++    }
++
++    #[test]
++    fn journal_tampering_never_enables_a_new_preflight() {
++        let (root, mut value) = fixture();
++        value.plan.candidate_sha256 = "d".repeat(64);
++        let parent = metadata(&root).unwrap();
++        update_journal(&parent, &value).unwrap();
++        assert!(journal(&parent).is_err());
++        assert!(ensure_ready(&root).is_err());
++        drop(parent);
++        cleanup_fixture(root);
++    }
++
++    #[test]
++    fn hard_kill_fixture() {
++        let Ok(root) = std::env::var("CATDESK_RETIREMENT_FIXTURE_ROOT") else {
++            return;
++        };
++        let root = PathBuf::from(root);
++        assert!(
++            root.starts_with(std::env::temp_dir())
++                && root
++                    .file_name()

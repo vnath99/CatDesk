@@ -460,7 +460,7 @@ mod windows {
         format!("O:SYG:SYD:P(A;;FA;;;SY)(A;;0x001200A9;;;{service_sid})(A;;0x001200A9;;;IU)")
     }
 
-    fn assert_service(readback: &ServiceReadback) -> Result<()> {
+    fn assert_service(readback: &ServiceReadback, operator_start_sid: Option<&str>) -> Result<()> {
         if readback.service_type != SERVICE_WIN32_OWN_PROCESS
             || readback.start_type != SERVICE_DEMAND_START
             || readback.binary_path != SERVICE_COMMAND_LINE
@@ -469,7 +469,7 @@ mod windows {
         {
             return Err("WAKE_BROKER_SCM_CONFIG_MISMATCH".into());
         }
-        if readback.security_sddl != canonical_sddl(expected_service_sddl())? {
+        if readback.security_sddl != canonical_broker_service_security(operator_start_sid)? {
             return Err("WAKE_BROKER_SCM_SECURITY_MISMATCH".into());
         }
         Ok(())
@@ -541,8 +541,12 @@ mod windows {
         if service.0.is_null() {
             return Err("WAKE_BROKER_SERVICE_UNPROVISIONED".into());
         }
+        service_readback_handle(service.0)
+    }
+
+    fn service_readback_handle(service: *mut c_void) -> Result<ServiceReadback> {
         let mut needed = 0;
-        unsafe { QueryServiceConfigW(service.0, ptr::null_mut(), 0, &mut needed) };
+        unsafe { QueryServiceConfigW(service, ptr::null_mut(), 0, &mut needed) };
         if needed as usize > MAX_SERVICE_CONFIG
             || (needed as usize) < std::mem::size_of::<ServiceConfig>()
         {
@@ -552,7 +556,7 @@ mod windows {
         let allocated = needed;
         if unsafe {
             QueryServiceConfigW(
-                service.0,
+                service,
                 config_words.as_mut_ptr().cast(),
                 allocated,
                 &mut needed,
@@ -572,7 +576,7 @@ mod windows {
         let mut sid_needed = 0;
         if unsafe {
             QueryServiceConfig2W(
-                service.0,
+                service,
                 SERVICE_CONFIG_SERVICE_SID_INFO,
                 (&mut sid_info as *mut ServiceSidInfo).cast(),
                 std::mem::size_of::<ServiceSidInfo>() as u32,
@@ -585,7 +589,7 @@ mod windows {
         let mut security_needed = 0;
         unsafe {
             QueryServiceObjectSecurity(
-                service.0,
+                service,
                 SECURITY_INFORMATION,
                 ptr::null_mut(),
                 0,
@@ -599,7 +603,7 @@ mod windows {
         let allocated = security_needed;
         if unsafe {
             QueryServiceObjectSecurity(
-                service.0,
+                service,
                 SECURITY_INFORMATION,
                 security.as_mut_ptr().cast(),
                 allocated,
@@ -856,9 +860,9 @@ mod windows {
         ))
     }
 
-    pub(super) fn inspect() -> Result<BrokerReadOnlySnapshotV1> {
+    pub(super) fn inspect(operator_start_sid: Option<&str>) -> Result<BrokerReadOnlySnapshotV1> {
         let service = service_readback()?;
-        assert_service(&service)?;
+        assert_service(&service, operator_start_sid)?;
         let service_sid = lookup_service_sid()?;
 
         // Every child is opened relative to an already pinned parent, with no
@@ -905,11 +909,11 @@ mod windows {
         })
     }
 
-    pub(super) fn acquire_fixed_root_for_reader() -> Result<FixedProtectedRootReadGuard> {
-        // The image/SCM and first namespace snapshot is a required diagnostic
-        // precursor. Reopen and pin the fixed chain for the reader itself, then
-        // compare the exact physical root observed by both passes.
-        let snapshot = inspect()?;
+    pub(super) fn acquire_fixed_namespace_for_policy() -> Result<FixedProtectedRootReadGuard> {
+        // Private bootstrap of the trust read: only the fixed namespace is
+        // pinned here. Its canonical protected policy then supplies the exact
+        // optional operator START ACE for full SCM/image inspection. No public
+        // policy or authority may escape before that complete inspection.
         let service_sid = lookup_service_sid()?;
         let volume = open_root()?;
         let program_data = open_relative(&volume, "ProgramData", true)?;
@@ -919,9 +923,6 @@ mod windows {
         let root = open_relative(&catdesk, "WakeProtectedInstallV1", true)?;
         assert_exact_leaf(&root, &expected_namespace_sddl(&service_sid))?;
         let root_identity = object_identity(&file_info(&root, true)?)?;
-        if root_identity != snapshot.protected_root {
-            return Err("WAKE_BROKER_ROOT_CHANGED".into());
-        }
         Ok(FixedProtectedRootReadGuard {
             _volume: volume,
             _program_data: program_data,
@@ -958,9 +959,76 @@ mod windows {
         ))
     }
 
+    pub(super) fn canonical_broker_service_security(
+        operator_start_sid: Option<&str>,
+    ) -> Result<String> {
+        let Some(sid) = operator_start_sid else {
+            return canonical_sddl(expected_service_sddl());
+        };
+        if sid.len() > 128
+            || !sid.starts_with("S-1-")
+            || !sid
+                .bytes()
+                .all(|b| b.is_ascii_digit() || b == b'S' || b == b'-')
+            || matches!(sid, "S-1-5-18" | "S-1-5-32-544" | "S-1-5-4")
+            || sid.starts_with("S-1-5-80-")
+        {
+            return Err("WAKE_BROKER_SERVICE_OPERATOR_INVALID".into());
+        }
+        canonical_sddl(&format!(
+            "{}(A;;0x00000010;;;{sid})",
+            expected_service_sddl()
+        ))
+    }
+
+    pub(super) fn canonical_broker_image_parent_security(service_sid: &str) -> Result<String> {
+        canonical_sddl(&expected_image_parent_sddl(service_sid))
+    }
+
+    pub(super) fn canonical_broker_image_file_security(service_sid: &str) -> Result<String> {
+        canonical_sddl(&expected_image_file_sddl(service_sid))
+    }
+
+    pub(super) fn verify_fixed_service_handle(
+        handle: *mut c_void,
+        operator_start_sid: Option<&str>,
+    ) -> Result<()> {
+        assert_service(&service_readback_handle(handle)?, operator_start_sid)
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[test]
+        fn service_start_descriptor_adds_only_exact_operator_start_and_never_general_control() {
+            let operator = "S-1-5-21-1-2-3-1001";
+            let expected = format!("{}(A;;0x00000010;;;{operator})", expected_service_sddl());
+            assert_eq!(
+                canonical_broker_service_security(None).unwrap(),
+                canonical_sddl(expected_service_sddl()).unwrap()
+            );
+            assert_eq!(
+                canonical_broker_service_security(Some(operator)).unwrap(),
+                canonical_sddl(&expected).unwrap()
+            );
+            let mut state = exact_service();
+            state.security_sddl = canonical_sddl(&expected).unwrap();
+            assert!(assert_service(&state, None).is_err());
+            assert!(assert_service(&state, Some(operator)).is_ok());
+            state.security_sddl =
+                canonical_sddl(&expected.replace("0x00000010", "0x00000030")).unwrap();
+            assert!(assert_service(&state, Some(operator)).is_err());
+            for sid in [
+                "S-1-5-18",
+                "S-1-5-32-544",
+                "S-1-5-4",
+                "S-1-5-80-1-2-3-4-5",
+                "S-1-5-21-1)(A;;FA;;;WD)",
+            ] {
+                assert!(canonical_broker_service_security(Some(sid)).is_err());
+            }
+        }
 
         fn exact_service() -> ServiceReadback {
             ServiceReadback {
@@ -976,36 +1044,36 @@ mod windows {
         #[test]
         fn fixed_service_policy_rejects_candidate_path_account_sid_start_and_security() {
             let exact = exact_service();
-            assert!(assert_service(&exact).is_ok());
+            assert!(assert_service(&exact, None).is_ok());
             let mut bad = exact.clone();
             bad.binary_path = r"C:\Users\worker\CatDeskWakeInstallBroker.exe".into();
             assert_eq!(
-                assert_service(&bad).unwrap_err(),
+                assert_service(&bad, None).unwrap_err(),
                 "WAKE_BROKER_SCM_CONFIG_MISMATCH"
             );
             let mut bad = exact.clone();
             bad.account = "worker".into();
             assert_eq!(
-                assert_service(&bad).unwrap_err(),
+                assert_service(&bad, None).unwrap_err(),
                 "WAKE_BROKER_SCM_CONFIG_MISMATCH"
             );
             let mut bad = exact.clone();
             bad.sid_type = 1;
             assert_eq!(
-                assert_service(&bad).unwrap_err(),
+                assert_service(&bad, None).unwrap_err(),
                 "WAKE_BROKER_SCM_CONFIG_MISMATCH"
             );
             let mut bad = exact.clone();
             bad.start_type = 2;
             assert_eq!(
-                assert_service(&bad).unwrap_err(),
+                assert_service(&bad, None).unwrap_err(),
                 "WAKE_BROKER_SCM_CONFIG_MISMATCH"
             );
             let mut bad = exact;
             bad.security_sddl =
                 canonical_sddl("O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;IU)").expect("unsafe policy");
             assert_eq!(
-                assert_service(&bad).unwrap_err(),
+                assert_service(&bad, None).unwrap_err(),
                 "WAKE_BROKER_SCM_SECURITY_MISMATCH"
             );
             let mut bad = exact_service();
@@ -1014,7 +1082,7 @@ mod windows {
             )
             .expect("missing IU query-config right");
             assert_eq!(
-                assert_service(&bad).unwrap_err(),
+                assert_service(&bad, None).unwrap_err(),
                 "WAKE_BROKER_SCM_SECURITY_MISMATCH"
             );
         }
@@ -1115,12 +1183,43 @@ mod windows {
 
 #[cfg(windows)]
 pub fn inspect_fixed_broker_read_only() -> Result<BrokerReadOnlySnapshotV1> {
-    windows::inspect()
+    let policy = crate::install_broker_policy::load_fixed_broker_policy_read_only()?;
+    inspect_fixed_broker_with_policy(&policy)
 }
 
 #[cfg(windows)]
 pub fn acquire_fixed_protected_root_for_reader() -> Result<FixedProtectedRootReadGuard> {
-    windows::acquire_fixed_root_for_reader()
+    let snapshot = inspect_fixed_broker_read_only()?;
+    let guard = windows::acquire_fixed_namespace_for_policy()?;
+    if guard.root_identity != snapshot.protected_root {
+        return Err("WAKE_BROKER_ROOT_CHANGED".into());
+    }
+    Ok(guard)
+}
+
+#[cfg(windows)]
+pub(crate) fn acquire_fixed_protected_namespace_for_policy() -> Result<FixedProtectedRootReadGuard>
+{
+    windows::acquire_fixed_namespace_for_policy()
+}
+
+#[cfg(windows)]
+pub(crate) fn inspect_fixed_broker_with_policy(
+    policy: &crate::install_broker_policy::BrokerProtectedPolicyV1,
+) -> Result<BrokerReadOnlySnapshotV1> {
+    let sid = policy.operator_service_start_sid()?;
+    let snapshot = windows::inspect(sid)?;
+    policy.revalidate()?;
+    Ok(snapshot)
+}
+
+#[cfg(windows)]
+pub(crate) fn verify_fixed_broker_service_handle(
+    handle: *mut c_void,
+    policy: &crate::install_broker_policy::BrokerProtectedPolicyV1,
+) -> Result<()> {
+    windows::verify_fixed_service_handle(handle, policy.operator_service_start_sid()?)?;
+    policy.revalidate()
 }
 
 #[cfg(windows)]
@@ -1136,6 +1235,23 @@ pub(crate) fn canonical_protected_security(service_sid: &str, directory: bool) -
 #[cfg(windows)]
 pub(crate) fn canonical_broker_policy_security(service_sid: &str) -> Result<String> {
     windows::canonical_broker_policy_security(service_sid)
+}
+
+#[cfg(windows)]
+pub(crate) fn canonical_broker_service_security(
+    operator_start_sid: Option<&str>,
+) -> Result<String> {
+    windows::canonical_broker_service_security(operator_start_sid)
+}
+
+#[cfg(windows)]
+pub(crate) fn canonical_broker_image_parent_security(service_sid: &str) -> Result<String> {
+    windows::canonical_broker_image_parent_security(service_sid)
+}
+
+#[cfg(windows)]
+pub(crate) fn canonical_broker_image_file_security(service_sid: &str) -> Result<String> {
+    windows::canonical_broker_image_file_security(service_sid)
 }
 
 #[cfg(windows)]

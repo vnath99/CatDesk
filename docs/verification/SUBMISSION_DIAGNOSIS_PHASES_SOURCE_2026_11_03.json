@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-03T15:21:47.706262+00:00",
+  "classification": "IMPLEMENTED_AND_TESTED_SOURCE_NOT_SELECTED_OR_INSTALLED",
+  "sourceCommit": "d21f98b09d04bcd90cd02cc94542f46e8171b0ba",
+  "priorCandidateSourceCommit": "a23a52a5fc5cb9bc2d2a5ff64bbd037f92f0a176",
+  "sourceDeltaPaths": [
+    "src/operator_web_review.rs",
+    "wake/src/runtime.rs",
+    "wake/src/runtime_review_reconcile.rs"
+  ],
+  "scope": {
+    "codePaths": 90,
+    "acceptedUnchanged": 72,
+    "changedExisting": 16,
+    "new": 2,
+    "priorCandidateIdenticalBlobs": 87
+  },
+  "change": "Existing no-send submission diagnosis retains content-free phase, elapsed time and budget. Uses the existing snapshot diagnostic type and monitored adapter. Operational observation failures report UNVERIFIED; authority, cancellation, scope and integrity failures retain hard refusal.",
+  "unchanged": [
+    "Original90-second deadline",
+    "Legacy Result API/error behavior",
+    "Package, owner, paired-target and historical dispatch checks",
+    "Receipt reconciliation and its positive-witness requirement",
+    "No USER submission/reset/draft clearing from diagnosis",
+    "No new browser owner/scheduler/authorization registry"
+  ],
+  "verification": {
+    "finalDistinctBehaviorCasesPassed": 16,
+    "wakeReconciliationDiagnosisCases": 12,
+    "operatorReviewIntegrationCases": 4,
+    "newRegressions": 3,
+    "privacyFixtureRetestPassed": true,
+    "rootFmtPassed": true,
+    "wakeFmtPassed": true,
+    "rootStrictClippyAllTargetsPassed": true,
+    "wakeStrictClippyAllTargetsPassed": true,
+    "mainInitialFilterSelectedZeroTestsNotAcceptedAsBehaviorPass": true,
+    "initialIntegrationDraftResult": {
+      "passed": 3,
+      "failed": 1,
+      "cause": "Operational-error formatting incorrectly swallowed a dispatch-authority refusal; original unchanged refusal test caught it."
+    },
+    "fixedIntegrationResult": {
+      "passed": 4,
+      "failed": 0
+    },
+    "originalRefusalTestBodySha256": "e844b34b4c3ab6fee6cf1bab38282dd94743b97dbf6736ae13a7a92d12395cfa",
+    "originalRefusalTestUnchanged": true,
+    "allFinalOwnersExitedWithoutTimeoutOrTerminationFailure": true,
+    "resourceAdmissionGuardGiB": 4,
+    "resourceGuardLowered": false,
+    "hostedCiClaimed": false
+  },
+  "runtimeSelected": false,
+  "productionChanged": false,
+  "currentNativeReviewStillPinnedToPriorCandidate": true,
+  "sourceAccepted": false,
+  "producerAuthority": false,
+  "remaining": [
+    "Build/qualify a separate immutable development diagnostic controller through existing procedures, preserving the selected previous version and all journals.",
+    "Use new phase-aware read-only diagnostics for the exact pending event; never replay its USER send or infer receipt from command logs.",
+    "Genuine current-source review/ACK/snapshot/producer/promotion, canonical/control/Wake pairing and actual installed two-Web coding remain open.",
+    "Full context visibility/calibration, independent Wake/recovery and later CD-P7 remain mandatory."
+  ]
+}

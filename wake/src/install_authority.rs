@@ -578,7 +578,10 @@ mod windows {
         )))
     }
 
-    fn reviewed_install_directory(pointer: &serde_json::Value) -> Result<&str> {
+    fn reviewed_install_directory<'a>(
+        root: &Path,
+        pointer: &'a serde_json::Value,
+    ) -> Result<&'a str> {
         let id = pointer
             .get("directory")
             .and_then(serde_json::Value::as_str)
@@ -588,19 +591,62 @@ mod windows {
         };
         let mut parts = suffix.split('-');
         let version = parts.next().unwrap_or("");
-        let host_hash = parts.next().unwrap_or("");
-        let gui_hash = parts.next().unwrap_or("");
+        let first_hash = parts.next().unwrap_or("");
+        let second_hash = parts.next();
         if pointer
             .get("schemaVersion")
             .and_then(serde_json::Value::as_u64)
             != Some(1)
             || version.is_empty()
             || !version.bytes().all(|byte| byte.is_ascii_digit())
-            || host_hash.len() != 12
-            || !host_hash.bytes().all(|byte| byte.is_ascii_hexdigit())
-            || gui_hash.len() != 12
-            || !gui_hash.bytes().all(|byte| byte.is_ascii_hexdigit())
             || parts.next().is_some()
+        {
+            return Err("WAKE_STORE_AUTHORITY_POINTER_INVALID".into());
+        }
+        if first_hash.len() == 12
+            && first_hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+            && second_hash.is_some_and(|hash| {
+                hash.len() == 12 && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+            })
+        {
+            return Ok(id);
+        }
+        // Only the explicitly prepared, physically pinned development root
+        // may use its all-four-artifact package ID. Its authority readback
+        // binds this pointer to the exact manifest, bytes and file identities.
+        if second_hash.is_some()
+            || first_hash.len() != 64
+            || !first_hash
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+            || crate::development_runtime::updated_package_id_from_pointer(pointer)
+                .map_err(|_| "WAKE_STORE_AUTHORITY_POINTER_INVALID")?
+                != id
+            || root.file_name() != Some(std::ffi::OsStr::new("runtime"))
+            || root.parent().and_then(Path::file_name)
+                != Some(std::ffi::OsStr::new("web-development"))
+            || root
+                .parent()
+                .and_then(Path::parent)
+                .and_then(Path::file_name)
+                != Some(std::ffi::OsStr::new(".catdesk"))
+        {
+            return Err("WAKE_STORE_AUTHORITY_POINTER_INVALID".into());
+        }
+        let workspace = root
+            .parent()
+            .and_then(Path::parent)
+            .and_then(Path::parent)
+            .ok_or("WAKE_STORE_AUTHORITY_POINTER_INVALID")?;
+        let selected = crate::development_runtime::root_for_workspace(workspace)
+            .map_err(|_| "WAKE_STORE_AUTHORITY_POINTER_INVALID")?
+            .ok_or("WAKE_STORE_AUTHORITY_POINTER_INVALID")?;
+        let physical_root =
+            open_pinned(root, true).map_err(|_| "WAKE_STORE_AUTHORITY_POINTER_INVALID")?;
+        let physical_selected =
+            open_pinned(&selected, true).map_err(|_| "WAKE_STORE_AUTHORITY_POINTER_INVALID")?;
+        if validate_info(info(&physical_root)?, true)?
+            != validate_info(info(&physical_selected)?, true)?
         {
             return Err("WAKE_STORE_AUTHORITY_POINTER_INVALID".into());
         }
@@ -636,7 +682,7 @@ mod windows {
         }
         let pointer: serde_json::Value = serde_json::from_slice(&pointer_bytes)
             .map_err(|_| "WAKE_STORE_AUTHORITY_POINTER_INVALID")?;
-        let id = reviewed_install_directory(&pointer)?;
+        let id = reviewed_install_directory(root, &pointer)?;
         let expected_hash = pointer
             .get("hostSha256")
             .and_then(serde_json::Value::as_str)
@@ -1006,6 +1052,72 @@ mod windows {
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[test]
+        fn reviewed_directory_accepts_exact_updated_dev_authority_only_at_its_physical_root() {
+            let parent = std::env::temp_dir().join(format!(
+                "catdesk-wake-dev-pointer-authority-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+            let workspace = parent.join("control");
+            let package = parent.join("package");
+            let updated = parent.join("updated-package");
+            let python = parent.join("python");
+            let installed = parent.join("installed");
+            for directory in [&workspace, &package, &updated, &python, &installed] {
+                std::fs::create_dir_all(directory).unwrap();
+            }
+            std::fs::write(package.join("CatDeskWakeHost.exe"), b"fixture host").unwrap();
+            std::fs::write(package.join("CatDeskBinagotchy.exe"), b"fixture gui").unwrap();
+            std::fs::write(package.join("adapter.py"), include_bytes!("../adapter.py")).unwrap();
+            std::fs::write(
+                package.join("wake_bridge.py"),
+                include_bytes!("../../scripts/wake_bridge.py"),
+            )
+            .unwrap();
+            std::fs::write(python.join("python.exe"), b"fixture Python").unwrap();
+            crate::development_runtime::prepare(&workspace, &package, &python).unwrap();
+            let root = crate::development_runtime::root_for_workspace(&workspace)
+                .unwrap()
+                .unwrap();
+            let old: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(root.join("current.json")).unwrap()).unwrap();
+            let old_id = old["directory"].as_str().unwrap();
+            assert_eq!(
+                reviewed_install_directory(&installed, &old).unwrap(),
+                old_id
+            );
+
+            for name in [
+                "CatDeskWakeHost.exe",
+                "CatDeskBinagotchy.exe",
+                "adapter.py",
+                "wake_bridge.py",
+            ] {
+                std::fs::copy(package.join(name), updated.join(name)).unwrap();
+            }
+            std::fs::write(updated.join("CatDeskWakeHost.exe"), b"updated fixture host").unwrap();
+            crate::development_runtime::update_package(&workspace, &updated).unwrap();
+            let pointer: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(root.join("current.json")).unwrap()).unwrap();
+            let new_id = pointer["directory"].as_str().unwrap();
+            assert_eq!(reviewed_install_directory(&root, &pointer).unwrap(), new_id);
+            assert_eq!(
+                reviewed_install_directory(&installed, &pointer).unwrap_err(),
+                "WAKE_STORE_AUTHORITY_POINTER_INVALID"
+            );
+            let mut tampered = pointer.clone();
+            tampered["adapterSha256"] = serde_json::json!("a".repeat(64));
+            assert_eq!(
+                reviewed_install_directory(&root, &tampered).unwrap_err(),
+                "WAKE_STORE_AUTHORITY_POINTER_INVALID"
+            );
+            std::fs::remove_dir_all(&parent).unwrap();
+        }
 
         #[test]
         fn fingerprint_is_stable_and_distinguishes_root_and_lock() {

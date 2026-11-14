@@ -718,7 +718,10 @@ pub struct AutonomousStateStoreV1 {
 
 #[derive(Debug)]
 pub struct AutonomousSessionLockV1 {
+    #[cfg(not(windows))]
     path: PathBuf,
+    #[cfg(windows)]
+    file: Option<File>,
     owner_id: String,
     released: bool,
 }
@@ -1107,7 +1110,7 @@ impl AutonomousStateStoreV1 {
         after_sequence: u64,
     ) -> Result<Vec<AutonomousEventV1>, AutonomyStateError> {
         self.ensure_session_exists(session_id)?;
-        let events = read_jsonl_repair_tail(&self.session_dir(session_id)?.join("events.jsonl"))?;
+        let events = read_jsonl(&self.session_dir(session_id)?.join("events.jsonl"))?;
         Ok(events
             .into_iter()
             .filter(|event: &AutonomousEventV1| event.sequence > after_sequence)
@@ -1879,6 +1882,7 @@ impl AutonomousStateStoreV1 {
             "review-{}-{}-{}",
             session_id, snapshot.last_event_sequence, next_action
         );
+        let _inbox_lock = self.acquire_inbox_mutation_lock()?;
         let path = self.root.join("review-inbox.json");
         let mut records: Vec<AutonomousReviewInboxRecordV1> = if path.exists() {
             read_json(&path)?
@@ -1960,6 +1964,7 @@ impl AutonomousStateStoreV1 {
         }
         let next_action = "independent_final_review";
         let record_id = format!("review-{compatibility_session_id}");
+        let _inbox_lock = self.acquire_inbox_mutation_lock()?;
         let path = self.root.join("review-inbox.json");
         let mut records: Vec<AutonomousReviewInboxRecordV1> = if path.exists() {
             read_json(&path)?
@@ -2176,6 +2181,7 @@ impl AutonomousStateStoreV1 {
         record_id: &str,
     ) -> Result<AutonomousReviewInboxRecordV1, AutonomyStateError> {
         validate_slug(record_id, "review inbox record id").map_err(validation_error)?;
+        let _inbox_lock = self.acquire_inbox_mutation_lock()?;
         let path = self.root.join("review-inbox.json");
         let mut records: Vec<AutonomousReviewInboxRecordV1> = read_json(&path)?;
         let record = records
@@ -2204,6 +2210,13 @@ impl AutonomousStateStoreV1 {
             .join("session.lock");
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            // Retain one exclusive OS handle. Process exit releases this lock
+            // without guessing whether an old pathname owner is dead.
+            options.read(true).share_mode(0).custom_flags(0x04000000);
+        }
         let mut file = options.open(&path).map_err(|error| {
             if error.kind() == std::io::ErrorKind::AlreadyExists {
                 AutonomyStateError::LockHeld(session_id.into())
@@ -2215,7 +2228,10 @@ impl AutonomousStateStoreV1 {
         file.write_all(b"\n").map_err(io_error)?;
         file.sync_data().map_err(io_error)?;
         Ok(AutonomousSessionLockV1 {
+            #[cfg(not(windows))]
             path,
+            #[cfg(windows)]
+            file: Some(file),
             owner_id: owner_id.into(),
             released: false,
         })
@@ -2340,6 +2356,20 @@ impl AutonomousStateStoreV1 {
         Ok(file)
     }
 
+    fn acquire_inbox_mutation_lock(&self) -> Result<File, AutonomyStateError> {
+        // Only the shared inbox read/modify/replace is serialized. Session
+        // work and unrelated project resources retain independent ownership.
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(self.root.join("review-inbox-mutation.lock"))
+            .map_err(io_error)?;
+        file.lock().map_err(io_error)?;
+        Ok(file)
+    }
+
     fn session_dir(&self, session_id: &str) -> Result<PathBuf, AutonomyStateError> {
         validate_slug(session_id, "autonomous session id").map_err(validation_error)?;
         Ok(self.root.join(session_id))
@@ -2355,13 +2385,32 @@ impl AutonomousSessionLockV1 {
         if self.released {
             return Ok(());
         }
+        #[cfg(not(windows))]
         let owner = fs::read_to_string(&self.path).map_err(io_error)?;
+        #[cfg(windows)]
+        let owner = {
+            let mut file = self
+                .file
+                .as_ref()
+                .ok_or_else(|| {
+                    AutonomyStateError::Validation("autonomous lock handle missing".into())
+                })?
+                .try_clone()
+                .map_err(io_error)?;
+            std::io::Seek::rewind(&mut file).map_err(io_error)?;
+            let mut text = String::new();
+            std::io::Read::read_to_string(&mut file, &mut text).map_err(io_error)?;
+            text
+        };
         if owner.trim() != self.owner_id {
             return Err(AutonomyStateError::LockOwnership(
                 "autonomous lock content did not match owner".into(),
             ));
         }
+        #[cfg(not(windows))]
         fs::remove_file(&self.path).map_err(io_error)?;
+        #[cfg(windows)]
+        drop(self.file.take());
         self.released = true;
         Ok(())
     }
@@ -2920,20 +2969,27 @@ fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T, AutonomyStateError> 
     serde_json::from_reader(file).map_err(serde_error)
 }
 
-fn read_jsonl_repair_tail<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>, AutonomyStateError> {
+fn read_jsonl<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>, AutonomyStateError> {
     if !path.exists() {
         return Ok(Vec::new());
     }
-    repair_torn_jsonl_tail(path)?;
     let file = File::open(path).map_err(io_error)?;
-    BufReader::new(file)
-        .lines()
-        .filter(|line| line.as_ref().is_ok_and(|line| !line.trim().is_empty()))
-        .map(|line| {
-            line.map_err(io_error)
-                .and_then(|line| serde_json::from_str(&line).map_err(serde_error))
-        })
-        .collect()
+    let mut values = Vec::new();
+    for line in BufReader::new(file).lines() {
+        let line = line.map_err(io_error)?;
+        if !line.trim().is_empty() {
+            values.push(serde_json::from_str(&line).map_err(serde_error)?);
+        }
+    }
+    Ok(values)
+}
+
+// The caller must hold the session state-mutation lock while repairing.
+fn read_jsonl_repair_tail<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>, AutonomyStateError> {
+    if path.exists() {
+        repair_torn_jsonl_tail(path)?;
+    }
+    read_jsonl(path)
 }
 
 fn repair_torn_jsonl_tail(path: &Path) -> Result<(), AutonomyStateError> {
@@ -4302,8 +4358,8 @@ mod tests {
     }
 
     #[test]
-    fn torn_terminal_event_is_repaired_without_losing_prior_events() {
-        let (_root, store) = store("torn-tail");
+    fn event_poll_torn_tail_is_read_only_and_locked_append_repairs() {
+        let (root, store) = store("torn-tail-read-only");
         store
             .create_session("session-one", queue())
             .expect("session");
@@ -4319,9 +4375,123 @@ mod tests {
             .open(&events_path)
             .expect("events open");
         file.write_all(b"{not-json").expect("torn tail");
+        file.sync_data().expect("torn tail durable");
         drop(file);
-        let events = store.poll_events("session-one", 0).expect("repaired poll");
-        assert_eq!(events.len(), 1);
+        let before_poll = fs::read(&events_path).expect("torn bytes");
+        let poll = store.poll_events("session-one", 0);
+        let after_poll = fs::read(&events_path).expect("after poll bytes");
+        let appended = store.append_event("session-one", "writer_repaired", "writer repaired");
+        let events = store.poll_events("session-one", 0);
+        let snapshot = store.load_session("session-one");
+        drop(store);
+        assert_eq!(root.parent(), Some(std::env::temp_dir().as_path()));
+        let cleanup = fs::remove_dir_all(&root);
+
+        assert!(cleanup.is_ok(), "owned fixture cleanup: {cleanup:?}");
+        assert!(matches!(poll, Err(AutonomyStateError::Serde(_))));
+        assert_eq!(after_poll, before_poll, "poll must not repair the journal");
+        assert_eq!(appended.expect("locked append repairs").sequence, 2);
+        let events = events.expect("writer repaired events");
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].kind, "session_created");
+        assert_eq!(events[1].kind, "writer_repaired");
+        assert_eq!(snapshot.expect("snapshot").last_event_sequence, 2);
+    }
+
+    #[test]
+    fn event_poll_preserves_concurrent_partial_append() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let (root, store) = store("partial-event-read-only");
+        store
+            .create_session("session-one", queue())
+            .expect("session");
+        store
+            .append_event("session-one", "session_created", "session created")
+            .expect("event");
+        let events_path = store
+            .session_dir("session-one")
+            .expect("path")
+            .join("events.jsonl");
+        let baseline = fs::read(&events_path).expect("baseline");
+        let event = AutonomousEventV1 {
+            schema_version: AUTONOMY_STATE_SCHEMA_VERSION,
+            session_id: "session-one".into(),
+            sequence: 2,
+            kind: "concurrent_event".into(),
+            summary: "synthetic concurrent event".into(),
+        };
+        let event_bytes = serde_json::to_vec(&event).expect("event bytes");
+        let split = event_bytes.len() / 2;
+        let mut expected_partial = baseline.clone();
+        expected_partial.extend_from_slice(&event_bytes[..split]);
+        let mut expected_complete = baseline;
+        expected_complete.extend_from_slice(&event_bytes);
+        expected_complete.push(b'\n');
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let (resume_tx, resume_rx) = mpsc::channel();
+        let writer_store = store.clone();
+        let writer_path = events_path.clone();
+        let writer = std::thread::spawn(move || -> Result<(), AutonomyStateError> {
+            let _mutation_lock = writer_store.acquire_state_mutation_lock("session-one")?;
+            let mut snapshot = writer_store.load_session("session-one")?;
+            let mut file = OpenOptions::new()
+                .append(true)
+                .open(&writer_path)
+                .map_err(io_error)?;
+            file.write_all(&event_bytes[..split]).map_err(io_error)?;
+            file.sync_data().map_err(io_error)?;
+            ready_tx.send(()).map_err(|_| {
+                AutonomyStateError::Validation("synthetic reader disconnected".into())
+            })?;
+            resume_rx
+                .recv_timeout(Duration::from_secs(5))
+                .map_err(|_| {
+                    AutonomyStateError::Validation("synthetic reader did not resume writer".into())
+                })?;
+            file.write_all(&event_bytes[split..]).map_err(io_error)?;
+            file.write_all(b"\n").map_err(io_error)?;
+            file.sync_data().map_err(io_error)?;
+            drop(file);
+            snapshot.last_event_sequence = 2;
+            write_json_atomic(
+                &writer_store.session_dir("session-one")?.join("state.json"),
+                &snapshot,
+            )
+        });
+        let ready = ready_rx.recv_timeout(Duration::from_secs(5));
+        let partial_before_poll = fs::read(&events_path);
+        let poll = store.poll_events("session-one", 0);
+        let partial_after_poll = fs::read(&events_path);
+        let resumed = resume_tx.send(());
+        let writer_result = writer.join();
+        let final_bytes = fs::read(&events_path);
+        let final_events = store.poll_events("session-one", 0);
+        let final_snapshot = store.load_session("session-one");
+        drop(store);
+        assert_eq!(root.parent(), Some(std::env::temp_dir().as_path()));
+        let cleanup = fs::remove_dir_all(&root);
+
+        assert!(cleanup.is_ok(), "owned fixture cleanup: {cleanup:?}");
+        assert!(ready.is_ok(), "writer reached partial append: {ready:?}");
+        assert!(resumed.is_ok(), "writer resumed: {resumed:?}");
+        assert_eq!(writer_result.expect("writer joined"), Ok(()));
+        assert_eq!(
+            partial_before_poll.expect("partial bytes"),
+            expected_partial
+        );
+        assert!(matches!(poll, Err(AutonomyStateError::Serde(_))));
+        assert_eq!(
+            partial_after_poll.expect("partial bytes after poll"),
+            expected_partial,
+            "observer must not truncate a live writer's partial record",
+        );
+        assert_eq!(final_bytes.expect("completed bytes"), expected_complete);
+        let events = final_events.expect("completed events");
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[1], event);
+        assert_eq!(final_snapshot.expect("snapshot").last_event_sequence, 2);
     }
 
     #[test]
@@ -4339,6 +4509,110 @@ mod tests {
         store
             .acquire_lock("session-one", "owner-b")
             .expect("second owner");
+    }
+
+    #[test]
+    fn shared_inbox_concurrent_session_delegated_and_ack_writes_preserve_all_records() {
+        let (root, store) = store("parallel-inbox");
+        let mut seeds = Vec::new();
+        for index in 0..8 {
+            store
+                .create_session(&format!("session-{index}"), queue())
+                .unwrap();
+            seeds.push(
+                store
+                    .emit_delegated_review_inbox_record(
+                        &format!("seed-{index}"),
+                        "project",
+                        "review/seed",
+                        1,
+                    )
+                    .unwrap()
+                    .record_id,
+            );
+        }
+        let barrier = std::sync::Barrier::new(24);
+        std::thread::scope(|scope| {
+            for (index, seed) in seeds.iter().enumerate() {
+                let store = &store;
+                let barrier = &barrier;
+                scope.spawn(move || {
+                    barrier.wait();
+                    store.acknowledge_review_inbox(seed).unwrap();
+                });
+                scope.spawn(move || {
+                    barrier.wait();
+                    store
+                        .emit_delegated_review_inbox_record(
+                            &format!("new-{index}"),
+                            "project",
+                            "review/new",
+                            2,
+                        )
+                        .unwrap();
+                });
+                scope.spawn(move || {
+                    barrier.wait();
+                    store
+                        .emit_review_inbox_record(
+                            &format!("session-{index}"),
+                            "project",
+                            AutonomousSessionStateV1::WaitingForChatgpt,
+                            "chatgpt_decision_required",
+                            "review/decision",
+                            2,
+                        )
+                        .unwrap();
+                });
+            }
+        });
+        let records = store.all_review_inbox().unwrap();
+        assert_eq!(records.len(), 24);
+        for seed in seeds {
+            assert!(
+                !records
+                    .iter()
+                    .find(|record| record.record_id == seed)
+                    .unwrap()
+                    .unread
+            );
+        }
+        assert_eq!(records.iter().filter(|record| record.unread).count(), 16);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn session_lock_abrupt_exit_fixture() {
+        let Some(root) = std::env::var_os("CATDESK_TEST_LOCK_CRASH_ROOT") else {
+            return;
+        };
+        let store = AutonomousStateStoreV1::open(PathBuf::from(root)).unwrap();
+        let _lock = store
+            .acquire_lock("session-one", "abrupt-exit-fixture")
+            .unwrap();
+        std::process::exit(0); // Intentionally bypass Drop to test OS lifetime.
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn session_lock_releases_on_process_exit_without_pathname_recovery() {
+        let (root, store) = store("abrupt-lock");
+        store.create_session("session-one", queue()).unwrap();
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "delegated::autonomy_state::tests::session_lock_abrupt_exit_fixture",
+            ])
+            .env("CATDESK_TEST_LOCK_CRASH_ROOT", &store.root)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let _lock = store
+            .acquire_lock("session-one", "after-abrupt-exit")
+            .unwrap();
+        drop(_lock);
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

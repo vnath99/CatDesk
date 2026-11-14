@@ -1,0 +1,163 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T17:41:46.979955+00:00",
+  "classification": "SOURCE_REGISTRATION_AND_REPORTED_CLIENT_CATALOG_SEPARATED_FROM_UPSTREAM_429",
+  "sourceBaseCommit": "ebdded93b04fa7fe220486c02ca6310b0df7bd86",
+  "userReportedNewConversation": {
+    "origin": "DIRECT_USER_REPORT_AND_SCREENSHOT",
+    "integration": "CATDESK_LOCAL_TUNNEL_V4",
+    "listedToolCount": 90,
+    "namedDispatcherListed": false,
+    "similarWebTaskNameFound": false,
+    "threeStatusChecks": "MCP SSE probe returned 429 from openai.org",
+    "rawCatalogOrHttpTraceProvided": false,
+    "originalAffectedConversationCatalogEstablished": false,
+    "connectionKindEstablished": false
+  },
+  "registration": {
+    "name": "catdesk_web_task_tool",
+    "constant": "src/web_task_dispatch.rs::TOOL",
+    "advertiser": "src/server.rs::post_mcp tools/list augmentation",
+    "predicate": [
+      "COMPUTER_OR_BOTH_MODE",
+      "MULTI_TOOLS_OR_SUPERVISOR_ONLY_TOOL_MODE",
+      "VALID_CONFIGURED_CENTRAL_MCP_BEARER"
+    ],
+    "genericMcpCatalogAloneIncludesCentralDispatcher": false,
+    "nameExistsInTrustedInstalledSource": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+    "renamedOrRemovedFinding": false,
+    "newConversationAbsenceProvesServerRegistrationDefect": false
+  },
+  "supportedCompatibility": {
+    "existingSince": "C92_C93_2026_10_24",
+    "mcpTool": "run_command",
+    "reservedPrefix": "CATDESK_WEB_TASK=",
+    "closedJsonEnvelope": true,
+    "sameScopedDispatcherCallIdAndJournal": true,
+    "shellExecuted": false,
+    "arbitraryCwdOrTimeoutAccepted": false,
+    "sameAuthModePlanAndTaskGuards": true,
+    "ambiguousOutcomeReplayAllowed": false,
+    "supervisorOnlyCanAcceptReservedAdapterWithoutListingGenericRunCommand": true,
+    "permissionToSwitchTransportOrRetryHeldC49": false
+  },
+  "differentTools": {
+    "autonomy_session_start": "START_AN_EXISTING_APPROVED_MANAGED_SESSION",
+    "autonomy_session_claim_direct_work": "CLAIM_DIRECT_WORK_WITHIN_AN_EXISTING_SESSION",
+    "autonomy_review_inbox_list": "READ_EXISTING_REVIEW_INBOX",
+    "catdesk_wake_bridge_run_once": "ONE_CONFIRMED_PROJECT_LOCAL_ACTIONABLE_REVIEW_WAKE",
+    "catdesk_project_task_tool": "FIXED_PROJECT_CONNECTION_ASSIGNED_WORKTREE_TOOL_NOT_A_RENAME"
+  },
+  "httpTransport": {
+    "samePostMcpRouteAdvertisesAndDispatchesNamedTool": true,
+    "separateSseCatalogRegistrationFound": false,
+    "localGetMcpAuthenticatedResponse": "405_GET_SSE_DISABLED_PURE_HTTP_MODE",
+    "reportedUpstream429EqualsLocal405": false,
+    "connectionSettingsChanged": false
+  },
+  "localReadOnlyObservation": {
+    "observedUtc": "2026-10-31T17:28:06.7869094+00:00",
+    "scope": "LOCAL_PROCESS_AND_CONFIG_METADATA_NO_HTTP",
+    "port3200ListenerCount": 0,
+    "catdeskImageProcessCount": 0,
+    "officialClientProcessCount": 0,
+    "canonicalImageMatchesTrustedC254": true,
+    "recordedFingerprintMatchesTrustedC254": true,
+    "httpRequests": 0,
+    "processActions": 0,
+    "settingChanges": 0,
+    "historical429ProvesDaemonStopped": false
+  },
+  "configuredModeObservation": {
+    "observedUtc": "2026-10-31T17:28:07.682113+00:00",
+    "defaultAndDevelopmentMode": "computer",
+    "defaultAndDevelopmentToolMode": "multiTools",
+    "provesActiveBearerOrProjectAuthority": false,
+    "configurationChanged": false
+  },
+  "sourceImprovement": {
+    "path": "src/server.rs::central_dispatch_readiness",
+    "scope": "ADDITIVE_STATIC_DIAGNOSTIC_METADATA_ONLY",
+    "fields": [
+      "publication.basis",
+      "publication.namedToolListed",
+      "publication.clientCatalogVerified",
+      "cachedSchemaTransport.serverConnectionReady",
+      "cachedSchemaTransport.toolNameListedByMode",
+      "cachedSchemaTransport.unknownOutcomeReplayAllowed"
+    ],
+    "clientCatalogVerified": false,
+    "executionAuthorized": false,
+    "registrationOrAuthorizationGuardsChanged": false,
+    "installedOrWebAcceptanceClaimed": false
+  },
+  "qualification": {
+    "redRegression": {
+      "expectedFailure": true,
+      "logSha256": "a04e2b6dcde4f7a84466604e71c96bf3cdb5452cbb266b722ce3878eb6fd585f"
+    },
+    "serverTests": {
+      "passed": 46,
+      "ignoredHelper": 1,
+      "logSha256": "33ca1058b63e959584c0f256a8a5044d57d56ac16aaa1e716920b7205f22c90a"
+    },
+    "broaderDispatcherSuite": {
+      "result": "TIME_LIMIT_REACHED_NO_PASS_CLAIM",
+      "wholeWorkflowSeconds": 500.141,
+      "ownerTimedOut": false,
+      "ownerTerminationFailed": false,
+      "preservationPinsChecked": 5121,
+      "preservationPinChanges": 0
+    },
+    "focusedCompatibilityAndStaticChecks": {
+      "passed": true,
+      "testsPassed": 2,
+      "checks": [
+        "CLOSED_RESERVED_ENVELOPE",
+        "HTTP_AUTH_MODE_PLAN_NO_SHELL_GUARDS",
+        "STRICT_ALL_TARGETS_CLIPPY",
+        "CARGO_FMT_CHECK"
+      ],
+      "finishedUtc": "2026-10-31T17:40:55.446722+00:00",
+      "elapsedSeconds": 47.047,
+      "ownerExitCode": 0,
+      "ownerTimedOut": false,
+      "ownerTerminationFailed": false,
+      "preservationPinsChecked": 5121,
+      "preservationPinChanges": 0,
+      "logSha256": {
+        "envelope": "13539f676b9f56cbe2faa626fb774240787965d0503317da57d8a45eb84cfba9",
+        "http-guards": "adddc6c0260f446b4f314575dad38b0cfa4c61e98c8def91894025438e789323",
+        "clippy": "16dc2fee41ee8c6238881575d6523864ccda971a9cfa75afcd20c0a62f549bb9",
+        "format": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "sourceFileSha256": "ba1f2fa240827958750ddc0865552814b0c0cac1fa07975a86c2c04d66b21b63",
+    "installedProductionAndSelectedDevelopmentContainThisAddition": false
+  },
+  "remainingGates": {
+    "publicationAndDiscovery": "ORIGINAL_AFFECTED_CONVERSATION_TOOL_PRESENCE_AND_CONNECTION_KIND_UNVERIFIED",
+    "authenticationAndProjectScope": "A_SEPARATE_EXACT_CALL_AUTHORITY_CHECK_NOT_PROVED_BY_CATALOG",
+    "protectedPromotion": "CURRENT_SOURCE_GENUINE_REVIEW_ACK_SNAPSHOT_AND_CONTROLLED_PRODUCER_AUTHORITY_OPEN",
+    "twoGenuineWebCodingCallers": "OPEN_LOCAL_NATIVE_MCP_EVIDENCE_PRESERVED"
+  },
+  "singleOperatorAction": {
+    "scope": "INSPECT_EXISTING_AFFECTED_C49_TASK_RESUME_CONVERSATION_CONNECTION_DETAILS_ONLY",
+    "privateDestinationReconciledAgainstRetainedSentReceipt": true,
+    "report": [
+      "NAMED_TOOL_PRESENT_ABSENT_OR_UI_UNAVAILABLE",
+      "DIRECT_CUSTOM_MCP_OR_PUBLISHED_PLUGIN_OR_UNKNOWN"
+    ],
+    "noRefreshReconnectMessageOrTaskRetry": true,
+    "noNewDuplicateQuestion": true
+  },
+  "actions": {
+    "newConnectorOrProviderProbes": 0,
+    "c49Retries": 0,
+    "browserWakeOfficialOrRecurringStarts": 0,
+    "protectedPromotionOrFingerprintChanges": 0,
+    "projectBindingOrNativeSessionChanges": 0,
+    "newReleaseCandidateBuilt": false,
+    "unresolvedSubmissionStatesPreserved": true
+  }
+}

@@ -85,15 +85,20 @@ pub struct OfflineMigrationAnchorV2 {
     pub old_host_image_sha256: String,
     pub target_conversation_id: String,
     pub target_generation: u64,
+    /// SHA-256 of the exact old root's config.json bytes, read through its pin.
     pub target_snapshot_sha256: String,
     pub project_id: String,
     pub project_registration_object: OfflineObjectIdentityV2,
     pub project_target_conversation_id: String,
     pub project_target_generation: u64,
+    /// SHA-256 of the exact pinned project-registration file bytes.
     pub project_target_snapshot_sha256: String,
     pub unresolved_events_sha256: String,
     pub ambiguous_event_disposition: AmbiguousEventDispositionV2,
     pub desired_state: OfflineDesiredStateV2,
+    /// SHA-256 of the retained lock set's canonical selected_inventory_bytes.
+    /// The independent reviewer must separately establish that this selection
+    /// exhausts the old stores; matching bytes do not prove completeness.
     pub closed_store_inventory_sha256: String,
     pub quarantined_launch_entrypoints_sha256: String,
     pub target_protected_root: OfflineObjectIdentityV2,
@@ -173,6 +178,34 @@ pub struct OfflinePairReadbackV2 {
     pub disposition: &'static str,
 }
 
+/// Signature-checked payloads for the existing protected-policy and ledger
+/// readers. Construction is private: this is not an admission, owner proof,
+/// exact-CI fetch receipt, or permission to create INTENT.
+pub(crate) struct CheckedOfflinePairV2 {
+    anchor: OfflineMigrationAnchorV2,
+    approval: WakeOfflineInstallApprovalV2,
+    readback: OfflinePairReadbackV2,
+    checked_at_utc_seconds: u64,
+}
+
+impl CheckedOfflinePairV2 {
+    pub(crate) fn anchor(&self) -> &OfflineMigrationAnchorV2 {
+        &self.anchor
+    }
+
+    pub(crate) fn approval(&self) -> &WakeOfflineInstallApprovalV2 {
+        &self.approval
+    }
+
+    pub(crate) fn readback(&self) -> &OfflinePairReadbackV2 {
+        &self.readback
+    }
+
+    pub(crate) fn checked_at_utc_seconds(&self) -> u64 {
+        self.checked_at_utc_seconds
+    }
+}
+
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SignedEnvelope<T> {
@@ -195,7 +228,7 @@ fn identifier(value: &str, max: usize) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'@'))
 }
 
-fn valid_object(value: &OfflineObjectIdentityV2) -> bool {
+pub(crate) fn valid_object(value: &OfflineObjectIdentityV2) -> bool {
     value.legacy.volume_serial != 0
         && (value.legacy.file_index_high != 0 || value.legacy.file_index_low != 0)
         && value.full.volume_serial != 0
@@ -423,32 +456,48 @@ fn validate_approval(
 /// The output is a diagnostic readback only. Even a successful result does not
 /// prove offline host quiescence, connected-store selection, exact GitHub CI,
 /// protected policy provenance or approval by a human independent of CatDesk.
+#[cfg(test)]
 pub(crate) fn verify_offline_pair_read_only(
     anchor_wire: &[u8],
     approval_wire: &[u8],
     key: &VerifyingKey,
     observed: &OfflineMigrationObservationV2,
 ) -> Result<OfflinePairReadbackV2> {
+    Ok(check_offline_pair(anchor_wire, approval_wire, key, observed)?.readback)
+}
+
+pub(crate) fn check_offline_pair(
+    anchor_wire: &[u8],
+    approval_wire: &[u8],
+    key: &VerifyingKey,
+    observed: &OfflineMigrationObservationV2,
+) -> Result<CheckedOfflinePairV2> {
     let (anchor, anchor_digest) =
         verify_envelope::<OfflineMigrationAnchorV2>(anchor_wire, ANCHOR_DOMAIN, key)?;
     validate_anchor(&anchor, observed)?;
     let (approval, approval_digest) =
         verify_envelope::<WakeOfflineInstallApprovalV2>(approval_wire, APPROVAL_DOMAIN, key)?;
     validate_approval(&approval, &anchor, &anchor_digest, observed.now_utc_seconds)?;
-    Ok(OfflinePairReadbackV2 {
+    let readback = OfflinePairReadbackV2 {
         schema_version: 2,
-        anchor_id: anchor.anchor_id,
-        approval_id: approval.approval_id,
+        anchor_id: anchor.anchor_id.clone(),
+        approval_id: approval.approval_id.clone(),
         anchor_envelope_sha256: anchor_digest,
         approval_envelope_sha256: approval_digest,
         verification_key_sha256: format!("{:x}", Sha256::digest(key.as_bytes())),
         install_generation: approval.install_generation,
         disposition: "SIGNED_OFFLINE_PAIR_MATCHED_SUPPLIED_OBSERVATION_NO_INSTALL_AUTHORITY",
+    };
+    Ok(CheckedOfflinePairV2 {
+        anchor,
+        approval,
+        readback,
+        checked_at_utc_seconds: observed.now_utc_seconds,
     })
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::install_broker_approval::tests as v1_test;
     use ed25519_dalek::{Signer, SigningKey};
@@ -482,7 +531,7 @@ mod tests {
         .expect("canonical envelope")
     }
 
-    fn fixture() -> (
+    pub(crate) fn fixture() -> (
         OfflineMigrationAnchorV2,
         WakeOfflineInstallApprovalV2,
         OfflineMigrationObservationV2,
@@ -577,6 +626,17 @@ mod tests {
             broker_service_image_sha256: anchor.broker_service_image_sha256.clone(),
         };
         (anchor, approval, observed, key)
+    }
+
+    pub(crate) fn signed_pair(
+        anchor: &OfflineMigrationAnchorV2,
+        approval: &WakeOfflineInstallApprovalV2,
+        key: &SigningKey,
+    ) -> (Vec<u8>, Vec<u8>) {
+        let anchor_wire = signed(anchor, ANCHOR_DOMAIN, key);
+        let mut approval = approval.clone();
+        approval.anchor_envelope_sha256 = format!("{:x}", Sha256::digest(&anchor_wire));
+        (anchor_wire, signed(&approval, APPROVAL_DOMAIN, key))
     }
 
     fn check(

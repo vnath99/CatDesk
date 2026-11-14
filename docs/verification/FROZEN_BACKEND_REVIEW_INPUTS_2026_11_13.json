@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-13T11:01:57.960022+00:00",
+  "documentationParent": "60ad372c0a325125b2e3942e8fbaedda3163c3f6",
+  "stage": "UNSIGNED_REVIEW_INPUT_BINDING_ONLY",
+  "candidateSourceCommit": "d22e96ca8df48786737ca0a7b78e3e7439531e5a",
+  "candidateSourceTree": "b3cefeeb74dc0e8763b50adb5929d35cdb94857c",
+  "candidateSha256": "625feffdd31dfaa33a22c15f91b4b5d1560074be71eedcc0586e771b79896ab1",
+  "sourceInputsVerified": 476,
+  "exactRawBuildInputsVerified": 476,
+  "actualCompilerInputsVerified": 217,
+  "secondReadbackPassed": true,
+  "artifactExecuted": false,
+  "currentSourceWorktreePreserved": true,
+  "lineEndingEvidence": {
+    "committedBytesAndBuildCheckoutBytesKeptDistinct": true,
+    "sourceAndBuildHashesVerified": true,
+    "unchangedMixedLineEndingInputs": [
+      "tests/test_wake_bridge.py",
+      "wake/tests/test_adapter.py"
+    ],
+    "currentFileUseAllowedOnlyAfterExactFrozenRawAndNormalizedHashMatch": true
+  },
+  "retainedFailedPreparation": {
+    "exactFailure": "EXACT_BUILD_CHECKOUT_BYTES_UNRECOVERABLE",
+    "exitCode": 1,
+    "timedOut": false,
+    "terminationFailed": false,
+    "reason": "Two test files had mixed line endings; generic LF/CRLF reconstruction did not match their frozen raw hashes. The unchanged current files supplied exact hash-proven bytes to a distinct successor.",
+    "originalArchiveReusedWithoutModification": true,
+    "originalAttemptPreserved": true,
+    "ownerSha256": "1fef6f1aed2af718899bc53dca5fcd28ef2a580cf9223d713770e019fbe30e4a"
+  },
+  "collection": {
+    "startedUtc": "2026-11-13T10:58:26.9893871+00:00",
+    "finishedUtc": "2026-11-13T10:58:37.1836452+00:00",
+    "maximumSeconds": 120,
+    "containment": "KILL_ON_JOB_CLOSE",
+    "exitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false,
+    "workerSha256": "5d8ee2a72c13fee7915ab960a6c5a3866378948604a9fbd92dfd496408179510"
+  },
+  "proofHashes": {
+    "intake": "42c43d2636640a3a79ba981563ac62b088ea2093b427615da6fea268f802a84d",
+    "sourceManifest": "c82fe84389593fcb81fc9c12df7e4b01c935beb8a1d1842672d7782d576b42b4",
+    "result": "6537dc4e9a0c94ad9189390046e9438957ae4e9d11e67f3611b3b81917380a64",
+    "owner": "dc351a2ef4adfd6c218939fd7642ebd1c6bf871f9a02d3d64b39efc6901f53ec",
+    "secondReadback": "4e63e18d64cdcb273b0c6dea5e81adc376d007660f2a1b57f2bbb221d52093cd"
+  },
+  "independentReviewCompleted": false,
+  "approvedNativeReviewContractCreated": false,
+  "acknowledgedReviewRecord": false,
+  "producerAuthority": false,
+  "releaseAuthority": false,
+  "signingActions": 0,
+  "installationActions": 0,
+  "productCommands": 0,
+  "browserStarts": 0,
+  "webMessagesSent": 0,
+  "taskOrGrantCreated": false,
+  "newCandidateBuilt": false,
+  "overallMvpAccepted": false,
+  "scopeLimit": "This follows the existing unsigned review-input convention. It is not an approved native review contract, reviewer verdict, acknowledgment, source-snapshot authority or reviewed-build producer record. It cannot be passed off as release authority.",
+  "remaining": [
+    "Genuine independent qualified canonical review through the existing approved contract and acknowledgment/source-snapshot/producer chain.",
+    "The one already pending operator-environment root comparison before fresh purpose-bound Wake migration inputs.",
+    "Explicit one-time account delegation, native protected enrollment/reconstruction and installed update/rollback qualification.",
+    "Actual Web edit/verification/Git checkpoint/sync/self-Wake/readback and independent second-project acceptance."
+  ]
+}

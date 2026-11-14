@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T09:30:02.805294+00:00",
+  "classification": "TESTED_SOURCE_RECEIPT_BOUND_VISIBLE_TOOL_MARKER_DIAGNOSTICS_NOT_EXECUTION_OR_INSTALLED_ACCEPTANCE",
+  "sourceBaseCommit": "59329765dbe2aaf1cc54e4f81f40b4b9c6b212b5",
+  "sourceFilesSha256": {
+    "scripts/wake_bridge.py": "e439920b157d7b4c50538e44382331d9ea422503122a61e276a17b394dfa7730",
+    "wake/adapter.py": "e2ba9468531d9df4f67f68255dd6aa50a2ccd7f41dc0b9e0f7872f6e4bacda95",
+    "src/operator_web_cli.rs": "9cc00d4d99c3dcab8595d10c34ffa2bd9e1f9a6b5341cbcb9a2e7867150c4dda",
+    "tests/test_wake_bridge.py": "64f1e8d1868e90c30669f3c24a987ac2ff686a6178969d8b0686ed68839ed6ce",
+    "tests/test_wake_bridge_current_dom.py": "15d1042bc85f4bdc6616ae5e7b0a45c6b40baeabfdf3ce97d0a24e83bb1ea57e",
+    "wake/tests/test_adapter.py": "4c45b48c2492e65827fc05c6c1fe1e698c638dfc0c835da4141024c8b9500457"
+  },
+  "implementation": {
+    "existingQualifiedResponseSnapshotAndSentReviewReaderReused": true,
+    "newBrowserOwnerSchedulerEndpointOrRegistry": false,
+    "metadataOnlyForExplicitReceiptBoundReview": true,
+    "exactWholeUserAndRouteWitnessRechecked": true,
+    "fields": "CAPPED_CALL_RESULT_ERROR_BUSY_MARKER_COUNTS_AND_CLOSED_PROVENANCE",
+    "maximumEachMarkerCount": 64,
+    "overflowReported": true,
+    "scope": "EXACT_USER_EXCHANGE",
+    "basis": "VISIBLE_UI_MARKERS_ONLY_NOT_EXECUTION_RECEIPT",
+    "coverage": "KNOWN_MARKERS_ONLY",
+    "labelsArgumentsIdsDraftsCredentialsOrArbitraryAttributesExported": false,
+    "userCodeHiddenHistoricalMarkersExcluded": true,
+    "optionalDiagnosticFailureDoesNotEraseUsableResponse": true,
+    "malformedDiagnosticRefusedOrReplacedWithClosedUnavailable": true,
+    "callerCancellationLeaseReceiptRouteAndNoReplayGuardsRetained": true,
+    "zeroMarkersProvesNoAttempt": false,
+    "uiErrorMarkerProvesPlatformPolicyCause": false,
+    "markerCountsAuthorizeRetry": false,
+    "selectorCoverageLiveQualified": false
+  },
+  "tests": {
+    "distinctCasesIndividuallyPassed": 263,
+    "newCases": 6,
+    "proofs": [
+      {
+        "kind": "dom",
+        "passed": 63,
+        "logSha256": "dd9236325621948cfb2bf142321dffd32d631995531dc59855277e70095d5e7d"
+      },
+      {
+        "kind": "adapter",
+        "passed": 41,
+        "logSha256": "3ed9e59bbae00d65524a5c6da7b132cddf2a35db371c15f5e2a87426866f78d1"
+      },
+      {
+        "kind": "reader",
+        "passed": 33,
+        "logSha256": "bc941380b3e947d80ee55f3cf4c7a9f10d9575d828cd1c438f9dd3cf06fdb2ac"
+      },
+      {
+        "kind": "bridgeFixedCase",
+        "passed": 1,
+        "logSha256": "8c1b771b8f03e0e1ed22fb3be4f239ab95e76f538ef936a36a5caa443b881504"
+      }
+    ],
+    "bridgeFullRun": {
+      "passed": 125,
+      "errors": 1,
+      "logSha256": "c623a3483eea42533d24f50730d8ebd44c222016737b5488b2a5e91ea4565c58",
+      "failure": "STALE_MOCK_CONFUSED_SHARED_COMPOSER_HELPER_WITH_USER_ANCHOR_PROBE",
+      "fixedCaseIncludedInProofs": true,
+      "completeFinalSingleSuiteRerun": false,
+      "sourceAfterFullRunChangedOnlyThatOneBridgeMock": true
+    },
+    "domInitialHarnessFailure": {
+      "reason": "WINDOWS_COMMAND_LINE_LENGTH_LIMIT",
+      "logSha256": "736f756de218c8257433d81283d2ce52ff24e3a9892fe10cd5a37c854200db95",
+      "resolution": "FIXTURE_OPTIONS_AND_PROBE_SOURCE_USE_STDIN_NOT_ARGV"
+    },
+    "clippy": [
+      {
+        "scope": "root",
+        "allTargets": true,
+        "warningsDenied": true,
+        "logSha256": "15a6911ea2aa331110b18d169bdff0872cc0cdf6e17dc8298d22982022dcb59f"
+      },
+      {
+        "scope": "wake",
+        "allTargets": true,
+        "warningsDenied": true,
+        "logSha256": "ca0063184293207d9b993540e6cdb6e369282e9638c3d7df439095db364001ba"
+      }
+    ],
+    "format": "PASS"
+  },
+  "preservation": {
+    "criticalPinsUnchanged": 5107,
+    "runtimeWrites": 0,
+    "browserBackendWakeOfficialOrRecurringStarts": 0,
+    "messagesSent": 0,
+    "taskCallsRetried": 0,
+    "bindingsAndNativeOwnershipChanged": false,
+    "selectedPackageOrProtectedInstallationChanged": false
+  },
+  "acceptance": {
+    "source": "PASS_RELEVANT_CASES_INDIVIDUALLY",
+    "actualNewInstalledObservation": "OPEN",
+    "actualToolExecutionReceipt": "NOT_ESTABLISHED",
+    "heldCallOutcome": "UNESTABLISHED_NO_REPLAY",
+    "fullNativeTwoWebCoding": "OPEN",
+    "newSourceProductionAuthority": "NOT_CREATED"
+  },
+  "nextExecutableTask": "BUILD_MATCHED_IMMUTABLE_DEVELOPMENT_PACKAGE_THEN_ONE_BOUNDED_RECEIPT_BOUND_READ_OF_EXISTING_HELD_EXCHANGE_NO_SEND",
+  "operatorActionRequired": false,
+  "goal": "ACTIVE"
+}

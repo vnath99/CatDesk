@@ -1,0 +1,209 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-10-23T17:52:15.4280686Z",
+  "localDate": "2026-10-23",
+  "task": "C42-FRESH-ENTRY-GUARD",
+  "branch": "codex/web-rollover-oct17",
+  "baseHead": "18ddac8449b62cb012063f447aebfc1776efb967",
+  "sourceFiles": [
+    {
+      "path": "scripts/wake_bridge.py",
+      "sha256": "a3d6bd20fd017c32dd8917a5f06e0c30c2e7aba547fe09ae9877066fa1d84498"
+    },
+    {
+      "path": "wake/tests/test_new_conversation.py",
+      "sha256": "30adde7235a55d79dd662aa17782337c2f0f470f5ea03dde2400308148ee5ded"
+    }
+  ],
+  "sourceGate": {
+    "status": "PASS",
+    "distinctTests": 246,
+    "addedTests": 5,
+    "successfulExecutions": 300,
+    "overlappingRepeatExecutions": 53,
+    "targetedExtraExecution": 1,
+    "completedUtc": "2026-10-23T17:32:43.751Z",
+    "suites": {
+      "newConversation": 71,
+      "wakeBridge": 122,
+      "currentDom": 25,
+      "adapter": 28
+    },
+    "redObservedShape": "EXPECTED_PRE_STRUCTURE_REFUSAL_WITH_ZERO_INSERTS",
+    "greenObservedShape": "PASS",
+    "allTestOwnersExited": true,
+    "diffCheck": "PASS",
+    "rustSourceChanged": false
+  },
+  "developmentSelection": {
+    "status": "PASS_STOPPED_V58",
+    "atUtc": "2026-10-23T17:08:09.979Z",
+    "seconds": 7.031059,
+    "recordsChecked": 218,
+    "packagePointerChanges": 2,
+    "otherRecordsUnchanged": 216,
+    "pairedProjectsRead": 9,
+    "productionChanged": false
+  },
+  "automaticAttempt": {
+    "status": "FAILED_PRESERVED_NO_REPLAY",
+    "startedUtc": "2026-10-23T17:13:54.065Z",
+    "finishedUtc": "2026-10-23T17:21:11.971Z",
+    "seconds": 437.904835,
+    "listenerBoundSeconds": 800,
+    "hostBoundSeconds": 820,
+    "outerBoundSeconds": 900,
+    "newSourceEvents": 1,
+    "newHandoffEvents": 1,
+    "newRolloverIntents": 1,
+    "sourceAndHandoff": "SENT_COMPLETE",
+    "finalPhase": "SUBMITTING",
+    "progress": "TEXT_ENTRY_AUTHORIZED",
+    "failure": "BOOTSTRAP_DRAFT_INSERT_UNVERIFIED",
+    "reconciliationReason": "WEB_BOOTSTRAP_PRE_SEND_AMBIGUOUS_NO_RESEND",
+    "bootstrapReceiptVerified": false,
+    "replacementUrlVerified": false,
+    "sourceGeneration": 3,
+    "replacementBindingCommitted": false,
+    "continuationVerified": false,
+    "policyRestored": true,
+    "baselineRecords": 219,
+    "expectedChangedRecords": 8,
+    "newRecords": 10,
+    "archivedSourceQueueRecords": 1,
+    "finalRecords": 228,
+    "unexpectedChanges": 0,
+    "otherEightPairsExact": true,
+    "priorCompletedRolloverExact": true,
+    "hostTreeExitProved": true,
+    "ownedProcessesAfter": 0,
+    "controls": [
+      "STOPPED",
+      "STOPPED"
+    ]
+  },
+  "readOnlyInspection": {
+    "startedUtc": "2026-10-23T17:25:08.243Z",
+    "finishedUtc": "2026-10-23T17:25:24.618Z",
+    "classification": "EMPTY_HOME",
+    "actualBytes": 0,
+    "recordsChecked": 228,
+    "changedRecords": 0,
+    "newRecords": 0,
+    "ownedProcessesAfter": 0,
+    "boundSeconds": 180
+  },
+  "metadataInspection": {
+    "startedUtc": "2026-10-23T17:27:26.452Z",
+    "finishedUtc": "2026-10-23T17:27:42.712Z",
+    "editorCount": 1,
+    "observedShape": "visible DIV.ProseMirror > P[data-empty-paragraph][data-placeholder][class] > BR[class]",
+    "recordsChecked": 228,
+    "changedRecords": 0,
+    "newRecords": 0,
+    "ownedProcessesAfter": 0,
+    "focusOrSelectionManipulation": false,
+    "rawTextReturned": false,
+    "boundSeconds": 180
+  },
+  "readOnlyGuardComparison": {
+    "status": "PASS_GUARD_ONLY",
+    "previousAttempt": {
+      "startedUtc": "2026-10-23T17:33:28.319Z",
+      "finishedUtc": "2026-10-23T17:33:42.753Z",
+      "oldGuard": "UNPROVEN",
+      "candidateGuard": "C42_PRE_EDIT_GUARDS_PASSED",
+      "overall": "FAIL_SELECTION_MEASUREMENT",
+      "stateChanges": 0,
+      "ownedProcessesAfter": 0
+    },
+    "insertionOrRolloverQualified": false,
+    "startedUtc": "2026-10-23T17:34:54.411Z",
+    "finishedUtc": "2026-10-23T17:35:08.359Z",
+    "recordsUnchanged": 228,
+    "ownedProcessesAfter": 0,
+    "selectionAndActiveElementUnchanged": true
+  },
+  "sourceChange": {
+    "emptyParagraphMarker": "ALLOW_ONLY_EMPTY_P_WITH_WHITESPACE_OR_EMPTY_BR_CHILDREN",
+    "unknownAttributes": "REFUSE",
+    "hiddenOrRichContent": "REFUSE",
+    "nonemptyMarkedParagraph": "REFUSE",
+    "selectionBehavior": "UNCHANGED",
+    "insertAttempts": "AT_MOST_ONE",
+    "diagnostics": "FIXED_PRE_EDIT_AND_POST_EDIT_CODES_NO_RAW_CONTENT",
+    "diagnosticsGrantRetry": false,
+    "currentUncertainIntent": "PRESERVED"
+  },
+  "preservation": {
+    "originalProjectBindings": 5,
+    "totalPairedProjects": 9,
+    "nativeSessionActions": 0,
+    "nativeSessionsObservedActive": 4,
+    "recurringStarts": 0,
+    "productionChanges": 0,
+    "completedCanariesReplayed": 0
+  },
+  "connector": {
+    "atUtc": "2026-10-23T17:26:32Z",
+    "httpStatus": 429,
+    "result": "UNAVAILABLE",
+    "retries": 0,
+    "settingsChanges": 0
+  },
+  "acceptance": {
+    "source": "TESTED_LOCAL",
+    "correctedPackage": "V59_SELECTED_STOPPED_NORMAL_BUILDS_PASS",
+    "guardOnlyLive": "PASS_NO_INSERTION_OR_SEND",
+    "freshUninterruptedRollover": "NOT_QUALIFIED",
+    "priorRecoveredRollovers": "PRESERVED",
+    "actualConcurrentWebCoding": "OPEN_CONNECTOR_DEPENDENCY",
+    "protectedInstalledRuntime": "NOT_QUALIFIED",
+    "unattendedOperation": "NOT_ACTIVATED"
+  },
+  "publication": {
+    "status": "PUBLISHED_VERIFIED",
+    "sourceCommit": "524273f81130576601ba9b098bd5c728e71425d8",
+    "remoteSha": "524273f81130576601ba9b098bd5c728e71425d8",
+    "atUtc": "2026-10-23T17:36:20.524Z",
+    "privacyReview": "PASS_8_PATHS",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "remoteCi": "UNVERIFIED",
+    "force": false,
+    "visibilityChanged": false
+  },
+  "limitations": [
+    "An empty composer does not prove the original insertion was never attempted.",
+    "The original generic failure cannot be retroactively assigned a precise pre-edit stage.",
+    "Read-only guard acceptance does not prove insertion, submission or rollover.",
+    "All prior accepted rollovers and their histories remain preserved."
+  ],
+  "normalQualification": {
+    "appStartedUtc": "2026-10-23T17:36:40.025Z",
+    "appFinishedUtc": "2026-10-23T17:43:38.668Z",
+    "appSha256": "11bf285738cf0de508a22bc2baf76e417fd01e8b172a49d6f0971e6988d5385a",
+    "hostStartedUtc": "2026-10-23T17:46:44.617Z",
+    "hostFinishedUtc": "2026-10-23T17:47:07.363Z",
+    "hostSha256": "2c7367ebc9687037f6f0d813ec5e09018fcfbae3b1ff9aff60761f1bd13a6c83",
+    "normalApp": true,
+    "normalHost": true,
+    "ownerEofRefused": true,
+    "gateRuntimeStateCreated": false,
+    "selectedUtc": "2026-10-23T17:50:14.204Z",
+    "selectionSeconds": 6.387448,
+    "selected": "V59_STOPPED",
+    "recordsChecked": 228,
+    "packagePointerChanges": 2,
+    "unchangedRecords": 226,
+    "newStateRecords": 0,
+    "exactPairedReads": 9,
+    "ownedProcessesAfter": 0,
+    "previousPackagePreserved": true,
+    "uncertainC42IntentPreserved": true,
+    "browserStarted": false,
+    "realWakeHostStarted": false,
+    "productionChanged": false,
+    "protectedInstalledAcceptance": false
+  }
+}

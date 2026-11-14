@@ -1,0 +1,167 @@
+{
+  "recordedUtc": "2026-10-23T09:47:44.7355377Z",
+  "task": "C22-SOURCE-GENERATED-SCHEMA2-HANDOFFS",
+  "classification": "ACTUAL_SELECTED_BROWSER_HANDOFF_EXCHANGE_AND_BOUNDED_WAKE_RECOVERY",
+  "branch": "codex/web-rollover-oct17",
+  "baseCommit": "17cde688c314be97d05835c4c05d647b4f88165e",
+  "qualifiedSource": "bf62b48945903e69ab02a7cf0e07f6a48b8feadb",
+  "policy": {
+    "syntheticLowThreshold": true,
+    "originalObservedTokens": [
+      132,
+      137
+    ],
+    "automaticRolloverEnabledForControlledProjects": true,
+    "triggerTokens": 128,
+    "recurringSchedulerStarted": false,
+    "productionProjectPoliciesChanged": false,
+    "controlledProjects": 2,
+    "automaticObservationEnabled": false
+  },
+  "handoffs": [
+    {
+      "phase": "PREPARED",
+      "sourceGeneration": 1,
+      "importantDecisions": 8,
+      "role": "alpha",
+      "requestFinishedUtc": "2026-10-23T09:30:30.8940137Z",
+      "collectStartedUtc": "2026-10-23T09:43:53.8251358Z",
+      "ownedProcesses": 0,
+      "handoffSourceReceiptAndTimerVerified": true,
+      "remainingTasks": 4,
+      "changedOwnSourceContextRecords": 1,
+      "requestStartedUtc": "2026-10-23T09:29:54.5287086Z",
+      "nativeOwnedPaths": 0,
+      "objectiveRetained": true,
+      "gitStateBasis": "UNKNOWN",
+      "newPreparedRecords": 2,
+      "markerPreserved": true,
+      "sourceSnapshotRecheckAtBindPending": true,
+      "collectFinishedUtc": "2026-10-23T09:44:30.1107115Z",
+      "schemaVersion": 2
+    },
+    {
+      "phase": "PREPARED",
+      "sourceGeneration": 1,
+      "importantDecisions": 7,
+      "role": "beta",
+      "requestFinishedUtc": "2026-10-23T09:31:41.6916208Z",
+      "collectStartedUtc": "2026-10-23T09:44:49.8176367Z",
+      "ownedProcesses": 0,
+      "handoffSourceReceiptAndTimerVerified": true,
+      "remainingTasks": 4,
+      "changedOwnSourceContextRecords": 1,
+      "requestStartedUtc": "2026-10-23T09:31:05.3223887Z",
+      "nativeOwnedPaths": 0,
+      "objectiveRetained": true,
+      "gitStateBasis": "UNKNOWN",
+      "newPreparedRecords": 2,
+      "markerPreserved": true,
+      "sourceSnapshotRecheckAtBindPending": true,
+      "collectFinishedUtc": "2026-10-23T09:45:58.3105339Z",
+      "schemaVersion": 2
+    }
+  ],
+  "delivery": {
+    "unexpectedNewRecords": 0,
+    "newRequests": 2,
+    "finishedUtc": "2026-10-23T09:40:56.2928926Z",
+    "ownedProcesses": 0,
+    "bindingsChanged": false,
+    "outerMaximumSeconds": 180,
+    "startedUtc": "2026-10-23T09:38:48.2986332Z",
+    "unexpectedChanges": 0,
+    "initialOutcome": "BOTH_SENT_RESPONSE_TIMERS_STILL_OBSERVING_AT_BOUNDED_STOP",
+    "newMessages": 2,
+    "hostTreeExitProved": true,
+    "hostMaximumSeconds": 130,
+    "confirmedSentReceipts": 2
+  },
+  "completionObservation": {
+    "outcome": "BOTH_RESPONSE_TIMERS_COMPLETE",
+    "timersComplete": 2,
+    "unexpectedChanges": 0,
+    "deliveryRecordsPinned": true,
+    "unexpectedNewRecords": 0,
+    "startedUtc": "2026-10-23T09:42:56.4589748Z",
+    "hostMaximumSeconds": 130,
+    "finishedUtc": "2026-10-23T09:43:24.1103236Z",
+    "ownedProcesses": 0,
+    "hostTreeExitProved": true,
+    "outerMaximumSeconds": 180,
+    "newMessages": 0
+  },
+  "isolation": {
+    "originalSevenBindingsAndHistoryPreserved": true,
+    "originalFiveNativeSessionsChanged": false,
+    "betaPreparedWhileAlphaQueued": true,
+    "newChatsCreated": 0,
+    "testSourceBindingsRemainGeneration1": true,
+    "oldAmbiguousCanaryTouched": false
+  },
+  "cleanup": {
+    "productionChanged": false,
+    "completedCanaryReplayed": false,
+    "ownedProcesses": 0,
+    "recurringStarts": 0,
+    "sourceResends": 0,
+    "controls": "BOTH_STOPPED",
+    "allHandlesTerminal": true
+  },
+  "dependencies": {
+    "latestRecordedConnectorUtc": "2026-10-23T07:53:32Z",
+    "latestRecordedConnectorHttpStatus": 429,
+    "connectorCalls": 0,
+    "ci": "UNVERIFIED"
+  },
+  "acceptance": {
+    "unattended": "NOT_ACTIVATED",
+    "B": "OPEN_ACTUAL_WEB_MCP_CODING",
+    "C": "QUEUED_ALPHA_DID_NOT_BLOCK_BETA_HANDOFF_PREPARATION_NOT_WEB_CODING_PROOF",
+    "E": "TWO_ACTUAL_SOURCE_GENERATED_SCHEMA2_DURABLE_HANDOFFS_WITH_CONFIGURED_PRESSURE",
+    "milestone": "PARTIAL",
+    "I": "PREPARED_JOURNALS_DURABLE_PENDING_RESTART_TO_TEST",
+    "protectedInstalled": "NOT_ACCEPTED",
+    "G": "OPEN_TWO_PREPARED_INTENTS_READY",
+    "H": "OPEN_CRITICAL_BROWSER_SUBMISSION_PHASES"
+  },
+  "nextTask": "Submit both fresh PREPARED rollover execute commands concurrently, observe durable browser admission serialization, retain exact project identities and independently verify both replacement bindings/continuation. No blind resend after unknown submission.",
+  "sourceFiles": [
+    {
+      "path": "src/operator_web_rollover.rs",
+      "sha256": "48e2720401bcd462b59c5d8969870faefae958d4b97c3e8f67a37c3aa82a0087"
+    },
+    {
+      "path": "src/project_mcp.rs",
+      "sha256": "e663b71f3fa3efd1d31ae2a11474f7de0a97a0096682220c5df1cfb1e4069f63"
+    },
+    {
+      "path": "src/main.rs",
+      "sha256": "eecf0517779b50a01ce806cce06441f26dab0ea1cdf91ac9cac1311be2caa6c2"
+    },
+    {
+      "path": "src/project_mcp_task.rs",
+      "sha256": "5f6146e7f134d2eedf723f3c4423f29571166be7e7af2d7a4ecbeab57f8a04fe"
+    },
+    {
+      "path": "src/project_task_command.rs",
+      "sha256": "5a82b4eddf495098ef85d94cc8c2a192f33a3423e8200a21aaf1c37de1d16c2b"
+    },
+    {
+      "path": "scripts/wake_bridge.py",
+      "sha256": "c41e5d2eb1c697fdd6d820725e3899edc2a11dba4e28dfe34f74b8cf47c0a255"
+    },
+    {
+      "path": "wake/tests/test_new_conversation.py",
+      "sha256": "c544b9b2370c840d9b56726c47d8432be2c5a84d4fa6de7eac82a60ef09cdae3"
+    },
+    {
+      "path": "tests/test_wake_bridge.py",
+      "sha256": "bebd6d8fb4b6a6e3ea2a17944c82e6dfdc967dfa6c5b0d8683375abb4cc8b02c"
+    },
+    {
+      "path": "tests/test_wake_bridge_current_dom.py",
+      "sha256": "6e730dfc30ed0ff73a5913f372369d77540db9c4759a54ba6b767a7e96fd973e"
+    }
+  ]
+}

@@ -144,6 +144,7 @@ pub struct IntegratedRunSnapshotV1 {
 }
 
 pub struct IntegratedDelegatedService {
+    strict_project_task_read_scope: bool,
     workspace_root: PathBuf,
     contract: ExecutionContractV1,
     config: IntegratedRunConfigV1,
@@ -228,6 +229,7 @@ impl IntegratedDelegatedService {
         });
         let run_id = RunId::new(contract.task_id.clone()).map_err(IntegratedError::Tool)?;
         Ok(Self {
+            strict_project_task_read_scope: false,
             workspace_root,
             contract,
             config,
@@ -253,6 +255,10 @@ impl IntegratedDelegatedService {
             corrective_turns_used: 0,
             json_tool_recovery_turns_remaining: 0,
         })
+    }
+
+    pub(crate) fn enforce_project_task_read_scope(&mut self) {
+        self.strict_project_task_read_scope = true;
     }
 
     pub fn tool_definitions(&self) -> Vec<ToolDefinitionV1> {
@@ -2039,8 +2045,17 @@ impl IntegratedDelegatedService {
         const MAX_READ_BYTES: usize = 8 * 1024;
 
         let path = string_arg(args, "path")?;
-        let output = workspace_tools::read_file(&self.workspace_root.display().to_string(), &path)
-            .map_err(IntegratedError::Tool)?;
+        let output = if self.strict_project_task_read_scope {
+            workspace_tools::read_file_task_scoped(
+                &self.workspace_root.display().to_string(),
+                &path,
+                &self.contract.allowed_paths,
+                &self.contract.forbidden_paths,
+            )
+        } else {
+            workspace_tools::read_file(&self.workspace_root.display().to_string(), &path)
+        }
+        .map_err(IntegratedError::Tool)?;
         let total_lines = output.text.lines().count();
         let start_line = args
             .get("startLine")
@@ -2145,26 +2160,33 @@ impl IntegratedDelegatedService {
     fn tool_search(&self, args: &Value) -> Result<IntegratedToolResultV1, IntegratedError> {
         let pattern = string_arg(args, "pattern")?;
         let path = args.get("path").and_then(Value::as_str);
-        let output = workspace_tools::search_text(
-            &self.workspace_root.display().to_string(),
-            workspace_tools::SearchTextOptions {
-                pattern: &pattern,
-                path,
-                glob: None,
-                fixed_strings: args
-                    .get("fixedStrings")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false),
-                case_insensitive: false,
-                context: Some(1),
-                before: None,
-                after: None,
-                max_matches: Some(50),
-                max_matches_per_file: Some(10),
-                include_hidden: false,
-                no_ignore: false,
-            },
-        )
+        let options = workspace_tools::SearchTextOptions {
+            pattern: &pattern,
+            path,
+            glob: None,
+            fixed_strings: args
+                .get("fixedStrings")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            case_insensitive: false,
+            context: Some(1),
+            before: None,
+            after: None,
+            max_matches: Some(50),
+            max_matches_per_file: Some(10),
+            include_hidden: false,
+            no_ignore: false,
+        };
+        let output = if self.strict_project_task_read_scope {
+            workspace_tools::search_text_task_scoped(
+                &self.workspace_root.display().to_string(),
+                options,
+                &self.contract.allowed_paths,
+                &self.contract.forbidden_paths,
+            )
+        } else {
+            workspace_tools::search_text(&self.workspace_root.display().to_string(), options)
+        }
         .map_err(IntegratedError::Tool)?;
         Ok(tool_result(
             "search",
@@ -2222,7 +2244,11 @@ impl IntegratedDelegatedService {
             .cloned()
             .ok_or_else(|| IntegratedError::Tool(format!("unknown patch {patch_id}")))?;
         let engine = PatchEngine::new(&self.workspace_root, &self.contract)?;
-        let result = engine.apply(&proposal)?;
+        let result = if self.strict_project_task_read_scope {
+            engine.apply_task_scoped(&proposal)?
+        } else {
+            engine.apply(&proposal)?
+        };
         let tool_call_id = args
             .get("toolCallId")
             .and_then(Value::as_str)
@@ -2292,12 +2318,23 @@ impl IntegratedDelegatedService {
         let paths =
             string_array_arg(args, "paths").unwrap_or_else(|_| self.contract.allowed_paths.clone());
         let engine = PatchEngine::new(&self.workspace_root, &self.contract)?;
-        let diff = engine.actual_git_diff(&paths)?;
+        let diff = if self.strict_project_task_read_scope {
+            engine.actual_git_diff_task_scoped(&paths)?
+        } else {
+            engine.actual_git_diff(&paths)?
+        };
         self.last_diff = Some(diff.clone());
         self.persist_durable_state()?;
         Ok(tool_result(
             "diff.actual",
-            format!("captured diff hash {}", diff.diff_hash),
+            if self.strict_project_task_read_scope {
+                format!(
+                    "captured contract-scoped diff hash {}; authorized ignored files may appear",
+                    diff.diff_hash
+                )
+            } else {
+                format!("captured diff hash {}", diff.diff_hash)
+            },
             serde_json::to_value(&diff)?,
             diff.diff.clone(),
         ))

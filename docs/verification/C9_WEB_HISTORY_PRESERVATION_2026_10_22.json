@@ -1,0 +1,141 @@
+{
+  "recordedUtc": "2026-10-23T03:38:20.8784783Z",
+  "localDate": "2026-10-22",
+  "task": "C9-MANDATORY-WEB-HISTORY-PRESERVATION",
+  "classification": "SOURCE_TESTED_LOCAL",
+  "branch": "codex/web-rollover-oct17",
+  "baseHead": "8591900d4882bacb1dc4753e29f42d3e351abcf7",
+  "sourceFiles": [
+    {
+      "path": "src/delegated/autonomy_projects.rs",
+      "sha256": "4c090b3d3ff6e8a4534e2d8ef1d21119025b1507c06fa1f522d7b4336be5d465"
+    }
+  ],
+  "operatorDirective": "FULL_WORDING_PRESERVED_LOCAL_GOAL;SANITIZED_CORE_AND_A_J_LEDGER_IN_ESTABLISHED_ACCEPTANCE_DOC",
+  "finding": "At 64 predecessors, registry silently evicted oldest URL after invoking paired Wake pre-commit callback",
+  "reproduction": {
+    "test": "target_history_capacity_refuses_before_wake_commit_without_losing_predecessors",
+    "exitCode": 101,
+    "reason": "FULL_HISTORY_WAS_NOT_REFUSED",
+    "logSha256": "5772712c5ebdefd0dc977c54f57cef5f15fb899767db241c265b83779d0ee862"
+  },
+  "implementation": {
+    "existingRegistryReused": true,
+    "maximumInlinePredecessors": 64,
+    "overflow": "REFUSE_BEFORE_WAKE_PRECOMMIT_NO_EVICTION",
+    "existingRegistryBytesPreservedOnRefusal": true,
+    "sameUrlAtCapacity": "ALLOWED_NO_ADDITIONAL_PREDECESSOR",
+    "independentSiblingBinding": "ALLOWED",
+    "newHistoryArchive": "NOT_IMPLEMENTED",
+    "schemaChanged": false
+  },
+  "tests": {
+    "focusedTestsPassed": 2,
+    "checks": [
+      {
+        "label": "history-capacity-regression",
+        "startedUtc": "2026-10-23T03:36:15.1646622Z",
+        "finishedUtc": "2026-10-23T03:36:34.9710542Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "target_history_capacity_refuses_before_wake_commit_without_losing_predecessors",
+          "--",
+          "--nocapture"
+        ],
+        "exitCode": 0,
+        "logSha256": "7ae17a988c705eff1b42bc214088ddafe503b63aa723385ca0263a17b14e2d79"
+      },
+      {
+        "label": "legacy-history-bounds",
+        "startedUtc": "2026-10-23T03:36:35.0000547Z",
+        "finishedUtc": "2026-10-23T03:36:35.5937823Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "historical_chat_urls_are_backward_compatible_and_bounded",
+          "--",
+          "--nocapture"
+        ],
+        "exitCode": 0,
+        "logSha256": "f8fd910b6404bb81856092236e1d3ba8522dd21d3ccd9734518280562afa9aca"
+      },
+      {
+        "label": "strict-root-clippy",
+        "startedUtc": "2026-10-23T03:36:35.6030129Z",
+        "finishedUtc": "2026-10-23T03:36:52.0077056Z",
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exitCode": 0,
+        "logSha256": "64e7449c9b3cc65f606953d11d607b072ce8b37f6276ca10a55bc95abafc87e7"
+      },
+      {
+        "label": "root-format",
+        "startedUtc": "2026-10-23T03:36:52.016685Z",
+        "finishedUtc": "2026-10-23T03:36:54.8346452Z",
+        "arguments": [
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "strictClippy": "PASS_ALL_TARGETS_ALL_FEATURES",
+    "format": "PASS",
+    "boundSeconds": 600,
+    "containment": "EXIT0_NO_TIMEOUT_NO_TERMINATION_FAILURE",
+    "realWakeMutationInHistoryTest": false,
+    "callbackNonInvocationVerified": true
+  },
+  "external": {
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "messagesSent": 0,
+    "fiveOriginalBindingsChanged": false,
+    "nativeSessionsChanged": false,
+    "recurringStarted": false,
+    "protectedProductionChanged": false,
+    "completedCanaryReplayed": false,
+    "selectedPackage": "PRIOR_C8_V49_RETAINED_NOT_C9"
+  },
+  "acceptance": {
+    "source": "PASS",
+    "normalExecutable": "NOT_YET_BUILT_FOR_C9",
+    "liveHistoryBoundary": "NOT_ATTEMPTED",
+    "allPredecessors": "NO_SILENT_LOSS_64_INLINE_LIMIT_REMAINS",
+    "webParallelWorkspace": "OPEN",
+    "durableFairRolloverAdmission": "OPEN",
+    "externalConnector": "UNVERIFIED",
+    "protectedProduction": "OPEN",
+    "unattended": "NOT_ACTIVATED",
+    "fullMilestone": "PARTIAL"
+  },
+  "nextTask": "Use the existing registry resolver and browser journals to implement reliable immutable project execution context and durable fair shared-browser rollover admission. Do not use caller project labels as authenticated ChatGPT origin; preserve native writer ownership and all completed canaries.",
+  "sourcePublication": {
+    "atUtc": "2026-10-23T03:40:32.8668083Z",
+    "sourceCommit": "cb73e3f158433dc1b6cc66b9a37c86ff1bc6507d",
+    "remoteSha": "cb73e3f158433dc1b6cc66b9a37c86ff1bc6507d",
+    "branch": "codex/web-rollover-oct17",
+    "privacyScan": "PASS",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED"
+  }
+}

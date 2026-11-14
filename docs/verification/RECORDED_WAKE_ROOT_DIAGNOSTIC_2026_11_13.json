@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-14T02:49:38.422741+00:00",
+  "userFacingDateZone": "America/New_York",
+  "documentationParent": "900e0ebb275637614cee8802c35e60954de916cf",
+  "trigger": "Actual elevated operator comparison result, not a periodic dependency retry",
+  "operatorResult": {
+    "observedUtc": "2026-11-14T02:21:23.9847975+00:00",
+    "powerShellVersion": "7.7.0",
+    "elevated": true,
+    "state": "FIXED_DIRECT_WAKE_ROOT_IDENTITY_CHANGED",
+    "proposalExpired": true,
+    "accountCheckReached": false,
+    "falseAccountFieldProvesAccountMismatch": false,
+    "protectedWrites": 0,
+    "signaturesCreated": 0,
+    "browserStarts": 0
+  },
+  "demonstratedDiagnosticDefect": {
+    "comparisonSha256": "60a4e4b50fbeb1a603646bc0ddeb6de2e434f642147ebd1c40fe12aa28f6a7f5",
+    "helperSha256": "4dde1866df390640670f331bdff9ace2cfd2ada71f7f9243139a3237beee0c61",
+    "cause": "The retained initializer opens and validates the fixed root before the caller performs its account check. A root refusal therefore leaves the account field at its unobserved false default.",
+    "additionalFinding": "Successful initialization also returns a disposable retained snapshot before the caller separately opens another snapshot.",
+    "identityGuardWeakened": false,
+    "frozenScriptsModified": false
+  },
+  "existingObserver": {
+    "sha256": "9d11999de6842abf04f3315419565718df7256b95eb0e3782e774d2348c27397",
+    "observedUtc": "2026-11-14T02:35:11.7542506+00:00",
+    "scope": "Current non-elevated Codex context; not intended elevated-operator authority",
+    "packageContext": "NO_PACKAGE_IDENTITY",
+    "observedRootsSameObject": false,
+    "ordinaryRoot": {
+      "matchesRecordedDirectory": false,
+      "identityStable": true,
+      "currentPointerHashMatches": true,
+      "controlHashMatches": false,
+      "configHashMatches": false,
+      "controlStopped": false
+    },
+    "recordedPackageRoot": {
+      "matchesRecordedDirectory": true,
+      "identityStable": true,
+      "currentPointer": "MISSING_BY_BOTH_ROOT_RELATIVE_AND_ABSOLUTE_OPEN",
+      "controlHashMatches": true,
+      "configHashMatches": true,
+      "controlStopped": true
+    },
+    "maximumSeconds": 60,
+    "exitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false,
+    "rootSplitCauseEstablished": false,
+    "pointerCopyOrIdentityResetAuthorized": false
+  },
+  "diagnosticSuccessor": {
+    "scope": "Private read-only diagnostic, not a product release or installation authority",
+    "sha256": "1c9e9b7bb25db40b4fa490aa79f52338b300ca8e3864859917f67af762654abe",
+    "elevationAndAccountCheckedBeforeObserver": true,
+    "reusesHashPinnedExistingObserver": true,
+    "childWaitMilliseconds": 20000,
+    "ownedChildCleanupWaitMilliseconds": 5000,
+    "readyForPurposeSigningAlwaysFalse": true,
+    "elevatedOperatorPositiveAcceptance": false,
+    "tests": {
+      "classifierCasesPassed": 13,
+      "sourceOrderingChecksPassed": 5,
+      "actualNonElevatedChildRefusedBeforeObservation": true,
+      "negativeChildExited": true,
+      "missingPointerAndUncertainLeavesFailClosed": true
+    },
+    "nextOperation": "In the already elevated approved-account PowerShell 7 window, execute the hash-checked diagnostic once and return its bounded JSON. No new elevation, profile, credentials, signature or install is requested."
+  },
+  "preservation": {
+    "baselinePins": 1685,
+    "pinMismatches": 0,
+    "profileIdentitiesUnchanged": true,
+    "legacyObserverUnmodified": true,
+    "strictComparisonUnmodified": true,
+    "historicalMessagesReplayed": false,
+    "productOrProtectedOperations": 0
+  },
+  "independentTracks": {
+    "rootDiagnosticCorrection": "SOURCE_TESTED_PRIVATE_NOT_INSTALLED",
+    "protectedWakeMigration": "BLOCKED_RECORDED_ROOT_STATE_AND_ELEVATED_ACCOUNT_VIEW_RECONCILIATION",
+    "backendCandidate": "BUILT_GENUINE_REVIEW_AND_PRODUCER_BLOCKED",
+    "reviewExecution": "BLOCKED_CONTROL_VIEW_ADMISSION_AND_EXPIRED_NONRENEWABLE_LEASE",
+    "existingBackend": "INSTALLED_PRIOR_BOUNDED_RESTART_AUTH_MCP_AND_CONNECTOR_LIVE_ACCEPTANCE_PRESERVED",
+    "directWebMvp": "BLOCKED_CONTROL_SCOPE_AND_INSTALLED_TASK_GIT_CHECKPOINT_GAP"
+  },
+  "noBlindRecovery": "Do not copy a pointer between stores, reset identities, force STOPPED, reuse expired proposals or infer release authority from a matching hash. Reconcile the actual operator result before selecting the existing supported recovery transition.",
+  "overallGoalComplete": false
+}

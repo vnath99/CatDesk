@@ -1,0 +1,204 @@
+{
+  "recordedUtc": "2026-11-01T17:11:46.913628+00:00",
+  "runtimeSourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+  "classification": "TWO_BOUNDED_ADMINISTRATIVE_WEB_REVIEWS_AFTER_CONTROLLED_ROLLOVER_NOT_PRODUCTION_ACCEPTANCE",
+  "sameManagedReviewRetained": true,
+  "sameScopedAuthorizationMessages": 2,
+  "newNativeClaims": 0,
+  "reviews": [
+    {
+      "observedUtc": "2026-11-01T16:52:27.552025+00:00",
+      "reviewNumber": 1,
+      "verdict": "REVIEWED_PARTIAL",
+      "frozenSourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "responseSha256": "3c31c40b94aab8fb8de161879069cbaa5d5d1a4ed45e025512aacde94de9c647",
+      "exactUserReceipt": true,
+      "completedResponseVerified": true,
+      "coordinatorClosed": true,
+      "matchingCommandLogCounts": [
+        1,
+        1
+      ],
+      "matchingCommandLogSha256": [
+        "2e1f3d72b2794439d311dff3103796e52b5df3d309406d9e23a8dad3751f046b",
+        "a30eae8220076d21c785e3563627ad873563b2ad522025e9fd72da771e0d773f"
+      ],
+      "sourceLogMatchesExistingPrivacyRedactionOfFrozenInputs": true,
+      "rawUnredactedLogClaimed": false,
+      "sourceAccepted": false,
+      "producerAuthority": false
+    },
+    {
+      "observedUtc": "2026-11-01T17:10:19.373835+00:00",
+      "reviewNumber": 2,
+      "verdict": "REVIEWED_PARTIAL",
+      "frozenSourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "responseSha256": "d1806a92e568406420d8f8809313d087cb1fb1280f1179a1b0ca885e9dd7a6d7",
+      "exactUserReceipt": true,
+      "completedResponseVerified": true,
+      "coordinatorClosed": true,
+      "matchingCommandLogCounts": [
+        1,
+        1,
+        1
+      ],
+      "matchingCommandLogSha256": [
+        "d18b628db02bc361b0aef489e63e973f164757ac7d43d3bb7e36b0e9b764160b",
+        "a90eb76e538e778d45800d44e988fcecd53dc0885c6274ee4cb3a78f0304a06c",
+        "7094b6be70085066be8d8d11833a3a43dce2ff1528331512327e372e5fff0ff5"
+      ],
+      "sourceLogMatchesExistingPrivacyRedactionOfFrozenInputs": true,
+      "rawUnredactedLogClaimed": false,
+      "sourceAccepted": false,
+      "producerAuthority": false,
+      "originalTimedOutPreDispatchAttemptRetained": true,
+      "supportedResumeWithoutNewRequestOrReservation": true
+    }
+  ],
+  "visibleRanges": [
+    {
+      "observedUtc": "2026-11-01T16:53:33.445347+00:00",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "reviewNumber": 1,
+      "exactResponseSha256": "3c31c40b94aab8fb8de161879069cbaa5d5d1a4ed45e025512aacde94de9c647",
+      "verdict": "REVIEWED_PARTIAL",
+      "ranges": [
+        {
+          "path": "src/project_task_context.rs",
+          "range": [
+            189,
+            309
+          ],
+          "firstCodeMatches": true,
+          "lastNonblankMatches": true,
+          "reviewerReportsUntruncated": true
+        },
+        {
+          "path": "src/project_task_context.rs",
+          "range": [
+            928,
+            1016
+          ],
+          "firstCodeMatches": true,
+          "lastNonblankMatches": true,
+          "reviewerReportsUntruncated": true
+        }
+      ],
+      "normalization": "Remove only Git blame hash/line framing before code comparison; preserve returned report unchanged",
+      "fullFileReviewOrComprehensionProved": false,
+      "sourceAccepted": false,
+      "producerAuthority": false
+    },
+    {
+      "observedUtc": "2026-11-01T17:09:00.979200+00:00",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "reviewNumber": 2,
+      "exactResponseSha256": "d1806a92e568406420d8f8809313d087cb1fb1280f1179a1b0ca885e9dd7a6d7",
+      "verdict": "REVIEWED_PARTIAL",
+      "ranges": [
+        {
+          "path": "src/web_work.rs",
+          "range": [
+            80,
+            153
+          ],
+          "firstCodeMatches": true,
+          "lastNonblankMatches": true,
+          "reviewerReportsUntruncated": true
+        },
+        {
+          "path": "src/operator_web_rollover.rs",
+          "range": [
+            393,
+            470
+          ],
+          "firstCodeMatches": true,
+          "lastNonblankMatches": true,
+          "reviewerReportsUntruncated": true
+        },
+        {
+          "path": "src/operator_web_rollover.rs",
+          "range": [
+            543,
+            580
+          ],
+          "firstCodeMatches": true,
+          "lastNonblankMatches": true,
+          "reviewerReportsUntruncated": true
+        }
+      ],
+      "normalization": "Remove only Git blame hash/line framing before code comparison; preserve returned report unchanged",
+      "fullFileReviewOrComprehensionProved": false,
+      "sourceAccepted": false,
+      "producerAuthority": false
+    }
+  ],
+  "existingUnchangedSourceTestQualification": {
+    "observedUtc": "2026-11-01T16:53:33.445347+00:00",
+    "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+    "path": "src/project_task_context.rs",
+    "qualifiedWorkingFileSha256": "b3b8d015474538e7cbf8545a0307772e4efe17721fedd01f7b819ad78eb6473a",
+    "sourceContentMatchesPinnedCommit": true,
+    "qualifiedLogSha256": "7a7c602183bc09926de843ee51bd7da89fd2585f2acb4fc45a7b2687dc05caf3",
+    "existingPassingCases": 14,
+    "caseNames": [
+      "operator_facade::web::tests::private_initial_context_commands_are_closed_and_never_accept_payload_or_runtime_overrides",
+      "project_mcp_task::context_delivery::tests::initial_context_accounting_requires_sent_and_recovers_continuation_without_queue_recreation",
+      "project_mcp_task::context_delivery::tests::initial_context_attempted_or_unknown_submission_never_gets_prewrite_retry",
+      "project_mcp_task::context_delivery::tests::initial_context_busy_meter_never_downgrades_sent_or_reopens_the_browser",
+      "project_mcp_task::context_delivery::tests::initial_context_continuation_is_key_free_deduplicated_and_requires_the_receipt",
+      "project_mcp_task::context_delivery::tests::initial_context_crash_before_ack_and_known_prewrite_failure_keep_the_fence",
+      "project_mcp_task::context_delivery::tests::initial_context_explicit_prewrite_retry_keeps_payload_and_has_a_fixed_limit",
+      "project_mcp_task::context_delivery::tests::initial_context_freezes_private_payload_and_only_safe_reference_in_workspace",
+      "project_mcp_task::context_delivery::tests::initial_context_receipt_cannot_be_recorded_before_the_durable_submit_fence",
+      "project_mcp_task::context_delivery::tests::initial_context_requires_existing_grant_and_exact_target_before_preparation",
+      "project_mcp_task::context_delivery::tests::initial_context_revoke_and_payload_change_refuse_without_browser_or_replacement",
+      "project_mcp_task::context_delivery::tests::initial_context_same_url_generation_change_refuses_before_any_browser_action",
+      "project_mcp_task::context_delivery::tests::initial_context_sent_is_idempotent_without_another_browser_or_ack",
+      "project_mcp_task::context_delivery::tests::initial_context_unknown_cannot_resend_but_readonly_reconciliation_can_prove_it"
+    ],
+    "testRerun": false,
+    "qualification": "Existing local source-fixture qualification, not independent Web execution or installed acceptance; transitive later changes assessed separately"
+  },
+  "preDispatchInterruption": {
+    "originalAttempt": "Timed out before durable dispatch marker; retained CLAIMED without receipt/timer/archive/submission witness",
+    "originalAttemptSeconds": 148.141,
+    "originalFailureType": "TimeoutExpired",
+    "originalPreservationMismatches": 0,
+    "supportedRecovery": "Existing review resume; same frozen request, authorization and reservation after exact pre-dispatch checks and owned-process exit inventory",
+    "resumeSeconds": 121.937,
+    "exactSentReceipt": true,
+    "newGrantOrReservation": false,
+    "blindRetry": false,
+    "timingCorrection": "Private recovery caller allows controller deadline and cleanup within existing 180-second containment; no product guard or grant limit changed"
+  },
+  "remainingDeltas": {
+    "olderChangedPaths": 16,
+    "bytesFromLatestReferencedReview": 135557,
+    "classification": "Additional targeting metadata only; earlier partial references remain limited and all84 declared code paths remain in scope"
+  },
+  "preservation": {
+    "testOwnedProcessesRemaining": 0,
+    "trustedInstalledBackendRetained": true,
+    "sharedWakeHostStopped": true,
+    "loginMarkerPresent": false,
+    "productionChanges": 0,
+    "nativeSessionActions": 0,
+    "sourceChanges": 0
+  },
+  "acceptance": {
+    "sourceVerdicts": [
+      "REVIEWED_PARTIAL",
+      "REVIEWED_PARTIAL"
+    ],
+    "cumulativeSourceAccepted": false,
+    "producerAuthority": false,
+    "controlledAdministrativeReviewAfterRollover": "VERIFIED_UNDER_SEPARATE_SCOPED_GRANT",
+    "automaticOriginalTaskAuthorityTransfer": "OPEN_CANONICAL_CONTROL_REGISTRY_SCOPE_MISMATCH",
+    "twoWebNativeCoding": "OPEN",
+    "protectedUpgrade": "NOT_PERFORMED",
+    "installedPersistentRecovery": "OPEN"
+  },
+  "nextExecutableTask": "Inspect complete project lease/OS-lock and atomic-write implementations, then current deltas and remaining material source; keep source suitability distinct from later installed gates",
+  "operatorActionRequired": false
+}

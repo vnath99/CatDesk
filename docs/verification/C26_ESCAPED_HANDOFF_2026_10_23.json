@@ -1,0 +1,193 @@
+{
+  "recordedUtc": "2026-10-23T12:00:54.3306078Z",
+  "localDate": "2026-10-23",
+  "task": "C26-ESCAPED-JSON-HANDOFF-TRANSPORT",
+  "classification": "SOURCE_AND_ACTUAL_ISOLATED_BROWSER_CANARY",
+  "branch": "codex/web-rollover-oct17",
+  "baseCommit": "404177ca7a587da98b9ced695e1a006c79c78a4a",
+  "publishedCodeCommit": "6dab09fcfb0c2e1c51841dc087e0945c229c78d1",
+  "verifiedRemoteCodeSha": "6dab09fcfb0c2e1c51841dc087e0945c229c78d1",
+  "sourceFiles": [
+    {
+      "sha256": "bd3331a475096efa392eabc14eb35a49301790c735cb16d39238ae66f552ad00",
+      "path": "scripts/wake_bridge.py"
+    },
+    {
+      "sha256": "854dde9301d98466f1c6fd7b34d46348d0a44e7ae0b2903a31033b8552adc809",
+      "path": "wake/adapter.py"
+    },
+    {
+      "sha256": "7f117ae02fa1519017f9fd24b85d073f898ee2283e96561cc6fa35fd309523bd",
+      "path": "wake/src/runtime.rs"
+    },
+    {
+      "sha256": "481433742517b3fc9a305ce4f4481e7d5cb1020d4fe6f56aaddb51f4e1085447",
+      "path": "src/operator_web_rollover.rs"
+    },
+    {
+      "sha256": "7e3688b46ce78aaf568624b06ea8be889c79465936d1d70f3f21ad8c0d0b6cb4",
+      "path": "wake/tests/test_new_conversation.py"
+    },
+    {
+      "sha256": "34c2b623f54c6ea3cb76ac677b391f19d9b302884c25c84301975a46d9ded411",
+      "path": "tests/test_wake_bridge_current_dom.py"
+    }
+  ],
+  "implementation": {
+    "strictReceiptChecksRelaxed": false,
+    "witness": "PREFIX_IN_EXISTING_IMMUTABLE_HANDOFF",
+    "urlEncoding": "JSON_UNICODE_ESCAPE_U002F",
+    "legacyComposerBytesChanged": false,
+    "oldRecordsRewritten": false,
+    "generatedUrlSpansRecognized": true,
+    "decodedDataPreserved": true,
+    "format": "JSON_ESCAPED_V1",
+    "legacySourceWitnessPreserved": true,
+    "newContextObservation": "ACTUAL_ENCODED_WIRE_TEXT",
+    "composerReader": "TEXT_DATA_WITHOUT_DECORATIVE_LAYOUT",
+    "secondRegistry": false,
+    "legacyContextDedupBytesPreserved": true
+  },
+  "c25Learning": {
+    "nativeRepairOnlySolutionQualified": false,
+    "testDraft": "FULL_FROZEN_IDENTITY_ARCHIVED_BEFORE_CLEAR",
+    "nativeRepairRecreatesGeneratedLinks": true,
+    "actualWidget": "SPAN_TEXT_LINK_HREF_DATA_RICH_TEXT_GENERATED_AUTOLINK",
+    "emptyHomeAfterReloadProved": true,
+    "unknownDraftCleared": false,
+    "legacyVisualReadersIntroduceUrlWhitespace": true,
+    "oldTestJournalRetained": true,
+    "removalMenuObserved": false,
+    "sendAttempts": 0,
+    "failedFixtureAssumptionsRetainedAndCorrected": true
+  },
+  "sourceTests": {
+    "pythonDom": 25,
+    "crossLanguageDigest": "f83dd687c0a2470e5a583845926fd8e5c9ce6d858397c2d9e6a4b8feee698c0f",
+    "maximumSeconds": 900,
+    "failed": 0,
+    "pythonAdapterBootstrap": 73,
+    "strictWakeClippy": "PASS",
+    "wakeBootstrapRuntime": 14,
+    "legacyAndNewSourceWitnessesAccepted": true,
+    "expandedPayloadBoundRefused": true,
+    "checks": [
+      {
+        "startedUtc": "2026-10-23T11:48:34.3103507Z",
+        "exitCode": 0,
+        "finishedUtc": "2026-10-23T11:48:52.5568696Z",
+        "label": "current-dom",
+        "logSha256": "cc3efebdb94b7ac3f4e5880016f659d618fe744dd8c6ae5b6ed931995ded5e98"
+      },
+      {
+        "startedUtc": "2026-10-23T11:48:52.5852567Z",
+        "exitCode": 0,
+        "finishedUtc": "2026-10-23T11:48:53.9403505Z",
+        "label": "adapter-and-bootstrap",
+        "logSha256": "7020c7ee2aded02ab233ebdeffafe4287658bcdd18f12abb9ae15aff049c6d73"
+      },
+      {
+        "startedUtc": "2026-10-23T11:48:53.9536482Z",
+        "exitCode": 0,
+        "finishedUtc": "2026-10-23T11:49:03.3662039Z",
+        "label": "wake-bootstrap-runtime",
+        "logSha256": "28c7a67ef597ded332434a61b373142e3ffc7e95568193a79d3948513b4dc20d"
+      },
+      {
+        "startedUtc": "2026-10-23T11:49:03.3779133Z",
+        "exitCode": 0,
+        "finishedUtc": "2026-10-23T11:50:14.7058298Z",
+        "label": "operator-rollover",
+        "logSha256": "9018dd0e411ac02dfff7f6abd71b530f6bf0a5cab54a0bc5355dfd2f66dac69b"
+      },
+      {
+        "startedUtc": "2026-10-23T11:50:14.716587Z",
+        "exitCode": 0,
+        "finishedUtc": "2026-10-23T11:50:38.5592426Z",
+        "label": "strict-root-clippy",
+        "logSha256": "eefec179c56970b92871cc3af64ed1e9c05cdf92e45562dbe8c2543210384fa8"
+      },
+      {
+        "startedUtc": "2026-10-23T11:50:38.5692521Z",
+        "exitCode": 0,
+        "finishedUtc": "2026-10-23T11:50:44.932435Z",
+        "label": "strict-wake-clippy",
+        "logSha256": "c2408402bfdf374ad01e85beb9576be89e012e190a0f9af7bc7d96ae49ab352c"
+      },
+      {
+        "startedUtc": "2026-10-23T11:50:44.9438169Z",
+        "exitCode": 0,
+        "finishedUtc": "2026-10-23T11:50:47.9825125Z",
+        "label": "root-format",
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "startedUtc": "2026-10-23T11:50:47.9860496Z",
+        "exitCode": 0,
+        "finishedUtc": "2026-10-23T11:50:48.818093Z",
+        "label": "wake-format",
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "strictRootClippy": "PASS",
+    "formats": "PASS",
+    "distinctPassed": 156,
+    "operatorRollover": 44
+  },
+  "isolatedBrowser": {
+    "prepareFinishedUtc": "2026-10-23T11:51:42.4976792Z",
+    "draftSurvivedBrowserExit": true,
+    "resumeFinishedUtc": "2026-10-23T11:52:46.1862255Z",
+    "retyping": 0,
+    "predecessor": "SYNTHETIC_NEGATIVE_WITNESS_NOT_NAVIGATED",
+    "issuedIdSeenInAuthenticatedApp": true,
+    "independentFreshDocumentReceipt": true,
+    "freshProcessReopenedExactDraft": true,
+    "completedAssistantBodyVerified": true,
+    "completedHistoricalCanaryReplayed": false,
+    "resumeStartedUtc": "2026-10-23T11:52:18.0615573Z",
+    "nativeRepairRequired": false,
+    "generatedLinks": 0,
+    "pairedCommitPerformed": false,
+    "verifiedUserMessages": 1,
+    "prepareStartedUtc": "2026-10-23T11:51:19.6566779Z",
+    "registeredProject": false,
+    "sourceImportedDirectly": true,
+    "payloadBytes": 734,
+    "actualIssuedUrlVerified": true,
+    "sendAttempts": 1,
+    "maximumSecondsPerRun": 180
+  },
+  "preservation": {
+    "selectedRuntimeChanged": false,
+    "pairedProjects": 9,
+    "changedRecords": 0,
+    "recurringStarts": 0,
+    "controls": [
+      "STOPPED",
+      "STOPPED"
+    ],
+    "wakeWorkerStarts": 0,
+    "connectorCalls": 0,
+    "recordsChecked": 181,
+    "ownedProcessesAfterEveryBoundedRun": 0,
+    "oldC24Unknown": "QUARANTINED_PRESERVED_NO_REPLAY",
+    "productionChanged": false,
+    "originalFiveBindingsOrNativeOwnersChanged": false
+  },
+  "acceptance": {
+    "actualWebMcpCodingBAndC": "OPEN_CONNECTOR_DEPENDENCY",
+    "selectedRuntimeEnvelope": "NOT_YET_QUALIFIED",
+    "unattended": "NOT_ACTIVATED",
+    "ci": "UNVERIFIED_ZERO_RUNS_CHECKS",
+    "protectedInstallation": "OPEN",
+    "isolatedBrowserEnvelope": "PASS",
+    "newFormatRegisteredPairedRollover": "OPEN",
+    "source": "PASS_QUALIFIED_SCOPE",
+    "automaticMonitoring": "NOT_LIVE_QUALIFIED",
+    "oldUnknownReceiptReconciliation": "NOT_AUTHORIZED_BY_NEW_FORMAT"
+  },
+  "nextExecutableTask": "Build matched normal release; qualify only stopped development selection with existing guarded updater and profile; then use a fresh registered task for new-format rollover/continuation. Do not replay completed source canary or old unknown operations.",
+  "operatorAction": "NONE_FOR_NEXT_ELIGIBLE_DEVELOPMENT_QUALIFICATION",
+  "privacy": "PRIVATE_URLS_IDS_DRAFTS_PROFILES_MACHINE_PATHS_AND_RAW_UI_EVIDENCE_OMITTED"
+}

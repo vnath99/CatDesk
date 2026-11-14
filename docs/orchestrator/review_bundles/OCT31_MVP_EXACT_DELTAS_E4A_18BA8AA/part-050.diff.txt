@@ -1,0 +1,209 @@
++    auth: &ReviewedPromotionAuthorizationV1,
++    handoff: Option<&ReloadHandoffStateV1>,
++    helper_hash: &str,
++    owned_worker: bool,
++    bridge_pid: Option<u32>,
++    intent: Option<&BackendOnlyIntent>,
++) -> Result<serde_json::Value, String> {
++    use crate::reviewed_candidate_owner::OwnedCandidateChild;
++    let interpreter = crate::operator_facade::trusted_windows_powershell(workspace)?;
++    let mut scripts = Guard::acquire(workspace, LABEL)?;
++    scripts.descend_existing("scripts", LABEL)?;
++    let helper = "catdesk-release-recovery.ps1";
++    let _helper = crate::windows_protected_fs::retain_reviewed_regular_artifact(
++        &scripts,
++        helper,
++        helper_hash,
++        131072,
++        LABEL,
++    )?;
++    let mut command = Command::new(interpreter);
++    command
++        .args([
++            "-NoLogo",
++            "-NoProfile",
++            "-NonInteractive",
++            "-Command",
++            INSPECTION,
++        ])
++        .env_remove("PSModulePath")
++        .current_dir(workspace)
++        .stdin(Stdio::piped())
++        .stdout(Stdio::piped())
++        .stderr(Stdio::piped());
++    let mut owner = OwnedCandidateChild::spawn(&mut command)?;
++    let input = serde_json::json!({"workspace":crate::command::normalize_windows_verbatim_path(workspace.to_path_buf()),
++        "candidate":crate::command::normalize_windows_verbatim_path(workspace.join(&auth.candidate_relative_path)),
++        "priorSha256":auth.prior_canonical_sha256,"transactionId":auth.transaction_id,"historicalPids":intent.map(|v|vec![v.old_pid]).unwrap_or_else(||handoff.map(|v|vec![v.old_pid,v.new_pid.unwrap_or(0)]).unwrap_or_default()),
++        "historicalCompletedUnix":handoff.map(|v|v.completed_at_unix).unwrap_or(0),
++        "intentCreatedAtUtc":intent.map(|v|v.created_at_utc.as_str()),"authorizationGeneration":auth.generation,"authorizationExpires":auth.expires_at_unix,
++        "bridgePid":bridge_pid,"ownedWorkerPid":owned_worker.then_some(std::process::id()),
++        "ownedWorkerImage":if owned_worker {Some(crate::command::normalize_windows_verbatim_path(std::env::current_exe().map_err(|_|"promotion worker image unavailable")?))}else{None}});
++    owner
++        .child_mut()
++        .stdin
++        .take()
++        .ok_or("retirement input unavailable")?
++        .write_all(&bytes(&input)?)
++        .map_err(|_| "retirement input failed")?;
++    let out = owner
++        .child_mut()
++        .stdout
++        .take()
++        .ok_or("retirement output unavailable")?;
++    let err = owner
++        .child_mut()
++        .stderr
++        .take()
++        .ok_or("retirement error unavailable")?;
++    let out = thread::spawn(move || {
++        let mut bytes = Vec::new();
++        out.take(4097).read_to_end(&mut bytes).map(|_| bytes)
++    });
++    let err = thread::spawn(move || {
++        let mut bytes = Vec::new();
++        err.take(4097).read_to_end(&mut bytes).map(|_| bytes)
++    });
++    let started = Instant::now();
++    let mut success = false;
++    while started.elapsed() < Duration::from_secs(20) {
++        if let Some(status) = owner
++            .child_mut()
++            .try_wait()
++            .map_err(|_| "retirement inspection wait failed")?
++        {
++            success = status.success();
++            break;
++        }
++        thread::sleep(Duration::from_millis(25));
++    }
++    owner.terminate_tree_and_confirm_quiescent()?;
++    let out = out
++        .join()
++        .map_err(|_| "retirement output reader failed")?
++        .map_err(|_| "retirement output failed")?;
++    let err = err
++        .join()
++        .map_err(|_| "retirement error reader failed")?
++        .map_err(|_| "retirement error failed")?;
++    if !success || out.len() > 4096 || !err.is_empty() {
++        return Err(format!("{LABEL} ownership or trust unproven"));
++    }
++    let proof: serde_json::Value =
++        serde_json::from_slice(&out).map_err(|_| format!("{LABEL} proof invalid"))?;
++    let scope_matches = match bridge_pid {
++        Some(pid) => proof["listenerVerified"] == true && proof["bridgePid"] == pid,
++        None => proof["ownersEmpty"] == true,
++    };
++    if !scope_matches || proof["canonicalSha256"] != auth.prior_canonical_sha256 {
++        return Err(format!("{LABEL} ownership proof differs"));
++    }
++    Ok(proof)
++}
++
++fn accepted_helper(
++    workspace: &Path,
++    auth: &ReviewedPromotionAuthorizationV1,
++) -> Result<String, String> {
++    validate_committed_snapshot(workspace, &auth.snapshot_expected)?
++        .entries
++        .into_iter()
++        .find(|v| v.relative_path == "scripts/catdesk-release-recovery.ps1")
++        .map(|v| v.sha256)
++        .ok_or_else(|| "accepted recovery helper unavailable".into())
++}
++
++pub(super) fn verify_bridge_listener(
++    workspace: &Path,
++    auth: &ReviewedPromotionAuthorizationV1,
++    pid: u32,
++) -> Result<(), String> {
++    inspect_owners_context(
++        workspace,
++        auth,
++        None,
++        &accepted_helper(workspace, auth)?,
++        false,
++        Some(pid),
++        None,
++    )
++    .map(|_| ())
++}
++
++pub(super) fn admit_stopped_source(
++    workspace: &Path,
++    auth: &ReviewedPromotionAuthorizationV1,
++) -> Result<(), String> {
++    let parent = metadata(workspace)?;
++    let j = journal(&parent)?.ok_or("promotion source requires completed explicit retirement")?;
++    if j.phase != "COMPLETED"
++        || j.plan.prior_sha256 != auth.prior_canonical_sha256
++        || j.plan.candidate_sha256 != auth.candidate_sha256
++    {
++        return Err("promotion source retirement binding differs".into());
++    }
++    verify_archive(&parent, &j)?;
++    let handoffs = child(&parent, "restart-handoff")?;
++    if read_optional_relative_regular(&handoffs, "latest.json", 4096, LABEL)?.is_some() {
++        return Err("promotion source has an unresolved new handoff".into());
++    }
++    inspect_owners_context(
++        workspace,
++        auth,
++        None,
++        &accepted_helper(workspace, auth)?,
++        true,
++        None,
++        None,
++    )
++    .map(|_| ())
++}
++
++pub(crate) fn qualify_stopped_source(
++    workspace: &Path,
++    transaction: &str,
++    expected: &str,
++) -> Result<serde_json::Value, String> {
++    let parent = metadata(workspace)?;
++    let _lock = create_delete_on_close_regular_lock(&parent, "promotion-operation.lock", LABEL)?;
++    let _lifecycle = super::source_bridge::lifecycle_lease(workspace)?;
++    let previous = journal(&parent)?;
++    let plan = inspect_locked(workspace, &parent, transaction, previous.as_ref())?;
++    if digest(&bytes(&plan)?) != expected {
++        return Err("promotion source evidence differs".into());
++    }
++    let control = child(&parent, "promotion-control")?;
++    let auth: ReviewedPromotionAuthorizationV1 = read_json(&control, "authorization.json")?;
++    super::source_bridge::qualify(workspace, &auth)
++}
++
++#[cfg(windows)]
++fn validate_terminal_binding(
++    auth: &ReviewedPromotionAuthorizationV1,
++    preflight: &ReviewedPromotionPreflightV1,
++    claim: &ReviewedPromotionClaimV1,
++    result: &ReviewedPromotionResultV1,
++    owner: &[u8],
++    transaction: &str,
++) -> Result<(), String> {
++    if auth.schema_version != 1
++        || !auth.local_backend_only
++        || auth.transaction_id != transaction
++        || !valid_id(transaction)
++        || auth.expires_at_unix >= now_unix()
++        || preflight.schema_version != 1
++        || preflight.expires_at_unix != auth.expires_at_unix
++        || preflight.authorization != *auth
++        || claim.schema_version != 1
++        || claim.state != "CLAIMED_PENDING"
++        || claim.transaction_id != transaction
++        || claim.authorization_id != auth.authorization_id
++        || claim.claim_id != auth.claim_id
++        || claim.candidate_relative_path != auth.candidate_relative_path
++        || result.schema_version != 1
++        || result.state != "PROMOTION_FAILED_OR_AMBIGUOUS"
++        || result.transaction_id != transaction
++        || result.authorization_generation != auth.generation
++        || result.candidate_sha256 != auth.candidate_sha256
++        || result.serving_state.is_some()
++        || owner != transaction.as_bytes()

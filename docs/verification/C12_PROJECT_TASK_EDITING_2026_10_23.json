@@ -1,0 +1,236 @@
+{
+  "recordedUtc": "2026-10-23T05:12:24.8174074Z",
+  "localDate": "2026-10-23",
+  "task": "C12-ASSIGNED-PROJECT-TASK-EDITING",
+  "classification": "SOURCE_TESTED_LOCAL_WORKTREE_FIXTURES",
+  "branch": "codex/web-rollover-oct17",
+  "baseHead": "f3e3c62d7d5d92919c1db287cf0503850dba1b3a",
+  "sourceFiles": [
+    {
+      "path": "src/project_mcp.rs",
+      "sha256": "71ce4f219ab71530af48af3071ce5e8dde277a83702887872b3d3eb528b700b0"
+    },
+    {
+      "path": "src/main.rs",
+      "sha256": "9a02c4430f30a5245d40580b0f2a4a2992d80703f2fa5c33f4b84e0d06d55de4"
+    },
+    {
+      "path": "src/project_mcp_task.rs",
+      "sha256": "91d2bdcb117be3e298cab403cbee4a7b0c0a17d7ef08676ade35cc575bf84fc5"
+    },
+    {
+      "path": "src/delegated/autonomy_supervisor.rs",
+      "sha256": "5f73a0ba8b237a7ef1a0a9812b9beb9a6e5ccdd5d628eba0ab7ee70c56c8b120"
+    }
+  ],
+  "implementation": {
+    "registry": "EXISTING_REGISTRY",
+    "contract": "EXISTING_EXECUTION_CONTRACT_V1_LOCAL_ASSIGNMENT",
+    "patchEngine": "EXISTING_DELEGATED_SERVICE_PREIMAGE_JOURNAL",
+    "writer": "EXISTING_PER_WORKTREE_OS_LOCK_AND_PENDING_MARKER",
+    "access": "CONTRACT_PATCH_TOOLS",
+    "genericTools": "REGISTERED_ROOT_READ_ONLY",
+    "taskWorkspace": "SEPARATE_LINKED_UNREGISTERED_WORKTREE_SAME_COMMON_REPOSITORY_EXACT_BRANCH_HEAD",
+    "editingOptIn": "LOCAL_ASSIGNMENT_PLUS_MULTI_TOOLS",
+    "stableCallIds": "RECORDED_CALLS_REFUSE_REPLAY_ARGUMENT_CONFLICT_REFUSED",
+    "unknownOutcome": "RETAIN_MARKER_NO_AUTOMATIC_RETRY",
+    "gracefulClose": "DRAIN_WORKER_RETIRE_EXACT_MARKER_RELEASE_LOCK",
+    "nativeWriterClaimed": false,
+    "globalWorkspaceMutation": false,
+    "globalToolLock": false,
+    "commandsEnabled": false,
+    "providerStarted": false,
+    "browserStarted": false
+  },
+  "tests": {
+    "distinctTestsPassed": 24,
+    "testExecutionsPassed": 25,
+    "projectScopeAndTask": 7,
+    "headlessLifecycle": 16,
+    "readOnlyTools": 2,
+    "checks": [
+      {
+        "label": "project-mcp-http-and-cli",
+        "startedUtc": "2026-10-23T05:10:44.6427112Z",
+        "finishedUtc": "2026-10-23T05:11:31.2032828Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "project_mcp",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "fa150d36a0b36dffb2b85934723548f63042feda72140cccc028bb11e5bb1336"
+      },
+      {
+        "label": "existing-headless-lifecycle",
+        "startedUtc": "2026-10-23T05:11:31.2374154Z",
+        "finishedUtc": "2026-10-23T05:11:31.9330974Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "headless_",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "a7fd0baa5fcde959d373f500f7e5aace88dc43c7e0fb92102243e789dd7ad621"
+      },
+      {
+        "label": "existing-read-only-tools",
+        "startedUtc": "2026-10-23T05:11:31.944759Z",
+        "finishedUtc": "2026-10-23T05:11:33.0955885Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "read_only_tools",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "a29efc4d878ee31ed88e9635725003170a0326852893393b72bc2e4e42d38f86"
+      },
+      {
+        "label": "strict-root-clippy",
+        "startedUtc": "2026-10-23T05:11:33.1054258Z",
+        "finishedUtc": "2026-10-23T05:11:46.789642Z",
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exitCode": 0,
+        "logSha256": "e13f65f060e62af60653d37e9f693e7809331ac31b0ab33b3b8d9bb40ebd8142"
+      },
+      {
+        "label": "root-format",
+        "startedUtc": "2026-10-23T05:11:46.7993192Z",
+        "finishedUtc": "2026-10-23T05:11:49.7146611Z",
+        "arguments": [
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "strictClippy": "PASS_ALL_TARGETS_ALL_FEATURES",
+    "format": "PASS",
+    "containment": {
+      "ExitCode": 0,
+      "TimedOut": false,
+      "TerminationFailed": false
+    },
+    "boundSeconds": 600,
+    "twoTaskParallelPatch": "PASS",
+    "originalCheckoutUnchanged": "PASS",
+    "restartRecordedCallRefusal": "PASS",
+    "changedContractRefusal": "PASS",
+    "registeredTaskRootTakeover": "REFUSED",
+    "unknownMutation": "QUARANTINED_WITH_MARKER",
+    "siblingAfterQuarantine": "PATCH_APPLIED",
+    "arbitraryCommand": "DENIED",
+    "actualChatGptWebCalls": false,
+    "priorFailures": "CLI_TEST_IMPORT;GRACEFUL_CLOSE_LOCK_RETENTION;INCORRECT_ASSUMPTION_OF_EXISTING_JOURNAL_RUN_DIRECTORY_ENCODING;ALL_CORRECTED"
+  },
+  "external": {
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "nativeChatsChanged": false,
+    "productionBindingsChanged": false,
+    "selectedPackageChanged": false,
+    "recurringStarted": false,
+    "protectedProductionChanged": false,
+    "connectorCalled": false,
+    "completedCanaryReplayed": false
+  },
+  "acceptance": {
+    "source": "PASS_CONTRACT_PATCH_STAGE",
+    "normalExecutable": "PASS_NORMAL_DEBUG_NO_DEV_DEPENDENCIES",
+    "normalTwoProcessHttp": "PASS_PARALLEL_PATCHES_AND_THIRD_PROCESS_RESTART_REPLAY_REFUSAL",
+    "actualWebB": "OPEN",
+    "workspaceContainedCommandExecution": "REQUIRED_NOT_IMPLEMENTED",
+    "selectedPackage": "C8_V49_UNCHANGED",
+    "liveGHI": "OPEN",
+    "connector": "LAST_DIRECT_READ_HTTP429_NO_RETRY",
+    "protectedProduction": "OPEN",
+    "unattended": "NOT_ACTIVATED",
+    "fullMilestone": "PARTIAL"
+  },
+  "nextTask": "Qualify a matched stopped development package and workspace-contained command execution, then actual Web B/G/H/I with fresh controlled sources. Task journal restart does not close pending-browser recovery acceptance. Preserve native sessions and completed canaries.",
+  "normalBuild": {
+    "sourceCommit": "f132657924cc498f7c5ca9b23c4a869a2816c165",
+    "finishedUtc": "2026-10-23T05:13:37.1876256Z",
+    "imageSha256": "97479245bf11336d35db012d344e2409f8ceafd95ae3a1119e46b192f94f163a",
+    "profile": "NORMAL_DEBUG_APP_NO_DEV_DEPENDENCIES",
+    "exitCode": 0,
+    "maximumSeconds": 240
+  },
+  "normalHttp": {
+    "startedUtc": "2026-10-23T05:14:17.3679711Z",
+    "finishedUtc": "2026-10-23T05:15:09.2895427Z",
+    "classification": "NORMAL_LOCAL_MCP_ASSIGNED_LINKED_WORKTREE_EDITING",
+    "elapsedSeconds": 51.92,
+    "maximumSeconds": 180,
+    "checks": [
+      "two-normal-process-parallel-own-root-reads",
+      "two-normal-process-parallel-contract-patches-original-roots-unchanged",
+      "recorded-patch-call-refused-without-replay",
+      "wrong-bearer-401",
+      "wrong-project-witness-refused",
+      "sibling-path-write-and-command-refused",
+      "simulated-independent-writer-progress",
+      "both-listeners-natural-deadline-exit-zero",
+      "normal-process-restart-exact-contract-recorded-call-refused-exit-zero"
+    ],
+    "parallelListeners": 2,
+    "normalProcessCount": 3,
+    "naturalLifetimesSeconds": [
+      35,
+      35,
+      10
+    ],
+    "exitCodes": [
+      0,
+      0,
+      0
+    ],
+    "containment": {
+      "ExitCode": 0,
+      "TimedOut": false,
+      "TerminationFailed": false
+    },
+    "ownedProcesses": 0,
+    "liveControlProcesses": 0,
+    "protectedRecords": 139,
+    "changedRecords": 0,
+    "newRecords": 0,
+    "actualWebCalls": false
+  },
+  "publication": {
+    "head": "f132657924cc498f7c5ca9b23c4a869a2816c165",
+    "remoteSha": "f132657924cc498f7c5ca9b23c4a869a2816c165",
+    "branch": "codex/web-rollover-oct17",
+    "atUtc": "2026-10-23T05:12:37.3319288Z",
+    "ci": "UNVERIFIED",
+    "workflowRuns": 0,
+    "checkRuns": 0
+  }
+}

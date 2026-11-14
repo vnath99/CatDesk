@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-08T05:26:10.509973+00:00",
+  "scope": "C0_C1_ONLY",
+  "sourceCommit": "9231a9fea7e04b792181ccc41f74a6b8156767e0",
+  "developmentController": {
+    "classification": "BUILT_SEPARATELY_NOT_INSTALLED",
+    "sha256": "38f99ce65ae8db3b7bff79b425fc79a7cc489b9e02da09a227b40a69d1117613",
+    "elapsedSeconds": 34.781
+  },
+  "installedBackend": {
+    "sha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "servingCanonicalParity": "MATCH",
+    "supervisorStates": [
+      "RECOVERED",
+      "MONITORING_COMPLETE"
+    ],
+    "authMatrixMissingWrongValid": [
+      401,
+      401,
+      200
+    ],
+    "authenticatedCatalogStatus": 200,
+    "serverToolCount": 102,
+    "centralTaskToolListedByServer": true,
+    "clientCatalogVerified": false,
+    "transportHealthField": "CONFIGURED_UNVERIFIED"
+  },
+  "existingOfficialRuntime": {
+    "readyVerified": true,
+    "connectorCalls": 1,
+    "connectorStructuredResponse": true,
+    "previous429RecurredInQualifiedWindow": false,
+    "cachedCatalogCentralRouteAdvertised": true,
+    "newTunnels": 0,
+    "persistentAuthChanges": 0,
+    "profileUnchanged": true
+  },
+  "retainedLocalRefusals": [
+    {
+      "reason": "DEFAULT_CONFIG_CHANGED",
+      "runtimeConnectAttempted": false,
+      "resolution": "Existing independently recorded authority matches every byte outside the four lifetime usage counters; configuration was not rewritten."
+    },
+    {
+      "reason": "OBSOLETE_PRIVATE_NATIVE_RUNNER_TYPE",
+      "runtimeConnectAttempted": false,
+      "resolution": "Private caller updated to current already-qualified lifecycle and Secure MCP runner interfaces; product guards unchanged."
+    }
+  ],
+  "originalInvitation": {
+    "attempts": 1,
+    "scope": "ACKNOWLEDGMENT_ONLY_NOT_NATIVE_EXECUTION",
+    "senderMaximumSeconds": 120,
+    "elapsedSeconds": 121.015,
+    "result": "BROWSER_ATTEMPT_TIMEOUT",
+    "durablePhase": "ATTENTION",
+    "exactUserReceipt": false,
+    "assistantResponseVerified": false,
+    "submissionOutcome": "UNVERIFIED_NO_REPLAY",
+    "workLedgerUnchanged": true,
+    "originalQueuePreserved": true,
+    "nativeGrantCreated": false,
+    "nativeSourceEdit": "NOT_RUN",
+    "nativeVerification": "NOT_RUN"
+  },
+  "cleanup": {
+    "boundedLiveStackSeconds": 137.656,
+    "unrelatedPinsChecked": 1046,
+    "unrelatedPinMismatches": 0,
+    "backendStopped": true,
+    "officialRuntimeStopped": true,
+    "wakeHostStopped": true,
+    "recordedTestPidsRemaining": 0,
+    "installedProfileProcessMatches": 0,
+    "controlledNativeWorktreesClean": 2,
+    "bindingChanges": 0,
+    "recurringRegistrationChanges": 0,
+    "globalHostIdleClaimed": false
+  },
+  "initialStoppedStateCause": "NOT_ESTABLISHED",
+  "finalStoppedStateCause": "INTENTIONAL_BOUNDED_TEST_CLEANUP",
+  "c0": "RECONCILED",
+  "c1": "BLOCKED_BROWSER_OBSERVATION_NOT_COMPLETE",
+  "c2ThroughC5": "NOT_RUN",
+  "next": "Qualify bounded read-only exact-project browser observation through existing profile-probe/observer owner before any delivery recovery decision. Do not replay the original invitation or infer login/navigation/typing state from CLAIMED or ATTENTION alone."
+}

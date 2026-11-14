@@ -1,0 +1,189 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T09:06:57.685252+00:00",
+  "classification": "TESTED_SOURCE_AND_ACTUAL_PASSIVE_DIAGNOSTIC_NOT_NEW_WEB_TASK_OR_PROTECTED_PROMOTION",
+  "sourceBaseCommit": "2bc8a54af57a4ca78e16e35208d9ec6ac754e333",
+  "sourceFilesSha256": {
+    "scripts/catdesk-doctor.ps1": "875850807a2998daad6ea68941d5c5c189fe23354441bbdb92db5e45d7a43ffc",
+    "scripts/test-catdesk-doctor.ps1": "c1c963804636c907261933b496fea607eae1c5116d9dcd0c7cab6392ff3552ee"
+  },
+  "existingDoctorSchemaAndLayerCountUnchanged": true,
+  "newAdvisoryCodes": [
+    "CONNECTOR_TOOL_DISCOVERY_UNVERIFIED",
+    "CONNECTOR_TASK_CALL_REPORTED_BLOCKED"
+  ],
+  "diagnosis": {
+    "readOnlyPluginPermissionInspectionCompleted": true,
+    "pluginPermissionsChanged": false,
+    "currentCodexV4ToolCount": 90,
+    "currentCodexAdvertisesRunCommand": true,
+    "currentCodexAdvertisesDedicatedTaskTool": false,
+    "scope": "CURRENT_CODEX_TOOL_SURFACE_ONLY_NOT_AFFECTED_WEB_CHAT",
+    "affectedWebCallerCatalog": "UNESTABLISHED",
+    "reportedTaskCallDeliveryAndPolicyCause": "UNESTABLISHED",
+    "toolDiscoveryMismatchProvenAsCause": false,
+    "pluginPreferenceProvesTaskAuthority": false,
+    "newCatDeskConnectorOrTaskProbe": false
+  },
+  "tests": [
+    {
+      "host": "POWERSHELL_7",
+      "assertionsPassed": 115,
+      "logSha256": "a3e7de0f26f185a10d3357a3d41c89197f55e285cdf6f8539f62fb7d7d1139d3"
+    },
+    {
+      "host": "WINDOWS_POWERSHELL_5_1",
+      "assertionsPassed": 115,
+      "logSha256": "a3e7de0f26f185a10d3357a3d41c89197f55e285cdf6f8539f62fb7d7d1139d3"
+    }
+  ],
+  "regression": {
+    "failingTestRecordedBeforeCorrection": true,
+    "redLogSha256": "613efdb3a45f0346b6b1d1286adfd55c476f87dbfe7735e8a7f369b77f598060",
+    "newImportedStatusesRemainUnverified": true,
+    "statusOrFactsInjectionAndWrongLayerRefusedAtomically": true,
+    "unknownCallRetryOrAlternateTransportNotAuthorized": true,
+    "existingWakeUnknownAndIndependentProjectProgressPreserved": true
+  },
+  "actualPassiveDiagnostic": {
+    "elapsedSeconds": 9.546,
+    "maximumSeconds": 60,
+    "owner": {
+      "ExitCode": 0,
+      "TimedOut": false,
+      "TerminationFailed": false
+    },
+    "layers": [
+      {
+        "layer": "PROCESS_OWNER",
+        "status": "UNVERIFIED",
+        "code": "OWNER_NOT_QUALIFIED",
+        "provenance": "CURRENT_PASSIVE_METADATA"
+      },
+      {
+        "layer": "RELEASE_PAIR",
+        "status": "PASS",
+        "code": "RELEASE_PAIR_VERIFIED",
+        "provenance": "CURRENT_PASSIVE_METADATA"
+      },
+      {
+        "layer": "RECOVERY_AUTHORITY",
+        "status": "PASS",
+        "code": "RECOVERY_AUTHORITY_AVAILABLE",
+        "provenance": "CURRENT_PASSIVE_METADATA"
+      },
+      {
+        "layer": "LOCAL_CONFIG",
+        "status": "PASS",
+        "code": "LOCAL_CONFIG_READABLE",
+        "provenance": "CURRENT_PASSIVE_METADATA"
+      },
+      {
+        "layer": "LOCAL_DAEMON",
+        "status": "FAIL",
+        "code": "LOCAL_MCP_LISTENER_MISSING",
+        "provenance": "CURRENT_PASSIVE_METADATA"
+      },
+      {
+        "layer": "LOCAL_HEALTH",
+        "status": "NOT_RUN",
+        "code": "LOCAL_HEALTH_NOT_PROBED",
+        "provenance": "NOT_RUN"
+      },
+      {
+        "layer": "LOCAL_MCP",
+        "status": "NOT_RUN",
+        "code": "LOCAL_MCP_NOT_PROBED",
+        "provenance": "NOT_RUN"
+      },
+      {
+        "layer": "OFFICIAL_RUNTIME",
+        "status": "UNVERIFIED",
+        "code": "RUNTIME_OWNER_UNVERIFIED",
+        "provenance": "CURRENT_PASSIVE_METADATA"
+      },
+      {
+        "layer": "UPSTREAM_CONTROL_PLANE",
+        "status": "NOT_RUN",
+        "code": "UPSTREAM_NOT_PROBED",
+        "provenance": "NOT_RUN"
+      },
+      {
+        "layer": "CONNECTOR",
+        "status": "UNVERIFIED",
+        "code": "CONNECTOR_TASK_CALL_REPORTED_BLOCKED",
+        "provenance": "IMPORTED_ADVISORY"
+      },
+      {
+        "layer": "BROWSER",
+        "status": "NOT_RUN",
+        "code": "BROWSER_NOT_INSPECTED",
+        "provenance": "NOT_RUN"
+      },
+      {
+        "layer": "PROJECT_REGISTRY",
+        "status": "PASS",
+        "code": "REGISTRY_METADATA_PAIRED",
+        "provenance": "CURRENT_PASSIVE_METADATA"
+      },
+      {
+        "layer": "WAKE_QUEUE",
+        "status": "UNVERIFIED",
+        "code": "WAKE_UNKNOWN_OUTCOME",
+        "provenance": "CURRENT_PASSIVE_METADATA"
+      },
+      {
+        "layer": "CODEX_CLI",
+        "status": "UNVERIFIED",
+        "code": "CODEX_PRESENT_AUTH_UNVERIFIED",
+        "provenance": "CURRENT_PASSIVE_METADATA"
+      },
+      {
+        "layer": "NATIVE_SESSION",
+        "status": "NOT_RUN",
+        "code": "WORKER_OWNER_NOT_PROBED",
+        "provenance": "NOT_RUN"
+      },
+      {
+        "layer": "LOCAL_PROVIDER",
+        "status": "UNVERIFIED",
+        "code": "LOCAL_PROVIDER_NOT_PROBED",
+        "provenance": "CURRENT_PASSIVE_METADATA"
+      },
+      {
+        "layer": "OBSERVATIONS",
+        "status": "UNVERIFIED",
+        "code": "OBSERVATIONS_IMPORTED_ADVISORY",
+        "provenance": "CURRENT_PASSIVE_METADATA"
+      }
+    ],
+    "canonicalReleasePair": "VERIFIED",
+    "retainedRecoveryAuthority": "AVAILABLE",
+    "listener": "ABSENT_WHILE_TEST_BACKEND_INTENTIONALLY_STOPPED",
+    "thisObservationProvesEarlierDaemonShutdownCause": false,
+    "protectedPinsChecked": 5107,
+    "protectedPinChanges": 0,
+    "networkRequests": 0,
+    "runtimeStarts": 0,
+    "repairs": 0,
+    "sourceFacadeUsedWithoutInstallingIt": true
+  },
+  "officialGuidance": {
+    "customMcpServer": "https://developers.openai.com/api/docs/guides/custom-mcp-server",
+    "connectAndTest": "https://developers.openai.com/plugins/deploy/connect-chatgpt",
+    "supportedMetadataRefresh": "DIRECT_CUSTOM_MCP_CONNECTION_DETAILS_REFRESH_THEN_VERIFY_ADVERTISED_METADATA",
+    "performed": false,
+    "refreshResolvesReportedPlatformRestriction": "NOT_ESTABLISHED",
+    "mandatoryPolicyChecksRemainInForce": true
+  },
+  "acceptance": {
+    "sourceAndPassiveRealStateDiagnostic": "PASS",
+    "affectedChatToolDiscovery": "OPEN",
+    "taskCallOutcome": "UNESTABLISHED_NO_REPLAY",
+    "fullNativeTwoWebCoding": "OPEN",
+    "newSourceProductionPromotion": "NOT_PERFORMED"
+  },
+  "nextExecutableTask": "INSPECT_EXISTING_OLD_CHAT_HANDOFF_FREEZE_AND_TASK_OWNERSHIP_INTEGRATION_WITHOUT_REPLAYING_HELD_WEB_TASK",
+  "operatorActionRequiredNow": false,
+  "goal": "ACTIVE"
+}

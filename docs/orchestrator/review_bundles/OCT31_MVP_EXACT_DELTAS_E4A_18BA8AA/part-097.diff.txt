@@ -1,0 +1,190 @@
++        let delivery = sent(&store, &lease, "alpha-1");
++        let controls = json!({"semanticAssistantUnits":1,"roleAssistantNodes":0,
++            "copyTestIdInTurn":0,"copyLabelInTurn":1,"copyResponseLabelInTurn":0,
++            "copyMessageLabelInTurn":0,"copyTextInTurn":1,"knownCopyInAssistant":0,
++            "knownCopyInBody":0,"sharedCopyAfterAssistant":0,"toolbarContainersInTurn":0,
++            "buttonsInTurn":1,"copyTestIdInParent":1,"copyLabelInParent":1,
++            "copyResponseLabelInParent":0,"copyMessageLabelInParent":0,
++            "pairedTurn":true,"assistantBodyPresent":true,"completionActionFound":false,
++            "assistantInsideSemanticUnit":true});
++        let mut value = observation(&delivery, "RESPONSE_PENDING");
++        value["diagnosticReason"] = json!("ASSISTANT_COMPLETION_ACTION_UNPROVEN");
++        value["completionControls"] = controls.clone();
++        assert!(!apply_observation(&store, &delivery, &value).unwrap());
++        for (field, bad) in [
++            ("copyLabelInTurn", json!(65)),
++            ("copyLabelInTurn", json!(-1)),
++            ("copyLabelInTurn", json!(true)),
++            ("copyLabelInTurn", json!("private text")),
++            ("pairedTurn", json!(1)),
++            ("extra", json!("private draft")),
++        ] {
++            let mut invalid = value.clone();
++            invalid["completionControls"][field] = bad;
++            assert_eq!(
++                apply_observation(&store, &delivery, &invalid).unwrap_err(),
++                "RESPONSE_PROBE_SCOPE_INVALID"
++            );
++        }
++        let mut no_reason = value.clone();
++        no_reason
++            .as_object_mut()
++            .unwrap()
++            .remove("diagnosticReason");
++        assert_eq!(
++            apply_observation(&store, &delivery, &no_reason).unwrap_err(),
++            "RESPONSE_PROBE_SCOPE_INVALID"
++        );
++        value["stage"] = json!("RESPONSE_COMPLETE");
++        value["diagnosticReason"] = json!("COMPLETE");
++        assert_eq!(
++            apply_observation(&store, &delivery, &value).unwrap_err(),
++            "RESPONSE_PROBE_SCOPE_INVALID"
++        );
++        assert_eq!(
++            store.timer("alpha-1").unwrap().unwrap().response_state,
++            ResponseState::Observing
++        );
++    }
+ }
+diff --git a/wake/src/runtime_scheduler.rs b/wake/src/runtime_scheduler.rs
+index 3f09b3ee0036a8119f26e1aca115bee6bc1694f4..00b4750977eb336b9b62cfcbec91386f596692a0 100644
+--- a/wake/src/runtime_scheduler.rs
++++ b/wake/src/runtime_scheduler.rs
+@@ -16,6 +16,7 @@ pub(super) fn fair_round(
+ ) -> Result<Vec<Event>> {
+     let mut chosen = BTreeMap::<String, Event>::new();
+     let mut uncertain = BTreeMap::<String, Event>::new();
++    let mut blocked_projects = BTreeSet::new();
+     // Existing created-time ordering is retained inside each project.
+     for event in store.events()? {
+         if targets
+@@ -25,12 +26,36 @@ pub(super) fn fair_round(
+             continue;
+         }
+         let delivery = store.delivery(&event.event_id)?;
++        if delivery
++            .as_ref()
++            .is_none_or(|value| !matches!(value.phase, Phase::Submitting | Phase::Sent))
++            && store.submission_witness_present(&event.event_id) != Ok(false)
++        {
++            // Partial/unreadable submission evidence reserves this project,
++            // including a crash after start-witness commit but before the
++            // SUBMITTING delivery write. Sibling projects remain eligible.
++            blocked_projects.insert(event.project_id.clone());
++            continue;
++        }
+         if delivery
+             .as_ref()
+             .is_some_and(|value| matches!(value.phase, Phase::Sent | Phase::Stale))
+         {
+             continue;
+         }
++        if event.is_expired_at(observed_utc)? {
++            match delivery.as_ref().map(|value| &value.phase) {
++                None => continue,
++                Some(Phase::Claimed | Phase::Attention) => {
++                    // A pre-submit crash may have left an owned composer draft.
++                    // Expiry cannot discard it or authorize another event in
++                    // that conversation. Other projects remain schedulable.
++                    blocked_projects.insert(event.project_id.clone());
++                    continue;
++                }
++                _ => {}
++            }
++        }
+         if delivery.as_ref().is_some_and(|value| {
+             value.phase == Phase::Attention && value.reason.as_deref() != Some("CHATGPT_NOT_IDLE")
+         }) {
+@@ -46,6 +71,9 @@ pub(super) fn fair_round(
+         }
+         chosen.entry(event.project_id.clone()).or_insert(event);
+     }
++    for project in blocked_projects {
++        chosen.remove(&project);
++    }
+     // The crash boundary can precede same-tab acceptance and its timer.
+     // Such a delivery still owns the conversation until read-only recovery.
+     chosen.extend(uncertain);
+@@ -102,11 +130,15 @@ pub(super) mod tests {
+     use super::*;
+     use crate::{
+         PROTOCOL_VERSION,
+-        protocol::digest,
++        protocol::{WakeMetadata, WakePurpose, digest},
+         store::{Delivery, HostLease, Receipt, now},
+     };
+ 
+     pub(crate) fn fixture(label: &str) -> (Store, HostLease) {
++        fixture_projects(label, &["alpha", "beta", "gamma"])
++    }
++
++    fn fixture_projects(label: &str, projects: &[&str]) -> (Store, HostLease) {
+         let unique = std::time::SystemTime::now()
+             .duration_since(std::time::UNIX_EPOCH)
+             .unwrap()
+@@ -118,7 +150,7 @@ pub(super) mod tests {
+         std::fs::create_dir_all(&base).unwrap();
+         let store = Store::open_scoped_for_test(&base.join("wake"), &base).unwrap();
+         store.initialize().unwrap();
+-        for (index, project) in ["alpha", "beta", "gamma"].iter().enumerate() {
++        for (index, project) in projects.iter().enumerate() {
+             store
+                 .set_target(
+                     project,
+@@ -198,6 +230,140 @@ pub(super) mod tests {
+         );
+     }
+ 
++    #[test]
++    fn five_project_concurrent_intents_and_mixed_holds_survive_restart() {
++        let projects = ["alpha", "beta", "gamma", "delta", "epsilon"];
++        let (store, lease) = fixture_projects("five-project-restart", &projects);
++        let barrier = std::sync::Barrier::new(projects.len());
++        std::thread::scope(|scope| {
++            let handles: Vec<_> = projects
++                .iter()
++                .map(|project| {
++                    let store = &store;
++                    let barrier = &barrier;
++                    scope.spawn(move || {
++                        barrier.wait();
++                        store.produce(
++                            &format!("{project}-parallel"),
++                            project,
++                            "review_ready",
++                            &format!("Review concurrent {project} work"),
++                        )
++                    })
++                })
++                .collect();
++            for handle in handles {
++                handle.join().unwrap().unwrap();
++            }
++        });
++        assert_eq!(store.events().unwrap().len(), 15);
++        let concurrent_intents: Vec<_> = projects
++            .iter()
++            .map(|project| {
++                let id = format!("{project}-parallel");
++                let event = store
++                    .events()
++                    .unwrap()
++                    .into_iter()
++                    .find(|event| event.event_id == id)
++                    .unwrap();
++                assert_eq!(&event.project_id, project);
++                assert_eq!(event.target_generation, 1);
++                let path = store.root().join(format!("queue/{id}.json"));
++                let bytes = std::fs::read(&path).unwrap();
++                (path, bytes)
++            })
++            .collect();
++        assert_eq!(
++            ids(&store, Some("beta"), &BTreeMap::new()),
++            ["delta-1", "epsilon-1", "gamma-1", "alpha-1", "beta-1"]
++        );
++        let event = |id: &str| {
++            store
++                .events()
++                .unwrap()

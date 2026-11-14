@@ -1,0 +1,199 @@
+@@ -804,12 +837,22 @@ fn review_text(snapshot: &Value, expected_message_digest: &str) -> Result<String
+     if assistant["role"] != "ASSISTANT"
+         || assistant["textComplete"] != true
+         || text.trim().is_empty()
+-        || text.len() > 8192
+-        || text.to_ascii_lowercase().contains("response couldn’t load")
+-        || text.to_ascii_lowercase().contains("response couldn't load")
++        || text.len() > 32768
+     {
+         return Err("WEB_REVIEW_RESPONSE_NOT_COMPLETE".into());
+     }
++    // A rendered load-error card is neither a review nor an unfinished answer.
++    // Match its observable whitespace/quote variants without changing the
++    // returned response bytes or permitting any retry/submission action.
++    let normalized = text
++        .split_whitespace()
++        .collect::<Vec<_>>()
++        .join(" ")
++        .replace(['’', '‘'], "'")
++        .to_ascii_lowercase();
++    if normalized.trim_end_matches('.') == "this response couldn't load" {
++        return Err("WEB_REVIEW_RESPONSE_LOAD_ERROR".into());
++    }
+     Ok(text.to_owned())
+ }
+ 
+@@ -959,6 +1002,8 @@ pub(crate) fn registry_rollover_status(workspace: &Path, project: &str) -> Value
+ }
+ 
+ pub(crate) use rollover::WorkLease as WebWorkLease;
++#[cfg(all(test, windows))]
++pub(crate) use rollover::native_continuation_fixture;
+ 
+ pub(crate) fn acquire_web_work_lease(
+     workspace: &Path,
+@@ -1360,11 +1405,26 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
+             project_id,
+             input_file,
+             revoke,
+-        } => crate::web_work::execution_permission(
+-            &workspace,
+-            read_work_input(&input_file, &project_id)?,
+-            revoke,
+-        ),
++            allow_manual_wake,
++            native_queue_task_id,
++        } => {
++            let input = read_work_input(&input_file, &project_id)?;
++            if native_queue_task_id.is_some() {
++                crate::web_work::execution_permission_with_capabilities(
++                    &workspace,
++                    input,
++                    revoke,
++                    allow_manual_wake,
++                    native_queue_task_id.as_deref(),
++                )
++            } else if allow_manual_wake {
++                crate::web_work::execution_permission_with_manual_wake(
++                    &workspace, input, revoke, true,
++                )
++            } else {
++                crate::web_work::execution_permission(&workspace, input, revoke)
++            }
++        }
+         WebAction::ContextConfigure {
+             project_id,
+             input_file,
+@@ -1601,6 +1661,36 @@ mod tests {
+         .unwrap();
+         assert_eq!(success["eventVerified"], true);
+         assert_eq!(success["response"], "Verified review body.");
++        for placeholder in [
++            "This response couldn't load",
++            "This response\ncouldn’t load",
++        ] {
++            let unavailable = read_review_using(
++                &control,
++                "alpha",
++                &event.event_id,
++                None,
++                &|| Ok(()),
++                |_, _, _, _, _| SnapshotReadReport {
++                    snapshot: Some(json!({"messages":[
++                        {"role":"USER","text":event.message,"textComplete":true},
++                        {"role":"ASSISTANT","text":placeholder,"textComplete":true}
++                    ]})),
++                    failure: None,
++                    diagnostic: SnapshotDiagnostic {
++                        phase: SnapshotReadPhase::Complete,
++                        elapsed_millis: 10,
++                        budget_millis: 90000,
++                    },
++                },
++            )
++            .unwrap();
++            assert_eq!(unavailable["eventVerified"], false);
++            assert_eq!(unavailable["status"], "UNVERIFIED_EVENT_SNAPSHOT");
++            assert_eq!(unavailable["reason"], "WEB_REVIEW_RESPONSE_LOAD_ERROR");
++            assert_eq!(unavailable["sendAttempted"], false);
++            assert!(unavailable.get("response").is_none());
++        }
+         assert!(
+             read_review_using(
+                 &control,
+@@ -1780,6 +1870,77 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn review_read_large_answer_preserves_limits_and_discussion_is_not_a_placeholder() {
++        let expected = catdesk_wake::protocol::digest("approved review request");
++        let mut snapshot = json!({"messages":[
++            {"role":"USER","text":"approved review request","textComplete":true},
++            {"role":"ASSISTANT","text":"r".repeat(16000),"textComplete":true}
++        ]});
++        assert_eq!(review_text(&snapshot, &expected).unwrap().len(), 16000);
++        snapshot["messages"][1]["text"] =
++            json!("A UI may say This response couldn't load. Preserve the receipt.");
++        assert!(review_text(&snapshot, &expected).is_ok());
++        snapshot["messages"][1]["text"] = json!("r".repeat(32769));
++        assert_eq!(
++            review_text(&snapshot, &expected).unwrap_err(),
++            "WEB_REVIEW_RESPONSE_NOT_COMPLETE"
++        );
++        snapshot["messages"][1]["text"] = json!("r".repeat(16000));
++        snapshot["messages"][1]["textComplete"] = json!(false);
++        assert!(review_text(&snapshot, &expected).is_err());
++        snapshot["messages"][1]["textComplete"] = json!(true);
++        assert!(review_text(&snapshot, &"0".repeat(64)).is_err());
++    }
++
++    #[test]
++    fn review_read_distinguishes_load_failure_without_accepting_placeholder_text() {
++        let message_digest = catdesk_wake::protocol::digest("approved review request");
++        for placeholder in [
++            "This response couldn't load",
++            "This response couldn’t load",
++            "This RESPONSE\ncouldn’t\tload",
++            "This response\u{00a0}couldn‘t load",
++        ] {
++            let mut snapshot = json!({"messages":[
++                {"role":"USER","text":"approved review request","textComplete":true},
++                {"role":"ASSISTANT","text":placeholder,"textComplete":true}
++            ]});
++            assert_eq!(
++                review_text(&snapshot, &message_digest).unwrap_err(),
++                "WEB_REVIEW_RESPONSE_LOAD_ERROR",
++                "placeholder must remain unverified: {placeholder:?}"
++            );
++            assert_eq!(
++                review_text(&snapshot, &"0".repeat(64)).unwrap_err(),
++                "WEB_REVIEW_EVENT_NOT_LATEST_OR_INCOMPLETE"
++            );
++            snapshot["messages"][1]["textComplete"] = json!(false);
++            assert_eq!(
++                review_text(&snapshot, &message_digest).unwrap_err(),
++                "WEB_REVIEW_RESPONSE_NOT_COMPLETE"
++            );
++        }
++    }
++
++    #[test]
++    fn review_read_rejects_wrapped_load_error_instead_of_accepting_it_as_review() {
++        let message_digest = catdesk_wake::protocol::digest("approved review request");
++        for placeholder in [
++            "This RESPONSE\ncouldn’t\tload",
++            "This response\u{00a0}couldn‘t load",
++        ] {
++            let snapshot = json!({"messages":[
++                {"role":"USER","text":"approved review request","textComplete":true},
++                {"role":"ASSISTANT","text":placeholder,"textComplete":true}
++            ]});
++            assert!(
++                review_text(&snapshot, &message_digest).is_err(),
++                "load placeholder must not become verified review text: {placeholder:?}"
++            );
++        }
++    }
++
+     #[test]
+     fn review_read_requires_exact_latest_complete_delivered_pair() {
+         let message_digest = catdesk_wake::protocol::digest("approved review request");
+@@ -1844,6 +2005,28 @@ mod tests {
+         assert!(parse(&invalid).is_err());
+     }
+ 
++    #[test]
++    fn review_retry_pre_submit_accepts_only_frozen_project_input() {
++        let valid = args(&[
++            "operator",
++            "web",
++            "review",
++            "retry-pre-submit",
++            "--project-id",
++            "alpha",
++            "--input-file",
++            "review.json",
++        ]);
++        assert!(

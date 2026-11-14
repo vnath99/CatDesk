@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C50_CONTROLLED_NORMAL_GRANTED_TASK_LIVE_ROLLOVER",
+  "localMilestoneDate": "2026-10-23_America_New_York",
+  "observedUtc": "2026-10-24T00:18:30.7481283Z",
+  "sourceCommit": "dfc3e2cd3152ac9a93ea46a303eee5d4f29e5773",
+  "sourceDocumentationCommit": "1c4a36d3852a96b734ea23230c3800f9ef0e8579",
+  "branch": "codex/web-rollover-oct17",
+  "normalAppSha256": "a1491526297ee86cea63f09451827149f612b9f71f02ffefb92ccde9ebe838e7",
+  "qualificationScope": "EXISTING_STOPPED_UNPROTECTED_DEVELOPMENT_PROFILE_AND_CONTROLLED_PROJECT",
+  "driver": "BOUNDED_OPERATOR_COMMANDS_USING_EXISTING_AUTOMATIC_TRANSACTION_IMPLEMENTATION",
+  "backgroundSchedulerStarted": false,
+  "stages": {
+    "coldCurrentGenerationAdmission": {
+      "launchAuthorized": false,
+      "sameOriginalTaskAndAssignment": true,
+      "journaledToolCalls": 0,
+      "generation": 5,
+      "status": "PREPARED_ONLY"
+    },
+    "freshSourceDelivery": {
+      "unexpectedChanges": 0,
+      "startedUtc": "2026-10-23T23:26:58.1462798+00:00",
+      "finishedUtc": "2026-10-23T23:28:00.7473649+00:00",
+      "exactSentReceipt": true,
+      "sourceRepublished": false,
+      "completedResponse": true,
+      "elapsedSeconds": 62.6011867,
+      "ownedTreeExited": true,
+      "unexpectedNewRecords": 0
+    },
+    "liveHandoffRequestDelivery": {
+      "unexpectedChanges": 0,
+      "startedUtc": "2026-10-23T23:43:51.6872031+00:00",
+      "finishedUtc": "2026-10-23T23:44:54.8651978+00:00",
+      "exactSentReceipt": true,
+      "sourceRepublished": false,
+      "completedResponse": true,
+      "elapsedSeconds": 63.1780963,
+      "ownedTreeExited": true,
+      "unexpectedNewRecords": 0
+    },
+    "stableTaskResume": {
+      "noKeyInWakeMessage": true,
+      "originalTaskAndGrantReused": true,
+      "publicationOnce": true,
+      "delivery": {
+        "unexpectedChanges": 0,
+        "startedUtc": "2026-10-24T00:00:56.9273430+00:00",
+        "finishedUtc": "2026-10-24T00:01:57.7756270+00:00",
+        "exactSentReceipt": true,
+        "sourceRepublished": false,
+        "completedResponse": true,
+        "elapsedSeconds": 60.8483858,
+        "ownedTreeExited": true,
+        "unexpectedNewRecords": 0
+      }
+    },
+    "normalCollector": {
+      "noFixtureMetadataInjection": true,
+      "payloadOutsideWorkspaces": true,
+      "startedUtc": "2026-10-23T23:46:15.1571228+00:00",
+      "finishedUtc": "2026-10-23T23:46:52.7203751+00:00",
+      "sourceJsonValidated": true,
+      "privatePayloadCreatedByNormalExecutable": true,
+      "actualSourceBrowserSnapshot": true,
+      "elapsedSeconds": 37.5640347,
+      "unfinishedTaskAndAssignmentPreserved": true,
+      "payloadDigestVerified": true
+    },
+    "taskResponseRead": {
+      "eventBound": true,
+      "reportedStatus": "BLOCKED_SCOPED_TOOL_UNAVAILABLE",
+      "startedUtc": "2026-10-24T00:04:23.0477825+00:00",
+      "finishedUtc": "2026-10-24T00:04:58.1344789+00:00",
+      "readOnly": true,
+      "privateTaskContextRetained": true,
+      "elapsedSeconds": 35.0874438,
+      "projectFilesChanged": false,
+      "journaledToolCalls": 0,
+      "rawResponseOnlyInFixedPrivateStore": true,
+      "readerObservedResponseCharacters": 1102
+    },
+    "continuationAcknowledgement": {
+      "unexpectedChanges": 0,
+      "startedUtc": "2026-10-23T23:55:19.1641934+00:00",
+      "finishedUtc": "2026-10-23T23:56:19.7753664+00:00",
+      "exactSentReceipt": true,
+      "sourceRepublished": false,
+      "completedResponse": true,
+      "elapsedSeconds": 60.6112755,
+      "ownedTreeExited": true,
+      "unexpectedNewRecords": 0
+    },
+    "replacementTransaction": {
+      "completedReplacementResponse": true,
+      "finishedUtc": "2026-10-23T23:52:24.0411860+00:00",
+      "otherEightPairsExact": true,
+      "noRawPrivateUrlPublished": true,
+      "elapsedSeconds": 94.9548144,
+      "exactBootstrapSubmissionReceipt": true,
+      "sourceGeneration": 4,
+      "maximumCommandSeconds": 300,
+      "predecessorHistoryPreserved": true,
+      "creationAdmissionSerialized": true,
+      "verifiedSourceSnapshot": true,
+      "actualIssuedUrlIndependentlyVerified": true,
+      "startedUtc": "2026-10-23T23:50:49.0868263+00:00",
+      "replacementGeneration": 5,
+      "pairedRegistryAndWakeCommit": true
+    }
+  },
+  "context": {
+    "exactProviderContextConsumptionClaimed": false,
+    "originalPolicyRestored": true,
+    "durableSourceHandoffCollected": true,
+    "pressureTrigger": "CONTROLLED_SYNTHETIC_POLICY",
+    "otherProjectsUnchanged": true,
+    "newConversationContextRecorded": true
+  },
+  "cleanup": {
+    "productionModified": false,
+    "finalStateRecords": 266,
+    "developmentControl": "STOPPED",
+    "testOwnedProcesses": 0,
+    "recurringStarts": 0,
+    "pendingQueueEvents": 0,
+    "pendingTaskAndPrivateGrantRetained": true,
+    "productionControl": "STOPPED",
+    "nativeAndAssignedFixtureFilesUnchanged": true,
+    "nativeSessionActions": 0
+  },
+  "dependencies": {
+    "probeCountThisQualification": 1,
+    "connectedBackendBuildRootAndCatalogParity": "UNVERIFIED",
+    "immediateRetries": 0,
+    "connectorStatus": "HTTP429_MCP_SSE_PROBE_FROM_OPENAI_ORG",
+    "nativeActions": 0,
+    "newConversationReportedScopedTaskToolUnavailable": true,
+    "nativeChatsIdleCompleted": 1,
+    "nativeChatsActive": 3,
+    "authenticationOrTunnelChanges": 0
+  },
+  "earlierPrivateHelperFailures": [
+    "Successful grant initially misclassified by a wildcard interpretation of an extended Windows path; literal-path read-only reconciliation confirmed the existing grant, with no reissue.",
+    "A private baseline generator omitted its script block after successful policy restoration; corrected before any continuation-delivery attempt, without repeating the policy command."
+  ],
+  "acceptance": {
+    "cleanupJ": "PASS_BOUNDED_TEST",
+    "fullOctoberMilestone": "OPEN",
+    "actualReplacementUrlAndPairedBinding": "PASS_CONTROLLED_DEVELOPMENT",
+    "actualChatGptWebMcpCoding": "BLOCKED_SCOPED_TOOL_UNAVAILABLE",
+    "privateTaskContextBrowserTransfer": "PASS",
+    "simultaneousRolloverG": "PRIOR_C23_PROOF_PRESERVED_NOT_REPLAYED",
+    "normalCollectorWithLiveSource": "PASS",
+    "parallelWebMcpBC": "OPEN",
+    "protectedInstalled": "NOT_QUALIFIED",
+    "criticalCrashRecoveryH": "PARTIAL_NO_NEW_CRASH_INJECTION",
+    "restartI": "COLD_CLI_CONTINUATION_ONLY_FULL_RUNTIME_GATE_OPEN",
+    "normalUnattended": "NOT_ACTIVATED",
+    "continuationAndPostAckTaskContextDelivery": "PASS"
+  },
+  "sourceReviewDecision": "Existing ProjectContext dispatch already records scoped traffic observations; do not duplicate metering.",
+  "review": "ROOT_SELF_REVIEW_NO_INDEPENDENT_REVIEW_CLAIM",
+  "sourceCi": "UNVERIFIED_PRIOR_EXACT_SOURCE_READBACK_ZERO_RUNS_AND_CHECKS",
+  "nextExecutableSourceTask": "Inspect serving backend build/root and live tool catalog through supported read-only paths, distinguishing transport failure from catalog or deployment mismatch. Continue durable reported work-blocker/progress support in the existing ledger/status if the dependency prevents that qualification.",
+  "operatorActionRequiredForSourceWork": false
+}

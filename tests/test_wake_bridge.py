@@ -67,6 +67,14 @@ class BusySingleton:
 
 
 class WakeBridgeTests(unittest.TestCase):
+    def test_conversation_native_entry_refuses_missing_evaluator_without_keyboard_fallback(self):
+        sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, .5)
+        cdp = types.SimpleNamespace(send_keys=lambda *_args, **_kwargs:self.fail("keyboard fallback used"))
+        with patch.object(sink, "pre_typing_ready"), patch.object(sink, "_replace_home_draft_once") as edit:
+            with self.assertRaisesRegex(wake_bridge.Attention, "CONVERSATION_NATIVE_ENTRY_REQUIRED"):
+                sink.insert_empty_conversation_draft(cdp, "PRIVATE_OWNED_MESSAGE")
+            edit.assert_not_called()
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
@@ -99,6 +107,17 @@ class WakeBridgeTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def test_reviewed_bridge_size_remains_bounded_and_hash_identity_is_not_substituted(self):
+        self.assertLessEqual(Path(wake_bridge.__file__).stat().st_size,wake_bridge.MAX_BRIDGE_BYTES)
+        path=self.root/'bounded-bridge.py'
+        data=b'x'*wake_bridge.MAX_BRIDGE_BYTES
+        path.write_bytes(data)
+        self.assertEqual(wake_bridge.bridge_sha256(path),wake_bridge.hashlib.sha256(data).hexdigest())
+        path.write_bytes(data+b'x')
+        with self.assertRaises(wake_bridge.Attention):wake_bridge.bridge_sha256(path)
+        path.write_bytes(b'changed')
+        self.assertNotEqual(wake_bridge.bridge_sha256(path),self.bridge_sha256)
 
     @property
     def state_path(self):
@@ -154,6 +173,18 @@ class WakeBridgeTests(unittest.TestCase):
             wake_bridge, "__file__", str(bridge_path or self.bridge_path)
         ), patch.object(sys, "argv", argv):
             return wake_bridge.main()
+
+    def test_keyboard_safe_message_preserves_receipt_and_json_spaces_without_submit_keys(self):
+        message = 'JSON {"note":"two  spaces"}\r\nNext\tstep\u2028done'
+        safe = wake_bridge.keyboard_safe_message(message)
+        self.assertEqual(safe, 'JSON {"note":"two  spaces"}  Next step done')
+        self.assertEqual(wake_bridge.normalize_message(safe), wake_bridge.normalize_message(message))
+        self.assertFalse(any(char in safe for char in "\r\n\t\u2028"))
+        with self.assertRaisesRegex(wake_bridge.Attention, "MESSAGE_CONTROL_UNSUPPORTED"):
+            wake_bridge.keyboard_safe_message("unsafe\x00input")
+        with self.assertRaisesRegex(wake_bridge.Attention, "MESSAGE_CONTROL_UNSUPPORTED"):
+            wake_bridge.keyboard_safe_message("unsafe\ue007input")
+        self.assertEqual(wake_bridge.keyboard_safe_message("project\ue100glyph"), "project\ue100glyph")
 
     @unittest.skipUnless(sys.platform == "win32", "Windows path normalization regression")
     def test_windows_extended_workspace_accepts_equivalent_normal_absolute_profile(self):
@@ -480,6 +511,8 @@ class WakeBridgeTests(unittest.TestCase):
                 return selector == fallback
 
             def evaluate(self, script):
+                if "return composerText(visible[0])" in script:
+                    return "fallback text"
                 case.assertIn("#prompt-textarea", script)
                 case.assertIn("div.ProseMirror[contenteditable=\"true\"]", script)
                 return ["ready", True]
@@ -666,6 +699,7 @@ class WakeBridgeTests(unittest.TestCase):
             def __init__(self): self.reloads, self.reload_at = 0, []
             def get_current_url(self): return "https://chatgpt.com/c/review-one"
             def evaluate(self, script):
+                if script == "location.href": return "https://chatgpt.com/c/review-one"
                 if script == "document.readyState": return "complete"
                 if "#prompt-textarea" in script:
                     return ["ready", True] if self.reloads == 1 else ["count", 0]
@@ -698,6 +732,7 @@ class WakeBridgeTests(unittest.TestCase):
             def get_current_url(self): return "https://chatgpt.com/c/review-one"
             def is_element_visible(self, selector): return False
             def evaluate(self, script):
+                if script == "location.href": return "https://chatgpt.com/c/review-one"
                 if script == "document.readyState": return "complete"
                 if "#prompt-textarea" in script: return ["count", 0]
                 raise AssertionError(script)
@@ -722,6 +757,7 @@ class WakeBridgeTests(unittest.TestCase):
             def get_current_url(self): return "https://chatgpt.com/c/review-one"
             def is_element_visible(self, selector): return False
             def evaluate(self, script):
+                if script == "location.href": return "https://chatgpt.com/c/review-one"
                 if script == "document.readyState": return "complete"
                 if "#prompt-textarea" in script:
                     return ["count", 0] if 9 <= clock.now < 10 else ["ready", True]
@@ -888,7 +924,9 @@ class WakeBridgeTests(unittest.TestCase):
             def get(self, url): self.opens.append(url)
             def is_element_visible(self, _selector): return False
             def evaluate(self, script):
+                if script == "location.href": return "https://chatgpt.com/c/review-one"
                 if script == "document.readyState": return "complete"
+                if "return composerText(visible[0])" in script: return getattr(self, "composer", "")
                 if "#prompt-textarea" in script: return ["ready", True]
                 raise AssertionError("unexpected fixed CDP evaluation")
         class SB:
@@ -1104,8 +1142,10 @@ class WakeBridgeTests(unittest.TestCase):
                 self.index, self.writes = index, []
             def get_current_url(self):
                 return "https://chatgpt.com/c/review-one"
-            def press_keys(self, _selector, text, timeout):
+            def send_keys(self, _selector, text, timeout):
                 self.writes.append((text, timeout))
+            def press_keys(self, *_args, **_kwargs):
+                raise AssertionError("human-speed message typing is forbidden")
 
         class SB:
             def __init__(self, **_kwargs):
@@ -1140,6 +1180,8 @@ class WakeBridgeTests(unittest.TestCase):
             sink, "wait_for_submission_accepted", return_value=99.0
         ), patch.object(sink, "durable_receipt_round_trip"), patch.object(
             sink, "confirm_exact_receipt", return_value=receipt
+        ), patch.object(
+            sink, "wait_for_persisted_response", return_value=None
         ), patch.object(
             sink, "wait_for_response_completion", return_value=None
         ):
@@ -1204,13 +1246,16 @@ class WakeBridgeTests(unittest.TestCase):
 
         self.assertEqual(["open", "close"], contexts)
 
-    def test_outer_retry_never_relaunches_after_browser_write_starts(self):
-        contexts, writes = [], []
+    def test_outer_retry_never_relaunches_after_submission_boundary_starts(self):
         message = wake_bridge.MESSAGE.format(record_id=self.record_id)
 
         class Cdp:
-            def press_keys(self, _selector, text, timeout):
+            def get_current_url(self):
+                return "https://chatgpt.com/c/review-one"
+            def send_keys(self, _selector, text, timeout):
                 writes.append((text, timeout))
+            def press_keys(self, *_args, **_kwargs):
+                raise AssertionError("human-speed message typing is forbidden")
 
         class SB:
             def __init__(self, **_kwargs):
@@ -1224,21 +1269,31 @@ class WakeBridgeTests(unittest.TestCase):
             def activate_cdp_mode(self, _url):
                 return None
 
-        sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, 1)
-        with patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=SB)}), patch.object(
-            wake_bridge.time, "sleep"
-        ), patch.object(sink, "wait_for_page_readiness", side_effect=lambda _sb, cdp: cdp), patch.object(
-            sink, "wait_for_idle"
-        ), patch.object(sink, "pre_typing_ready"), patch.object(
-            sink, "pre_submit_receipt_snapshot", return_value=0
-        ), patch.object(sink, "best_effort_present_browser"), patch.object(
-            sink, "text", side_effect=wake_bridge.Attention("BROWSER_NETWORK_ERROR")
-        ):
-            with self.assertRaisesRegex(wake_bridge.Attention, "BROWSER_NETWORK_ERROR"):
-                sink.wake(self.record_id, message, lambda: True, lambda: self.fail("submission boundary"))
+        for fail_at_checkpoint in (True, False):
+            with self.subTest(fail_at_checkpoint=fail_at_checkpoint):
+                contexts, writes, checkpoints = [], [], []
 
-        self.assertEqual([(message, 1)], writes)
-        self.assertEqual(["open", "close"], contexts)
+                def before_submit():
+                    checkpoints.append("submission-boundary")
+                    if fail_at_checkpoint:
+                        raise wake_bridge.Attention("BROWSER_NETWORK_ERROR")
+
+                sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, 1)
+                with patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=SB)}), patch.object(
+                    wake_bridge.time, "sleep"
+                ), patch.object(sink, "wait_for_page_readiness", side_effect=lambda _sb, cdp: cdp), patch.object(
+                    sink, "wait_for_idle"
+                ), patch.object(sink, "pre_typing_ready"), patch.object(
+                    sink, "pre_submit_receipt_snapshot", return_value=0
+                ), patch.object(sink, "best_effort_present_browser"), patch.object(
+                    sink, "text", side_effect=wake_bridge.Attention("BROWSER_NETWORK_ERROR")
+                ):
+                    with self.assertRaisesRegex(wake_bridge.Attention, "BROWSER_NETWORK_ERROR"):
+                        sink.wake(self.record_id, message, lambda: True, before_submit)
+
+                self.assertEqual(["submission-boundary"], checkpoints)
+                self.assertEqual([] if fail_at_checkpoint else [(message, 1)], writes)
+                self.assertEqual(["open", "close"], contexts)
 
     def test_production_waits_for_safe_send_and_never_converts_disabled_to_enter(self):
         class Clock:
@@ -1671,11 +1726,21 @@ class WakeBridgeTests(unittest.TestCase):
                     self.composer = ""
                     self.messages.append(message)
                 else:
-                    self.composer = text
+                    raise AssertionError("human-speed message typing is forbidden")
+            def send_keys(self, _selector, text, timeout):
+                self.composer = text
             def evaluate(self, script):
+                # Emulate the input primitive; native editor CAS is exercised
+                # independently by the JavaScript DOM fixture tests.
+                if "document.execCommand('insertText'" in script:
+                    text, _ = json.JSONDecoder().raw_decode(script.rsplit("const text = ", 1)[1])
+                    self.send_keys(wake_bridge.EDITOR, text, timeout=1)
+                    return "INSERTED"
+                if script == "location.href": return "https://chatgpt.com/c/review-one"
                 if script == "document.readyState": return "complete"
+                if "return composerText(visible[0])" in script: return self.composer
                 if "#prompt-textarea" in script: return ["ready", self.composer == ""]
-                if "const selectorTiers" in script:
+                if "const expected =" in script and "const selectorTiers" in script:
                     return ["ready", int(message in self.messages), 0]
                 if "data-message-author-role" in script: return list(self.messages)
                 if "const unique" in script: return ["missing", None]
@@ -1691,16 +1756,23 @@ class WakeBridgeTests(unittest.TestCase):
 
         sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, 1)
         with patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=SB)}), patch.object(
+            sink, "wait_for_page_readiness", return_value=cdp
+        ), patch.object(
             sink, "wait_for_submission_accepted", return_value=99.0
         ), patch.object(
             sink, "post_submit_visible_any", return_value=False
         ), patch.object(
             sink, "post_submit_composer_text", return_value=""
         ), patch.object(
+            sink, "wait_for_persisted_response", return_value=None
+        ), patch.object(
             sink, "wait_for_response_completion", return_value=None
-        ):
+        ), patch.object(
+            sink, "durable_receipt_round_trip", wraps=sink.durable_receipt_round_trip
+        ) as receipt_probe:
             with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "SUBMIT_RECEIPT_ROUND_TRIP_FAILED"):
                 sink.wake(self.record_id, message, lambda: True, lambda: boundary.append("submitted"))
+        receipt_probe.assert_called_once_with(cdp, completed_response=True)
         self.assertEqual(["submitted"], boundary)
         self.assertEqual(message, cdp.messages[-1])
 
@@ -1769,7 +1841,6 @@ class WakeBridgeTests(unittest.TestCase):
         digests = wake_bridge.CdpSink.user_message_digests(cdp)
         self.assertEqual([wake_bridge.digest("exact wake message")], digests)
         self.assertIn("[data-message-author-role='user']", cdp.script)
-        self.assertIn("article[data-turn='user']", cdp.script)
         self.assertIn("[data-testid^='conversation-turn-']", cdp.script)
         self.assertIn("article[id^='conversation-turn-']", cdp.script)
         self.assertIn("[data-turn='user']", cdp.script)
@@ -1806,9 +1877,12 @@ class WakeBridgeTests(unittest.TestCase):
         self.assertIn("for (const selector of selectorTiers)", anchor.script)
         self.assertIn("return isUserTurn !== isAssistantTurn;", anchor.script)
         self.assertIn("if (tierTurns.some(turn => classifyTurn(turn)[0]))", anchor.script)
-        self.assertIn("turns = tierTurns;", anchor.script)
+        self.assertIn("return tierTurns;", anchor.script)
+        self.assertIn("const turns = trustedTurns();", anchor.script)
         self.assertNotIn("const rawTurns =", anchor.script)
-        self.assertIn("isUserTurn && !isAssistantTurn && text.includes(expected)", anchor.script)
+        self.assertIn("if (!isUserTurn || isAssistantTurn) return;", anchor.script)
+        self.assertIn("normalize(userBodyText(content || turn))", anchor.script)
+        self.assertIn("if (text === expected) matches.push(index);", anchor.script)
         self.assertNotIn("if (text.includes(expected)) matches.push(index);", anchor.script)
 
         class ResponseCdp:
@@ -1834,6 +1908,7 @@ class WakeBridgeTests(unittest.TestCase):
         self.assertIn("inWakeExchange", response.script)
 
         class RetryCdp:
+            def get_current_url(self): return "https://chatgpt.com/c/review-one"
             def evaluate(self, script):
                 self.script = script
                 return "clicked"
@@ -1900,7 +1975,139 @@ class WakeBridgeTests(unittest.TestCase):
         )
         self.assertGreaterEqual(clock.now, 1.5)
 
-    def test_active_generation_periodically_refreshes_same_target_until_pause_clears(self):
+    def test_response_observer_recovers_transient_read_failures_without_ui_actions(self):
+        class Clock:
+            now = 0.0
+            def monotonic(self): return self.now
+            def sleep(self, seconds):
+                self.assert_positive(seconds)
+                self.now += seconds
+            @staticmethod
+            def assert_positive(seconds):
+                if seconds <= 0: raise AssertionError("observation must not busy-spin")
+
+        for location in ("url", "visibility", "editor", "snapshot"):
+            with self.subTest(location=location):
+                clock, failures, stages = Clock(), [], []
+                sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, 1)
+                def fail_once(at):
+                    if at == location and not failures:
+                        failures.append(at)
+                        if at == "url": raise RuntimeError("CDP context remounted")
+                        raise wake_bridge.PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
+                class Cdp:
+                    def get_current_url(self):
+                        fail_once("url")
+                        return sink.url
+                def visible(_cdp, _selectors):
+                    fail_once("visibility")
+                    return False
+                def editor(_cdp):
+                    fail_once("editor")
+                    return "ready", True
+                def snapshot(_cdp, _message):
+                    fail_once("snapshot")
+                    return 0, 0, True, True
+                with patch.object(sink, "post_submit_visible_any", side_effect=visible), patch.object(
+                    sink, "editor_state", side_effect=editor
+                ), patch.object(sink, "trusted_turn_anchor_state", return_value=(1, 1)), patch.object(
+                    sink, "response_snapshot", side_effect=snapshot
+                ), patch.object(sink, "click_response_timeout_retry") as retry, patch.object(
+                    sink, "refresh_response_observer"
+                ) as refresh:
+                    sink.wait_for_response_completion(
+                        Cdp(), "exact", allow_retry=False, observer=stages.append,
+                        monotonic=clock.monotonic, sleeper=clock.sleep,
+                    )
+                self.assertEqual([location], failures)
+                self.assertEqual("RESPONSE_COMPLETED", stages[-1])
+                self.assertLessEqual(clock.now, 2)
+                retry.assert_not_called()
+                refresh.assert_not_called()
+
+    def test_response_observer_read_failure_budget_is_bounded_and_preserves_other_errors(self):
+        class Clock:
+            now = 0.0
+            def monotonic(self): return self.now
+            def sleep(self, seconds): self.now += seconds
+        class Cdp:
+            def get_current_url(self): return "https://chatgpt.com/c/review-one"
+        for reason, attempts in (("RESPONSE_STATE_QUERY_FAILED", 3),
+                                 ("RESPONSE_COMPLETION_UNPROVEN", 1),
+                                 ("RESPONSE_SEQUENCE_DRIFT", 1)):
+            with self.subTest(reason=reason):
+                sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, 1)
+                clock = Clock()
+                with patch.object(sink, "post_submit_visible_any", return_value=False), patch.object(
+                    sink, "editor_state", return_value=("ready", True)
+                ), patch.object(sink, "trusted_turn_anchor_state", return_value=(1, 1)), patch.object(
+                    sink, "response_snapshot", side_effect=wake_bridge.PostSubmitUnknown(reason)
+                ) as snapshot, patch.object(sink, "click_response_timeout_retry") as retry:
+                    with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, reason):
+                        sink.wait_for_response_completion(
+                            Cdp(), "exact", allow_retry=False,
+                            monotonic=clock.monotonic, sleeper=clock.sleep,
+                        )
+                self.assertEqual(attempts, snapshot.call_count)
+                self.assertLessEqual(clock.now, 3)
+                retry.assert_not_called()
+
+    def test_response_observer_read_recovery_keeps_original_deadlines(self):
+        class Clock:
+            now = 0.0
+            def monotonic(self): return self.now
+            def sleep(self, seconds): self.now += seconds
+        class Cdp:
+            def get_current_url(self): return "https://chatgpt.com/c/review-one"
+        for generation, total, reason in ((1.0, 2.0, "RESPONSE_COMPLETION_UNPROVEN"),
+                                          (2.0, 1.0, "RESPONSE_TOTAL_TIMEOUT")):
+            with self.subTest(reason=reason):
+                clock = Clock()
+                sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, 1)
+                with patch.object(wake_bridge, "RESPONSE_GENERATION_WINDOW_SECONDS", generation), patch.object(
+                    wake_bridge, "RESPONSE_TOTAL_WINDOW_SECONDS", total
+                ), patch.object(sink, "post_submit_visible_any", return_value=False), patch.object(
+                    sink, "editor_state", return_value=("ready", True)
+                ), patch.object(sink, "trusted_turn_anchor_state", return_value=(1, 1)), patch.object(
+                    sink, "response_snapshot",
+                    side_effect=wake_bridge.PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED"),
+                ) as snapshot, patch.object(sink, "click_response_timeout_retry") as retry:
+                    with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, reason):
+                        sink.wait_for_response_completion(
+                            Cdp(), "exact", allow_retry=False,
+                            monotonic=clock.monotonic, sleeper=clock.sleep,
+                        )
+                self.assertEqual(1, snapshot.call_count)
+                self.assertEqual(1.0, clock.now)
+                retry.assert_not_called()
+
+    def test_response_observer_rechecks_target_after_failed_read(self):
+        class Clock:
+            now = 0.0
+            def monotonic(self): return self.now
+            def sleep(self, seconds): self.now += seconds
+        class Cdp:
+            url = "https://chatgpt.com/c/review-one"
+            def get_current_url(self): return self.url
+        cdp, clock = Cdp(), Clock()
+        sink = wake_bridge.CdpSink(cdp.url, self.profile, 1, 1)
+        def failed_snapshot(_cdp, _message):
+            cdp.url = "https://chatgpt.com/c/other"
+            raise wake_bridge.PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
+        with patch.object(sink, "post_submit_visible_any", return_value=False), patch.object(
+            sink, "editor_state", return_value=("ready", True)
+        ), patch.object(sink, "trusted_turn_anchor_state", return_value=(1, 1)), patch.object(
+            sink, "response_snapshot", side_effect=failed_snapshot
+        ) as snapshot, patch.object(sink, "click_response_timeout_retry") as retry:
+            with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "RESPONSE_TARGET_DRIFT"):
+                sink.wait_for_response_completion(
+                    cdp, "exact", allow_retry=False,
+                    monotonic=clock.monotonic, sleeper=clock.sleep,
+                )
+        self.assertEqual(1, snapshot.call_count)
+        retry.assert_not_called()
+
+    def test_active_generation_keeps_same_browser_without_refresh_until_pause_clears(self):
         class Clock:
             def __init__(self): self.now = 0.0
             def monotonic(self): return self.now
@@ -1919,7 +2126,7 @@ class WakeBridgeTests(unittest.TestCase):
         ), patch.object(
             sink,
             "post_submit_visible_any",
-            side_effect=lambda _cdp, selectors: selectors == wake_bridge.STOP and cdp.reloads == 0,
+            side_effect=lambda _cdp, selectors: selectors == wake_bridge.STOP and clock.now < wake_bridge.RESPONSE_ACTIVE_REFRESH_SECONDS + 1,
         ), patch.object(
             sink, "editor_state", return_value=("ready", True)
         ), patch.object(
@@ -1936,7 +2143,7 @@ class WakeBridgeTests(unittest.TestCase):
                 monotonic=clock.monotonic,
                 sleeper=clock.sleep,
             )
-        self.assertEqual(1, cdp.reloads)
+        self.assertEqual(0, cdp.reloads)
         self.assertGreaterEqual(clock.now, wake_bridge.RESPONSE_ACTIVE_REFRESH_SECONDS)
         self.assertEqual("RESPONSE_COMPLETED", stages[-1])
         reopen.assert_not_called()
@@ -2237,6 +2444,72 @@ class WakeBridgeTests(unittest.TestCase):
         self.assertEqual(9.0, receipt.browser_sent_at_unix)
         self.assertEqual([0.25], clock.sleeps)
 
+    def test_submitting_reconciliation_shared_deadline_only_shortens_and_never_submits(self):
+        class Cdp:
+            def get_current_url(self): return "https://chatgpt.com/c/review-one"
+        sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, .5)
+        for requested, expected_end in ((.6, .6), (600.0, 60.0)):
+            clock = [0.0]
+            sleeps = []
+            def sleep(value):
+                self.assertGreater(value, 0)
+                sleeps.append(value)
+                clock[0] += value
+            with patch.object(sink, "post_submit_visible_any", return_value=False), patch.object(
+                sink, "trusted_turn_anchor_state", return_value=(0, 0)
+            ), patch.object(sink, "smoke_path_submit") as submit:
+                with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "SUBMIT_CLEARED_NO_APPEND"):
+                    sink.reconcile_persisted_receipt(Cdp(), wake_bridge.digest("exact"), "exact",
+                        self.record_id, wake_bridge.digest(sink.url), monotonic=lambda:clock[0],
+                        sleeper=sleep, observation_deadline=requested)
+                submit.assert_not_called()
+            self.assertAlmostEqual(clock[0], expected_end)
+            self.assertLessEqual(max(sleeps), .25)
+
+    def test_submitting_reconciliation_rejects_expired_or_invalid_deadline_without_observation(self):
+        sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, .5)
+        cdp = types.SimpleNamespace(get_current_url=lambda:self.fail("expired deadline queried the page"))
+        for deadline in (-1.0, 0.0):
+            with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "SUBMIT_RECEIPT_UNPROVEN"):
+                sink.reconcile_persisted_receipt(cdp, wake_bridge.digest("exact"), "exact", self.record_id,
+                    wake_bridge.digest(sink.url), monotonic=lambda:0.0, observation_deadline=deadline)
+        for deadline in (float("nan"), float("inf"), True, "PRIVATE_DEADLINE"):
+            with self.assertRaises(ValueError):
+                sink.reconcile_persisted_receipt(cdp, wake_bridge.digest("exact"), "exact", self.record_id,
+                    wake_bridge.digest(sink.url), monotonic=lambda:0.0, observation_deadline=deadline)
+
+    def test_submitting_reconciliation_does_not_mint_a_receipt_after_shared_deadline(self):
+        sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, .5)
+        cdp = types.SimpleNamespace(get_current_url=lambda:sink.url)
+        clock = [0.0]
+        calls = [0]
+        def anchor(*_):
+            calls[0] += 1
+            if calls[0] == 2: clock[0] = 1.0
+            return (1, 1)
+        def sleep(value): clock[0] += value
+        with patch.object(sink, "post_submit_visible_any", return_value=False), patch.object(
+            sink, "trusted_turn_anchor_state", side_effect=anchor
+        ):
+            with self.assertRaises(wake_bridge.PostSubmitUnknown):
+                sink.reconcile_persisted_receipt(cdp, wake_bridge.digest("exact"), "exact", self.record_id,
+                    wake_bridge.digest(sink.url), monotonic=lambda:clock[0], sleeper=sleep,
+                    wall_time=lambda:self.fail("late proof minted a receipt"), observation_deadline=.5)
+
+    def test_submitting_reconciliation_rechecks_deadline_at_final_stable_sample(self):
+        sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, .5)
+        cdp = types.SimpleNamespace(get_current_url=lambda:sink.url)
+        # The second DOM query finishes just inside the limit; the subsequent
+        # sample timestamp reaches it. That sample must not mint a receipt.
+        times = iter([0.0, 0.0, .1, .1, .1, .35, .49, .5])
+        with patch.object(sink, "post_submit_visible_any", return_value=False), patch.object(
+            sink, "trusted_turn_anchor_state", return_value=(1, 1)
+        ):
+            with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "SUBMIT_RECEIPT_UNPROVEN"):
+                sink.reconcile_persisted_receipt(cdp, wake_bridge.digest("exact"), "exact", self.record_id,
+                    wake_bridge.digest(sink.url), monotonic=lambda:next(times), sleeper=lambda _:None,
+                    wall_time=lambda:self.fail("boundary sample minted a receipt"), observation_deadline=.5)
+
     def test_submitting_reconciliation_rejects_duplicate_or_target_drift(self):
         class Cdp:
             def __init__(self, url="https://chatgpt.com/c/review-one"): self.url = url
@@ -2354,6 +2627,10 @@ class WakeBridgeTests(unittest.TestCase):
                 "RESPONSE_NETWORK_ERROR",
                 "RESPONSE_GENERATION_TIMEOUT",
                 "RESPONSE_COMPLETION_UNPROVEN",
+                "RESPONSE_LOAD_ERROR",
+                "RESPONSE_RETRY_BLOCKED_DRAFT",
+                "RESPONSE_RETRY_BLOCKED_GENERATION",
+                "RESPONSE_RETRY_EDITOR_UNAVAILABLE",
                 "RESPONSE_TIMEOUT_RETRY_AMBIGUOUS",
                 "RESPONSE_RETRY_EXHAUSTED",
                 "RESPONSE_TIMEOUT_STATE_LOST",
@@ -2363,8 +2640,9 @@ class WakeBridgeTests(unittest.TestCase):
             wake_bridge.POST_SUBMIT_DIAGNOSTICS,
         )
 
-    def test_browser_presentation_is_one_shot_and_precedes_typing_and_submit_boundary(self):
-        message, timeline = wake_bridge.MESSAGE.format(record_id=self.record_id), []
+    def test_browser_presentation_is_one_shot_and_precedes_submit_boundary_and_typing(self):
+        message = wake_bridge.MESSAGE.format(record_id=self.record_id) + '\r\nJSON {"note":"two  spaces"}'
+        timeline = []
 
         class Browser: _process_pid = 4242
         class Driver: cdp_base = Browser()
@@ -2378,12 +2656,27 @@ class WakeBridgeTests(unittest.TestCase):
             def maximize(self): timeline.append("maximize")
             def bring_active_window_to_front(self): timeline.append("foreground")
             def press_keys(self, _selector, text, timeout):
-                timeline.append("type" if text != "\n" else "submit")
-                if text == "\n": self.composer = ""; self.messages.append(message)
-                else: self.composer = text
+                if text != "\n": raise AssertionError("human-speed message typing is forbidden")
+                timeline.append("submit")
+                self.composer = ""; self.messages.append(message)
+            def send_keys(self, _selector, text, timeout):
+                self.assert_keyboard_safe(text)
+                timeline.append("type")
+                self.composer = text
+            @staticmethod
+            def assert_keyboard_safe(text):
+                if any(char in text for char in "\r\n\t"):
+                    raise AssertionError("message typing would submit a USER turn")
             def evaluate(self, script):
+                # Emulate the input primitive; native editor CAS is exercised
+                # independently by the JavaScript DOM fixture tests.
+                if "document.execCommand('insertText'" in script:
+                    text, _ = json.JSONDecoder().raw_decode(script.rsplit("const text = ", 1)[1])
+                    self.send_keys(wake_bridge.EDITOR, text, timeout=1)
+                    return "INSERTED"
+                if "return composerText(visible[0])" in script: return getattr(self, "composer", "")
                 if "#prompt-textarea" in script: return ["ready", True]
-                if "const selectorTiers" in script:
+                if "const expected =" in script and "const selectorTiers" in script:
                     return ["ready", int(message in self.messages), 0]
                 if "data-message-author-role" in script: return list(self.messages)
                 if "const unique" in script: return ["missing", None]
@@ -2400,17 +2693,25 @@ class WakeBridgeTests(unittest.TestCase):
         with patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=SB)}), patch.object(
             wake_bridge.CdpSink, "best_effort_windows_foreground", side_effect=lambda _pid: timeline.append("native")
         ), patch.object(
+            sink, "pre_submit_receipt_snapshot", wraps=sink.pre_submit_receipt_snapshot
+        ) as prior_snapshot, patch.object(
             sink, "wait_for_submission_accepted", return_value=99.0
         ), patch.object(
-            sink, "durable_receipt_round_trip", side_effect=lambda _cdp: timeline.append("reload")
+            sink, "wait_for_send_control", return_value=None
+        ), patch.object(
+            sink, "durable_receipt_round_trip", side_effect=lambda _cdp, **_kwargs: timeline.append("reload")
+        ), patch.object(
+            sink, "wait_for_persisted_response", return_value=None
         ), patch.object(
             sink, "wait_for_response_completion", return_value=None
-        ), patch.object(
+        ) as response_observer, patch.object(
             sink, "confirm_exact_receipt",
             return_value=wake_bridge.receipt_for(self.record_id, message, sink.url, 99.0)
         ):
             sink.wake(self.record_id, message, lambda: True, lambda: timeline.append("boundary"))
-        self.assertEqual(["maximize", "foreground", "native", "type", "boundary", "submit", "reload"], timeline)
+        prior_snapshot.assert_called_once_with(cdp, message)
+        response_observer.assert_called_once_with(cdp, message)
+        self.assertEqual(["maximize", "foreground", "native", "boundary", "type", "submit", "reload"], timeline)
 
     def test_windows_foreground_requires_exact_current_cdp_pid_and_one_suitable_window(self):
         class Browser: _process_pid = 4242
@@ -2472,10 +2773,18 @@ class WakeBridgeTests(unittest.TestCase):
                 if self.drift: self.url = "https://chatgpt.com/c/other"
                 raise RuntimeError("foreground policy")
             def bring_active_window_to_front(self): timeline.append("foreground"); return False
-            def press_keys(self, _selector, text, timeout): timeline.append("type"); self.composer = text
+            def send_keys(self, _selector, text, timeout): timeline.append("type"); self.composer = text
+            def press_keys(self, *_args, **_kwargs): raise AssertionError("human-speed message typing is forbidden")
             def evaluate(self, script):
+                # Emulate the input primitive; native editor CAS is exercised
+                # independently by the JavaScript DOM fixture tests.
+                if "document.execCommand('insertText'" in script:
+                    text, _ = json.JSONDecoder().raw_decode(script.rsplit("const text = ", 1)[1])
+                    self.send_keys(wake_bridge.EDITOR, text, timeout=1)
+                    return "INSERTED"
+                if "return composerText(visible[0])" in script: return getattr(self, "composer", "")
                 if "#prompt-textarea" in script: return ["ready", True]
-                if "const selectorTiers" in script:
+                if "const expected =" in script and "const selectorTiers" in script:
                     return ["ready", int(message in self.messages), 0]
                 if "data-message-author-role" in script: return list(self.messages)
                 if "const unique" in script: return ["missing", None]
@@ -2489,9 +2798,11 @@ class WakeBridgeTests(unittest.TestCase):
                 def activate_cdp_mode(self, _url): return None
             sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, 1)
             with patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=SB)}), patch.object(
-                sink, "durable_receipt_round_trip", side_effect=lambda _cdp: timeline.append("reload")
+                sink, "durable_receipt_round_trip", side_effect=lambda _cdp, **_kwargs: timeline.append("reload")
             ), patch.object(
-                sink, "wait_for_response_completion", return_value=None
+                sink, "wait_for_persisted_response", return_value=None
+        ), patch.object(
+            sink, "wait_for_response_completion", return_value=None
             ), patch.object(
                 sink, "wait_for_submission_accepted", return_value=99.0
             ), patch.object(
@@ -2507,15 +2818,19 @@ class WakeBridgeTests(unittest.TestCase):
 
         class DeliveredCdp(Cdp):
             def press_keys(self, _selector, text, timeout):
-                timeline.append("type" if text != "\n" else "submit")
-                if text == "\n": self.composer = ""; self.messages.append(message)
-                else: self.composer = text
+                if text != "\n": raise AssertionError("human-speed message typing is forbidden")
+                timeline.append("submit")
+                self.composer = ""; self.messages.append(message)
         run(DeliveredCdp())
-        self.assertEqual(["maximize", "foreground", "type", "boundary", "submit", "reload"], timeline)
+        self.assertEqual(["maximize", "foreground", "boundary", "type", "submit", "reload"], timeline)
 
     def test_presentation_is_skipped_for_non_actionable_draft_or_existing_digest(self):
         sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, 1)
         message, presented = wake_bridge.MESSAGE.format(record_id=self.record_id), []
+        class Clock:
+            def __init__(self): self.now = 0.0
+            def monotonic(self): return self.now
+            def sleep(self, seconds): self.now += seconds
         class Cdp:
             def __init__(self, composer="", messages=None):
                 self.composer, self.messages = composer, messages or ["prior"]
@@ -2525,6 +2840,7 @@ class WakeBridgeTests(unittest.TestCase):
             def get_attribute(self, *_args, **_kwargs): return self.composer
             def get_text(self, *_args, **_kwargs): return self.composer
             def evaluate(self, script):
+                if "return composerText(visible[0])" in script: return self.composer
                 if "#prompt-textarea" in script: return ["ready", self.composer == ""]
                 if "data-message-author-role" in script: return list(self.messages)
                 raise AssertionError("unexpected fixed CDP evaluation")
@@ -2536,8 +2852,13 @@ class WakeBridgeTests(unittest.TestCase):
             def __exit__(self, *_args): return False
             def activate_cdp_mode(self, _url): return None
         for cdp, actionable in ((Cdp("draft"), lambda: True), (Cdp(), lambda: False), (Cdp(messages=[message]), lambda: True)):
+            clock = Clock()
             with patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=lambda **kwargs: SB(cdp, **kwargs))}), patch.object(
                 wake_bridge.CdpSink, "best_effort_windows_foreground", side_effect=lambda _pid: presented.append("native")
+            ), patch.object(
+                sink, "wait_for_page_readiness", side_effect=lambda sb, current: wake_bridge.CdpSink.wait_for_page_readiness(
+                    sink, sb, current, monotonic=clock.monotonic, sleeper=clock.sleep
+                )
             ):
                 with self.assertRaises(wake_bridge.Attention):
                     sink.wake(self.record_id, message, actionable, lambda: self.fail("submission boundary"))
@@ -2545,6 +2866,10 @@ class WakeBridgeTests(unittest.TestCase):
 
     def test_login_captcha_or_unrecoverable_network_never_presents_browser(self):
         presented = []
+        class Clock:
+            def __init__(self): self.now = 0.0
+            def monotonic(self): return self.now
+            def sleep(self, seconds): self.now += seconds
         class Cdp:
             def __init__(self, mode): self.mode = mode
             def get_current_url(self):
@@ -2566,7 +2891,12 @@ class WakeBridgeTests(unittest.TestCase):
                 def __exit__(self, *_args): return False
                 def activate_cdp_mode(self, _url): return None
             sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, 1)
-            with patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=SB)}), patch.object(wake_bridge.time, "sleep"):
+            clock = Clock()
+            readiness = sink.wait_for_page_readiness
+            with patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=SB)}), patch.object(
+                wake_bridge.time, "sleep", side_effect=clock.sleep
+            ), patch.object(sink, "wait_for_page_readiness", side_effect=lambda sb, cdp:
+                            readiness(sb, cdp, monotonic=clock.monotonic, sleeper=clock.sleep)):
                 with self.assertRaises(wake_bridge.Attention):
                     sink.wake(self.record_id, wake_bridge.MESSAGE.format(record_id=self.record_id), lambda: True, lambda: self.fail("submission boundary"))
         self.assertEqual([], presented)
@@ -2583,12 +2913,15 @@ class WakeBridgeTests(unittest.TestCase):
         ), patch.object(
             sink, "durable_receipt_round_trip", return_value=None
         ), patch.object(sink, "confirm_exact_receipt", return_value=object()), patch.object(
+            sink, "wait_for_persisted_response", return_value=None
+        ), patch.object(
             sink, "wait_for_response_completion", return_value=None
         ):
             class ReloadingCdp:
                 def reload(self, ignore_cache): pass
                 def get_current_url(self): return "https://chatgpt.com/c/review-one"
-                def press_keys(self, *_args, **_kwargs): pass
+                def send_keys(self, *_args, **_kwargs): pass
+                def press_keys(self, *_args, **_kwargs): raise AssertionError("human-speed message typing is forbidden")
             real_cdp = ReloadingCdp()
             class SB:
                 def __init__(self, **_kwargs): self.cdp = real_cdp
@@ -2615,31 +2948,36 @@ class WakeBridgeTests(unittest.TestCase):
                 return selector == wake_bridge.EDITOR
             def get_current_url(self):
                 return "https://chatgpt.com/c/review-one"
-            def get_attribute(self, _selector, _name, timeout):
+            def get_attribute(self, _selector, _name):
                 return self.composer
             def get_text(self, _selector, timeout):
                 return self.composer
-            def press_keys(self, _selector, text, timeout):
+            def send_keys(self, _selector, text, timeout):
                 self.composer = text
+            def press_keys(self, *_args, **_kwargs):
+                raise AssertionError("human-speed message typing is forbidden")
             def evaluate(self, script):
+                # Emulate the input primitive; native editor CAS is exercised
+                # independently by the JavaScript DOM fixture tests.
+                if "document.execCommand('insertText'" in script:
+                    text, _ = json.JSONDecoder().raw_decode(script.rsplit("const text = ", 1)[1])
+                    self.send_keys(wake_bridge.EDITOR, text, timeout=1)
+                    return "INSERTED"
+                # Shared canonical body helpers contain composerText too.
+                # Identify the actual probe before its helper definitions.
+                if "const expected =" in script and "const selectorTiers =" in script:
+                    expected_text = wake_bridge.normalize_message(message)
+                    matches = sum(
+                        expected_text == wake_bridge.normalize_message(item)
+                        for item in self.messages
+                    )
+                    return ["ready", matches, 0]
+                if "const containers = trustedTurns()" in script:
+                    return list(self.messages)
+                if "const composerText = root" in script:
+                    return self.composer
                 if "#prompt-textarea" in script:
                     return ["ready", True]
-                if "const expected =" in script and "conversation-turn-" in script:
-                    expected_text = wake_bridge.normalize_message(message)
-                    matches = sum(
-                        expected_text in wake_bridge.normalize_message(item)
-                        for item in self.messages
-                    )
-                    return ["ready", matches, 0]
-                if "const expected =" in script and "conversation-turn-" in script:
-                    expected_text = wake_bridge.normalize_message(message)
-                    matches = sum(
-                        expected_text in wake_bridge.normalize_message(item)
-                        for item in self.messages
-                    )
-                    return ["ready", matches, 0]
-                if "data-message-author-role" in script:
-                    return list(self.messages)
                 if "const unique" in script:
                     return ["ready", "button#composer-submit-button"]
                 raise AssertionError("unexpected fixed CDP evaluation")
@@ -2658,6 +2996,8 @@ class WakeBridgeTests(unittest.TestCase):
         sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, 1)
         with patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=SB)}), patch.object(
             sink, "wait_for_submission_accepted", return_value=99.0
+        ), patch.object(
+            sink, "wait_for_persisted_response", return_value=None
         ), patch.object(
             sink, "wait_for_response_completion", return_value=None
         ), patch.object(
@@ -2705,21 +3045,30 @@ class WakeBridgeTests(unittest.TestCase):
             def __init__(self):
                 self.composer = ""
                 self.messages = ["prior message"]
-                self.keys = []
+                self.fast_keys = []
+                self.enter_keys = []
             def is_element_visible(self, selector): return selector == wake_bridge.EDITOR
             def get_current_url(self): return "https://chatgpt.com/c/review-one"
             def get_attribute(self, _selector, _name, timeout): return self.composer
             def get_text(self, _selector, timeout): return self.composer
+            def send_keys(self, selector, text, timeout):
+                self.fast_keys.append((selector, text, timeout))
+                self.composer = text
             def press_keys(self, selector, text, timeout):
-                self.keys.append((selector, text, timeout))
-                if text == "\n":
-                    self.composer = ""
-                    self.messages.append(message)
-                else:
-                    self.composer = text
+                if text != "\n": raise AssertionError("human-speed message typing is forbidden")
+                self.enter_keys.append((selector, text, timeout))
+                self.composer = ""
+                self.messages.append(message)
             def evaluate(self, script):
+                # Emulate the input primitive; native editor CAS is exercised
+                # independently by the JavaScript DOM fixture tests.
+                if "document.execCommand('insertText'" in script:
+                    text, _ = json.JSONDecoder().raw_decode(script.rsplit("const text = ", 1)[1])
+                    self.send_keys(wake_bridge.EDITOR, text, timeout=1)
+                    return "INSERTED"
+                if "return composerText(visible[0])" in script: return getattr(self, "composer", "")
                 if "#prompt-textarea" in script: return ["ready", True]
-                if "const selectorTiers" in script:
+                if "const expected =" in script and "const selectorTiers" in script:
                     return ["ready", int(message in self.messages), 0]
                 if "data-message-author-role" in script: return list(self.messages)
                 if "const unique" in script: return ["missing", None]
@@ -2738,6 +3087,8 @@ class WakeBridgeTests(unittest.TestCase):
         ), patch.object(
             sink, "durable_receipt_round_trip", return_value=None
         ), patch.object(
+            sink, "wait_for_persisted_response", return_value=None
+        ), patch.object(
             sink, "wait_for_response_completion", return_value=None
         ), patch.object(
             sink, "confirm_exact_receipt",
@@ -2745,7 +3096,8 @@ class WakeBridgeTests(unittest.TestCase):
         ):
             receipt = sink.wake(self.record_id, message, lambda: True, lambda: events.append("boundary"))
         self.assertEqual(["boundary"], events)
-        self.assertEqual([(wake_bridge.EDITOR, message, 1), (wake_bridge.EDITOR, "\n", 1)], cdp.keys)
+        self.assertEqual([(wake_bridge.EDITOR, message, 1)], cdp.fast_keys)
+        self.assertEqual([(wake_bridge.EDITOR, "\n", 1)], cdp.enter_keys)
         self.assertEqual(wake_bridge.digest(wake_bridge.normalize_message(message)), receipt.message_sha256)
 
     def test_bridge_send_selector_parity_with_proven_smoke_paths(self):

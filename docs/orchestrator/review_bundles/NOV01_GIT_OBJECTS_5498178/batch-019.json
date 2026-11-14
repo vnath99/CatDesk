@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "purpose": "PARTIAL_SOURCE_REVIEW_ONLY_NOT_RELEASE_AUTHORITY",
+  "batchId": "b019",
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "sourceCommit": "549817859c94f56a7696f998848d8ace429b1663",
+  "patchBytes": 54695,
+  "sourcePaths": [
+    "tests/test_wake_readiness_probe.py",
+    "wake/adapter.py",
+    "wake/src/bin/CatDeskWakeProfileProbe.rs",
+    "wake/src/development_login_recovery.rs"
+  ],
+  "units": [
+    {
+      "unitId": "u092",
+      "path": "tests/test_wake_readiness_probe.py",
+      "skipLines": 0,
+      "takeLines": 334,
+      "bytes": 19992,
+      "sha256": "06797eb356e98990169e277b47b7caa6fd0b930ab3a76a54d6fec02bbe995096",
+      "baseBlob": null,
+      "targetBlob": "4be25881565108803062140f2f909fa57ca436fc"
+    },
+    {
+      "unitId": "u093",
+      "path": "tests/test_wake_readiness_probe.py",
+      "skipLines": 334,
+      "takeLines": 151,
+      "bytes": 8881,
+      "sha256": "ac33c4a2c5f7d515c93e8cd997dab4b1949f9fe25c15b6ba249e7279492aa91a",
+      "baseBlob": null,
+      "targetBlob": "4be25881565108803062140f2f909fa57ca436fc"
+    },
+    {
+      "unitId": "u094",
+      "path": "wake/adapter.py",
+      "skipLines": 0,
+      "takeLines": 198,
+      "bytes": 11809,
+      "sha256": "2025f122244d823e5708c1fb9ff2c9cce6476c186b93468b597111367fc3e812",
+      "baseBlob": "348d5085292eae2bcd0104edd292e32c487f63e6",
+      "targetBlob": "a2f6b2852fcdd5ba7582e3f4b254376596fb423d"
+    },
+    {
+      "unitId": "u095",
+      "path": "wake/src/bin/CatDeskWakeProfileProbe.rs",
+      "skipLines": 0,
+      "takeLines": 188,
+      "bytes": 6961,
+      "sha256": "e2e563f1aa6beea755e2d89ecefbb6887221df548aaedfd7bcf2b965ef32d121",
+      "baseBlob": "1388796b803ff241e37ba6cad078c21d046fda08",
+      "targetBlob": "e66c442a4735017c4960cad8d4658105d779acb4"
+    },
+    {
+      "unitId": "u096",
+      "path": "wake/src/development_login_recovery.rs",
+      "skipLines": 0,
+      "takeLines": 171,
+      "bytes": 7052,
+      "sha256": "bb29c52fe58f60ddf69866f89ec8e0d5c90cc5c96b8e271adb1276a9fe45187e",
+      "baseBlob": null,
+      "targetBlob": "e159f49fc232e7ab1f2c04e9c897052a07121e0b"
+    }
+  ],
+  "cumulativeSourceAccepted": false,
+  "requiredReplyMarker": "NOV01_GIT_SOURCE_BATCH_ONLY",
+  "requiredReplyFields": [
+    "marker",
+    "sourceCommit",
+    "batchId",
+    "verdict",
+    "findings",
+    "inspectedUnitIds",
+    "inspectedPaths",
+    "limitations",
+    "cumulativeSourceAccepted"
+  ],
+  "permittedVerdicts": [
+    "REVIEWED_BATCH",
+    "FAIL",
+    "INCONCLUSIVE"
+  ]
+}

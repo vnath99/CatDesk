@@ -1,0 +1,65 @@
+{
+  "observedUtc": "2026-11-02T07:04:48.052777+00:00",
+  "classification": "READ_ONLY_SOURCE_INVESTIGATION_AND_PRIVATE_CONTEXT_PREPARATION_NOT_INSTALLED_ACCEPTANCE",
+  "sourceCommit": "6544f6b20aff7eb8ca13f58bd212b5ea6e5d3234",
+  "reviewTargetCommit": "c52e9ef75490381becabaaf027f98f2845f1a183",
+  "wakePublication": {
+    "installerRefusesAllNonBuildOnlyInvocations": true,
+    "refusalBeforeBuildOrStage": true,
+    "brokerServiceImplementationDeliberatelyNonMutating": true,
+    "brokerBinaryHasNoProvisioningMode": true,
+    "operatorProvisioningAloneWouldResolve": false,
+    "classification": "SOURCE_PUBLICATION_INTEGRATION_REQUIRED",
+    "productionOrServiceActions": 0,
+    "nextTask": "Finish genuine source review, then implement/qualify the existing reviewed Wake publication or reviewed migration path. Do not remove holds or request service installation as if it alone solved publication."
+  },
+  "timingInvestigation": {
+    "failedTest": "handoff_target_config_writer_contention_preserves_code_and_recovers_without_actions",
+    "originalExpandedResult": {
+      "passed": 164,
+      "failed": 1,
+      "ignored": 1
+    },
+    "failedAssertion": "Aggregate elapsed time for two diagnosed reads below five seconds.",
+    "bothExpectedBusyCodesCheckedBeforeAssertion": true,
+    "isolatedRetestSeconds": 4.93,
+    "isolatedRetestPassed": true,
+    "testBodyByteIdenticalToAcceptedBaseline": true,
+    "unchangedDependencyGitBlobs": {
+      "src/mcp.rs": {
+        "313f6a31f13c04c90d6098fad57f1e6a6c99cfd7": "495f67951806e23f86fc82a6fcb53d53f6c74f11",
+        "c52e9ef75490381becabaaf027f98f2845f1a183": "495f67951806e23f86fc82a6fcb53d53f6c74f11",
+        "6544f6b20aff7eb8ca13f58bd212b5ea6e5d3234": "495f67951806e23f86fc82a6fcb53d53f6c74f11"
+      },
+      "wake/src/store.rs": {
+        "313f6a31f13c04c90d6098fad57f1e6a6c99cfd7": "a4efac11a50312b636b4faa8f247d7a09c211e38",
+        "c52e9ef75490381becabaaf027f98f2845f1a183": "a4efac11a50312b636b4faa8f247d7a09c211e38",
+        "6544f6b20aff7eb8ca13f58bd212b5ea6e5d3234": "a4efac11a50312b636b4faa8f247d7a09c211e38"
+      }
+    },
+    "wakeConfigReadUsesImmediateSharedTryLock": true,
+    "sourceObservation": "The diagnosed target-read path holds its root coordination mutex across registered-scope preparation; the status-read path performs preparation before that mutex. This is a candidate liveness investigation, not established as the observed failure cause.",
+    "soleCauseEstablished": false,
+    "expandedFailureReclassifiedAsPass": false,
+    "testDeadlineChanged": false,
+    "newTestExecutionClaimed": false
+  },
+  "nativeAcceptancePreparation": {
+    "oneExistingRegisteredIsolatedWorktreeClean": true,
+    "alreadyBoundNativeThreadPreserved": true,
+    "stillNoChatgptBinding": true,
+    "contextOnlyInputPrepared": true,
+    "compactContextUtf8Bytes": 2733,
+    "currentReservationRevalidationRequiredBeforeEdit": true,
+    "noExecutionKeyOrNativeGrantIssued": true,
+    "productCommands": 0,
+    "browserStarts": 0,
+    "messagesSent": 0,
+    "registrationsRepeated": 0,
+    "nativeTasksStarted": 0,
+    "preparationIdentityCorrection": "Initial lexical workspace comparison refused before output/product commands. Native same-file identity proved the recorded verbatim and ordinary path spellings refer to the same directory; corrected preparation preserved all state."
+  },
+  "operatorActionRequiredForCurrentSourceReview": false,
+  "publicationOperatorCommandQualified": false,
+  "goalComplete": false
+}

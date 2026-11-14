@@ -1,0 +1,87 @@
++        @('UPSTREAM_CONTROL_PLANE','EXTERNAL_SERVICE','OFFICIAL_OWNER_POLL_OBSERVATION','WAIT_FOR_CHANGED_UPSTREAM_EVIDENCE',@('UPSTREAM_NOT_PROBED','UPSTREAM_RATE_OR_CONNECTOR_UNAVAILABLE','UPSTREAM_READY','UPSTREAM_UNAVAILABLE')),
++        @('CONNECTOR','CHATGPT_CONNECTOR','CONNECTOR_RESPONSE_OBSERVATION','WAIT_FOR_CHANGED_CONNECTOR_EVIDENCE',@('CONNECTOR_NOT_PROBED','UPSTREAM_RATE_OR_CONNECTOR_UNAVAILABLE','CONNECTOR_TRANSPORT_NO_HTTP_STATUS','CONNECTOR_RESPONSE_VERIFIED')),
++        @('BROWSER','EXISTING_BROWSER_OWNER','APPROVED_PROFILE_READINESS_OBSERVATION','operator web-dev-runtime inspect-readiness --project-id <registered-project>',@('BROWSER_NOT_INSPECTED','HOME_EDITOR_MISSING','BROWSER_DRAFT_UNKNOWN','BROWSER_TARGET_MISSING','BROWSER_EXACT_READY','BROWSER_RESPONSE_LOAD_ERROR','BROWSER_AUTH_REQUIRED','BROWSER_OWNER_CLEANUP_UNVERIFIED')),
++        @('PROJECT_REGISTRY','PROJECT_REGISTRY','.catdesk/projects/projects.json','operator web projects',@('REGISTRY_METADATA_PAIRED','PROJECT_WAKE_TARGET_MISMATCH','REGISTRY_UNAVAILABLE','REGISTRY_INVALID','WAKE_CONFIG_INVALID')),
++        @('WAKE_QUEUE','EXISTING_WAKE_OWNER','WAKE_CONFIG_CONTROL_AND_DELIVERIES','operator web projects',@('WAKE_METADATA_OBSERVED','WAKE_METADATA_UNAVAILABLE','WAKE_METADATA_PARTIAL','WAKE_UNKNOWN_OUTCOME')),
++        @('CODEX_CLI','CURRENT_USER_CODEX','TRUSTED_CODEX_COMMAND_DISCOVERY','operator codex diagnose --project-id <registered-project>',@('CODEX_PRESENT_AUTH_UNVERIFIED','CODEX_CLI_UNAVAILABLE')),
++        @('NATIVE_SESSION','EXISTING_NATIVE_PROJECT_OWNER','PROJECT_OWNER_LEASE_OBSERVATION','operator codex diagnose --project-id <registered-project>',@('WORKER_OWNER_NOT_PROBED','WORKER_GONE','WORKER_OWNER_VERIFIED')),
++        @('LOCAL_PROVIDER','LOCAL_MODEL_OWNER','LOCAL_OLLAMA_EXECUTABLE_DISCOVERY','RUN_BOUNDED_LOCAL_PROVIDER_STATUS',@('LOCAL_PROVIDER_NOT_PROBED','LOCAL_PROVIDER_UNAVAILABLE','LOCAL_PROVIDER_READY')),
++        @('OBSERVATIONS','CALLER','IMPORTED_ADVISORY_DOCUMENT','SUPPLY_VALID_REDACTED_OBSERVATIONS',@('OBSERVATIONS_NOT_SUPPLIED','OBSERVATIONS_IMPORTED_ADVISORY','OBSERVATIONS_INVALID'))
++    )
++}
++
++function Invoke-CatDeskDoctor([string]$ObservationFile = '', [string]$ProjectWorkspace = '', [string]$WakeRoot = '', [switch]$Human) {
++    if (-not $ProjectWorkspace) { $ProjectWorkspace = $Workspace }
++    if (-not $WakeRoot) { $WakeRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'CatDeskWake' }
++    foreach($localPath in @($Workspace,$ProjectWorkspace,$WakeRoot,$ConfigPath,$BuildFingerprintPath)){Assert-DoctorLocalPath $localPath}
++    $observedUtc = [DateTimeOffset]::UtcNow.ToString('o')
++    $definitions = Get-DoctorDefinitions
++    $layers = [ordered]@{}
++    foreach ($definition in $definitions) {
++        $layers[$definition[0]] = [pscustomobject][ordered]@{
++            layer=$definition[0]; status='NOT_RUN'; code=$definition[4][0]; observedUtc=$observedUtc;
++            provenance='NOT_RUN'; owner=$definition[1]; evidenceRef=$definition[2]; nextDiagnostic=$definition[3]; facts=[ordered]@{}; retained=@()
++        }
++    }
++    function Set-DoctorLayer([string]$Id,[string]$State,[string]$Code,$Facts = $null) {
++        $definition = @($definitions | Where-Object { $_[0] -ceq $Id })[0]
++        if ($State -cnotin @('PASS','FAIL','UNVERIFIED','NOT_RUN') -or $Code -cnotin $definition[4]) { throw 'DOCTOR_CODE_INVALID' }
++        $layers[$Id].status=$State; $layers[$Id].code=$Code
++        $layers[$Id].provenance=if($State -ceq 'NOT_RUN'){'NOT_RUN'}else{'CURRENT_PASSIVE_METADATA'}
++        if ($null -ne $Facts) { $layers[$Id].facts=$Facts }
++    }
++    Set-DoctorLayer 'PROCESS_OWNER' 'UNVERIFIED' 'OWNER_NOT_QUALIFIED'
++    Set-DoctorLayer 'LOCAL_HEALTH' 'NOT_RUN' 'LOCAL_HEALTH_NOT_PROBED'
++    Set-DoctorLayer 'LOCAL_MCP' 'NOT_RUN' 'LOCAL_MCP_NOT_PROBED'
++    Set-DoctorLayer 'UPSTREAM_CONTROL_PLANE' 'NOT_RUN' 'UPSTREAM_NOT_PROBED'
++    Set-DoctorLayer 'CONNECTOR' 'NOT_RUN' 'CONNECTOR_NOT_PROBED'
++    Set-DoctorLayer 'BROWSER' 'NOT_RUN' 'BROWSER_NOT_INSPECTED'
++    Set-DoctorLayer 'NATIVE_SESSION' 'NOT_RUN' 'WORKER_OWNER_NOT_PROBED'
++    $identity=$null;$local=$null
++    try {
++        $identity=Get-LifecycleCanonicalIdentity
++        if ((Get-DoctorProperty $identity 'Path') -isnot [string] -or (Get-DoctorProperty $identity 'Sha256') -cnotmatch '\A[a-fA-F0-9]{64}\z') { throw 'CATDESK_CANONICAL_IDENTITY_INTERNAL' }
++        Set-DoctorLayer 'RELEASE_PAIR' 'PASS' 'RELEASE_PAIR_VERIFIED'
++    }
++    catch { $identity=$null; Set-DoctorLayer 'RELEASE_PAIR' 'FAIL' (Get-LifecycleCanonicalFailureGate $_.Exception.Message) }
++    try {
++        $authority=Invoke-LifecycleSeam -Name 'DoctorAuthority' -Arguments @($Workspace,$ExpectedBuildSha256) -Default {param($root,$hash) Get-CanonicalReleaseRecoveryAssessment -Root $root -ExpectedHash $hash}
++        $code=[string](Get-DoctorProperty $authority 'State')
++        if($code -ceq 'RECOVERY_READY'){Set-DoctorLayer 'RECOVERY_AUTHORITY' 'PASS' 'RECOVERY_AUTHORITY_AVAILABLE'}
++        elseif($code -cin @('LKG_AUTHORITY_MISSING','LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED','RECOVERY_RELEASE_AUTHORITY_REQUIRED')){Set-DoctorLayer 'RECOVERY_AUTHORITY' 'FAIL' $code}
++        else{Set-DoctorLayer 'RECOVERY_AUTHORITY' 'UNVERIFIED' 'RECOVERY_AUTHORITY_UNVERIFIED'}
++    } catch { Set-DoctorLayer 'RECOVERY_AUTHORITY' 'UNVERIFIED' 'RECOVERY_AUTHORITY_UNVERIFIED' }
++    try { $local=Get-LifecycleLocalMcp; Set-DoctorLayer 'LOCAL_CONFIG' 'PASS' 'LOCAL_CONFIG_READABLE' }
++    catch { Set-DoctorLayer 'LOCAL_CONFIG' 'FAIL' 'LOCAL_CONFIG_UNAVAILABLE' }
++    if($identity -and $local){
++        try {
++            $listener=Get-LifecycleListener -LocalMcp $local -Canonical $identity
++            if($null -eq $listener){Set-DoctorLayer 'LOCAL_DAEMON' 'FAIL' 'LOCAL_MCP_LISTENER_MISSING'}
++            elseif((Get-DoctorProperty $listener 'MatchesCanonical') -is [bool] -and (Get-DoctorProperty $listener 'MatchesCanonical')){Set-DoctorLayer 'LOCAL_DAEMON' 'PASS' 'CANONICAL_LISTENER_PRESENT'}
++            else{Set-DoctorLayer 'LOCAL_DAEMON' 'FAIL' 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH'}
++        }catch{Set-DoctorLayer 'LOCAL_DAEMON' 'UNVERIFIED' 'LOCAL_OWNER_UNVERIFIED'}
++    }else{Set-DoctorLayer 'LOCAL_DAEMON' 'NOT_RUN' 'LOCAL_OWNER_UNVERIFIED'}
++    try {
++        $client=Invoke-LifecycleSeam -Name 'DoctorRuntimeClient' -Arguments @() -Default {Find-TunnelClient -ExplicitPath ''}
++        if($client){Set-DoctorLayer 'OFFICIAL_RUNTIME' 'UNVERIFIED' 'RUNTIME_OWNER_UNVERIFIED'}
++        else{Set-DoctorLayer 'OFFICIAL_RUNTIME' 'FAIL' 'RUNTIME_CLIENT_UNAVAILABLE'}
++    }catch{Set-DoctorLayer 'OFFICIAL_RUNTIME' 'UNVERIFIED' 'RUNTIME_OWNER_UNVERIFIED'}
++    try{
++        $registry=Read-DoctorJson (Join-Path $ProjectWorkspace '.catdesk/projects/projects.json')
++        $version=Get-DoctorProperty $registry 'schemaVersion'
++        if(($version -isnot [int] -and $version -isnot [long]) -or $version -notin @(1,2)){throw 'REGISTRY_INVALID'}
++        if(-not $registry.PSObject.Properties['projects'] -or $registry.projects -isnot [array]){throw 'REGISTRY_INVALID'}
++        $projects=$registry.projects;$seen=@{};$web=0;$paired=0;$native=0
++        $wake=$null;$invalidWake=$false
++        try{
++            $wake=Read-DoctorJson (Join-Path $WakeRoot 'config.json');$wakeVersion=Get-DoctorProperty $wake 'schemaVersion'
++            $retired=Get-DoctorProperty $wake 'retiredTargets';$retiredCount=0
++            if($null -ne $retired){
++                if($retired -isnot [pscustomobject]){throw 'WAKE_CONFIG_INVALID'}
++                $retiredCount=@($retired.PSObject.Properties).Count
++            }
++            if(($wakeVersion -isnot [int] -and $wakeVersion -isnot [long]) -or $wakeVersion -notin @(1,2) -or
++                ($wakeVersion -eq 1 -and $retiredCount -ne 0) -or ($wakeVersion -eq 2 -and $retiredCount -eq 0) -or $retiredCount -gt 256){$wake=$null;$invalidWake=$true}
++        }catch{if($_.Exception.Message -ceq 'WAKE_CONFIG_INVALID'){$wake=$null;$invalidWake=$true}}
++        foreach($project in $projects){
++            $id=Get-DoctorProperty $project 'projectId'

@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-04T05:18:53Z",
+  "classification": "TESTED_SOURCE",
+  "baseCommit": "360e2ae64b0b503b2ef5fb7ea05cb45ab6a52089",
+  "baseReviewedBuildRawSha256": "88cce0c85e75399b0e4f6796a0c7b8756431aa58403bbc0bb357a98fc45b0143",
+  "hooksRawSha256": "1d16d4c5646852d22f3cc39475600e1264e46ad4b4177f4f10be8d4ec707767e",
+  "moduleRawSha256": "e380c9fa7f8e5efdb6216b1fe839e7dd3304674f335c3accc8ecfec7a65e3fcf",
+  "recordSchemaVersion": 1,
+  "maximumRecordBytes": 16384,
+  "scope": "Only the three existing manual ignored Windows diagnostic runners; all new helpers are cfg(test,windows).",
+  "recordNames": [
+    "diagnostic-storage-start.json",
+    "diagnostic-storage-outcome.json"
+  ],
+  "guards": [
+    "retained no-follow workspace/root handles and strong identities",
+    "bounded create-new synchronized writes",
+    "START before source/cache materialization",
+    "raw START hash and root/source/attempt binding",
+    "explicit tool/policy/snapshot/lock whitelist",
+    "no arbitrary error/environment/session/token/path serialization",
+    "original body Result and stdout preserved",
+    "fixed relative-root stderr discovery hint",
+    "missing/invalid outcome is UNKNOWN/HOLD",
+    "no age or PID-based cleanup authority"
+  ],
+  "testsEnabledTypecheck": {
+    "command": "cargo check --offline --locked --tests --bin catdesk -j1",
+    "exitCode": 0,
+    "elapsedSeconds": 49.0858725,
+    "scope": "Earlier prepared module, before subsequent fixture-export and stderr-handoff additions; not relabeled as final-source proof."
+  },
+  "initialFocusedAttempt": {
+    "exitCode": 101,
+    "testExecutions": 0,
+    "reason": "Late synthetic export markers were placed in the wrong test scope; corrected placement without weakening assertions."
+  },
+  "finalFocusedTests": {
+    "command": "cargo test --offline --locked --bin catdesk diagnostic_storage::tests:: -j1 -- --test-threads=1 --nocapture",
+    "passed": 12,
+    "failed": 0,
+    "ignored": 0,
+    "exitCode": 0,
+    "elapsedSeconds": 116.289852,
+    "timedOut": false,
+    "terminationFailed": false,
+    "preservationPinMismatches": 0,
+    "compilerProcessesRemaining": 0
+  },
+  "coverage": [
+    "exact serialized-size boundary",
+    "create-new collision refusal before work",
+    "root/source/attempt/lock binding",
+    "tool identity grammar",
+    "secret exclusion",
+    "actual raw START hash",
+    "known function return versus compiler exit",
+    "fixed versus active Job/EOF observation",
+    "original Result under failed outcome recording",
+    "immutable outcome collision",
+    "unknown EOF",
+    "changed physical identity",
+    "panic/missing outcome",
+    "hooks only in real runners before materialization",
+    "relative-root discovery hint format/privacy"
+  ],
+  "priorDeveloperTestArtifacts": "Exact prior EXE/PDB bytes and original identities preserved in two independent create-new local audit copies before ordinary test linking; original historical build commit remains UNKNOWN. No protected release artifact was replaced.",
+  "syntheticReaderHandoff": "Actual START/OUTCOME bytes extracted and hash/binding checked from one synthetic test fixture; private local evidence only. Original temporary fixture root was removed by the test.",
+  "containment": "Existing ordinary finite-deadline helper; disclosed start-before-Job-assignment limitation retained, no atomic containment claim.",
+  "realIgnoredDiagnosticsExecuted": 0,
+  "productionChanges": 0,
+  "cleanupAuthorized": false,
+  "retentionDisposition": "HOLD_OWNER_REVIEW",
+  "liveDiagnosticIngestionAcceptance": "UNVERIFIED",
+  "goalResumed": false,
+  "outsideRunnerAndModuleDeclarationLfSourceUnchanged": true
+}

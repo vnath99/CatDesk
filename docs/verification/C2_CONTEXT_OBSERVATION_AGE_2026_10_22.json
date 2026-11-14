@@ -1,0 +1,102 @@
+{
+  "recordedUtc": "2026-10-22T22:41:45.4267112Z",
+  "task": "C2-CONTEXT-OBSERVATION-AGE",
+  "owner": "Existing CatDesk development conversation",
+  "branch": "codex/web-rollover-oct17",
+  "baseHead": "48b1c2e9200165607f939499c9f4141506bdb544",
+  "sourceFiles": [
+    {
+      "path": "src/binagotchy_cli.rs",
+      "sha256": "8e05fa6157b8807cc50d3bd08afa9ceba76730e0bbce40f60080a936f0418679"
+    }
+  ],
+  "classification": "SOURCE_TESTED_LOCAL",
+  "behavior": [
+    "Independent age of last saved browser observation for exact paired context",
+    "Missing, zero, future, invalid or unavailable-clock observations remain UNKNOWN",
+    "Generation mismatch suppresses old context and age",
+    "Advisory coverage and saved-not-monitoring boundaries remain explicit"
+  ],
+  "checks": [
+    {
+      "label": "console-regressions",
+      "startedUtc": "2026-10-22T22:39:46.5155399Z",
+      "finishedUtc": "2026-10-22T22:40:44.4830821Z",
+      "arguments": [
+        "test",
+        "--locked",
+        "--offline",
+        "--bin",
+        "catdesk",
+        "binagotchy_cli::tests",
+        "--",
+        "--test-threads=1"
+      ],
+      "exitCode": 0,
+      "logSha256": "1414bb46ab538d8725658548a94bc4c97be2e8db5f63c9c72c48ad3cabd45cfe"
+    },
+    {
+      "label": "strict-clippy",
+      "startedUtc": "2026-10-22T22:40:44.5279734Z",
+      "finishedUtc": "2026-10-22T22:41:05.0461666Z",
+      "arguments": [
+        "clippy",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exitCode": 0,
+      "logSha256": "954134f9f198acf1bf022de10adfb09f6b307630ccdb66a847e9c7e699aa15f5"
+    },
+    {
+      "label": "format-check",
+      "startedUtc": "2026-10-22T22:41:05.0554006Z",
+      "finishedUtc": "2026-10-22T22:41:07.6232694Z",
+      "arguments": [
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exitCode": 0,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "consoleTestsPassed": 22,
+  "containment": {
+    "maximumSeconds": 600,
+    "exitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false
+  },
+  "selectedPackageQualification": "PASS_STOPPED_UNPROTECTED_NORMAL_RELEASE_VIEW_ONLY",
+  "selectedPriorRuntime": "PRESERVED_QUALIFIED_NO_WEB_AUTO",
+  "browserActions": 0,
+  "eventsPublished": 0,
+  "nativeWriterActions": 0,
+  "runtimeStateChanges": 0,
+  "packageSelectionChanged": false,
+  "productionModified": false,
+  "externalConnector": "HTTP429 separate verification dependency; no new attempt",
+  "completedCanaryReplayed": false,
+  "overallAcceptance": "PARTIAL",
+  "nextExecutableTask": "Prepare a source-bound natural review candidate using existing routing and exact target checks; do not enqueue, start Wake or resend completed events under current stop instruction",
+  "operatorActionRequired": false,
+  "publication": {
+    "observedUtc": "2026-10-22T22:42:11.8521275Z",
+    "status": "PUSHED_EXACT_REMOTE_MATCH",
+    "sourceCommit": "9a0047644cd103afe1b1b678e445d53e5ebe8cfd",
+    "remoteSha": "9a0047644cd103afe1b1b678e445d53e5ebe8cfd",
+    "branch": "codex/web-rollover-oct17",
+    "remote": "https://github.com/vnath99/CatDesk",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED",
+    "force": false,
+    "visibilityChange": false
+  },
+  "runtimeQualificationReceipt": "C2_CONTEXT_AGE_RELEASE_2026_10_22.json"
+}

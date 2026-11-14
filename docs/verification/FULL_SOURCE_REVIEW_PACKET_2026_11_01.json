@@ -1,0 +1,255 @@
+{
+ "date": "2026-11-01",
+ "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+ "trustedReviewedBase": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+ "classification": "FULL_SCOPE_CURRENT_SOURCE_REVIEW_INPUTS_NOT_ACCEPTANCE",
+ "fullDeclaredCodePaths": 84,
+ "scopeNarrowed": false,
+ "allCodePaths": [
+  "catdesk.ps1",
+  "scripts/catdesk-autostart-supervisor.ps1",
+  "scripts/catdesk-doctor.ps1",
+  "scripts/promote-reviewed-catdesk-build.ps1",
+  "scripts/setup-secure-mcp.ps1",
+  "scripts/start-catdesk-stack.ps1",
+  "scripts/test-backend-only-native-capability.ps1",
+  "scripts/test-catdesk-autostart-supervisor.ps1",
+  "scripts/test-catdesk-doctor.ps1",
+  "scripts/test-catdesk-lifecycle.ps1",
+  "scripts/test-catdesk-production-acceptance.ps1",
+  "scripts/test-local-mcp-readiness-strict.ps1",
+  "scripts/test-local-mcp-user-bearer.ps1",
+  "scripts/test-promotion-handoff-script-status.ps1",
+  "scripts/test-release-worker-command-line.ps1",
+  "scripts/test-secure-mcp-bearer-forwarding.ps1",
+  "scripts/test-start-catdesk-stack.ps1",
+  "scripts/wake_bridge.py",
+  "scripts/wake_profile_quiescence.py",
+  "scripts/wake_readiness_visual_probe.py",
+  "src/command.rs",
+  "src/daemon_reload.rs",
+  "src/delegated/autonomy_projects.rs",
+  "src/delegated/autonomy_runtime.rs",
+  "src/delegated/autonomy_supervisor.rs",
+  "src/delegated/codex_app_server.rs",
+  "src/main.rs",
+  "src/mcp.rs",
+  "src/operator_codex_cli.rs",
+  "src/operator_codex_cli/queue.rs",
+  "src/operator_codex_cli/queue/native_continuation.rs",
+  "src/operator_codex_cli/queue/native_dispatch.rs",
+  "src/operator_codex_cli/queue/owned_native.rs",
+  "src/operator_development_backend.rs",
+  "src/operator_development_project.rs",
+  "src/operator_facade.rs",
+  "src/operator_installed_backend.rs",
+  "src/operator_installed_project.rs",
+  "src/operator_web_auto.rs",
+  "src/operator_web_cli.rs",
+  "src/operator_web_initialization.rs",
+  "src/operator_web_observe.rs",
+  "src/operator_web_quarantine.rs",
+  "src/operator_web_receipts.rs",
+  "src/operator_web_rollover.rs",
+  "src/project_mcp.rs",
+  "src/project_mcp_task.rs",
+  "src/project_task_context.rs",
+  "src/promotion_retirement.rs",
+  "src/promotion_source_bridge.rs",
+  "src/reviewed_build.rs",
+  "src/reviewed_candidate_owner.rs",
+  "src/server.rs",
+  "src/wake_protocol_client.rs",
+  "src/web_context_user_receipts.rs",
+  "src/web_conversation_context.rs",
+  "src/web_review_work.rs",
+  "src/web_rollover_admission.rs",
+  "src/web_task_dispatch.rs",
+  "src/web_work.rs",
+  "src/windows_protected_fs.rs",
+  "src/windows_supervisor_startup.rs",
+  "tests/test_wake_bridge.py",
+  "tests/test_wake_bridge_current_dom.py",
+  "tests/test_wake_profile_quiescence.py",
+  "tests/test_wake_readiness_probe.py",
+  "wake/adapter.py",
+  "wake/src/bin/CatDeskWakeProfileProbe.rs",
+  "wake/src/development_login_recovery.rs",
+  "wake/src/development_runtime.rs",
+  "wake/src/lib.rs",
+  "wake/src/protocol.rs",
+  "wake/src/readiness_probe.rs",
+  "wake/src/runtime.rs",
+  "wake/src/runtime_reobserve.rs",
+  "wake/src/runtime_response.rs",
+  "wake/src/runtime_scheduler.rs",
+  "wake/src/runtime_scoped_review.rs",
+  "wake/src/runtime_snapshot.rs",
+  "wake/src/runtime_task_context.rs",
+  "wake/src/store.rs",
+  "wake/tests/protocol_store.rs",
+  "wake/tests/test_adapter.py",
+  "wake/tests/test_new_conversation.py"
+ ],
+ "referenceCounts": {
+  "CURRENT_BLOB_REFERENCED_PARTIAL_OR_INCONCLUSIVE": 56,
+  "NO_INSPECTION_REFERENCE": 12,
+  "OLDER_CHANGED_BLOB_REFERENCED": 16
+ },
+ "referenceMeaning": "A source-blob match preserves only the specific bounded inspection. It does not assert full-file review, independent tests, accepted source, absence of defects or installed acceptance.",
+ "coverageReference": "docs/verification/CURRENT_SOURCE_REVIEW_COVERAGE_2026_11_01.json",
+ "reviewObjective": "Assess exact source suitability for the existing guarded reviewed-build and qualification procedures. Source approval is distinct from installed production health, deployment authority and MVP acceptance. Keep all 84 changed source/test paths declared; do not infer full-file acceptance from old partial references.",
+ "reviewCriteria": [
+  "Identify concrete defects in caller/project/workspace identity, task and process ownership, lease/CAS, no-replay and crash recovery.",
+  "Assess the requested source scope using actual code, preserved prior reports and qualified test evidence. Seek pinned dependency reads when materially needed; preserve unread/uncertain scope honestly.",
+  "Distinguish documented unsupported migrations and trust assumptions from established defects. No formal proof of every interleaving or malicious same-user filesystem mutation is claimed by existing policy.",
+  "Do not finalize an accepted artifact or advance ACK/snapshot/producer from partial or inconclusive evidence. An eventual genuine source decision cannot be represented as installed acceptance."
+ ],
+ "qualifiedLocalEvidence": [
+  {
+   "reference": "docs/verification/SOURCE_AUTHORED_ROLLOVER_2026_11_01.json",
+   "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+   "controllerHandoffTests": 57,
+   "wakeScopedTests": 18,
+   "rootAndWakeStrictClippyPassed": true,
+   "developmentPackageSha256": "f460a47d38788d41d2bef2e092550d7c7726561ac64fe94cb1deebc9d738dc2f",
+   "developmentOnly": true
+  },
+  {
+   "reference": "docs/verification/TRANSITIVE_REVIEW_REASSESSMENT_2026_11_01.json",
+   "responseRecoveryTestsPassed": 12,
+   "privateWrapperCountErrorReconciledWithoutTestReplay": true
+  },
+  {
+   "reference": "docs/verification/REVIEW_QUESTION_QUALIFICATION_2026_11_01.json",
+   "actualWindowsPowerShellHosts": 2,
+   "literalComponentTestsPassed": true,
+   "independentExecutionClaimed": false
+  },
+  {
+   "reference": "docs/verification/CORRECTED_RUNTIME_REVIEW_INPUTS_2026_11_01.json",
+   "olderNativeDispatcherFixtureCases": 27,
+   "qualification": "Retain exact older test source and scope limits; no blanket current-dependency or installed parity inferred."
+  }
+ ],
+ "priorReviewReferences": [
+  "docs/verification/CANONICAL_TURN_ANCHOR_2026_10_31.json",
+  "docs/verification/CURRENT_NATIVE_MANAGED_REVIEW_2026_11_01.json",
+  "docs/verification/NATIVE_DEPENDENCY_WEB_REVIEWS_2026_11_01.json",
+  "docs/verification/CORRECTED_RUNTIME_REVIEW_INPUTS_2026_11_01.json",
+  "docs/verification/CUMULATIVE_REVIEW_FOLLOWUP_2026_11_01.json",
+  "docs/verification/POST_ROLLOVER_SOURCE_REVIEWS_2026_11_01.json",
+  "docs/verification/TRANSITIVE_REVIEW_REASSESSMENT_2026_11_01.json"
+ ],
+ "initialSourceReads": [
+  {
+   "command": "git --no-optional-locks --no-pager diff e4a99a8b6913c3db689a216f4ae4e0a7f6fff612 6e97db1fdaaf91f9d6393997e930023a387f0403 -- scripts/test-catdesk-production-acceptance.ps1 scripts/test-local-mcp-user-bearer.ps1 src/command.rs src/operator_web_auto.rs",
+   "paths": [
+    "scripts/test-catdesk-production-acceptance.ps1",
+    "scripts/test-local-mcp-user-bearer.ps1",
+    "src/command.rs",
+    "src/operator_web_auto.rs"
+   ],
+   "scope": "EXACT_FULL_PATH_DIFF_FROM_TRUSTED_BASE",
+   "bytes": 12501,
+   "sha256": "6f5af06fb09677fca59285c1214b980f6a6b4732b2b5e229167f44bbeec90517"
+  },
+  {
+   "command": "git --no-optional-locks --no-pager diff e4a99a8b6913c3db689a216f4ae4e0a7f6fff612 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/operator_web_observe.rs src/web_conversation_context.rs src/web_rollover_admission.rs",
+   "paths": [
+    "src/operator_web_observe.rs",
+    "src/web_conversation_context.rs",
+    "src/web_rollover_admission.rs"
+   ],
+   "scope": "EXACT_FULL_PATH_DIFF_FROM_TRUSTED_BASE",
+   "bytes": 17136,
+   "sha256": "3ee5b480e213f48fde8997bf107cd10f7f18b75a2cd5ccc85376bf0863814ee0"
+  },
+  {
+   "command": "git --no-optional-locks --no-pager diff e4a99a8b6913c3db689a216f4ae4e0a7f6fff612 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/operator_development_backend.rs src/operator_development_project.rs",
+   "paths": [
+    "src/operator_development_backend.rs",
+    "src/operator_development_project.rs"
+   ],
+   "scope": "EXACT_FULL_PATH_DIFF_FROM_TRUSTED_BASE",
+   "bytes": 24226,
+   "sha256": "41d655823112b45d3a90030abf52225a3701e172e92ec115eb2fb90609aafb26"
+  },
+  {
+   "command": "git --no-optional-locks --no-pager diff e4a99a8b6913c3db689a216f4ae4e0a7f6fff612 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/operator_web_receipts.rs",
+   "paths": [
+    "src/operator_web_receipts.rs"
+   ],
+   "scope": "EXACT_FULL_PATH_DIFF_FROM_TRUSTED_BASE",
+   "bytes": 16209,
+   "sha256": "9db1eecd3d3c4c336df77ba91a7ce489a73cda4800f2056a486c645c9ce603f2"
+  },
+  {
+   "command": "git --no-optional-locks --no-pager diff e4a99a8b6913c3db689a216f4ae4e0a7f6fff612 6e97db1fdaaf91f9d6393997e930023a387f0403 -- wake/src/runtime_task_context.rs",
+   "paths": [
+    "wake/src/runtime_task_context.rs"
+   ],
+   "scope": "EXACT_FULL_PATH_DIFF_FROM_TRUSTED_BASE",
+   "bytes": 26934,
+   "sha256": "b9ed5b0d7a6fb697115a059b63b7f447a50fe1772189de31392c6067ded9dc45"
+  },
+  {
+   "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 1,200 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/project_task_context.rs",
+   "paths": [
+    "src/project_task_context.rs"
+   ],
+   "scope": "PINNED_SOURCE_LINES_1_200_REMAINDER_UNREAD",
+   "bytes": 9957,
+   "sha256": "f88862057e56964be235b509b8393c101310384d0a720f7a6576a1f3b6532f75"
+  },
+  {
+   "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 201,400 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/project_task_context.rs",
+   "paths": [
+    "src/project_task_context.rs"
+   ],
+   "scope": "PINNED_SOURCE_LINES_201_400_REMAINDER_UNREAD",
+   "bytes": 10542,
+   "sha256": "4f9a0d3845d7997e94d8ca78f95c7985d5734a5b759ca4c88df0f682946c1cc7"
+  },
+  {
+   "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 401,600 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/project_task_context.rs",
+   "paths": [
+    "src/project_task_context.rs"
+   ],
+   "scope": "PINNED_SOURCE_LINES_401_600_REMAINDER_UNREAD",
+   "bytes": 10397,
+   "sha256": "7003a639d0904866c3599a7e74c5347edb33c08845d0f1f2f6c6848d6379b6d0"
+  }
+ ],
+ "initialReadsTotalBytes": 127902,
+ "initialReadLimitMeaning": "First bounded checkpoint only, prioritizing 12 paths without recorded inspection. project_task_context.rs lines601-1370 and the 16 older-changed-blob paths still need appropriate assessment; full-file acceptance is not inferred.",
+ "contextBudget": {
+  "currentGeneration": 3,
+  "knownContentProxyBeforeThisReview": 27319,
+  "coverageKnown": false,
+  "providerExact": false,
+  "budgetTokens": 96000,
+  "headroomTokens": 24000,
+  "unknownSourceReserveTokens": 8000,
+  "maximumFreshOutputBytesThisCheckpoint": 150000,
+  "actionAtOutputBudget": "Return a durable review checkpoint with exact inspected paths/ranges, concrete findings and neededReads; do not claim unread acceptance. The coordinator will account for observed traffic and use supported project-specific handoff if due."
+ },
+ "servingReality": {
+  "trustedInstalledSource": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "installedImageSha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf",
+  "centralTaskToolAdvertisedLocally": true,
+  "nativeCodexOperationsAbsentFromInstalledDispatcher": true,
+  "legacySessionStartBoundToServingMcpWorkspace": true,
+  "sourceScopedNativeDispatcherRequiredForIntendedCentralRoute": true,
+  "separateCanonicalAndDevelopmentRegistryScopes": true,
+  "noWorkspaceOverrideOrTransportWorkaroundAuthorized": true
+ },
+ "remainingInstalledAcceptance": [
+  "Protected exact-source producer/attestation/promotion and matching installed fingerprint.",
+  "Authenticated two-Web project workspace edits and native verification, with cross-project and duplicate refusal.",
+  "Correct intended registry/Wake scope through qualified serving owner; no registry copies or native ownership changes.",
+  "Installed startup/restart, rollback and persistent supervisor recovery."
+ ],
+ "sourceAccepted": false,
+ "producerAuthority": false
+}

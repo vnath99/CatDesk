@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeSet,
     fs,
-    io::ErrorKind,
+    io::{ErrorKind, Read},
     path::{Component, Path},
 };
 
@@ -233,8 +233,12 @@ fn safe_file(workspace: &Path, path_relative: &str, max: u64) -> Result<Vec<u8>>
     if !metadata.file_type().is_file() || metadata.len() > max {
         return Err("WAKE_SOL_REVIEW_EVIDENCE_INVALID".into());
     }
-    let bytes = fs::read(path).map_err(|_| "WAKE_SOL_REVIEW_EVIDENCE_MISSING")?;
-    if bytes.len() as u64 != metadata.len() {
+    let file = fs::File::open(path).map_err(|_| "WAKE_SOL_REVIEW_EVIDENCE_MISSING")?;
+    let mut bytes = Vec::new();
+    file.take(max + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "WAKE_SOL_REVIEW_EVIDENCE_MISSING")?;
+    if bytes.len() as u64 > max || bytes.len() as u64 != metadata.len() {
         return Err("WAKE_SOL_REVIEW_EVIDENCE_CHANGED".into());
     }
     Ok(bytes)
@@ -550,6 +554,60 @@ fn object_exists(path: &Path) -> Result<bool> {
     }
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ReviewProjectRegistry {
+    schema_version: u32,
+    projects: Vec<ReviewProjectTarget>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ReviewProjectTarget {
+    #[serde(default)]
+    project_id: serde_json::Value,
+    #[serde(default)]
+    chatgpt_target_url: serde_json::Value,
+    #[serde(default)]
+    chatgpt_target_sha256: serde_json::Value,
+}
+
+/// Read only target metadata from the fixed control registry. Call again
+/// under Wake's queue lock before publishing, so a guarded pair update cannot
+/// interleave with the final registry/config comparison and event write.
+pub(crate) fn validate_registered_review_target(
+    workspace: &Path,
+    project_id: &str,
+    expected: &crate::protocol::Target,
+) -> Result<()> {
+    expected
+        .validate()
+        .map_err(|_| "REVIEW_PROJECT_TARGET_INVALID")?;
+    let registry: ReviewProjectRegistry =
+        read_json(workspace, ".catdesk/projects/projects.json", 1024 * 1024)
+            .map_err(|_| "REVIEW_PROJECT_REGISTRY_INVALID")?;
+    if registry.schema_version != 1 || registry.projects.len() > 1024 {
+        return Err("REVIEW_PROJECT_REGISTRY_INVALID".into());
+    }
+    let matches: Vec<_> = registry
+        .projects
+        .iter()
+        .filter(|project| project.project_id.as_str() == Some(project_id))
+        .collect();
+    if matches.is_empty() {
+        return Err("REVIEW_PROJECT_NOT_REGISTERED".into());
+    }
+    if matches.len() != 1 {
+        return Err("REVIEW_PROJECT_REGISTRATION_AMBIGUOUS".into());
+    }
+    if matches[0].chatgpt_target_url.as_str() != Some(expected.url.as_str())
+        || matches[0].chatgpt_target_sha256.as_str() != Some(expected.digest.as_str())
+    {
+        return Err("REVIEW_PROJECT_TARGET_MISMATCH".into());
+    }
+    Ok(())
+}
+
 /// A missing contract is accepted only for an actual pre-contract session
 /// whose persisted state has no approved contract hash. Terra keeps its
 /// historical inbox contract. Every managed Sol review must pass all checks.
@@ -585,6 +643,9 @@ pub fn validate_completed_review(
     let contract_file = format!("{session_root}/contract.json");
     let contract_path = workspace.join(&contract_file);
     if !object_exists(&contract_path)? {
+        if project_id != "catdesk" {
+            return Err("WAKE_SOL_REVIEW_PROJECT_BINDING_REQUIRED".into());
+        }
         return if state.approved_contract_hash.is_none()
             && !object_exists(&workspace.join(&binding_file))?
         {

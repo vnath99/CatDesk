@@ -1,0 +1,200 @@
++    native_continuation: Option<native_continuation::NativeContinuationLink>,
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    native_origin: Option<native_continuation::NativeContinuationOrigin>,
+ }
+ 
+ impl QueueJob {
+@@ -667,6 +728,8 @@ impl QueueJob {
+             verification_sha256: None,
+             review_package_sha256: None,
+             advisory_outcome_sha256: None,
++            native_continuation: None,
++            native_origin: None,
+         })
+     }
+     fn same_request(&self, other: &Self) -> bool {
+@@ -678,6 +741,20 @@ impl QueueJob {
+             && self.cyber_access_program == other.cyber_access_program
+             && self.windows_sandbox == other.windows_sandbox
+     }
++    fn request_sha256(&self) -> String {
++        let identity = serde_json::to_vec(&(
++            self.schema_version,
++            &self.task_id,
++            &self.binding,
++            &self.prompt_sha256,
++            &self.model,
++            &self.effort,
++            &self.cyber_access_program,
++            &self.windows_sandbox,
++        ))
++        .expect("serializable queued native request");
++        format!("{:x}", Sha256::digest(identity))
++    }
+     fn summary(&self) -> Value {
+         let mut summary = json!({
+             "projectId": self.binding.project_id, "taskId": self.task_id,
+@@ -685,6 +762,7 @@ impl QueueJob {
+             "targetSha256": self.binding.target_sha256,
+             "gitIdentitySha256": format!("{:x}", Sha256::digest(self.binding.git_identity.as_bytes())),
+             "verificationProfile": self.binding.verification_profile,
++            "requestSha256": self.request_sha256(),
+             "promptSha256": self.prompt_sha256, "state": self.state,
+             "createdAtUnix": self.created_at_unix,
+             "attemptId": self.attempt.as_ref().map(|attempt| &attempt.attempt_id),
+@@ -700,6 +778,12 @@ impl QueueJob {
+         if let Some(implementation) = &self.windows_sandbox {
+             summary["windowsSandbox"] = json!(implementation);
+         }
++        if let Some(link) = &self.native_continuation {
++            summary["nativeContinuation"] = json!(link);
++        }
++        if let Some(origin) = &self.native_origin {
++            summary["nativeOrigin"] = json!(origin);
++        }
+         summary
+     }
+ }
+@@ -735,6 +819,9 @@ struct QueueReceipt {
+     evidence_level: String,
+     exit_code: Option<i32>,
+     child_exit_observed: bool,
++    /// Absent in historical parent-only receipts; never inferred on readback.
++    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
++    tree_exit_proven: bool,
+     binding_still_matches: bool,
+     outcome: String,
+     recorded_at_unix: u64,
+@@ -1935,6 +2022,12 @@ fn create_new_record(path: &Path, bytes: &[u8]) -> Result<(), String> {
+ }
+ 
+ fn validate_job(job: &QueueJob) -> Result<(), String> {
++    if let Some(link) = &job.native_continuation {
++        link.validate(job)?;
++    }
++    if let Some(origin) = &job.native_origin {
++        origin.validate(job)?;
++    }
+     valid_slug(&job.task_id)?;
+     valid_slug(&job.binding.project_id)?;
+     if job.schema_version != native_task_record_schema(job.windows_sandbox.as_deref())
+@@ -2497,6 +2590,14 @@ pub(crate) async fn execute_action(
+             let mut job = store
+                 .load_job(&project.project_id, &task_id)?
+                 .ok_or("CODEX_QUEUE: task ID is not queued for this project")?;
++            if job.native_continuation.is_some()
++                || job
++                    .native_origin
++                    .as_ref()
++                    .is_some_and(|origin| !origin.activated)
++            {
++                return Err("CODEX_QUEUE_STATE: superseded task remains paused; inspect its linked continuation".into());
++            }
+             if !job.binding.matches(&project) {
+                 return Err("CODEX_QUEUE_SCOPE: queued task binding drifted".into());
+             }
+@@ -2518,7 +2619,25 @@ pub(crate) async fn execute_action(
+                 json!({ "action":if pause { "codex_queue_pause" } else { "codex_queue_resume" }, "job":job.summary() }),
+             )
+         }
+-        QueueAction::Dispatch => dispatch_one(&control.project).await,
++        QueueAction::Dispatch => dispatch_one(&control.project, &control.control_workspace).await,
++        QueueAction::DispatchTask {
++            scope,
++            task_id,
++            expected_binding_sha256,
++            expected_request_sha256,
++        } => {
++            dispatch_selected(
++                &control.project,
++                &control.control_workspace,
++                Some((
++                    &scope,
++                    &task_id,
++                    &expected_binding_sha256,
++                    expected_request_sha256.as_deref(),
++                )),
++            )
++            .await
++        }
+     }
+ }
+ 
+@@ -3144,6 +3263,9 @@ async fn verify_receipt_in_store_with_executable(
+     let (receipt, candidate, job) = {
+         let _queue_lock = store.lock()?;
+         let receipt = store.read_receipt(receipt_id)?;
++        if !receipt.tree_exit_proven {
++            return Err("CODEX_QUEUE_VERIFY_TREE_EXIT_UNPROVEN: parent exit is not descendant-exit proof; historical evidence remains readable and must not be replayed".into());
++        }
+         let candidate = store.read_review_candidate(&receipt)?;
+         let job = store
+             .load_job(&receipt.project_id, &receipt.task_id)?
+@@ -3158,6 +3280,7 @@ async fn verify_receipt_in_store_with_executable(
+             || receipt.exit_code != Some(0)
+             || receipt.outcome != "NATIVE_EXIT_ZERO"
+             || !receipt.child_exit_observed
++            || !receipt.tree_exit_proven
+             || !receipt.binding_still_matches
+             || !actual_profile_matches_receipt(&receipt)
+         {
+@@ -3383,8 +3506,50 @@ fn scheduler(control_workspace: &Path) -> Result<AutonomousProjectRegistryStoreV
+         .map_err(|_| "CODEX_QUEUE: control registry is unavailable".to_string())
+ }
+ 
++type DispatchSelection<'a> = Option<(&'a CodexScope, &'a str, &'a str, Option<&'a str>)>;
++
++fn dispatch_jobs(
++    queue: &QueueStore,
++    selected: DispatchSelection<'_>,
++) -> Result<Vec<QueueJob>, String> {
++    let Some((scope, task, _, expected)) = selected else {
++        return queue.jobs();
++    };
++    // A scoped invocation must not decode unrelated records: a corrupt or
++    // unresolved sibling is not authority to block this project's task.
++    let job = queue.load_job(&scope.project_id, task)?;
++    if let Some(expected) = expected {
++        let job = job
++            .as_ref()
++            .ok_or("CODEX_QUEUE_SCOPE: selected native request is unavailable")?;
++        if job.request_sha256() != expected {
++            return Err("CODEX_QUEUE_SCOPE: selected native request changed".into());
++        }
++    }
++    Ok(job.into_iter().collect())
++}
++
++fn exact_dispatch_binding(control: &Path, selected: DispatchSelection<'_>) -> Result<(), String> {
++    if let Some((scope, _, expected, _)) = selected {
++        let project = registered_project(control, scope)?;
++        if project_binding_sha256(&project)? != expected {
++            return Err("CODEX_QUEUE_SCOPE: exact dispatch binding changed".into());
++        }
++    }
++    Ok(())
++}
++
+ fn claim_one(control_workspace: &Path, queue: &QueueStore) -> Result<Option<QueueJob>, String> {
++    claim_selected(control_workspace, queue, None)
++}
++
++fn claim_selected(
++    control_workspace: &Path,
++    queue: &QueueStore,
++    selected: DispatchSelection<'_>,
++) -> Result<Option<QueueJob>, String> {
+     let _lock = queue.lock()?;
++    exact_dispatch_binding(control_workspace, selected)?;
+     let read_only_scheduler = scheduler(control_workspace)?;
+     let registry = read_only_scheduler
+         .load_registry()
+@@ -3397,7 +3562,7 @@ fn claim_one(control_workspace: &Path, queue: &QueueStore) -> Result<Option<Queu
+         }
+     }
+     let mut ready = BTreeMap::<String, QueueJob>::new();
+-    for mut job in queue.jobs()? {
++    for mut job in dispatch_jobs(queue, selected)? {
+         if job.state != QueueState::Ready {
+             continue;
+         }

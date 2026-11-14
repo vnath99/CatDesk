@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C95_CONTEXT_SNAPSHOT_LIMIT_RECOVERY",
+  "observedUtc": "2026-10-24T09:57:56.7365283+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "parentCommit": "5c87f462d1d1e66188c0d402beb19dd953c7d1b3",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "SOURCE_AND_ISOLATED_METADATA_FIXTURES_NOT_NORMAL_APP_OR_CHATGPT_WEB",
+  "sourceHashes": {
+    "src/operator_web_auto.rs": "9a5ca33f7513ef8298c1bb0af436a0c8db606987544b5cbb915aa68f0f363c1c",
+    "src/web_conversation_context.rs": "b780cf102ffa337583041417b2c460fae070a85b7c478fca138fe2018574bc3a",
+    "src/operator_web_observe.rs": "fea46830a6fcd6ef546b743ff67b8426b69a22237fb796ca9033280ffa62870a",
+    "src/operator_web_rollover.rs": "2d93b8a52696d83e5900f4eba42562ceb15a3fb951a4bcfe763b00d7f1da4bfa"
+  },
+  "change": {
+    "retainedEventsNeverEvicted": true,
+    "coverageOverflowAndTextGapsSticky": true,
+    "defect": "A full observation ledger rejected a fresh browser snapshot before existing policy readiness could reach guarded handoff preparation",
+    "estimatedTokensNeverInvented": true,
+    "knownRevisionsStillUpdateAtLimit": true,
+    "schedulerChanged": false,
+    "onlyEventLimitHandledAsAccountingGap": true,
+    "thresholdsAndRolloverEligibilityUnchanged": true,
+    "derivedPerConversationLimitStatusAdded": true,
+    "persistedSchemaChanged": false,
+    "storedHandoffsRewritten": false,
+    "newUncountedMessagesExplicit": true,
+    "handoffFreshIdleTargetChecksUnchanged": true,
+    "falseFieldOmittedForLegacyStatusShape": true
+  },
+  "regression": {
+    "targetChangeStillRefused": true,
+    "fileSizeAndFilesystemBoundsRetained": true,
+    "realConfiguredEventBound": 4096,
+    "knownRevisionAndReplayAccounting": true,
+    "completeAndClippedMessagesAtBound": true,
+    "newMethods": 2,
+    "quiescenceStillRequired": true,
+    "sourceFixturesRetained": true,
+    "coldReaderSeesStableDueIntent": true,
+    "rawTextPersisted": false,
+    "otherErrorsRemainErrors": true,
+    "lowPressureSaturationNeverForcesRollover": true,
+    "siblingCaptureIndependent": true
+  },
+  "causalRed": {
+    "exitCode": 101,
+    "elapsedSeconds": 45.2375501,
+    "status": "PASS_EXPECTED_EVENT_LIMIT_FAILURE",
+    "reason": "WEB_CONTEXT_EVENT_LIMIT"
+  },
+  "green": {
+    "snapshotIngestionTestsPassed": 7,
+    "exitCode": 0,
+    "ignored": 0,
+    "failed": 0,
+    "sourceFrozen": true,
+    "ownedGateSeconds": 35.0417627
+  },
+  "finalGates": {
+    "exitCodes": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "failed": 0,
+    "ownedGateSeconds": 60.3616465,
+    "strictClippy": "PASS_LOCKED_OFFLINE_WORKSPACE_ALL_TARGETS_ALL_FEATURES_DENY_WARNINGS",
+    "sourceFrozen": true,
+    "snapshotTestsIncludedInWebCount": true,
+    "webOperatorTestsPassed": 109,
+    "format": "PASS_CARGO_FMT_ALL_CHECK",
+    "ignored": 0,
+    "contextMeterTestsPassed": 23
+  },
+  "dependency": {
+    "connectorCalls": 0,
+    "actualParallelWebCodingBC": "OPEN_SERVING_BACKEND_CONNECTOR_PATH",
+    "officialRuntimeActions": 0,
+    "priorHttp429NotReprobed": true
+  },
+  "preservation": {
+    "heldUnknownJournalTouched": false,
+    "queueCount": 0,
+    "selectedAppSourceCommit": "092dda25ff0836e04b67e889a16895087a38d363",
+    "scopedOwners": 0,
+    "browserWakeRecurringStarts": 0,
+    "runtimeRecords": 306,
+    "controls": "BOTH_STOPPED",
+    "testProcesses": 0,
+    "selectedPackageChanged": false,
+    "completedCanariesReplayed": 0,
+    "nativeActions": 0,
+    "changedRecords": 0,
+    "productionChanged": false
+  },
+  "acceptance": {
+    "normalApp": "NOT_BUILT_FOR_C95",
+    "actualParallelChatgptWebCodingBC": "OPEN",
+    "selectedRuntime": "RETAINS_C94_V75_STOPPED",
+    "source": "PASS",
+    "fullOctoberMilestone": "OPEN",
+    "unattended": "NOT_ACTIVATED",
+    "protectedInstalled": "NOT_QUALIFIED",
+    "actualWebSaturation": "NOT_TESTED"
+  },
+  "limitation": "Metadata saturation does not prove high model token pressure. A saturated conversation below the configured trigger remains advisory/unknown and needs a policy decision; no automatic rollover is invented. Non-limit errors, file-size bounds and source authority failures remain fail-closed.",
+  "nextTask": "Build the reviewed normal C95 app and qualify the derived limit status through supported normal CLI reads of fresh disposable per-conversation metadata, with a cold reopen and unchanged sibling. Keep ingestion source qualification distinct from actual Web and protected runtime acceptance. Actual Web B/C remains pending the supported serving backend/connector."
+}

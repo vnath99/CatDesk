@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C92_CACHED_SCHEMA_SCOPED_TASK_TRANSPORT",
+  "observedUtc": "2026-10-24T09:32:21.5790281+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "parentCommit": "c46528a55c5491ced15dae55e1c97bf8f5ddf336",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "SOURCE_AND_ISOLATED_NATIVE_HTTP_FIXTURES_NOT_NORMAL_APP_OR_CHATGPT_WEB",
+  "sourceHashes": {
+    "src/web_task_handoff.rs": "56aba550d34376ca64964587c0be98fd3d6a2d80abcd0adde5fd5cb1bfced30f",
+    "src/project_mcp_task.rs": "cd3ec6e49cbe58871f482c447b677c6c7e76d7b1312b85f0dedd9cc72c176c61",
+    "src/mcp.rs": "236076679d939be82a812f255f9fe6bb1befb30f68b128f0a2a0448406641c1a",
+    "src/web_task_dispatch.rs": "eacd1093d1feb7471cf44b35af5547e1bb8fab5001394f6c70e593c392237265",
+    "src/server.rs": "edc1077a6d9754908be354a4feb4e3351171a6d254e59a80c4fa26baea4d4d09"
+  },
+  "change": {
+    "futurePrivateHandoffMetadataAdded": true,
+    "centralComputerAndSupervisorModesRequiredForBothTransports": true,
+    "cachedMcpTool": "run_command",
+    "globalWorkspaceVariableAdded": false,
+    "newRegistries": 0,
+    "cwdTimeoutTrueDryRunFullOutputAndUnknownOptionsRefused": true,
+    "commandTextReachesShell": false,
+    "centralBearerRetained": true,
+    "sameTaskDispatcher": true,
+    "centralPlanGuardRetained": true,
+    "reservedPrefix": "CATDESK_WEB_TASK=",
+    "ordinaryShellStillDisabledInSupervisorOnly": true,
+    "payload": "JSON serialization of existing scoped task arguments",
+    "sameCallIdAndNoReplayJournal": true,
+    "oldPrivateHandoffPayloadsRewritten": false,
+    "sameTargetAssignmentGrantAndWriterGuards": true,
+    "existingHandoffSourceUnchanged": true,
+    "malformedReservedNamespaceCannotFallThroughToShell": true
+  },
+  "regression": {
+    "independentProjectPreviewApplyAndBusySiblingProgress": true,
+    "methodsPassed": 6,
+    "sourceFixtureKeyDeletionClaimed": false,
+    "refusalsCreateNoTaskJournal": true,
+    "unauthenticatedWrongProjectKeyAndModeRefused": true,
+    "existingCancellationDrainRetained": true,
+    "newMethods": 3,
+    "crossTransportCompletedCallReplayRefused": true,
+    "privateKeyAbsentFromResponsesAndContextLedger": true
+  },
+  "causalRed": {
+    "actual": "NULL_ON_OLD_CACHED_ROUTE",
+    "exitCode": 101,
+    "expected": "WEB_TASK_GRANT_SCOPE_MISMATCH",
+    "elapsedSeconds": 53.1039295,
+    "status": "PASS_EXPECTED_OLD_ROUTE_FAILURE"
+  },
+  "green": {
+    "failed": 0,
+    "ignored": 0,
+    "exitCode": 0,
+    "affectedTestsPassed": 6,
+    "sourceFrozen": true,
+    "ownedGateSeconds": 138.2059077
+  },
+  "finalGates": {
+    "privateGrantedHandoffCompatibilityTestsPassed": 3,
+    "existingServerTestsIgnored": 1,
+    "exitCodes": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "serverRoutingTestsPassed": 43,
+    "strictClippy": "PASS_LOCKED_OFFLINE_WORKSPACE_ALL_TARGETS_ALL_FEATURES_DENY_WARNINGS",
+    "format": "PASS_CARGO_FMT_ALL_CHECK",
+    "sourceFrozen": true,
+    "ownedGateSeconds": 57.0554641
+  },
+  "dependency": {
+    "priorHttp429NotReprobed": true,
+    "connectorCalls": 0,
+    "officialRuntimeActions": 0,
+    "cachedTransportLiveQualification": "NOT_YET_TESTED",
+    "actualParallelWebCodingBC": "OPEN_SERVING_BACKEND_CONNECTOR_AND_CATALOG_PATH"
+  },
+  "preservation": {
+    "runtimeRecords": 306,
+    "changedRecords": 0,
+    "queueCount": 0,
+    "completedCanariesReplayed": 0,
+    "nativeActions": 0,
+    "productionChanged": false,
+    "controls": "BOTH_STOPPED",
+    "scopedOwners": 0,
+    "selectedPackageChanged": false,
+    "testProcesses": 0,
+    "browserWakeRecurringStarts": 0,
+    "selectedAppSourceCommit": "cb3014903863f0cd7cc9222a117d2e18eeb97b60",
+    "heldUnknownJournalTouched": false
+  },
+  "acceptance": {
+    "fullOctoberMilestone": "OPEN",
+    "selectedRuntime": "RETAINS_C91_C89_APP_STOPPED",
+    "protectedInstalled": "NOT_QUALIFIED",
+    "source": "PASS",
+    "unattended": "NOT_ACTIVATED",
+    "normalApp": "NOT_BUILT_FOR_C92",
+    "actualChatgptWebTaskExecution": "NOT_QUALIFIED_CONNECTOR_BACKEND_GATE"
+  },
+  "nextTask": "Build the reviewed normal C92 app and exercise the closed cached-schema transport in the existing bounded disposable central HTTP harness. Preserve real bindings, private payloads and stopped production. Actual independent ChatGPT Web coding remains a separate serving-backend/connector gate."
+}

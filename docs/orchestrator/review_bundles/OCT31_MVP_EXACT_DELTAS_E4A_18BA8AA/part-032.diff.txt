@@ -1,0 +1,212 @@
++
++fn check_link(
++    queue: &QueueStore,
++    parent: &QueueJob,
++    link: &NativeContinuationLink,
++    root: &native_dispatch::NativeQueueSelection,
++    source_event: Option<&str>,
++) -> Result<QueueJob, String> {
++    link.validate(parent)?;
++    no_native_effects(queue, parent)?;
++    if link.origin_task_id != root.task_id
++        || link.origin_request_sha256 != root.request_sha256
++        || source_event.is_some_and(|event| event != link.source_event_id)
++    {
++        return Err("WEB_TASK_NATIVE_CONTINUATION_SCOPE_CHANGED".into());
++    }
++    let child = queue
++        .load_job(&parent.binding.project_id, &link.task_id)?
++        .ok_or("WEB_TASK_NATIVE_CONTINUATION_RECORD_MISSING_NO_REPLAY")?;
++    let expected = dormant_child(parent, link);
++    if child.request_sha256() != expected.request_sha256()
++        || child.native_origin.as_ref().is_none_or(|origin| {
++            let mut expected_origin = expected.native_origin.clone().unwrap();
++            expected_origin.activated = origin.activated;
++            *origin != expected_origin
++        })
++    {
++        return Err("WEB_TASK_NATIVE_CONTINUATION_SCOPE_CHANGED".into());
++    }
++    Ok(child)
++}
++
++pub(super) fn follow(
++    queue: &QueueStore,
++    project: &str,
++    root: &native_dispatch::NativeQueueSelection,
++    source_event: Option<&str>,
++) -> Result<(QueueJob, Vec<String>), String> {
++    let mut job = queue
++        .load_job(project, &root.task_id)?
++        .ok_or("WEB_TASK_NATIVE_TASK_UNAVAILABLE")?;
++    if job.request_sha256() != root.request_sha256 {
++        return Err("WEB_TASK_NATIVE_REQUEST_CHANGED".into());
++    }
++    let mut lineage = Vec::new();
++    for _ in 0..64 {
++        if lineage.contains(&job.task_id) {
++            break;
++        }
++        lineage.push(job.task_id.clone());
++        let Some(link) = job.native_continuation.as_ref() else {
++            return Ok((job, lineage));
++        };
++        job = check_link(queue, &job, link, root, source_event)?;
++    }
++    Err("WEB_TASK_NATIVE_CONTINUATION_CHAIN_INVALID".into())
++}
++
++fn has_capacity(queue: &QueueStore) -> Result<(), String> {
++    let mut records = 0;
++    for (index, entry) in fs::read_dir(queue.root.join("jobs"))
++        .map_err(|_| "CODEX_QUEUE: jobs unavailable")?
++        .enumerate()
++    {
++        let entry = entry.map_err(|_| "CODEX_QUEUE: jobs unavailable")?;
++        if index >= MAX_DIR_ENTRIES {
++            return Err("CODEX_QUEUE: directory entry limit reached".into());
++        }
++        if entry.path().extension().is_some_and(|ext| ext == "json") {
++            records += 1;
++        }
++    }
++    if records >= MAX_JOBS {
++        return Err("WEB_TASK_NATIVE_CONTINUATION_CAPACITY".into());
++    }
++    Ok(())
++}
++
++#[cfg(all(test, windows))]
++fn continue_native_queue_selection(
++    control: &Path,
++    project_id: &str,
++    root: &native_dispatch::NativeQueueSelection,
++    lease: &crate::operator_facade::WebWorkLease,
++    original: &catdesk_wake::protocol::Target,
++    current: &catdesk_wake::protocol::Target,
++    source_event: &str,
++) -> Result<native_dispatch::NativeQueueSelection, String> {
++    continue_selection(
++        control,
++        project_id,
++        root,
++        ContinuationProof {
++            lease,
++            original,
++            current,
++            source_event,
++        },
++        |_| Ok(()),
++    )
++}
++
++struct ContinuationProof<'a> {
++    lease: &'a crate::operator_facade::WebWorkLease,
++    original: &'a catdesk_wake::protocol::Target,
++    current: &'a catdesk_wake::protocol::Target,
++    source_event: &'a str,
++}
++
++/// No Git commands. Used only inside the existing paired-target transaction
++/// after its exact prepared registration has been revalidated.
++pub(crate) fn continue_native_queue_selection_prepared(
++    prepared: &crate::delegated::autonomy_projects::PreparedProjectScopeV1,
++    root: &native_dispatch::NativeQueueSelection,
++    lease: &crate::operator_facade::WebWorkLease,
++    original: &catdesk_wake::protocol::Target,
++    current: &catdesk_wake::protocol::Target,
++    source_event: &str,
++) -> Result<native_dispatch::NativeQueueSelection, String> {
++    continue_selection_for_projects(
++        prepared.controller(),
++        prepared.scope(),
++        root,
++        ContinuationProof {
++            lease,
++            original,
++            current,
++            source_event,
++        },
++        |_| Ok(()),
++    )
++}
++
++#[cfg(all(test, windows))]
++fn continue_selection(
++    control: &Path,
++    project_id: &str,
++    root: &native_dispatch::NativeQueueSelection,
++    proof: ContinuationProof<'_>,
++    checkpoint: impl Fn(&str) -> Result<(), String>,
++) -> Result<native_dispatch::NativeQueueSelection, String> {
++    root.validate()?;
++    let controller = resolve_registered_project_from_control_root(control, "catdesk")
++        .map_err(|_| "WEB_TASK_NATIVE_CONTROL_UNAVAILABLE")?;
++    let project = resolve_registered_project_from_control_root(control, project_id)
++        .map_err(|_| "WEB_TASK_NATIVE_PROJECT_UNAVAILABLE")?;
++    continue_selection_for_projects(&controller.project, &project, root, proof, checkpoint)
++}
++
++fn continue_selection_for_projects(
++    controller: &AutonomousProjectV1,
++    project: &crate::delegated::autonomy_projects::ResolvedProjectScopeV1,
++    root: &native_dispatch::NativeQueueSelection,
++    proof: ContinuationProof<'_>,
++    checkpoint: impl Fn(&str) -> Result<(), String>,
++) -> Result<native_dispatch::NativeQueueSelection, String> {
++    let ContinuationProof {
++        lease,
++        original,
++        current,
++        source_event,
++    } = proof;
++    root.validate()?;
++    let control = &project.control_workspace;
++    let project_id = project.project.project_id.as_str();
++    let queue = native_dispatch::selected_store(control, controller)?;
++    let _lock = queue.lock()?;
++    let (mut job, _) = follow(&queue, project_id, root, Some(source_event))?;
++    let current_hash = project_binding_sha256(&project.project)?;
++    let needs_continuation = root.binding_sha256 != current_hash || job.task_id != root.task_id;
++    if needs_continuation {
++        lease.check_native_continuation(control, project_id, original, current, source_event)?;
++    }
++    if project.project.chatgpt_target_sha256.as_deref() != Some(&current.digest)
++        || project.project.chatgpt_target_url.as_deref() != Some(&current.url)
++    {
++        return Err("WEB_TASK_NATIVE_CONTINUATION_SCOPE_CHANGED".into());
++    }
++    let mut native_scope = job.binding.clone();
++    native_scope.target_sha256 = project.project.chatgpt_target_sha256.clone();
++    if native_scope != QueueBinding::from_project(&project.project)? {
++        return Err("WEB_TASK_NATIVE_CONTINUATION_SCOPE_CHANGED".into());
++    }
++    if job.binding.target_sha256 != Some(current.digest.clone())
++        && (job.state == QueueState::Ready
++            || job.native_origin.as_ref().is_some_and(|o| !o.activated))
++    {
++        lease.check_native_continuation(control, project_id, original, current, source_event)?;
++        no_native_effects(&queue, &job)?;
++        let mut link = NativeContinuationLink {
++            origin_task_id: root.task_id.clone(),
++            origin_request_sha256: root.request_sha256.clone(),
++            source_event_id: source_event.into(),
++            target_generation: current.generation,
++            target_sha256: current.digest.clone(),
++            task_id: String::new(),
++            request_sha256: String::new(),
++            created_at_unix: unix_now()?,
++        };
++        link.task_id = child_id(&job.task_id, &link);
++        let existing = queue.load_job(project_id, &link.task_id)?;
++        if let Some(child) = &existing {
++            link.created_at_unix = child.created_at_unix;
++        }
++        link.request_sha256 = dormant_child(&job, &link).request_sha256();
++        let child = dormant_child(&job, &link);
++        if let Some(existing) = existing {
++            if existing != child {
++                return Err("WEB_TASK_NATIVE_CONTINUATION_CONFLICT".into());
++            }
++        } else {
++            has_capacity(&queue)?;

@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T20:48:49.789394+00:00",
+  "classification": "SOURCE_DIAGNOSTIC_NOT_AUTHENTICATED_WEB_ACCEPTANCE",
+  "sourceBaseCommit": "a977a5f1bbb438efab05851e335ce7ff412dc3c6",
+  "change": {
+    "retainedConnectorCode": "CONNECTOR_RESPONSE_VERIFIED",
+    "nextDiagnostic": "VERIFY_AUTHENTICATED_PROJECT_TASK_SCOPE",
+    "projectTaskAccess": "UNVERIFIED",
+    "providerConversationIdentity": "UNVERIFIED",
+    "taskGrantRequired": true,
+    "bearerAndExecutionModeRequired": true,
+    "retainedAvailabilityRemainsUnverified": true,
+    "noRepeatedConnectorPollRecommended": true
+  },
+  "existingAuthorityReferences": [
+    "src/server.rs:central_dispatch_readiness",
+    "src/server.rs:central_dispatch_authenticated",
+    "src/web_task_dispatch.rs:authorize"
+  ],
+  "tests": {
+    "assertionsPerShell": 87,
+    "powerShell7": "PASS",
+    "windowsPowerShell51": "PASS",
+    "logSha256": {
+      "ps7": "fe0e96cd8a91d3c774405268cba118da7dd43896e5b2482ad650e08cb536955f",
+      "ps51": "fe0e96cd8a91d3c774405268cba118da7dd43896e5b2482ad650e08cb536955f"
+    },
+    "retainedObservationDoesNotOverrideUnknownWakeOrUnprobedLocalMcp": true
+  },
+  "preservation": {
+    "protectedPinsUnchanged": 131,
+    "credentialReads": 0,
+    "authChanges": 0,
+    "networkCalls": 0,
+    "browserWakeRuntimeStarts": 0,
+    "projectBindingChanges": 0,
+    "protectedAuthorityChanges": 0,
+    "connectorEvidencePreserved": true
+  },
+  "scope": "DIAGNOSTIC_ADVICE_ONLY_EXISTING_DISPATCH_AUTHORIZATION_UNCHANGED",
+  "unchangedExternalGatesReaudited": false,
+  "goal": "ACTIVE"
+}

@@ -1,0 +1,229 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-10T04:59:04.797886+00:00",
+  "classification": "SOURCE_AND_DISPOSABLE_FIXTURE_QUALIFICATION_ONLY",
+  "sourceBaseCommit": "27c58b372a8143345800809cd1e92a10d7652993",
+  "changes": [
+    "Refuse unsupported installed native-entry pairs before new scoped work/manual claims or browser launch; retain uncertainty/replay precedence",
+    "Remove reduced-adapter keyboard fallback; retain fixed timeout stage and bounded callback costs",
+    "Preserve CLI exit2 through manual delivery timeout results",
+    "Plan compatible current/previous selection in the same existing document, with full-byte CAS and independent qualification callbacks; no production writer"
+  ],
+  "sourceFiles": [
+    {
+      "path": "src/main.rs",
+      "sha256": "5e1defc634189f05fd828610fd25924e71f75a9948bfbd48698d1a48c416d4da",
+      "normalizedLfSha256": "5e1defc634189f05fd828610fd25924e71f75a9948bfbd48698d1a48c416d4da"
+    },
+    {
+      "path": "src/web_work_manual_delivery.rs",
+      "sha256": "2e4e65a312e30c7043b96b0e67a4ab3e17e62b60d1753a4c8faf098714f87586",
+      "normalizedLfSha256": "2e4e65a312e30c7043b96b0e67a4ab3e17e62b60d1753a4c8faf098714f87586"
+    },
+    {
+      "path": "wake/src/runtime.rs",
+      "sha256": "6c5d1875a8d5ef8dfa6ba77e08266c0e004e005aae792cf335261ca70f09d728",
+      "normalizedLfSha256": "6c5d1875a8d5ef8dfa6ba77e08266c0e004e005aae792cf335261ca70f09d728"
+    },
+    {
+      "path": "wake/src/runtime_scoped_review.rs",
+      "sha256": "b05f54d22c7bedec44c50bea26d09163b5a68d8c874f92b206af727a903d31ae",
+      "normalizedLfSha256": "b05f54d22c7bedec44c50bea26d09163b5a68d8c874f92b206af727a903d31ae"
+    },
+    {
+      "path": "wake/src/runtime_install_selection.rs",
+      "sha256": "d098696e19cc35ad950b7e855bebcd7cdc67dbdef2b6fa240fa1180431620153",
+      "normalizedLfSha256": "d098696e19cc35ad950b7e855bebcd7cdc67dbdef2b6fa240fa1180431620153"
+    },
+    {
+      "path": "scripts/wake_bridge.py",
+      "sha256": "5671574c987ca5962c5e181ba7a26a84ba418c8a64a1864134cc58ba6b958a6f",
+      "normalizedLfSha256": "00794db41eec0cea25a1300555603f0743d749b73c5006dc0c4a19610f56b1c0"
+    },
+    {
+      "path": "tests/test_wake_bridge.py",
+      "sha256": "25fad40f1d6180a221101f465a4477d90461043ae2488e571a604e5919670729",
+      "normalizedLfSha256": "9c2e53f64ebc364ae10061036f56201005ace3c350869b0d4d8407fb87fac1d0"
+    },
+    {
+      "path": "wake/adapter.py",
+      "sha256": "11ef16ca7d7636c861dc1b6492f5e74ade269c03ed34e77dc4407da9fa606b9b",
+      "normalizedLfSha256": "47ef6ae0a8c36ee0086b8f5652a583dd5983e63bb65b8429fb24b895270094b7"
+    }
+  ],
+  "checks": [
+    {
+      "batch": "nov10-bounded-entry-focused-tests",
+      "name": "adapter-regression",
+      "exitCode": 0,
+      "passedCases": 47,
+      "failedCases": 0,
+      "metadataSha256": "cf8846f8ab14e529265da6a4963d717bdd53bffacd5e51f58578bf6cbfcdb09c",
+      "logSha256": "f754973e4a9fe53be4e8337b32134eb8bf1edd57696e8a8410c01a447822490d",
+      "startedUtc": "2026-11-10T04:54:35.4482690+00:00",
+      "finishedUtc": "2026-11-10T04:54:48.5259636+00:00"
+    },
+    {
+      "batch": "nov10-bounded-entry-focused-tests",
+      "name": "entry-error-code-tests",
+      "exitCode": 0,
+      "passedCases": 1,
+      "failedCases": 0,
+      "metadataSha256": "6d20a994a69d862309cfedb2b1b0b28f3f46a230d4ce71744f9112055ca31920",
+      "logSha256": "6dfd6c7046667f12bbe5cf5c12e29d1e5a0b43eecf90b3ba038674c7ecf3fe1a",
+      "startedUtc": "2026-11-10T04:52:56.2883010+00:00",
+      "finishedUtc": "2026-11-10T04:54:27.2836718+00:00"
+    },
+    {
+      "batch": "nov10-bounded-entry-focused-tests",
+      "name": "native-cas-regression",
+      "exitCode": 0,
+      "passedCases": 85,
+      "failedCases": 0,
+      "metadataSha256": "8c1aa75f8ee02887fa0aa2c367be28ba879847ba24a33651dc1f22f43e18e57d",
+      "logSha256": "7e3b40ad522d1d66897816479278ec3e069fa9444e3b15527ea548fdea0a119e",
+      "startedUtc": "2026-11-10T04:54:28.2328860+00:00",
+      "finishedUtc": "2026-11-10T04:54:35.4476589+00:00"
+    },
+    {
+      "batch": "nov10-bounded-entry-focused-tests",
+      "name": "native-edit-refusal-test",
+      "exitCode": 0,
+      "passedCases": 1,
+      "failedCases": 0,
+      "metadataSha256": "7c6be6bbe77bb99cba491521bd3cb4b21b6f36088440cbd79f9ff34994623d0f",
+      "logSha256": "f07c46c0e07fc93fb3a068242cac2fe577a967099843478efb05dfc8828b796a",
+      "startedUtc": "2026-11-10T04:54:27.9165489+00:00",
+      "finishedUtc": "2026-11-10T04:54:28.2322587+00:00"
+    },
+    {
+      "batch": "nov10-bounded-entry-focused-tests",
+      "name": "receipt-refusal-regression",
+      "exitCode": 0,
+      "passedCases": 3,
+      "failedCases": 0,
+      "metadataSha256": "b366d397bc670eebceedf6f6c17403451126046f902dedc274d0682e8c1b7fd8",
+      "logSha256": "fb4645739f01e39822e61f8e93175a6d81aaea5c86afdb10ef6dc6035ec00473",
+      "startedUtc": "2026-11-10T04:54:27.2842875+00:00",
+      "finishedUtc": "2026-11-10T04:54:27.9159580+00:00"
+    },
+    {
+      "batch": "nov10-bounded-entry-focused-tests",
+      "name": "scoped-sender-tests",
+      "exitCode": 101,
+      "passedCases": 39,
+      "failedCases": 1,
+      "metadataSha256": "7c3a36da682d0f35bd4a8cc45c0c75c4941f3646423da858494fff31156c5f9d",
+      "logSha256": "e579e7af2b07d450d9aa4b83b042871c0e8945c7b1e0eb69717623084363758d",
+      "startedUtc": "2026-11-10T04:52:31.6755021+00:00",
+      "finishedUtc": "2026-11-10T04:52:56.0262275+00:00"
+    },
+    {
+      "batch": "nov10-bounded-entry-focused-tests",
+      "name": "selection-planner-tests",
+      "exitCode": 0,
+      "passedCases": 7,
+      "failedCases": 0,
+      "metadataSha256": "c55fc039f5eec921a579e4d68f80602228b391b86bc61df69ba51c324f9db14d",
+      "logSha256": "361aa2a8ef4d55eb5d862ebada4f12566c2b1685a890fcad3ef904c20fdd45e5",
+      "startedUtc": "2026-11-10T04:52:56.0407141+00:00",
+      "finishedUtc": "2026-11-10T04:52:56.2864956+00:00"
+    },
+    {
+      "batch": "nov10-bounded-entry-selection-final-checks",
+      "name": "clippy-root",
+      "exitCode": 0,
+      "passedCases": null,
+      "failedCases": 0,
+      "metadataSha256": "ec1e9fdc1d68d2ca458541598dd3ad8a56e7cfbbdb474d7fd1967b301479b670",
+      "logSha256": "06597feb7f123acf025b16e2e7139ef330dd99718d7e4f4629e9ee2973467b62",
+      "startedUtc": "2026-11-10T04:57:34.2679269+00:00",
+      "finishedUtc": "2026-11-10T04:58:14.4307221+00:00"
+    },
+    {
+      "batch": "nov10-bounded-entry-selection-final-checks",
+      "name": "clippy-wake",
+      "exitCode": 0,
+      "passedCases": null,
+      "failedCases": 0,
+      "metadataSha256": "c17f9439b904f0a63b81ef47caed70d6ea1bf6f4940795848ec01c02a27a4e89",
+      "logSha256": "f9b28971715dc87200bd105a903d088e4d9e8a552e48e3908a2a880fdd167b5c",
+      "startedUtc": "2026-11-10T04:58:14.4314630+00:00",
+      "finishedUtc": "2026-11-10T04:58:23.9536499+00:00"
+    },
+    {
+      "batch": "nov10-bounded-entry-selection-final-checks",
+      "name": "corrected-sibling-fixture",
+      "exitCode": 0,
+      "passedCases": 1,
+      "failedCases": 0,
+      "metadataSha256": "3c36ea4dcc71a253f6b5df34e13e23e9c84c59175ce379f70993abf3698c6c42",
+      "logSha256": "7d69e9eb96b12e0a215656ef506654033e92bd2592e917baeffa49c0f328e119",
+      "startedUtc": "2026-11-10T04:56:51.3800078+00:00",
+      "finishedUtc": "2026-11-10T04:56:55.9532132+00:00"
+    },
+    {
+      "batch": "nov10-bounded-entry-selection-final-checks",
+      "name": "fmt-root",
+      "exitCode": 0,
+      "passedCases": null,
+      "failedCases": 0,
+      "metadataSha256": "e561c9c7abba3c8265d4add54595abaa446319b75936049464745c29e184d142",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "startedUtc": "2026-11-10T04:56:46.0542535+00:00",
+      "finishedUtc": "2026-11-10T04:56:50.3913731+00:00"
+    },
+    {
+      "batch": "nov10-bounded-entry-selection-final-checks",
+      "name": "fmt-wake",
+      "exitCode": 0,
+      "passedCases": null,
+      "failedCases": 0,
+      "metadataSha256": "3c72a6a7b99e1146d61f8ca230f7bb3d5c73f6c5a48af8d81699320e371ff2c2",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "startedUtc": "2026-11-10T04:56:50.4046626+00:00",
+      "finishedUtc": "2026-11-10T04:56:51.3784268+00:00"
+    },
+    {
+      "batch": "nov10-bounded-entry-selection-final-checks",
+      "name": "manual-timeout-wrapper",
+      "exitCode": 0,
+      "passedCases": 1,
+      "failedCases": 0,
+      "metadataSha256": "4a42ab2b2787d8ea90392a7ca9d21178babc67f83c51c363bf67cf90499d9036",
+      "logSha256": "8540fc204caf69ba3121abf06187d8d470755c1122eb5a94e1ca7482e000aeba",
+      "startedUtc": "2026-11-10T04:56:55.9540198+00:00",
+      "finishedUtc": "2026-11-10T04:57:34.2669245+00:00"
+    }
+  ],
+  "distinctRustCases": 52,
+  "distinctPythonCases": 133,
+  "originalFailedRun": {
+    "retained": true,
+    "passedCases": 39,
+    "failedCases": 1,
+    "reason": "New fixture required a particular later event instead of independent project eligibility",
+    "timedOut": false,
+    "terminationFailed": false
+  },
+  "affectedChecksAfterCorrectionPassed": true,
+  "formatAndStrictRootWakeClippyPassed": true,
+  "finalOwnerElapsedSeconds": 98.7643645,
+  "finalOwnerNaturalExit": true,
+  "actualInstalledCompatibilityOperandsMatchSupportedPair": false,
+  "actualInstalledProductSelectorExecuted": false,
+  "legacyReaderCompatibilityScope": "Unchanged attested reader functions accept the flat projection; actual installed startup not run",
+  "interruptionScope": "Abandoned staging and existing atomic writer in disposable Store; actual process crash/power loss not qualified",
+  "qualificationAuditSha256": "3e0e896762b1be6d4407abe9af214c0859f14c8bba7e4a97a96fc01624643625",
+  "installedOrProtectedChangesPerformed": false,
+  "browserStarts": 0,
+  "backendOrTunnelStarts": 0,
+  "messagesSent": 0,
+  "historicalUnknownRequestsReplayed": false,
+  "recurringAutomationEnabled": false,
+  "installedAcceptance": false,
+  "actualWebEditVerificationSelfWakeAccepted": false,
+  "fullMvpComplete": false,
+  "remainingDependency": "Reviewed executable existing-owner installation/migration transaction and exact package authority; broker remains closed",
+  "operatorAuthenticationCurrentlyRequired": false
+}

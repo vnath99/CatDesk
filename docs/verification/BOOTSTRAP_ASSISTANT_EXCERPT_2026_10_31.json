@@ -1,0 +1,35 @@
+{
+  "date": "2026-10-31",
+  "timezone": "America/New_York",
+  "comparisonBase": "16504385590e33425bf4e23dbb725156440096f7",
+  "classification": "SOURCE_QUALIFIED_AFTER_LIVE_PRE_SUBMIT_REFUSAL",
+  "liveRefusal": {
+    "code": "BOOTSTRAP_SOURCE_ASSISTANT_UNAVAILABLE",
+    "phaseAfterFailure": "PREPARED",
+    "bootstrapProgress": null,
+    "bootstrapReceipt": null,
+    "textEntryReached": false,
+    "submitReached": false,
+    "siblingBindingsUnchanged": true,
+    "workLedgerUnchanged": true,
+    "temporaryPolicyRestored": true,
+    "ownedProcessExited": true
+  },
+  "sourceFinding": "The usability check used ordinary 4096-byte context excerpts, then rejected the incomplete flag as an unusable answer. A complete longer reply can therefore block a fresh conversation before text entry.",
+  "retainedReviewResponseBytes": 6019,
+  "correction": "Inspect only the latest private pair using the existing 32768-byte per-message and bounded frame profile. No answer text is exported by this check. Actual load-error placeholders, missing answers and answers exceeding the bound remain refused.",
+  "qualification": {
+    "redRegression": "Complete 8000-byte answer reproduced BOOTSTRAP_SOURCE_ASSISTANT_UNAVAILABLE.",
+    "pythonBootstrapTestsPassed": 81,
+    "pythonAdapterTestsPassed": 43,
+    "oversizedAnswerStillRefused": true,
+    "sourceAndPostSubmitErrorTypesPreserved": true,
+    "legacyMessageAndDigestChanges": 0,
+    "newExecutablesRequired": true,
+    "reason": "The development controller embeds the accepted primitive hashes. Reusing the earlier executable with changed Python bytes correctly refused DEV_PACKAGE_SCRIPT_SOURCE_MISMATCH before selection; a matched rebuild passed the existing guard."
+  },
+  "nextAction": "Use the matched, separately rebuilt development package. Resume the same unchanged intent only after confirming no text-entry/submission checkpoint and current source-response readiness. Do not prepare a replacement intent or resend an unknown message.",
+  "liveCorrectionAcceptance": "PENDING",
+  "protectedReleaseChanged": false,
+  "fullMilestoneComplete": false
+}

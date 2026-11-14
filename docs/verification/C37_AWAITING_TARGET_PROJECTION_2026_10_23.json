@@ -1,0 +1,30 @@
+{
+  "recordedUtc": "2026-10-23T15:13:01.5160128Z",
+  "localDate": "2026-10-23",
+  "task": "C37-AWAITING-TARGET-PROJECTION",
+  "classification": "SOURCE_TESTED_PUBLISHED_NOT_SELECTED",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "fac2e103b9458dd434b7118a5c92a621da63971c",
+  "change": "Allow AWAITING_TARGET through the existing sanitized central-status projection; retain the fixed reason and absent target generation without exposing private diagnostics",
+  "sourceFile": {
+    "path": "src/operator_web_cli.rs",
+    "sha256": "6a52037c3c0c8f548ac6349deb16b2c40750c679e26162da6eb8f22735ebf57c"
+  },
+  "verification": {
+    "atUtc": "2026-10-23T15:09:36.7151840Z",
+    "exitCode": 0,
+    "projectionAndCliTests": 13,
+    "overlapsC35TestSet": true,
+    "combinedDistinctTestTotal": "NOT_98_DO_NOT_SUM"
+  },
+  "publication": {
+    "atUtc": "2026-10-23T15:10:51.652Z",
+    "exactRemoteSha": "fac2e103b9458dd434b7118a5c92a621da63971c"
+  },
+  "selectedRuntimeSource": "cdb39ba7d478841f54c271a3552dc1d9c1a6c1eb",
+  "normalImageIncludesFix": false,
+  "liveProjectionQualified": false,
+  "automaticDriverAccepted": false,
+  "protectedInstalledAcceptance": false,
+  "unattendedAcceptance": false
+}

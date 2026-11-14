@@ -1,0 +1,35 @@
+{
+  "date": "2026-10-28",
+  "sourceParent": "fadc93dd26183ba187381b12e9d627a573cede2d",
+  "classification": "SOURCE_AND_NATIVE_FIXTURES_QUALIFIED_LIVE_PENDING",
+  "purpose": "Supply a bounded old listener to the existing guarded promotion when the trusted current release is stopped and lacks newer backend-only startup.",
+  "reused": [
+    "qualified-stopped result and exact original qualification config",
+    "installed foreground read-only command and exact ten-tool verifier",
+    "existing lifecycle lease, armed child Job and guarded promotion/handoff"
+  ],
+  "tests": {
+    "daemonRecoveryAndBridge": 38,
+    "operator": 20,
+    "installedRuntime": 8,
+    "total": 66,
+    "subprocessEntryPointsIncluded": 2
+  },
+  "format": "PASS",
+  "strictAllTargetClippy": "PASS",
+  "sourceBridgeMaximumSeconds": 120,
+  "permissions": "Existing operator-authorized bounded tests and guarded production recovery; no new source-review authority",
+  "productionPromoted": false,
+  "installedBridgeLiveQualification": "NOT_YET_EXECUTED",
+  "metadataRetirementExecuted": false,
+  "newWebMessages": 0,
+  "browserWakeTunnelStarts": 0,
+  "ci": "UNVERIFIED",
+  "logsSha256": {
+    "promotion-source-bridge-daemon-tests-v3.private.log": "b7f10072e0847c8408d95f5d54a0e6adfe04f182f9438129a608d2acba7247a7",
+    "promotion-source-bridge-operator-tests.private.log": "f13b2d9b88b8daab852eb5f60aaf453df0f3f15401cc304ebf7d5b5300d395bd",
+    "promotion-source-bridge-installed-tests.private.log": "7a861813a84a0acae512102df4e2f2669894c5b595119aa918a5bdca84bc4fc5",
+    "promotion-source-bridge-format-v2.private.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "promotion-source-bridge-clippy.private.log": "bbd9a8aaf86179a643c99ad66758d8f6e7de2676607d750c268c96391f6b65b9"
+  }
+}

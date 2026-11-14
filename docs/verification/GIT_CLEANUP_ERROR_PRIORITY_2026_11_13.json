@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-13T02:20:30.988243+00:00",
+  "sourceBaseCommit": "e18acdcc8af1e58f7c46b0290c8b9d0c81a0f71d",
+  "scope": "GIT_PROCESS_READBACK_ERROR_PRIORITY_SOURCE_ONLY",
+  "files": [
+    {
+      "path": "src/project_task_git.rs",
+      "physicalSha256": "9b3331211402840aa64ef15c5f196890fe3d25effc01ee1c1dbe8859f4dec9de"
+    }
+  ],
+  "finding": "A stdout join/read failure returned OUTCOME_UNKNOWN before checking failed process cleanup. Before an intent or push witness exists, that secondary error could complete the journal as Failed and release its writer fence despite unproved descendants.",
+  "correction": "Check cleanup first, preserve CLEANUP_UNPROVEN and do not join a potentially blocked pipe reader until tree exit is proved. Existing callers retain their journal/writer quarantine on that error.",
+  "reviewCoverage": [
+    "project_task_git.rs production functions",
+    "explicit Git grant construction and per-request assignment checks",
+    "task-local serialization and uncertain-state propagation",
+    "exact checkpoint/CAS recovery",
+    "origin binding and unknown-push observation-only behavior"
+  ],
+  "reviewLimit": "Integrator source inspection and focused tests, not a FULL_SOURCE independent canonical-backend release review or installation authority.",
+  "tests": {
+    "ownerSha256": "5b71cbb02fbbf692f716fbd8bb2442930ecc413552cc92e0d7f3ec241f6840f0",
+    "resultSha256": "afcf5131bbc21450cb3a7a7ac39dfbee2b233fc7b5f244789a2615f108b416cf",
+    "startedUtc": "2026-11-13T02:15:33.2396087+00:00",
+    "finishedUtc": "2026-11-13T02:17:38.3442166+00:00",
+    "sourceFence": {
+      "src/project_task_git.rs": "5a64944e3198f128512c65b8fa019e236005dc86b915e3ada51ef7bce0abaabd"
+    },
+    "logs": [
+      {
+        "name": "git-cleanup",
+        "sha256": "6090ab6f44553a53f4dd5e45b2856cc50f3bb56b92ad452ae9d1b484a4ed06a5"
+      }
+    ]
+  },
+  "testCasesPassed": 12,
+  "newTests": 2,
+  "testNames": [
+    "task_git_cleanup_unproved_precedes_readback_and_does_not_wait_for_it",
+    "task_git_cleanup_proved_preserves_stdout_and_readback_failure",
+    "task_git_sync_readback_cleanup_error_retains_journal_and_writer_until_reconciled"
+  ],
+  "strictClippy": {
+    "ownerSha256": "fb8cc4a4189724a19c5c712b3f5fd3c5be40e9d3f59e03f60eb4c0017ae1434f",
+    "resultSha256": "399450efb0f918548a67e86432fb540d95e321fc953049c81a49f8599b90e6cc",
+    "startedUtc": "2026-11-13T02:18:03.1105771+00:00",
+    "finishedUtc": "2026-11-13T02:18:23.1933993+00:00",
+    "sourceFence": {
+      "src/project_task_git.rs": "9b3331211402840aa64ef15c5f196890fe3d25effc01ee1c1dbe8859f4dec9de"
+    },
+    "logs": [
+      {
+        "name": "main-clippy",
+        "sha256": "62611e2bbfc686226290aed48a21d5e4b72236f5f70a93985595d2ff6ab7fe33"
+      }
+    ]
+  },
+  "initialFormatCheck": "FAILED_TEST_LAYOUT_ONLY_PRESERVED",
+  "formatCorrection": "One test assertion line joined after tests exited. The saved tested source transformed by that exact test-layout substitution equals the final source; production code is unchanged by formatting.",
+  "testedSourceSha256": "5a64944e3198f128512c65b8fa019e236005dc86b915e3ada51ef7bce0abaabd",
+  "productionCodeChangedByFormatting": false,
+  "newReleaseBuilt": false,
+  "protectedInstallationChanged": false,
+  "originalTaskReplayed": false,
+  "browserStarts": 0,
+  "servicesStarted": 0,
+  "installedAcceptance": false,
+  "artifactProvenance": "Retained qualified runtime artifacts keep original source0d6; they do not inherit this correction. New canonical-backend build/review/qualification remains required."
+}

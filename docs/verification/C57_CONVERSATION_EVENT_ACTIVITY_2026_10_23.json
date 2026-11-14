@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C57_PER_CONVERSATION_OBSERVED_EVENT_ACTIVITY",
+  "observedUtc": "2026-10-24T02:29:55.7226657+00:00",
+  "localDate": "2026-10-23_America_New_York",
+  "parentCommit": "1e585032fd179c9100110b8b6f4e2ac84e022e2c",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "SOURCE_AND_DISPOSABLE_LEDGER_REGRESSIONS",
+  "change": "Expose lastObservedEventAtUnix in existing PressureStatus and its CLI/central registry consumers, derived from retained conversation event metadata; no new registry, timer or persisted fields.",
+  "meaning": {
+    "existingAdvisoryAndUnauthenticatedOriginMarkersPreserved": true,
+    "basis": "LATEST_RETAINED_EVENT_OBSERVATION_TIMESTAMP",
+    "wallClockVerified": false,
+    "workerLivenessProved": false,
+    "taskCompletionProved": false,
+    "readOrExactContentRetryRefreshesTimestamp": false,
+    "emptyConversation": null
+  },
+  "sourceTests": [
+    {
+      "filter": "web_conversation_context::tests",
+      "startedUtc": "2026-10-24T02:27:19.7483939+00:00",
+      "finishedUtc": "2026-10-24T02:28:16.3251262+00:00",
+      "elapsedSeconds": 56.5767435,
+      "timedOut": false,
+      "exitCode": 0,
+      "ownerExited": true,
+      "summary": "test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 1655 filtered out; finished in 1.29s"
+    },
+    {
+      "filter": "web_registry_context_activity",
+      "startedUtc": "2026-10-24T02:28:16.3493792+00:00",
+      "finishedUtc": "2026-10-24T02:28:20.6418903+00:00",
+      "elapsedSeconds": 4.2925175,
+      "timedOut": false,
+      "exitCode": 0,
+      "ownerExited": true,
+      "summary": "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1677 filtered out; finished in 0.45s"
+    }
+  ],
+  "passed": 24,
+  "newRegressions": 2,
+  "checks": [
+    {
+      "name": "strict-workspace-clippy",
+      "arguments": [
+        "clippy",
+        "--locked",
+        "--offline",
+        "--workspace",
+        "--all-targets",
+        "--all-features",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "startedUtc": "2026-10-24T02:28:33.6367072+00:00",
+      "finishedUtc": "2026-10-24T02:28:53.2995619+00:00",
+      "elapsedSeconds": 19.6628614,
+      "limitSeconds": 600,
+      "timedOut": false,
+      "exitCode": 0,
+      "ownerExited": true,
+      "stdoutSha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+      "stderrSha256": "b4c28737ab8b23524cb736bdceacbcec6838a695977f09c457de3033ffe0eb5e"
+    },
+    {
+      "name": "workspace-format",
+      "arguments": [
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "startedUtc": "2026-10-24T02:28:53.3115853+00:00",
+      "finishedUtc": "2026-10-24T02:28:56.0641006+00:00",
+      "elapsedSeconds": 2.7525207,
+      "limitSeconds": 120,
+      "timedOut": false,
+      "exitCode": 0,
+      "ownerExited": true,
+      "stdoutSha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+      "stderrSha256": "5e672f18272aaacf8ce74f73c09a347c2d7d14b1a1855d429616c1863f4a547c"
+    },
+    {
+      "name": "diff-whitespace",
+      "arguments": [
+        "diff",
+        "--check"
+      ],
+      "startedUtc": "2026-10-24T02:28:56.0725363+00:00",
+      "finishedUtc": "2026-10-24T02:28:56.1421920+00:00",
+      "elapsedSeconds": 0.0696597,
+      "limitSeconds": 60,
+      "timedOut": false,
+      "exitCode": 0,
+      "ownerExited": true,
+      "stdoutSha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+      "stderrSha256": "ee9c2192e59dd40f7cb7fd550c1c3333528ee61439edd59c5f2ce6c2f72b7e46"
+    }
+  ],
+  "sourceHashes": [
+    {
+      "sha256": "56b31695852eb5ed5e5624e585b8b246037464afbc0ee8a588efa31599b92ce0",
+      "path": "src/mcp.rs"
+    },
+    {
+      "sha256": "2f8f25eb5d34d1586a01851f0bbef27019832c528740f70e487580f6c5e90c2d",
+      "path": "src/web_conversation_context.rs"
+    }
+  ],
+  "invariants": [
+    "Out-of-order events retain maximum observed event time.",
+    "Identical-content retries and cold status reads preserve exact ledger bytes and original timestamps.",
+    "New content revisions change the retained observation, independently per project and generation.",
+    "Rollover starts with unknown activity for the new conversation and retains historical timestamps.",
+    "Unpaired/stale context never becomes current; public projection contains no raw event text.",
+    "Older serialized PressureStatus without the field decodes as unknown."
+  ],
+  "preservation": {
+    "pairedProjects": 9,
+    "newMessages": 0,
+    "runtimeRecordsChecked": 266,
+    "selectedDevelopment": "C56_V68_C55_STOPPED_UNCHANGED",
+    "scopedOwners": 0,
+    "nativeActions": 0,
+    "completedCanariesReplayed": false,
+    "browserWakeRecurringStarts": 0,
+    "changedRuntimeRecords": 0,
+    "productionModified": false
+  },
+  "acceptance": {
+    "normalExecutable": "NOT_BUILT_OR_QUALIFIED_FOR_C57",
+    "source": "PASS",
+    "selectedOrInstalledC57": "NOT_QUALIFIED",
+    "fullOctoberMilestone": "OPEN",
+    "actualWebMcpCodingBC": "OPEN",
+    "fullRuntimeRestart": "OPEN",
+    "unattendedOperation": "NOT_ACTIVATED_OR_ACCEPTED",
+    "actualBrowserPairedCommitCrash": "OPEN"
+  },
+  "nextTask": "Build the published C57 normal executable; qualify scoped activity through normal context and central-status commands in disposable state. Keep the live MCP startup-owner dependency separate."
+}

@@ -1,0 +1,189 @@
++                tool_call_id: ToolCallId::new("ambiguous-prior").unwrap(),
++                tool_name: "wake.manual_end_turn".into(),
++                request_hash: "fixture".into(),
++                arguments_hash: "fixture".into(),
++                mutation_kind: ToolMutationKind::Mutating,
++                status: ToolCallStatus::Requested,
++                result_hash: None,
++                outcome_summary: None,
++            })
++            .unwrap();
++        let before = beta.events().unwrap();
++        assert_eq!(
++            call(
++                &g,
++                manual_request(&g, "new-call-to-evade", "new-turn-to-evade")
++            )
++            .await["error"]["message"],
++            "PROJECT_TASK_RECOVERY_REQUIRED"
++        );
++        assert_eq!(beta.events().unwrap(), before);
++    }
++
++    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
++    async fn exact_grant_survives_cold_calls_refuses_wrong_identity_and_revokes() {
++        let f = fixture("alpha");
++        let fresh = request(&f, "first-read", "read", json!({"path":"src/lib.rs"}));
++        let task_dir = f
++            .control
++            .join(".catdesk/project-mcp-tasks/alpha/task-fixture");
++        for (field, value) in [
++            ("executionKey", json!("b".repeat(64))),
++            ("taskId", json!("other-task")),
++            ("sourceEventId", json!("wrong-event")),
++            ("assignmentSha256", json!("b".repeat(64))),
++            ("expectedTargetGeneration", json!(999)),
++            ("workspace", json!(f.native)),
++        ] {
++            let mut invalid = fresh.clone();
++            invalid["params"]["arguments"][field] = value;
++            assert!(call(&f, invalid).await.get("error").is_some());
++            assert!(
++                !task_dir.join("journal").exists(),
++                "wrong identity opened task writer"
++            );
++        }
++        let result = call(&f, fresh.clone()).await;
++        assert!(result.get("error").is_none(), "{result}");
++        assert_eq!(
++            result["result"]["_meta"]["catdeskTaskLifecycle"]["status"],
++            "CLOSED"
++        );
++        assert_eq!(
++            result["result"]["_meta"]["catdeskProjectScope"]["projectId"],
++            "alpha"
++        );
++        assert_eq!(
++            result["result"]["_meta"]["catdeskProjectScope"]["assignedTask"]["isolatedWorktreeWriterClaimed"],
++            false
++        );
++        assert_eq!(
++            call(&f, fresh).await["error"]["message"],
++            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
++        );
++        let read_again = call(
++            &f,
++            request(&f, "second-read", "read", json!({"path":"src/lib.rs"})),
++        )
++        .await;
++        assert!(read_again.get("error").is_none(), "{read_again}");
++        crate::web_work::execution_permission(&f.control, f.pins.clone(), true).unwrap();
++        assert_eq!(
++            call(
++                &f,
++                request(&f, "revoked-read", "read", json!({"path":"src/lib.rs"}))
++            )
++            .await["error"]["message"],
++            "WEB_TASK_GRANT_REVOKED"
++        );
++        assert_eq!(
++            crate::web_work::execution_permission(&f.control, f.pins.clone(), false).unwrap_err(),
++            "WEB_TASK_GRANT_REVOKED"
++        );
++        drop(crate::delegated::autonomy_runtime::acquire_project_writer_lock(&f.task).unwrap());
++        drop(crate::operator_facade::acquire_web_work_lease(&f.control, "alpha").unwrap());
++    }
++
++    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
++    async fn cancelled_awaiter_still_drains_exact_patch_and_refuses_replay() {
++        let f = fixture("alpha");
++        let preview=call(&f,request(&f,"cancel-preview","patch.preview",json!({"patchId":"cancel-patch","operations":[{"path":"src/lib.rs","old":"{ 1 }","new":"{ 49 }"}]}))).await;
++        assert!(preview.get("error").is_none(), "{preview}");
++        let entered = Arc::new(tokio::sync::Notify::new());
++        let release = Arc::new(tokio::sync::Notify::new());
++        TEST_GATES
++            .get_or_init(Default::default)
++            .lock()
++            .unwrap()
++            .insert(f.control.clone(), (entered.clone(), release.clone()));
++        let apply = request(
++            &f,
++            "cancel-apply",
++            "patch.apply",
++            json!({"patchId":"cancel-patch"}),
++        );
++        let req = serde_json::from_value(apply.clone()).unwrap();
++        let root = f.control.clone();
++        let awaiter = tokio::spawn(async move { handle(root.to_str().unwrap(), &req).await });
++        tokio::time::timeout(Duration::from_secs(10), entered.notified())
++            .await
++            .unwrap();
++        assert!(crate::delegated::autonomy_runtime::acquire_project_writer_lock(&f.task).is_err());
++        awaiter.abort();
++        assert!(matches!(awaiter.await,Err(error) if error.is_cancelled()));
++        release.notify_one();
++        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
++        loop {
++            if let Ok(lease) = crate::operator_facade::acquire_web_work_lease(&f.control, "alpha") {
++                drop(lease);
++                break;
++            }
++            assert!(
++                tokio::time::Instant::now() < deadline,
++                "cancelled turn did not release its project lease"
++            );
++            tokio::time::sleep(Duration::from_millis(10)).await;
++        }
++        TEST_GATES.get().unwrap().lock().unwrap().remove(&f.control);
++        assert!(
++            fs::read_to_string(f.task.join("src/lib.rs"))
++                .unwrap()
++                .contains("{ 49 }")
++        );
++        assert!(
++            fs::read_to_string(f.native.join("src/lib.rs"))
++                .unwrap()
++                .contains("{ 1 }")
++        );
++        assert_eq!(
++            call(&f, apply).await["error"]["message"],
++            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
++        );
++        drop(crate::delegated::autonomy_runtime::acquire_project_writer_lock(&f.task).unwrap());
++    }
++
++    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
++    async fn one_central_http_route_patches_two_projects_and_busy_alpha_does_not_stall_beta() {
++        central_http_route_fixture(false).await;
++    }
++
++    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
++    async fn cached_schema_route_uses_same_scoped_dispatcher_and_no_replay_journal() {
++        central_http_route_fixture(true).await;
++    }
++
++    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
++    async fn native_http_uses_scoped_grant_and_drains_after_disconnect() {
++        native_http_fixture(false).await;
++    }
++    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
++    async fn native_cached_http_uses_same_grant_and_journal() {
++        native_http_fixture(true).await;
++    }
++
++    fn native_request(f: &Fixture, call_id: &str) -> Value {
++        request(f, call_id, "native.codex.dispatch", json!({}))
++    }
++
++    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
++    async fn manual_wake_slow_preparation_does_not_hold_shared_registration() {
++        let (alpha, beta) = paired_fixtures(false);
++        let wake = ready_manual_wake(&alpha);
++        let control = alpha.control.clone();
++        let pins = alpha.pins.clone();
++        let key = alpha.key.clone();
++        let (entered, waiting) = std::sync::mpsc::sync_channel(1);
++        let (release, released) = std::sync::mpsc::sync_channel(1);
++        let owner = tokio::task::spawn_blocking(move || {
++            crate::web_work::manual_wake_with_preparation(
++                &control,
++                pins,
++                &key,
++                "task-fixture",
++                "prepared-alpha",
++                json!({"sourceTurnId":"prepared-alpha-turn","priority":10,"ttlSeconds":300}),
++                |root, project| {
++                    // Stand in for a slow external Git identity probe. No
++                    // registry/Wake/project lock may span this preparation.
++                    entered.send(()).unwrap();
++                    released

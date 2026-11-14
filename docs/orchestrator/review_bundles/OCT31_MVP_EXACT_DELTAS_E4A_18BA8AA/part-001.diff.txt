@@ -1,0 +1,121 @@
+diff --git a/catdesk.ps1 b/catdesk.ps1
+index d15cc95d2cfe04612670bb18ec2015d0e8618600..599cdcea313107a50bdcfbc46c6942047ea4a75b 100644
+--- a/catdesk.ps1
++++ b/catdesk.ps1
+@@ -1,7 +1,7 @@
+ [CmdletBinding()]
+ param(
+     [Parameter(Mandatory = $true, Position = 0)]
+-    [ValidateSet('install', 'start', 'status', 'diagnose', 'recover', 'stop', 'autostart', 'wake')]
++    [ValidateSet('install', 'start', 'status', 'diagnose', 'doctor', 'recover', 'stop', 'autostart', 'wake')]
+     [string]$Command,
+     [Parameter(Position = 1)]
+     [string]$AutostartAction = '',
+@@ -13,6 +13,10 @@ param(
+     [string]$BuildFingerprintPath = '',
+     [int]$ReadyTimeoutSeconds = 180,
+     [switch]$BackendOnly,
++    [string]$ObservationFile = '',
++    [string]$ProjectWorkspace = '',
++    [string]$WakeRoot = '',
++    [switch]$Human,
+     [hashtable]$TestSeams = @{}
+ )
+ 
+@@ -25,7 +29,8 @@ $ErrorActionPreference = 'Stop'
+ # facade-relative defaults only after parameter binding has completed.
+ if ([string]::IsNullOrWhiteSpace($Workspace)) { $Workspace = $PSScriptRoot }
+ if ([string]::IsNullOrWhiteSpace($BuildFingerprintPath)) {
+-    $BuildFingerprintPath = Join-Path $PSScriptRoot 'target\release\catdesk.exe.sha256'
++    if ($Command -eq 'doctor') { $BuildFingerprintPath = Join-Path $Workspace 'target\release\catdesk.exe.sha256' }
++    else { $BuildFingerprintPath = Join-Path $PSScriptRoot 'target\release\catdesk.exe.sha256' }
+ }
+ $script:LifecycleSeams = $TestSeams
+ $engineExpectedPath = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'scripts\start-catdesk-stack.ps1'))
+@@ -951,12 +956,18 @@ function Invoke-CatDeskOnlyStop {
+ 
+ try {
+     if ($BackendOnly -and $Command -notin @('start', 'recover')) { throw 'BackendOnly is limited to start and recover' }
++    if ($Command -ne 'doctor' -and ($ObservationFile -or $ProjectWorkspace -or $WakeRoot -or $Human)) { throw 'doctor options require doctor' }
+     switch ($Command) {
+         'install' { Invoke-InstallPreparation }
+         'start' { Invoke-CanonicalRecovery -RequestedCommand 'start' }
+         'recover' { Invoke-CanonicalRecovery -RequestedCommand 'recover' }
+         'status' { Get-NonMutatingStatus }
+         'diagnose' { Invoke-LayeredDiagnosis }
++        'doctor' {
++            $doctorPath = Resolve-TrustedBootstrapHelperPath -Path (Join-Path $PSScriptRoot 'scripts/catdesk-doctor.ps1') -FailureMessage 'doctor helper unavailable'
++            . $doctorPath
++            Invoke-CatDeskDoctor -ObservationFile $ObservationFile -ProjectWorkspace $ProjectWorkspace -WakeRoot $WakeRoot -Human:$Human
++        }
+         'stop' { Invoke-CatDeskOnlyStop }
+         'autostart' { Invoke-AutostartLifecycle }
+         'wake' { Invoke-WakePolicyLifecycle }
+diff --git a/scripts/catdesk-doctor.ps1 b/scripts/catdesk-doctor.ps1
+new file mode 100644
+index 0000000000000000000000000000000000000000..1ad8c770546b504e5359fb2482543d344071f660
+--- /dev/null
++++ b/scripts/catdesk-doctor.ps1
+@@ -0,0 +1,254 @@
++# Additive passive diagnostic library for catdesk.ps1. No startup, repair,
++# authentication command, MCP POST, browser inspection or report-file writer.
++
++function Get-DoctorProperty($Value, [string]$Name, $Default = $null) {
++    if ($null -eq $Value) { return $Default }
++    if ($Value -is [Collections.IDictionary]) {
++        if ($Value.Contains($Name)) { return $Value[$Name] }
++    } elseif ($Value.PSObject.Properties[$Name]) { return $Value.$Name }
++    return $Default
++}
++
++function Assert-DoctorLocalPath([string]$Path) {
++    if($Path -notmatch '\A[A-Za-z]:[\\/]' -or $Path.Length -gt 4096){throw 'DOCTOR_LOCAL_PATH_REQUIRED'}
++    $full=[IO.Path]::GetFullPath($Path);$volume=[IO.Path]::GetPathRoot($full)
++    if($full.Substring($volume.Length).Contains(':') -or ([IO.DriveInfo]::new($volume)).DriveType -notin @([IO.DriveType]::Fixed,[IO.DriveType]::Removable)){throw 'DOCTOR_LOCAL_PATH_REQUIRED'}
++    # Check ancestors before touching descendants so a junction cannot turn a
++    # local metadata read into a remote share/authentication request.
++    $cursor=$volume
++    foreach($component in ($full.Substring($volume.Length) -split '[\\/]')){
++        if(-not $component){continue};$cursor=Join-Path $cursor $component
++        try{$entry=Get-Item -LiteralPath $cursor -Force -ErrorAction Stop}
++        catch [System.Management.Automation.ItemNotFoundException]{break}
++        if(($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'DOCTOR_LOCAL_PATH_REQUIRED'}
++    }
++}
++
++function Test-DoctorWorkspaceSpelling($Path) {
++    # Rust canonicalize persists local Windows workspaces with a verbatim drive
++    # prefix. Inspect spelling only: do not open another project's directory or
++    # interpret a registry row as current filesystem/ownership authority.
++    if($Path -isnot [string] -or $Path.Length -gt 4096){return $false}
++    $ordinary=$Path
++    if($ordinary.StartsWith('\\?\',[StringComparison]::Ordinal)){$ordinary=$ordinary.Substring(4)}
++    if($ordinary -notmatch '\A[A-Za-z]:[\\/]' -or $ordinary -match '(?:\A|[\\/])\.\.?(?:[\\/]|\z)'){return $false}
++    if($ordinary.IndexOfAny([IO.Path]::GetInvalidPathChars()) -ge 0 -or $ordinary.Substring(2).Contains(':')){return $false}
++    try{return [string]::Equals([IO.Path]::GetFullPath($ordinary),$ordinary.Replace('/','\'),[StringComparison]::OrdinalIgnoreCase)}catch{return $false}
++}
++
++function Read-DoctorJson([string]$Path, [int]$MaximumBytes = 1048576) {
++    Assert-DoctorLocalPath $Path
++    $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
++    if ($item -isnot [IO.FileInfo] -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $item.Length -gt $MaximumBytes) { throw 'DOCTOR_METADATA_UNAVAILABLE' }
++    $stream=[IO.File]::Open($item.FullName,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::ReadWrite)
++    try{
++        $bytes=New-Object byte[] ($MaximumBytes+1);$count=0
++        while($count -le $MaximumBytes){$read=$stream.Read($bytes,$count,$bytes.Length-$count);if($read -eq 0){break};$count+=$read}
++        if($count -gt $MaximumBytes){throw 'DOCTOR_METADATA_UNAVAILABLE'}
++        $text=[Text.UTF8Encoding]::new($false,$true).GetString($bytes,0,$count).TrimStart([char]0xfeff)
++    }finally{$stream.Dispose()}
++    return (ConvertFrom-CatDeskLiteralJson $text)
++}
++
++function Get-DoctorDefinitions {
++    @(
++        @('PROCESS_OWNER','CURRENT_OPERATOR','CURRENT_PROCESS','RUN_SUPPORTED_OWNER_DIAGNOSTIC',@('OWNER_NOT_QUALIFIED','OWNER_QUALIFIED')),
++        @('RELEASE_PAIR','CANONICAL_RELEASE','target/release/catdesk.exe.sha256','catdesk.ps1 diagnose',@('RELEASE_PAIR_VERIFIED','CANONICAL_BINARY_MISSING','CANONICAL_FINGERPRINT_MISSING','CANONICAL_FINGERPRINT_INVALID','CANONICAL_HASH_MISMATCH','CANONICAL_WORKSPACE_RESOLVE','CANONICAL_IDENTITY_INTERNAL','CANONICAL_IDENTITY')),
++        @('RECOVERY_AUTHORITY','RELEASE_MANAGER','.catdesk/release-recovery/current.json','catdesk.ps1 diagnose',@('RECOVERY_AUTHORITY_AVAILABLE','LKG_AUTHORITY_MISSING','LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED','RECOVERY_RELEASE_AUTHORITY_REQUIRED','RECOVERY_AUTHORITY_UNVERIFIED')),
++        @('LOCAL_CONFIG','LOCAL_OPERATOR','CONFIGURED_LOCAL_MCP','catdesk.ps1 diagnose',@('LOCAL_CONFIG_READABLE','LOCAL_CONFIG_UNAVAILABLE')),
++        @('LOCAL_DAEMON','CANONICAL_DAEMON','BOUNDED_WINDOWS_LISTENER_INVENTORY','catdesk.ps1 diagnose',@('CANONICAL_LISTENER_PRESENT','LOCAL_MCP_LISTENER_MISSING','LOCAL_MCP_LISTENER_IDENTITY_MISMATCH','LOCAL_OWNER_UNVERIFIED')),
++        @('LOCAL_HEALTH','CANONICAL_DAEMON','LOCAL_HEALTH_ENDPOINTS','RUN_BOUNDED_LOCAL_HEALTH_TEST',@('LOCAL_HEALTH_NOT_PROBED','LOCAL_HEALTH_READY','LOCAL_HEALTH_FAILED')),
++        @('LOCAL_MCP','CANONICAL_DAEMON','LOCAL_MCP_INITIALIZE_AND_CATALOG','catdesk.ps1 diagnose',@('LOCAL_MCP_NOT_PROBED','LOCAL_MCP_READY','LOCAL_MCP_AUTH_REJECTED','LOCAL_MCP_PROTOCOL_UNREADY')),
++        @('OFFICIAL_RUNTIME','EXISTING_OFFICIAL_OWNER','CONFIGURED_NATIVE_RUNTIME_PROFILE','RUN_EXISTING_OWNER_READONLY_STATUS',@('RUNTIME_CLIENT_UNAVAILABLE','RUNTIME_OWNER_UNVERIFIED','RUNTIME_OWNER_ABSENT','RUNTIME_PROFILE_ROUTE_MISMATCH','RUNTIME_LOCAL_READY')),

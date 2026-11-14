@@ -1,0 +1,191 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-29T22:01:25.411644+00:00",
+  "classification": "TESTED_SOURCE_AND_SYNTHETIC_LOOPBACK_HTTP_NOT_INSTALLED_OR_CHATGPT_WEB",
+  "sourceBranch": "codex/web-rollover-oct17",
+  "implementationCommit": "1411f25787b4bb2b3e293a2152770faa10090811",
+  "testedBaseline": "9f9c963fb39d4abf6723b7abe1cddabca5a953d4",
+  "sourceFiles": [
+    {
+      "path": "src/wake_protocol_client.rs",
+      "sha256": "31c2a928b75aafaf7b026231b0befeff253d5a20254235ece28ee1656ab42bcc",
+      "length": 23566
+    },
+    {
+      "path": "src/project_mcp_task.rs",
+      "sha256": "7edebc7ae68ce99189dfadfb059037a12531745dca419f8d368c6d3222905bb1",
+      "length": 110374
+    },
+    {
+      "path": "src/web_work.rs",
+      "sha256": "a3bd566b781ec8748eebbfbdea51f9c632478ed942058e4f7c163614f0247cf0",
+      "length": 41746
+    },
+    {
+      "path": "src/web_task_dispatch.rs",
+      "sha256": "ee2773597400cf4001c92504f22842f0d74a59fa9dafdc6964afbbbaea3f629c",
+      "length": 62853
+    },
+    {
+      "path": "src/operator_web_cli.rs",
+      "sha256": "2e6e047d67008f5e1ca9b68c607bc1f215f345412c07540bce1bed7b3f205178",
+      "length": 100950
+    }
+  ],
+  "fileHashBasis": "TESTED_CHECKOUT_BYTES",
+  "normalizedGitBlobSha256": {
+    "src/wake_protocol_client.rs": "31c2a928b75aafaf7b026231b0befeff253d5a20254235ece28ee1656ab42bcc",
+    "src/project_mcp_task.rs": "7edebc7ae68ce99189dfadfb059037a12531745dca419f8d368c6d3222905bb1",
+    "src/web_work.rs": "a3bd566b781ec8748eebbfbdea51f9c632478ed942058e4f7c163614f0247cf0",
+    "src/web_task_dispatch.rs": "ee2773597400cf4001c92504f22842f0d74a59fa9dafdc6964afbbbaea3f629c",
+    "src/operator_web_cli.rs": "2e6e047d67008f5e1ca9b68c607bc1f215f345412c07540bce1bed7b3f205178"
+  },
+  "sourceReview": {
+    "explicitLocalFlag": "--allow-manual-wake",
+    "flagScope": "operator web work execution-grant only; not revoke/request/remote grant",
+    "legacyAbsentFalseBytesPreserved": true,
+    "existingGrantUpgradeRefused": true,
+    "revocationShared": true,
+    "olderStrictReaderRefusesTrueCapability": true,
+    "manualCapabilityInGrantedHandoffOnlyWhenTrue": true,
+    "identity": [
+      "project",
+      "work request",
+      "source event",
+      "assignment SHA",
+      "task",
+      "execution key",
+      "current target generation/digest"
+    ],
+    "message": "FIXED_SERVER_SINGLE_SPACE_TEMPLATE_NO_CALLER_MESSAGE_URL_OR_WORKSPACE",
+    "boundedInput": {
+      "sourceTurnIdMaximum": 128,
+      "priorityRange": [
+        0,
+        255
+      ],
+      "ttlSecondsRange": [
+        1,
+        86400
+      ]
+    },
+    "journal": "EXISTING_ASSIGNMENT_JOURNAL_AND_MAX_TOOL_CALLS_BUDGET",
+    "unknownFence": "ANY non-COMPLETED/non-FAILED earlier call refuses new call/turn identities",
+    "contentionRetry": "ONLY proved pre-effect admission contention, maximum2seconds; callback-entry witness excludes post-effect retry",
+    "publication": "EXISTING_REGISTERED_ACTIVATION_HISTORY_TARGET_CAS_AND_SEMANTIC_PRODUCER",
+    "nativeWriterAcquiredByManualBranch": false,
+    "newWorkLedgerTaskCreated": false,
+    "newAuthorizationRegistry": false,
+    "normalReadAfterFirstManualJournalVerified": true
+  },
+  "independentReview": "Grant/journal/auth/lock-order review; fixed template newline defect before passing tests",
+  "verification": {
+    "finalManualTests": 6,
+    "fullDispatchTests": 10,
+    "postKeyGuardHttpTests": 2,
+    "distinctPassingNames": [
+      "operator_facade::web::tests::manual_wake_permission_requires_explicit_local_grant_flag",
+      "web_task_dispatch::tests::cached_envelope_is_closed_bounded_and_never_accepts_shell_options",
+      "web_task_dispatch::tests::cached_http_retains_auth_mode_plan_and_non_disclosure_guards",
+      "web_task_dispatch::tests::cached_schema_route_uses_same_scoped_dispatcher_and_no_replay_journal",
+      "web_task_dispatch::tests::cancelled_awaiter_still_drains_exact_patch_and_refuses_replay",
+      "web_task_dispatch::tests::exact_grant_survives_cold_calls_refuses_wrong_identity_and_revokes",
+      "web_task_dispatch::tests::manual_wake_checks_exact_capability_identity_and_never_claims_native_writer",
+      "web_task_dispatch::tests::manual_wake_dedupes_restart_and_preserves_material_conflicts_and_unknown_delivery",
+      "web_task_dispatch::tests::manual_wake_fixture_cleanup_is_exact_and_preserves_peer_key",
+      "web_task_dispatch::tests::manual_wake_grant_is_explicit_immutable_and_revocable",
+      "web_task_dispatch::tests::manual_wake_unknown_journal_fences_new_identities_and_budget_is_shared",
+      "web_task_dispatch::tests::one_central_http_route_patches_two_projects_and_busy_alpha_does_not_stall_beta"
+    ],
+    "distinctPassingCount": 12,
+    "strictRootAllTargetClippy": "PASS",
+    "formatAndDiffCheck": "PASS",
+    "scopeNote": "Full dispatch suite preceded test-only key guard/handoff assertions; final six and both HTTP fixtures then reran with that guard. Production implementation unchanged between those passes."
+  },
+  "receipts": {
+    "grantOnly": {
+      "sha256": "1e5640920f5a085b936d7de76531ed28476e22d8f3ded6e513eb45dbfa9cf0cd"
+    },
+    "cliZeroMatch": {
+      "sha256": "7e285f52a9c9fc9e3c6ca1c826a1efd1e6ab1c41464df4c8e0db355c46febebf"
+    },
+    "cliCorrected": {
+      "sha256": "f2fed995286607c659674b7a4e6a9ac80f04d1260fa5b158d111ac91952e86d4"
+    },
+    "firstIngressFailure": {
+      "sha256": "783f8c874991a9054e838d6d1142b299307c08c6c0693d8c22f6ba15d1e3f02e"
+    },
+    "correctedIngress": {
+      "sha256": "5f7772ec36b2d79d8d65e7af900eb1b428b5a604fb15d8c9c3e74cd6090f448e"
+    },
+    "dispatchSuiteBeforeKeyGuard": {
+      "sha256": "82fb36b631d9b6ccf2f200a1f47700fbd7a142423b130bfbff98ec9a749ce30b"
+    },
+    "finalManualAndCleanup": {
+      "sha256": "a27bfe84b815fe38fcc7874d4504dc8cfad91dfd0ea9fdccc7e0a53d48fa5e88"
+    },
+    "finalDirectHttp": {
+      "sha256": "d88bffd8e9195705ceed41395e616c94529d9be755e3fd95ed6d3e296eb45e77"
+    },
+    "finalCachedHttp": {
+      "sha256": "eb20c806791e2acb4879f7939808424d5e631af661f1c8319a2bf27126471001"
+    },
+    "strictRootClippy": {
+      "sha256": "bdaa945ac5950bda9e54f3403142c5b9d3b91f3d3d0dbbfa04ec6794d226a513"
+    }
+  },
+  "failureHistory": {
+    "zeroMatchCliInvocation": "Wrong --exact nested namespace ran0 tests; retained and not counted as acceptance",
+    "firstIngress": "2 passed/3 failed QUEUE_EVENT_INVALID due server newline template; fixed single-space template and reran",
+    "noFailedReceiptOverwritten": true
+  },
+  "processAndArtifactScope": {
+    "realProjectNativeSessionsStarted": 0,
+    "actualBrowserStarts": 0,
+    "actualWakeHostStarts": 0,
+    "officialRuntimeStarts": 0,
+    "installedBackendStarts": 0,
+    "liveProviderMessages": 0,
+    "recurringAutomationEnabled": false,
+    "noActiveAgentCargoOrTestSessions": true,
+    "finalLoopbackServersStopped": true,
+    "newFixtureKeys": "Expected path proved absent before grant, exact regular leaf/parent and unchanged bytes verified before removal; peer key preserved",
+    "historicalSyntheticKeysFromEarlierRuns": "RETAINED_NO_SWEEP",
+    "temporaryFixtureReposAndState": "RETAINED_EXISTING_FIXTURE_BEHAVIOR",
+    "zeroPersistentWritesClaimed": false
+  },
+  "postTestPreservation": {
+    "observedUtc": "2026-10-29T22:01:17.337926+00:00",
+    "scope": "POST_SOURCE_TEST_READONLY_PRESERVATION_AND_RUNTIME_INVENTORY",
+    "protectedFilesBefore": 5858,
+    "protectedFilesAfter": 5858,
+    "changedProtectedFiles": 0,
+    "topologyPreserved": true,
+    "inventory": {
+      "testProfileBrowserOwners": 0,
+      "catdeskImages": 0,
+      "wakeImages": 0,
+      "tunnelImages": 0,
+      "port3200Listeners": 0,
+      "processActions": 0
+    },
+    "sourceTestKeyArtifacts": "Only exact newly tracked fixture keys cleaned; earlier synthetic keys retained, no sweep",
+    "newProductionStarts": 0,
+    "newBrowserStarts": 0,
+    "newRecurringActivation": 0,
+    "stateRestorationAttempted": false
+  },
+  "remaining": [
+    "Source code not installed/promoted by this agent; no actual ChatGPT Web or normal unattended acceptance",
+    "Registration lock retains assignment/Git admission and journal/publication; real-project latency and global contention unmeasured",
+    "Manual metadata branch bypasses ProjectContext TrafficObservation; per-conversation request/result coverage incomplete and uncertain",
+    "Ambiguous manual journal outcomes remain RECOVERY_REQUIRED; no blind retry or new automatic recovery transition",
+    "Fresh true-capability grants need a runtime containing this feature; older rollback reader refuses rather than rewrites/downgrades",
+    "Existing upstream connector429/browser profile dependency unchanged; no probes/replays"
+  ],
+  "privateEvidenceSha256": "156666f8621f5fb549123f970086a08f155cf02a3b7deca70417df4b1783c926",
+  "remoteSourceShaVerified": true,
+  "exactSourceHostedCI": "UNVERIFIED_ZERO_VISIBLE_CHECKS_AND_RUNS",
+  "installedReleaseChanged": false,
+  "actualWebCodingAcceptance": "OPEN"
+}

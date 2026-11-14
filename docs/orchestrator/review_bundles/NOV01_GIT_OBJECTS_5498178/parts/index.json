@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "purpose": "EXACT_SMALL_PUBLIC_PATCH_INPUTS_NOT_REVIEW_OR_RELEASE_AUTHORITY",
+  "sourceCommit": "549817859c94f56a7696f998848d8ace429b1663",
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "sourcePath": "src/operator_web_rollover.rs",
+  "patchBytes": 40264,
+  "patchSha256": "02e5c24a69e601930cd1a1e8a92a39726e43ff1883dd715ade189eecce2b0282",
+  "parts": [
+    {
+      "unitId": "u055",
+      "file": "parts/u055.txt",
+      "bytes": 19944,
+      "sha256": "82d62e0c0bd83e5fc39c7db919010121218314f0109f9a3fe8d8176b01933ced",
+      "sourceSkipLines": 0,
+      "sourceTakeLines": 493
+    },
+    {
+      "unitId": "u056",
+      "file": "parts/u056.txt",
+      "bytes": 19983,
+      "sha256": "689c9c20c793aed4b54bd6c56207d21704d08296ab5ec1ad8676ce4047813c96",
+      "sourceSkipLines": 493,
+      "sourceTakeLines": 505
+    },
+    {
+      "unitId": "u057",
+      "file": "parts/u057.txt",
+      "bytes": 337,
+      "sha256": "09aac8981367854cd3983ebdcb3c13e31860e926b713af20beef719f529487f4",
+      "sourceSkipLines": 998,
+      "sourceTakeLines": 10
+    }
+  ],
+  "retrieval": "Use separate simple git show PUBLICATION_COMMIT:docs/orchestrator/review_bundles/NOV01_GIT_OBJECTS_5498178/parts/UNIT.txt commands with include_full_output=true. No pipes, checkout or source execution.",
+  "coverage": "Concatenate parts in the listed order, without inserting delimiters. Exact native verification proves complete gap-free original patch bytes.",
+  "reason": "The actual whole40264-byte Web response was truncated; whole32401-byte and24445-byte reads succeeded. These existing <=20000-byte windows avoid the observed failed input size without changing any runtime guard.",
+  "sourceAccepted": false
+}

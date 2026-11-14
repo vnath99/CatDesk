@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C63_C64_RETAINED_HISTORY_AND_COORDINATOR_REGISTRY_READ",
+  "observedUtc": "2026-10-24T03:58:45.2505447+00:00",
+  "localDate": "2026-10-23_America_New_York",
+  "parentCommit": "4a9529a20b9d364bcfa59fdb645ede48ddc7b5f2",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "sourceHashes": [
+    {
+      "path": "src/delegated/autonomy_supervisor.rs",
+      "sha256": "e4471194b8c5480f4381e13335fd2fecce89a09fac9d59b2e3afcc8140ce6643"
+    }
+  ],
+  "sourceChange": "Existing MCP registry reader returns nonempty retiredProjects with saved workspace, current target, predecessors and retirement metadata. Legacy empty response shape preserved; no activation or new registry.",
+  "retirement": {
+    "workspaceAllFilesExact": true,
+    "ownedProcesses": 0,
+    "predecessorPreserved": true,
+    "qualification": "SUPPORTED_NORMAL_SELECTED_DEVELOPMENT_COMMAND",
+    "lastGenerationPreserved": 2,
+    "nativeActions": 0,
+    "currentRecords": 282,
+    "elapsedSeconds": 5.7121648,
+    "previousNineProjectsUnchanged": true,
+    "coldCentralStatusVerified": true,
+    "unexpectedChanges": 0,
+    "browserWakeRecurringStarts": 0,
+    "changedRecords": 2,
+    "retiredProjects": 1,
+    "coldReplayBytesExact": true,
+    "newRetirementJournal": 1,
+    "activeProjects": 9,
+    "messagesSent": 0
+  },
+  "diagnostic": {
+    "changedRecords": 0,
+    "sourceCommit": "799b1e420dbc5372399a8475176d25539212b026",
+    "httpRequests": 2,
+    "catalogTools": 79,
+    "naturalListenerExit": "NOT_QUALIFIED_EARLY_OWNED_CLEANUP",
+    "activeProjectsInSavedResponse": 9,
+    "harnessError": "Optional isError was absent on successful MCP response; saved response independently inspected. First read-only-mode attempt lacked supervisor registry tool by design. Neither attempt is a complete passing qualification.",
+    "retiredProjectsAbsent": true,
+    "actualChatGptExecution": false,
+    "qualification": "PRE_FIX_NORMAL_LOOPBACK_REAL_METADATA_ONLY",
+    "centralScopedTaskToolAdvertised": true,
+    "registryHttpStatus": 200,
+    "ownedProcesses": 0
+  },
+  "regression": {
+    "green": [
+      {
+        "filter": "project_registry_read_",
+        "startedUtc": "2026-10-24T03:51:01.2239235+00:00",
+        "finishedUtc": "2026-10-24T03:51:17.5466875+00:00",
+        "elapsedSeconds": 16.3227711,
+        "pid": 41520,
+        "timedOut": false,
+        "exitCode": 0,
+        "ownerExited": true,
+        "summary": "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 1677 filtered out; finished in 0.05s"
+      },
+      {
+        "filter": "web_registry_read_keeps_rollover_and_automation_status_per_project",
+        "startedUtc": "2026-10-24T03:51:17.5646506+00:00",
+        "finishedUtc": "2026-10-24T03:51:18.0807788+00:00",
+        "elapsedSeconds": 0.5161331,
+        "pid": 52308,
+        "timedOut": false,
+        "exitCode": 0,
+        "ownerExited": true,
+        "summary": "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1678 filtered out; finished in 0.00s"
+      }
+    ],
+    "causalRed": "Runtime-account regression failed with missing retiredProjects (null versus preserved retired row), exit101.",
+    "strictChecks": [
+      {
+        "name": "strict-workspace-clippy",
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "--workspace",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "startedUtc": "2026-10-24T03:56:21.3388216+00:00",
+        "finishedUtc": "2026-10-24T03:56:44.5125992+00:00",
+        "elapsedSeconds": 23.1737848,
+        "limitSeconds": 600,
+        "pid": 56104,
+        "timedOut": false,
+        "exitCode": 0,
+        "ownerExited": true,
+        "stdoutSha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+        "stderrSha256": "713e34ee95c15810160474076836d8487ac0492354baf3f15026ce01c1903e0a"
+      },
+      {
+        "name": "workspace-format",
+        "arguments": [
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "startedUtc": "2026-10-24T03:56:44.5287443+00:00",
+        "finishedUtc": "2026-10-24T03:56:47.4778438+00:00",
+        "elapsedSeconds": 2.9491053,
+        "limitSeconds": 120,
+        "pid": 73364,
+        "timedOut": false,
+        "exitCode": 0,
+        "ownerExited": true,
+        "stdoutSha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+        "stderrSha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6"
+      },
+      {
+        "name": "diff-whitespace",
+        "arguments": [
+          "diff",
+          "--check"
+        ],
+        "startedUtc": "2026-10-24T03:56:47.4801617+00:00",
+        "finishedUtc": "2026-10-24T03:56:47.5416104+00:00",
+        "elapsedSeconds": 0.0614526,
+        "limitSeconds": 60,
+        "pid": 32084,
+        "timedOut": false,
+        "exitCode": 0,
+        "ownerExited": true,
+        "stdoutSha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+        "stderrSha256": "1074c2c7fa8a1d64d0b00254a1edbf06adf469584d5c0cf5483fec7d1af83980"
+      }
+    ],
+    "normalFixedImage": "NOT_BUILT_OR_QUALIFIED_YET",
+    "sourceFrozen": true,
+    "environmentAttempt": "Initial sandbox run refused Windows ancestor canonicalization; preserved as environment failure, no guards relaxed."
+  },
+  "dependencies": {
+    "reportedHttp429": "C62 assistant report, not independently traced provider response or proven consequence of runtime state.",
+    "workflow": "Push and pull_request triggers exist without branch filters. No workflow_dispatch. Zero exact-SHA runs/checks do not establish acceptance or explain administrative restriction.",
+    "officialRuntime": "Existing status-only command reports stopped, no running process, healthy=false, ready=false; no lifecycle/settings action."
+  },
+  "preservation": {
+    "productionChanged": false,
+    "changedRuntimeRecords": 0,
+    "selectedPackageChanged": false,
+    "recurringStarts": 0,
+    "runtimeRecordsChecked": 282,
+    "originalFiveProjectsPreserved": true,
+    "nativeSessionsChanged": false,
+    "completedRolloverResent": false
+  },
+  "acceptance": {
+    "archiveHistorySource": "PASS",
+    "protectedInstalled": "NOT_QUALIFIED",
+    "actualWebToolExecutionBC": "OPEN",
+    "unattended": "NOT_ACTIVATED_OR_ACCEPTED",
+    "fullRuntimeRestart": "OPEN",
+    "normalFixedGetter": "PENDING",
+    "supportedTestProjectRetirement": "PASS",
+    "fullOctoberMilestone": "OPEN"
+  },
+  "nextTask": "Build reviewed clean source normally and verify the fixed archive reader through a bounded ephemeral loopback listener with Web auto disabled, preserving all 282 records. Actual Web execution still requires supported serving-backend ownership and accessible connector tools."
+}

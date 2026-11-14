@@ -1,4 +1,6 @@
-use crate::protocol::{Event, Target, digest, valid_id};
+use crate::protocol::{
+    Event, MAX_WAKE_TTL_SECONDS, Target, WakeMetadata, WakePurpose, digest, valid_id,
+};
 use crate::{PROTOCOL_VERSION, Result};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
@@ -7,10 +9,15 @@ use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
 static TEMP: AtomicU64 = AtomicU64::new(0);
+#[path = "store_reobserve.rs"]
+mod reobserve;
+#[cfg(test)]
+#[path = "store_submission_deadline_tests.rs"]
+mod submission_deadline_tests;
 const MAX_FILE: u64 = 1024 * 1024;
 pub const MANUAL_TURN_PREFIX: &str = "manual-turn-";
 const MAX_SOURCE_PROGRESS_ITEMS: usize = 100_000;
@@ -21,6 +28,53 @@ pub fn now() -> u64 {
         .as_secs()
 }
 
+/// Semantic input for one target-bound Wake intent. The Store assigns its ID,
+/// received time and absolute expiry; callers cannot choose those wire fields.
+#[derive(Clone, Copy, Debug)]
+pub struct WakeIntent<'a> {
+    pub purpose: WakePurpose,
+    pub source_event_id: &'a str,
+    pub source_turn_id: &'a str,
+    pub priority: u8,
+    pub ttl_seconds: u64,
+}
+
+impl WakeIntent<'_> {
+    fn metadata(&self, created_utc: u64) -> Result<WakeMetadata> {
+        if self.ttl_seconds == 0 || self.ttl_seconds > MAX_WAKE_TTL_SECONDS {
+            return Err("QUEUE_WAKE_METADATA_INVALID".into());
+        }
+        let metadata = WakeMetadata {
+            purpose: self.purpose,
+            source_event_id: self.source_event_id.into(),
+            source_turn_id: self.source_turn_id.into(),
+            priority: self.priority,
+            expires_utc: created_utc
+                .checked_add(self.ttl_seconds)
+                .ok_or("QUEUE_WAKE_METADATA_INVALID")?,
+        };
+        metadata.validate(created_utc)?;
+        Ok(metadata)
+    }
+
+    /// Pure semantic identity lookup; does not publish, renew TTL or grant a
+    /// sender. Allows receipt accounting without recreating an expired intent.
+    pub fn event_id(&self, project: &str) -> Result<String> {
+        if !valid_id(project) {
+            return Err("QUEUE_EVENT_INVALID".into());
+        }
+        self.metadata(1)?;
+        let identity = serde_json::to_string(&(
+            project,
+            self.source_event_id,
+            self.source_turn_id,
+            self.purpose,
+        ))
+        .map_err(|_| "QUEUE_WAKE_METADATA_INVALID")?;
+        Ok(format!("wake-intent-{}", digest(&identity)))
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TargetChange {
@@ -29,12 +83,24 @@ pub struct TargetChange {
     pub changed_utc: u64,
 }
 
+/// A permanently reserved project ID. Retirement keeps its exact last target
+/// and existing history; it does not authorize reuse or erase delivery evidence.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RetiredTarget {
+    pub retirement_id: String,
+    pub last_target: Option<Target>,
+    pub retired_utc: u64,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Config {
     pub schema_version: u32,
     pub targets: BTreeMap<String, Target>,
     pub history: Vec<TargetChange>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub retired_targets: BTreeMap<String, RetiredTarget>,
 }
 
 impl Default for Config {
@@ -43,15 +109,19 @@ impl Default for Config {
             schema_version: PROTOCOL_VERSION,
             targets: BTreeMap::new(),
             history: vec![],
+            retired_targets: BTreeMap::new(),
         }
     }
 }
 
 impl Config {
-    fn validate(&self) -> Result<()> {
-        if self.schema_version != PROTOCOL_VERSION
+    pub(crate) fn validate(&self) -> Result<()> {
+        if !matches!(self.schema_version, 1 | 2)
+            || (self.schema_version == 1 && !self.retired_targets.is_empty())
+            || (self.schema_version == 2 && self.retired_targets.is_empty())
             || self.targets.len() > 64
             || self.history.len() > 128
+            || self.retired_targets.len() > 256
         {
             return Err("CONFIG_INVALID".into());
         }
@@ -67,6 +137,18 @@ impl Config {
             }
             change.target.validate()?;
         }
+        for (project, retired) in &self.retired_targets {
+            if !valid_id(project)
+                || self.targets.contains_key(project)
+                || !valid_id(&retired.retirement_id)
+                || retired.retired_utc == 0
+            {
+                return Err("CONFIG_RETIRED_TARGET_INVALID".into());
+            }
+            if let Some(target) = &retired.last_target {
+                target.validate()?;
+            }
+        }
         Ok(())
     }
 }
@@ -81,7 +163,7 @@ pub enum Phase {
     Stale,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Delivery {
     pub schema_version: u32,
@@ -117,6 +199,21 @@ struct SubmissionStart {
     started_utc: u64,
 }
 
+/// Terminal, event-bound adapter evidence. It never grants another submit.
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PreEditRefusalRecord {
+    schema_version: u32,
+    event_id: String,
+    project_id: String,
+    owner: String,
+    target: Target,
+    message_digest: String,
+    submission_started_utc: u64,
+    recorded_utc: u64,
+    frame: serde_json::Value,
+}
+
 /// Passive assistant-response timing, anchored only to an exact USER receipt.
 /// It has no control input and cannot publish or replay a wake event.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -128,7 +225,7 @@ pub enum ResponseState {
     Complete,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TurnTimer {
     pub schema_version: u32,
@@ -199,7 +296,10 @@ fn require_expected_retirement_event(
     message_sha256: &str,
 ) -> Result<()> {
     if event.project_id != project
-        || event.event_type != "engineering_attention"
+        || !matches!(
+            event.event_type.as_str(),
+            "engineering_attention" | "source_review"
+        )
         || event.target_generation != target.generation
         || digest(&event.message) != message_sha256
     {
@@ -212,6 +312,7 @@ fn require_expected_retirement_event(
 /// releases it on process death; atomic JSON replacement preserves prior bytes.
 pub struct Store {
     root: PathBuf,
+    read_only: bool,
 }
 pub struct HostLease {
     _lock: File,
@@ -235,7 +336,29 @@ impl Store {
         }
         Ok(Self {
             root: fs::canonicalize(root).map_err(|_| "CONFIG_ROOT_UNAVAILABLE")?,
+            read_only: false,
         })
+    }
+
+    /// Diagnostic access never initializes directories/locks or waits for a
+    /// writer. Mutating methods refuse this handle before changing state.
+    pub fn open_read_only(root: &Path) -> Result<Self> {
+        safe_directories_mode(root, false)?;
+        for child in ["queue", "archive", "deliveries", "turns", "logs"] {
+            safe_directories_mode(&root.join(child), false)?;
+        }
+        Ok(Self {
+            root: fs::canonicalize(root).map_err(|_| "CONFIG_ROOT_UNAVAILABLE")?,
+            read_only: true,
+        })
+    }
+
+    /// Internal admitted same-root writer: require the existing namespace;
+    /// unlike open(), refusal never initializes missing runtime directories.
+    pub(crate) fn open_existing_writer(root: &Path) -> Result<Self> {
+        let mut store = Self::open_read_only(root)?;
+        store.read_only = false;
+        Ok(store)
     }
 
     /// Test-build-only constructor for sandboxed integration tests whose worker
@@ -262,13 +385,19 @@ impl Store {
         if !canonical.starts_with(&trusted) {
             return Err("CONFIG_ROOT_OUTSIDE_TEST_PARENT".into());
         }
-        Ok(Self { root: canonical })
+        Ok(Self {
+            root: canonical,
+            read_only: false,
+        })
     }
     pub fn root(&self) -> &Path {
         &self.root
     }
 
     fn lock(&self) -> Result<File> {
+        if self.read_only {
+            return Err("STATE_READ_ONLY".into());
+        }
         let path = self.root.join("transaction.lock");
         reject_link(&path)?;
         let file = OpenOptions::new()
@@ -279,6 +408,23 @@ impl Store {
             .open(path)
             .map_err(|_| "CONFIG_LOCK_UNAVAILABLE")?;
         file.lock().map_err(|_| "CONFIG_LOCK_UNAVAILABLE")?;
+        Ok(file)
+    }
+    fn read_lock(&self) -> Result<File> {
+        if !self.read_only {
+            return self.lock();
+        }
+        let path = self.root.join("transaction.lock");
+        reject_link(&path)?;
+        let file = File::open(path).map_err(|_| "CONFIG_LOCK_UNAVAILABLE")?;
+        if !file
+            .metadata()
+            .map_err(|_| "CONFIG_LOCK_UNAVAILABLE")?
+            .is_file()
+        {
+            return Err("CONFIG_LOCK_UNAVAILABLE".into());
+        }
+        file.try_lock_shared().map_err(|_| "CONFIG_LOCK_BUSY")?;
         Ok(file)
     }
     fn read_config(&self) -> Result<Config> {
@@ -299,8 +445,18 @@ impl Store {
         self.read_config().map(|_| ())
     }
     pub fn config(&self) -> Result<Config> {
-        let _lock = self.lock()?;
+        let _lock = self.read_lock()?;
         self.read_config()
+    }
+    /// Retain the existing transaction read lock during a bounded metadata
+    /// operation. A read-only store permits sibling reads while preventing
+    /// target writers. The callback must not write through this Wake store.
+    pub fn with_config_read_only<T>(
+        &self,
+        operation: impl FnOnce(&Config) -> Result<T>,
+    ) -> Result<T> {
+        let _lock = self.read_lock()?;
+        operation(&self.read_config()?)
     }
     pub fn set_target(&self, project: &str, expected: u64, url: &str) -> Result<Target> {
         self.set_target_with_submission_policy(project, expected, url, false, None, None)
@@ -368,12 +524,91 @@ impl Store {
             return Err("CONFIG_SOURCE_WITNESS_INVALID".into());
         }
         source.validate()?;
-        let _lock = self.lock()?;
+        let _lock = self.read_lock()?;
         if self.read_config()?.targets.get(project) != Some(source) {
             return Err("CONFIG_SOURCE_WITNESS_TARGET_MISMATCH".into());
         }
         self.ensure_no_source_progress_locked(project, source, witness_event_id)?;
         self.source_progress_fingerprint_locked(project, source, witness_event_id)
+    }
+
+    /// Validate a completed source and hold the existing queue transaction
+    /// lock across a short local disposition commit. No external operation or
+    /// caller-supplied quiescence assertion participates in this proof.
+    pub fn with_quiescent_source<T>(
+        &self,
+        project: &str,
+        source: &Target,
+        witness_event_id: &str,
+        source_task_id: &str,
+        forbidden_event_ids: &[&str],
+        action: impl FnOnce(&str, &str) -> Result<T>,
+    ) -> Result<T> {
+        if !valid_id(project) || !valid_id(witness_event_id) {
+            return Err("CONFIG_SOURCE_WITNESS_INVALID".into());
+        }
+        if !valid_id(source_task_id) || forbidden_event_ids.iter().any(|id| !valid_id(id)) {
+            return Err("CONFIG_SOURCE_WITNESS_INVALID".into());
+        }
+        source.validate()?;
+        let _lock = self.read_lock()?;
+        let config = self.read_config()?;
+        if config.targets.get(project) != Some(source) {
+            return Err("CONFIG_SOURCE_WITNESS_TARGET_MISMATCH".into());
+        }
+        for id in forbidden_event_ids {
+            if self.read_delivery(id)?.is_some()
+                || self.read_timer(id)?.is_some()
+                || self
+                    .event_path(id)
+                    .try_exists()
+                    .map_err(|_| "QUEUE_UNAVAILABLE")?
+                || self
+                    .archive_path(id)
+                    .try_exists()
+                    .map_err(|_| "QUEUE_UNAVAILABLE")?
+            {
+                return Err("CONFIG_QUARANTINE_CONTINUATION_ALREADY_RECORDED".into());
+            }
+        }
+        self.require_project_quiescent_locked(project, &config)?;
+        self.completed_source_witness_locked(project, source, witness_event_id)?;
+        let task = self
+            .read_delivery(source_task_id)?
+            .ok_or("CONFIG_SOURCE_TASK_COMPLETION_REQUIRED")?;
+        let timer = self
+            .read_timer(source_task_id)?
+            .ok_or("CONFIG_SOURCE_TASK_COMPLETION_REQUIRED")?;
+        if task.event.project_id != project
+            || task.target != *source
+            || task.phase != Phase::Sent
+            || task.receipt.as_ref().is_none_or(|receipt| {
+                receipt.event_id != source_task_id
+                    || receipt.target_generation != source.generation
+                    || receipt.target_digest != source.digest
+                    || receipt.message_digest != task.message_digest
+                    || receipt.evidence != "EXACT_USER_MESSAGE_APPENDED"
+            })
+            || timer.project_id != project
+            || timer.target_generation != source.generation
+            || timer.target_digest != source.digest
+            || timer.response_state != ResponseState::Complete
+            || timer.completed_utc.is_none()
+        {
+            return Err("CONFIG_SOURCE_TASK_COMPLETION_REQUIRED".into());
+        }
+        let task_proof = digest(
+            &serde_json::to_string(&(task, timer))
+                .map_err(|_| "CONFIG_SOURCE_TASK_COMPLETION_REQUIRED")?,
+        );
+        action(
+            &self.quiescent_source_progress_fingerprint_locked(
+                project,
+                source,
+                witness_event_id,
+            )?,
+            &task_proof,
+        )
     }
 
     /// Compensate a staged automatic rollover only if no work has entered its
@@ -396,6 +631,193 @@ impl Store {
         )
     }
 
+    /// Retire only one quiescent project, under the same transaction lock used
+    /// by producers and claims. Other projects and an independent running host
+    /// remain usable. The caller owns registry/native/browser coordination.
+    pub fn retire_target_if_quiescent(
+        &self,
+        project: &str,
+        expected: Option<&Target>,
+        retirement_id: &str,
+    ) -> Result<Option<Target>> {
+        if !valid_id(project) || !valid_id(retirement_id) {
+            return Err("CONFIG_RETIREMENT_ID_INVALID".into());
+        }
+        if let Some(target) = expected {
+            target.validate()?;
+        }
+        let _lock = self.lock()?;
+        let mut config = self.read_config()?;
+        if let Some(retired) = config.retired_targets.get(project) {
+            return if retired.retirement_id == retirement_id
+                && retired.last_target.as_ref() == expected
+            {
+                Ok(retired.last_target.clone())
+            } else {
+                Err("CONFIG_RETIREMENT_CONFLICT".into())
+            };
+        }
+        if config.targets.get(project) != expected {
+            return Err("CONFIG_RETIREMENT_TARGET_MISMATCH".into());
+        }
+        if config.retired_targets.len() >= 256 {
+            return Err("CONFIG_RETIREMENT_CAPACITY".into());
+        }
+        self.require_project_quiescent_locked(project, &config)?;
+        let retired = RetiredTarget {
+            retirement_id: retirement_id.into(),
+            last_target: expected.cloned(),
+            retired_utc: now(),
+        };
+        config.targets.remove(project);
+        config
+            .retired_targets
+            .insert(project.into(), retired.clone());
+        // Old schema-1 readers fail closed rather than silently writing a
+        // configuration that forgets the permanent project-ID reservation.
+        config.schema_version = 2;
+        config.validate()?;
+        atomic(&self.root.join("config.json"), &config)?;
+        let observed = self.read_config()?;
+        if observed.targets.contains_key(project)
+            || observed.retired_targets.get(project) != Some(&retired)
+            || observed.targets != config.targets
+            || observed.history != config.history
+        {
+            return Err("CONFIG_RETIREMENT_READBACK_MISMATCH".into());
+        }
+        Ok(expected.cloned())
+    }
+
+    fn require_project_quiescent_locked(&self, project: &str, config: &Config) -> Result<()> {
+        for entry in fs::read_dir(self.root.join("queue")).map_err(|_| "QUEUE_UNAVAILABLE")? {
+            let path = entry.map_err(|_| "QUEUE_UNAVAILABLE")?.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            let event: Event = read(&path)?;
+            if event.project_id == project {
+                event.validate()?;
+                return Err("CONFIG_RETIREMENT_BUSY".into());
+            }
+        }
+        for entry in
+            fs::read_dir(self.root.join("deliveries")).map_err(|_| "RECEIPT_UNAVAILABLE")?
+        {
+            let path = entry.map_err(|_| "RECEIPT_UNAVAILABLE")?.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            let delivery: Delivery = read(&path)?;
+            if delivery.event.project_id != project {
+                continue;
+            }
+            delivery.validate()?;
+            if path.file_stem().and_then(|value| value.to_str()) != Some(&delivery.event.event_id)
+                || !matches!(delivery.phase, Phase::Sent | Phase::Stale)
+            {
+                return Err("CONFIG_RETIREMENT_BUSY".into());
+            }
+            if delivery.phase == Phase::Sent {
+                let timer = self
+                    .read_timer(&delivery.event.event_id)?
+                    .ok_or("CONFIG_RETIREMENT_BUSY")?;
+                if timer.response_state != ResponseState::Complete
+                    || timer.project_id != project
+                    || timer.target_generation != delivery.target.generation
+                    || timer.target_digest != delivery.target.digest
+                {
+                    return Err("CONFIG_RETIREMENT_BUSY".into());
+                }
+            }
+        }
+        for entry in fs::read_dir(self.root.join("turns")).map_err(|_| "TURN_TIMER_UNAVAILABLE")? {
+            let path = entry.map_err(|_| "TURN_TIMER_UNAVAILABLE")?.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            let timer: TurnTimer = read(&path)?;
+            if timer.project_id != project {
+                continue;
+            }
+            timer.validate()?;
+            if path.file_stem().and_then(|value| value.to_str()) != Some(&timer.event_id)
+                || timer.response_state != ResponseState::Complete
+            {
+                return Err("CONFIG_RETIREMENT_BUSY".into());
+            }
+            if !timer.event_id.starts_with(MANUAL_TURN_PREFIX) {
+                let delivery = self
+                    .read_delivery(&timer.event_id)?
+                    .ok_or("CONFIG_RETIREMENT_BUSY")?;
+                if !matches!(delivery.phase, Phase::Sent | Phase::Stale)
+                    || delivery.event.project_id != project
+                    || delivery.target.generation != timer.target_generation
+                    || delivery.target.digest != timer.target_digest
+                {
+                    return Err("CONFIG_RETIREMENT_BUSY".into());
+                }
+            }
+        }
+        // A surviving submission-start witness cannot be treated as idle if
+        // its delivery/response proof is missing, even after a process exits.
+        for entry in
+            fs::read_dir(self.root.join("logs")).map_err(|_| "SUBMISSION_START_UNAVAILABLE")?
+        {
+            let path = entry.map_err(|_| "SUBMISSION_START_UNAVAILABLE")?.path();
+            if !path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .is_some_and(|name| {
+                    name.starts_with("submission-start-") && name.ends_with(".json")
+                })
+            {
+                continue;
+            }
+            let start: SubmissionStart = read(&path)?;
+            let delivery = self.read_delivery(&start.event_id)?;
+            let own_target = config
+                .targets
+                .get(project)
+                .into_iter()
+                .chain(
+                    config
+                        .history
+                        .iter()
+                        .filter(|change| change.project_id == project)
+                        .map(|change| &change.target),
+                )
+                .any(|target| {
+                    target.generation == start.target_generation
+                        && target.digest == start.target_digest
+                });
+            if !own_target
+                && !delivery
+                    .as_ref()
+                    .is_some_and(|value| value.event.project_id == project)
+            {
+                continue;
+            }
+            let delivery = delivery.ok_or("CONFIG_RETIREMENT_BUSY")?;
+            if start.schema_version != PROTOCOL_VERSION
+                || start.started_utc == 0
+                || delivery.event.project_id != project
+                || delivery.phase != Phase::Sent
+                || delivery.target.generation != start.target_generation
+                || delivery.target.digest != start.target_digest
+            {
+                return Err("CONFIG_RETIREMENT_BUSY".into());
+            }
+            let timer = self
+                .read_timer(&start.event_id)?
+                .ok_or("CONFIG_RETIREMENT_BUSY")?;
+            if timer.response_state != ResponseState::Complete {
+                return Err("CONFIG_RETIREMENT_BUSY".into());
+            }
+        }
+        Ok(())
+    }
+
     fn set_target_with_submission_policy(
         &self,
         project: &str,
@@ -410,6 +832,9 @@ impl Store {
         }
         let _lock = self.lock()?;
         let mut config = self.read_config()?;
+        if config.retired_targets.contains_key(project) {
+            return Err("CONFIG_PROJECT_RETIRED".into());
+        }
         let previous = config.targets.get(project);
         if previous.map_or(0, |t| t.generation) != expected {
             return Err("CONFIG_CAS_CONFLICT".into());
@@ -483,12 +908,12 @@ impl Store {
         Ok(target)
     }
 
-    fn ensure_no_source_progress_locked(
+    fn completed_source_witness_locked(
         &self,
         project: &str,
         source: &Target,
         witness_event_id: &str,
-    ) -> Result<()> {
+    ) -> Result<u64> {
         let witness = self
             .read_delivery(witness_event_id)?
             .ok_or("CONFIG_SOURCE_WITNESS_MISSING")?;
@@ -515,9 +940,18 @@ impl Store {
         {
             return Err("CONFIG_SOURCE_WITNESS_INCOMPLETE".into());
         }
-        let completed = timer
+        timer
             .completed_utc
-            .ok_or("CONFIG_SOURCE_WITNESS_INCOMPLETE")?;
+            .ok_or("CONFIG_SOURCE_WITNESS_INCOMPLETE".into())
+    }
+
+    fn ensure_no_source_progress_locked(
+        &self,
+        project: &str,
+        source: &Target,
+        witness_event_id: &str,
+    ) -> Result<()> {
+        let completed = self.completed_source_witness_locked(project, source, witness_event_id)?;
         for entry in fs::read_dir(self.root.join("queue")).map_err(|_| "QUEUE_UNAVAILABLE")? {
             let path = entry.map_err(|_| "QUEUE_UNAVAILABLE")?.path();
             if path.extension().and_then(|value| value.to_str()) != Some("json") {
@@ -578,6 +1012,54 @@ impl Store {
             }
         }
         Ok(())
+    }
+
+    /// An unknown-attempt disposition neither moves a target nor replays its
+    /// old handoff. Later completed work is retained and pinned, not forbidden.
+    /// Hold the queue lock while measuring and comparing this current state.
+    fn quiescent_source_progress_fingerprint_locked(
+        &self,
+        project: &str,
+        source: &Target,
+        witness_event_id: &str,
+    ) -> Result<String> {
+        let identity =
+            self.source_progress_fingerprint_locked(project, source, witness_event_id)?;
+        let mut facts = BTreeMap::new();
+        for child in ["queue", "archive", "deliveries", "turns"] {
+            for entry in fs::read_dir(self.root.join(child))
+                .map_err(|_| "CONFIG_SOURCE_FINGERPRINT_UNAVAILABLE")?
+            {
+                let path = entry
+                    .map_err(|_| "CONFIG_SOURCE_FINGERPRINT_UNAVAILABLE")?
+                    .path();
+                if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                    continue;
+                }
+                let value: serde_json::Value = read(&path)?;
+                let owner = if child == "deliveries" {
+                    &value["event"]["projectId"]
+                } else {
+                    &value["projectId"]
+                };
+                if owner.as_str() != Some(project) {
+                    continue;
+                }
+                let filename = path
+                    .file_name()
+                    .and_then(|value| value.to_str())
+                    .ok_or("CONFIG_SOURCE_FINGERPRINT_UNAVAILABLE")?;
+                let canonical = serde_json::to_string(&value)
+                    .map_err(|_| "CONFIG_SOURCE_FINGERPRINT_UNAVAILABLE")?;
+                facts.insert(format!("{child}/{filename}"), digest(&canonical));
+                if facts.len() > MAX_SOURCE_PROGRESS_ITEMS {
+                    return Err("CONFIG_SOURCE_FINGERPRINT_CAPACITY".into());
+                }
+            }
+        }
+        let canonical = serde_json::to_string(&(identity, facts))
+            .map_err(|_| "CONFIG_SOURCE_FINGERPRINT_UNAVAILABLE")?;
+        Ok(digest(&canonical))
     }
 
     fn source_progress_fingerprint_locked(
@@ -687,6 +1169,10 @@ impl Store {
     pub fn publish(&self, event: &Event) -> Result<()> {
         event.validate()?;
         let _lock = self.lock()?;
+        let config = self.read_config()?;
+        if config.retired_targets.contains_key(&event.project_id) {
+            return Err("CONFIG_PROJECT_RETIRED".into());
+        }
         let path = self.event_path(&event.event_id);
         let archived = self.archive_path(&event.event_id);
         if archived.try_exists().map_err(|_| "QUEUE_UNAVAILABLE")? {
@@ -705,7 +1191,6 @@ impl Store {
                 Err("QUEUE_EVENT_ID_CONFLICT".into())
             };
         }
-        let config = self.read_config()?;
         let target = config
             .targets
             .get(&event.project_id)
@@ -726,7 +1211,7 @@ impl Store {
         event_type: &str,
         message: &str,
     ) -> Result<Event> {
-        self.produce_bound(id, project, event_type, message, None)
+        self.produce_bound(id, project, event_type, message, None, None)
     }
 
     /// Manual diagnostics must bind the target observed by their caller. The
@@ -740,7 +1225,194 @@ impl Store {
         message: &str,
         expected: &Target,
     ) -> Result<Event> {
-        self.produce_bound(id, project, event_type, message, Some(expected))
+        self.produce_bound(id, project, event_type, message, Some(expected), None)
+    }
+
+    /// Preserve typed admission references in the same immutable event/target
+    /// transaction. A replay cannot add, remove, or replace its references.
+    #[allow(clippy::too_many_arguments)]
+    pub fn produce_expected_with_audit(
+        &self,
+        id: &str,
+        project: &str,
+        event_type: &str,
+        message: &str,
+        expected: &Target,
+        audit_references: &[String],
+    ) -> Result<Event> {
+        if !valid_id(id) || !valid_id(project) {
+            return Err("QUEUE_EVENT_INVALID".into());
+        }
+        let _lock = self.lock()?;
+        self.produce_bound_locked_with_audit(
+            id,
+            project,
+            event_type,
+            message,
+            Some(expected),
+            None,
+            audit_references,
+        )
+    }
+
+    /// Record one bounded semantic intent against the caller's exact target.
+    /// Registered callers must retain their existing admission/ownership checks.
+    /// This only queues metadata: it grants no permission and starts no sender.
+    /// Replays use every durable event/delivery witness and never repair or
+    /// recreate queue/archive files, including an unknown prior submission.
+    pub fn produce_expected_wake(
+        &self,
+        project: &str,
+        message: &str,
+        expected: &Target,
+        intent: WakeIntent<'_>,
+    ) -> Result<Event> {
+        let event_id = intent.event_id(project)?;
+        expected.validate()?;
+        // Validate message and all caller-controlled metadata before touching
+        // Store state. The actual received time is assigned under its lock.
+        let make_event = |created_utc| {
+            Event {
+                schema_version: PROTOCOL_VERSION,
+                event_id: event_id.clone(),
+                project_id: project.into(),
+                event_type: "engineering_attention".into(),
+                created_utc,
+                message: message.into(),
+                target_generation: expected.generation,
+                audit_references: Vec::new(),
+            }
+            .with_wake_metadata(intent.metadata(created_utc)?)
+        };
+        make_event(1)?;
+
+        let _lock = self.lock()?;
+        let config = self.read_config()?;
+        if config.retired_targets.contains_key(project) {
+            return Err("CONFIG_PROJECT_RETIRED".into());
+        }
+        if config.targets.get(project) != Some(expected) {
+            return Err("TARGET_EXPECTATION_MISMATCH".into());
+        }
+        let mut previous = None;
+        for path in [self.archive_path(&event_id), self.event_path(&event_id)] {
+            if path.try_exists().map_err(|_| "QUEUE_UNAVAILABLE")? {
+                let event: Event = read(&path)?;
+                event.validate()?;
+                if previous.as_ref().is_some_and(|prior| prior != &event) {
+                    return Err("QUEUE_EVENT_ID_CONFLICT".into());
+                }
+                previous = Some(event);
+            }
+        }
+        let delivery = self.read_delivery(&event_id)?;
+        if let Some(delivery) = delivery.as_ref() {
+            if delivery.target != *expected {
+                return Err("TARGET_EXPECTATION_MISMATCH".into());
+            }
+            if previous
+                .as_ref()
+                .is_some_and(|prior| prior != &delivery.event)
+            {
+                return Err("QUEUE_EVENT_ID_CONFLICT".into());
+            }
+            previous = Some(delivery.event.clone());
+        }
+        if self.has_submission_witness_locked(&event_id)? {
+            // A surviving queue or CLAIMED journal cannot downgrade a crossed
+            // boundary. Only its compatible SUBMITTING/SENT delivery permits
+            // immutable readback; it never authorizes another submission.
+            let delivery = delivery
+                .as_ref()
+                .filter(|delivery| matches!(delivery.phase, Phase::Submitting | Phase::Sent))
+                .ok_or("SUBMISSION_RECONCILIATION_REQUIRED")?;
+            self.submission_started_utc(delivery)?;
+            if let Some(timer) = self.read_timer(&event_id)?
+                && (timer.project_id != delivery.event.project_id
+                    || timer.target_generation != delivery.target.generation
+                    || timer.target_digest != delivery.target.digest)
+            {
+                return Err("TIMER_SUBMISSION_BINDING_MISMATCH".into());
+            }
+        }
+        let created_utc = previous
+            .as_ref()
+            .map_or_else(now, |event| event.created_utc);
+        let event = make_event(created_utc)?;
+        if let Some(previous) = previous {
+            if previous.target_generation != expected.generation {
+                return Err("TARGET_EXPECTATION_MISMATCH".into());
+            }
+            if previous != event {
+                return Err("QUEUE_EVENT_ID_CONFLICT".into());
+            }
+            return Ok(previous);
+        }
+        self.check_capacity()?;
+        atomic(&self.event_path(&event_id), &event)?;
+        Ok(event)
+    }
+
+    /// Both authentic review producers use the same project-scoped message
+    /// and target CAS. An exact legacy CatDesk message may be returned only
+    /// from an existing event; new events always use the current message.
+    pub fn produce_review_expected(
+        &self,
+        id: &str,
+        project: &str,
+        event_type: &str,
+        expected: &Target,
+    ) -> Result<Event> {
+        self.produce_review_expected_in(id, project, event_type, expected, None)
+    }
+
+    /// Independent discovery rechecks the fixed source registry while holding
+    /// the same queue lock as the final target CAS and event publication.
+    pub fn produce_discovered_review_expected(
+        &self,
+        workspace: &Path,
+        id: &str,
+        project: &str,
+        event_type: &str,
+        expected: &Target,
+    ) -> Result<Event> {
+        self.produce_review_expected_in(id, project, event_type, expected, Some(workspace))
+    }
+
+    fn produce_review_expected_in(
+        &self,
+        id: &str,
+        project: &str,
+        event_type: &str,
+        expected: &Target,
+        workspace: Option<&Path>,
+    ) -> Result<Event> {
+        if !valid_id(id)
+            || !valid_id(project)
+            || !matches!(event_type, "review_ready" | "engineering_attention")
+        {
+            return Err("QUEUE_EVENT_INVALID".into());
+        }
+        let message = format!(
+            "CatDesk Wake: {event_type} for project {project} review record {id}. Continue only this registered project's pending review in this conversation."
+        );
+        // Compatibility readback preserves immutable queued/archived bytes.
+        // This old instruction is never used to construct a new event.
+        let legacy = (project == "catdesk").then(|| format!(
+            "CatDesk Wake: {event_type} for CatDesk review record {id}. Review the exact record and current wake/GUI repair plan through CatDesk. Ordinary autonomy remains frozen until wake acceptance completes."
+        ));
+        let _lock = self.lock()?;
+        if let Some(workspace) = workspace {
+            crate::review_binding::validate_registered_review_target(workspace, project, expected)?;
+        }
+        self.produce_bound_locked(
+            id,
+            project,
+            event_type,
+            &message,
+            Some(expected),
+            legacy.as_deref(),
+        )
     }
 
     fn produce_bound(
@@ -750,13 +1422,52 @@ impl Store {
         event_type: &str,
         message: &str,
         expected: Option<&Target>,
+        legacy_message: Option<&str>,
     ) -> Result<Event> {
         if !valid_id(id) || !valid_id(project) {
             return Err("QUEUE_EVENT_INVALID".into());
         }
         let _lock = self.lock()?;
+        self.produce_bound_locked(id, project, event_type, message, expected, legacy_message)
+    }
+
+    fn produce_bound_locked(
+        &self,
+        id: &str,
+        project: &str,
+        event_type: &str,
+        message: &str,
+        expected: Option<&Target>,
+        legacy_message: Option<&str>,
+    ) -> Result<Event> {
+        self.produce_bound_locked_with_audit(
+            id,
+            project,
+            event_type,
+            message,
+            expected,
+            legacy_message,
+            &[],
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn produce_bound_locked_with_audit(
+        &self,
+        id: &str,
+        project: &str,
+        event_type: &str,
+        message: &str,
+        expected: Option<&Target>,
+        legacy_message: Option<&str>,
+        audit_references: &[String],
+    ) -> Result<Event> {
+        let config = self.read_config()?;
+        if config.retired_targets.contains_key(project) {
+            return Err("CONFIG_PROJECT_RETIRED".into());
+        }
         if let Some(expected) = expected
-            && self.read_config()?.targets.get(project) != Some(expected)
+            && config.targets.get(project) != Some(expected)
         {
             return Err("TARGET_EXPECTATION_MISMATCH".into());
         }
@@ -771,7 +1482,8 @@ impl Store {
             if prior.event_id == id
                 && prior.project_id == project
                 && prior.event_type == event_type
-                && prior.message == message
+                && prior.audit_references == audit_references
+                && (prior.message == message || legacy_message == Some(prior.message.as_str()))
             {
                 return Ok(prior);
             }
@@ -786,13 +1498,13 @@ impl Store {
             if prior.event_id != id
                 || prior.project_id != project
                 || prior.event_type != event_type
-                || prior.message != message
+                || prior.audit_references != audit_references
+                || (prior.message != message && legacy_message != Some(prior.message.as_str()))
             {
                 return Err("QUEUE_EVENT_ID_CONFLICT".into());
             }
             return Ok(prior);
         }
-        let config = self.read_config()?;
         let target = config.targets.get(project).ok_or("TARGET_NOT_CONFIGURED")?;
         let event = Event {
             schema_version: 1,
@@ -802,7 +1514,7 @@ impl Store {
             created_utc: now(),
             message: message.into(),
             target_generation: target.generation,
-            audit_references: vec![],
+            audit_references: audit_references.to_vec(),
         };
         event.validate()?;
         self.check_capacity()?;
@@ -856,11 +1568,23 @@ impl Store {
         Ok(Some(timer))
     }
     pub fn timer(&self, id: &str) -> Result<Option<TurnTimer>> {
-        let _lock = self.lock()?;
+        let _lock = self.read_lock()?;
         self.read_timer(id)
     }
     pub fn timers(&self) -> Result<Vec<TurnTimer>> {
-        let _lock = self.lock()?;
+        self.read_timers(None)
+    }
+    /// Scope automatic task discovery to one registered project. An attributable
+    /// sibling's invalid timer must not deny this project's progress. Unreadable
+    /// or unparseable state still fails closed; global diagnostics stay strict.
+    pub fn timers_for_project(&self, project: &str) -> Result<Vec<TurnTimer>> {
+        if !valid_id(project) {
+            return Err("TURN_PROJECT_INVALID".into());
+        }
+        self.read_timers(Some(project))
+    }
+    fn read_timers(&self, project: Option<&str>) -> Result<Vec<TurnTimer>> {
+        let _lock = self.read_lock()?;
         let mut timers = Vec::new();
         for entry in fs::read_dir(self.root.join("turns")).map_err(|_| "TURN_TIMER_UNAVAILABLE")? {
             let path = entry.map_err(|_| "TURN_TIMER_UNAVAILABLE")?.path();
@@ -868,6 +1592,11 @@ impl Store {
                 continue;
             }
             let timer: TurnTimer = read(&path)?;
+            if valid_id(&timer.project_id)
+                && project.is_some_and(|project| timer.project_id != project)
+            {
+                continue;
+            }
             timer.validate()?;
             if path.file_stem().and_then(|value| value.to_str()) != Some(&timer.event_id) {
                 return Err("TURN_EVENT_MISMATCH".into());
@@ -977,7 +1706,7 @@ impl Store {
     }
 
     pub fn events(&self) -> Result<Vec<Event>> {
-        let _lock = self.lock()?;
+        let _lock = self.read_lock()?;
         let mut events = Vec::new();
         for entry in fs::read_dir(self.root.join("queue")).map_err(|_| "QUEUE_UNAVAILABLE")? {
             let path = entry.map_err(|_| "QUEUE_UNAVAILABLE")?.path();
@@ -1013,7 +1742,7 @@ impl Store {
         Ok(Some(delivery))
     }
     pub fn delivery(&self, id: &str) -> Result<Option<Delivery>> {
-        let _lock = self.lock()?;
+        let _lock = self.read_lock()?;
         self.read_delivery(id)
     }
     /// A host holds a separate lifetime lock. Only after that lock is acquired
@@ -1048,6 +1777,9 @@ impl Store {
                 return Err("RECEIPT_BINDING_MISMATCH".into());
             }
         }
+        if self.has_submission_witness_locked(&event.event_id)? {
+            return Err("SUBMISSION_RECONCILIATION_REQUIRED".into());
+        }
         let delivery = Delivery {
             schema_version: PROTOCOL_VERSION,
             event: event.clone(),
@@ -1070,6 +1802,30 @@ impl Store {
         receipt: Option<Receipt>,
         reason: Option<String>,
     ) -> Result<Delivery> {
+        self.transition_with_deadline(id, owner, next, receipt, reason, None)
+    }
+
+    /// Scoped admission must check its monotonic deadline after acquiring the
+    /// transaction lock, immediately before starting a new submission witness.
+    /// Already-started I/O and existing uncertain submissions are not undone.
+    pub fn begin_submission_before_deadline(
+        &self,
+        id: &str,
+        owner: &str,
+        deadline: Instant,
+    ) -> Result<Delivery> {
+        self.transition_with_deadline(id, owner, Phase::Submitting, None, None, Some(deadline))
+    }
+
+    fn transition_with_deadline(
+        &self,
+        id: &str,
+        owner: &str,
+        next: Phase,
+        receipt: Option<Receipt>,
+        reason: Option<String>,
+        submission_deadline: Option<Instant>,
+    ) -> Result<Delivery> {
         let _lock = self.lock()?;
         let mut delivery = self.read_delivery(id)?.ok_or("SUBMISSION_CLAIM_MISSING")?;
         if delivery.owner != owner {
@@ -1089,6 +1845,15 @@ impl Store {
             }
         }
         if next == Phase::Submitting {
+            if self.has_submission_witness_locked(id)? {
+                return Err("SUBMISSION_RECONCILIATION_REQUIRED".into());
+            }
+            // Recheck immediately before authorizing browser submission. Do
+            // not apply TTL to SUBMITTING/SENT recovery or receipt recording:
+            // an unknown outcome must never be retired or made replayable.
+            if delivery.event.is_expired_at(now())? {
+                return Err("QUEUE_EVENT_EXPIRED".into());
+            }
             // Keep the immutable recovery-window start separate from the
             // queue's age and the mutable attention timestamp. A sidecar keeps
             // the existing Delivery JSON readable by earlier installed hosts.
@@ -1099,6 +1864,9 @@ impl Store {
                 target_digest: delivery.target.digest.clone(),
                 started_utc: now(),
             };
+            if submission_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                return Err("SCOPED_REVIEW_TIMEOUT".into());
+            }
             atomic(&self.submission_start_path(id), &start)?;
         }
         delivery.phase = next;
@@ -1120,6 +1888,29 @@ impl Store {
         self.root
             .join("logs")
             .join(format!("submission-start-{id}.json"))
+    }
+
+    /// Called under the Store transaction lock. Even a partial submission
+    /// write remains evidence; a stale CLAIMED owner must not replace it.
+    fn has_submission_witness_locked(&self, id: &str) -> Result<bool> {
+        for path in [self.submission_start_path(id), self.timer_path(id)] {
+            if path
+                .try_exists()
+                .map_err(|_| "SUBMISSION_RETRY_EVIDENCE_UNAVAILABLE")?
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// A scheduler read cannot clear or downgrade partial submission evidence.
+    pub(crate) fn submission_witness_present(&self, id: &str) -> Result<bool> {
+        if !valid_id(id) {
+            return Err("QUEUE_EVENT_INVALID".into());
+        }
+        let _lock = self.read_lock()?;
+        self.has_submission_witness_locked(id)
     }
 
     pub(crate) fn submission_started_utc(&self, delivery: &Delivery) -> Result<u64> {
@@ -1144,13 +1935,107 @@ impl Store {
         Ok(start.started_utc)
     }
 
+    /// Positive current-protocol fence proof; legacy fallback is insufficient
+    /// for transferring ownership before the adapter's submit acknowledgment.
+    pub fn require_submitting_witness(&self, delivery: &Delivery) -> Result<u64> {
+        let _lock = self.read_lock()?;
+        if delivery.phase != Phase::Submitting
+            || delivery.receipt.is_some()
+            || self.read_delivery(&delivery.event.event_id)?.as_ref() != Some(delivery)
+            || !self
+                .submission_start_path(&delivery.event.event_id)
+                .try_exists()
+                .map_err(|_| "SUBMISSION_START_UNAVAILABLE")?
+        {
+            return Err("SUBMISSION_HANDOFF_WITNESS_REQUIRED".into());
+        }
+        self.submission_started_utc(delivery)
+    }
+
     /// Reconcile one already-crossed submission boundary after a later
     /// browser-only proof confirms that the exact expected user message is
     /// durably present on the exact stored target. This path can only advance
     /// SUBMITTING -> SENT; it never permits replay, downgrade, or retargeting.
     pub(crate) fn reconcile_submitting_sent(&self, id: &str, receipt: Receipt) -> Result<Delivery> {
+        self.reconcile_submitting_sent_inner(id, receipt, None, false)
+    }
+
+    /// Commit only a fresh browser proof selected by the ordinary work owner.
+    /// No send authority is created; the retained submission witness is required.
+    pub fn reconcile_ordinary_submitting_sent_expected(
+        &self,
+        id: &str,
+        receipt: Receipt,
+        expected: &Delivery,
+    ) -> Result<Delivery> {
+        self.reconcile_submitting_sent_inner(id, receipt, Some(expected), false)
+    }
+
+    /// The same receipt CAS for an exact task-context continuation. The caller
+    /// retains the task/project lease and supplies fresh read-only browser proof.
+    /// This creates no task, producer authority, retry permission or USER input.
+    pub fn reconcile_task_continuation_sent_expected(
+        &self,
+        id: &str,
+        receipt: Receipt,
+        expected: &Delivery,
+    ) -> Result<Delivery> {
+        self.reconcile_submitting_sent_inner(id, receipt, Some(expected), true)
+    }
+
+    fn reconcile_submitting_sent_inner(
+        &self,
+        id: &str,
+        receipt: Receipt,
+        expected: Option<&Delivery>,
+        task_continuation: bool,
+    ) -> Result<Delivery> {
         let _lock = self.lock()?;
         let mut delivery = self.read_delivery(id)?.ok_or("SUBMISSION_CLAIM_MISSING")?;
+        let exact_hash = |value: &str| {
+            value.len() == 64
+                && value
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        };
+        let selected_kind = if task_continuation {
+            id.strip_prefix("wake-intent-").is_some_and(exact_hash)
+                && delivery.event.audit_references.len() == 5
+                && delivery.event.wake_metadata()?.is_some_and(|metadata| {
+                    metadata.purpose == crate::protocol::WakePurpose::NewTask
+                        && metadata
+                            .source_event_id
+                            .strip_prefix("web-work-")
+                            .is_some_and(exact_hash)
+                        && metadata
+                            .source_turn_id
+                            .strip_prefix("initial-context-")
+                            .is_some_and(exact_hash)
+                        && crate::store::WakeIntent {
+                            purpose: metadata.purpose,
+                            source_event_id: &metadata.source_event_id,
+                            source_turn_id: &metadata.source_turn_id,
+                            priority: metadata.priority,
+                            ttl_seconds: 1,
+                        }
+                        .event_id(&delivery.event.project_id)
+                        .is_ok_and(|expected_id| expected_id == id)
+                })
+        } else {
+            delivery.event.audit_references.is_empty()
+                && id.strip_prefix("web-work-").is_some_and(exact_hash)
+        };
+        if let Some(expected) = expected
+            && (&delivery != expected
+                || delivery.event.event_type != "engineering_attention"
+                || !selected_kind
+                || read::<Event>(&self.event_path(id))? != delivery.event
+                || !self.submission_start_path(id).is_file()
+                || receipt.sent_utc < self.submission_started_utc(&delivery)?
+                || receipt.sent_utc > now())
+        {
+            return Err("SUBMISSION_RECONCILIATION_SCOPE_CHANGED".into());
+        }
         if delivery.phase != Phase::Submitting || delivery.receipt.is_some() {
             return Err("SUBMISSION_RECONCILIATION_REFUSED".into());
         }
@@ -1409,18 +2294,259 @@ impl Store {
     }
 
     pub fn retry_pre_submit(&self, id: &str) -> Result<()> {
+        self.retry_pre_submit_inner(id, None).map(|_| ())
+    }
+
+    /// Local operator recovery after qualifying the original acknowledgment
+    /// protocol. CAS and prior evidence are committed under the existing lock;
+    /// this method does not attest historical code or authorize a browser send.
+    pub fn retry_ordinary_pre_submit_expected(
+        &self,
+        id: &str,
+        expected: &Delivery,
+        expected_sha256: &str,
+    ) -> Result<Delivery> {
+        self.retry_pre_submit_inner(id, Some((expected, expected_sha256)))
+    }
+
+    fn retry_pre_submit_inner(
+        &self,
+        id: &str,
+        expected: Option<(&Delivery, &str)>,
+    ) -> Result<Delivery> {
         let _lock = self.lock()?;
         let mut delivery = self.read_delivery(id)?.ok_or("SUBMISSION_CLAIM_MISSING")?;
+        if let Some((prior, hash)) = expected {
+            use sha2::{Digest, Sha256};
+            if hash.len() != 64
+                || !hash
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                || &delivery != prior
+                || format!(
+                    "{:x}",
+                    Sha256::digest(
+                        fs::read(self.delivery_path(id))
+                            .map_err(|_| "SUBMISSION_RETRY_EVIDENCE_UNAVAILABLE")?
+                    )
+                ) != hash
+            {
+                return Err("SUBMISSION_RETRY_CAS_CHANGED".into());
+            }
+            if delivery.event.event_type != "engineering_attention"
+                || !delivery.event.audit_references.is_empty()
+                || delivery.reason.as_deref() != Some("BROWSER_ATTEMPT_TIMEOUT")
+                || !id.strip_prefix("web-work-").is_some_and(|v| {
+                    v.len() == 64
+                        && v.bytes()
+                            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                })
+                || read::<Event>(&self.event_path(id))? != delivery.event
+            {
+                return Err("SUBMISSION_RETRY_ORDINARY_SCOPE_INVALID".into());
+            }
+        }
         if delivery.phase != Phase::Attention || delivery.receipt.is_some() {
             return Err("SUBMISSION_RETRY_REFUSED".into());
+        }
+        // Surviving submission evidence remains authoritative even if an older
+        // or interrupted journal says ATTENTION. Never downgrade that boundary.
+        for path in [
+            self.submission_start_path(id),
+            self.timer_path(id),
+            self.archive_path(id),
+        ] {
+            if path
+                .try_exists()
+                .map_err(|_| "SUBMISSION_RETRY_EVIDENCE_UNAVAILABLE")?
+            {
+                return Err("SUBMISSION_RETRY_REFUSED".into());
+            }
         }
         if self.read_config()?.targets.get(&delivery.event.project_id) != Some(&delivery.target) {
             return Err("TARGET_GENERATION_STALE".into());
         }
+        if let Some((_, hash)) = expected {
+            let evidence = serde_json::json!({"schemaVersion":1,"purpose":"ORDINARY_PRE_SUBMIT_RECOVERY_PRIOR_DELIVERY",
+                "deliverySha256":hash,"delivery":delivery});
+            let path = self
+                .root
+                .join("logs")
+                .join(format!("pre-submit-retry-{id}-{hash}.json"));
+            if path
+                .try_exists()
+                .map_err(|_| "SUBMISSION_RETRY_EVIDENCE_UNAVAILABLE")?
+            {
+                if read::<serde_json::Value>(&path)? != evidence {
+                    return Err("SUBMISSION_RETRY_PRIOR_EVIDENCE_CONFLICT".into());
+                }
+            } else {
+                atomic(&path, &evidence)?;
+            }
+        }
         delivery.phase = Phase::Claimed;
         delivery.reason = None;
         delivery.updated_utc = now();
-        atomic(&self.delivery_path(id), &delivery)
+        atomic(&self.delivery_path(id), &delivery)?;
+        Ok(delivery)
+    }
+
+    fn pre_edit_refusal_path(&self, id: &str) -> PathBuf {
+        self.root
+            .join("logs")
+            .join(format!("pre-edit-refusal-{id}.json"))
+    }
+
+    fn checked_pre_edit_refusal(&self, delivery: &Delivery) -> Result<PreEditRefusalRecord> {
+        delivery.validate()?;
+        let proof: PreEditRefusalRecord =
+            read(&self.pre_edit_refusal_path(&delivery.event.event_id))?;
+        if proof.schema_version != PROTOCOL_VERSION
+            || proof.event_id != delivery.event.event_id
+            || proof.project_id != delivery.event.project_id
+            || proof.owner != delivery.owner
+            || proof.target != delivery.target
+            || proof.message_digest != delivery.message_digest
+            || delivery.event.event_type != "source_review"
+            || delivery.event.audit_references.len() != 1
+            || !delivery.event.audit_references[0].starts_with("catdesk-review-v1:")
+            || delivery.event.audit_references[0] == "catdesk-review-v1:"
+            || !self
+                .submission_start_path(&delivery.event.event_id)
+                .try_exists()
+                .map_err(|_| "PRE_EDIT_REFUSAL_EVIDENCE_UNAVAILABLE")?
+            || proof.submission_started_utc != self.submission_started_utc(delivery)?
+            || proof.recorded_utc < proof.submission_started_utc
+            || proof.recorded_utc > now()
+        {
+            return Err("PRE_EDIT_REFUSAL_EVIDENCE_INVALID".into());
+        }
+        crate::runtime::validate_pre_edit_refusal_frame(&proof.frame, delivery)?;
+        Ok(proof)
+    }
+
+    /// Called only while handling this owner's terminal adapter frame, never
+    /// from an operator-supplied attestation or a later negative DOM snapshot.
+    pub(crate) fn record_pre_edit_refusal(
+        &self,
+        id: &str,
+        lease: &HostLease,
+        frame: &serde_json::Value,
+    ) -> Result<()> {
+        if !valid_id(id) || lease.root != self.root {
+            return Err("PRE_EDIT_REFUSAL_OWNER_INVALID".into());
+        }
+        let _lock = self.lock()?;
+        let delivery = self.read_delivery(id)?.ok_or("SUBMISSION_CLAIM_MISSING")?;
+        if delivery.phase != Phase::Submitting
+            || delivery.owner != lease.owner()
+            || delivery.receipt.is_some()
+            || delivery.event.event_type != "source_review"
+            || delivery.event.audit_references.len() != 1
+            || !delivery.event.audit_references[0].starts_with("catdesk-review-v1:")
+            || delivery.event.audit_references[0] == "catdesk-review-v1:"
+            || self.read_config()?.targets.get(&delivery.event.project_id) != Some(&delivery.target)
+            || self.read_timer(id)?.is_some()
+            || self
+                .archive_path(id)
+                .try_exists()
+                .map_err(|_| "QUEUE_UNAVAILABLE")?
+            || !self
+                .submission_start_path(id)
+                .try_exists()
+                .map_err(|_| "SUBMISSION_START_UNAVAILABLE")?
+        {
+            return Err("PRE_EDIT_REFUSAL_RECORD_REFUSED".into());
+        }
+        let queued: Event = read(&self.event_path(id))?;
+        if queued != delivery.event {
+            return Err("PRE_EDIT_REFUSAL_RECORD_REFUSED".into());
+        }
+        crate::runtime::validate_pre_edit_refusal_frame(frame, &delivery)?;
+        let path = self.pre_edit_refusal_path(id);
+        if path
+            .try_exists()
+            .map_err(|_| "PRE_EDIT_REFUSAL_EVIDENCE_UNAVAILABLE")?
+        {
+            let prior = self.checked_pre_edit_refusal(&delivery)?;
+            return if prior.frame == *frame {
+                Ok(())
+            } else {
+                Err("PRE_EDIT_REFUSAL_EVIDENCE_CHANGED".into())
+            };
+        }
+        let proof = PreEditRefusalRecord {
+            schema_version: PROTOCOL_VERSION,
+            event_id: id.into(),
+            project_id: delivery.event.project_id.clone(),
+            owner: delivery.owner.clone(),
+            target: delivery.target.clone(),
+            message_digest: delivery.message_digest.clone(),
+            submission_started_utc: self.submission_started_utc(&delivery)?,
+            recorded_utc: now(),
+            frame: frame.clone(),
+        };
+        if proof.recorded_utc < proof.submission_started_utc {
+            return Err("PRE_EDIT_REFUSAL_EVIDENCE_INVALID".into());
+        }
+        atomic(&path, &proof)
+    }
+
+    fn retire_pre_edit_refusal_locked(
+        &self,
+        id: &str,
+        project: &str,
+        target: &Target,
+        message_digest: &str,
+    ) -> Result<()> {
+        // try_lock is nonblocking. A running or still-closing host must refuse
+        // rather than race its error handler or borrow its process ownership.
+        let _host = self.host_lock()?;
+        let control: crate::runtime::Control = read(&self.root.join("control.json"))?;
+        if control.schema_version != 1 || control.desired != "STOPPED" {
+            return Err("PRE_EDIT_REFUSAL_HOST_NOT_STOPPED".into());
+        }
+        let mut delivery = self.read_delivery(id)?.ok_or("SUBMISSION_CLAIM_MISSING")?;
+        require_expected_retirement_event(&delivery.event, project, target, message_digest)?;
+        if delivery.target != *target
+            || delivery.message_digest != message_digest
+            || self.read_config()?.targets.get(project) != Some(target)
+            || delivery.receipt.is_some()
+            || self.read_timer(id)?.is_some()
+            || !(delivery.phase == Phase::Submitting
+                || (delivery.phase == Phase::Stale
+                    && delivery.reason.as_deref() == Some("PRE_EDIT_REFUSED_NO_SEND")))
+        {
+            return Err("PRE_EDIT_REFUSAL_RETIREMENT_REFUSED".into());
+        }
+        self.checked_pre_edit_refusal(&delivery)?;
+        let queued = self.event_path(id);
+        let archive = self.archive_path(id);
+        let has_queue = queued.try_exists().map_err(|_| "QUEUE_UNAVAILABLE")?;
+        let has_archive = archive.try_exists().map_err(|_| "QUEUE_UNAVAILABLE")?;
+        if (has_queue && read::<Event>(&queued)? != delivery.event)
+            || (has_archive && read::<Event>(&archive)? != delivery.event)
+            || (has_archive && delivery.phase != Phase::Stale)
+            || (!has_queue && (!has_archive || delivery.phase != Phase::Stale))
+        {
+            return Err("PRE_EDIT_REFUSAL_RETIREMENT_REFUSED".into());
+        }
+        if delivery.phase != Phase::Stale {
+            delivery.phase = Phase::Stale;
+            delivery.reason = Some("PRE_EDIT_REFUSED_NO_SEND".into());
+            delivery.updated_utc = now();
+            delivery.validate()?;
+            atomic(&self.delivery_path(id), &delivery)?;
+        }
+        if !has_archive {
+            atomic(&archive, &delivery.event)?;
+        }
+        if has_queue {
+            fs::remove_file(queued).map_err(|_| "QUEUE_ARCHIVE_FAILED")?;
+        }
+        // The original submission marker and refusal witness remain. Retrying
+        // the old identity is still forbidden; no reservation is refunded.
+        Ok(())
     }
 
     /// Retire one exact pre-submit queue event without deleting its evidence.
@@ -1435,9 +2561,10 @@ impl Store {
         self.retire_stale_locked(id, None)
     }
 
-    /// Retire an exact, receiptless engineering-attention request during a
-    /// durable caller-side closure. A never-published request has no Wake
-    /// artifacts and is a safe no-op; any partial evidence refuses closure.
+    /// Retire an exact, receiptless request during a durable caller-side closure.
+    /// A newly witnessed source-review pre-edit refusal additionally requires
+    /// a stopped host; the caller verifies historical review authorization.
+    /// Legacy/unknown submission evidence still refuses closure.
     pub fn retire_stale_expected(
         &self,
         id: &str,
@@ -1460,6 +2587,15 @@ impl Store {
     }
 
     fn retire_stale_locked(&self, id: &str, expected: Option<(&str, &Target, &str)>) -> Result<()> {
+        if self
+            .pre_edit_refusal_path(id)
+            .try_exists()
+            .map_err(|_| "PRE_EDIT_REFUSAL_EVIDENCE_UNAVAILABLE")?
+        {
+            let (project, target, digest) =
+                expected.ok_or("STALE_RETIREMENT_EXPECTATION_REQUIRED")?;
+            return self.retire_pre_edit_refusal_locked(id, project, target, digest);
+        }
         let event_path = self.event_path(id);
         let archive_path = self.archive_path(id);
         let queued = event_path.try_exists().map_err(|_| "QUEUE_UNAVAILABLE")?;
@@ -1606,6 +2742,9 @@ impl Store {
         fs::remove_file(self.event_path(id)).map_err(|_| "QUEUE_ARCHIVE_FAILED".into())
     }
     pub fn host_lock(&self) -> Result<HostLease> {
+        if self.read_only {
+            return Err("STATE_READ_ONLY".into());
+        }
         let path = self.root.join("host.lock");
         reject_link(&path)?;
         let file = OpenOptions::new()
@@ -1629,6 +2768,433 @@ impl Store {
     }
 }
 
+#[cfg(test)]
+mod task_continuation_receipt_tests {
+    use super::*;
+
+    fn fixture() -> (Store, Delivery, Receipt) {
+        let base = std::env::temp_dir().join(format!(
+            "task-continuation-receipt-{}-{}",
+            std::process::id(),
+            TEMP.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir(&base).unwrap();
+        let store = Store::open_scoped_for_test(&base.join("wake"), &base).unwrap();
+        store.initialize().unwrap();
+        let target = store
+            .set_target("alpha", 0, "https://chatgpt.com/c/fixture")
+            .unwrap();
+        let event = store
+            .produce_expected_wake(
+                "alpha",
+                "frozen task continuation",
+                &target,
+                WakeIntent {
+                    purpose: WakePurpose::NewTask,
+                    source_event_id: &format!("web-work-{}", "a".repeat(64)),
+                    source_turn_id: &format!("initial-context-{}", "b".repeat(64)),
+                    priority: 0,
+                    ttl_seconds: 600,
+                },
+            )
+            .unwrap();
+        let host = store.host_lock().unwrap();
+        let claimed = store.claim(&event, &host).unwrap();
+        let delivery = store
+            .transition(
+                &event.event_id,
+                &claimed.owner,
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: event.event_id,
+            target_generation: target.generation,
+            target_digest: target.digest,
+            message_digest: delivery.message_digest.clone(),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        drop(host);
+        (store, delivery, receipt)
+    }
+
+    #[test]
+    fn exact_task_continuation_receipt_reuses_cas_and_never_authorizes_replay() {
+        let (store, prior, receipt) = fixture();
+        let id = &prior.event.event_id;
+        let witness = fs::read(store.submission_start_path(id)).unwrap();
+        assert!(
+            store
+                .reconcile_ordinary_submitting_sent_expected(id, receipt.clone(), &prior)
+                .is_err()
+        );
+        let sent = store
+            .reconcile_task_continuation_sent_expected(id, receipt.clone(), &prior)
+            .unwrap();
+        assert_eq!(sent.phase, Phase::Sent);
+        assert_eq!(sent.receipt, Some(receipt.clone()));
+        assert_eq!(fs::read(store.submission_start_path(id)).unwrap(), witness);
+        assert_eq!(read::<Event>(&store.archive_path(id)).unwrap(), prior.event);
+        assert!(!store.event_path(id).exists());
+        store.record_exact_receipt_timer(id, &receipt).unwrap();
+        assert!(
+            store
+                .reconcile_task_continuation_sent_expected(id, receipt, &prior)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn changed_task_receipt_identity_or_authority_preserves_unknown_without_mutation() {
+        for case in [
+            "expected",
+            "queue",
+            "witness",
+            "target",
+            "message",
+            "evidence",
+            "future",
+            "past",
+            "event-id",
+            "purpose",
+            "source",
+            "turn",
+            "semantic-id",
+            "claimed",
+        ] {
+            let (store, prior, mut receipt) = fixture();
+            let id = &prior.event.event_id;
+            let mut expected = prior.clone();
+            match case {
+                "expected" => expected.reason = Some("changed".into()),
+                "queue" => {
+                    let mut event = prior.event.clone();
+                    event.message = "foreign".into();
+                    atomic(&store.event_path(id), &event).unwrap();
+                }
+                "witness" => fs::remove_file(store.submission_start_path(id)).unwrap(),
+                "target" => receipt.target_generation += 1,
+                "message" => receipt.message_digest = "c".repeat(64),
+                "evidence" => receipt.evidence = "SUBMISSION_ACCEPTED".into(),
+                "future" => receipt.sent_utc = now() + 1000,
+                "past" => receipt.sent_utc = 1,
+                "event-id" => receipt.event_id = format!("wake-intent-{}", "c".repeat(64)),
+                "claimed" => {
+                    expected.phase = Phase::Claimed;
+                    atomic(&store.delivery_path(id), &expected).unwrap();
+                }
+                _ => {
+                    for field in &mut expected.event.audit_references {
+                        if case == "purpose" {
+                            *field = field.replace("NEW_TASK", "ROLLOVER");
+                        }
+                        if case == "source" {
+                            *field = field.replace("web-work-", "foreign-");
+                        }
+                        if case == "turn" {
+                            *field = field.replace("initial-context-", "foreign-");
+                        }
+                        if case == "semantic-id" {
+                            *field = field.replace(&"a".repeat(64), &"d".repeat(64));
+                        }
+                    }
+                    atomic(&store.delivery_path(id), &expected).unwrap();
+                    atomic(&store.event_path(id), &expected.event).unwrap();
+                }
+            }
+            let before = fs::read(store.delivery_path(id)).unwrap();
+            assert!(
+                store
+                    .reconcile_task_continuation_sent_expected(id, receipt, &expected)
+                    .is_err(),
+                "{case}"
+            );
+            assert_eq!(fs::read(store.delivery_path(id)).unwrap(), before);
+            assert!(!store.archive_path(id).exists());
+            assert!(!store.timer_path(id).exists());
+        }
+    }
+}
+
+#[cfg(test)]
+mod ordinary_retry_cas_tests {
+    use super::*;
+    use sha2::{Digest, Sha256};
+    fn submitting_fixture() -> (Store, Delivery, Receipt) {
+        let (store, prior, hash) = fixture();
+        let claimed = store
+            .retry_ordinary_pre_submit_expected(&prior.event.event_id, &prior, &hash)
+            .unwrap();
+        let delivery = store
+            .transition(
+                &claimed.event.event_id,
+                &claimed.owner,
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: delivery.event.event_id.clone(),
+            target_generation: delivery.target.generation,
+            target_digest: delivery.target.digest.clone(),
+            message_digest: delivery.message_digest.clone(),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        (store, delivery, receipt)
+    }
+
+    #[test]
+    fn ordinary_receipt_commit_requires_exact_crossed_delivery_and_preserves_witness() {
+        let (store, prior, receipt) = submitting_fixture();
+        let id = &prior.event.event_id;
+        let witness = fs::read(store.submission_start_path(id)).unwrap();
+        let sent = store
+            .reconcile_ordinary_submitting_sent_expected(id, receipt.clone(), &prior)
+            .unwrap();
+        assert_eq!(sent.phase, Phase::Sent);
+        assert_eq!(sent.receipt, Some(receipt.clone()));
+        assert_eq!(fs::read(store.submission_start_path(id)).unwrap(), witness);
+        assert!(!store.event_path(id).exists());
+        assert_eq!(read::<Event>(&store.archive_path(id)).unwrap(), prior.event);
+        store.record_exact_receipt_timer(id, &receipt).unwrap();
+        assert!(
+            store
+                .reconcile_ordinary_submitting_sent_expected(id, receipt, &prior)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn ordinary_receipt_commit_refuses_changed_scope_queue_witness_or_receipt_without_mutation() {
+        for case in [
+            "expected",
+            "queue",
+            "witness",
+            "wrong-project",
+            "generation",
+            "message",
+            "evidence",
+            "future",
+            "past",
+            "claimed",
+        ] {
+            let (store, prior, mut receipt) = submitting_fixture();
+            let id = &prior.event.event_id;
+            let mut expected = prior.clone();
+            match case {
+                "expected" => expected.reason = Some("changed".into()),
+                "queue" => {
+                    let mut event = prior.event.clone();
+                    event.message = "foreign".into();
+                    atomic(&store.event_path(id), &event).unwrap();
+                }
+                "witness" => fs::remove_file(store.submission_start_path(id)).unwrap(),
+                "wrong-project" => receipt.event_id = format!("web-work-{}", "b".repeat(64)),
+                "generation" => receipt.target_generation += 1,
+                "message" => receipt.message_digest = "c".repeat(64),
+                "evidence" => receipt.evidence = "SUBMISSION_ACCEPTED".into(),
+                "future" => receipt.sent_utc = now() + 1000,
+                "past" => receipt.sent_utc = 1,
+                _ => {
+                    expected.phase = Phase::Claimed;
+                    atomic(&store.delivery_path(id), &expected).unwrap();
+                }
+            }
+            let before = fs::read(store.delivery_path(id)).unwrap();
+            assert!(
+                store
+                    .reconcile_ordinary_submitting_sent_expected(id, receipt, &expected)
+                    .is_err(),
+                "{case}"
+            );
+            assert_eq!(fs::read(store.delivery_path(id)).unwrap(), before);
+            assert!(!store.archive_path(id).exists());
+            assert!(!store.timer_path(id).exists());
+        }
+    }
+    fn fixture() -> (Store, Delivery, String) {
+        let base = std::env::temp_dir().join(format!(
+            "ordinary-retry-cas-{}-{}",
+            std::process::id(),
+            TEMP.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir(&base).unwrap();
+        let store = Store::open_scoped_for_test(&base.join("wake"), &base).unwrap();
+        store.initialize().unwrap();
+        let target = store
+            .set_target("alpha", 0, "https://chatgpt.com/c/fixture")
+            .unwrap();
+        let event = store
+            .produce_expected_with_audit(
+                &format!("web-work-{}", "a".repeat(64)),
+                "alpha",
+                "engineering_attention",
+                "ordinary invitation",
+                &target,
+                &[],
+            )
+            .unwrap();
+        let host = store.host_lock().unwrap();
+        store.claim(&event, &host).unwrap();
+        let delivery = store
+            .transition(
+                &event.event_id,
+                host.owner(),
+                Phase::Attention,
+                None,
+                Some("BROWSER_ATTEMPT_TIMEOUT".into()),
+            )
+            .unwrap();
+        let hash = format!(
+            "{:x}",
+            Sha256::digest(fs::read(store.delivery_path(&event.event_id)).unwrap())
+        );
+        drop(host);
+        (store, delivery, hash)
+    }
+    fn evidence(store: &Store, d: &Delivery, hash: &str) -> PathBuf {
+        store
+            .root
+            .join("logs")
+            .join(format!("pre-submit-retry-{}-{hash}.json", d.event.event_id))
+    }
+    #[test]
+    fn concurrent_exact_cas_has_one_winner_and_one_preserved_failure() {
+        let (store, d, hash) = fixture();
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let jobs: Vec<_> = (0..2)
+            .map(|_| {
+                let root = store.root.clone();
+                let parent = root.parent().unwrap().to_path_buf();
+                let prior = d.clone();
+                let expected = hash.clone();
+                let gate = barrier.clone();
+                std::thread::spawn(move || {
+                    let other = Store::open_scoped_for_test(&root, &parent).unwrap();
+                    gate.wait();
+                    other
+                        .retry_ordinary_pre_submit_expected(
+                            &prior.event.event_id,
+                            &prior,
+                            &expected,
+                        )
+                        .is_ok()
+                })
+            })
+            .collect();
+        assert_eq!(
+            jobs.into_iter()
+                .map(|job| job.join().unwrap())
+                .filter(|won| *won)
+                .count(),
+            1
+        );
+        let saved: serde_json::Value = read(&evidence(&store, &d, &hash)).unwrap();
+        assert_eq!(saved["delivery"], serde_json::to_value(&d).unwrap());
+        assert_eq!(
+            store.delivery(&d.event.event_id).unwrap().unwrap().phase,
+            Phase::Claimed
+        );
+    }
+    #[test]
+    fn exact_cas_preserves_failure_then_rearms_once_without_receipt_or_queue_change() {
+        let (store, d, hash) = fixture();
+        let queued = fs::read(store.event_path(&d.event.event_id)).unwrap();
+        let next = store
+            .retry_ordinary_pre_submit_expected(&d.event.event_id, &d, &hash)
+            .unwrap();
+        assert_eq!(next.phase, Phase::Claimed);
+        assert!(next.receipt.is_none());
+        let saved: serde_json::Value = read(&evidence(&store, &d, &hash)).unwrap();
+        assert_eq!(saved["delivery"], serde_json::to_value(&d).unwrap());
+        assert_eq!(
+            fs::read(store.event_path(&d.event.event_id)).unwrap(),
+            queued
+        );
+        assert!(
+            store
+                .retry_ordinary_pre_submit_expected(&d.event.event_id, &d, &hash)
+                .is_err()
+        );
+    }
+    #[test]
+    fn changed_hash_identity_queue_target_or_witness_refuses_without_evidence_write() {
+        for kind in [
+            "hash",
+            "identity",
+            "queue",
+            "target",
+            "submission",
+            "timer",
+            "archive",
+        ] {
+            let (store, d, mut hash) = fixture();
+            let mut expected = d.clone();
+            let id = &d.event.event_id;
+            match kind {
+                "hash" => hash = "f".repeat(64),
+                "identity" => expected.owner = "foreign-owner".into(),
+                "queue" => {
+                    let mut e = d.event.clone();
+                    e.message = "changed message".into();
+                    atomic(&store.event_path(id), &e).unwrap();
+                }
+                "target" => {
+                    let mut c = store.config().unwrap();
+                    c.targets.insert(
+                        "alpha".into(),
+                        Target::new(2, "https://chatgpt.com/c/foreign".into()).unwrap(),
+                    );
+                    atomic(&store.root.join("config.json"), &c).unwrap();
+                }
+                "submission" => fs::write(store.submission_start_path(id), b"partial").unwrap(),
+                "timer" => fs::write(store.timer_path(id), b"partial").unwrap(),
+                _ => atomic(&store.archive_path(id), &d.event).unwrap(),
+            }
+            let before = fs::read(store.delivery_path(id)).unwrap();
+            assert!(
+                store
+                    .retry_ordinary_pre_submit_expected(id, &expected, &hash)
+                    .is_err(),
+                "{kind}"
+            );
+            assert_eq!(fs::read(store.delivery_path(id)).unwrap(), before);
+            assert!(!evidence(&store, &d, &hash).exists());
+        }
+    }
+    #[test]
+    fn interrupted_prior_evidence_resumes_only_exact_record_and_never_overwrites_conflict() {
+        for conflict in [false, true] {
+            let (store, d, hash) = fixture();
+            let path = evidence(&store, &d, &hash);
+            let value = if conflict {
+                serde_json::json!({"foreign":true})
+            } else {
+                serde_json::json!({"schemaVersion":1,"purpose":"ORDINARY_PRE_SUBMIT_RECOVERY_PRIOR_DELIVERY","deliverySha256":hash,"delivery":d})
+            };
+            atomic(&path, &value).unwrap();
+            let before = fs::read(&path).unwrap();
+            assert_eq!(
+                store
+                    .retry_ordinary_pre_submit_expected(&d.event.event_id, &d, &hash)
+                    .is_err(),
+                conflict
+            );
+            assert_eq!(fs::read(path).unwrap(), before);
+            if conflict {
+                assert_eq!(store.delivery(&d.event.event_id).unwrap(), Some(d));
+            }
+        }
+    }
+}
+
 pub fn read<T: DeserializeOwned>(path: &Path) -> Result<T> {
     reject_link(path)?;
     let file = File::open(path).map_err(|_| "STATE_UNAVAILABLE")?;
@@ -1648,6 +3214,11 @@ pub fn read<T: DeserializeOwned>(path: &Path) -> Result<T> {
 pub fn atomic<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     reject_link(path)?;
     let bytes = serde_json::to_vec_pretty(value).map_err(|_| "STATE_SERIALIZATION_FAILED")?;
+    atomic_bytes(path, &bytes)
+}
+
+pub(crate) fn atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
+    reject_link(path)?;
     if bytes.len() as u64 > MAX_FILE {
         return Err("STATE_TOO_LARGE".into());
     }
@@ -1662,7 +3233,7 @@ pub fn atomic<T: Serialize>(path: &Path, value: &T) -> Result<()> {
         .open(&tmp)
         .map_err(|_| "STATE_WRITE_FAILED")?;
     let result = (|| {
-        file.write_all(&bytes)
+        file.write_all(bytes)
             .and_then(|_| file.sync_all())
             .map_err(|_| "STATE_WRITE_FAILED")?;
         drop(file);
@@ -1732,6 +3303,10 @@ fn reject_link(path: &Path) -> Result<()> {
     }
 }
 fn safe_directories(path: &Path) -> Result<()> {
+    safe_directories_mode(path, true)
+}
+
+fn safe_directories_mode(path: &Path, create: bool) -> Result<()> {
     if !path.is_absolute() {
         return Err("CONFIG_ROOT_NOT_ABSOLUTE".into());
     }
@@ -1752,6 +3327,9 @@ fn safe_directories(path: &Path) -> Result<()> {
             .try_exists()
             .map_err(|_| "CONFIG_ROOT_UNAVAILABLE")?
         {
+            if !create {
+                return Err("CONFIG_ROOT_UNAVAILABLE".into());
+            }
             fs::create_dir(&current).map_err(|_| "CONFIG_ROOT_UNAVAILABLE")?;
         }
         if !current.is_dir() {
@@ -1759,6 +3337,383 @@ fn safe_directories(path: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod target_retirement_tests {
+    use super::*;
+
+    fn fixture() -> (PathBuf, Store, Target) {
+        let base = std::env::temp_dir().join(format!(
+            "wake-retirement-{}-{}",
+            std::process::id(),
+            TEMP.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir(&base).unwrap();
+        let store = Store::open_scoped_for_test(&base.join("wake"), &base).unwrap();
+        store.initialize().unwrap();
+        let target = store
+            .set_target("alpha", 0, "https://chatgpt.com/c/alpha")
+            .unwrap();
+        (base, store, target)
+    }
+
+    fn submitted(store: &Store, lease: &HostLease) -> (Event, Receipt) {
+        let event = store
+            .produce("alpha-event", "alpha", "test", "bounded event")
+            .unwrap();
+        let delivery = store.claim(&event, lease).unwrap();
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: event.event_id.clone(),
+            target_generation: delivery.target.generation,
+            target_digest: delivery.target.digest,
+            message_digest: digest(&event.message),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        (event, receipt)
+    }
+
+    #[test]
+    fn retirement_schema_preserves_legacy_bytes_and_fails_closed_for_old_writers() {
+        let config = Config::default();
+        assert_eq!(
+            serde_json::to_string(&config).unwrap(),
+            r#"{"schemaVersion":1,"targets":{},"history":[]}"#
+        );
+        let (base, store, target) = fixture();
+        store
+            .retire_target_if_quiescent("alpha", Some(&target), "retire-alpha")
+            .unwrap();
+        let config = store.config().unwrap();
+        assert_eq!(config.schema_version, 2);
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase", deny_unknown_fields)]
+        struct LegacyConfig {
+            #[serde(rename = "schemaVersion")]
+            _schema_version: u32,
+            #[serde(rename = "targets")]
+            _targets: BTreeMap<String, Target>,
+            #[serde(rename = "history")]
+            _history: Vec<TargetChange>,
+        }
+        assert!(
+            serde_json::from_value::<LegacyConfig>(serde_json::to_value(&config).unwrap()).is_err()
+        );
+        let mut invalid = config.clone();
+        invalid.schema_version = 1;
+        assert!(invalid.validate().is_err());
+        invalid = config.clone();
+        invalid.retired_targets.clear();
+        assert!(invalid.validate().is_err());
+        invalid = config.clone();
+        invalid.targets.insert("alpha".into(), target.clone());
+        assert!(invalid.validate().is_err());
+        invalid = config.clone();
+        invalid
+            .retired_targets
+            .get_mut("alpha")
+            .unwrap()
+            .retired_utc = 0;
+        assert!(invalid.validate().is_err());
+        invalid = config.clone();
+        invalid
+            .retired_targets
+            .get_mut("alpha")
+            .unwrap()
+            .last_target
+            .as_mut()
+            .unwrap()
+            .digest = "0".repeat(64);
+        assert!(invalid.validate().is_err());
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn retirement_preserves_full_history_reserves_ids_and_allows_running_siblings() {
+        let (base, store, target) = fixture();
+        let beta = store
+            .set_target("beta", 0, "https://chatgpt.com/c/beta")
+            .unwrap();
+        let lease = store.host_lock().unwrap();
+        let sibling = store
+            .produce("beta-event", "beta", "test", "sibling work")
+            .unwrap();
+        let mut config = store.config().unwrap();
+        while config.history.len() < 128 {
+            config.history.push(TargetChange {
+                project_id: "alpha".into(),
+                target: target.clone(),
+                changed_utc: now(),
+            });
+        }
+        atomic(&store.root.join("config.json"), &config).unwrap();
+        let history = serde_json::to_vec(&config.history).unwrap();
+        assert_eq!(
+            store
+                .retire_target_if_quiescent("alpha", Some(&target), "retire-alpha")
+                .unwrap(),
+            Some(target.clone())
+        );
+        let after = store.config().unwrap();
+        assert_eq!(serde_json::to_vec(&after.history).unwrap(), history);
+        assert_eq!(after.targets.get("beta"), Some(&beta));
+        assert_eq!(store.events().unwrap(), vec![sibling.clone()]);
+        let checkpoint = fs::read(store.root.join("config.json")).unwrap();
+        assert_eq!(
+            store
+                .retire_target_if_quiescent("alpha", Some(&target), "retire-alpha")
+                .unwrap(),
+            Some(target.clone())
+        );
+        assert_eq!(
+            fs::read(store.root.join("config.json")).unwrap(),
+            checkpoint
+        );
+        assert_eq!(
+            store
+                .retire_target_if_quiescent("alpha", Some(&target), "different")
+                .unwrap_err(),
+            "CONFIG_RETIREMENT_CONFLICT"
+        );
+        assert_eq!(
+            store
+                .retire_target_if_quiescent("alpha", None, "retire-alpha")
+                .unwrap_err(),
+            "CONFIG_RETIREMENT_CONFLICT"
+        );
+        assert_eq!(
+            store.set_target("alpha", 0, &target.url).unwrap_err(),
+            "CONFIG_PROJECT_RETIRED"
+        );
+        assert_eq!(
+            store
+                .produce("new-alpha", "alpha", "test", "new event")
+                .unwrap_err(),
+            "CONFIG_PROJECT_RETIRED"
+        );
+        assert_eq!(
+            store
+                .produce_expected("new-alpha", "alpha", "test", "new event", &target)
+                .unwrap_err(),
+            "CONFIG_PROJECT_RETIRED"
+        );
+        let archived = Event {
+            schema_version: 1,
+            event_id: "old-alpha".into(),
+            project_id: "alpha".into(),
+            event_type: "test".into(),
+            created_utc: now(),
+            message: "old event".into(),
+            target_generation: target.generation,
+            audit_references: vec![],
+        };
+        atomic(&store.archive_path(&archived.event_id), &archived).unwrap();
+        assert_eq!(
+            store.publish(&archived).unwrap_err(),
+            "CONFIG_PROJECT_RETIRED"
+        );
+        assert_eq!(
+            store
+                .produce(&archived.event_id, "alpha", "test", "old event")
+                .unwrap_err(),
+            "CONFIG_PROJECT_RETIRED"
+        );
+        assert!(store.claim(&sibling, &lease).is_ok());
+        drop(lease);
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn retirement_can_reserve_an_unbound_id_without_reusing_it() {
+        let (base, store, target) = fixture();
+        assert_eq!(
+            store
+                .retire_target_if_quiescent("unbound", None, "retire-unbound")
+                .unwrap(),
+            None
+        );
+        let snapshot = fs::read(store.root.join("config.json")).unwrap();
+        assert_eq!(
+            store
+                .retire_target_if_quiescent("unbound", None, "retire-unbound")
+                .unwrap(),
+            None
+        );
+        assert_eq!(fs::read(store.root.join("config.json")).unwrap(), snapshot);
+        assert_eq!(
+            store.set_target("unbound", 0, &target.url).unwrap_err(),
+            "CONFIG_PROJECT_RETIRED"
+        );
+        assert_eq!(
+            store
+                .retire_target_if_quiescent("alpha", None, "wrong")
+                .unwrap_err(),
+            "CONFIG_RETIREMENT_TARGET_MISMATCH"
+        );
+        let stale = Target::new(2, target.url.clone()).unwrap();
+        assert_eq!(
+            store
+                .retire_target_if_quiescent("alpha", Some(&stale), "wrong")
+                .unwrap_err(),
+            "CONFIG_RETIREMENT_TARGET_MISMATCH"
+        );
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn retirement_refuses_queued_active_unknown_and_incomplete_response_work() {
+        for mode in [
+            "queue",
+            "claimed",
+            "submitting",
+            "attention",
+            "sent-no-timer",
+            "sent-pending",
+            "sent-complete",
+        ] {
+            let (base, store, target) = fixture();
+            let lease = store.host_lock().unwrap();
+            let (event, receipt) = if mode.starts_with("sent") || mode == "submitting" {
+                submitted(&store, &lease)
+            } else {
+                let event = store
+                    .produce("alpha-event", "alpha", "test", "bounded event")
+                    .unwrap();
+                if mode != "queue" {
+                    store.claim(&event, &lease).unwrap();
+                }
+                if mode == "attention" {
+                    store
+                        .transition(
+                            &event.event_id,
+                            lease.owner(),
+                            Phase::Attention,
+                            None,
+                            Some("OPERATOR_REVIEW".into()),
+                        )
+                        .unwrap();
+                }
+                (
+                    event,
+                    Receipt {
+                        schema_version: 1,
+                        event_id: "unused".into(),
+                        target_generation: 1,
+                        target_digest: target.digest.clone(),
+                        message_digest: "0".repeat(64),
+                        sent_utc: now(),
+                        evidence: "unused".into(),
+                    },
+                )
+            };
+            if mode.starts_with("sent") {
+                store
+                    .transition(
+                        &event.event_id,
+                        lease.owner(),
+                        Phase::Sent,
+                        Some(receipt.clone()),
+                        None,
+                    )
+                    .unwrap();
+                if mode != "sent-no-timer" {
+                    store
+                        .record_exact_receipt_timer(&event.event_id, &receipt)
+                        .unwrap();
+                }
+                if mode == "sent-complete" {
+                    store.complete_timer(&event.event_id).unwrap();
+                }
+            } else if mode != "queue" {
+                fs::remove_file(store.event_path(&event.event_id)).unwrap();
+            }
+            let before = fs::read(store.root.join("config.json")).unwrap();
+            let result = store.retire_target_if_quiescent("alpha", Some(&target), "retire-alpha");
+            if mode == "sent-complete" {
+                assert_eq!(result.unwrap(), Some(target));
+            } else {
+                assert_eq!(result.unwrap_err(), "CONFIG_RETIREMENT_BUSY", "{mode}");
+                assert_eq!(fs::read(store.root.join("config.json")).unwrap(), before);
+            }
+            drop(lease);
+            fs::remove_dir_all(base).unwrap();
+        }
+    }
+
+    #[test]
+    fn retirement_refuses_manual_response_and_orphaned_submission_evidence() {
+        let (base, store, target) = fixture();
+        let id = "manual-turn-retirement";
+        store.start_manual_turn_timer(id, "alpha", &target).unwrap();
+        assert_eq!(
+            store
+                .retire_target_if_quiescent("alpha", Some(&target), "retire-alpha")
+                .unwrap_err(),
+            "CONFIG_RETIREMENT_BUSY"
+        );
+        store
+            .complete_manual_turn_timer(id, "alpha", &target)
+            .unwrap();
+        atomic(
+            &store.submission_start_path("orphan"),
+            &SubmissionStart {
+                schema_version: 1,
+                event_id: "orphan".into(),
+                target_generation: target.generation,
+                target_digest: target.digest.clone(),
+                started_utc: now(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            store
+                .retire_target_if_quiescent("alpha", Some(&target), "retire-alpha")
+                .unwrap_err(),
+            "CONFIG_RETIREMENT_BUSY"
+        );
+        assert!(store.config().unwrap().retired_targets.is_empty());
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn retirement_and_producers_serialize_without_orphaning_an_event() {
+        use std::sync::{Arc, Barrier};
+        for _ in 0..8 {
+            let (base, store, target) = fixture();
+            let store = Arc::new(store);
+            let barrier = Arc::new(Barrier::new(3));
+            let writer = store.clone();
+            let start = barrier.clone();
+            let publish = std::thread::spawn(move || {
+                start.wait();
+                writer.produce("race-event", "alpha", "test", "racing event")
+            });
+            let remover = store.clone();
+            let start = barrier.clone();
+            let retire = std::thread::spawn(move || {
+                start.wait();
+                remover.retire_target_if_quiescent("alpha", Some(&target), "retire-alpha")
+            });
+            barrier.wait();
+            match (publish.join().unwrap(), retire.join().unwrap()) {
+                (Ok(_), Err(reason)) => assert_eq!(reason, "CONFIG_RETIREMENT_BUSY"),
+                (Err(reason), Ok(Some(_))) => assert_eq!(reason, "CONFIG_PROJECT_RETIRED"),
+                other => panic!("unexpected producer/retirement result: {other:?}"),
+            }
+            fs::remove_dir_all(base).unwrap();
+        }
+    }
 }
 
 #[cfg(all(test, windows))]
@@ -1780,6 +3735,134 @@ mod canonical_store_root_tests {
         let reopened = Store::open(&canonical).unwrap();
         assert_eq!(normal.root(), reopened.root());
         assert_eq!(reopened.config().unwrap().schema_version, PROTOCOL_VERSION);
+        fs::remove_dir_all(&root).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod read_only_store_tests {
+    use super::*;
+
+    fn root() -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "catdesk-wake-read-only-{}-{}-{}",
+            std::process::id(),
+            now(),
+            TEMP.fetch_add(1, Ordering::Relaxed)
+        ))
+    }
+
+    #[test]
+    fn missing_root_and_children_are_never_initialized() {
+        let root = root();
+        assert!(Store::open_read_only(&root).is_err());
+        assert!(!root.exists());
+        fs::create_dir(&root).unwrap();
+        assert!(Store::open_read_only(&root).is_err());
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 0);
+        fs::remove_dir(&root).unwrap();
+    }
+
+    #[test]
+    fn missing_transaction_lock_is_not_created() {
+        let root = root();
+        let writer = Store::open(&root).unwrap();
+        writer.initialize().unwrap();
+        fs::remove_file(root.join("transaction.lock")).unwrap();
+        let reader = Store::open_read_only(&root).unwrap();
+        assert!(reader.config().is_err());
+        assert!(reader.events().is_err());
+        assert!(!root.join("transaction.lock").exists());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn existing_reads_preserve_bytes_and_refuse_writes_or_host_ownership() {
+        let root = root();
+        let writer = Store::open(&root).unwrap();
+        writer.initialize().unwrap();
+        let before = fs::read(root.join("config.json")).unwrap();
+        let reader = Store::open_read_only(&root).unwrap();
+        assert_eq!(reader.config().unwrap().schema_version, PROTOCOL_VERSION);
+        assert!(reader.events().unwrap().is_empty());
+        assert!(reader.timers().unwrap().is_empty());
+        assert!(reader.timer("missing-event").unwrap().is_none());
+        assert!(reader.delivery("missing-event").unwrap().is_none());
+        assert_eq!(reader.initialize().unwrap_err(), "STATE_READ_ONLY");
+        assert_eq!(
+            reader
+                .set_target("alpha", 0, "https://chatgpt.com/c/chat-alpha")
+                .unwrap_err(),
+            "STATE_READ_ONLY"
+        );
+        assert!(reader.host_lock().is_err());
+        assert!(!root.join("host.lock").exists());
+        assert_eq!(fs::read(root.join("config.json")).unwrap(), before);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn scoped_snapshot_allows_readers_holds_writers_and_releases_on_error() {
+        let root = root();
+        let writer = Store::open(&root).unwrap();
+        writer.initialize().unwrap();
+        let first = writer
+            .set_target("alpha", 0, "https://chatgpt.com/c/first")
+            .unwrap();
+        let reader = Store::open_read_only(&root).unwrap();
+        let sibling = Store::open_read_only(&root).unwrap();
+        reader
+            .with_config_read_only(|config| {
+                assert_eq!(config.targets.get("alpha"), Some(&first));
+                assert_eq!(sibling.config()?.targets.get("alpha"), Some(&first));
+                let contender = OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .open(root.join("transaction.lock"))
+                    .unwrap();
+                assert!(
+                    contender.try_lock().is_err(),
+                    "writer must wait until the scoped read ends"
+                );
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(
+            writer
+                .set_target("alpha", 1, "https://chatgpt.com/c/second")
+                .unwrap()
+                .generation,
+            2
+        );
+        let failed = reader.with_config_read_only(|_| Err::<(), String>("FIXTURE_FAILURE".into()));
+        assert_eq!(failed.unwrap_err(), "FIXTURE_FAILURE");
+        let contender = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(root.join("transaction.lock"))
+            .unwrap();
+        contender
+            .try_lock()
+            .expect("error released only the read guard");
+        drop(contender);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn busy_writer_returns_without_waiting_or_releasing_its_lock() {
+        let root = root();
+        let writer = Store::open(&root).unwrap();
+        writer.initialize().unwrap();
+        let reader = Store::open_read_only(&root).unwrap();
+        let held = writer.lock().unwrap();
+        assert_eq!(reader.config().unwrap_err(), "CONFIG_LOCK_BUSY");
+        assert_eq!(reader.events().unwrap_err(), "CONFIG_LOCK_BUSY");
+        assert_eq!(
+            reader.delivery("missing-event").unwrap_err(),
+            "CONFIG_LOCK_BUSY"
+        );
+        drop(held);
+        assert!(reader.config().is_ok());
         fs::remove_dir_all(&root).unwrap();
     }
 }
@@ -1818,6 +3901,46 @@ fn safe_directories_beneath(trusted_parent: &Path, path: &Path) -> Result<()> {
 #[cfg(test)]
 mod submission_reconciliation_tests {
     use super::*;
+
+    #[test]
+    fn ownership_handoff_requires_exact_current_submitting_delivery_and_positive_witness() {
+        for changed in ["none", "phase", "delivery", "missing", "partial", "binding"] {
+            let (_base, store, event, _lease) = fixture(&format!("handoff-{changed}"));
+            let mut delivery = store.delivery(&event.event_id).unwrap().unwrap();
+            let path = store.submission_start_path(&event.event_id);
+            match changed {
+                "phase" => delivery.phase = Phase::Claimed,
+                "delivery" => delivery.updated_utc += 1,
+                "missing" => fs::remove_file(&path).unwrap(),
+                "partial" => fs::write(&path, b"partial").unwrap(),
+                "binding" => {
+                    let mut witness: serde_json::Value = read(&path).unwrap();
+                    witness["targetDigest"] = serde_json::json!("0".repeat(64));
+                    atomic(&path, &witness).unwrap();
+                }
+                _ => {}
+            }
+            let before = fs::read(store.delivery_path(&event.event_id)).unwrap();
+            let witness_before = fs::read(&path).ok();
+            assert_eq!(
+                store.require_submitting_witness(&delivery).is_ok(),
+                changed == "none",
+                "{changed}"
+            );
+            assert_eq!(
+                fs::read(store.delivery_path(&event.event_id)).unwrap(),
+                before
+            );
+            assert_eq!(fs::read(&path).ok(), witness_before);
+            if changed == "missing" {
+                // Historical readback compatibility remains separate from transfer authority.
+                assert_eq!(
+                    store.submission_started_utc(&delivery).unwrap(),
+                    event.created_utc
+                );
+            }
+        }
+    }
 
     fn fixture(label: &str) -> (PathBuf, Store, Event, HostLease) {
         let base = std::env::temp_dir().join(format!(
@@ -1868,6 +3991,282 @@ mod submission_reconciliation_tests {
             message_digest: digest(&event.message),
             sent_utc: now(),
             evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        }
+    }
+
+    fn pre_edit_fixture(label: &str) -> (PathBuf, Store, Event, HostLease, serde_json::Value) {
+        let (base, store, _, lease) = fixture(label);
+        atomic(
+            &store.root.join("control.json"),
+            &serde_json::json!({"schemaVersion":1,"desired":"STOPPED"}),
+        )
+        .unwrap();
+        let target = store.config().unwrap().targets["catdesk"].clone();
+        let event = store
+            .produce_expected_with_audit(
+                &format!("pre-edit-{label}"),
+                "catdesk",
+                "source_review",
+                "Review bounded public source",
+                &target,
+                &["catdesk-review-v1:grant".into()],
+            )
+            .unwrap();
+        store.claim(&event, &lease).unwrap();
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        let frame = serde_json::json!({"stage":"ATTENTION","reason":"CONVERSATION_DRAFT_INSERT_UNVERIFIED_PRE_STRUCTURE",
+            "preEditRefusal":{"schemaVersion":1,"eventId":event.event_id,"projectId":event.project_id,
+                "targetGeneration":target.generation,"targetDigest":target.digest,"messageDigest":digest(&event.message),
+                "nativeInputAttempted":false,"composerStructure":{"schemaVersion":1,"reason":"ATTRIBUTE_STYLE","nodesExamined":2}}});
+        (base, store, event, lease, frame)
+    }
+
+    #[test]
+    fn pre_edit_refusal_is_durable_and_exact_retirement_never_creates_retry_or_receipt() {
+        let (_, store, event, lease, frame) = pre_edit_fixture("durable");
+        let target = store.config().unwrap().targets["catdesk"].clone();
+        let before = fs::read(store.delivery_path(&event.event_id)).unwrap();
+        let marker = fs::read(store.submission_start_path(&event.event_id)).unwrap();
+        store
+            .record_pre_edit_refusal(&event.event_id, &lease, &frame)
+            .unwrap();
+        assert_eq!(
+            fs::read(store.delivery_path(&event.event_id)).unwrap(),
+            before
+        );
+        let proof = fs::read(store.pre_edit_refusal_path(&event.event_id)).unwrap();
+        store
+            .record_pre_edit_refusal(&event.event_id, &lease, &frame)
+            .unwrap();
+        assert_eq!(
+            fs::read(store.pre_edit_refusal_path(&event.event_id)).unwrap(),
+            proof
+        );
+        drop(lease);
+        let reopened =
+            Store::open_scoped_for_test(store.root(), store.root().parent().unwrap()).unwrap();
+        reopened
+            .retire_stale_expected(&event.event_id, "catdesk", &target, &digest(&event.message))
+            .unwrap();
+        let retired = reopened.delivery(&event.event_id).unwrap().unwrap();
+        assert_eq!(retired.phase, Phase::Stale);
+        assert_eq!(retired.reason.as_deref(), Some("PRE_EDIT_REFUSED_NO_SEND"));
+        assert!(retired.receipt.is_none());
+        assert!(reopened.timer(&event.event_id).unwrap().is_none());
+        assert_eq!(
+            read::<Event>(&reopened.archive_path(&event.event_id)).unwrap(),
+            event
+        );
+        assert!(!reopened.event_path(&event.event_id).exists());
+        assert_eq!(
+            fs::read(reopened.submission_start_path(&event.event_id)).unwrap(),
+            marker
+        );
+        assert_eq!(
+            fs::read(reopened.pre_edit_refusal_path(&event.event_id)).unwrap(),
+            proof
+        );
+        let final_bytes = fs::read(reopened.delivery_path(&event.event_id)).unwrap();
+        reopened
+            .retire_stale_expected(&event.event_id, "catdesk", &target, &digest(&event.message))
+            .unwrap();
+        assert_eq!(
+            fs::read(reopened.delivery_path(&event.event_id)).unwrap(),
+            final_bytes
+        );
+        assert!(reopened.retry_pre_submit(&event.event_id).is_err());
+        assert!(reopened.retire_stale(&event.event_id).is_err());
+    }
+
+    #[test]
+    fn pre_edit_retirement_requires_stopped_quiescent_host_and_exact_scope() {
+        let (_, store, event, lease, frame) = pre_edit_fixture("owner");
+        let target = store.config().unwrap().targets["catdesk"].clone();
+        store
+            .record_pre_edit_refusal(&event.event_id, &lease, &frame)
+            .unwrap();
+        assert!(
+            store
+                .retire_stale_expected(&event.event_id, "catdesk", &target, &digest(&event.message))
+                .is_err()
+        );
+        drop(lease);
+        atomic(
+            &store.root.join("control.json"),
+            &serde_json::json!({"schemaVersion":1,"desired":"RUNNING"}),
+        )
+        .unwrap();
+        assert!(
+            store
+                .retire_stale_expected(&event.event_id, "catdesk", &target, &digest(&event.message))
+                .is_err()
+        );
+        atomic(
+            &store.root.join("control.json"),
+            &serde_json::json!({"schemaVersion":1,"desired":"STOPPED"}),
+        )
+        .unwrap();
+        assert!(
+            store
+                .retire_stale_expected(&event.event_id, "foreign", &target, &digest(&event.message))
+                .is_err()
+        );
+        assert!(
+            store
+                .retire_stale_expected(&event.event_id, "catdesk", &target, &"a".repeat(64))
+                .is_err()
+        );
+        assert_eq!(
+            store.delivery(&event.event_id).unwrap().unwrap().phase,
+            Phase::Submitting
+        );
+    }
+
+    #[test]
+    fn pre_edit_proof_refuses_legacy_reason_post_input_and_foreign_or_private_frames() {
+        for invalid in [
+            "legacy",
+            "accepted",
+            "foreign",
+            "private",
+            "post-input",
+            "wrong-owner",
+        ] {
+            let (_, store, event, lease, mut frame) = pre_edit_fixture(invalid);
+            let target = store.config().unwrap().targets["catdesk"].clone();
+            match invalid {
+                "legacy" => {
+                    frame.as_object_mut().unwrap().remove("preEditRefusal");
+                }
+                "accepted" => {
+                    store.start_submission_timer(&event.event_id).unwrap();
+                }
+                "foreign" => frame["preEditRefusal"]["projectId"] = serde_json::json!("foreign"),
+                "private" => {
+                    frame["preEditRefusal"]["rawText"] = serde_json::json!("private draft")
+                }
+                "post-input" => {
+                    frame["preEditRefusal"]["nativeInputAttempted"] = serde_json::json!(true)
+                }
+                _ => {
+                    let mut delivery = store.delivery(&event.event_id).unwrap().unwrap();
+                    delivery.owner = "foreign-owner".into();
+                    atomic(&store.delivery_path(&event.event_id), &delivery).unwrap();
+                }
+            }
+            let before = fs::read(store.delivery_path(&event.event_id)).unwrap();
+            assert!(
+                store
+                    .record_pre_edit_refusal(&event.event_id, &lease, &frame)
+                    .is_err()
+            );
+            assert!(!store.pre_edit_refusal_path(&event.event_id).exists());
+            drop(lease);
+            // A legacy string plus an empty later composer cannot take the new path.
+            assert!(
+                store
+                    .retire_stale_expected(
+                        &event.event_id,
+                        "catdesk",
+                        &target,
+                        &digest(&event.message)
+                    )
+                    .is_err()
+            );
+            assert_eq!(
+                fs::read(store.delivery_path(&event.event_id)).unwrap(),
+                before
+            );
+        }
+    }
+
+    #[test]
+    fn pre_edit_proof_tampering_cannot_change_unknown_delivery() {
+        for field in [
+            "owner",
+            "projectId",
+            "messageDigest",
+            "submissionStartedUtc",
+            "rawText",
+        ] {
+            let (_, store, event, lease, frame) = pre_edit_fixture(field);
+            let target = store.config().unwrap().targets["catdesk"].clone();
+            store
+                .record_pre_edit_refusal(&event.event_id, &lease, &frame)
+                .unwrap();
+            let path = store.pre_edit_refusal_path(&event.event_id);
+            let mut proof: serde_json::Value = read(&path).unwrap();
+            proof[field] = if field == "submissionStartedUtc" {
+                serde_json::json!(0)
+            } else {
+                serde_json::json!("foreign")
+            };
+            atomic(&path, &proof).unwrap();
+            drop(lease);
+            let before = fs::read(store.delivery_path(&event.event_id)).unwrap();
+            assert!(
+                store
+                    .retire_stale_expected(
+                        &event.event_id,
+                        "catdesk",
+                        &target,
+                        &digest(&event.message)
+                    )
+                    .is_err()
+            );
+            assert_eq!(
+                fs::read(store.delivery_path(&event.event_id)).unwrap(),
+                before
+            );
+            assert!(store.event_path(&event.event_id).exists());
+        }
+    }
+
+    #[test]
+    fn pre_edit_retirement_resumes_only_its_ordered_partial_commits() {
+        for phase in [
+            "delivery",
+            "archive",
+            "complete",
+            "archive-before-delivery",
+            "missing-event",
+        ] {
+            let (_, store, event, lease, frame) = pre_edit_fixture(phase);
+            let target = store.config().unwrap().targets["catdesk"].clone();
+            store
+                .record_pre_edit_refusal(&event.event_id, &lease, &frame)
+                .unwrap();
+            drop(lease);
+            if matches!(phase, "delivery" | "archive" | "complete") {
+                let mut delivery = store.delivery(&event.event_id).unwrap().unwrap();
+                delivery.phase = Phase::Stale;
+                delivery.reason = Some("PRE_EDIT_REFUSED_NO_SEND".into());
+                atomic(&store.delivery_path(&event.event_id), &delivery).unwrap();
+            }
+            if matches!(phase, "archive" | "complete" | "archive-before-delivery") {
+                atomic(&store.archive_path(&event.event_id), &event).unwrap();
+            }
+            if matches!(phase, "complete" | "missing-event") {
+                fs::remove_file(store.event_path(&event.event_id)).unwrap();
+            }
+            let result = store.retire_stale_expected(
+                &event.event_id,
+                "catdesk",
+                &target,
+                &digest(&event.message),
+            );
+            assert_eq!(
+                result.is_ok(),
+                matches!(phase, "delivery" | "archive" | "complete")
+            );
         }
     }
 
@@ -2042,6 +4441,77 @@ mod submission_reconciliation_tests {
             )
             .unwrap();
         assert_eq!(destination.generation, source.generation + 1);
+    }
+
+    #[test]
+    fn quarantine_disposition_guard_retains_queue_lock_and_ignores_sibling_work() {
+        let (_base, store, witness, lease) = fixture("disposition-source-lock");
+        let source = completed_witness(&store, &witness, &lease);
+        store
+            .set_target("sibling", 0, "https://chatgpt.com/c/sibling")
+            .unwrap();
+        store
+            .produce(
+                "sibling-work",
+                "sibling",
+                "review_ready",
+                "independent work",
+            )
+            .unwrap();
+        let config_before = fs::read(store.root.join("config.json")).unwrap();
+        let result = store
+            .with_quiescent_source(
+                "catdesk",
+                &source,
+                &witness.event_id,
+                &witness.event_id,
+                &[],
+                |fingerprint, task_proof| {
+                    assert_eq!(fingerprint.len(), 64);
+                    assert_eq!(task_proof.len(), 64);
+                    let competing = OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .open(store.root.join("transaction.lock"))
+                        .unwrap();
+                    assert!(competing.try_lock().is_err());
+                    Ok("local-journal-only")
+                },
+            )
+            .unwrap();
+        assert_eq!(result, "local-journal-only");
+        assert_eq!(
+            fs::read(store.root.join("config.json")).unwrap(),
+            config_before
+        );
+        assert_eq!(
+            store
+                .with_quiescent_source(
+                    "catdesk",
+                    &source,
+                    &witness.event_id,
+                    &witness.event_id,
+                    &[&witness.event_id],
+                    |_, _| Ok(())
+                )
+                .unwrap_err(),
+            "CONFIG_QUARANTINE_CONTINUATION_ALREADY_RECORDED"
+        );
+        store
+            .produce("own-new-work", "catdesk", "review_ready", "new own work")
+            .unwrap();
+        assert!(
+            store
+                .with_quiescent_source(
+                    "catdesk",
+                    &source,
+                    &witness.event_id,
+                    &witness.event_id,
+                    &[],
+                    |_, _| -> Result<()> { panic!("busy project must not commit") }
+                )
+                .is_err()
+        );
     }
 
     #[test]
@@ -2380,6 +4850,56 @@ mod turn_timer_tests {
     }
 
     #[test]
+    fn project_timer_read_isolates_sibling_validation_and_preserves_strict_errors() {
+        let (root, store, event, _lease, receipt) = fixture();
+        store
+            .record_exact_receipt_timer(&event.event_id, &receipt)
+            .unwrap();
+        let own = store.timer(&event.event_id).unwrap().unwrap();
+        let mut sibling = own.clone();
+        sibling.event_id = "sibling-task".into();
+        sibling.project_id = "beta".into();
+        sibling.completed_utc = Some(sibling.started_utc - 1);
+        sibling.response_state = ResponseState::Complete;
+        let sibling_path = store.timer_path(&sibling.event_id);
+        atomic(&sibling_path, &sibling).unwrap();
+        let scoped = store.timers_for_project("catdesk").unwrap();
+        assert_eq!(scoped.len(), 1);
+        assert_eq!(scoped[0].event_id, own.event_id);
+        assert_eq!(scoped[0].started_utc, own.started_utc);
+        assert_eq!(
+            store.timers_for_project("beta").unwrap_err(),
+            "TURN_TIMER_INVALID"
+        );
+        assert_eq!(store.timers().unwrap_err(), "TURN_TIMER_INVALID");
+        assert_eq!(
+            store.timers_for_project("../beta").unwrap_err(),
+            "TURN_PROJECT_INVALID"
+        );
+        sibling.project_id = "../beta".into();
+        atomic(&sibling_path, &sibling).unwrap();
+        assert_eq!(
+            store.timers_for_project("catdesk").unwrap_err(),
+            "TURN_TIMER_INVALID"
+        );
+        fs::write(&sibling_path, b"not json").unwrap();
+        assert_eq!(
+            store.timers_for_project("catdesk").unwrap_err(),
+            "STATE_MALFORMED"
+        );
+        sibling.project_id = "catdesk".into();
+        sibling.completed_utc = None;
+        sibling.response_state = ResponseState::Observing;
+        sibling.event_id = "different-name".into();
+        atomic(&sibling_path, &sibling).unwrap();
+        assert_eq!(
+            store.timers_for_project("catdesk").unwrap_err(),
+            "TURN_EVENT_MISMATCH"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn timer_refuses_wrong_receipt_binding_without_queue_replay() {
         let (root, store, event, _lease, mut receipt) = fixture();
         receipt.message_digest = "0".repeat(64);
@@ -2502,5 +5022,874 @@ mod turn_timer_tests {
             ResponseState::Observing
         );
         let _ = fs::remove_dir_all(root);
+    }
+}
+
+#[cfg(test)]
+mod wake_metadata_tests {
+    use super::*;
+    use crate::protocol::{WakeMetadata, WakePurpose};
+
+    fn fixture() -> (PathBuf, Store, Target) {
+        let base = std::env::temp_dir().join(format!(
+            "wake-metadata-{}-{}",
+            std::process::id(),
+            TEMP.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir(&base).unwrap();
+        let store = Store::open_scoped_for_test(&base.join("wake"), &base).unwrap();
+        store.initialize().unwrap();
+        let target = store
+            .set_target("alpha", 0, "https://chatgpt.com/c/alpha")
+            .unwrap();
+        (base, store, target)
+    }
+
+    fn metadata(expires_utc: u64) -> WakeMetadata {
+        WakeMetadata {
+            purpose: WakePurpose::ManualEndTurn,
+            source_event_id: "source-alpha-1".into(),
+            source_turn_id: "turn-alpha-1".into(),
+            priority: 10,
+            expires_utc,
+        }
+    }
+
+    fn expired_event(target: &Target) -> Event {
+        let created_utc = now() - 120;
+        Event {
+            schema_version: PROTOCOL_VERSION,
+            event_id: "manual-alpha-expired".into(),
+            project_id: "alpha".into(),
+            event_type: "engineering_attention".into(),
+            created_utc,
+            message: "Continue alpha's assigned task".into(),
+            target_generation: target.generation,
+            audit_references: metadata(created_utc + 60)
+                .audit_references(created_utc)
+                .unwrap(),
+        }
+    }
+
+    #[test]
+    fn wake_metadata_publication_preserves_target_cas_immutable_identity_and_restart() {
+        let (base, store, target) = fixture();
+        let references = metadata(now() + 300).audit_references(now()).unwrap();
+        let event = store
+            .produce_expected_with_audit(
+                "manual-alpha",
+                "alpha",
+                "engineering_attention",
+                "Continue alpha",
+                &target,
+                &references,
+            )
+            .unwrap();
+        let persisted = fs::read(store.event_path("manual-alpha")).unwrap();
+        let reopened =
+            Store::open_scoped_for_test(store.root(), store.root().parent().unwrap()).unwrap();
+        let replay = reopened
+            .produce_expected_with_audit(
+                "manual-alpha",
+                "alpha",
+                "engineering_attention",
+                "Continue alpha",
+                &target,
+                &references,
+            )
+            .unwrap();
+        assert_eq!(replay, event);
+        assert_eq!(
+            replay.wake_metadata().unwrap(),
+            event.wake_metadata().unwrap()
+        );
+        assert_eq!(
+            fs::read(store.event_path("manual-alpha")).unwrap(),
+            persisted
+        );
+        let mut changed = references.clone();
+        changed[2] = "catdesk.wake.v1:source-turn:turn-alpha-2".into();
+        assert_eq!(
+            reopened
+                .produce_expected_with_audit(
+                    "manual-alpha",
+                    "alpha",
+                    "engineering_attention",
+                    "Continue alpha",
+                    &target,
+                    &changed,
+                )
+                .unwrap_err(),
+            "QUEUE_EVENT_ID_CONFLICT"
+        );
+        let wrong_target = Target::new(2, target.url.clone()).unwrap();
+        assert_eq!(
+            reopened
+                .produce_expected_with_audit(
+                    "manual-other",
+                    "alpha",
+                    "engineering_attention",
+                    "Continue alpha",
+                    &wrong_target,
+                    &references,
+                )
+                .unwrap_err(),
+            "TARGET_EXPECTATION_MISMATCH"
+        );
+        assert_eq!(reopened.events().unwrap(), [event]);
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn wake_metadata_expiry_refuses_submit_before_any_submission_journal_write() {
+        let (base, store, target) = fixture();
+        let event = expired_event(&target);
+        store.publish(&event).unwrap();
+        let lease = store.host_lock().unwrap();
+        let claimed = store.claim(&event, &lease).unwrap();
+        let before = fs::read(store.delivery_path(&event.event_id)).unwrap();
+        assert_eq!(
+            store
+                .transition(
+                    &event.event_id,
+                    lease.owner(),
+                    Phase::Submitting,
+                    None,
+                    None
+                )
+                .unwrap_err(),
+            "QUEUE_EVENT_EXPIRED"
+        );
+        assert_eq!(store.delivery(&event.event_id).unwrap(), Some(claimed));
+        assert_eq!(
+            fs::read(store.delivery_path(&event.event_id)).unwrap(),
+            before
+        );
+        assert!(!store.submission_start_path(&event.event_id).exists());
+        assert!(!store.archive_path(&event.event_id).exists());
+        drop(lease);
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn wake_metadata_expired_unknown_submission_remains_unreplayable_and_reconcilable() {
+        let (base, store, target) = fixture();
+        let event = expired_event(&target);
+        store.publish(&event).unwrap();
+        let lease = store.host_lock().unwrap();
+        let mut historical = store.claim(&event, &lease).unwrap();
+        // Fixture represents a submission committed before its TTL elapsed.
+        // No clock mutation, browser action, or production state is involved.
+        historical.phase = Phase::Submitting;
+        historical.updated_utc = event.created_utc + 1;
+        historical.validate().unwrap();
+        atomic(&store.delivery_path(&event.event_id), &historical).unwrap();
+        assert_eq!(
+            store.claim(&event, &lease).unwrap_err(),
+            "SUBMISSION_RECONCILIATION_REQUIRED"
+        );
+        assert_eq!(
+            store.retry_pre_submit(&event.event_id).unwrap_err(),
+            "SUBMISSION_RETRY_REFUSED"
+        );
+        assert_eq!(store.delivery(&event.event_id).unwrap(), Some(historical));
+        let receipt = Receipt {
+            schema_version: PROTOCOL_VERSION,
+            event_id: event.event_id.clone(),
+            target_generation: target.generation,
+            target_digest: target.digest,
+            message_digest: digest(&event.message),
+            sent_utc: event.created_utc + 2,
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        let reconciled = store
+            .reconcile_submitting_sent(&event.event_id, receipt.clone())
+            .unwrap();
+        assert_eq!(reconciled.phase, Phase::Sent);
+        assert_eq!(reconciled.receipt, Some(receipt));
+        assert_eq!(reconciled.event, event);
+        assert!(store.archive_path(&event.event_id).exists());
+        drop(lease);
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    fn intent() -> WakeIntent<'static> {
+        WakeIntent {
+            purpose: WakePurpose::ManualEndTurn,
+            source_event_id: "source-alpha-1",
+            source_turn_id: "turn-alpha-1",
+            priority: 10,
+            ttl_seconds: 300,
+        }
+    }
+
+    #[test]
+    fn semantic_wake_freezes_received_time_and_expiry_across_cold_retries() {
+        let (base, store, target) = fixture();
+        let before = now();
+        let first = store
+            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+            .unwrap();
+        assert!((before..=now()).contains(&first.created_utc));
+        assert_eq!(
+            first.wake_metadata().unwrap().unwrap().expires_utc,
+            first.created_utc + intent().ttl_seconds
+        );
+        // A previously received intent is fixture data, not a changed clock.
+        // Its age exposes any accidental regeneration of creation/expiry.
+        let historical_created_utc = first.created_utc - 120;
+        let historical = Event {
+            created_utc: historical_created_utc,
+            audit_references: Vec::new(),
+            ..first
+        }
+        .with_wake_metadata(intent().metadata(historical_created_utc).unwrap())
+        .unwrap();
+        atomic(&store.event_path(&historical.event_id), &historical).unwrap();
+        let saved = fs::read(store.event_path(&historical.event_id)).unwrap();
+        let reopened =
+            Store::open_scoped_for_test(store.root(), store.root().parent().unwrap()).unwrap();
+        let replay = reopened
+            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+            .unwrap();
+        assert_eq!(replay, historical);
+        assert_eq!(fs::read(store.event_path(&replay.event_id)).unwrap(), saved);
+        assert_eq!(reopened.events().unwrap(), [historical]);
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn semantic_wake_material_changes_conflict_but_distinct_source_identity_is_admitted() {
+        let (base, store, target) = fixture();
+        let original = store
+            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+            .unwrap();
+        assert_eq!(
+            original.event_id,
+            "wake-intent-b128942a8ffb67ccf1e9583f55a01b58c0f681f5c06ec3d22246e9ebfea943ad"
+        );
+        let saved = fs::read(store.event_path(&original.event_id)).unwrap();
+        for changed in [
+            WakeIntent {
+                priority: 11,
+                ..intent()
+            },
+            WakeIntent {
+                ttl_seconds: 301,
+                ..intent()
+            },
+        ] {
+            assert_eq!(
+                store
+                    .produce_expected_wake("alpha", "Continue alpha", &target, changed)
+                    .unwrap_err(),
+                "QUEUE_EVENT_ID_CONFLICT"
+            );
+        }
+        assert_eq!(
+            store
+                .produce_expected_wake("alpha", "Different task", &target, intent())
+                .unwrap_err(),
+            "QUEUE_EVENT_ID_CONFLICT"
+        );
+        assert_eq!(
+            fs::read(store.event_path(&original.event_id)).unwrap(),
+            saved
+        );
+        let mut identities = BTreeSet::from([original.event_id]);
+        for distinct in [
+            WakeIntent {
+                source_turn_id: "turn-alpha-2",
+                ..intent()
+            },
+            WakeIntent {
+                source_event_id: "source-alpha-2",
+                ..intent()
+            },
+            WakeIntent {
+                purpose: WakePurpose::NewTask,
+                ..intent()
+            },
+        ] {
+            let event = store
+                .produce_expected_wake("alpha", "Continue alpha", &target, distinct)
+                .unwrap();
+            assert!(identities.insert(event.event_id));
+        }
+        assert_eq!(store.events().unwrap().len(), 4);
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn semantic_wake_unknown_expired_submission_is_not_recreated_or_refreshed_after_restart() {
+        let (base, store, target) = fixture();
+        let intent = WakeIntent {
+            ttl_seconds: 60,
+            ..intent()
+        };
+        let created_utc = now() - 120;
+        let event = Event {
+            schema_version: PROTOCOL_VERSION,
+            event_id: intent.event_id("alpha").unwrap(),
+            project_id: "alpha".into(),
+            event_type: "engineering_attention".into(),
+            created_utc,
+            message: "Continue alpha".into(),
+            target_generation: target.generation,
+            audit_references: Vec::new(),
+        }
+        .with_wake_metadata(intent.metadata(created_utc).unwrap())
+        .unwrap();
+        store.publish(&event).unwrap();
+        let lease = store.host_lock().unwrap();
+        let mut historical = store.claim(&event, &lease).unwrap();
+        historical.phase = Phase::Submitting;
+        historical.updated_utc = created_utc + 1;
+        historical.validate().unwrap();
+        atomic(&store.delivery_path(&event.event_id), &historical).unwrap();
+        let saved_delivery = fs::read(store.delivery_path(&event.event_id)).unwrap();
+        let saved_queue = fs::read(store.event_path(&event.event_id)).unwrap();
+        drop(lease);
+        let reopened =
+            Store::open_scoped_for_test(store.root(), store.root().parent().unwrap()).unwrap();
+        assert_eq!(
+            reopened
+                .produce_expected_wake("alpha", "Continue alpha", &target, intent)
+                .unwrap(),
+            event
+        );
+        assert!(event.is_expired_at(now()).unwrap());
+        assert_eq!(
+            fs::read(store.event_path(&event.event_id)).unwrap(),
+            saved_queue
+        );
+        assert_eq!(
+            fs::read(store.delivery_path(&event.event_id)).unwrap(),
+            saved_delivery
+        );
+        let recovered_lease = reopened.host_lock().unwrap();
+        assert_eq!(
+            reopened.claim(&event, &recovered_lease).unwrap_err(),
+            "SUBMISSION_RECONCILIATION_REQUIRED"
+        );
+        drop(recovered_lease);
+        // Even incomplete historical evidence cannot cause a new queue write.
+        fs::remove_file(store.event_path(&event.event_id)).unwrap();
+        assert_eq!(
+            reopened
+                .produce_expected_wake("alpha", "Continue alpha", &target, intent)
+                .unwrap(),
+            event
+        );
+        assert!(!store.event_path(&event.event_id).exists());
+        assert!(!store.archive_path(&event.event_id).exists());
+        assert_eq!(
+            fs::read(store.delivery_path(&event.event_id)).unwrap(),
+            saved_delivery
+        );
+        assert_eq!(
+            reopened.delivery(&event.event_id).unwrap(),
+            Some(historical)
+        );
+        assert_eq!(
+            reopened.retry_pre_submit(&event.event_id).unwrap_err(),
+            "SUBMISSION_RETRY_REFUSED"
+        );
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn semantic_wake_archived_delivery_reuses_all_original_bytes_without_queue_republication() {
+        let (base, store, target) = fixture();
+        let event = store
+            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+            .unwrap();
+        let lease = store.host_lock().unwrap();
+        let delivery = store.claim(&event, &lease).unwrap();
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        let receipt = Receipt {
+            schema_version: PROTOCOL_VERSION,
+            event_id: event.event_id.clone(),
+            target_generation: target.generation,
+            target_digest: target.digest.clone(),
+            message_digest: delivery.message_digest,
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        store
+            .record_exact_receipt_timer(&event.event_id, &receipt)
+            .unwrap();
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Sent,
+                Some(receipt),
+                None,
+            )
+            .unwrap();
+        let saved = [
+            store.archive_path(&event.event_id),
+            store.delivery_path(&event.event_id),
+            store.timer_path(&event.event_id),
+        ]
+        .into_iter()
+        .map(|path| {
+            let bytes = fs::read(&path).unwrap();
+            (path, bytes)
+        })
+        .collect::<Vec<_>>();
+        drop(lease);
+        let reopened =
+            Store::open_scoped_for_test(store.root(), store.root().parent().unwrap()).unwrap();
+        assert_eq!(
+            reopened
+                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                .unwrap(),
+            event
+        );
+        for (path, bytes) in saved {
+            assert_eq!(fs::read(path).unwrap(), bytes);
+        }
+        assert!(reopened.events().unwrap().is_empty());
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn semantic_wake_wrong_or_stale_target_cannot_publish_or_retarget_an_existing_intent() {
+        let (base, store, target) = fixture();
+        let original = store
+            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+            .unwrap();
+        let saved = fs::read(store.event_path(&original.event_id)).unwrap();
+        for wrong in [
+            Target::new(target.generation, "https://chatgpt.com/c/wrong".into()).unwrap(),
+            Target::new(target.generation + 1, target.url.clone()).unwrap(),
+        ] {
+            assert_eq!(
+                store
+                    .produce_expected_wake("alpha", "Continue alpha", &wrong, intent())
+                    .unwrap_err(),
+                "TARGET_EXPECTATION_MISMATCH"
+            );
+        }
+        let next = store
+            .set_target("alpha", target.generation, "https://chatgpt.com/c/next")
+            .unwrap();
+        for expected in [&target, &next] {
+            assert_eq!(
+                store
+                    .produce_expected_wake("alpha", "Continue alpha", expected, intent())
+                    .unwrap_err(),
+                "TARGET_EXPECTATION_MISMATCH"
+            );
+        }
+        assert_eq!(
+            fs::read(store.event_path(&original.event_id)).unwrap(),
+            saved
+        );
+        assert_eq!(store.events().unwrap(), [original]);
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn semantic_wake_refuses_unbounded_input_and_read_only_writes() {
+        let (base, store, target) = fixture();
+        for invalid in [
+            WakeIntent {
+                ttl_seconds: 0,
+                ..intent()
+            },
+            WakeIntent {
+                ttl_seconds: MAX_WAKE_TTL_SECONDS + 1,
+                ..intent()
+            },
+            WakeIntent {
+                source_event_id: "foreign/event",
+                ..intent()
+            },
+            WakeIntent {
+                source_turn_id: "",
+                ..intent()
+            },
+        ] {
+            assert_eq!(
+                store
+                    .produce_expected_wake("alpha", "Continue alpha", &target, invalid)
+                    .unwrap_err(),
+                "QUEUE_WAKE_METADATA_INVALID"
+            );
+        }
+        for message in [
+            "".to_owned(),
+            "not  normalized".into(),
+            "x\0y".into(),
+            "x".repeat(2049),
+        ] {
+            assert_eq!(
+                store
+                    .produce_expected_wake("alpha", &message, &target, intent())
+                    .unwrap_err(),
+                "QUEUE_EVENT_INVALID"
+            );
+        }
+        let read_only = Store::open_read_only(store.root()).unwrap();
+        assert_eq!(
+            read_only
+                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                .unwrap_err(),
+            "STATE_READ_ONLY"
+        );
+        assert!(store.events().unwrap().is_empty());
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn semantic_wake_conflicting_durable_witnesses_are_preserved_without_repair() {
+        let (base, store, target) = fixture();
+        let event = store
+            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+            .unwrap();
+        let conflicting = Event {
+            message: "Different historical content".into(),
+            ..event.clone()
+        };
+        atomic(&store.archive_path(&event.event_id), &conflicting).unwrap();
+        let queue_bytes = fs::read(store.event_path(&event.event_id)).unwrap();
+        let archive_bytes = fs::read(store.archive_path(&event.event_id)).unwrap();
+        assert_eq!(
+            store
+                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                .unwrap_err(),
+            "QUEUE_EVENT_ID_CONFLICT"
+        );
+        assert_eq!(
+            fs::read(store.event_path(&event.event_id)).unwrap(),
+            queue_bytes
+        );
+        assert_eq!(
+            fs::read(store.archive_path(&event.event_id)).unwrap(),
+            archive_bytes
+        );
+        fs::remove_file(store.archive_path(&event.event_id)).unwrap();
+        let historical = Delivery {
+            schema_version: PROTOCOL_VERSION,
+            event: conflicting.clone(),
+            target: target.clone(),
+            phase: Phase::Submitting,
+            owner: "historical-owner".into(),
+            updated_utc: event.created_utc,
+            message_digest: digest(&conflicting.message),
+            receipt: None,
+            reason: None,
+        };
+        historical.validate().unwrap();
+        atomic(&store.delivery_path(&event.event_id), &historical).unwrap();
+        let delivery_bytes = fs::read(store.delivery_path(&event.event_id)).unwrap();
+        assert_eq!(
+            store
+                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                .unwrap_err(),
+            "QUEUE_EVENT_ID_CONFLICT"
+        );
+        assert_eq!(
+            fs::read(store.event_path(&event.event_id)).unwrap(),
+            queue_bytes
+        );
+        assert_eq!(
+            fs::read(store.delivery_path(&event.event_id)).unwrap(),
+            delivery_bytes
+        );
+        assert!(!store.archive_path(&event.event_id).exists());
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn semantic_wake_orphaned_submission_or_timer_witness_refuses_new_queue_entry() {
+        let (base, store, target) = fixture();
+        let event_id = intent().event_id("alpha").unwrap();
+        let submission = SubmissionStart {
+            schema_version: PROTOCOL_VERSION,
+            event_id: event_id.clone(),
+            target_generation: target.generation,
+            target_digest: target.digest.clone(),
+            started_utc: now(),
+        };
+        let path = store.submission_start_path(&event_id);
+        atomic(&path, &submission).unwrap();
+        let saved = fs::read(&path).unwrap();
+        assert_eq!(
+            store
+                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                .unwrap_err(),
+            "SUBMISSION_RECONCILIATION_REQUIRED"
+        );
+        assert!(store.events().unwrap().is_empty());
+        assert_eq!(fs::read(&path).unwrap(), saved);
+        fs::remove_file(path).unwrap();
+        let timer = TurnTimer {
+            schema_version: PROTOCOL_VERSION,
+            event_id: event_id.clone(),
+            project_id: "alpha".into(),
+            target_generation: target.generation,
+            target_digest: target.digest,
+            started_utc: now(),
+            completed_utc: None,
+            response_state: ResponseState::Observing,
+        };
+        let path = store.timer_path(&event_id);
+        atomic(&path, &timer).unwrap();
+        let saved = fs::read(&path).unwrap();
+        let expected = store.config().unwrap().targets["alpha"].clone();
+        assert_eq!(
+            store
+                .produce_expected_wake("alpha", "Continue alpha", &expected, intent())
+                .unwrap_err(),
+            "SUBMISSION_RECONCILIATION_REQUIRED"
+        );
+        assert!(store.events().unwrap().is_empty());
+        assert_eq!(fs::read(path).unwrap(), saved);
+        assert!(store.delivery(&event_id).unwrap().is_none());
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    fn witness_bytes(store: &Store, id: &str) -> Vec<(PathBuf, Option<Vec<u8>>)> {
+        [
+            store.root().join("config.json"),
+            store.event_path(id),
+            store.archive_path(id),
+            store.delivery_path(id),
+            store.submission_start_path(id),
+            store.timer_path(id),
+        ]
+        .into_iter()
+        .map(|path| {
+            let bytes = path.try_exists().unwrap().then(|| fs::read(&path).unwrap());
+            (path, bytes)
+        })
+        .collect()
+    }
+
+    #[test]
+    fn semantic_wake_queue_sidecars_refuse_producer_claim_and_same_owner_submit_without_writes() {
+        for phase in [
+            None,
+            Some(Phase::Claimed),
+            Some(Phase::Attention),
+            Some(Phase::Stale),
+        ] {
+            for kind in ["submission", "timer"] {
+                let (base, store, target) = fixture();
+                let event = store
+                    .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                    .unwrap();
+                let lease = store.host_lock().unwrap();
+                if let Some(phase) = phase.as_ref() {
+                    let mut delivery = store.claim(&event, &lease).unwrap();
+                    delivery.phase = phase.clone();
+                    delivery.validate().unwrap();
+                    atomic(&store.delivery_path(&event.event_id), &delivery).unwrap();
+                }
+                if kind == "submission" {
+                    let start = SubmissionStart {
+                        schema_version: PROTOCOL_VERSION,
+                        event_id: event.event_id.clone(),
+                        target_generation: target.generation,
+                        target_digest: target.digest.clone(),
+                        started_utc: event.created_utc,
+                    };
+                    atomic(&store.submission_start_path(&event.event_id), &start).unwrap();
+                } else {
+                    let timer = TurnTimer {
+                        schema_version: PROTOCOL_VERSION,
+                        event_id: event.event_id.clone(),
+                        project_id: event.project_id.clone(),
+                        target_generation: target.generation,
+                        target_digest: target.digest.clone(),
+                        started_utc: event.created_utc,
+                        completed_utc: None,
+                        response_state: ResponseState::Observing,
+                    };
+                    atomic(&store.timer_path(&event.event_id), &timer).unwrap();
+                }
+                let saved = witness_bytes(&store, &event.event_id);
+                assert_eq!(
+                    store
+                        .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                        .unwrap_err(),
+                    "SUBMISSION_RECONCILIATION_REQUIRED"
+                );
+                assert_eq!(
+                    store.claim(&event, &lease).unwrap_err(),
+                    "SUBMISSION_RECONCILIATION_REQUIRED"
+                );
+                if phase == Some(Phase::Claimed) {
+                    assert_eq!(
+                        store
+                            .transition(
+                                &event.event_id,
+                                lease.owner(),
+                                Phase::Submitting,
+                                None,
+                                None
+                            )
+                            .unwrap_err(),
+                        "SUBMISSION_RECONCILIATION_REQUIRED"
+                    );
+                }
+                let reopened =
+                    Store::open_scoped_for_test(store.root(), store.root().parent().unwrap())
+                        .unwrap();
+                assert_eq!(
+                    reopened
+                        .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                        .unwrap_err(),
+                    "SUBMISSION_RECONCILIATION_REQUIRED"
+                );
+                assert_eq!(witness_bytes(&store, &event.event_id), saved);
+                drop(lease);
+                fs::remove_dir_all(base).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn semantic_wake_crossed_boundary_refuses_mismatched_submission_start_without_writes() {
+        let (base, store, target) = fixture();
+        let event = store
+            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+            .unwrap();
+        let lease = store.host_lock().unwrap();
+        store.claim(&event, &lease).unwrap();
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        assert_eq!(
+            store
+                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                .unwrap(),
+            event
+        );
+        let path = store.submission_start_path(&event.event_id);
+        let mut start: SubmissionStart = read(&path).unwrap();
+        start.target_digest = "f".repeat(64);
+        atomic(&path, &start).unwrap();
+        let saved = witness_bytes(&store, &event.event_id);
+        assert_eq!(
+            store
+                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                .unwrap_err(),
+            "SUBMISSION_START_BINDING_INVALID"
+        );
+        assert_eq!(witness_bytes(&store, &event.event_id), saved);
+        drop(lease);
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn semantic_wake_crossed_boundary_refuses_mismatched_timer_without_writes() {
+        let (base, store, target) = fixture();
+        let event = store
+            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+            .unwrap();
+        let lease = store.host_lock().unwrap();
+        store.claim(&event, &lease).unwrap();
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        store.start_submission_timer(&event.event_id).unwrap();
+        assert_eq!(
+            store
+                .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                .unwrap(),
+            event
+        );
+        let timer = store.timer(&event.event_id).unwrap().unwrap();
+        for changed in [
+            TurnTimer {
+                project_id: "beta".into(),
+                ..timer.clone()
+            },
+            TurnTimer {
+                target_generation: target.generation + 1,
+                ..timer.clone()
+            },
+            TurnTimer {
+                target_digest: "f".repeat(64),
+                ..timer.clone()
+            },
+        ] {
+            atomic(&store.timer_path(&event.event_id), &changed).unwrap();
+            let saved = witness_bytes(&store, &event.event_id);
+            assert_eq!(
+                store
+                    .produce_expected_wake("alpha", "Continue alpha", &target, intent())
+                    .unwrap_err(),
+                "TIMER_SUBMISSION_BINDING_MISMATCH"
+            );
+            assert_eq!(witness_bytes(&store, &event.event_id), saved);
+        }
+        drop(lease);
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn semantic_wake_simultaneous_independent_producers_keep_project_identity_and_deduplicate() {
+        use std::sync::{Arc, Barrier};
+        let (base, store, alpha) = fixture();
+        let beta = store
+            .set_target("beta", 0, "https://chatgpt.com/c/beta")
+            .unwrap();
+        let store = Arc::new(store);
+        let barrier = Arc::new(Barrier::new(4));
+        let threads = [
+            ("alpha", alpha.clone()),
+            ("beta", beta.clone()),
+            ("alpha", alpha),
+            ("beta", beta),
+        ]
+        .into_iter()
+        .map(|(project, target)| {
+            let store = store.clone();
+            let barrier = barrier.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                store
+                    .produce_expected_wake(project, "Continue assigned work", &target, intent())
+                    .unwrap()
+            })
+        })
+        .collect::<Vec<_>>();
+        let events = threads
+            .into_iter()
+            .map(|thread| thread.join().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(events[0], events[2]);
+        assert_eq!(events[1], events[3]);
+        assert_ne!(events[0].event_id, events[1].event_id);
+        assert_eq!(events[0].project_id, "alpha");
+        assert_eq!(events[1].project_id, "beta");
+        assert_eq!(store.events().unwrap().len(), 2);
+        fs::remove_dir_all(base).unwrap();
     }
 }

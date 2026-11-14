@@ -1,0 +1,202 @@
++            target_digest: target.digest.clone(),
++            message_digest: crate::protocol::digest(&event.message),
++            sent_utc: now(),
++            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
++        };
++        let mut delivery = store
++            .transition(
++                "review-pair",
++                lease.owner(),
++                Phase::Sent,
++                Some(receipt),
++                None,
++            )
++            .unwrap();
++        let request = snapshot_request(&store, "alpha", &target, Some("review-pair")).unwrap();
++        assert_eq!(request["reviewEvent"]["message"], "approved review");
++        assert!(request.get("submit").is_none());
++        delivery.receipt.as_mut().unwrap().message_digest = "0".repeat(64);
++        crate::store::atomic(&store.root().join("deliveries/review-pair.json"), &delivery).unwrap();
++        assert_eq!(
++            snapshot_request(&store, "alpha", &target, Some("review-pair")).unwrap_err(),
++            "RECEIPT_INVALID"
++        );
++    }
++
+     #[test]
+     fn snapshot_success_sends_only_one_snapshot_and_bounds_cleanup_to_remaining_time() {
+         let (store, target) = fixture();
+@@ -551,6 +641,7 @@ mod tests {
+     fn snapshot_diagnostic_error_vocabulary_matches_bounded_component_codes() {
+         for reason in [
+             "RESPONSE_STATE_QUERY_FAILED",
++            "RESPONSE_LOAD_ERROR",
+             "SOURCE_SNAPSHOT_TIMEOUT",
+             "CHATGPT_NOT_IDLE",
+             "SELENIUMBASE_IMPORT_FAILED",
+diff --git a/wake/src/store.rs b/wake/src/store.rs
+index 30ee46b148ae8c57f741492355ab63f86f058d72..31eb5f963d079a3fe2b7c29647befc6f8d1f5dd5 100644
+--- a/wake/src/store.rs
++++ b/wake/src/store.rs
+@@ -1,4 +1,6 @@
+-use crate::protocol::{Event, Target, digest, valid_id};
++use crate::protocol::{
++    Event, MAX_WAKE_TTL_SECONDS, Target, WakeMetadata, WakePurpose, digest, valid_id,
++};
+ use crate::{PROTOCOL_VERSION, Result};
+ use serde::{Deserialize, Serialize, de::DeserializeOwned};
+ use std::{
+@@ -23,6 +25,51 @@ pub fn now() -> u64 {
+         .as_secs()
+ }
+ 
++/// Semantic input for one target-bound Wake intent. The Store assigns its ID,
++/// received time and absolute expiry; callers cannot choose those wire fields.
++#[derive(Clone, Copy, Debug)]
++pub struct WakeIntent<'a> {
++    pub purpose: WakePurpose,
++    pub source_event_id: &'a str,
++    pub source_turn_id: &'a str,
++    pub priority: u8,
++    pub ttl_seconds: u64,
++}
++
++impl WakeIntent<'_> {
++    fn metadata(&self, created_utc: u64) -> Result<WakeMetadata> {
++        if self.ttl_seconds == 0 || self.ttl_seconds > MAX_WAKE_TTL_SECONDS {
++            return Err("QUEUE_WAKE_METADATA_INVALID".into());
++        }
++        let metadata = WakeMetadata {
++            purpose: self.purpose,
++            source_event_id: self.source_event_id.into(),
++            source_turn_id: self.source_turn_id.into(),
++            priority: self.priority,
++            expires_utc: created_utc
++                .checked_add(self.ttl_seconds)
++                .ok_or("QUEUE_WAKE_METADATA_INVALID")?,
++        };
++        metadata.validate(created_utc)?;
++        Ok(metadata)
++    }
++
++    fn event_id(&self, project: &str) -> Result<String> {
++        if !valid_id(project) {
++            return Err("QUEUE_EVENT_INVALID".into());
++        }
++        self.metadata(1)?;
++        let identity = serde_json::to_string(&(
++            project,
++            self.source_event_id,
++            self.source_turn_id,
++            self.purpose,
++        ))
++        .map_err(|_| "QUEUE_WAKE_METADATA_INVALID")?;
++        Ok(format!("wake-intent-{}", digest(&identity)))
++    }
++}
++
+ #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+ #[serde(rename_all = "camelCase", deny_unknown_fields)]
+ pub struct TargetChange {
+@@ -1180,6 +1227,104 @@ impl Store {
+         )
+     }
+ 
++    /// Record one bounded semantic intent against the caller's exact target.
++    /// Registered callers must retain their existing admission/ownership checks.
++    /// This only queues metadata: it grants no permission and starts no sender.
++    /// Replays use every durable event/delivery witness and never repair or
++    /// recreate queue/archive files, including an unknown prior submission.
++    pub fn produce_expected_wake(
++        &self,
++        project: &str,
++        message: &str,
++        expected: &Target,
++        intent: WakeIntent<'_>,
++    ) -> Result<Event> {
++        let event_id = intent.event_id(project)?;
++        expected.validate()?;
++        // Validate message and all caller-controlled metadata before touching
++        // Store state. The actual received time is assigned under its lock.
++        let make_event = |created_utc| {
++            Event {
++                schema_version: PROTOCOL_VERSION,
++                event_id: event_id.clone(),
++                project_id: project.into(),
++                event_type: "engineering_attention".into(),
++                created_utc,
++                message: message.into(),
++                target_generation: expected.generation,
++                audit_references: Vec::new(),
++            }
++            .with_wake_metadata(intent.metadata(created_utc)?)
++        };
++        make_event(1)?;
++
++        let _lock = self.lock()?;
++        let config = self.read_config()?;
++        if config.retired_targets.contains_key(project) {
++            return Err("CONFIG_PROJECT_RETIRED".into());
++        }
++        if config.targets.get(project) != Some(expected) {
++            return Err("TARGET_EXPECTATION_MISMATCH".into());
++        }
++        let mut previous = None;
++        for path in [self.archive_path(&event_id), self.event_path(&event_id)] {
++            if path.try_exists().map_err(|_| "QUEUE_UNAVAILABLE")? {
++                let event: Event = read(&path)?;
++                event.validate()?;
++                if previous.as_ref().is_some_and(|prior| prior != &event) {
++                    return Err("QUEUE_EVENT_ID_CONFLICT".into());
++                }
++                previous = Some(event);
++            }
++        }
++        let delivery = self.read_delivery(&event_id)?;
++        if let Some(delivery) = delivery.as_ref() {
++            if delivery.target != *expected {
++                return Err("TARGET_EXPECTATION_MISMATCH".into());
++            }
++            if previous
++                .as_ref()
++                .is_some_and(|prior| prior != &delivery.event)
++            {
++                return Err("QUEUE_EVENT_ID_CONFLICT".into());
++            }
++            previous = Some(delivery.event.clone());
++        }
++        if self.has_submission_witness_locked(&event_id)? {
++            // A surviving queue or CLAIMED journal cannot downgrade a crossed
++            // boundary. Only its compatible SUBMITTING/SENT delivery permits
++            // immutable readback; it never authorizes another submission.
++            let delivery = delivery
++                .as_ref()
++                .filter(|delivery| matches!(delivery.phase, Phase::Submitting | Phase::Sent))
++                .ok_or("SUBMISSION_RECONCILIATION_REQUIRED")?;
++            self.submission_started_utc(delivery)?;
++            if let Some(timer) = self.read_timer(&event_id)?
++                && (timer.project_id != delivery.event.project_id
++                    || timer.target_generation != delivery.target.generation
++                    || timer.target_digest != delivery.target.digest)
++            {
++                return Err("TIMER_SUBMISSION_BINDING_MISMATCH".into());
++            }
++        }
++        let created_utc = previous
++            .as_ref()
++            .map_or_else(now, |event| event.created_utc);
++        let event = make_event(created_utc)?;
++        if let Some(previous) = previous {
++            if previous.target_generation != expected.generation {
++                return Err("TARGET_EXPECTATION_MISMATCH".into());
++            }
++            if previous != event {
++                return Err("QUEUE_EVENT_ID_CONFLICT".into());
++            }
++            return Ok(previous);
++        }
++        self.check_capacity()?;
++        atomic(&self.event_path(&event_id), &event)?;
++        Ok(event)
++    }
++

@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 use super::autonomous_contract::{
     AutonomousApprovalKindV1, AutonomousApprovalV1, AutonomousGitActionV1,
@@ -372,6 +373,10 @@ pub(crate) enum GithubPublicationRecordStateV1 {
     /// A permit was minted but there is no evidence that a remote request was
     /// dispatched.  Automatic replay is unsafe and therefore refused.
     Prepared,
+    /// The exact local commit intent was persisted before invoking Git.
+    LocalCommitOutcomeUnknown,
+    /// The resulting commit was measured against the retained local intent.
+    LocalCommitConfirmed,
     /// A remote request may have reached GitHub.  A trusted reconciliation is
     /// required before any retry.
     RemoteOutcomeUnknown,
@@ -427,6 +432,39 @@ pub(crate) struct GithubPublicationPreparedV1 {
     /// subsequent Git operation.
     #[serde(default)]
     pub git_selected_identity: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_commit_intent: Option<GithubPublicationCommitIntentV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_commit_receipt: Option<GithubPublicationCommitReceiptV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub push_expected_commit: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct GithubPublicationCommitIntentV1 {
+    pub parent_commit: String,
+    pub tree: String,
+    pub paths: Vec<String>,
+    pub message: String,
+    pub accepted_at_unix: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct GithubPublicationCommitReceiptV1 {
+    pub commit: String,
+    pub parent_commit: String,
+    pub tree: String,
+    pub message: String,
+}
+
+pub(crate) fn publication_commit_message(token: &str) -> String {
+    // The public commit carries a one-way identity, never the local permit.
+    let commitment = format!("{:x}", Sha256::digest(token.as_bytes()));
+    format!(
+        "docs: publish CatDesk recovery reconstruction snapshot\n\nCatDesk-Publication-Intent-SHA256: {commitment}\n"
+    )
 }
 
 /// Durable state is intentionally a small serializable value: the autonomous
@@ -575,6 +613,61 @@ impl GithubPublicationJournalV1 {
             {
                 return Err(GithubPublicationGateErrorV1::JournalSchemaInvalid);
             }
+            if let Some(intent) = &prepared.local_commit_intent {
+                if intent.parent_commit != prepared.repository.head_commit
+                    || !full_git_object_id(&intent.parent_commit)
+                    || !full_git_object_id(&intent.tree)
+                    || intent.paths.is_empty()
+                    || prepared
+                        .manifest_include_count
+                        .checked_add(1)
+                        .and_then(|count| count.checked_add(prepared.supplemental_paths.len()))
+                        != Some(intent.paths.len())
+                    || intent.paths.iter().any(|path| !valid_manifest_path(path))
+                    || intent.paths.windows(2).any(|pair| pair[0] >= pair[1])
+                    || intent.message != publication_commit_message(token)
+                    || intent.accepted_at_unix >= prepared.expires_at_unix
+                {
+                    return Err(GithubPublicationGateErrorV1::JournalSchemaInvalid);
+                }
+            }
+            if let Some(receipt) = &prepared.local_commit_receipt {
+                let intent = prepared
+                    .local_commit_intent
+                    .as_ref()
+                    .ok_or(GithubPublicationGateErrorV1::JournalSchemaInvalid)?;
+                if !full_git_object_id(&receipt.commit)
+                    || receipt.commit == intent.parent_commit
+                    || receipt.parent_commit != intent.parent_commit
+                    || receipt.tree != intent.tree
+                    || receipt.message != intent.message
+                {
+                    return Err(GithubPublicationGateErrorV1::JournalSchemaInvalid);
+                }
+            }
+            if let Some(expected) = &prepared.push_expected_commit
+                && prepared.local_commit_receipt.as_ref().map(|r| &r.commit) != Some(expected)
+            {
+                return Err(GithubPublicationGateErrorV1::JournalSchemaInvalid);
+            }
+            let state = &self.records[&prepared.idempotency_key].state;
+            if (*state == GithubPublicationRecordStateV1::LocalCommitOutcomeUnknown
+                && (prepared.local_commit_intent.is_none()
+                    || prepared.local_commit_receipt.is_some()))
+                || (*state == GithubPublicationRecordStateV1::LocalCommitConfirmed
+                    && prepared.local_commit_receipt.is_none())
+                || (prepared.local_commit_intent.is_some()
+                    && matches!(
+                        state,
+                        GithubPublicationRecordStateV1::RemoteOutcomeUnknown
+                            | GithubPublicationRecordStateV1::Confirmed
+                            | GithubPublicationRecordStateV1::ReconciledNotApplied
+                    )
+                    && (prepared.local_commit_receipt.is_none()
+                        || prepared.push_expected_commit.is_none()))
+            {
+                return Err(GithubPublicationGateErrorV1::JournalSchemaInvalid);
+            }
         }
         Ok(())
     }
@@ -647,6 +740,8 @@ impl GithubPublicationJournalV1 {
                     return Err(GithubPublicationGateErrorV1::AlreadyCompleted);
                 }
                 GithubPublicationRecordStateV1::Prepared
+                | GithubPublicationRecordStateV1::LocalCommitOutcomeUnknown
+                | GithubPublicationRecordStateV1::LocalCommitConfirmed
                 | GithubPublicationRecordStateV1::RemoteOutcomeUnknown => {
                     return Err(GithubPublicationGateErrorV1::RecoveryRequired);
                 }
@@ -668,6 +763,71 @@ impl GithubPublicationJournalV1 {
             idempotency_key: key.clone(),
             intent_hash,
         })
+    }
+
+    pub(crate) fn begin_local_commit(
+        &mut self,
+        token: &str,
+        intent: GithubPublicationCommitIntentV1,
+    ) -> Result<(), GithubPublicationGateErrorV1> {
+        self.validate()?;
+        let (prepared, permit) = self.prepared(token)?;
+        if self.state_for(&permit)? != GithubPublicationRecordStateV1::Prepared
+            || prepared.local_commit_intent.is_some()
+        {
+            return Err(GithubPublicationGateErrorV1::RecoveryRequired);
+        }
+        self.prepared.get_mut(token).unwrap().local_commit_intent = Some(intent);
+        self.transition(
+            &permit,
+            GithubPublicationRecordStateV1::Prepared,
+            GithubPublicationRecordStateV1::LocalCommitOutcomeUnknown,
+        )?;
+        self.validate()
+    }
+
+    pub(crate) fn record_local_commit(
+        &mut self,
+        token: &str,
+        receipt: GithubPublicationCommitReceiptV1,
+    ) -> Result<(), GithubPublicationGateErrorV1> {
+        self.validate()?;
+        let (_, permit) = self.prepared(token)?;
+        self.transition(
+            &permit,
+            GithubPublicationRecordStateV1::LocalCommitOutcomeUnknown,
+            GithubPublicationRecordStateV1::LocalCommitConfirmed,
+        )?;
+        self.prepared.get_mut(token).unwrap().local_commit_receipt = Some(receipt);
+        self.validate()
+    }
+
+    pub(crate) fn begin_exact_push(
+        &mut self,
+        token: &str,
+    ) -> Result<(), GithubPublicationGateErrorV1> {
+        self.validate()?;
+        let (prepared, permit) = self.prepared(token)?;
+        let commit = prepared
+            .local_commit_receipt
+            .as_ref()
+            .ok_or(GithubPublicationGateErrorV1::RecoveryRequired)?
+            .commit
+            .clone();
+        let state = self.state_for(&permit)?;
+        if !matches!(
+            state,
+            GithubPublicationRecordStateV1::LocalCommitConfirmed
+                | GithubPublicationRecordStateV1::ReconciledNotApplied
+        ) {
+            return Err(GithubPublicationGateErrorV1::RecoveryRequired);
+        }
+        self.prepared.get_mut(token).unwrap().push_expected_commit = Some(commit);
+        self.transition(
+            &permit,
+            state,
+            GithubPublicationRecordStateV1::RemoteOutcomeUnknown,
+        )
     }
 
     /// Persist this transition immediately before a future executor dispatches
@@ -796,6 +956,10 @@ fn map_approval_error(error: ContractPolicyError) -> GithubPublicationGateErrorV
 
 fn valid_commit_id(value: &str) -> bool {
     (7..=64).contains(&value.len()) && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn full_git_object_id(value: &str) -> bool {
+    matches!(value.len(), 40 | 64) && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 fn valid_idempotency_key(value: &str) -> bool {

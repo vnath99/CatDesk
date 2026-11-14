@@ -1,0 +1,175 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T23:59:35.694864+00:00",
+  "classification": "ACTUAL_SELECTED_DEVELOPMENT_LOGIN_RECOVERY_HEALTH_AND_THREE_PROJECT_READONLY_OBSERVATION",
+  "sourceCommit": "80ecc921d097724cf93db4bbdddeae5aa6be3d4e",
+  "branch": "codex/web-rollover-oct17",
+  "build": {
+    "sourceCleanAtBuild": true,
+    "appSha256": "487382841885e236394782a0f1c5e020c58d5fb4a51e9eadf763bb3054d51b4a",
+    "wakeHostSha256": "2037aac622f510968fe6b32c4b6c68894a82d8318690ac7ae642ff63545bccc2",
+    "wakeComponentReusedWithUnchangedSourceProof": true,
+    "optimizedControllerBuildSeconds": 469.313,
+    "buildLogSha256": "f926755db2dfdeb5763aaf913f606d17e9be68798463d933e561594ea8113662"
+  },
+  "selection": {
+    "mode": "DEVELOPMENT_UNPROTECTED",
+    "currentAppSha256": "487382841885e236394782a0f1c5e020c58d5fb4a51e9eadf763bb3054d51b4a",
+    "previousVerifiedAppSha256": "b322bd6131f146e1dfeb36a7d0ac66cd5c49cbcd7c2910b430d119f05f6ba31c",
+    "currentAndPreviousVerifiedRetained": true,
+    "protectedProductionPromoted": false,
+    "productionAuthorityCreated": false
+  },
+  "recovery": {
+    "preflightPassed": true,
+    "supportedCommitPassed": true,
+    "originalMarkerArchivedByteForByte": true,
+    "historicalJobExitInferred": false,
+    "historicalSubmissionOutcome": "UNCHANGED_UNPROVEN",
+    "wakeOrRolloverQuarantineCleared": false,
+    "currentLoginFenceAbsent": true
+  },
+  "boundedQualification": {
+    "maximumSeconds": 180,
+    "elapsedSeconds": 85.281,
+    "exitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false,
+    "unauthorizedHttpStatus": 401,
+    "authenticatedInitializeHttpStatus": 200,
+    "authenticatedCatalogHttpStatus": 200,
+    "registeredFileReadPassed": true,
+    "healthOwnerTreeExitProved": true,
+    "healthEndpointClosed": true
+  },
+  "independentObservationMatrix": {
+    "maximumSeconds": 180,
+    "elapsedSeconds": 65.656,
+    "exitCode": 0,
+    "actualSelectedVersionedExecutableUsed": true,
+    "rows": [
+      {
+        "projectLabel": "registered-project-A",
+        "finalState": "HOME",
+        "browserObservation": {
+          "assistant": "ABSENT",
+          "composer": "UNKNOWN",
+          "document": "COMPLETE",
+          "editor": "MISSING",
+          "exchange": "UNATTRIBUTED",
+          "generation": "IDLE",
+          "history": "ABSENT",
+          "recovery": "OBSERVATION_ONLY",
+          "route": "HOME"
+        },
+        "tabSelectionStates": [
+          "PROBE:TARGET_TAB_DRIFT",
+          "PROBE:TARGET_TAB_DRIFT",
+          "PROBE:TARGET_TAB_DRIFT",
+          "PROBE:TARGET_TAB_DRIFT"
+        ],
+        "expectedBindingPinned": true,
+        "ownedTreeExited": true
+      },
+      {
+        "projectLabel": "registered-project-B",
+        "finalState": "HOME",
+        "browserObservation": {
+          "assistant": "ABSENT",
+          "composer": "UNKNOWN",
+          "document": "COMPLETE",
+          "editor": "MISSING",
+          "exchange": "UNATTRIBUTED",
+          "generation": "IDLE",
+          "history": "ABSENT",
+          "recovery": "OBSERVATION_ONLY",
+          "route": "HOME"
+        },
+        "tabSelectionStates": [
+          "PROBE:TARGET_TAB_MISSING",
+          "PROBE:TARGET_TAB_MISSING",
+          "PROBE:TARGET_TAB_MISSING",
+          "PROBE:TARGET_TAB_MISSING"
+        ],
+        "expectedBindingPinned": true,
+        "ownedTreeExited": true
+      },
+      {
+        "projectLabel": "registered-project-C",
+        "finalState": "HOME",
+        "browserObservation": {
+          "assistant": "ABSENT",
+          "composer": "UNKNOWN",
+          "document": "COMPLETE",
+          "editor": "MISSING",
+          "exchange": "UNATTRIBUTED",
+          "generation": "IDLE",
+          "history": "ABSENT",
+          "recovery": "OBSERVATION_ONLY",
+          "route": "HOME"
+        },
+        "tabSelectionStates": [
+          "PROBE:TARGET_TAB_MISSING",
+          "PROBE:TARGET_TAB_MISSING",
+          "PROBE:TARGET_TAB_MISSING",
+          "PROBE:TARGET_TAB_MISSING"
+        ],
+        "expectedBindingPinned": true,
+        "ownedTreeExited": true
+      }
+    ],
+    "unusableEarlierProjectDidNotPreventLaterObservation": true,
+    "provesWakeDeliveryOrIndependentCoding": false
+  },
+  "preservation": {
+    "originalCriticalPinsUnchanged": 128,
+    "originalStatePinsUnchanged": 200,
+    "intentionalDevelopmentSelectionAndAccountingPaths": 3,
+    "laterMatrixPinsUnchanged": 287,
+    "previousPackageFilesUnchanged": 6,
+    "olderRetainedPackageFilesUnchanged": 7,
+    "allFiveOriginalProjectBindingsAndTenPairedTargetsUnchanged": true,
+    "profileDirectoryIdentityAndNonUsageConfigurationPreserved": true,
+    "messagesSent": 0,
+    "unknownRequestsReplayed": false,
+    "nativeTaskOrSessionCommandsInvoked": false,
+    "recurringOrTunnelOwnersStarted": false
+  },
+  "cleanup": {
+    "nativeReadOnlyProfileState": "PROFILE_QUIESCENT",
+    "observedUtc": "2026-10-30T23:57:33.115700+00:00",
+    "ownedBrowserTreesExitProved": true,
+    "hostStopped": true,
+    "ordinaryUnrelatedBrowsersNotKilled": true
+  },
+  "acceptance": {
+    "loginOnlyRecovery": "PASS_REAL_DEVELOPMENT",
+    "selectedDevelopmentStartupAndAuthenticatedLocalMcp": "PASS",
+    "installedReadOnlyObserverProtocolAndCleanup": "PASS_HOME_OBSERVED",
+    "exactRegisteredConversationReached": "OPEN_NOT_OBSERVED",
+    "actualAssistantLoadErrorDetection": "OPEN_CONVERSATION_NOT_REACHED",
+    "actualIndependentWebCodingAndWakeDelivery": "OPEN",
+    "protectedCurrentSourcePromotion": "OPEN",
+    "unattendedOperation": "OPEN"
+  },
+  "blocker": "SHARED_AUTOMATED_BROWSER_NAVIGATION_OR_CONTROL_CONTEXT_HOME_WITH_TARGET_DRIFT_OR_MISSING",
+  "unprovenCauses": [
+    "authentication loss",
+    "network failure",
+    "assistant response failure",
+    "SDK scalar URL mismatch",
+    "same-chat route alias rejection"
+  ],
+  "nextExecutableTask": "ADD_BOUNDED_CONTENT_FREE_TARGET_METADATA_VERSUS_DOCUMENT_ROUTE_AND_SELECTION_STAGE_DIAGNOSTICS_USING_EXISTING_OWNER_AND_CANONICAL_ID_GUARDS",
+  "connector": "NOT_REPROBED_LATEST_RETAINED_OCT30_TRANSPORT_RESPONSE_SUCCEEDED_SEPARATE_FROM_PROJECT_TASK_AUTHORITY",
+  "operatorActionRequired": false,
+  "goal": "ACTIVE",
+  "privateEvidenceSha256": {
+    "oct30-login-recovery-lock-fix-build-result.private.json": "cb2a3577b077e80a1314a320c9dca6f02e2eae7a5b45c36c5fda431f8b5291ee",
+    "oct30-login-recovery-lock-fix-and-observation-result.private.json": "b99ccdf1568109d902315e87dd432a25d9d8835dc7284a043053d6d333c78646",
+    "oct30-login-recovery-lock-fix-and-observation-owner.private.json": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "oct30-installed-project-observation-matrix-result.private.json": "d84ee7884dd9b5e1ef2b95ebf5718e276b4d1cc6e7e22c311e3086174515eaa5",
+    "oct30-installed-project-observation-matrix-owner.private.json": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "oct30-profile-quiescence-matrix-cleanup-result.private.json": "5f5d9842b51bd2066d61b0909c015116bf399fa540d45ce2f08f5f5a193c2e9c"
+  }
+}

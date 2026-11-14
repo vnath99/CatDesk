@@ -1,0 +1,72 @@
+{
+  "observedUtc": "2026-11-02T09:03:51.791755+00:00",
+  "classification": "TESTED_SOURCE_WITH_NATIVE_WINDOWS_FIXTURE_NOT_INSTALLED_ACCEPTANCE",
+  "sourceBaseCommit": "0342ca38387911bf357b88a301a5ae359d1f2701",
+  "changedSource": {
+    "src/mcp.rs": "71c1fb7ecd1c20f6c9a25e023380d1cbb484587b3b5dcd12a16bf48f9a67fd7d",
+    "src/project_mcp.rs": "cb4cec45ab866b58ab128a5892525d7d09846bcc057fce18070ad270aff37536"
+  },
+  "implementation": {
+    "diagnosedGitPreparationOutsideSharedWakeBindingMutex": true,
+    "lockPinnedToPreparedWakeRoot": true,
+    "selectedRootRecheckedInsideLock": true,
+    "registryWakeDigestGenerationHistoryReadbackStillInsideLock": true,
+    "existingConfigurationBusyAndMismatchDiagnosticsPreserved": true,
+    "ordinaryStatusReadPathUnchanged": true,
+    "newBrowserOwnerSchedulerOrRegistry": false
+  },
+  "verification": {
+    "newNativeConcurrencyCaseFailedUnderOriginalOrder": true,
+    "originalFailure": "Sibling target read could not complete before the delayed project was released.",
+    "redFailedCases": 1,
+    "greenFocusedPassedCases": 1,
+    "projectMcpSuitePassedIncludingFocusedCase": 8,
+    "handoffRegressionsPassed": 20,
+    "distinctGreenCases": 28,
+    "redAndGreenTestSourceBytesIdentical": true,
+    "bothNativeReaderThreadsReleasedAndJoined": true,
+    "strictAllTargetClippyPassed": true,
+    "formatAndDiffChecksPassed": true,
+    "ownerTimeouts": 0,
+    "ownerTerminationFailures": 0,
+    "commands": [
+      "cargo test --locked --offline --bin catdesk project_mcp::tests::slow_diagnosed_project_preparation_does_not_block_sibling_target_readback -- --test-threads=1",
+      "cargo test --locked --offline --bin catdesk project_mcp::tests:: -- --test-threads=2",
+      "cargo test --locked --offline --bin catdesk operator_facade::web::rollover::tests::handoff_ -- --test-threads=2",
+      "cargo clippy --locked --offline --all-targets -- -D warnings",
+      "cargo fmt --all -- --check",
+      "git diff --check"
+    ],
+    "earlierExpandedParallelFailureErased": false,
+    "soleCauseOfEarlierFiveSecondFailureProved": false
+  },
+  "independentReview": {
+    "targetCommit": "c52e9ef75490381becabaaf027f98f2845f1a183",
+    "reassessmentVerdict": "INCONCLUSIVE",
+    "reassessmentResponseSha256": "03b12195117dfc59b2d845f49bd585df2eabcc7546e01110b505bc161ffef5f3",
+    "taskCorroboratedGitCalls": 5,
+    "sourceBlobIdentityAndRecordedCoverageQuestionsResolved": true,
+    "semanticReconciliationAndTimingDecisionStillOpen": true,
+    "newLivenessChangeInheritsPriorSourceAuthority": false,
+    "nativeReportAckSnapshotProducerOrSourceIntegrationCreated": false
+  },
+  "generation8Context": {
+    "observedProxy": 26408,
+    "argumentProxy": 809,
+    "resultProxy": 23317,
+    "coverageKnown": false,
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "separateProcessRepeatedImportChangedLedger": false,
+    "rawTextPersisted": false
+  },
+  "cleanup": {
+    "testOwnedProcesses": 0,
+    "trustedBackendSoleExpectedListener": true,
+    "originalTunnelAndAllBindingsRetained": true,
+    "recurringWakeHostStopped": true,
+    "productionAuthenticationOrNativeSessionChanges": 0
+  },
+  "nextTask": "Build and qualify the exact updated isolated development controller, then exercise never-tested predecessor-free initialization in a new isolated Web-only acceptance scope using the existing registry/profile/owner. Preserve all existing projects and completed canaries. Genuine semantic source and installed authority remain separate.",
+  "operatorActionRequired": false
+}

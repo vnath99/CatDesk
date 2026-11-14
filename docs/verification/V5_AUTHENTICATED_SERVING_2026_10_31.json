@@ -1,0 +1,93 @@
+{
+  "date": "2026-10-31",
+  "timezone": "America/New_York",
+  "branch": "codex/web-rollover-oct17",
+  "comparisonBase": "284c34fa13092b89027d7bd739f8d3cdbaa7883d",
+  "installedReleaseSource": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "installedSha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf",
+  "releasePromotions": 0,
+  "authorization": "Owner authorized central authentication, supported project pairing and bounded restart qualification; existing release authority retained.",
+  "implementation": {
+    "secureMcpHelper": "Use a distinct managed type namespace so lifecycle-first loading cannot hide child-only bearer forwarding.",
+    "doctor": "19 independent layers; distinguish bearer environment configuration from daemon enforcement, stopped registered monitors from recovery acceptance, and unbound projects from mismatched existing bindings.",
+    "supervisor": "Optional backend-only mode on the existing monitor uses public diagnose and recover -BackendOnly; only a verified missing listener permits recovery. Other local failures hold; external or Wake degradation does not recycle a healthy backend. Default behavior unchanged."
+  },
+  "sourceTests": {
+    "test-secure-mcp-bearer-forwarding.ps1": "PASS: 17 checks including an actual native child after lifecycle-first initialization; parent environment preserved.",
+    "test-secure-mcp-route-validation.ps1": "PASS",
+    "test-catdesk-doctor.ps1": "PASS: 144 assertions; no network, process start or repair.",
+    "test-catdesk-autostart-supervisor.ps1": "PASS: existing cases plus backend-only recovery, foreign owner, authentication, release, duplicate-layer and external-degradation cases.",
+    "test-catdesk-lifecycle.ps1": "PASS",
+    "test-start-catdesk-stack.ps1": "PASS",
+    "test-catdesk-production-acceptance.ps1": "PASS: fixtures only, not production acceptance."
+  },
+  "installedLiveEvidence": {
+    "initialPairing": {
+      "projectsPaired": 2,
+      "method": "Existing installed operator web target bind with exact registry digest and expected Wake generation 0.",
+      "result": "PAIRED at generation 1; initial adoption of each existing URL only.",
+      "registryBytesUnchanged": true,
+      "conversationUrlsChanged": 0,
+      "nativeOwnersChanged": 0,
+      "deliveryProved": false
+    },
+    "centralAuthentication": {
+      "durationSeconds": 16.23,
+      "existingCredentialsRotated": 0,
+      "configuration": "Separate random MCP bearer retained in the Windows User environment; existing process-only forwarding helper supplies Authorization to the existing owned tunnel client.",
+      "missingBearerHttp": 401,
+      "incorrectBearerHttp": 401,
+      "authenticatedCatalogHttp": 200,
+      "tools": 102,
+      "namedDispatcherListed": true,
+      "existingTunnelReadyAndHealthy": true,
+      "existingTunnelProfileUnchanged": true,
+      "canonicalImageAndFingerprintUnchanged": true,
+      "connectorResponse": "One exposed connector status call returned structured content with BEARER_REQUIRED and serving/canonical parity MATCH. No task call was issued."
+    },
+    "boundedSupervisorRestart": {
+      "durationSeconds": 35.016,
+      "scope": "Source-qualified finite monitor controlling the unchanged trusted installed backend through its public lifecycle facade.",
+      "states": [
+        "RECOVERED",
+        "READY",
+        "MONITORING_COMPLETE"
+      ],
+      "missingBearerHttp": 401,
+      "authenticatedCatalogHttp": 200,
+      "tools": 102,
+      "temporaryMonitorExited": true,
+      "pinnedStateChanges": 0,
+      "tunnelRestartCommands": 0,
+      "installedSupervisorUpdated": false,
+      "recurringRegistrationChanges": 0,
+      "unattendedRebootAcceptance": "UNVERIFIED"
+    },
+    "readOnlyDoctor": "New source helper, using the installed lifecycle definitions, observes the verified release/listener, User bearer reference with current diagnostic process unset, registered monitor stopped, two paired installed projects, one mismatched Web binding and one unbound project. It performs zero network requests or repairs."
+  },
+  "retainedFailures": [
+    "Pre-effect live wrapper checks refused a whole-config checksum after normal usage counters changed, an incorrect wrapper result-property assumption, and incompatible shared helper type loading. No credentials or serving owners changed during those refusals.",
+    "The new regression first reproduced the five-argument helper overload failure, then passed after the namespace correction.",
+    "First restart observation exceeded its capture bound because the retained daemon inherited a pipe. The monitor had exited and the backend was running, but that attempt remains failed/inconclusive. File-backed capture fixed the test harness; the separately recorded bounded restart passed."
+  ],
+  "remainingAcceptance": {
+    "nativeModelDispatch": "Installed C254 advertises scoped reads/patches/fixed verification only. Later source contains native.codex.dispatch/status and manual-wake task grants; genuine review/producer/promotion authority remains necessary before claiming those operations installed.",
+    "twoChatgptWebCodingConversations": "OPEN: local authenticated catalogs and a connector status response do not prove two project chats executed tasks.",
+    "wake2InstalledPairing": "OPEN: its verified companion belongs to controlled development authority. Do not blindly copy that URL into installed Wake and create competing owners.",
+    "catdeskInstalledPairing": "OPEN: existing mismatched binding and historical unknown deliveries preserved.",
+    "manualWakeDelivery": "OPEN for these new installed pairs; historical unknown deliveries and C49 remain untouched.",
+    "persistentSupervisor": "OPEN: finite source-owner restart passed; installed recurring/reboot recovery not qualified."
+  },
+  "preservation": {
+    "browserActions": 0,
+    "wakeHostStarts": 0,
+    "nativeTaskStarts": 0,
+    "newTunnelsOrPlugins": 0,
+    "historicalRequestReplays": 0,
+    "projectUrlChanges": 0,
+    "nativeSessionChanges": 0,
+    "protectedReleaseChanges": 0
+  },
+  "fullMilestoneComplete": false,
+  "recordCreatedUtc": "2026-11-01T02:43:34.0808668+00:00"
+}

@@ -1,0 +1,52 @@
+{
+  "date": "2026-10-28",
+  "sourceStatusFixCommit": "958e8d73903d9661051d992ee47e948efadea6f0",
+  "classification": "SOURCE_QUALIFIED_LIVE_PRIOR_PRESERVED",
+  "defect": "LASTEXITCODE can be unset or stale after a successful PowerShell script call; status is now captured inside the array expression for Windows PowerShell compatibility.",
+  "rootCauseScope": "Fresh actual Windows PowerShell regression reproduces the failure. Original promotion helper stdout was not retained; intermediate worker outcome remains preserved as INTENT_RECORDED.",
+  "tests": {
+    "rustRecovery": 14,
+    "subprocessEntryPointsIncluded": 2,
+    "windowsScriptStatus": 5,
+    "coreScriptStatus": 5,
+    "windowsWorkerClassifier": 7,
+    "coreWorkerClassifier": 7,
+    "existingPromotionSuite": "PASS",
+    "format": "PASS",
+    "strictAllTargetClippy": "PASS"
+  },
+  "supportedRecovery": "Five mandatory native records, optional copied producer attestation, exact expired schema-4 local-backend intent only after trusted unchanged disk pair, no disk transaction and independent process quiescence; unknown/completed/foreign receipts refuse. One UTF-8 BOM decoded, original bytes archived.",
+  "live": {
+    "installedC208HeadlessQualification": "PASS_401_200_200_EXACT_10_READ_ONLY_TOOLS_OWNED_EXIT",
+    "firstHistoricalRetirement": "COMPLETED_VERIFIED_7_ORIGINAL_FILES_BYTE_PRESERVED",
+    "secondPromotion": "FAILED_BEFORE_SWAP_INTENT_PRESERVED_NO_RETRY",
+    "priorPinsPreserved": 8485,
+    "currentProtectedPins": 8491,
+    "metadataOnlyPreserved": 2,
+    "ownersRemaining": 0,
+    "port3200Listeners": 0,
+    "diskTransactionExists": false,
+    "canonicalSha256": "91eea19e6e030e80900d43114f800c3642f5cc063ef2c969b83eb20d2c28d14b",
+    "reconciliationSha256": "db3b73aae39141dcdbf4880a6e807df4affb8615584d18b679a522638ba0177f"
+  },
+  "productionHelperStatusFixInstalled": false,
+  "secondIntentRetirementExecuted": false,
+  "candidateUnchanged": {
+    "sourceCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+    "sha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf"
+  },
+  "newBrowserWakeTunnelStarts": 0,
+  "twoProjectWebCoding": "OPEN",
+  "ci": "UNVERIFIED",
+  "logsSha256": {
+    "promotion-handoff-exit-status-red.private.log": "d90dbf11b7c6a8ec21462878e37ff47537593d39bb594f5c3516b5405746407e",
+    "promotion-handoff-exit-status-green-windows.private.log": "e8a6c10307f4f146f5aa99a057911e3a8906ecb0c6c1fe65fb52a3c8255f2df0",
+    "promotion-handoff-exit-status-green-core.private.log": "e8a6c10307f4f146f5aa99a057911e3a8906ecb0c6c1fe65fb52a3c8255f2df0",
+    "promotion-handoff-existing-regressions.private.log": "554737e9489b54469a8ee8a7fbee0b0bf32099a1b772d77159e8c9f624f293dd",
+    "release-worker-classifier-windows.private.log": "6edd5e9b5ef0db82c7b4cd5dfbe5a89e84c94f927e2e86630de737c98f784d67",
+    "release-worker-classifier-core.private.log": "6edd5e9b5ef0db82c7b4cd5dfbe5a89e84c94f927e2e86630de737c98f784d67",
+    "failed-intent-retirement-focused-tests-v4.private.log": "68b5b68f66e718dd1c2eafbcb3a364d7903d5693b732fb45fe2f8f78460e986a",
+    "failed-intent-retirement-format-v4.private.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "failed-intent-retirement-clippy-v3.private.log": "181b2b8f491aeab3e59d4fd49757fff2e8dfaa8c578e619cb68a116ba693d75b"
+  }
+}

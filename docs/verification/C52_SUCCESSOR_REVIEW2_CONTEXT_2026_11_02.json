@@ -1,0 +1,72 @@
+{
+  "observedUtc": "2026-11-02T06:32:31.024286+00:00",
+  "classification": "TESTED_CONTROLLED_LIVE_ADMINISTRATIVE_REVIEW_CONTINUED_AFTER_ROLLOVER_NOT_NATIVE_CODING",
+  "sourceCommit": "c52e9ef75490381becabaaf027f98f2845f1a183",
+  "controllerSourceCommit": "6544f6b20aff7eb8ca13f58bd212b5ea6e5d3234",
+  "review": {
+    "number": 2,
+    "verdict": "REVIEWED_PARTIAL",
+    "responseSha256": "f765863a4c8e26d63f3e9e4d09d7ce478dbf9540dde8a8e91503831529f2fe65",
+    "exactSingleUserReceipt": true,
+    "completedExactResponse": true,
+    "coordinatorClosed": true,
+    "taskCorrelatedSourceAndPacketCalls": 9,
+    "allFrozenSourceLogsMatched": true,
+    "inspectedPaths": [
+      "src/operator_web_cli.rs",
+      "src/operator_web_onboarding.rs"
+    ],
+    "inspectedRanges": [
+      "src/operator_web_cli.rs:1854-1860",
+      "src/operator_web_onboarding.rs:1-420"
+    ],
+    "reportedOutputTruncated": false,
+    "noConcreteDefectEstablished": true,
+    "limitations": [
+      "86 paths retained: 78 accepted unchanged blobs, six changed, two new.",
+      "Review covers declared group-2 ranges only; no cumulative acceptance.",
+      "Previously reported expanded parallel regression failure remains unresolved.",
+      "Native checkout identity, full installed lifecycle, producer and protected promotion remain unverified.",
+      "No tests, writes, native execution, authentication, binding or production mutations performed.",
+      "Browser response completion does not prove project task completion."
+    ],
+    "cumulativeSourceAccepted": false
+  },
+  "context": {
+    "generation": 7,
+    "knownMcpCalls": 9,
+    "observations": 18,
+    "observedTokenProxy": 19986,
+    "observedToolArgumentTokens": 461,
+    "observedToolResultTokens": 17696,
+    "pressureAssessment": "UNKNOWN_OR_INCOMPLETE",
+    "coverageKnown": false,
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "duplicateImportChangedLedger": false,
+    "separateCliProcessesReopenedDurableLedger": true,
+    "rawTextPersisted": false,
+    "preservationMismatches": 0
+  },
+  "cleanup": {
+    "testOwnedProcesses": 0,
+    "trustedBackendAndOriginalTunnelRetained": true,
+    "sharedWakeHostStopped": true,
+    "loginMarkerAbsent": true,
+    "recurringAutomationEnabled": false
+  },
+  "preservedWork": {
+    "sameNativeClaim": true,
+    "fullSourcePaths": 86,
+    "priorFirstReviewNotReplayed": true,
+    "remainingNeverSubmittedReviews": 6,
+    "productionChanged": false,
+    "nativeProjectExecutionStarted": false,
+    "producerAuthorityCreated": false
+  },
+  "preparationNotes": [
+    "A private context-payload preparation initially omitted __file__ in its evaluation namespace and stopped before creating payloads or issuing product commands. The original helper is preserved; corrected preparation then used the existing observe and reconcile-receipts API."
+  ],
+  "nextTask": "Send only the existing never-submitted checkpoint3 through the current qualified transfer grant, then observe/read/close/corroborate and account known traffic. Preserve the current C52 claim; later transfer source needs its own independent review.",
+  "operatorActionRequired": false
+}

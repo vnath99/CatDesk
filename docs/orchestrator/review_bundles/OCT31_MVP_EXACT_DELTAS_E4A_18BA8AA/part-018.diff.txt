@@ -1,0 +1,163 @@
+     args = parser.parse_args()
+     if args.await_start and sys.stdin.readline() != "START\n":
+         return 2
+     url = args.conversation_url
+-    parsed = urlparse(url)
+-    if parsed.scheme != "https" or parsed.hostname not in {"chatgpt.com", "chat.openai.com"} or not parsed.path.startswith("/c/") or parsed.query or parsed.fragment:
++    if conversation_id(url) is None:
+         print("PROBE:BAD_URL", flush=True); return 2
+     if not 5 <= args.seconds <= 120:
+         print("PROBE:BAD_DURATION", flush=True); return 2
+-    if not PROFILE.is_dir():
++    profile = args.profile if args.profile is not None else PROFILE
++    if not profile.is_dir():
+         print("PROBE:PROFILE_NOT_FOUND", flush=True); return 2
++    sink = None
++    if args.primitives is not None or args.primitives_sha256 is not None:
++        try:
++            sink = load_observation_sink(args.primitives, args.primitives_sha256, profile, url)
++        except Exception:
++            print("PROBE:FINAL:OBSERVATION_UNAVAILABLE", flush=True)
++            return 0
++    def observation(cdp):
++        if sink is None:
++            return classify(cdp, url), None
++        try:
++            value = sink.browser_surface_observation(cdp)
++            return surface_state(value), value
++        except Exception:
++            return "OBSERVATION_UNAVAILABLE", None
+     from seleniumbase import SB
+-    with SB(uc=True, user_data_dir=str(PROFILE)) as sb:
++    def report_tab(facts):
++        print("PROBE:TAB:" + json.dumps(facts, separators=(",", ":"), sort_keys=True), flush=True)
++    with SB(uc=True, user_data_dir=str(profile)) as sb:
+         sb.activate_cdp_mode(url)
+         cdp = sb.cdp
++        if args.profile is not None:
++            print("PROBE:" + select_registered_target_tab(cdp, url, report_tab), flush=True)
+         last = None
++        last_surface = None
+         deadline = time.monotonic() + args.seconds
++        recover_after = time.monotonic() + min(5.0, args.seconds / 2)
++        recovery_attempted = False
++        # A returned tab can still be loading when the initial independent
++        # document check runs. Reinspect existing tabs within the same budget;
++        # select only the same unique, independently exact registered target.
++        selection_attempts = 1
++        select_after = recover_after
+         while time.monotonic() < deadline:
+-            state = classify(cdp, url)
++            state, surface = observation(cdp)
++            if (args.profile is not None and state in {"HOME", "TARGET_DRIFT"}
++                    and selection_attempts < 4 and time.monotonic() >= select_after):
++                selection_attempts += 1
++                selected = select_registered_target_tab(cdp, url, report_tab)
++                print("PROBE:" + selected, flush=True)
++                state, surface = observation(cdp)
++                select_after = time.monotonic() + 5.0
+             if state != last:
+                 print("PROBE:" + state, flush=True); last = state
++                if state == "CHROME_ERROR":
++                    print("PROBE:NETWORK:" + chrome_error_detail(cdp), flush=True)
++            if surface is not None and surface != last_surface:
++                print("PROBE:SURFACE:" + json.dumps(surface, separators=(",", ":"), sort_keys=True), flush=True)
++                last_surface = surface
++            if not args.read_only and args.profile is not None and state == "HOME" and not recovery_attempted and time.monotonic() >= recover_after:
++                recovery_attempted = True
++                print("PROBE:HOME_CHECK:" + recover_empty_home(cdp, url), flush=True)
+             time.sleep(1)
+-        print("PROBE:FINAL:" + classify(cdp, url), flush=True)
++        final, surface = observation(cdp)
++        if surface is not None:
++            print("PROBE:SURFACE:" + json.dumps(surface, separators=(",", ":"), sort_keys=True), flush=True)
++        if final == "CHROME_ERROR" and last != final:
++            print("PROBE:NETWORK:" + chrome_error_detail(cdp), flush=True)
++        print("PROBE:FINAL:" + final, flush=True)
+     return 0
+ if __name__ == "__main__": raise SystemExit(main())
+diff --git a/src/daemon_reload.rs b/src/daemon_reload.rs
+index 778ac587052d4944d31fd42b643133df59efcf7a..9bb9fd36a4ee8fa99dd5f38bb7ed79d3a57ced9d 100644
+--- a/src/daemon_reload.rs
++++ b/src/daemon_reload.rs
+@@ -26,6 +26,12 @@ use crate::reviewed_source_snapshot::{
+     ReviewedSourceSnapshotExpectedV1, validate_committed_snapshot,
+ };
+ 
++#[path = "promotion_retirement.rs"]
++#[cfg(windows)]
++pub(crate) mod retirement;
++#[path = "promotion_source_bridge.rs"]
++#[cfg(windows)]
++pub(crate) mod source_bridge;
+ #[path = "release_pair_stopped.rs"]
+ pub(crate) mod stopped;
+ 
+@@ -437,6 +443,10 @@ pub fn prepare_reviewed_promotion_with_profile(
+     local_backend_only: bool,
+ ) -> Result<ReviewedPromotionPreflightV1, String> {
+     let workspace = canonical_directory(workspace, "reviewed promotion workspace")?;
++    #[cfg(windows)]
++    let _promotion_lease = retirement::mutation_lease(&workspace)?;
++    #[cfg(windows)]
++    retirement::ensure_ready(&workspace)?;
+     let candidate =
+         canonical_workspace_file(&workspace, candidate, "reviewed promotion candidate")?;
+     let candidate_sha256 = sha256_file(&candidate)?;
+@@ -539,12 +549,33 @@ pub fn prepare_reviewed_promotion_with_profile(
+             && existing.expires_at_unix >= now_unix()
+             && same_reviewed_promotion_evidence(&existing.authorization, &preflight.authorization)
+         {
++            if reviewed_promotion_claim_path(&workspace).exists() {
++                let claim: ReviewedPromotionClaimV1 = read_bounded_json(
++                    &reviewed_promotion_claim_path(&workspace),
++                    "reviewed promotion claim",
++                )?;
++                if claim.authorization_id != existing.authorization.authorization_id
++                    || claim.transaction_id != existing.authorization.transaction_id
++                    || claim.claim_id != existing.authorization.claim_id
++                    || claim.state != "CLAIMED_PENDING"
++                {
++                    return Err(
++                        "reviewed promotion claim differs; explicit recovery is required".into(),
++                    );
++                }
++            }
+             return Ok(existing);
+         }
+         if existing.authorization.review_record_id == preflight.authorization.review_record_id {
+             return Err("reviewed promotion binding is already immutable".into());
+         }
+     }
++    if reviewed_promotion_claim_path(&workspace).exists() {
++        return Err(
++            "reviewed promotion is claimed; inspect RESULT and use explicit stopped retirement"
++                .into(),
++        );
++    }
+     atomic_json_write(&reviewed_promotion_preflight_path(&workspace), &preflight)?;
+     Ok(preflight)
+ }
+@@ -556,6 +587,10 @@ pub fn confirm_reviewed_promotion(
+     confirmation_token: &str,
+ ) -> Result<ReviewedPromotionConfirmationOutcomeV1, String> {
+     let workspace = canonical_directory(workspace, "reviewed promotion workspace")?;
++    #[cfg(windows)]
++    let _promotion_lease = retirement::mutation_lease(&workspace)?;
++    #[cfg(windows)]
++    retirement::ensure_ready(&workspace)?;
+     let preflight: ReviewedPromotionPreflightV1 = read_bounded_json(
+         &reviewed_promotion_preflight_path(&workspace),
+         "reviewed promotion preflight",
+@@ -774,7 +809,35 @@ pub fn run_reviewed_promotion_worker(args: ReviewedPromotionWorkerArgsV1) -> Res
+             &authorization.transaction_id,
+         )?
+     };
+-    let result = crate::operator_facade::run_fixed_powershell_invocation_blocking(invocation)?;
++    // A previously qualified stopped release can supply the old listener using
++    // its existing bounded headless mode. The normal handoff/promotion remains
++    // the sole writer of the canonical pair and release authority.
++    #[cfg(windows)]
++    let mut source_bridge = match source_bridge::start_if_required(&workspace, &authorization) {
++        Ok(bridge) => bridge,
++        Err(error) => {

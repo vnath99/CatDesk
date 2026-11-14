@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "targetCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+  "kind": "sources",
+  "offset": 0,
+  "entries": [
+    {
+      "path": "catdesk.ps1",
+      "baseBlob": "d15cc95d2cfe04612670bb18ec2015d0e8618600",
+      "targetBlob": "599cdcea313107a50bdcfbc46c6942047ea4a75b",
+      "patchSha256": "ce98191cccac278bf5f4533fde352342b557efb5f2f915775acc484002dbe6dc",
+      "startByte": 0,
+      "endByte": 2727
+    },
+    {
+      "path": "scripts/catdesk-doctor.ps1",
+      "baseBlob": null,
+      "targetBlob": "1ad8c770546b504e5359fb2482543d344071f660",
+      "patchSha256": "9cbb1444dfff0c7abd2a265d06698a2937a00127670ab70095839d6edbccd5ce",
+      "startByte": 2727,
+      "endByte": 25375
+    },
+    {
+      "path": "scripts/promote-reviewed-catdesk-build.ps1",
+      "baseBlob": "beec5e3d460ebdbe413a4e40feab470f1c3471a6",
+      "targetBlob": "38b312b85a81957852e5e48e7b5c87cb130f3db6",
+      "patchSha256": "fd97f44ac5925b9123a094e9d2ad3481408ccb9c8ace040d5b86c3b048f00f77",
+      "startByte": 25375,
+      "endByte": 27375
+    },
+    {
+      "path": "scripts/setup-secure-mcp.ps1",
+      "baseBlob": "de0c6fdeaf2285aae46fce6a0eb6e4c3f0754ee9",
+      "targetBlob": "a30cfcdfe7e3a16d2abc2967eb1add07953d3f06",
+      "patchSha256": "66416319a4620fc800cf8ecac5b4cd9005ae4a0a8114d294a932b0bcf814cc85",
+      "startByte": 27375,
+      "endByte": 34076
+    },
+    {
+      "path": "scripts/start-catdesk-stack.ps1",
+      "baseBlob": "8f4e08f978c2e4ed96989da7993bfd3a87f0debd",
+      "targetBlob": "49172c945d3c6148a7c6e238335aecfe41d66466",
+      "patchSha256": "057516667eff9bca0ada5babfc911324ef09cb989c693817e1309daf3b901f26",
+      "startByte": 34076,
+      "endByte": 38074
+    },
+    {
+      "path": "scripts/test-backend-only-native-capability.ps1",
+      "baseBlob": null,
+      "targetBlob": "1ba610bc295c71e989351ee5c8790ed4e7ac329a",
+      "patchSha256": "a5472d43443473d7b630f76e437e0c9aac3315b38998f581754172839ea84e19",
+      "startByte": 38074,
+      "endByte": 39673
+    },
+    {
+      "path": "scripts/test-catdesk-doctor.ps1",
+      "baseBlob": null,
+      "targetBlob": "39c12cd0332ef2a4e4aabd9b3a8930ac902c4e20",
+      "patchSha256": "e89618daff572872ac929fbfe092e10bcfbe040aa03b871fdbd85602e7f42d8a",
+      "startByte": 39673,
+      "endByte": 56235
+    },
+    {
+      "path": "scripts/test-catdesk-lifecycle.ps1",
+      "baseBlob": "6a5b994b82cf72b7b2723def27a6479b3e049711",
+      "targetBlob": "ee0fe3b4b954f79ebe4b65b0fdf2d1fda6a3fc90",
+      "patchSha256": "783dc0e8a3191dbd111c8b6ec19cac0ab7532d338bb332b64755ceeea75647bb",
+      "startByte": 56235,
+      "endByte": 57598
+    }
+  ]
+}

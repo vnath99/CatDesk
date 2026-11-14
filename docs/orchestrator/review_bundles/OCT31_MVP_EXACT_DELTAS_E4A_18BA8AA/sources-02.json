@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "targetCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+  "kind": "sources",
+  "offset": 8,
+  "entries": [
+    {
+      "path": "scripts/test-local-mcp-readiness-strict.ps1",
+      "baseBlob": null,
+      "targetBlob": "29539a9ec65bf77c42df3a49a99285f5069d1505",
+      "patchSha256": "884c350860c352db1ec847ac768d629f82db49564a7ee7c76ec91d0c05c7aad1",
+      "startByte": 57598,
+      "endByte": 60759
+    },
+    {
+      "path": "scripts/test-promotion-handoff-script-status.ps1",
+      "baseBlob": null,
+      "targetBlob": "2f23d169596226fc98d354f18b65099cff920ed1",
+      "patchSha256": "df6a5aec0d69788fea578d01aa3e2e0280b4509c2f91df71a536d52ffc450827",
+      "startByte": 60759,
+      "endByte": 65649
+    },
+    {
+      "path": "scripts/test-release-worker-command-line.ps1",
+      "baseBlob": null,
+      "targetBlob": "a01631140011d25edd9be3af4aef4fd0f3a5e69d",
+      "patchSha256": "502a7a6b8a7a193adff04167e9a42212e6f275089887415c594f8cdded08dcaf",
+      "startByte": 65649,
+      "endByte": 67913
+    },
+    {
+      "path": "scripts/test-secure-mcp-bearer-forwarding.ps1",
+      "baseBlob": null,
+      "targetBlob": "328f2474dcac4fe7d67807ed2ebcd7647becf140",
+      "patchSha256": "392c2c8792b11bda7f5116994a452fb7d37bf3f288b44e279046193907d8c80b",
+      "startByte": 67913,
+      "endByte": 74826
+    },
+    {
+      "path": "scripts/test-start-catdesk-stack.ps1",
+      "baseBlob": "ddfaad3c85b1268164e41a5632efd0e7af0698ad",
+      "targetBlob": "3f9f635b91eb5d149bb0cd2f690bfebf56952b99",
+      "patchSha256": "00aa3432204fd095df82106d9813b174ab644d31fa23387c9c3770740f2873e3",
+      "startByte": 74826,
+      "endByte": 76071
+    },
+    {
+      "path": "scripts/wake_bridge.py",
+      "baseBlob": "d4fa11e7f1e3aeedcea245169b4c21e7ac7a83a2",
+      "targetBlob": "507f109f0619642b4ed207fb5c90b18473be05eb",
+      "patchSha256": "4af2efb47ff05b0c8e10a15dbee9874c7a7a21ea6c62a5334ba42921b7e17969",
+      "startByte": 76071,
+      "endByte": 114999
+    },
+    {
+      "path": "scripts/wake_profile_quiescence.py",
+      "baseBlob": null,
+      "targetBlob": "67370ea65a1021915e38255676832c074e13a2a7",
+      "patchSha256": "6f9bbab985280803ba4ab405c69cbf60a05e052ccd5a6c2eec3c804752269517",
+      "startByte": 114999,
+      "endByte": 124192
+    },
+    {
+      "path": "scripts/wake_readiness_visual_probe.py",
+      "baseBlob": "5e3d2ba5abb58b9e20a1ae89a027981f323f8585",
+      "targetBlob": "60ad352fe972bd64f9c5a28ddfbe719d2e84dd72",
+      "patchSha256": "9502cdc1779f76eb4ca91b3f3ca60dd80d385500bc8185eef6825d35c3891982",
+      "startByte": 124192,
+      "endByte": 142576
+    }
+  ]
+}

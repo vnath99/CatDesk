@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "dateUtc": "2026-11-04",
+  "baseCommit": "4dd01ccf6810d93cd03e263928631cfd86e13512",
+  "classification": "TESTED_SOURCE_PUBLIC_FACADE_WITH_MOCKS",
+  "sourceFiles": {
+    "scripts/catdesk-dev-lane.ps1": {
+      "workingRawSha256": "cc65f19e25e6b34e7c4831cc313f4ea75a5987caaafa83519d3af700b233c182",
+      "canonicalLfSha256": "cbe089734a5c7fdedc7951abf19d5210b5ddec81d15e69bf8c85ca656e1356bd",
+      "lineEndings": "Existing CRLF retained; Git canonical bytes are LF."
+    },
+    "scripts/test-catdesk-dev-lane-warning.ps1": {
+      "workingRawSha256": "8794b78d86d8d8858e1992e75e18484fbbd1db713d31c47fd4864a5fe7aa6f25",
+      "canonicalLfSha256": "8794b78d86d8d8858e1992e75e18484fbbd1db713d31c47fd4864a5fe7aa6f25"
+    },
+    "scripts/test-catdesk-dev-lane-storage.ps1": {
+      "workingRawSha256": "4fae4b7f38d52940b0318e7bf665f3d21dc3515f565e64cf3bf659345a48d85e",
+      "canonicalLfSha256": "4fae4b7f38d52940b0318e7bf665f3d21dc3515f565e64cf3bf659345a48d85e"
+    },
+    "scripts/test-catdesk-dev-local-target.ps1": {
+      "workingRawSha256": "549661ac97cb34de7dd9d3fed41c120f0f0c28dce1fdbc08683e3f9ef837c8af",
+      "canonicalLfSha256": "549661ac97cb34de7dd9d3fed41c120f0f0c28dce1fdbc08683e3f9ef837c8af"
+    }
+  },
+  "implementation": {
+    "newAdvisoryHelpers": 1,
+    "ordinaryBuildVerifyHooks": 2,
+    "defaultThresholdBytes": 68719476736,
+    "zeroThresholdAutomaticQueries": 0,
+    "counterReaderChanged": false,
+    "stdoutReceiptKeys": 9,
+    "stderrOnlyFixedWhitelist": true,
+    "nonfatalQuerySerializationAndStderrFailures": true,
+    "effectiveCargoTargetVerified": false,
+    "admissionGate": false
+  },
+  "initialMockAttempt": {
+    "preflightUtc": "2026-11-04T08:05:03.6302403+00:00",
+    "state": "FIXTURE_BINDING_FAILURE_BEFORE_CARGO",
+    "reason": "Mock script-scoped state resolved against invoked facade; corrected to caller-scope fixture cell.",
+    "productGuardChanged": false
+  },
+  "coreCompatibilityWindow": {
+    "preflightUtc": "2026-11-04T08:07:37.4405212+00:00",
+    "finishedUtc": "2026-11-04T08:07:38.2892948+00:00",
+    "earlierWarningVariantPassed": 116,
+    "storagePassed": 36,
+    "localTargetMockPassed": 37,
+    "scope": "Compatibility scripts are final bytes; warning suite later gained custom-threshold cases and stricter numeric notice checks."
+  },
+  "finalWarningAndDesktopWindow": {
+    "preflightUtc": "2026-11-04T08:09:03.7143102+00:00",
+    "finishedUtc": "2026-11-04T08:09:06.6716585+00:00",
+    "coreVersion": "7.6.5",
+    "coreWarningPassed": 130,
+    "desktopVersion": "5.1.26100.9711",
+    "desktopWarningPassed": 130,
+    "desktopStoragePassed": 32,
+    "desktopLocalTargetMockPassed": 37,
+    "protectedPinsMatchedBeforeAndAfter": 6
+  },
+  "coverage": [
+    "actual default public build/verify path without extra opt-in",
+    "low, healthy, exact boundary and custom threshold",
+    "zero skips automatic query and notice",
+    "unavailable counter notice excludes private exception",
+    "disposed stderr writer cannot block commands or mask original Cargo failure",
+    "exact original command argv and nine stdout receipt keys",
+    "original Cargo exception and exit code",
+    "incremental environment and PowerShell/OS location restoration",
+    "status no automatic query; explicit storage-status unchanged",
+    "same historical whole-source compatibility hashes"
+  ],
+  "historicalHashAssertions": {
+    "storageBaselineRoundTripSha256": "dc95643829f2a11b5fe4fa3c337647f943015c83c783a065344f95cef7e99a18",
+    "legacyFacadeLfSha256": "964cffd6d314b5edc33f286568150ddeef5a313070d4dae7d543964c5ca3c026",
+    "legacyStorageTestLfSha256": "b181b3e96977f88d0c1c588de3a96dd98e3ad880795b4c09f42929acb000e3ff"
+  },
+  "realCargoRuns": 0,
+  "realVolumeQueries": 0,
+  "nativeFixtures": 0,
+  "targetOrCacheAdoption": false,
+  "productionOrWakeActions": 0,
+  "installedOrLiveBuildAcceptance": "UNVERIFIED",
+  "generalGoalResumed": false
+}

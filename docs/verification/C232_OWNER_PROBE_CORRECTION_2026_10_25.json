@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C232",
+  "status": "SOURCE_AND_WINDOWS_OWNER_FIXTURE_PASS_LIVE_PENDING",
+  "sourceParent": "fc893e8ca62e3daa80799aa659fd26e6177013e2",
+  "branch": "codex/web-rollover-oct17",
+  "change": "Reuse the existing pinned reconciliation SHA-256 helper and process-path lookup. Preserve exact PID/path/hash/start/listener checks; return bounded sanitized failure stage/type/HRESULT and distinguish helper lifetime failures.",
+  "priorLive": {
+    "secondProjectStarted": false,
+    "preservedPins": 1938,
+    "originalExactCause": "UNKNOWN_HELPER_OUTPUT_NOT_RETAINED",
+    "resultSha256": "8be64da37011a2f3681543a99bfefadea38434930bc2590ff590ce9a390a5576",
+    "ownedImagesAfter": 0,
+    "leaseAvailable": true,
+    "ownedJobAbsent": true,
+    "note": "Initial default-sandbox inventory could not query CIM/lease; its assumed fields were superseded by a strict owner-context record.",
+    "canonicalListenersAfter": 0,
+    "messagesSent": 0,
+    "cleanupSha256": "6deeaa972df172f69872b65523b7107b673a825b4c8808bcd6cc1a5b9cc2c9bf",
+    "newAttributedHistoryFiles": 2,
+    "result": "REFUSED_BEFORE_READY",
+    "checkpoint": "C231",
+    "reason": "INSTALLED_BACKEND_OWNER_PROOF_FAILED"
+  },
+  "fixtureDiagnosis": {
+    "initialFailed": 1,
+    "noClaimOriginalCimCause": true,
+    "command": "Get-FileHash",
+    "type": "CommandNotFoundException",
+    "stage": "IMAGE_HASH",
+    "initialPassed": 9,
+    "fix": "Existing .NET hashing helper; no recovery-helper changes"
+  },
+  "qualification": {
+    "failed": 0,
+    "passed": 10,
+    "startedUtc": "2026-10-26T02:36:23.1428574+00:00",
+    "actualWindowsListenerAndWrongHash": "PASS",
+    "finishedUtc": "2026-10-26T02:37:24.5736287+00:00",
+    "format": "PASS",
+    "resultSha256": "211bbfbe424a48dca92539a6e3ff9c23381c391cc8aae66f931b1f3cdb2a7599",
+    "outerSha256": "d9d12d58c6545005169e290f6b3ec04c6a47741e9e8b3c32b1aff63b0a6d6707",
+    "sourceFileSha256": "20b71f7a0f1edce217b430631a66b737365d0f3f08f9fff5262e0e61f3d9f472",
+    "strictClippy": "PASS"
+  },
+  "installedReplacement": false,
+  "browserWakeStarts": 0,
+  "webAcceptance": false,
+  "milestoneComplete": false
+}

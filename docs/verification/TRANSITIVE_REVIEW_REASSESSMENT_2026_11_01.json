@@ -1,0 +1,173 @@
+{
+  "date": "2026-11-01",
+  "observedUtc": "2026-11-01T14:55:40.734624+00:00",
+  "classification": "ACTUAL_WEB_TRANSITIVE_REASSESSMENT_AND_LOCAL_RECOVERY_REGRESSIONS_NOT_RELEASE_ACCEPTANCE",
+  "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+  "fullDeclaredCodePaths": 84,
+  "review": {
+    "verdict": "REVIEWED_PARTIAL",
+    "questionStatuses": [
+      {
+        "question": "Transitive reobservation callback lock order",
+        "status": "PARTIALLY_RESOLVED",
+        "detail": "The inspected path retains the ProjectStore lock, acquires the Wake host lock during reobservation, performs browser observation before entering the registration lock, and then calls the final Wake store commit under that registration lock. The commit uses deadline and stopped-host checks rather than reacquiring the paired-target mutex. No direct lock inversion was identified in the inspected path."
+      },
+      {
+        "question": "Separate pre-submit observations",
+        "status": "PARTIALLY_RESOLVED",
+        "detail": "The project journal lock remains held. The callback rechecks the handoff request, exact event, paired target, registered owner and request policy. The runtime transitions the delivery to SUBMITTING before sending submit=true. This supports durable replay protection, but does not establish an atomic snapshot of concurrent policy and registration changes."
+      },
+      {
+        "question": "Supervisor component wildcard interpretation",
+        "status": "UNVERIFIED_INDEPENDENTLY",
+        "detail": "The qualification document reports successful Windows PowerShell 5.1 and PowerShell 7.6.5 tests for bracketed directory names, case aliases and punctuation. These results are coordinator-reported. The seven pinned reads do not include the supervisor's complete identity function, and no independent Windows test was executed."
+      },
+      {
+        "question": "Legacy monitor and mutable helper boundaries",
+        "status": "KNOWN_LIMITATIONS_RETAINED",
+        "detail": "Earlier source review established matching legacy mutex compatibility. Existing monitors using different legacy case spellings, mutable helper-file identity and concurrent directory replacement remain outside demonstrated compatibility and security guarantees."
+      }
+    ],
+    "findings": [
+      {
+        "severity": "INFO",
+        "status": "SOURCE_SUPPORTED",
+        "detail": "Reobservation checks exact SENT delivery, target, receipt, message digest and timer identity. Finalization obtains the Wake store lock, compares the retained delivery and timer, writes a witness, then updates the timer when completion is validated."
+      },
+      {
+        "severity": "INFO",
+        "status": "SOURCE_SUPPORTED",
+        "detail": "The inspected registration wrapper acquires one registration lock around its callback. The inspected prepared-scope resolution reads registry metadata and verifies Git workspace identity without visibly acquiring another registration lock."
+      },
+      {
+        "severity": "MEDIUM",
+        "status": "RESIDUAL_RISK",
+        "detail": "Final reobservation holds the registration lock while acquiring the Wake store lock. Complete deadlock exclusion requires checking all reverse acquisition paths, beyond the seven pinned ranges."
+      },
+      {
+        "severity": "MEDIUM",
+        "status": "RESIDUAL_RISK",
+        "detail": "Separate pre-submit checks leave a possible interval for concurrent policy or registry changes. No exploitable race was demonstrated, but global atomicity and concurrent-update exclusion are not established."
+      },
+      {
+        "severity": "MEDIUM",
+        "status": "TEST_LIMITATION",
+        "detail": "The coordinator's actual-Windows test evidence was retrieved, but its executions, output hashes and filesystem assumptions were not independently reproduced."
+      },
+      {
+        "severity": "INFO",
+        "status": "NO_NEW_CONFIRMED_DEFECT",
+        "detail": "The seven inspected ranges did not establish a new actionable defect. This is not proof that the complete implementation is defect-free."
+      }
+    ],
+    "limitations": [
+      "Native ownership could not be independently queried.",
+      "The pinned source reads do not exhaust every transitive lock path.",
+      "Supervisor Windows tests remain coordinator-reported.",
+      "No independent test execution or installed acceptance was performed.",
+      "No complete concurrent-update or crash-injection qualification was performed.",
+      "Only the specified source ranges were assessed.",
+      "All 84 release paths remain declared; unread paths receive no acceptance.",
+      "No native project authority or release authority was inherited."
+    ],
+    "inspectedPaths": [
+      "docs/verification/REVIEW_QUESTION_QUALIFICATION_2026_11_01.json",
+      "src/operator_web_rollover.rs:2014-2164",
+      "wake/src/runtime_reobserve.rs:48-124",
+      "wake/src/store_reobserve.rs:12-119",
+      "src/operator_web_rollover.rs:704-770",
+      "src/delegated/autonomy_projects.rs:2023-2038",
+      "src/delegated/autonomy_projects.rs:276-337",
+      "wake/src/runtime.rs:7219-7254"
+    ],
+    "corroboration": {
+      "observedUtc": "2026-11-01T14:52:58.824828+00:00",
+      "reviewNumber": 1,
+      "verdict": "REVIEWED_PARTIAL",
+      "frozenSourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "responseSha256": "08d1978c4eb76e2c1742f80c4adfd5e0ee39263a6ff3ff95f7496322fac9d6e2",
+      "exactUserReceipt": true,
+      "completedResponseVerified": true,
+      "coordinatorClosed": true,
+      "matchingCommandLogCounts": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "matchingCommandLogSha256": [
+        "43a7ee2a4e5bf66f5bd57488d30902aaa30ea6eca720652ac7fc74238e22cc75",
+        "636a80ca85088a63bf6711cb9b28e4d2b925396b71a61724b0be7e21b0442734",
+        "63583314b52d9a41468285a66728f855a31c7ee3cc61a25cd56ed6fc660db94c",
+        "f221feff718d1426f6908dff50f7a616f66cc572dbc11e7bae2a812b9763ff73",
+        "567b3a81d578a88251b695f8efc23c128fa0e4a143276c068b7fd6ee9ddf3eb8",
+        "f6b9028fe233a73fcef6021c770e3f11ed5601b1cbc91c586f6869f7fe3123ee",
+        "4ba220e389c631cf6bc92d80046f52343a97b348fe713ee3152d94d69960bf68",
+        "6f7795c527add99216a3339b81a2f8275fe18e1ec63850d882dc50d711df1067"
+      ],
+      "sourceLogMatchesExistingPrivacyRedactionOfFrozenInputs": true,
+      "rawUnredactedLogClaimed": false,
+      "sourceAccepted": false,
+      "producerAuthority": false
+    }
+  },
+  "tests": {
+    "observedUtc": "2026-11-01T14:46:29.700970+00:00",
+    "classification": "RECONCILED_ORIGINAL_SUCCESSFUL_CARGO_RUN_AFTER_PRIVATE_WRAPPER_COUNT_ASSERTION",
+    "cargoTestsPassed": true,
+    "testsPassed": 12,
+    "testNames": [
+      "runtime::reobserve::tests::pending_diagnostic_is_returned_and_journaled_without_timer_change",
+      "runtime::reobserve::tests::reobserve_aged_attention_commits_only_fresh_witness_and_preserves_prior_timer",
+      "runtime::reobserve::tests::reobserve_already_complete_is_idempotent_without_browser_or_journal",
+      "runtime::reobserve::tests::failed_assistant_observations_preserve_delivery_and_allow_sibling_wake",
+      "runtime::reobserve::tests::reobserve_existing_outcome_or_commit_guard_failure_never_changes_timer",
+      "runtime::reobserve::tests::reobserve_cas_rejects_changed_timer_delivery_or_current_target",
+      "runtime::reobserve::tests::reobserve_first_entry_runs_observer_then_authority_guard_then_cas",
+      "runtime::reobserve::tests::reobserve_first_entry_cancellation_and_timeout_preserve_timer_and_error",
+      "runtime::reobserve::tests::reobserve_refuses_live_host_control_and_cancellation_before_browser",
+      "runtime::reobserve::tests::reobserve_pending_and_failure_preserve_exact_attention_timer_bytes",
+      "runtime::reobserve::tests::reobserve_scope_and_receipt_rejections_create_no_journal",
+      "runtime::reobserve::tests::reobserve_rejects_forged_or_extra_completion_fields"
+    ],
+    "cargoExitCode": 0,
+    "privateWrapperPassed": false,
+    "wrapperFailure": "Hardcoded expected count 10; actual named passing tests 12. No test was rerun.",
+    "originalResultSha256": "ba0804ae85a654117c8c03f2a6f7354d60dc824a4ea6003c4b485a1586e2ed41",
+    "originalOwnerSha256": "f1a2f9395f4be4e5261b9d7ac05a45d8a2bd11199d6f579f9acde4a6e468356a",
+    "originalLogSha256": "52317ac83439473b31d83cd62024c4bb7de70a1f241088c8f96d15b0b3d30d85",
+    "ownedTerminationFailed": false,
+    "timedOut": false,
+    "originalEvidenceRewritten": false,
+    "testsRerun": false,
+    "sourceAccepted": false
+  },
+  "literalDirectoryQualification": "docs/verification/REVIEW_QUESTION_QUALIFICATION_2026_11_01.json",
+  "coverageReferenceCounts": {
+    "CURRENT_BLOB_REFERENCED_PARTIAL_OR_INCONCLUSIVE": 56,
+    "NO_INSPECTION_REFERENCE": 12,
+    "OLDER_CHANGED_BLOB_REFERENCED": 16
+  },
+  "coverageMeaning": "A source-blob match preserves only the specific bounded inspection. It does not assert full-file review, independent tests, accepted source, absence of defects or installed acceptance.",
+  "preservation": {
+    "projectAndJournalPinMismatches": 0,
+    "testOwnedProcesses": 0,
+    "trustedInstalledBackendRetained": true,
+    "existingTunnelRetained": true,
+    "hostStopped": true,
+    "loginMarkerPresent": false,
+    "newNativeClaim": false,
+    "productionChanges": 0,
+    "bindingChanges": 0,
+    "authenticationChanges": 0,
+    "recurringAutomationEnabled": false
+  },
+  "sourceAccepted": false,
+  "producerAuthority": false,
+  "operatorActionRequired": false,
+  "nextExecutableTask": "Freeze a genuine full-scope source review contract against unchanged runtime source, using the coverage map and actual test evidence. Permit bounded pinned dependency reads needed to judge concrete invariants; distinguish documented limits from established defects. Do not repeat completed reviews or invent formal proof requirements beyond existing release policy."
+}

@@ -1,0 +1,1983 @@
+# CatDesk exact public-source review input. No approval or execution authority.
+# Base e4a99a8b6913c3db689a216f4ae4e0a7f6fff612
+# Target b25119e8c47cfe261aae06b461c3697e3841cdb6
+
+diff --git a/wake/src/development_runtime.rs b/wake/src/development_runtime.rs
+index b404980202cca4e46dba12ef0d4bc757601abe7a..54620c83a82d7206dc1fcf7825bc95e65a8f9ed9 100644
+--- a/wake/src/development_runtime.rs
++++ b/wake/src/development_runtime.rs
+@@ -17,7 +17,7 @@ use std::{
+     collections::{BTreeMap, BTreeSet},
+     ffi::{OsStr, c_void},
+     fs::{self, File, OpenOptions},
+-    io::{BufReader, IsTerminal, Read, Write},
++    io::{BufRead, BufReader, IsTerminal, Read, Write},
+     os::windows::{
+         ffi::OsStrExt,
+         fs::MetadataExt,
+@@ -27,7 +27,7 @@ use std::{
+     process::{Child, Command, Stdio},
+     sync::mpsc,
+     thread,
+-    time::Duration,
++    time::{Duration, Instant},
+ };
+ 
+ const PURPOSE: &str = "CATDESK_WAKE_DEVELOPMENT_UNPROTECTED_V1";
+@@ -56,6 +56,10 @@ const INVALID_HANDLE: *mut c_void = -1isize as *mut c_void;
+ #[path = "development_foreground.rs"]
+ mod foreground;
+ 
++#[path = "development_login_recovery.rs"]
++mod login_recovery;
++pub use login_recovery::reconcile_login;
++
+ #[link(name = "kernel32")]
+ unsafe extern "system" {
+     fn CreateFileW(
+@@ -1337,6 +1341,22 @@ fn validated_authority_options(
+     workspace: &Path,
+     allow_package_update: bool,
+     allow_retiring_package_files: bool,
++) -> Result<Option<(PathBuf, Authority)>> {
++    validated_authority_for_login_recovery(
++        workspace,
++        allow_package_update,
++        allow_retiring_package_files,
++        None,
++    )
++}
++
++// A matching marker hash is accepted only inside the explicit login-only
++// reconciliation path. Ordinary selection retains its unconditional fence.
++fn validated_authority_for_login_recovery(
++    workspace: &Path,
++    allow_package_update: bool,
++    allow_retiring_package_files: bool,
++    expected_login_marker: Option<&str>,
+ ) -> Result<Option<(PathBuf, Authority)>> {
+     let workspace = canonical_workspace(workspace)?;
+     let dev = dev_dir(&workspace);
+@@ -1353,7 +1373,11 @@ fn validated_authority_options(
+         return Ok(None);
+     }
+     plain(&dev, true)?;
+-    if present(&dev.join("login-active.json"))? {
++    let login_marker = dev.join("login-active.json");
++    if present(&login_marker)?
++        && (expected_login_marker.is_none()
++            || expected_login_marker != Some(hash_file(&login_marker, 4096)?.as_str()))
++    {
+         return Err("DEV_LOGIN_CLEANUP_UNVERIFIED".into());
+     }
+     if !allow_package_update && present(&dev.join(PACKAGE_UPDATE_ATTEMPT))? {
+@@ -1951,10 +1975,23 @@ struct LoginPreflight {
+     root: PathBuf,
+     python: PathBuf,
+     profile: PathBuf,
++    primitives: PathBuf,
++    primitives_sha256: String,
++    target_generation: u64,
+     _host: crate::store::HostLease,
+     _browser: File,
+ }
+ 
++fn browser_child_path(path: &Path, directory: bool) -> Result<PathBuf> {
++    let compatible = runtime::browser_process_root(path)?;
++    // Normal spelling must still resolve to the same approved object. A
++    // packaged-process root-view difference is a refusal, never a rebind.
++    if identity(&compatible, directory)? != identity(path, directory)? {
++        return Err("DEV_LOGIN_BROWSER_PATH_IDENTITY_MISMATCH".into());
++    }
++    Ok(compatible)
++}
++
+ fn require_login_target(store: &Store, url: &str) -> Result<()> {
+     let config = store.config()?;
+     let matched = config
+@@ -1977,6 +2014,21 @@ fn require_stopped_control(root: &Path) -> Result<()> {
+     Ok(())
+ }
+ 
++fn require_observed_target_generation(store: &Store, url: &str, expected: u64) -> Result<()> {
++    require_login_target(store, url)?;
++    if store
++        .config()?
++        .targets
++        .values()
++        .find(|target| target.url == url)
++        .map(|target| target.generation)
++        != Some(expected)
++    {
++        return Err("DEV_LOGIN_TARGET_GENERATION_CHANGED".into());
++    }
++    Ok(())
++}
++
+ fn login_preflight(workspace: &Path, target_url: &str) -> Result<LoginPreflight> {
+     protocol::validate_target(target_url)?;
+     let (root, authority) = validated_authority(workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+@@ -1996,13 +2048,32 @@ fn login_preflight(workspace: &Path, target_url: &str) -> Result<LoginPreflight>
+     validate_against_production(&checked_authority, target_url)?;
+     require_stopped_control(&root)?;
+     require_login_target(&store, target_url)?;
+-    let python = root.join("runtime/python.exe");
+-    let profile = root.join("browser-profile");
++    let python = browser_child_path(&root.join("runtime/python.exe"), false)?;
++    let profile = browser_child_path(&root.join("browser-profile"), true)?;
+     plain(&profile, true)?;
++    let primitives = root
++        .join("versions")
++        .join(&checked_authority.package_id)
++        .join("wake_bridge.py");
++    let primitives_sha256 = checked_authority
++        .artifacts
++        .get("wake_bridge.py")
++        .cloned()
++        .ok_or("DEV_RUNTIME_PACKAGE_MANIFEST_MISMATCH")?;
++    let target_generation = store
++        .config()?
++        .targets
++        .values()
++        .find(|target| target.url == target_url)
++        .ok_or("DEV_LOGIN_TARGET_NOT_REGISTERED")?
++        .generation;
+     Ok(LoginPreflight {
+         root,
+         python,
+         profile,
++        primitives,
++        primitives_sha256,
++        target_generation,
+         _host: host,
+         _browser: browser,
+     })
+@@ -2026,6 +2097,37 @@ fn read_login_token(reader: &mut BufReader<impl Read>) -> Result<String> {
+     Err("DEV_LOGIN_HELPER_OUTPUT_INVALID".into())
+ }
+ 
++fn login_remaining(deadline: Instant, maximum: Duration) -> Result<Duration> {
++    let remaining = deadline.saturating_duration_since(Instant::now());
++    if remaining.is_zero() {
++        Err("DEV_LOGIN_INTERACTION_TIMEOUT".into())
++    } else {
++        Ok(remaining.min(maximum))
++    }
++}
++
++fn wait_login_enter(reader: impl Read + Send + 'static, wait: Duration) -> Result<()> {
++    let (tx, rx) = mpsc::sync_channel(1);
++    thread::spawn(move || {
++        // Never retain or export arbitrary terminal input. Three bytes are
++        // sufficient to reject anything other than a single Enter.
++        let mut line = String::new();
++        let result = BufReader::new(reader.take(3))
++            .read_line(&mut line)
++            .map_err(|_| "DEV_LOGIN_TERMINAL_UNAVAILABLE".to_owned())
++            .and_then(|_| {
++                if matches!(line.as_str(), "\n" | "\r\n") {
++                    Ok(())
++                } else {
++                    Err("DEV_LOGIN_ENTER_REQUIRED".into())
++                }
++            });
++        let _ = tx.send(result);
++    });
++    rx.recv_timeout(wait)
++        .map_err(|_| "DEV_LOGIN_INTERACTION_TIMEOUT".to_owned())?
++}
++
+ fn cleanup_login_child(
+     mut child: Child,
+     job: &crate::process_job::Job,
+@@ -2063,6 +2165,74 @@ fn cleanup_login_child(
+     Ok(exit)
+ }
+ 
++/// Inspect the existing registered development profile without interaction,
++/// message entry, queue mutation, a new profile, or production policy changes.
++pub fn inspect_readiness(workspace: &Path, target_url: &str) -> Result<Value> {
++    let prepared = login_preflight(workspace, target_url)?;
++    let marker = dev_dir(&canonical_workspace(workspace)?).join("login-active.json");
++    write_json_new(
++        &marker,
++        &json!({"schemaVersion":1,"purpose":"DEV_LOGIN_OWNED_BROWSER_V1",
++        "targetSha256":protocol::digest(target_url),"startedUtc":now()}),
++    )?;
++    let mut command = Command::new(&prepared.python);
++    command
++        .arg("-I")
++        .arg("-c")
++        .arg(include_str!("../../scripts/wake_readiness_visual_probe.py"))
++        .arg("--await-start")
++        .arg("--profile")
++        .arg(&prepared.profile)
++        .arg("--conversation-url")
++        .arg(target_url)
++        .arg("--primitives")
++        .arg(&prepared.primitives)
++        .arg("--primitives-sha256")
++        .arg(&prepared.primitives_sha256)
++        .arg("--read-only")
++        .arg("--seconds")
++        .arg("20")
++        .current_dir(&prepared.root);
++    let result = crate::readiness_probe::run_bounded(&mut command, Duration::from_secs(90));
++    if result.as_ref().err() == Some(&"PROBE_CLEANUP_UNVERIFIED") {
++        // Reuse the existing sticky owner marker when cleanup is unproven.
++        return Err("DEV_READINESS_CLEANUP_UNVERIFIED".into());
++    }
++    plain(&marker, false)?;
++    fs::remove_file(&marker).map_err(|_| "DEV_READINESS_CLEANUP_UNVERIFIED")?;
++    let rows = result.map_err(str::to_owned)?;
++    let final_state = rows
++        .last()
++        .and_then(|row| row.strip_prefix("PROBE:FINAL:"))
++        .ok_or("DEV_READINESS_FINAL_UNOBSERVED")?;
++    require_stopped_control(&prepared.root)?;
++    require_observed_target_generation(
++        &Store::open(&prepared.root)?,
++        target_url,
++        prepared.target_generation,
++    )?;
++    let browser_observation = if final_state == "OBSERVATION_UNAVAILABLE" {
++        None
++    } else {
++        rows.iter()
++            .rev()
++            .find_map(|line| crate::readiness_probe::surface_observation(line))
++    };
++    let tab_observation = rows
++        .iter()
++        .rev()
++        .find_map(|line| crate::readiness_probe::tab_observation(line));
++    Ok(
++        json!({"mode":"DEVELOPMENT_UNPROTECTED","status":"BROWSER_READINESS_OBSERVED",
++        "observations":rows,"finalState":final_state,"authenticationVerified":false,
++        "browserObservation":browser_observation,"tabObservation":tab_observation,
++        "registeredTargetSha256":protocol::digest(target_url),
++        "registeredTargetGeneration":prepared.target_generation,
++        "advisory":true,"browserReadOnly":true,"sendAttempted":false,
++        "hostStarted":false,"schedulerStarted":false,"ownedTreeExited":true}),
++    )
++}
++
+ /// Open only the prepared development browser profile for manual sign-in.
+ /// This intentionally never inspects authentication or reports readiness.
+ /// The browser lock stays held until the private Job proves all descendants
+@@ -2114,6 +2284,10 @@ pub fn login(workspace: &Path, target_url: &str) -> Result<Value> {
+             return Err(error);
+         }
+     };
++    // Bound the whole owned interaction, including browser opening, human
++    // acknowledgement and normal close. Expiry still takes the same retained
++    // Job cleanup path; it does not clear an earlier interrupted owner marker.
++    let interaction_deadline = Instant::now() + Duration::from_secs(120);
+     let interaction = (|| -> Result<()> {
+         let output = child
+             .stdout
+@@ -2137,30 +2311,33 @@ pub fn login(workspace: &Path, target_url: &str) -> Result<Value> {
+             .and_then(|_| input.flush())
+             .map_err(|_| "DEV_LOGIN_HELPER_INPUT_UNAVAILABLE")?;
+         let opened = rx
+-            .recv_timeout(Duration::from_secs(120))
++            .recv_timeout(login_remaining(
++                interaction_deadline,
++                Duration::from_secs(120),
++            )?)
+             .map_err(|_| "DEV_LOGIN_BROWSER_OPEN_UNPROVEN")??;
+         if opened != "LOGIN_BROWSER_OPEN" {
+             return Err("DEV_LOGIN_BROWSER_OPEN_UNPROVEN".into());
+         }
+         println!(
+-            "LOGIN_BROWSER_OPEN — sign in in the visible browser, then press Enter here to close it."
++            "LOGIN_BROWSER_OPEN — inspect/sign in in the visible browser, then press Enter here. This session has a 120-second interaction limit, followed by guarded cleanup."
+         );
+         std::io::stdout()
+             .flush()
+             .map_err(|_| "DEV_LOGIN_TERMINAL_UNAVAILABLE")?;
+-        let mut acknowledgement = String::new();
+-        std::io::stdin()
+-            .read_line(&mut acknowledgement)
+-            .map_err(|_| "DEV_LOGIN_TERMINAL_UNAVAILABLE")?;
+-        if !matches!(acknowledgement.as_str(), "\n" | "\r\n") {
+-            return Err("DEV_LOGIN_ENTER_REQUIRED".into());
+-        }
++        wait_login_enter(
++            std::io::stdin(),
++            login_remaining(interaction_deadline, Duration::from_secs(120))?,
++        )?;
+         input
+             .write_all(b"\n")
+             .and_then(|_| input.flush())
+             .map_err(|_| "DEV_LOGIN_HELPER_INPUT_UNAVAILABLE")?;
+         let closed = rx
+-            .recv_timeout(Duration::from_secs(30))
++            .recv_timeout(login_remaining(
++                interaction_deadline,
++                Duration::from_secs(30),
++            )?)
+             .map_err(|_| "DEV_LOGIN_BROWSER_CLOSE_UNPROVEN")??;
+         if closed != "LOGIN_BROWSER_CLOSED" {
+             return Err("DEV_LOGIN_BROWSER_CLOSE_UNPROVEN".into());
+@@ -3563,6 +3740,94 @@ mod tests {
+         );
+     }
+ 
++    #[test]
++    fn login_enter_is_bounded_and_never_accepts_text_or_eof() {
++        for bytes in [b"\n".as_slice(), b"\r\n"] {
++            wait_login_enter(std::io::Cursor::new(bytes.to_vec()), Duration::from_secs(1)).unwrap();
++        }
++        for bytes in [b"".as_slice(), b"private input\n", b"\r", b"x\n"] {
++            assert_eq!(
++                wait_login_enter(std::io::Cursor::new(bytes.to_vec()), Duration::from_secs(1))
++                    .unwrap_err(),
++                "DEV_LOGIN_ENTER_REQUIRED"
++            );
++        }
++        assert_eq!(
++            login_remaining(
++                Instant::now() - Duration::from_secs(1),
++                Duration::from_secs(120)
++            )
++            .unwrap_err(),
++            "DEV_LOGIN_INTERACTION_TIMEOUT"
++        );
++    }
++
++    #[test]
++    fn absent_login_enter_expires_without_waiting_for_input_thread() {
++        struct HeldInput(mpsc::Receiver<()>, mpsc::Sender<()>);
++        impl Read for HeldInput {
++            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
++                let _ = self.0.recv();
++                Ok(0)
++            }
++        }
++        impl Drop for HeldInput {
++            fn drop(&mut self) {
++                let _ = self.1.send(());
++            }
++        }
++        let (release, held) = mpsc::channel();
++        let (exited, exit) = mpsc::channel();
++        let start = Instant::now();
++        assert_eq!(
++            wait_login_enter(HeldInput(held, exited), Duration::from_millis(25)).unwrap_err(),
++            "DEV_LOGIN_INTERACTION_TIMEOUT"
++        );
++        assert!(start.elapsed() < Duration::from_secs(2));
++        release.send(()).unwrap();
++        exit.recv_timeout(Duration::from_secs(2)).unwrap();
++    }
++
++    #[test]
++    fn expired_login_uses_existing_exact_job_cleanup_before_retiring_own_marker() {
++        use std::os::windows::process::CommandExt;
++        let (parent, workspace, _, _) = fixture();
++        let marker = workspace.join("owned-login-test.json");
++        fs::write(&marker, b"retained fixture marker").unwrap();
++        let shell = PathBuf::from(std::env::var_os("SystemRoot").unwrap())
++            .join("System32/WindowsPowerShell/v1.0/powershell.exe");
++        let mut child = Command::new(shell)
++            .args(["-NoProfile", "-NonInteractive", "-Command",
++                "if([Console]::In.ReadLine() -cne 'START'){exit 2}; [Console]::Out.WriteLine('READY'); Start-Sleep -Seconds 600"])
++            .creation_flags(0x0800_0000)
++            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null())
++            .spawn().unwrap();
++        let job = crate::process_job::Job::assign(&child).unwrap();
++        let output = child.stdout.take().unwrap();
++        let (tx, rx) = mpsc::sync_channel(1);
++        thread::spawn(move || {
++            let _ = tx.send(read_login_token(&mut BufReader::new(output)));
++        });
++        let mut input = child.stdin.take().unwrap();
++        input.write_all(b"START\n").unwrap();
++        input.flush().unwrap();
++        assert_eq!(
++            rx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap(),
++            "READY"
++        );
++        assert!(marker.is_file());
++        assert!(job.active_processes().unwrap() >= 1);
++        let start = Instant::now();
++        let exit = cleanup_login_child(child, &job, &marker).unwrap();
++        assert!(!exit.success());
++        assert!(start.elapsed() < Duration::from_secs(25));
++        assert_eq!(job.active_processes().unwrap(), 0);
++        assert!(!marker.exists());
++        drop(input);
++        drop(job);
++        cleanup(&parent);
++    }
++
+     #[test]
+     fn login_preflight_requires_exact_target_stopped_host_and_free_browser() {
+         let (parent, workspace, package, python) = fixture();
+@@ -3583,6 +3848,26 @@ mod tests {
+         );
+         let selected = login_preflight(&workspace, url).unwrap();
+         assert_eq!(selected.root, root);
++        assert_eq!(selected.target_generation, 1);
++        assert_eq!(selected.primitives.file_name().unwrap(), "wake_bridge.py");
++        assert_eq!(
++            hash_file(&selected.primitives, MAX_PACKAGE_FILE).unwrap(),
++            selected.primitives_sha256
++        );
++        store
++            .set_target(
++                "canary-project",
++                1,
++                "https://chatgpt.com/c/intervening-generation",
++            )
++            .unwrap();
++        store.set_target("canary-project", 2, url).unwrap();
++        assert_eq!(
++            require_observed_target_generation(&store, url, selected.target_generation)
++                .unwrap_err(),
++            "DEV_LOGIN_TARGET_GENERATION_CHANGED"
++        );
++        require_observed_target_generation(&store, url, 3).unwrap();
+         assert_eq!(
+             login_preflight(&workspace, url).err().unwrap(),
+             "HOST_ALREADY_RUNNING"
+@@ -3605,6 +3890,43 @@ mod tests {
+         cleanup(&parent);
+     }
+ 
++    #[test]
++    fn login_preflight_uses_chrome_compatible_identity_preserving_paths() {
++        let (parent, workspace, package, python) = fixture();
++        prepare_fixture(&workspace, &package, &python);
++        let root = root_for_workspace(&workspace).unwrap().unwrap();
++        let url = "https://chatgpt.com/c/chrome-compatible-profile-path";
++        Store::open(&root)
++            .unwrap()
++            .set_target("alpha", 0, url)
++            .unwrap();
++        let prepared = login_preflight(&workspace, url).unwrap();
++        assert_eq!(
++            identity(&prepared.profile, true).unwrap(),
++            identity(&root.join("browser-profile"), true).unwrap()
++        );
++        assert_eq!(
++            identity(&prepared.python, false).unwrap(),
++            identity(&root.join("runtime/python.exe"), false).unwrap()
++        );
++        let browser_paths_are_normal = !prepared
++            .profile
++            .as_os_str()
++            .to_string_lossy()
++            .starts_with(r"\\?\")
++            && !prepared
++                .python
++                .as_os_str()
++                .to_string_lossy()
++                .starts_with(r"\\?\");
++        drop(prepared);
++        cleanup(&parent);
++        assert!(
++            browser_paths_are_normal,
++            "Browser children must receive the existing Chrome-compatible drive spelling"
++        );
++    }
++
+     #[test]
+     fn unresolved_login_marker_blocks_all_dev_authority_selection() {
+         let (parent, workspace, package, python) = fixture();
+@@ -3625,6 +3947,290 @@ mod tests {
+         cleanup(&parent);
+     }
+ 
++    fn recovery_login_fixture() -> (PathBuf, PathBuf, PathBuf, String) {
++        let (parent, workspace, package, python) = fixture();
++        prepare_fixture(&workspace, &package, &python);
++        let root = root_for_workspace(&workspace).unwrap().unwrap();
++        Store::open(&root)
++            .unwrap()
++            .set_target("alpha", 0, "https://chatgpt.com/c/login-recovery-alpha")
++            .unwrap();
++        let marker = dev_dir(&workspace).join("login-active.json");
++        write_json_new(&marker, &json!({"schemaVersion":1,"purpose":"DEV_LOGIN_OWNED_BROWSER_V1",
++            "targetSha256":protocol::digest("https://chatgpt.com/c/login-recovery-alpha"),"startedUtc":now()})).unwrap();
++        let hash = hash_file(&marker, 4096).unwrap();
++        (parent, workspace, root, hash)
++    }
++
++    fn recovery_pair(store: &Store) -> Result<protocol::Target> {
++        store
++            .config()?
++            .targets
++            .get("alpha")
++            .cloned()
++            .ok_or("missing fixture target".into())
++    }
++
++    #[test]
++    fn login_recovery_preflight_preserves_fence_and_execute_archives_exact_bytes_only() {
++        let (parent, workspace, root, hash) = recovery_login_fixture();
++        let dev = dev_dir(&workspace);
++        let marker = dev.join("login-active.json");
++        let original = fs::read(&marker).unwrap();
++        let config = fs::read(root.join("config.json")).unwrap();
++        let pointer = fs::read(root.join("current.json")).unwrap();
++        let authority = fs::read(dev.join("authority.json")).unwrap();
++        let unknown = root.join("unknown-send-preserved.json");
++        fs::write(&unknown, b"unknown send must never be replayed or resolved").unwrap();
++        let preflight = login_recovery::reconcile_with_observer(
++            &workspace,
++            &hash,
++            false,
++            recovery_pair,
++            |_| Ok(()),
++        )
++        .unwrap();
++        assert_eq!(preflight["status"], "LOGIN_RECOVERY_PREFLIGHT_PASSED");
++        assert!(!preflight["markerArchived"].as_bool().unwrap());
++        assert_eq!(fs::read(&marker).unwrap(), original);
++        assert!(!dev.join(format!("login-recovery-{hash}.json")).exists());
++        assert_eq!(
++            root_for_workspace(&workspace).unwrap_err(),
++            "DEV_LOGIN_CLEANUP_UNVERIFIED"
++        );
++        let committed =
++            login_recovery::reconcile_with_observer(&workspace, &hash, true, recovery_pair, |_| {
++                Ok(())
++            })
++            .unwrap();
++        assert_eq!(committed["status"], "LOGIN_ONLY_MARKER_ARCHIVED");
++        assert_eq!(
++            committed["historicalSubmissionOutcome"],
++            "UNCHANGED_UNPROVEN"
++        );
++        assert_eq!(
++            fs::read(dev.join(format!("login-recovered-{hash}.json"))).unwrap(),
++            original
++        );
++        assert!(!marker.exists());
++        assert_eq!(fs::read(root.join("config.json")).unwrap(), config);
++        assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
++        assert_eq!(fs::read(dev.join("authority.json")).unwrap(), authority);
++        assert_eq!(
++            fs::read(unknown).unwrap(),
++            b"unknown send must never be replayed or resolved"
++        );
++        assert!(root_for_workspace(&workspace).unwrap().is_some());
++        assert!(
++            login_recovery::reconcile_with_observer(
++                &workspace,
++                &hash,
++                true,
++                recovery_pair,
++                |_| panic!("completed operation must not observe again")
++            )
++            .is_err()
++        );
++        cleanup(&parent);
++    }
++
++    #[test]
++    fn login_recovery_refuses_unproven_inventory_without_mutation() {
++        for reason in [
++            "DEV_LOGIN_RECOVERY_HELPER_ACTIVE",
++            "DEV_LOGIN_RECOVERY_BROWSER_ACTIVE",
++            "DEV_LOGIN_RECOVERY_OWNER_UNATTRIBUTED",
++            "DEV_LOGIN_RECOVERY_INVENTORY_UNVERIFIED",
++        ] {
++            let (parent, workspace, _, hash) = recovery_login_fixture();
++            let marker = dev_dir(&workspace).join("login-active.json");
++            let before = fs::read(&marker).unwrap();
++            assert_eq!(
++                login_recovery::reconcile_with_observer(
++                    &workspace,
++                    &hash,
++                    true,
++                    recovery_pair,
++                    |_| Err(reason.into())
++                )
++                .unwrap_err(),
++                reason
++            );
++            assert_eq!(fs::read(marker).unwrap(), before);
++            assert!(
++                !dev_dir(&workspace)
++                    .join(format!("login-recovery-{hash}.json"))
++                    .exists()
++            );
++            cleanup(&parent);
++        }
++    }
++
++    #[test]
++    fn login_recovery_refuses_unknown_marker_and_wrong_hash_before_observation() {
++        for change in [
++            "wrong-hash",
++            "wrong-purpose",
++            "unknown-schema",
++            "future",
++            "extra-key",
++        ] {
++            let (parent, workspace, _, mut hash) = recovery_login_fixture();
++            let marker = dev_dir(&workspace).join("login-active.json");
++            let mut record: Value = read_json(&marker, 4096).unwrap();
++            match change {
++                "wrong-hash" => hash = "0".repeat(64),
++                "wrong-purpose" => record["purpose"] = json!("SEND_ATTEMPTED"),
++                "unknown-schema" => record["schemaVersion"] = json!(2),
++                "future" => record["startedUtc"] = json!(now() + 1000),
++                _ => record["unknown"] = json!("must preserve"),
++            }
++            if change != "wrong-hash" {
++                fs::write(&marker, serde_json::to_vec(&record).unwrap()).unwrap();
++                hash = hash_file(&marker, 4096).unwrap();
++            }
++            let before = fs::read(&marker).unwrap();
++            assert!(
++                login_recovery::reconcile_with_observer(
++                    &workspace,
++                    &hash,
++                    true,
++                    recovery_pair,
++                    |_| panic!("unsupported marker must not observe")
++                )
++                .is_err()
++            );
++            assert_eq!(fs::read(marker).unwrap(), before);
++            cleanup(&parent);
++        }
++    }
++
++    #[test]
++    fn login_recovery_requires_stopped_backend_host_and_browser_leases() {
++        for held in ["backend", "host", "browser", "running"] {
++            let (parent, workspace, root, hash) = recovery_login_fixture();
++            let store = Store::open(&root).unwrap();
++            let backend = (held == "backend").then(|| backend_lock(&workspace).unwrap());
++            let host = (held == "host").then(|| store.host_lock().unwrap());
++            let browser = (held == "browser")
++                .then(|| runtime::browser_session_lock(&root, Duration::ZERO).unwrap());
++            if held == "running" {
++                runtime::control(&store, "RUNNING").unwrap();
++            }
++            let marker = dev_dir(&workspace).join("login-active.json");
++            let before = fs::read(&marker).unwrap();
++            assert!(
++                login_recovery::reconcile_with_observer(
++                    &workspace,
++                    &hash,
++                    true,
++                    recovery_pair,
++                    |_| panic!("busy owner must not observe")
++                )
++                .is_err()
++            );
++            assert_eq!(fs::read(marker).unwrap(), before);
++            drop((backend, host, browser));
++            cleanup(&parent);
++        }
++    }
++
++    #[test]
++    fn login_recovery_rechecks_generation_and_marker_cas_after_observation() {
++        for change in ["target", "marker"] {
++            let (parent, workspace, root, hash) = recovery_login_fixture();
++            let marker = dev_dir(&workspace).join("login-active.json");
++            let observed = login_recovery::reconcile_with_observer(
++                &workspace,
++                &hash,
++                true,
++                recovery_pair,
++                |_| {
++                    if change == "target" {
++                        Store::open(&root)
++                            .unwrap()
++                            .set_target("alpha", 1, "https://chatgpt.com/c/changed-recovery-target")
++                            .unwrap();
++                    } else {
++                        fs::write(&marker, b"unknown replacement marker").unwrap();
++                    }
++                    Ok(())
++                },
++            );
++            assert!(observed.is_err());
++            assert!(marker.is_file());
++            assert!(
++                !dev_dir(&workspace)
++                    .join(format!("login-recovered-{hash}.json"))
++                    .exists()
++            );
++            cleanup(&parent);
++        }
++    }
++
++    #[test]
++    fn login_recovery_interrupted_archive_resumes_from_original_journal_without_overwrite() {
++        use std::os::windows::fs::OpenOptionsExt;
++        let (parent, workspace, _, hash) = recovery_login_fixture();
++        let dev = dev_dir(&workspace);
++        let marker = dev.join("login-active.json");
++        let before = fs::read(&marker).unwrap();
++        let pinned = OpenOptions::new()
++            .read(true)
++            .share_mode(1)
++            .open(&marker)
++            .unwrap();
++        assert_eq!(
++            login_recovery::reconcile_with_observer(
++                &workspace,
++                &hash,
++                true,
++                recovery_pair,
++                |_| Ok(())
++            )
++            .unwrap_err(),
++            "DEV_LOGIN_RECOVERY_ARCHIVE_FAILED"
++        );
++        let journal = dev.join(format!("login-recovery-{hash}.json"));
++        let intent = fs::read(&journal).unwrap();
++        assert_eq!(fs::read(&marker).unwrap(), before);
++        assert_eq!(
++            root_for_workspace(&workspace).unwrap_err(),
++            "DEV_LOGIN_CLEANUP_UNVERIFIED"
++        );
++        drop(pinned);
++        login_recovery::reconcile_with_observer(&workspace, &hash, true, recovery_pair, |_| Ok(()))
++            .unwrap();
++        assert_eq!(fs::read(&journal).unwrap(), intent);
++        assert_eq!(
++            fs::read(dev.join(format!("login-recovered-{hash}.json"))).unwrap(),
++            before
++        );
++        cleanup(&parent);
++    }
++
++    #[test]
++    fn login_recovery_never_overwrites_unknown_archive_or_journal() {
++        for filename in ["login-recovered", "login-recovery"] {
++            let (parent, workspace, _, hash) = recovery_login_fixture();
++            let conflict = dev_dir(&workspace).join(format!("{filename}-{hash}.json"));
++            fs::write(&conflict, b"unknown historical artifact").unwrap();
++            assert!(
++                login_recovery::reconcile_with_observer(
++                    &workspace,
++                    &hash,
++                    true,
++                    recovery_pair,
++                    |_| Ok(())
++                )
++                .is_err()
++            );
++            assert_eq!(fs::read(conflict).unwrap(), b"unknown historical artifact");
++            assert!(dev_dir(&workspace).join("login-active.json").exists());
++            cleanup(&parent);
++        }
++    }
++
+     #[test]
+     fn explicit_prepare_is_sticky_and_readback_rejects_source_drift() {
+         let (parent, workspace, package, python) = fixture();
+
+diff --git a/wake/src/lib.rs b/wake/src/lib.rs
+index af82b661e837c2e9cdaf4e16c76806dba3718933..4271a26a0211e0921f0d9ca806fc045c453225ca 100644
+--- a/wake/src/lib.rs
++++ b/wake/src/lib.rs
+@@ -44,6 +44,7 @@ pub(crate) mod install_broker_source;
+ #[cfg(windows)]
+ pub mod install_broker_stage_writer;
+ pub mod process_job;
++pub mod readiness_probe;
+ #[cfg(not(windows))]
+ pub mod development_runtime {
+     use crate::Result;
+
+diff --git a/wake/src/protocol.rs b/wake/src/protocol.rs
+index 99a61e31906b2b4af88d1f674226eb8639bd0465..c3bef73368370044513e704f12f8c985d528a116 100644
+--- a/wake/src/protocol.rs
++++ b/wake/src/protocol.rs
+@@ -14,6 +14,84 @@ pub fn valid_id(value: &str) -> bool {
+             .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
+ }
+ 
++/// Typed Wake intent metadata lives in the existing audit-reference namespace.
++/// Events without these references retain their original JSON and digests.
++const WAKE_METADATA_NAMESPACE: &str = "catdesk.wake.";
++const WAKE_METADATA_V1: &str = "catdesk.wake.v1:";
++pub const MAX_WAKE_TTL_SECONDS: u64 = 24 * 60 * 60;
++
++#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
++#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
++pub enum WakePurpose {
++    ManualEndTurn,
++    NewTask,
++    Rollover,
++    PeriodicHealth,
++}
++
++impl WakePurpose {
++    fn wire_value(self) -> &'static str {
++        match self {
++            Self::ManualEndTurn => "MANUAL_END_TURN",
++            Self::NewTask => "NEW_TASK",
++            Self::Rollover => "ROLLOVER",
++            Self::PeriodicHealth => "PERIODIC_HEALTH",
++        }
++    }
++
++    fn parse(value: &str) -> Result<Self> {
++        match value {
++            "MANUAL_END_TURN" => Ok(Self::ManualEndTurn),
++            "NEW_TASK" => Ok(Self::NewTask),
++            "ROLLOVER" => Ok(Self::Rollover),
++            "PERIODIC_HEALTH" => Ok(Self::PeriodicHealth),
++            _ => Err("QUEUE_WAKE_METADATA_INVALID".into()),
++        }
++    }
++}
++
++#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
++#[serde(rename_all = "camelCase", deny_unknown_fields)]
++pub struct WakeMetadata {
++    pub purpose: WakePurpose,
++    pub source_event_id: String,
++    pub source_turn_id: String,
++    /// Scheduling hint only; it does not override per-project FIFO or fairness.
++    pub priority: u8,
++    /// Absolute Unix seconds. TTL is measured from the immutable received time.
++    pub expires_utc: u64,
++}
++
++impl WakeMetadata {
++    pub fn validate(&self, created_utc: u64) -> Result<()> {
++        if created_utc == 0
++            || !valid_id(&self.source_event_id)
++            || !valid_id(&self.source_turn_id)
++            || self.expires_utc <= created_utc
++            || self.expires_utc - created_utc > MAX_WAKE_TTL_SECONDS
++        {
++            return Err("QUEUE_WAKE_METADATA_INVALID".into());
++        }
++        Ok(())
++    }
++
++    /// Pass these references to the existing immutable, target-bound producer.
++    /// All five are required together; partial metadata is never accepted.
++    pub fn audit_references(&self, created_utc: u64) -> Result<Vec<String>> {
++        self.validate(created_utc)?;
++        Ok([
++            ("purpose", self.purpose.wire_value().to_owned()),
++            ("source-event", self.source_event_id.clone()),
++            ("source-turn", self.source_turn_id.clone()),
++            ("priority", self.priority.to_string()),
++            ("expires-utc", self.expires_utc.to_string()),
++        ]
++        .into_iter()
++        .map(|(key, value)| format!("{WAKE_METADATA_V1}{key}:{value}"))
++        .collect())
++    }
++}
++
+ /// Accept only an exact conversation URL, including a ChatGPT Project route
+ /// and the reviewed uppercase WEB: conversation compatibility spelling. No
+ /// redirects, query strings, ports or URL credentials.
+@@ -109,8 +187,76 @@ impl Event {
+         {
+             return Err("QUEUE_EVENT_INVALID".into());
+         }
++        self.wake_metadata()?;
+         Ok(())
+     }
++
++    pub fn wake_metadata(&self) -> Result<Option<WakeMetadata>> {
++        let mut fields = std::collections::BTreeMap::new();
++        for reference in &self.audit_references {
++            if !reference.starts_with(WAKE_METADATA_NAMESPACE) {
++                continue;
++            }
++            let (key, value) = reference
++                .strip_prefix(WAKE_METADATA_V1)
++                .and_then(|reference| reference.split_once(':'))
++                .ok_or("QUEUE_WAKE_METADATA_INVALID")?;
++            if !matches!(
++                key,
++                "purpose" | "source-event" | "source-turn" | "priority" | "expires-utc"
++            ) || fields.insert(key, value).is_some()
++            {
++                return Err("QUEUE_WAKE_METADATA_INVALID".into());
++            }
++        }
++        if fields.is_empty() {
++            return Ok(None);
++        }
++        if fields.len() != 5 {
++            return Err("QUEUE_WAKE_METADATA_INVALID".into());
++        }
++        let priority = fields["priority"]
++            .parse::<u8>()
++            .map_err(|_| "QUEUE_WAKE_METADATA_INVALID")?;
++        let expires_utc = fields["expires-utc"]
++            .parse::<u64>()
++            .map_err(|_| "QUEUE_WAKE_METADATA_INVALID")?;
++        if priority.to_string() != fields["priority"]
++            || expires_utc.to_string() != fields["expires-utc"]
++        {
++            return Err("QUEUE_WAKE_METADATA_INVALID".into());
++        }
++        let metadata = WakeMetadata {
++            purpose: WakePurpose::parse(fields["purpose"])?,
++            source_event_id: fields["source-event"].into(),
++            source_turn_id: fields["source-turn"].into(),
++            priority,
++            expires_utc,
++        };
++        metadata.validate(self.created_utc)?;
++        Ok(Some(metadata))
++    }
++
++    /// Add metadata without replacing ordinary evidence or rewriting an intent.
++    pub fn with_wake_metadata(mut self, metadata: WakeMetadata) -> Result<Self> {
++        if let Some(existing) = self.wake_metadata()? {
++            if existing != metadata {
++                return Err("QUEUE_WAKE_METADATA_CONFLICT".into());
++            }
++        } else {
++            self.audit_references
++                .extend(metadata.audit_references(self.created_utc)?);
++        }
++        self.validate()?;
++        Ok(self)
++    }
++
++    /// Expiration forbids a new submission, never reconciliation of a prior one.
++    pub fn is_expired_at(&self, observed_utc: u64) -> Result<bool> {
++        Ok(self
++            .wake_metadata()?
++            .is_some_and(|metadata| observed_utc >= metadata.expires_utc))
++    }
+ }
+ 
+ #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+@@ -140,3 +286,151 @@ impl Target {
+         Ok(())
+     }
+ }
++
++#[cfg(test)]
++mod wake_metadata_tests {
++    use super::*;
++
++    const LEGACY_EVENT: &str = r#"{"schemaVersion":1,"eventId":"legacy-event","projectId":"alpha","eventType":"test","createdUtc":100,"message":"Review alpha","targetGeneration":1,"auditReferences":["review-receipt-1"]}"#;
++
++    fn event() -> Event {
++        serde_json::from_str(LEGACY_EVENT).unwrap()
++    }
++
++    fn metadata() -> WakeMetadata {
++        WakeMetadata {
++            purpose: WakePurpose::ManualEndTurn,
++            source_event_id: "source-event-1".into(),
++            source_turn_id: "source-turn-1".into(),
++            priority: 5,
++            expires_utc: 160,
++        }
++    }
++
++    #[test]
++    fn wake_metadata_absence_preserves_legacy_event_wire_bytes_and_digest() {
++        let event = event();
++        event.validate().unwrap();
++        assert_eq!(event.wake_metadata().unwrap(), None);
++        assert!(!event.is_expired_at(u64::MAX).unwrap());
++        let wire = serde_json::to_string(&event).unwrap();
++        assert_eq!(wire, LEGACY_EVENT);
++        assert_eq!(
++            digest(&wire),
++            "2d6c490be50d99a2d328a25b6047ab7f5ea3bbe4ba80f32b99dc113636bbf156"
++        );
++    }
++
++    #[test]
++    fn wake_metadata_round_trips_all_purposes_and_has_exact_expiry_boundary() {
++        for purpose in [
++            WakePurpose::ManualEndTurn,
++            WakePurpose::NewTask,
++            WakePurpose::Rollover,
++            WakePurpose::PeriodicHealth,
++        ] {
++            let metadata = WakeMetadata {
++                purpose,
++                ..metadata()
++            };
++            let enriched = event().with_wake_metadata(metadata.clone()).unwrap();
++            assert_eq!(enriched.audit_references[0], "review-receipt-1");
++            assert_eq!(enriched.audit_references.len(), 6);
++            assert_eq!(enriched.wake_metadata().unwrap(), Some(metadata.clone()));
++            assert!(!enriched.is_expired_at(159).unwrap());
++            assert!(enriched.is_expired_at(160).unwrap());
++            let wire = serde_json::to_string(&enriched).unwrap();
++            let decoded: Event = serde_json::from_str(&wire).unwrap();
++            decoded.validate().unwrap();
++            assert_eq!(decoded, enriched);
++            assert_eq!(
++                enriched.clone().with_wake_metadata(metadata).unwrap(),
++                enriched
++            );
++        }
++    }
++
++    #[test]
++    fn wake_metadata_refuses_partial_duplicate_unknown_or_noncanonical_fields() {
++        let valid = metadata().audit_references(100).unwrap();
++        let mut cases = Vec::new();
++        cases.push(valid[..4].to_vec());
++        let mut duplicate = valid.clone();
++        duplicate.push(valid[0].clone());
++        cases.push(duplicate);
++        for replacement in [
++            "catdesk.wake.v2:purpose:MANUAL_END_TURN",
++            "catdesk.wake.v1:other:MANUAL_END_TURN",
++            "catdesk.wake.v1:purpose:manual_end_turn",
++            "catdesk.wake.v1:purpose:UNKNOWN",
++        ] {
++            let mut references = valid.clone();
++            references[0] = replacement.into();
++            cases.push(references);
++        }
++        for (index, key, values) in [
++            (1, "source-event", vec!["", "event:foreign", "event space"]),
++            (2, "source-turn", vec!["", "turn/foreign", "turn space"]),
++            (3, "priority", vec!["-1", "+1", "01", "256"]),
++            (
++                4,
++                "expires-utc",
++                vec!["0", "100", "+160", "0160", "18446744073709551616"],
++            ),
++        ] {
++            for value in values {
++                let mut references = valid.clone();
++                references[index] = format!("{WAKE_METADATA_V1}{key}:{value}");
++                cases.push(references);
++            }
++        }
++        for references in cases {
++            let invalid = Event {
++                audit_references: references,
++                ..event()
++            };
++            assert_eq!(
++                invalid.validate().unwrap_err(),
++                "QUEUE_WAKE_METADATA_INVALID",
++                "{:?}",
++                invalid.audit_references
++            );
++        }
++    }
++
++    #[test]
++    fn wake_metadata_ttl_and_identity_are_bounded_without_overflow() {
++        let mut metadata = metadata();
++        metadata.expires_utc = 100 + MAX_WAKE_TTL_SECONDS;
++        metadata.validate(100).unwrap();
++        metadata.expires_utc += 1;
++        assert!(metadata.validate(100).is_err());
++        metadata.expires_utc = u64::MAX;
++        metadata.validate(u64::MAX - MAX_WAKE_TTL_SECONDS).unwrap();
++        assert!(metadata.validate(u64::MAX).is_err());
++        metadata.source_event_id = "a".repeat(201);
++        assert!(metadata.validate(u64::MAX - 1).is_err());
++        assert!(metadata.validate(0).is_err());
++    }
++
++    #[test]
++    fn wake_metadata_cannot_rewrite_an_existing_intent_or_overflow_audit_capacity() {
++        let enriched = event().with_wake_metadata(metadata()).unwrap();
++        let changed = WakeMetadata {
++            priority: 6,
++            ..metadata()
++        };
++        assert_eq!(
++            enriched.with_wake_metadata(changed).unwrap_err(),
++            "QUEUE_WAKE_METADATA_CONFLICT"
++        );
++        let full = Event {
++            audit_references: (1..=4).map(|id| format!("existing-{id}")).collect(),
++            ..event()
++        };
++        assert_eq!(
++            full.with_wake_metadata(metadata()).unwrap_err(),
++            "QUEUE_EVENT_INVALID"
++        );
++    }
++}
+
+diff --git a/wake/src/readiness_probe.rs b/wake/src/readiness_probe.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..fb83b1d5a795a34b759d1b5819dae8207c876d9a
+--- /dev/null
++++ b/wake/src/readiness_probe.rs
+@@ -0,0 +1,374 @@
++//! Bounded, metadata-only readiness probe shared by the existing profile probe
++//! and the guarded development inspector. START precedes every browser import.
++use std::{
++    io::{Read, Write},
++    process::{Command, Stdio},
++    time::{Duration, Instant},
++};
++
++/// Whitelist metadata at the native boundary, even if a helper prints content.
++pub(crate) fn surface_observation(line: &str) -> Option<serde_json::Value> {
++    let text = line.strip_prefix("PROBE:SURFACE:")?;
++    if text.len() > 1024 {
++        return None;
++    }
++    let value: serde_json::Value = serde_json::from_str(text).ok()?;
++    let object = value.as_object()?;
++    if object.len() != 9
++        || !object.iter().all(|(key, value)| {
++            let Some(word) = value.as_str() else {
++                return false;
++            };
++            match key.as_str() {
++                "route" => matches!(
++                    word,
++                    "EXACT"
++                        | "HOME"
++                        | "AUTH_REQUIRED"
++                        | "SECURITY_CHECK"
++                        | "NETWORK_ERROR"
++                        | "TARGET_DRIFT"
++                        | "UNKNOWN"
++                ),
++                "document" => matches!(word, "COMPLETE" | "LOADING" | "UNKNOWN"),
++                "history" => matches!(word, "PRESENT" | "ABSENT" | "UNKNOWN"),
++                "editor" => matches!(word, "READY" | "MISSING" | "AMBIGUOUS" | "UNKNOWN"),
++                "composer" => matches!(word, "EMPTY" | "DRAFT_PRESENT" | "UNKNOWN"),
++                "generation" => matches!(word, "ACTIVE" | "IDLE" | "UNKNOWN"),
++                "assistant" => matches!(
++                    word,
++                    "LOAD_ERROR" | "DELIVERY_TIMEOUT" | "PRESENT" | "ABSENT" | "UNKNOWN"
++                ),
++                "exchange" => word == "UNATTRIBUTED",
++                "recovery" => word == "OBSERVATION_ONLY",
++                _ => false,
++            }
++        })
++    {
++        return None;
++    }
++    Some(value)
++}
++
++/// URL classes and value shapes only. Never pass tab IDs, URLs or page text.
++pub(crate) fn tab_observation(line: &str) -> Option<serde_json::Value> {
++    let text = line.strip_prefix("PROBE:TAB:")?;
++    if text.len() > 1024 {
++        return None;
++    }
++    let value: serde_json::Value = serde_json::from_str(text).ok()?;
++    let object = value.as_object()?;
++    if object.len() != 12 || value.get("schemaVersion")?.as_u64()? != 1 {
++        return None;
++    }
++    for (key, item) in object {
++        let valid = match key.as_str() {
++            "schemaVersion" => item.as_u64() == Some(1),
++            "tabCount" => item.as_i64().is_some_and(|n| (-1..=32).contains(&n)),
++            "metadataMatches" | "unreadableMetadata" => item.as_u64().is_some_and(|n| n <= 32),
++            "candidateShape" | "controlledShape" => matches!(
++                item.as_str(),
++                Some("UNOBSERVED" | "STRING" | "WRAPPED" | "OTHER")
++            ),
++            "candidateRoute" | "controlledRoute" => matches!(
++                item.as_str(),
++                Some("UNKNOWN" | "EXACT" | "HOME" | "AUTH" | "NETWORK" | "OTHER" | "INVALID")
++            ),
++            "candidateFrame" => matches!(item.as_str(), Some("UNKNOWN" | "TOP" | "SUBFRAME")),
++            "alternateRoute" => item.is_boolean(),
++            "stage" => matches!(
++                item.as_str(),
++                Some("ENUMERATION" | "METADATA" | "DOCUMENT" | "SWITCH" | "VERIFIED")
++            ),
++            "state" => matches!(
++                item.as_str(),
++                Some(
++                    "TARGET_TAB_UNAVAILABLE"
++                        | "TARGET_TAB_MISSING"
++                        | "TARGET_TAB_AMBIGUOUS"
++                        | "TARGET_TAB_DRIFT"
++                        | "TARGET_TAB_EXACT"
++                )
++            ),
++            _ => false,
++        };
++        if !valid {
++            return None;
++        }
++    }
++    let count = value["tabCount"].as_i64()?;
++    let examined = value["metadataMatches"].as_u64()? + value["unreadableMetadata"].as_u64()?;
++    if count >= 0 && examined > count as u64 || count < 0 && examined != 0 {
++        return None;
++    }
++    Some(value)
++}
++
++pub fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<String>, &'static str> {
++    #[cfg(windows)]
++    {
++        use std::os::windows::process::CommandExt;
++        command.creation_flags(0x0800_0000);
++    }
++    let mut child = command
++        .stdin(Stdio::piped())
++        .stdout(Stdio::piped())
++        .stderr(Stdio::null())
++        .spawn()
++        .map_err(|_| "PROBE_LAUNCH_FAILED")?;
++    let job = match crate::process_job::Job::assign(&child) {
++        Ok(job) => job,
++        Err(_) => {
++            drop(child.stdin.take());
++            let _ = child.kill();
++            let deadline = Instant::now() + Duration::from_secs(5);
++            loop {
++                match child.try_wait() {
++                    Ok(Some(_)) => return Err("PROBE_CONTAINMENT_FAILED"),
++                    _ if Instant::now() >= deadline => return Err("PROBE_CLEANUP_UNVERIFIED"),
++                    _ => std::thread::sleep(Duration::from_millis(25)),
++                }
++            }
++        }
++    };
++    let result = (|| {
++        child
++            .stdin
++            .take()
++            .ok_or("PROBE_PIPE_FAILED")?
++            .write_all(b"START\n")
++            .map_err(|_| "PROBE_PIPE_FAILED")?;
++        let deadline = Instant::now() + timeout;
++        loop {
++            if let Some(status) = child.try_wait().map_err(|_| "PROBE_WAIT_FAILED")? {
++                return if status.success() {
++                    Ok(())
++                } else {
++                    Err("PROBE_FAILED")
++                };
++            }
++            if Instant::now() >= deadline {
++                return Err("PROBE_PROCESS_TIMEOUT");
++            }
++            std::thread::sleep(Duration::from_millis(25));
++        }
++    })();
++    // A normal helper exit is insufficient: retained descendants may still own
++    // Chrome/profile resources or the output pipe. Prove the exact Job empty.
++    job.terminate_and_wait_empty(Duration::from_secs(5))
++        .map_err(|_| "PROBE_CLEANUP_UNVERIFIED")?;
++    child.wait().map_err(|_| "PROBE_CLEANUP_UNVERIFIED")?;
++    result?;
++    let mut bytes = Vec::new();
++    child
++        .stdout
++        .take()
++        .ok_or("PROBE_PIPE_FAILED")?
++        .take(16_385)
++        .read_to_end(&mut bytes)
++        .map_err(|_| "PROBE_OUTPUT_FAILED")?;
++    if bytes.len() > 16_384 {
++        return Err("PROBE_OUTPUT_TOO_LARGE");
++    }
++    let text = std::str::from_utf8(&bytes).map_err(|_| "PROBE_OUTPUT_INVALID")?;
++    Ok(text
++        .lines()
++        .filter(|line| {
++            let Some(state) = line.strip_prefix("PROBE:") else {
++                return false;
++            };
++            if state.starts_with("SURFACE:") {
++                return surface_observation(line).is_some();
++            }
++            if state.starts_with("TAB:") {
++                return tab_observation(line).is_some();
++            }
++            if let Some(reason) = state.strip_prefix("HOME_CHECK:") {
++                return matches!(
++                    reason,
++                    "EMPTY"
++                        | "NOT_HOME"
++                        | "BUSY"
++                        | "DOCUMENT_LOADING"
++                        | "EDITOR_MISSING"
++                        | "EDITOR_AMBIGUOUS"
++                        | "EDITOR_UNSUPPORTED"
++                        | "DRAFT_PRESENT"
++                        | "EDITOR_MEDIA_PRESENT"
++                        | "ATTACHMENT_INDICATOR"
++                        | "EVALUATION_UNKNOWN"
++                        | "EVALUATION_FAILED"
++                        | "NAVIGATION_ATTEMPTED"
++                        | "NAVIGATION_FAILED"
++                );
++            }
++            if let Some(code) = state.strip_prefix("NETWORK:") {
++                return matches!(
++                    code,
++                    "UNKNOWN"
++                        | "ERR_NETWORK_CHANGED"
++                        | "ERR_INTERNET_DISCONNECTED"
++                        | "ERR_NAME_NOT_RESOLVED"
++                        | "ERR_CONNECTION_CLOSED"
++                        | "ERR_CONNECTION_RESET"
++                        | "ERR_CONNECTION_ABORTED"
++                        | "ERR_CONNECTION_REFUSED"
++                        | "ERR_CONNECTION_TIMED_OUT"
++                        | "ERR_TIMED_OUT"
++                        | "ERR_PROXY_CONNECTION_FAILED"
++                        | "ERR_TUNNEL_CONNECTION_FAILED"
++                        | "ERR_CERT_DATE_INVALID"
++                        | "ERR_CERT_AUTHORITY_INVALID"
++                        | "ERR_CERT_COMMON_NAME_INVALID"
++                        | "ERR_BLOCKED_BY_CLIENT"
++                        | "ERR_BLOCKED_BY_ADMINISTRATOR"
++                        | "ERR_BLOCKED_BY_RESPONSE"
++                        | "ERR_HTTP_RESPONSE_CODE_FAILURE"
++                        | "ERR_TOO_MANY_RETRIES"
++                        | "ERR_EMPTY_RESPONSE"
++                        | "ERR_FAILED"
++                        | "ERR_HTTP2_PROTOCOL_ERROR"
++                        | "ERR_SSL_PROTOCOL_ERROR"
++                        | "ERR_QUIC_PROTOCOL_ERROR"
++                );
++            }
++            let state = state.strip_prefix("FINAL:").unwrap_or(state);
++            matches!(
++                state,
++                "EXACT_READY_IDLE"
++                    | "PROFILE_QUIESCENT"
++                    | "PROFILE_HELPER_ACTIVE"
++                    | "PROFILE_BROWSER_ACTIVE"
++                    | "PROFILE_OWNER_UNATTRIBUTED"
++                    | "PROFILE_INVENTORY_UNVERIFIED"
++                    | "EXACT_READY_RESPONSE_LOAD_ERROR"
++                    | "EXACT_READY_RESPONSE_TIMEOUT"
++                    | "EXACT_DRAFT_PRESENT"
++                    | "EXACT_DOCUMENT_LOADING"
++                    | "EXACT_EDITOR_AMBIGUOUS"
++                    | "OBSERVATION_UNAVAILABLE"
++                    | "TARGET_TAB_EXACT"
++                    | "TARGET_TAB_MISSING"
++                    | "TARGET_TAB_AMBIGUOUS"
++                    | "TARGET_TAB_DRIFT"
++                    | "TARGET_TAB_UNAVAILABLE"
++                    | "EXACT_READY_BUSY"
++                    | "EXACT_NO_EDITOR"
++                    | "LOGIN_VISIBLE"
++                    | "CAPTCHA_VISIBLE"
++                    | "HOME"
++                    | "TARGET_DRIFT"
++                    | "CHROME_ERROR"
++                    | "URL_UNAVAILABLE"
++                    | "URL_INVALID"
++            )
++        })
++        .take(64)
++        .map(|line| {
++            // Return canonical whitelisted values, never raw JSON containing
++            // duplicate-key values or formatting from an untrusted helper.
++            if let Some(value) = surface_observation(line) {
++                format!("PROBE:SURFACE:{value}")
++            } else if let Some(value) = tab_observation(line) {
++                format!("PROBE:TAB:{value}")
++            } else {
++                line.to_owned()
++            }
++        })
++        .collect())
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    fn surface() -> serde_json::Value {
++        serde_json::json!({"route":"EXACT","document":"COMPLETE","history":"PRESENT",
++            "editor":"READY","composer":"EMPTY","generation":"IDLE","assistant":"LOAD_ERROR",
++            "exchange":"UNATTRIBUTED","recovery":"OBSERVATION_ONLY"})
++    }
++    fn tab() -> serde_json::Value {
++        serde_json::json!({"schemaVersion":1,"tabCount":2,"metadataMatches":1,
++            "unreadableMetadata":0,"candidateShape":"STRING","candidateRoute":"HOME",
++            "candidateFrame":"TOP","controlledShape":"STRING","controlledRoute":"HOME",
++            "alternateRoute":false,"stage":"DOCUMENT","state":"TARGET_TAB_DRIFT"})
++    }
++    #[test]
++    fn tab_protocol_accepts_only_bounded_counts_shapes_and_closed_routes() {
++        let value = tab();
++        assert_eq!(
++            tab_observation(&format!("PROBE:TAB:{value}")),
++            Some(value.clone())
++        );
++        for (key, invalid) in [
++            ("tabCount", serde_json::json!(33)),
++            ("metadataMatches", serde_json::json!(3)),
++            ("metadataMatches", serde_json::json!(true)),
++            ("schemaVersion", serde_json::json!(true)),
++            (
++                "candidateRoute",
++                serde_json::json!("https://chatgpt.com/c/private"),
++            ),
++            ("candidateShape", serde_json::json!("PRIVATE_CONTENT")),
++            ("alternateRoute", serde_json::json!("true")),
++        ] {
++            let mut changed = value.clone();
++            changed[key] = invalid;
++            assert!(tab_observation(&format!("PROBE:TAB:{changed}")).is_none());
++        }
++        let mut changed = value;
++        changed["privateBody"] = serde_json::json!("PRIVATE_DRAFT");
++        assert!(tab_observation(&format!("PROBE:TAB:{changed}")).is_none());
++    }
++    #[test]
++    fn surface_protocol_accepts_only_closed_metadata_vocabulary() {
++        let value = surface();
++        assert_eq!(
++            surface_observation(&format!("PROBE:SURFACE:{value}")),
++            Some(value.clone())
++        );
++        for changed in [
++            serde_json::json!({"draft":"PRIVATE_CONTENT"}),
++            serde_json::json!([]),
++            serde_json::Value::Null,
++        ] {
++            assert!(surface_observation(&format!("PROBE:SURFACE:{changed}")).is_none());
++        }
++        for (key, bad) in [
++            ("composer", serde_json::json!("PRIVATE_DRAFT")),
++            ("route", serde_json::json!("https://chatgpt.com/c/private")),
++            ("generation", serde_json::json!(true)),
++            ("exchange", serde_json::json!("CURRENT_EXACT_USER")),
++        ] {
++            let mut changed = value.clone();
++            changed[key] = bad;
++            assert!(surface_observation(&format!("PROBE:SURFACE:{changed}")).is_none());
++        }
++        let mut extra = value;
++        extra["body"] = serde_json::json!("PRIVATE_ANSWER");
++        assert!(surface_observation(&format!("PROBE:SURFACE:{extra}")).is_none());
++    }
++    #[cfg(windows)]
++    #[test]
++    fn bounded_probe_accepts_near_limit_output_and_canonicalizes_metadata() {
++        let shell = std::path::PathBuf::from(std::env::var_os("SystemRoot").unwrap())
++            .join("System32/WindowsPowerShell/v1.0/powershell.exe");
++        let mut command = Command::new(shell);
++        let row = surface()
++            .to_string()
++            .replacen('{', "{\"composer\":\"PRIVATE_SENTINEL\",", 1);
++        let tab_row = tab()
++            .to_string()
++            .replacen('{', "{\"state\":\"PRIVATE_TAB_SENTINEL\",", 1);
++        let script = format!(
++            "if([Console]::In.ReadLine() -cne 'START'){{exit 2}}; for($i=0;$i -lt 90;$i++){{[Console]::Out.WriteLine(('x'*150))}}; [Console]::Out.WriteLine('PROBE:SURFACE:{row}'); [Console]::Out.WriteLine('PROBE:TAB:{tab_row}'); [Console]::Out.WriteLine('PROBE:FINAL:EXACT_READY_RESPONSE_LOAD_ERROR')"
++        );
++        command.args(["-NoProfile", "-NonInteractive", "-Command", &script]);
++        let rows = run_bounded(&mut command, Duration::from_secs(5)).unwrap();
++        assert_eq!(rows.len(), 3);
++        assert_eq!(surface_observation(&rows[0]), Some(surface()));
++        assert_eq!(tab_observation(&rows[1]), Some(tab()));
++        assert_eq!(rows[2], "PROBE:FINAL:EXACT_READY_RESPONSE_LOAD_ERROR");
++        assert!(!rows.join(" ").contains("PRIVATE_SENTINEL"));
++        assert!(!rows.join(" ").contains("PRIVATE_TAB_SENTINEL"));
++    }
++}
+
+diff --git a/wake/src/runtime_reobserve.rs b/wake/src/runtime_reobserve.rs
+index c6e65b2a42c52f6e76b78f5de1082958a6c2a711..74bd35b722ec85d386c0ae9155c27a9f1ba8fe56 100644
+--- a/wake/src/runtime_reobserve.rs
++++ b/wake/src/runtime_reobserve.rs
+@@ -223,6 +223,48 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn failed_assistant_observations_preserve_delivery_and_allow_sibling_wake() {
++        for reason in [
++            "RESPONSE_LOAD_ERROR",
++            "RESPONSE_NETWORK_ERROR",
++            "RESPONSE_EXPECTED_USER_DUPLICATED",
++            "RESPONSE_PROBE_TIMEOUT",
++        ] {
++            let (store, delivery) = ready_fixture("failed-response-sibling-progress");
++            let before_timer = timer_bytes(&store);
++            let path = store.root().join("deliveries/alpha-1.json");
++            let before_delivery = std::fs::read(&path).unwrap();
++            let result = reobserve_with_observer(
++                &store,
++                "alpha",
++                &delivery.target,
++                "alpha-1",
++                &|| Ok(()),
++                |_| panic!("failed assistant must not commit completion"),
++                |_, _, _| Err(reason.into()),
++            );
++            assert_eq!(result.unwrap_err(), reason);
++            assert_eq!(timer_bytes(&store), before_timer);
++            assert_eq!(std::fs::read(&path).unwrap(), before_delivery);
++            assert!(!store.root().join("queue/alpha-1.json").exists());
++            let events = super::super::scheduler::fair_round(
++                &store,
++                &store.config().unwrap().targets,
++                None,
++                &std::collections::BTreeMap::new(),
++                crate::store::now(),
++            )
++            .unwrap();
++            let beta = events
++                .iter()
++                .find(|event| event.event_id == "beta-1")
++                .unwrap();
++            let lease = store.host_lock().unwrap();
++            assert_eq!(store.claim(beta, &lease).unwrap().phase, Phase::Claimed);
++        }
++    }
++
+     #[test]
+     fn reobserve_scope_and_receipt_rejections_create_no_journal() {
+         let (store, lease) = fixture("reobserve-scope");
+
+diff --git a/wake/src/runtime_scheduler.rs b/wake/src/runtime_scheduler.rs
+index 3f09b3ee0036a8119f26e1aca115bee6bc1694f4..00b4750977eb336b9b62cfcbec91386f596692a0 100644
+--- a/wake/src/runtime_scheduler.rs
++++ b/wake/src/runtime_scheduler.rs
+@@ -16,6 +16,7 @@ pub(super) fn fair_round(
+ ) -> Result<Vec<Event>> {
+     let mut chosen = BTreeMap::<String, Event>::new();
+     let mut uncertain = BTreeMap::<String, Event>::new();
++    let mut blocked_projects = BTreeSet::new();
+     // Existing created-time ordering is retained inside each project.
+     for event in store.events()? {
+         if targets
+@@ -25,12 +26,36 @@ pub(super) fn fair_round(
+             continue;
+         }
+         let delivery = store.delivery(&event.event_id)?;
++        if delivery
++            .as_ref()
++            .is_none_or(|value| !matches!(value.phase, Phase::Submitting | Phase::Sent))
++            && store.submission_witness_present(&event.event_id) != Ok(false)
++        {
++            // Partial/unreadable submission evidence reserves this project,
++            // including a crash after start-witness commit but before the
++            // SUBMITTING delivery write. Sibling projects remain eligible.
++            blocked_projects.insert(event.project_id.clone());
++            continue;
++        }
+         if delivery
+             .as_ref()
+             .is_some_and(|value| matches!(value.phase, Phase::Sent | Phase::Stale))
+         {
+             continue;
+         }
++        if event.is_expired_at(observed_utc)? {
++            match delivery.as_ref().map(|value| &value.phase) {
++                None => continue,
++                Some(Phase::Claimed | Phase::Attention) => {
++                    // A pre-submit crash may have left an owned composer draft.
++                    // Expiry cannot discard it or authorize another event in
++                    // that conversation. Other projects remain schedulable.
++                    blocked_projects.insert(event.project_id.clone());
++                    continue;
++                }
++                _ => {}
++            }
++        }
+         if delivery.as_ref().is_some_and(|value| {
+             value.phase == Phase::Attention && value.reason.as_deref() != Some("CHATGPT_NOT_IDLE")
+         }) {
+@@ -46,6 +71,9 @@ pub(super) fn fair_round(
+         }
+         chosen.entry(event.project_id.clone()).or_insert(event);
+     }
++    for project in blocked_projects {
++        chosen.remove(&project);
++    }
+     // The crash boundary can precede same-tab acceptance and its timer.
+     // Such a delivery still owns the conversation until read-only recovery.
+     chosen.extend(uncertain);
+@@ -102,11 +130,15 @@ pub(super) mod tests {
+     use super::*;
+     use crate::{
+         PROTOCOL_VERSION,
+-        protocol::digest,
++        protocol::{WakeMetadata, WakePurpose, digest},
+         store::{Delivery, HostLease, Receipt, now},
+     };
+ 
+     pub(crate) fn fixture(label: &str) -> (Store, HostLease) {
++        fixture_projects(label, &["alpha", "beta", "gamma"])
++    }
++
++    fn fixture_projects(label: &str, projects: &[&str]) -> (Store, HostLease) {
+         let unique = std::time::SystemTime::now()
+             .duration_since(std::time::UNIX_EPOCH)
+             .unwrap()
+@@ -118,7 +150,7 @@ pub(super) mod tests {
+         std::fs::create_dir_all(&base).unwrap();
+         let store = Store::open_scoped_for_test(&base.join("wake"), &base).unwrap();
+         store.initialize().unwrap();
+-        for (index, project) in ["alpha", "beta", "gamma"].iter().enumerate() {
++        for (index, project) in projects.iter().enumerate() {
+             store
+                 .set_target(
+                     project,
+@@ -198,6 +230,140 @@ pub(super) mod tests {
+         );
+     }
+ 
++    #[test]
++    fn five_project_concurrent_intents_and_mixed_holds_survive_restart() {
++        let projects = ["alpha", "beta", "gamma", "delta", "epsilon"];
++        let (store, lease) = fixture_projects("five-project-restart", &projects);
++        let barrier = std::sync::Barrier::new(projects.len());
++        std::thread::scope(|scope| {
++            let handles: Vec<_> = projects
++                .iter()
++                .map(|project| {
++                    let store = &store;
++                    let barrier = &barrier;
++                    scope.spawn(move || {
++                        barrier.wait();
++                        store.produce(
++                            &format!("{project}-parallel"),
++                            project,
++                            "review_ready",
++                            &format!("Review concurrent {project} work"),
++                        )
++                    })
++                })
++                .collect();
++            for handle in handles {
++                handle.join().unwrap().unwrap();
++            }
++        });
++        assert_eq!(store.events().unwrap().len(), 15);
++        let concurrent_intents: Vec<_> = projects
++            .iter()
++            .map(|project| {
++                let id = format!("{project}-parallel");
++                let event = store
++                    .events()
++                    .unwrap()
++                    .into_iter()
++                    .find(|event| event.event_id == id)
++                    .unwrap();
++                assert_eq!(&event.project_id, project);
++                assert_eq!(event.target_generation, 1);
++                let path = store.root().join(format!("queue/{id}.json"));
++                let bytes = std::fs::read(&path).unwrap();
++                (path, bytes)
++            })
++            .collect();
++        assert_eq!(
++            ids(&store, Some("beta"), &BTreeMap::new()),
++            ["delta-1", "epsilon-1", "gamma-1", "alpha-1", "beta-1"]
++        );
++        let event = |id: &str| {
++            store
++                .events()
++                .unwrap()
++                .into_iter()
++                .find(|event| event.event_id == id)
++                .unwrap()
++        };
++        // Alpha's later ambiguous submission must retain its exact identity,
++        // rather than selecting the older queue entry or authorizing a resend.
++        store.claim(&event("alpha-2"), &lease).unwrap();
++        store
++            .transition("alpha-2", lease.owner(), Phase::Submitting, None, None)
++            .unwrap();
++        let beta = sent(&store, &lease, "beta-1");
++        // Gamma has a claimed draft and a durable pre-submit witness but no
++        // acceptance timer. The scheduler may not replace its owner or draft.
++        let gamma = event("gamma-1");
++        store.claim(&gamma, &lease).unwrap();
++        let gamma_target = store.config().unwrap().targets["gamma"].clone();
++        let witness = store.root().join("logs/submission-start-gamma-1.json");
++        std::fs::write(
++            &witness,
++            serde_json::to_vec(&serde_json::json!({
++                "schemaVersion":PROTOCOL_VERSION,"eventId":gamma.event_id,
++                "targetGeneration":gamma_target.generation,
++                "targetDigest":gamma_target.digest,"startedUtc":gamma.created_utc
++            }))
++            .unwrap(),
++        )
++        .unwrap();
++        let witness_bytes = std::fs::read(&witness).unwrap();
++        store
++            .set_target(
++                "delta",
++                1,
++                "https://chatgpt.com/c/five-project-delta-successor",
++            )
++            .unwrap();
++        let deadlines = BTreeMap::from([("beta-1".into(), now() + 3600)]);
++        let held = ["alpha-2", "beta-1", "gamma-1"].map(|id| {
++            (
++                id,
++                std::fs::read(store.root().join(format!("deliveries/{id}.json"))).unwrap(),
++            )
++        });
++        assert_eq!(ids(&store, None, &deadlines), ["alpha-2", "epsilon-1"]);
++        drop(lease);
++        let reopened =
++            Store::open_scoped_for_test(store.root(), store.root().parent().unwrap()).unwrap();
++        assert_eq!(
++            ids(&reopened, Some("alpha"), &deadlines),
++            ["epsilon-1", "alpha-2"]
++        );
++        let next_owner = reopened.host_lock().unwrap();
++        // Only the unaffected project advances through the existing receipt /
++        // response protocol. The other four projects' outcomes stay preserved.
++        let epsilon = sent(&reopened, &next_owner, "epsilon-1");
++        reopened
++            .record_response_probe("epsilon-1", &epsilon.target, true)
++            .unwrap();
++        assert_eq!(
++            ids(&reopened, Some("alpha"), &deadlines),
++            ["epsilon-2", "alpha-2"]
++        );
++        for (id, bytes) in held {
++            assert_eq!(
++                std::fs::read(reopened.root().join(format!("deliveries/{id}.json"))).unwrap(),
++                bytes
++            );
++        }
++        assert_eq!(std::fs::read(&witness).unwrap(), witness_bytes);
++        for (path, bytes) in concurrent_intents {
++            assert_eq!(std::fs::read(path).unwrap(), bytes);
++        }
++        assert_eq!(reopened.config().unwrap().targets["delta"].generation, 2);
++        assert_eq!(
++            reopened.timer("beta-1").unwrap().unwrap().target_digest,
++            beta.target.digest
++        );
++        assert!(reopened.timer("alpha-2").unwrap().is_none());
++        assert!(reopened.timer("gamma-1").unwrap().is_none());
++        drop(next_owner);
++        std::fs::remove_dir_all(store.root().parent().unwrap()).unwrap();
++    }
++
+     #[test]
+     fn pending_response_reserves_only_its_project_and_survives_restart() {
+         let (store, lease) = fixture("restart");
+@@ -282,4 +448,188 @@ pub(super) mod tests {
+             ["alpha-2", "beta-1", "gamma-1"]
+         );
+     }
++
++    #[test]
++    fn orphaned_pre_submit_witness_holds_only_its_project_and_survives_restart() {
++        for claimed in [false, true] {
++            for kind in ["submission", "timer"] {
++                let (store, lease) = fixture("orphaned-pre-submit");
++                let event = store
++                    .events()
++                    .unwrap()
++                    .into_iter()
++                    .find(|event| event.event_id == "alpha-1")
++                    .unwrap();
++                if claimed {
++                    store.claim(&event, &lease).unwrap();
++                }
++                let target = store.config().unwrap().targets["alpha"].clone();
++                let (path, witness) = if kind == "submission" {
++                    (
++                        store.root().join("logs/submission-start-alpha-1.json"),
++                        serde_json::json!({
++                            "schemaVersion":PROTOCOL_VERSION,"eventId":event.event_id,
++                            "targetGeneration":target.generation,"targetDigest":target.digest,"startedUtc":event.created_utc
++                        }),
++                    )
++                } else {
++                    (
++                        store.root().join("turns/alpha-1.json"),
++                        serde_json::json!({
++                            "schemaVersion":PROTOCOL_VERSION,"eventId":event.event_id,"projectId":event.project_id,
++                            "targetGeneration":target.generation,"targetDigest":target.digest,"startedUtc":event.created_utc,
++                            "completedUtc":null,"responseState":"OBSERVING"
++                        }),
++                    )
++                };
++                let bytes = serde_json::to_vec(&witness).unwrap();
++                std::fs::write(&path, &bytes).unwrap();
++                let original_delivery = store.delivery(&event.event_id).unwrap();
++                let queue_path = store.root().join("queue/alpha-1.json");
++                let queue_bytes = std::fs::read(&queue_path).unwrap();
++                assert_eq!(ids(&store, None, &BTreeMap::new()), ["beta-1", "gamma-1"]);
++                assert_eq!(
++                    store.claim(&event, &lease).unwrap_err(),
++                    "SUBMISSION_RECONCILIATION_REQUIRED"
++                );
++                drop(lease);
++                let reopened =
++                    Store::open_scoped_for_test(store.root(), store.root().parent().unwrap())
++                        .unwrap();
++                assert_eq!(
++                    ids(&reopened, None, &BTreeMap::new()),
++                    ["beta-1", "gamma-1"]
++                );
++                assert_eq!(
++                    reopened.delivery(&event.event_id).unwrap(),
++                    original_delivery
++                );
++                assert_eq!(std::fs::read(path).unwrap(), bytes);
++                assert_eq!(std::fs::read(queue_path).unwrap(), queue_bytes);
++                std::fs::remove_dir_all(store.root().parent().unwrap()).unwrap();
++            }
++        }
++    }
++
++    fn manual_event(store: &Store, created_utc: u64, expires_utc: u64) -> Event {
++        let event = Event {
++            schema_version: PROTOCOL_VERSION,
++            event_id: "alpha-manual".into(),
++            project_id: "alpha".into(),
++            event_type: "engineering_attention".into(),
++            created_utc,
++            message: "Continue alpha's assigned task".into(),
++            target_generation: store.config().unwrap().targets["alpha"].generation,
++            audit_references: Vec::new(),
++        }
++        .with_wake_metadata(WakeMetadata {
++            purpose: WakePurpose::ManualEndTurn,
++            source_event_id: "alpha-source-event".into(),
++            source_turn_id: "alpha-source-turn".into(),
++            priority: 255,
++            expires_utc,
++        })
++        .unwrap();
++        store.publish(&event).unwrap();
++        event
++    }
++
++    #[test]
++    fn wake_metadata_expiry_skips_only_unclaimed_work_and_preserves_claimed_drafts_on_restart() {
++        let (store, lease) = fixture("expiry-claimed");
++        let event = manual_event(&store, now() - 120, now() - 60);
++        // The expired intent remains durable, but does not consume a slice.
++        assert_eq!(
++            ids(&store, None, &BTreeMap::new()),
++            ["alpha-1", "beta-1", "gamma-1"]
++        );
++        assert!(store.delivery(&event.event_id).unwrap().is_none());
++        let claimed = store.claim(&event, &lease).unwrap();
++        assert_eq!(ids(&store, None, &BTreeMap::new()), ["beta-1", "gamma-1"]);
++        drop(lease);
++        let reopened =
++            Store::open_scoped_for_test(store.root(), store.root().parent().unwrap()).unwrap();
++        assert_eq!(
++            ids(&reopened, None, &BTreeMap::new()),
++            ["beta-1", "gamma-1"]
++        );
++        assert_eq!(reopened.delivery(&event.event_id).unwrap(), Some(claimed));
++        assert!(reopened.events().unwrap().contains(&event));
++        std::fs::remove_dir_all(store.root().parent().unwrap()).unwrap();
++    }
++
++    #[test]
++    fn wake_metadata_expiry_never_suppresses_unknown_submit_or_sent_response_observation() {
++        let (store, lease) = fixture("expiry-reconciliation");
++        let event = manual_event(&store, now(), now() + 300);
++        let delivery = store.claim(&event, &lease).unwrap();
++        store
++            .transition(
++                &event.event_id,
++                lease.owner(),
++                Phase::Submitting,
++                None,
++                None,
++            )
++            .unwrap();
++        let observed_after_expiry = event.wake_metadata().unwrap().unwrap().expires_utc;
++        let round = || {
++            fair_round(
++                &store,
++                &store.config().unwrap().targets,
++                None,
++                &BTreeMap::new(),
++                observed_after_expiry,
++            )
++            .unwrap()
++            .into_iter()
++            .map(|event| event.event_id)
++            .collect::<Vec<_>>()
++        };
++        assert_eq!(round(), ["alpha-manual", "beta-1", "gamma-1"]);
++        assert_eq!(
++            store.claim(&event, &lease).unwrap_err(),
++            "SUBMISSION_RECONCILIATION_REQUIRED"
++        );
++        let receipt = Receipt {
++            schema_version: PROTOCOL_VERSION,
++            event_id: event.event_id.clone(),
++            target_generation: delivery.target.generation,
++            target_digest: delivery.target.digest,
++            message_digest: digest(&event.message),
++            sent_utc: now(),
++            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
++        };
++        store
++            .record_exact_receipt_timer(&event.event_id, &receipt)
++            .unwrap();
++        store
++            .transition(
++                &event.event_id,
++                lease.owner(),
++                Phase::Sent,
++                Some(receipt),
++                None,
++            )
++            .unwrap();
++        assert_eq!(round(), ["alpha-manual", "beta-1", "gamma-1"]);
++        assert_eq!(
++            store.delivery(&event.event_id).unwrap().unwrap().phase,
++            Phase::Sent
++        );
++        drop(lease);
++        std::fs::remove_dir_all(store.root().parent().unwrap()).unwrap();
++    }
++
++    #[test]
++    fn wake_metadata_priority_does_not_override_fifo_or_project_rotation() {
++        let (store, lease) = fixture("priority-fairness");
++        manual_event(&store, now() + 1, now() + 300);
++        assert_eq!(
++            ids(&store, Some("alpha"), &BTreeMap::new()),
++            ["beta-1", "gamma-1", "alpha-1"]
++        );
++        drop(lease);
++        std::fs::remove_dir_all(store.root().parent().unwrap()).unwrap();
++    }
+ }
+
+diff --git a/wake/src/runtime_snapshot.rs b/wake/src/runtime_snapshot.rs
+index fc0d1c176a40896cb8b6660e71e31c7db2f8f48f..6eb10184eed187539d9f9421d39f985a08ae4134 100644
+--- a/wake/src/runtime_snapshot.rs
++++ b/wake/src/runtime_snapshot.rs
+@@ -95,6 +95,7 @@ fn diagnostic_failure(reason: &str) -> String {
+         | "LOGIN_OR_PROFILE_REQUIRED"
+         | "RESPONSE_STATE_QUERY_FAILED"
+         | "RESPONSE_STATE_UNPROVEN"
++        | "RESPONSE_LOAD_ERROR"
+         | "WEB_REVIEW_READ_TIMEOUT"
+         | "WEB_REVIEW_TARGET_CHANGED"
+         | "WEB_AUTO_OWNER_STOPPED" => code.into(),
+@@ -551,6 +552,7 @@ mod tests {
+     fn snapshot_diagnostic_error_vocabulary_matches_bounded_component_codes() {
+         for reason in [
+             "RESPONSE_STATE_QUERY_FAILED",
++            "RESPONSE_LOAD_ERROR",
+             "SOURCE_SNAPSHOT_TIMEOUT",
+             "CHATGPT_NOT_IDLE",
+             "SELENIUMBASE_IMPORT_FAILED",

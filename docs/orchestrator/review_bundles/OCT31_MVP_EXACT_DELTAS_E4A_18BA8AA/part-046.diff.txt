@@ -1,0 +1,193 @@
+         "requestId":record.request_id,"sourceEventId":record.event_id,"taskId":link.task_id,
+         "executionKeyFile":key_path,"executionKeyDisclosed":false,
+         "assignmentSha256":link.assignment_sha256,"scopeSha256":link.scope_sha256,
+         "targetGeneration":prepared["targetGeneration"],"targetSha256":prepared["targetSha256"],
+-        "executionBudgetSeconds":180,"executionAuthorized":true,"workerStarted":false,"nativeSessionAction":"NONE"}),
+-    )
++        "executionBudgetSeconds":180,"executionAuthorized":true,"workerStarted":false,"nativeSessionAction":"NONE"});
++    if allow_manual_wake {
++        result["manualWakeAllowed"] = json!(true);
++    }
++    if let Some(selection) = native_queue {
++        result["nativeQueue"] = json!({"selection":selection,"registeredWorkspace":project.project.workspace,
++            "normalNativeCli":true,"workerStarted":false,"separateFromIsolatedContractTools":true});
++    }
++    Ok(result)
+ }
+ 
+ fn execution_key_path(
+@@ -565,7 +635,7 @@ pub(crate) fn granted_handoff_context(
+         project, link, false,
+     )?)?)
+     .map_err(|_| "WEB_TASK_GRANT_INVALID")?;
+-    authorized_web_assignment(project, record, &key)?;
++    let (_, allow_manual_wake, native_queue) = authorized_web_grant(project, record, &key)?;
+     let prepared = prepare_work_resume(project, record, current)?;
+     let journal_root = directory.join("journal");
+     let (calls, proposals, applications) = if journal_root
+@@ -616,6 +686,20 @@ pub(crate) fn granted_handoff_context(
+             "callId":application.tool_call_id,"status":application.status,"pathsChanged":application.actual_paths_changed})).collect::<Vec<_>>(),
+         "completedCallReplayAllowed":false,"unknownCallReplayAllowed":false,"nativeSessionAction":"NONE"});
+     context["cachedSchemaTransport"] = crate::web_task_dispatch::cached_transport_metadata();
++    if allow_manual_wake {
++        context["manualWake"] = json!({"tool":"wake.manual_end_turn", "allowed":true,
++            "arguments":["sourceTurnId","priority","ttlSeconds"], "maximumTtlSeconds":catdesk_wake::protocol::MAX_WAKE_TTL_SECONDS,
++            "budget":"SHARED_ASSIGNMENT_MAX_TOOL_CALLS", "fixedServerMessage":true, "queueOnly":true});
++    }
++    if let Some(selection) = native_queue {
++        context["nativeQueue"] = json!({"tool":"native.codex.dispatch","statusTool":"native.codex.status","selection":selection.clone(),
++            "arguments":{},"registeredWorkspace":project.project.workspace,
++            "normalNativeCli":true,"separateFromIsolatedContractTools":true,
++            "scope":"EXACT_FROZEN_LOCAL_QUEUE_TASK_ONLY","retryWithNewCallIdAllowed":false});
++        context["nativeQueue"]["snapshot"] = crate::operator_codex_cli::native_queue_selection_status(
++            &project.control_workspace, &project.project.project_id, &selection)
++            .unwrap_or_else(|reason| json!({"status":"UNAVAILABLE_OR_CHANGED","reason":reason,"taskCompletionVerified":false}));
++    }
+     if let Some(report) = &record.reported_status {
+         // Snapshot metadata only; it cannot replace execution evidence, scope or
+         // grant checks. Omit the field for legacy records to retain their shape.
+@@ -640,6 +724,33 @@ pub(crate) fn authorized_web_assignment(
+     record: &crate::web_work_state::WorkRecord,
+     key: &str,
+ ) -> Result<PathBuf, String> {
++    authorized_web_grant(project, record, key).map(|(archive, _, _)| archive)
++}
++
++pub(crate) fn authorized_manual_wake_assignment(
++    project: &ResolvedProjectScopeV1,
++    record: &crate::web_work_state::WorkRecord,
++    key: &str,
++) -> Result<PathBuf, String> {
++    let (archive, allowed, _) = authorized_web_grant(project, record, key)?;
++    if !allowed {
++        return Err("WEB_TASK_MANUAL_WAKE_NOT_GRANTED".into());
++    }
++    Ok(archive)
++}
++
++fn authorized_web_grant(
++    project: &ResolvedProjectScopeV1,
++    record: &crate::web_work_state::WorkRecord,
++    key: &str,
++) -> Result<
++    (
++        PathBuf,
++        bool,
++        Option<crate::operator_codex_cli::NativeQueueSelection>,
++    ),
++    String,
++> {
+     if !valid_execution_key(key) {
+         return Err("WEB_TASK_GRANT_REQUIRED".into());
+     }
+@@ -666,6 +777,8 @@ pub(crate) fn authorized_web_assignment(
+         source_event_id: record.event_id.clone(),
+         assignment: link.clone(),
+         key_sha256: catdesk_wake::protocol::digest(key),
++        allow_manual_wake: grant.allow_manual_wake,
++        native_queue: grant.native_queue.clone(),
+     };
+     // Compare fixed-size digests without exposing the key in errors or status.
+     let key_matches = grant
+@@ -692,7 +805,380 @@ pub(crate) fn authorized_web_assignment(
+     if record.phase != "OPEN" || digest != link.assignment_sha256 {
+         return Err("WEB_TASK_GRANT_SCOPE_MISMATCH".into());
+     }
+-    Ok(archive)
++    if let Some(selection) = &grant.native_queue {
++        selection.validate()?;
++    }
++    Ok((archive, grant.allow_manual_wake, grant.native_queue))
++}
++
++#[derive(Deserialize, Serialize)]
++#[serde(rename_all = "camelCase", deny_unknown_fields)]
++pub(crate) struct ManualWakeRequest {
++    pub(crate) source_turn_id: String,
++    pub(crate) priority: u8,
++    pub(crate) ttl_seconds: u64,
++}
++
++impl ManualWakeRequest {
++    pub(crate) fn parse(arguments: Value) -> Result<Self, String> {
++        let request: Self = serde_json::from_value(arguments)
++            .map_err(|_| "WEB_TASK_MANUAL_WAKE_ARGUMENTS_INVALID")?;
++        if request.source_turn_id.len() > 128
++            || !catdesk_wake::protocol::valid_id(&request.source_turn_id)
++            || request.ttl_seconds == 0
++            || request.ttl_seconds > catdesk_wake::protocol::MAX_WAKE_TTL_SECONDS
++        {
++            return Err("WEB_TASK_MANUAL_WAKE_ARGUMENTS_INVALID".into());
++        }
++        Ok(request)
++    }
++}
++
++/// Shared durable call admission for explicitly granted extra capabilities.
++struct JournaledTaskCall {
++    journal: DelegatedJournal,
++    run: RunId,
++    tool_call_id: ToolCallId,
++}
++
++fn prepare_journaled_task_call(
++    project: &ResolvedProjectScopeV1,
++    inspected: &AssignmentInspection,
++    call_id: &str,
++    tool_name: &str,
++    arguments_hash: String,
++) -> Result<JournaledTaskCall, String> {
++    prepare_journaled_task_call_checked(
++        project,
++        inspected,
++        call_id,
++        tool_name,
++        arguments_hash,
++        true,
++    )
++}
++
++fn prepare_journaled_task_call_checked(
++    project: &ResolvedProjectScopeV1,
++    inspected: &AssignmentInspection,
++    call_id: &str,
++    tool_name: &str,
++    arguments_hash: String,
++    record: bool,
++) -> Result<JournaledTaskCall, String> {
++    use crate::delegated::journal::{ToolCallRecordV1, ToolMutationKind};
++    let tool_call_id = ToolCallId::new(call_id).map_err(|_| "PROJECT_TASK_CALL_INVALID")?;
++    let directory = task_directory(project, &inspected.contract.task_id, false)?;
++    let journal_root = directory.join("journal");
++    if !journal_root
++        .try_exists()
++        .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?
++    {
++        fs::create_dir(&journal_root).map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
++    }
++    plain_directory(&journal_root)?;
++    let existing = fs::read_dir(&journal_root)
++        .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?
++        .next()
++        .is_some();
++    let journal =
++        DelegatedJournal::open(&journal_root).map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
++    let run =
++        RunId::new(&inspected.contract.task_id).map_err(|_| "PROJECT_TASK_CONTRACT_INVALID")?;
++    if existing {
++        if journal
++            .load_contract(&run)
++            .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?
++            != inspected.contract
++        {
++            return Err("PROJECT_TASK_CONTRACT_CHANGED".into());
++        }
++    } else {
++        journal
++            .create_run(&inspected.contract)
++            .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
++    }
++    let calls = journal
++        .load_tool_calls(&run)
++        .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
++    if let Some(prior) = calls.get(tool_call_id.as_str()) {

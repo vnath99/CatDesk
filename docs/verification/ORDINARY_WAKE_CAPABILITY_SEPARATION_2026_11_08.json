@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-08T05:00:59Z",
+  "classification": "TESTED_SOURCE_AND_EXACT_INSTALLED_ADAPTER_OFFLINE_NOT_LIVE",
+  "sourceBaseCommit": "da613954bfcb5ce918a63212eab7e99d17c68a56",
+  "branch": "codex/web-rollover-oct17",
+  "finding": "Ordinary invitation delivery incorrectly required new-chat bootstrap capability. Installed protocol-1 ordinary delivery has a distinct existing acknowledged-submit/receipt contract.",
+  "change": "Factor unchanged installed package integrity checks; ordinary work checks protocol 1, while bootstrap and other existing bootstrap callers retain their new-chat capability check.",
+  "inputHashes": {
+    "wake/src/runtime.rs": "83a174b469242e07541445beafca54b3102bba0f41e4ba24f95252341f990078",
+    "wake/src/runtime_scoped_review.rs": "30374a6635f73b414ac8bd506c26b4f40d0cc1509d244e4651fd7c09e20c3353",
+    "scripts/catdesk_acceptance_inventory.py": "e329dcf0af217f2f6442fa89a67e26f07e165cae2eb0101ec4beca7049c34b53",
+    "tests/test_catdesk_acceptance_inventory.py": "142a4883850a4304074ca5558ccab588bfaedf20a024fd5e45bad2711c07d531"
+  },
+  "verification": {
+    "wakeScopedCasesPassed": 25,
+    "newRustTestFunctions": 3,
+    "coordinatorCasesPassed": 10,
+    "inventoryCasesPassed": 11,
+    "rootStrictAllTargetClippy": "PASS",
+    "wakeStrictAllTargetClippy": "PASS",
+    "rootFmtCheck": "PASS",
+    "wakeFormatting": "PASS",
+    "retainedBearerForwardingChecksOnCurrentHost": 17,
+    "realBrowserAcceptance": "NOT_RUN",
+    "c1": "NOT_ACCEPTED"
+  },
+  "installedAdapterOfflineQualification": {
+    "casesPassed": 8,
+    "adapterSha256": "f4e01f6e2fb392ae59d2a8ac173587a373a8b5fbb4106250a6e4302ba82ed20d",
+    "bridgeSha256": "aa4c055990fabc2cea811cc9514bfbfb3e77085e6dbf7a3bab2fb88914e2697c",
+    "coverage": ["acknowledged exact receipt", "denied submit acknowledgment", "wrong target", "wrong generation", "unknown draft", "duplicate USER", "navigation failure", "response failure after one accepted submission"],
+    "browserAndSink": "SYNTHETIC_OFFLINE_FIXTURES",
+    "actualAdapterAndNormalizationBytes": true,
+    "seleniumImported": false,
+    "realBrowserStarts": 0,
+    "realMessagesSent": 0,
+    "realProfileReads": 0,
+    "installedPinsMatched": 4
+  },
+  "preserved": ["installed binaries and manifests", "project and native thread identities", "paired targets", "original queued request IDs", "SENT and SUBMITTING replay refusals", "bootstrap requirement", "production promotion authority", "UNKNOWN and C49 fences"],
+  "next": "Build separately from installed artifacts, qualify the existing backend-only serving pipeline and then the original ordinary invitation. No protected Wake upgrade is inferred necessary for ordinary delivery alone."
+}

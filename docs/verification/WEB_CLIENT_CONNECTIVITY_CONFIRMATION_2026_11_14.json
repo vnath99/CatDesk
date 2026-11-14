@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-14T07:16:12.552290+00:00",
+  "userFacingDateZone": "America/New_York",
+  "taskId": "nov14-web-connectivity-confirmation",
+  "documentationParent": "3199a7a7f3156584587f8b67edaaeeb9479ea9cc",
+  "newObjective": "One real registered ChatGPT Web edit, verification, task-scoped Git checkpoint/sync, manual Wake and completed continuation before expanding independent projects and automatic rollover. Preserve completed historical canaries.",
+  "webConnectivity": {
+    "stage": "LIVE_ACCEPTED_OPERATOR_VERIFIED_FRESH_WEB_STATUS_CALL_ONLY",
+    "source": "User reply Succeeded to the exact affected-Web-client read-only check",
+    "tool": "catdesk_transport_status",
+    "operatorReportedSuccess": true,
+    "exactResponseBodyRetained": false,
+    "authAndParityValuesReturnedByOperator": false,
+    "independentBrowserReceiptObtained": false,
+    "registeredProjectCallerIdentityEstablished": false,
+    "noProjectTaskOrWakeRequested": true,
+    "codexConnectorEvidenceKeptSeparate": true,
+    "originalPendingConnectivityCheckClosed": true
+  },
+  "phase1": {
+    "stage": "BLOCKED_NOT_LIVE_ACCEPTED",
+    "installedRegistryReadOnly": true,
+    "controlledProjects": [
+      {
+        "projectId": "catdesk-web-native-bug",
+        "workspaceExists": true,
+        "wakeStatus": "ATTENTION",
+        "wakeReason": "REGISTRY_WAKE_MISMATCH"
+      },
+      {
+        "projectId": "catdesk-web-native-byovd",
+        "workspaceExists": true,
+        "wakeStatus": "ATTENTION",
+        "wakeReason": "REGISTRY_WAKE_MISMATCH"
+      }
+    ],
+    "newTasksOrWakeDeliveriesAttempted": false,
+    "historicalOperationsReplayed": false,
+    "knownInstalledTaskScopedGitCheckpointGapUnchanged": true,
+    "rootIdentityAndPairingAuthorityNotRewritten": true
+  },
+  "workstreams": {
+    "uiCompatibility": "EXISTING_ISOLATED_WIP_BRANCH_UNDER_SOURCE_QUALIFICATION_NOT_MERGED_OR_INSTALLED",
+    "migration": "EXISTING_OPERATOR_ROOT_COMPARISON_PENDING_NO_COLLECTOR_OR_SIGNING_RETRY",
+    "backendReview": "EXISTING_EXPIRED_WORK_LEASE_NOT_REUSED_NO_SELF_APPROVAL",
+    "automaticRollover": "NO_NEW_AUTOMATIC_RUN_BEFORE_PHASE1_AND_PHASE2_ACCEPTANCE"
+  },
+  "verificationLimits": [
+    "Fresh operator-reported Web connectivity does not authorize a task, prove its caller project or establish edit/checkpoint/self-Wake acceptance.",
+    "Previous backend restart/authentication/connector results remain accepted for their recorded scope; they were not repeated.",
+    "Source UI compatibility tests and review are independent work, not a demonstrated prerequisite for correcting the current registry/Wake pairing."
+  ],
+  "proofHashes": {
+    "operatorConfirmation": "94915c91c6d02bab3ff43a3049f025e3c551703e2603329f5ee508479bf150e0",
+    "installedRegistryStatus": "555f6809b666e511b3f12fd39253afa05a96e6c6c8e43896f469652c1ed3c6e5"
+  },
+  "uiQualification": {
+    "branch": "codex/c1-ui-002-content-fallback",
+    "sourceCommit": "b35793173c6189962fc57be910c5b535bb8f0e43",
+    "publishedQualificationCommit": "53e9f4db3236ee45ed8f4d9eed567ecef0fa14e2",
+    "remoteExactShaVerified": true,
+    "sourceFiles": [
+      "src/mcp.rs",
+      "src/git_workflow.rs"
+    ],
+    "sourceUnchanged": true,
+    "focusedTestsPassed": 25,
+    "focusedTestBatches": 8,
+    "strictMainAndTestsClippyPassed": true,
+    "rustfmtPassed": true,
+    "boundedOwnersExited": true,
+    "productionOrProjectTasksRun": false,
+    "independentReview": "PENDING",
+    "merged": false,
+    "installed": false,
+    "liveUiAccepted": false,
+    "evidencePathOnFeatureBranch": "docs/verification/C1_UI_002_SOURCE_QUALIFICATION_2026_11_14.json",
+    "sourceQualificationDoesNotResolveRegistryPairing": true
+  }
+}

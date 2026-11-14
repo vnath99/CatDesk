@@ -1,0 +1,205 @@
++            ids(&store, None, &BTreeMap::new()),
++            ["alpha-1", "beta-1", "gamma-1"]
++        );
++        assert!(store.delivery(&event.event_id).unwrap().is_none());
++        let claimed = store.claim(&event, &lease).unwrap();
++        assert_eq!(ids(&store, None, &BTreeMap::new()), ["beta-1", "gamma-1"]);
++        drop(lease);
++        let reopened =
++            Store::open_scoped_for_test(store.root(), store.root().parent().unwrap()).unwrap();
++        assert_eq!(
++            ids(&reopened, None, &BTreeMap::new()),
++            ["beta-1", "gamma-1"]
++        );
++        assert_eq!(reopened.delivery(&event.event_id).unwrap(), Some(claimed));
++        assert!(reopened.events().unwrap().contains(&event));
++        std::fs::remove_dir_all(store.root().parent().unwrap()).unwrap();
++    }
++
++    #[test]
++    fn wake_metadata_expiry_never_suppresses_unknown_submit_or_sent_response_observation() {
++        let (store, lease) = fixture("expiry-reconciliation");
++        let event = manual_event(&store, now(), now() + 300);
++        let delivery = store.claim(&event, &lease).unwrap();
++        store
++            .transition(
++                &event.event_id,
++                lease.owner(),
++                Phase::Submitting,
++                None,
++                None,
++            )
++            .unwrap();
++        let observed_after_expiry = event.wake_metadata().unwrap().unwrap().expires_utc;
++        let round = || {
++            fair_round(
++                &store,
++                &store.config().unwrap().targets,
++                None,
++                &BTreeMap::new(),
++                observed_after_expiry,
++            )
++            .unwrap()
++            .into_iter()
++            .map(|event| event.event_id)
++            .collect::<Vec<_>>()
++        };
++        assert_eq!(round(), ["alpha-manual", "beta-1", "gamma-1"]);
++        assert_eq!(
++            store.claim(&event, &lease).unwrap_err(),
++            "SUBMISSION_RECONCILIATION_REQUIRED"
++        );
++        let receipt = Receipt {
++            schema_version: PROTOCOL_VERSION,
++            event_id: event.event_id.clone(),
++            target_generation: delivery.target.generation,
++            target_digest: delivery.target.digest,
++            message_digest: digest(&event.message),
++            sent_utc: now(),
++            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
++        };
++        store
++            .record_exact_receipt_timer(&event.event_id, &receipt)
++            .unwrap();
++        store
++            .transition(
++                &event.event_id,
++                lease.owner(),
++                Phase::Sent,
++                Some(receipt),
++                None,
++            )
++            .unwrap();
++        assert_eq!(round(), ["alpha-manual", "beta-1", "gamma-1"]);
++        assert_eq!(
++            store.delivery(&event.event_id).unwrap().unwrap().phase,
++            Phase::Sent
++        );
++        drop(lease);
++        std::fs::remove_dir_all(store.root().parent().unwrap()).unwrap();
++    }
++
++    #[test]
++    fn wake_metadata_priority_does_not_override_fifo_or_project_rotation() {
++        let (store, lease) = fixture("priority-fairness");
++        manual_event(&store, now() + 1, now() + 300);
++        assert_eq!(
++            ids(&store, Some("alpha"), &BTreeMap::new()),
++            ["beta-1", "gamma-1", "alpha-1"]
++        );
++        drop(lease);
++        std::fs::remove_dir_all(store.root().parent().unwrap()).unwrap();
++    }
+ }
+diff --git a/wake/src/runtime_snapshot.rs b/wake/src/runtime_snapshot.rs
+index fc0d1c176a40896cb8b6660e71e31c7db2f8f48f..2b5017530ac00fabb85429cb47ab9a94ace70e39 100644
+--- a/wake/src/runtime_snapshot.rs
++++ b/wake/src/runtime_snapshot.rs
+@@ -56,6 +56,8 @@ fn diagnostic_failure(reason: &str) -> String {
+         | "SOURCE_SNAPSHOT_QUERY_FAILED"
+         | "SOURCE_SNAPSHOT_TOO_LARGE"
+         | "SOURCE_REVIEW_RECEIPT_REQUIRED"
++        | "SOURCE_REVIEW_SEQUENCE_UNPROVEN"
++        | "SOURCE_REVIEW_USER_WITNESS_REQUIRED"
+         | "BOOTSTRAP_SOURCE_BINDING_CHANGED"
+         | "BOOTSTRAP_SOURCE_QUEUE_PENDING"
+         | "BOOTSTRAP_SOURCE_TURN_PENDING"
+@@ -95,6 +97,7 @@ fn diagnostic_failure(reason: &str) -> String {
+         | "LOGIN_OR_PROFILE_REQUIRED"
+         | "RESPONSE_STATE_QUERY_FAILED"
+         | "RESPONSE_STATE_UNPROVEN"
++        | "RESPONSE_LOAD_ERROR"
+         | "WEB_REVIEW_READ_TIMEOUT"
+         | "WEB_REVIEW_TARGET_CHANGED"
+         | "WEB_AUTO_OWNER_STOPPED" => code.into(),
+@@ -231,6 +234,7 @@ fn snapshot_with_adapter<A: SubmissionAdapter>(
+         guard()?;
+         phase.set(SnapshotReadPhase::ScopeCheck);
+         ensure_source_snapshot_available(store, project_id, source, delivered_review)?;
++        let request = snapshot_request(store, project_id, source, delivered_review)?;
+         guard()?;
+         phase.set(SnapshotReadPhase::PackageCheck);
+         let monitor = |value| {
+@@ -243,8 +247,7 @@ fn snapshot_with_adapter<A: SubmissionAdapter>(
+         let mut adapter = connect(deadline, &guard, &monitor)?;
+         phase.set(SnapshotReadPhase::BrowserReady);
+         guard()?;
+-        adapter
+-            .send(serde_json::json!({"snapshot":true,"projectId":project_id,"source":source}))?;
++        adapter.send(request)?;
+         phase.set(SnapshotReadPhase::SnapshotReply);
+         loop {
+             guard()?;
+@@ -310,6 +313,44 @@ fn snapshot_with_adapter<A: SubmissionAdapter>(
+     }
+ }
+ 
++fn snapshot_request(
++    store: &Store,
++    project: &str,
++    source: &Target,
++    delivered_review: Option<&str>,
++) -> Result<Value> {
++    let mut request = serde_json::json!({"snapshot":true,"projectId":project,"source":source});
++    if let Some(id) = delivered_review {
++        let delivery = store
++            .delivery(id)?
++            .ok_or("SOURCE_REVIEW_RECEIPT_REQUIRED")?;
++        if delivery.event.event_type == "source_review" {
++            let receipt = delivery
++                .receipt
++                .as_ref()
++                .ok_or("SOURCE_REVIEW_RECEIPT_REQUIRED")?;
++            if delivery.phase != Phase::Sent
++                || delivery.target != *source
++                || delivery.event.project_id != project
++                || delivery.event.event_id != id
++                || delivery.event.target_generation != source.generation
++                || delivery.event.message.len() > 2048
++                || receipt.event_id != id
++                || receipt.target_generation != source.generation
++                || receipt.target_digest != source.digest
++                || receipt.evidence != "EXACT_USER_MESSAGE_APPENDED"
++                || receipt.message_digest != delivery.message_digest
++                || receipt.message_digest != crate::protocol::digest(&delivery.event.message)
++            {
++                return Err("SOURCE_REVIEW_RECEIPT_REQUIRED".into());
++            }
++            request["reviewEvent"] = serde_json::json!({"eventId":id,
++                "message":delivery.event.message,"messageDigest":delivery.message_digest});
++        }
++    }
++    Ok(request)
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+@@ -379,6 +420,55 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn large_review_profile_requires_exact_sent_source_review_receipt() {
++        let (store, target) = fixture();
++        let plain = snapshot_request(&store, "alpha", &target, None).unwrap();
++        assert!(plain.get("reviewEvent").is_none());
++        let event = store
++            .produce_expected(
++                "review-pair",
++                "alpha",
++                "source_review",
++                "approved review",
++                &target,
++            )
++            .unwrap();
++        let lease = store.host_lock().unwrap();
++        store.claim(&event, &lease).unwrap();
++        assert!(snapshot_request(&store, "alpha", &target, Some("review-pair")).is_err());
++        store
++            .transition("review-pair", lease.owner(), Phase::Submitting, None, None)
++            .unwrap();
++        let receipt = crate::store::Receipt {
++            schema_version: 1,
++            event_id: event.event_id.clone(),
++            target_generation: target.generation,

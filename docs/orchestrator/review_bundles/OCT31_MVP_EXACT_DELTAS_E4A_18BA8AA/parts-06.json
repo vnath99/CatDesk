@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "targetCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+  "kind": "parts",
+  "offset": 40,
+  "entries": [
+    {
+      "file": "part-041.diff.txt",
+      "bytes": 8000,
+      "sha256": "ffdbdbaad7811efecb5f13db45d9663535f3be533ce3bc9c0ccab3ac5a45bdc5",
+      "startByte": 326278,
+      "endByte": 334278,
+      "paths": [
+        "src/operator_installed_backend.rs"
+      ]
+    },
+    {
+      "file": "part-042.diff.txt",
+      "bytes": 8168,
+      "sha256": "c41496f48b7ace5390b05304c9b8303aa96552ee04e9a76875a1df93ed4b828f",
+      "startByte": 334278,
+      "endByte": 342446,
+      "paths": [
+        "src/operator_installed_backend.rs",
+        "src/operator_installed_project.rs",
+        "src/operator_web_cli.rs"
+      ]
+    },
+    {
+      "file": "part-043.diff.txt",
+      "bytes": 8180,
+      "sha256": "16acaff1de402449434d01a97e5672a8d739ac7edd69562d068f207df4c09274",
+      "startByte": 342446,
+      "endByte": 350626,
+      "paths": [
+        "src/operator_web_cli.rs"
+      ]
+    },
+    {
+      "file": "part-044.diff.txt",
+      "bytes": 8186,
+      "sha256": "58f2f2dd616ea8f5bae72ae64c655582c4905ad1e3c864db8068983fdf083c24",
+      "startByte": 350626,
+      "endByte": 358812,
+      "paths": [
+        "src/operator_web_cli.rs",
+        "src/operator_web_rollover.rs"
+      ]
+    },
+    {
+      "file": "part-045.diff.txt",
+      "bytes": 8137,
+      "sha256": "06bd27735e1d6eb65e22c8a5b43d351a927d68ff955196b178e0ab7eb135a320",
+      "startByte": 358812,
+      "endByte": 366949,
+      "paths": [
+        "src/operator_web_rollover.rs",
+        "src/project_mcp.rs",
+        "src/project_mcp_task.rs"
+      ]
+    },
+    {
+      "file": "part-046.diff.txt",
+      "bytes": 8171,
+      "sha256": "2b15933faf57a17e509d7e2d2687d8ea89886277f1b37ecb2a68be672a65e274",
+      "startByte": 366949,
+      "endByte": 375120,
+      "paths": [
+        "src/project_mcp_task.rs"
+      ]
+    },
+    {
+      "file": "part-047.diff.txt",
+      "bytes": 8114,
+      "sha256": "ab5a61b63b08895285579d460b4e7aac1dac2f92add243c867b6c66ebf03a15f",
+      "startByte": 375120,
+      "endByte": 383234,
+      "paths": [
+        "src/project_mcp_task.rs"
+      ]
+    },
+    {
+      "file": "part-048.diff.txt",
+      "bytes": 8145,
+      "sha256": "0195f8dc259776855f11ed28987e120710a9caaba21e588e2c28fd4e0d55d49f",
+      "startByte": 383234,
+      "endByte": 391379,
+      "paths": [
+        "src/project_mcp_task.rs",
+        "src/promotion_retirement.rs"
+      ]
+    }
+  ]
+}

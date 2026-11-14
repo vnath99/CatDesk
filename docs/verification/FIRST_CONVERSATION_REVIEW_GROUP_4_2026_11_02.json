@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "c52e9ef75490381becabaaf027f98f2845f1a183",
+  "acceptedBaselineCommit": "313f6a31f13c04c90d6098fad57f1e6a6c99cfd7",
+  "scopeCounts": {
+    "UNCHANGED_ACCEPTED": 78,
+    "CHANGED_REQUIRES_REVIEW": 6,
+    "NEW": 2
+  },
+  "fullDeclaredCodePaths": 86,
+  "scopeDigest": "a327e9405ec439ad43ccc983e90f1962bcde3cf7ce0197d4378be417d5c6558e",
+  "group": 4,
+  "status": "PREPARED_SOURCE_INPUTS_NOT_REVIEW_ACCEPTANCE",
+  "inputs": [
+    {
+      "number": 25,
+      "path": "src/operator_web_rollover.rs",
+      "firstLine": 2696,
+      "lastLine": 2716,
+      "command": "git --no-optional-locks --no-pager blame -L 2696,2716 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_rollover.rs",
+      "utf8Bytes": 2018,
+      "sha256": "a675df9d0ef20bbae0438229c0c277a965e4155eb98d2e2f32a7736cfdf69bc4"
+    },
+    {
+      "number": 26,
+      "path": "src/operator_web_rollover.rs",
+      "firstLine": 3962,
+      "lastLine": 3994,
+      "command": "git --no-optional-locks --no-pager blame -L 3962,3994 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_rollover.rs",
+      "utf8Bytes": 2938,
+      "sha256": "88fc5a67475789a3204bd1fd94d4ac614ee2ac6e371491c968e10c767bf51da3"
+    },
+    {
+      "number": 27,
+      "path": "src/web_rollover_admission.rs",
+      "firstLine": 10,
+      "lastLine": 69,
+      "command": "git --no-optional-locks --no-pager blame -L 10,69 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/web_rollover_admission.rs",
+      "utf8Bytes": 4595,
+      "sha256": "e7cc4c8f09ecd66e4b215acfd31489feb90d57844132dc945a6e9051567315cb"
+    },
+    {
+      "number": 28,
+      "path": "src/web_rollover_admission.rs",
+      "firstLine": 358,
+      "lastLine": 417,
+      "command": "git --no-optional-locks --no-pager blame -L 358,417 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/web_rollover_admission.rs",
+      "utf8Bytes": 5252,
+      "sha256": "fc44196dc6fbe73a4b1cacbd2be4e38a7b8414fecd9d157dabde71d7b150c6a3"
+    },
+    {
+      "number": 29,
+      "path": "src/web_rollover_admission.rs",
+      "firstLine": 418,
+      "lastLine": 421,
+      "command": "git --no-optional-locks --no-pager blame -L 418,421 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/web_rollover_admission.rs",
+      "utf8Bytes": 317,
+      "sha256": "d8546cbfebbabbca4e77d74acaf6389e12df1fb5a589df33331b333e4c081bb2"
+    },
+    {
+      "number": 30,
+      "path": "wake/adapter.py",
+      "firstLine": 32,
+      "lastLine": 52,
+      "command": "git --no-optional-locks --no-pager blame -L 32,52 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/adapter.py",
+      "utf8Bytes": 1960,
+      "sha256": "1900f8436b65099931edf1c2c440ab75112edef1f11794a4169c4bd042cf8091"
+    },
+    {
+      "number": 31,
+      "path": "wake/adapter.py",
+      "firstLine": 162,
+      "lastLine": 221,
+      "command": "git --no-optional-locks --no-pager blame -L 162,221 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/adapter.py",
+      "utf8Bytes": 6581,
+      "sha256": "1bb32ad647865bfe08083159b05b5f797ee86a21e7b909cf498b592768d79a18"
+    },
+    {
+      "number": 32,
+      "path": "wake/adapter.py",
+      "firstLine": 222,
+      "lastLine": 249,
+      "command": "git --no-optional-locks --no-pager blame -L 222,249 c52e9ef75490381becabaaf027f98f2845f1a183 -- wake/adapter.py",
+      "utf8Bytes": 2837,
+      "sha256": "e1a69cc90b6b33a2954909698ced5c3bf37a317ad61aebe4e52c91b508039c82"
+    }
+  ],
+  "limitations": [
+    "Prior baseline acceptance covers only unchanged Git blobs.",
+    "All 86 paths remain declared; inspect six changed and two new paths before cumulative current-source acceptance.",
+    "Package health and a source coordinator review do not establish independent review, producer or protected publication authority.",
+    "Retain expanded regression deadline failure and source/installed/live distinctions."
+  ]
+}

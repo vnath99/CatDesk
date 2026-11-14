@@ -127,6 +127,155 @@ fn cleanup(parent: &Path) {
     fs::remove_dir_all(canonical).unwrap();
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn scoped_review_preflight_preserves_runtime_and_keeps_projects_independent() {
+    use serde_json::json;
+    let production_before = production_snapshot();
+    let parent = fixture_parent();
+    let control = parent.join("control");
+    fs::create_dir(&control).unwrap();
+    let (package, python) = package_and_python(&parent);
+    development_runtime::prepare(&control, &package, &python).unwrap();
+    for (id, workspace) in [
+        ("catdesk", control.clone()),
+        ("alpha", parent.join("alpha")),
+        ("beta", parent.join("beta")),
+    ] {
+        let origin = format!("https://example.test/{id}.git");
+        git_root(&workspace, &origin);
+        web_action(
+            &control,
+            &[
+                "operator",
+                "web",
+                "project",
+                "register",
+                "--project-id",
+                id,
+                "--workspace",
+                workspace.to_str().unwrap(),
+                "--git-identity",
+                &origin,
+            ],
+        )
+        .await;
+    }
+    for id in ["alpha", "beta"] {
+        web_action(
+            &control,
+            &[
+                "operator",
+                "web",
+                "target",
+                "bind",
+                "--project-id",
+                id,
+                "--conversation-url",
+                &format!("https://chatgpt.com/c/review-{id}"),
+                "--expected-current-target-sha256",
+                "none",
+                "--expected-wake-generation",
+                "0",
+            ],
+        )
+        .await;
+    }
+    // Move the fixture's activation cutoff into the past without sleeping.
+    let wake_root = wake_protocol_client::wake_root_for_workspace(&control).unwrap();
+    let mut config: serde_json::Value =
+        serde_json::from_slice(&fs::read(wake_root.join("config.json")).unwrap()).unwrap();
+    for entry in config["history"].as_array_mut().unwrap() {
+        entry["changedUtc"] = json!(1);
+    }
+    fs::write(
+        wake_root.join("config.json"),
+        serde_json::to_vec(&config).unwrap(),
+    )
+    .unwrap();
+    let mut activation: serde_json::Value =
+        serde_json::from_slice(&fs::read(wake_root.join("activation.json")).unwrap()).unwrap();
+    activation["acceptAfterUtc"] = json!(1);
+    fs::write(
+        wake_root.join("activation.json"),
+        serde_json::to_vec(&activation).unwrap(),
+    )
+    .unwrap();
+    let before_config = fs::read(wake_root.join("config.json")).unwrap();
+    let before_control = fs::read(wake_root.join("control.json")).unwrap();
+    let before_registry = fs::read(control.join(".catdesk/projects/projects.json")).unwrap();
+    let mut inputs = Vec::new();
+    for id in ["alpha", "beta"] {
+        let target = Store::open(&wake_root).unwrap().config().unwrap().targets[id].clone();
+        let request = json!({"projectId":id,"requestId":"routine-review",
+            "expectedTargetGeneration":target.generation,"expectedTargetSha256":target.digest,
+            "taskText":"Review the public fixture source without editing or executing it."});
+        let wire = format!(
+            "CatDesk central work request routine-review for project {id}. Requested task: Review the public fixture source without editing or executing it. Review current project state and existing task ownership first. Continue only work assigned to this conversation; preserve ongoing Codex sessions and avoid duplicate execution. Report completed artifacts, verification, and remaining blockers. Browser response completion alone is not project task completion."
+        );
+        let key = catdesk_wake::protocol::digest(&format!("public-fixture-review-{id}"));
+        let authorization = json!({"projectId":id,"authorization":{"grantId":"routine-batch",
+            "category":"READ_ONLY_SOURCE_REVIEW","target":target,"expiresUtc":catdesk_wake::store::now()+3600,
+            "maxMessages":2,"maxExecutionSeconds":180,"approvalEvidenceSha256":"a".repeat(64),
+            "messages":[{"requestId":"routine-review",
+                "eventId":format!("web-work-{}",catdesk_wake::protocol::digest(&format!("{id}\0routine-review"))),
+                "messageSha256":catdesk_wake::protocol::digest(&wire),"reviewKey":key}]}});
+        crate::web_work::review_action(&control, "authorize", authorization).unwrap();
+        let input =
+            json!({"projectId":id,"grantId":"routine-batch","reviewKey":key,"request":request});
+        assert_eq!(
+            crate::web_work::review_action(&control, "preflight", input.clone()).unwrap()["status"],
+            "ELIGIBLE"
+        );
+        assert_eq!(
+            crate::web_work::request(&control, input["request"].clone()).unwrap_err(),
+            "WEB_REVIEW_SCOPED_WORKFLOW_REQUIRED"
+        );
+        inputs.push(input);
+    }
+    // A denied project does not reserve the browser or another project's queue.
+    crate::web_work::review_action(
+        &control,
+        "revoke",
+        json!({"projectId":"alpha","grantId":"routine-batch"}),
+    )
+    .unwrap();
+    assert_eq!(
+        crate::web_work::review_action(&control, "preflight", inputs[0].clone()).unwrap_err(),
+        "WEB_REVIEW_GRANT_REVOKED"
+    );
+    assert_eq!(
+        crate::web_work::review_action(&control, "preflight", inputs[1].clone()).unwrap()["status"],
+        "ELIGIBLE"
+    );
+    let mut changed = inputs[1].clone();
+    changed["request"]["taskText"] = json!("Publish private data instead");
+    assert_eq!(
+        crate::web_work::review_action(&control, "preflight", changed).unwrap_err(),
+        "WEB_REVIEW_GRANT_SCOPE_CHANGED"
+    );
+    assert!(
+        Store::open(&wake_root)
+            .unwrap()
+            .events()
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        fs::read(wake_root.join("config.json")).unwrap(),
+        before_config
+    );
+    assert_eq!(
+        fs::read(wake_root.join("control.json")).unwrap(),
+        before_control
+    );
+    assert_eq!(
+        fs::read(control.join(".catdesk/projects/projects.json")).unwrap(),
+        before_registry
+    );
+    assert_eq!(production_snapshot(), production_before);
+    cleanup(&parent);
+}
+
 async fn web_mcp_request(
     client: &reqwest::Client,
     url: &str,
@@ -141,6 +290,162 @@ async fn web_mcp_request(
     let response = request.send().await.unwrap();
     let status = response.status();
     (status, response.json().await.unwrap())
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn target_diagnostics_retain_project_git_failure_and_keep_sibling_independent() {
+    let production_before = production_snapshot();
+    let parent = fixture_parent();
+    let control = parent.join("control");
+    fs::create_dir(&control).unwrap();
+    let (package, python) = package_and_python(&parent);
+    development_runtime::prepare(&control, &package, &python).unwrap();
+    let projects = [
+        ("catdesk", control.clone()),
+        ("alpha", parent.join("alpha")),
+        ("beta", parent.join("beta")),
+    ];
+    for (id, workspace) in &projects {
+        let origin = format!("https://example.test/{id}.git");
+        git_root(workspace, &origin);
+        web_action(
+            &control,
+            &[
+                "operator",
+                "web",
+                "project",
+                "register",
+                "--project-id",
+                id,
+                "--workspace",
+                workspace.to_str().unwrap(),
+                "--git-identity",
+                &origin,
+            ],
+        )
+        .await;
+    }
+    for id in ["alpha", "beta"] {
+        web_action(
+            &control,
+            &[
+                "operator",
+                "web",
+                "target",
+                "bind",
+                "--project-id",
+                id,
+                "--conversation-url",
+                &format!("https://chatgpt.com/c/{id}"),
+                "--expected-current-target-sha256",
+                "none",
+                "--expected-wake-generation",
+                "0",
+            ],
+        )
+        .await;
+    }
+    let registry_path = control.join(".catdesk/projects/projects.json");
+    let registry_before = fs::read(&registry_path).unwrap();
+    // A foreground Wake transaction may overlap any project's paired read.
+    // Preserve the busy reason and do not fall through to writer recovery.
+    let wake_root = wake_protocol_client::wake_root_for_workspace(&control).unwrap();
+    let config_before = fs::read(wake_root.join("config.json")).unwrap();
+    let held = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(wake_root.join("transaction.lock"))
+        .unwrap();
+    held.lock().unwrap();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let release = std::thread::spawn(move || {
+        let _ = release_rx.recv_timeout(std::time::Duration::from_secs(5));
+        drop(held);
+    });
+    let start = std::time::Instant::now();
+    let busy = crate::mcp::operator_read_project_web_target_diagnosed(&control, "beta");
+    let busy_action = operator_facade::parse_operator_action(
+        ["operator", "web", "auto", "tick", "--project-id", "beta"].map(str::to_string),
+    )
+    .unwrap()
+    .unwrap();
+    let busy_tick = operator_facade::execute_operator_action(busy_action, &control).await;
+    let elapsed = start.elapsed();
+    let _ = release_tx.send(());
+    release.join().unwrap();
+    assert_eq!(busy.unwrap_err().code, "WEB_TARGET_WAKE_CONFIG_BUSY");
+    assert_eq!(busy_tick.unwrap_err(), "WEB_TARGET_WAKE_CONFIG_BUSY");
+    assert!(elapsed < std::time::Duration::from_secs(2));
+    let waiting: serde_json::Value = serde_json::from_slice(
+        &fs::read(control.join(".catdesk/web-rollovers/beta/auto-status.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(waiting["stage"], "AWAITING_TARGET");
+    assert_eq!(waiting["reason"], "WEB_TARGET_WAKE_CONFIG_BUSY");
+    assert!(waiting["lastFailure"].is_null());
+    assert!(waiting["retry"].is_null());
+    assert_eq!(
+        fs::read(wake_root.join("config.json")).unwrap(),
+        config_before
+    );
+    assert!(
+        Command::new("git")
+            .arg("-C")
+            .arg(parent.join("alpha"))
+            .args([
+                "remote",
+                "set-url",
+                "origin",
+                "https://example.test/changed.git"
+            ])
+            .status()
+            .unwrap()
+            .success()
+    );
+    let rejected = web_action(
+        &control,
+        &["operator", "web", "target", "read", "--project-id", "alpha"],
+    )
+    .await;
+    assert_eq!(rejected["wake"]["status"], "ATTENTION");
+    assert_eq!(
+        rejected["wake"]["diagnosticCode"],
+        "WEB_TARGET_PROJECT_GIT_UNAVAILABLE"
+    );
+    let action = operator_facade::parse_operator_action(
+        ["operator", "web", "auto", "tick", "--project-id", "alpha"].map(str::to_string),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(
+        operator_facade::execute_operator_action(action, &control)
+            .await
+            .unwrap_err(),
+        "WEB_TARGET_PROJECT_GIT_UNAVAILABLE"
+    );
+    let saved: serde_json::Value = serde_json::from_slice(
+        &fs::read(control.join(".catdesk/web-rollovers/alpha/auto-status.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(saved["stage"], "ATTENTION");
+    assert_eq!(saved["reason"], "WEB_TARGET_PROJECT_GIT_UNAVAILABLE");
+    assert!(!saved.to_string().contains("example.test"));
+    let sibling = web_action(
+        &control,
+        &["operator", "web", "target", "read", "--project-id", "beta"],
+    )
+    .await;
+    assert_eq!(sibling["wake"]["status"], "PAIRED");
+    assert_eq!(sibling["wake"]["target"]["projectId"], "beta");
+    let tick = web_action(
+        &control,
+        &["operator", "web", "auto", "tick", "--project-id", "beta"],
+    )
+    .await;
+    assert_eq!(tick["stage"], "WAKE_STOPPED");
+    assert_eq!(fs::read(&registry_path).unwrap(), registry_before);
+    assert_eq!(production_snapshot(), production_before);
+    cleanup(&parent);
 }
 
 async fn web_mcp_tool(
@@ -359,8 +664,33 @@ async fn three_projects_route_only_to_prepared_development_wake() {
             && event.event_id == format!("dev-{id}")));
     }
     let status = web_action(&control, &["operator", "web", "status"]).await;
+    let before_read = tree_snapshot(&control);
+    let console_status = operator_facade::read_web_status(&control).unwrap();
+    assert_eq!(console_status, status);
+    let console_summary = operator_facade::read_web_summary(&control).unwrap();
+    assert_eq!(console_summary["webProjects"], status["webProjects"]);
+    assert!(console_summary.get("projects").is_none());
+    let mut console = Vec::new();
+    crate::binagotchy_cli::render_web_projects(&console_summary, &mut console).unwrap();
+    let console = String::from_utf8(console).unwrap();
+    for id in ["catdesk", "alpha", "beta"] {
+        assert!(console.contains(&format!("{id} | Wake PAIRED")));
+    }
+    assert!(!console.contains("https://"));
+    assert!(!console.contains("private-fixture"));
+    assert_eq!(tree_snapshot(&control), before_read);
     assert_eq!(status["runtimeMode"], "DEVELOPMENT_UNPROTECTED");
     assert_eq!(status["projects"].as_array().unwrap().len(), 3);
+    let central = &status["webProjects"];
+    assert_eq!(central["readOnly"], true);
+    assert_eq!(central["status"], "SOURCE_STATUS_ONLY");
+    assert_eq!(central["installedAcceptance"], "UNVERIFIED");
+    assert_eq!(central["projects"].as_array().unwrap().len(), 3);
+    for project in central["projects"].as_array().unwrap() {
+        assert_eq!(project["wake"]["status"], "PAIRED", "{project}");
+        assert_eq!(project["context"]["status"], "CURRENT_ADVISORY");
+        assert_eq!(project["rollover"]["status"], "UNOBSERVED");
+    }
     for project in status["projects"].as_array().unwrap() {
         assert_eq!(project["wake"]["status"], "PAIRED");
         assert_eq!(project["wake"]["runtimeMode"], "DEVELOPMENT_UNPROTECTED");
@@ -374,6 +704,7 @@ async fn three_projects_route_only_to_prepared_development_wake() {
     )
     .unwrap();
     assert!(wake_protocol_client::wake_root_for_workspace(&control).is_err());
+    assert!(operator_facade::read_web_status(&control).is_err());
     assert!(
         web_action_result(&control, &["operator", "web", "status"])
             .await
@@ -389,6 +720,71 @@ async fn web_action_result(control: &Path, args: &[&str]) -> Result<serde_json::
     let action = operator_facade::parse_operator_action(args.iter().map(|value| (*value).into()))?
         .ok_or("FIXTURE_ACTION_MISSING")?;
     operator_facade::execute_operator_action(action, control).await
+}
+
+async fn web_work_file_action(
+    control: &Path,
+    input_file: &Path,
+    project: &str,
+    verb: &str,
+    input: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    fs::write(input_file, serde_json::to_vec(input).unwrap()).unwrap();
+    web_action_result(
+        control,
+        &[
+            "operator",
+            "web",
+            "work",
+            verb,
+            "--project-id",
+            project,
+            "--input-file",
+            input_file.to_str().unwrap(),
+        ],
+    )
+    .await
+}
+
+fn tree_snapshot(root: &Path) -> Vec<(PathBuf, String)> {
+    let mut snapshot = Vec::new();
+    for entry in fs::read_dir(root).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            snapshot.extend(tree_snapshot(&path));
+        } else {
+            snapshot.push((
+                path.clone(),
+                format!("{:x}", Sha256::digest(fs::read(path).unwrap())),
+            ));
+        }
+    }
+    snapshot.sort();
+    snapshot
+}
+
+async fn context_file_action(
+    control: &Path,
+    input_file: &Path,
+    project: &str,
+    verb: &str,
+    input: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    fs::write(input_file, serde_json::to_vec(input).unwrap()).unwrap();
+    web_action_result(
+        control,
+        &[
+            "operator",
+            "web",
+            "context",
+            verb,
+            "--project-id",
+            project,
+            "--input-file",
+            input_file.to_str().unwrap(),
+        ],
+    )
+    .await
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -518,7 +914,441 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
         .collect::<Vec<_>>();
     assert!(names.contains(&"catdesk_web_work_request"));
     assert!(names.contains(&"catdesk_web_work_resolve"));
+    assert!(names.contains(&"catdesk_web_context_configure"));
+    assert!(names.contains(&"catdesk_web_context_observe"));
+    let observation_schema = listed["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["name"] == "catdesk_web_context_observe")
+        .unwrap();
+    assert!(observation_schema["inputSchema"]["properties"]["event"]["properties"]["sourceKind"]["enum"]
+        .as_array().unwrap().contains(&json!("WORKER_MESSAGE")));
     assert!(!names.contains(&"run_command"));
+
+    let context_config = |project: &str| {
+        json!({"projectId":project,"expectedTargetGeneration":1,
+        "expectedTargetSha256":bindings[project].digest,"policy":{
+            "configuredBudgetTokens":match project {"catdesk"=>4000,"alpha"=>6000,_=>8000},
+            "safetyHeadroomTokens":1000,"unknownSourceReserveTokens":500,
+            "automaticRolloverEnabled":false,"automaticObservationEnabled":false,"incompleteHistoryRollover":false}})
+    };
+    let context_event = |project: &str| {
+        json!({"projectId":project,"expectedTargetGeneration":1,
+        "expectedTargetSha256":bindings[project].digest,"event":{"eventId":"same-event",
+            "revision":1,"dedupKey":"same-output","sourceKind":"TOOL_RESULT",
+            "visibleText":format!("PRIVATE_CONTEXT_{project} {}", "context ".repeat(10))}})
+    };
+    let (denied, _) = web_mcp_request(&client, &url, None, json!({"jsonrpc":"2.0","id":"denied-context",
+        "method":"tools/call","params":{"name":"catdesk_web_context_configure","arguments":context_config("catdesk")}})).await;
+    assert_eq!(denied, reqwest::StatusCode::UNAUTHORIZED);
+    assert!(!control.join(".catdesk/web-context").exists());
+    for (project, _) in &projects {
+        let configured = web_mcp_tool(
+            &client,
+            &url,
+            token,
+            "catdesk_web_context_configure",
+            context_config(project),
+        )
+        .await;
+        let result = &configured["result"]["structuredContent"];
+        assert_eq!(
+            result["pressure"]["configuredBudgetTokens"],
+            context_config(project)["policy"]["configuredBudgetTokens"]
+        );
+        assert_eq!(result["originAuthenticated"], false);
+        assert_eq!(result["hostStarted"], false);
+        let observed = web_mcp_tool(
+            &client,
+            &url,
+            token,
+            "catdesk_web_context_observe",
+            context_event(project),
+        )
+        .await;
+        let result = &observed["result"]["structuredContent"];
+        assert_eq!(result["pressure"]["key"]["projectId"], *project);
+        assert_eq!(result["pressure"]["recordedEvents"], 1);
+        assert!(
+            result["pressure"]["observedToolResultTokens"]
+                .as_u64()
+                .unwrap()
+                > 0
+        );
+        assert_eq!(result["observationSource"], "CALLER_REPORTED");
+        assert_eq!(result["rawTextPersisted"], false);
+        assert_eq!(result["browserAction"], "NONE");
+        assert!(!observed.to_string().contains("PRIVATE_CONTEXT_"));
+        let replay = web_mcp_tool(
+            &client,
+            &url,
+            token,
+            "catdesk_web_context_observe",
+            context_event(project),
+        )
+        .await;
+        assert_eq!(
+            replay["result"]["structuredContent"]["pressure"],
+            result["pressure"]
+        );
+    }
+    // The local CLI must reject the whole batch before counting an earlier
+    // valid event. Invalid/revision-conflicting imports cannot change pressure.
+    let context_input_file = parent.join("context-input.json");
+    let cli_context_key = ConversationKey {
+        project_id: "alpha".into(),
+        conversation_url: bindings["alpha"].url.clone(),
+        target_generation: 1,
+    };
+    let cli_event = json!({"eventId":"cli-import", "revision":1,
+        "dedupKey":"cli-import", "sourceKind":"USER_MESSAGE",
+        "visibleText":"private local context", "observedAtUnix":1});
+    let cli_input = json!({"schemaVersion":1,"key":cli_context_key,"events":[cli_event]});
+    let before_invalid_import = tree_snapshot(&control);
+    for late_event in [
+        json!({"eventId":"invalid", "revision":0,"dedupKey":"invalid",
+            "sourceKind":"USER_MESSAGE","visibleText":"invalid revision","observedAtUnix":1}),
+        json!({"eventId":"same-event", "revision":1,"dedupKey":"same-output",
+            "sourceKind":"TOOL_RESULT","visibleText":"conflicting revision","observedAtUnix":1}),
+    ] {
+        let mut invalid = cli_input.clone();
+        invalid["events"].as_array_mut().unwrap().push(late_event);
+        assert!(
+            context_file_action(&control, &context_input_file, "alpha", "observe", &invalid)
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            tree_snapshot(&control),
+            before_invalid_import,
+            "rejected context import changed state"
+        );
+    }
+    // A contended metadata lock must refuse immediately instead of freezing
+    // the HTTP reactor. The separate thread bounds the old blocking behavior
+    // so this regression cannot hang the suite before the fix.
+    let held = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(control.join(".catdesk/web-context/ledger.lock"))
+        .unwrap();
+    held.lock().unwrap();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let release = std::thread::spawn(move || {
+        let _ = release_rx.recv_timeout(std::time::Duration::from_secs(30));
+        drop(held);
+    });
+    let busy_cli_configure = context_file_action(
+        &control,
+        &context_input_file,
+        "alpha",
+        "configure",
+        &context_config("alpha")["policy"],
+    )
+    .await;
+    let busy_cli_observe = context_file_action(
+        &control,
+        &context_input_file,
+        "alpha",
+        "observe",
+        &cli_input,
+    )
+    .await;
+    let busy = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_context_configure",
+        context_config("alpha"),
+    )
+    .await;
+    let busy_observe = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_context_observe",
+        context_event("beta"),
+    )
+    .await;
+    let sibling_status = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "autonomy_project_registry_read",
+        json!({}),
+    )
+    .await;
+    let released_before_timeout = release_tx.send(()).is_ok();
+    release.join().unwrap();
+    assert!(
+        released_before_timeout,
+        "context operations waited for fixture release timeout"
+    );
+    assert!(
+        busy.to_string().contains("WEB_CONTEXT_BUSY"),
+        "context mutation waited for held lock: {busy}"
+    );
+    assert!(busy_observe.to_string().contains("WEB_CONTEXT_BUSY"));
+    assert_eq!(busy_cli_configure.unwrap_err(), "WEB_CONTEXT_BUSY");
+    assert_eq!(busy_cli_observe.unwrap_err(), "WEB_CONTEXT_BUSY");
+    assert_ne!(sibling_status["result"]["isError"], true);
+    let busy_projects = sibling_status["result"]["structuredContent"]["webProjects"]["projects"]
+        .as_array()
+        .unwrap();
+    assert_eq!(busy_projects.len(), 3);
+    assert!(
+        busy_projects
+            .iter()
+            .all(|project| project["wake"]["status"] == "PAIRED")
+    );
+
+    let configured_cli = context_file_action(
+        &control,
+        &context_input_file,
+        "alpha",
+        "configure",
+        &context_config("alpha")["policy"],
+    )
+    .await
+    .unwrap();
+    assert_eq!(configured_cli["pairedTargetVerified"], true);
+    assert_eq!(configured_cli["pressure"]["configuredBudgetTokens"], 6000);
+    let meter_snapshot =
+        WebContextStore::open_read_only(control.join(".catdesk/web-context")).unwrap();
+    let sibling_before_import = meter_snapshot.project_history("beta").unwrap();
+    let mut successful_input = cli_input.clone();
+    successful_input["events"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({
+        "eventId":"cli-worker", "revision":1,"dedupKey":"cli-worker",
+        "sourceKind":"WORKER_MESSAGE","visibleText":"private worker context","observedAtUnix":1}));
+    let imported = context_file_action(
+        &control,
+        &context_input_file,
+        "alpha",
+        "observe",
+        &successful_input,
+    )
+    .await
+    .unwrap();
+    assert_eq!(imported["pressure"]["recordedEvents"], 3);
+    assert_eq!(imported["pairedTargetVerified"], true);
+    assert_eq!(imported["rawTextPersisted"], false);
+    assert!(!imported.to_string().contains("private local context"));
+    assert!(!imported.to_string().contains("private worker context"));
+    let after_import = tree_snapshot(&control);
+    let replay = context_file_action(
+        &control,
+        &context_input_file,
+        "alpha",
+        "observe",
+        &successful_input,
+    )
+    .await
+    .unwrap();
+    assert_eq!(replay, imported);
+    assert_eq!(tree_snapshot(&control), after_import);
+    assert_eq!(
+        meter_snapshot.project_history("beta").unwrap(),
+        sibling_before_import
+    );
+
+    let independent = crate::mcp::with_current_project_web_target(
+        &control,
+        "alpha",
+        1,
+        &bindings["alpha"].digest,
+        |workspace, _| {
+            let sibling = crate::mcp::operator_read_project_web_target_status(workspace, "beta")
+                .map_err(|_| "WEB_CONTEXT_PARALLEL_READ_UNAVAILABLE")?
+                .ok_or("WEB_CONTEXT_PARALLEL_READ_UNAVAILABLE")?;
+            assert_eq!(sibling.sha256, bindings["beta"].digest);
+            Ok(())
+        },
+    );
+    assert!(
+        independent.is_ok(),
+        "sibling status blocked during context operation: {independent:?}"
+    );
+    let meter = WebContextStore::open_read_only(control.join(".catdesk/web-context")).unwrap();
+    let before = meter.project_history("alpha").unwrap();
+    let mut wrong_scope = context_config("alpha");
+    wrong_scope["expectedTargetSha256"] = json!(bindings["beta"].digest);
+    wrong_scope["policy"]["configuredBudgetTokens"] = json!(9000);
+    let refused = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_context_configure",
+        wrong_scope,
+    )
+    .await;
+    assert!(refused.to_string().contains("WEB_CONTEXT_TARGET_CHANGED"));
+    let mut conflict = context_event("alpha");
+    conflict["event"]["visibleText"] = json!("different private content");
+    let refused = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_context_observe",
+        conflict,
+    )
+    .await;
+    assert!(
+        refused
+            .to_string()
+            .contains("WEB_CONTEXT_EVENT_REVISION_CONFLICT")
+    );
+    assert_eq!(meter.project_history("alpha").unwrap(), before);
+    let mut revision = context_event("beta");
+    revision["event"]["revision"] = json!(2);
+    revision["event"]["visibleText"] = json!("revised visible context ".repeat(30));
+    let revised = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_context_observe",
+        revision,
+    )
+    .await;
+    assert_eq!(
+        revised["result"]["structuredContent"]["pressure"]["recordedEvents"],
+        1
+    );
+    let mut arguments_event = context_event("alpha");
+    arguments_event["event"]["eventId"] = json!("tool-arguments");
+    arguments_event["event"]["dedupKey"] = json!("tool-arguments");
+    arguments_event["event"]["sourceKind"] = json!("TOOL_ARGUMENTS");
+    let traffic = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_context_observe",
+        arguments_event,
+    )
+    .await;
+    assert!(
+        traffic["result"]["structuredContent"]["pressure"]["observedToolArgumentTokens"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+    assert_eq!(
+        traffic["result"]["structuredContent"]["pressure"]["visibleUniqueTokens"],
+        json!(
+            before[0].visible_unique_tokens
+                + traffic["result"]["structuredContent"]["pressure"]["observedToolArgumentTokens"]
+                    .as_u64()
+                    .unwrap()
+        )
+    );
+    let beta_before_worker = meter.project_history("beta").unwrap();
+    let mut worker = context_event("alpha");
+    worker["event"]["eventId"] = json!("worker-message");
+    worker["event"]["dedupKey"] = json!("worker-message");
+    worker["event"]["sourceKind"] = json!("WORKER_MESSAGE");
+    let worker_reply = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_context_observe",
+        worker.clone(),
+    )
+    .await;
+    let worker_pressure = &worker_reply["result"]["structuredContent"]["pressure"];
+    assert!(
+        worker_pressure["visibleUniqueTokens"].as_u64().unwrap()
+            > traffic["result"]["structuredContent"]["pressure"]["visibleUniqueTokens"]
+                .as_u64()
+                .unwrap()
+    );
+    let replayed = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_context_observe",
+        worker.clone(),
+    )
+    .await;
+    assert_eq!(
+        replayed["result"]["structuredContent"]["pressure"],
+        *worker_pressure
+    );
+    worker["event"]["eventId"] = json!("worker-rendered-copy");
+    worker["event"]["sourceKind"] = json!("ASSISTANT_MESSAGE");
+    let duplicate = web_mcp_tool(&client, &url, token, "catdesk_web_context_observe", worker).await;
+    assert_eq!(
+        duplicate["result"]["structuredContent"]["pressure"]["visibleUniqueTokens"],
+        worker_pressure["visibleUniqueTokens"]
+    );
+    assert_eq!(meter.project_history("beta").unwrap(), beta_before_worker);
+    let mut unknown = context_event("beta");
+    unknown["event"]["eventId"] = json!("unknown-attachment");
+    unknown["event"]["dedupKey"] = json!("unknown-attachment");
+    unknown["event"]["sourceKind"] = json!("UNKNOWN_ATTACHMENT");
+    unknown["event"]["visibleText"] = json!(null);
+    let reserved = web_mcp_tool(&client, &url, token, "catdesk_web_context_observe", unknown).await;
+    assert_eq!(
+        reserved["result"]["structuredContent"]["pressure"]["unknownSourceCount"],
+        1
+    );
+    assert!(
+        wake.events().unwrap().is_empty(),
+        "context controls publish no Wake events"
+    );
+    for entry in fs::read_dir(control.join(".catdesk/web-context/conversations")).unwrap() {
+        let bytes = fs::read(entry.unwrap().path()).unwrap();
+        assert!(
+            !String::from_utf8(bytes)
+                .unwrap()
+                .contains("PRIVATE_CONTEXT_")
+        );
+    }
+
+    let work_input_file = parent.join("operator-work-input.json");
+    let before_scope_refusal = tree_snapshot(&control);
+    // The coordinator can ask for a response, but no nonexistent receipt can
+    // authorize a browser read or disclose another project's conversation.
+    for (project, _) in &projects {
+        let missing = web_mcp_tool(
+            &client,
+            &url,
+            token,
+            "catdesk_web_review_read",
+            json!({"projectId":project,"eventId":"review-not-delivered",
+                "expectedTargetGeneration":1,"expectedTargetSha256":bindings[*project].digest}),
+        )
+        .await;
+        assert!(missing.to_string().contains("WEB_REVIEW_DELIVERY_REQUIRED"));
+        assert!(!missing.to_string().contains("snapshot"));
+        assert_eq!(tree_snapshot(&control), before_scope_refusal);
+    }
+    for verb in ["request", "resolve"] {
+        assert_eq!(
+            web_work_file_action(
+                &control,
+                &work_input_file,
+                "alpha",
+                verb,
+                &arguments("beta", "wrong-file-project"),
+            )
+            .await
+            .unwrap_err(),
+            "WEB_WORK_PROJECT_SCOPE_MISMATCH"
+        );
+        assert_eq!(tree_snapshot(&control), before_scope_refusal);
+    }
+    let mut overridden = arguments("alpha", "scope-override");
+    overridden["workspace"] = json!("private-scope-override");
+    assert_eq!(
+        web_work_file_action(&control, &work_input_file, "alpha", "request", &overridden)
+            .await
+            .unwrap_err(),
+        "WEB_WORK_ARGUMENTS_INVALID"
+    );
+    assert_eq!(tree_snapshot(&control), before_scope_refusal);
 
     let mut event_ids = std::collections::BTreeSet::new();
     for (project, _) in &projects {
@@ -534,6 +1364,10 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
             .await;
             assert_ne!(response["result"]["isError"], true);
             response["result"]["structuredContent"].clone()
+        } else if *project == "alpha" {
+            web_work_file_action(&control, &work_input_file, project, "request", &input)
+                .await
+                .unwrap()
         } else {
             crate::web_work::request(&control, input.clone()).unwrap()
         };
@@ -552,6 +1386,10 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
             .await;
             assert_ne!(response["result"]["isError"], true);
             response["result"]["structuredContent"].clone()
+        } else if *project == "alpha" {
+            web_work_file_action(&control, &work_input_file, project, "request", &input)
+                .await
+                .unwrap()
         } else {
             crate::web_work::request(&control, input.clone()).unwrap()
         };
@@ -574,6 +1412,25 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
             .await;
             assert_eq!(response["result"]["isError"], true);
             assert!(response.to_string().contains("WEB_WORK_ACTIVE_REQUEST"));
+        } else if *project == "alpha" {
+            assert_eq!(
+                web_work_file_action(&control, &work_input_file, project, "request", &conflict)
+                    .await
+                    .unwrap_err(),
+                "WEB_WORK_REQUEST_CONFLICT"
+            );
+            assert_eq!(
+                web_work_file_action(
+                    &control,
+                    &work_input_file,
+                    project,
+                    "request",
+                    &arguments(project, "another-task"),
+                )
+                .await
+                .unwrap_err(),
+                "WEB_WORK_ACTIVE_REQUEST"
+            );
         } else {
             assert_eq!(
                 crate::web_work::request(&control, conflict).unwrap_err(),
@@ -635,6 +1492,50 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
             "expectedTargetGeneration":1,"expectedTargetSha256":bindings[project].digest,
             "outcome":outcome,"summary":"Coordinator reports the controlled review is closed."})
     };
+    // Reporting one project's dependency cannot release its task or retire the
+    // queue, and another project can independently report useful progress.
+    let mut report = resolution("catdesk", "blocked");
+    let missing_reason = crate::web_work::resolve(&control, report.clone()).unwrap_err();
+    assert_eq!(missing_reason, "WEB_WORK_ARGUMENTS_INVALID");
+    report["reasonCode"] = json!("SCOPED_TOOL_UNAVAILABLE");
+    let mut wrong_report = report.clone();
+    wrong_report["expectedTargetSha256"] = json!("0".repeat(64));
+    assert_eq!(
+        crate::web_work::resolve(&control, wrong_report).unwrap_err(),
+        "WEB_WORK_TARGET_CHANGED"
+    );
+    let blocked = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_work_resolve",
+        report.clone(),
+    )
+    .await;
+    assert_ne!(blocked["result"]["isError"], true);
+    assert_eq!(blocked["result"]["structuredContent"]["phase"], "OPEN");
+    assert_eq!(
+        blocked["result"]["structuredContent"]["ownershipReleased"],
+        false
+    );
+    let retry = crate::web_work::resolve(&control, report).unwrap();
+    assert_eq!(retry, blocked["result"]["structuredContent"]);
+    let mut progress = resolution("alpha", "in_progress");
+    progress["reasonCode"] = json!("ASSIGNED_REVIEW_ACTIVE");
+    assert_eq!(
+        crate::web_work::resolve(&control, progress).unwrap()["phase"],
+        "OPEN"
+    );
+    assert_eq!(wake.events().unwrap(), events);
+    for (project, state) in [("catdesk", "blocked"), ("alpha", "in_progress")] {
+        let intent = crate::web_work_state::WorkLedger::status(&control, project);
+        assert_eq!(intent["active"]["reportedStatus"]["state"], state);
+        assert_eq!(intent["active"]["taskCompletionVerified"], false);
+        assert_eq!(
+            crate::web_work::request(&control, arguments(project, "another-task")).unwrap_err(),
+            "WEB_WORK_ACTIVE_REQUEST"
+        );
+    }
     assert_eq!(
         crate::web_work::resolve(&control, resolution("catdesk", "completed")).unwrap_err(),
         "WEB_WORK_DELIVERY_REQUIRED"
@@ -784,6 +1685,43 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
     .await;
     // Closing an existing intent uses its original witness after a target
     // changes. The preserved receipt cannot be relabelled as the new target.
+    let old_context = meter.project_history("catdesk").unwrap();
+    for (tool, input) in [
+        ("catdesk_web_context_configure", context_config("catdesk")),
+        ("catdesk_web_context_observe", context_event("catdesk")),
+        (
+            "catdesk_web_context_capture",
+            json!({"projectId":"catdesk","expectedTargetGeneration":1,
+            "expectedTargetSha256":bindings["catdesk"].digest}),
+        ),
+    ] {
+        let stale = web_mcp_tool(&client, &url, token, tool, input).await;
+        assert!(stale.to_string().contains("WEB_CONTEXT_TARGET_CHANGED"));
+    }
+    assert_eq!(meter.project_history("catdesk").unwrap(), old_context);
+    let mut replacement_event = context_event("catdesk");
+    replacement_event["expectedTargetGeneration"] = json!(2);
+    replacement_event["expectedTargetSha256"] = json!(digest(&replacement_url));
+    let recorded = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_context_observe",
+        replacement_event,
+    )
+    .await;
+    assert_eq!(
+        recorded["result"]["structuredContent"]["pressure"]["key"]["targetGeneration"],
+        2
+    );
+    let context_history = meter.project_history("catdesk").unwrap();
+    assert_eq!(context_history.len(), 2);
+    assert_eq!(
+        context_history[0].recorded_events,
+        old_context[0].recorded_events
+    );
+    assert_eq!(meter.project_history("alpha").unwrap().len(), 1);
+    assert_eq!(meter.project_history("beta").unwrap().len(), 1);
     let mut new_witness = resolution("catdesk", "completed");
     new_witness["expectedTargetGeneration"] = json!(2);
     new_witness["expectedTargetSha256"] = json!(digest(&replacement_url));
@@ -791,10 +1729,26 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
         crate::web_work::resolve(&control, new_witness).unwrap_err(),
         "WEB_WORK_TARGET_CHANGED"
     );
-    let closed = crate::web_work::resolve(&control, resolution("catdesk", "completed")).unwrap();
+    let closed = web_work_file_action(
+        &control,
+        &work_input_file,
+        "catdesk",
+        "resolve",
+        &resolution("catdesk", "completed"),
+    )
+    .await
+    .unwrap();
     assert_eq!(closed["taskCompletionVerified"], false);
     assert_eq!(
-        crate::web_work::resolve(&control, resolution("catdesk", "completed")).unwrap(),
+        web_work_file_action(
+            &control,
+            &work_input_file,
+            "catdesk",
+            "resolve",
+            &resolution("catdesk", "completed"),
+        )
+        .await
+        .unwrap(),
         closed
     );
     let mut wrong_resolution = resolution("alpha", "retired");
@@ -875,5 +1829,354 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
     assert_eq!(production_snapshot(), production_before);
     server.abort();
     let _ = server.await;
+    cleanup(&parent);
+}
+
+// Exercise the real scope checks, capture lifecycle and ingestion with a fake
+// snapshot provider. No runtime reader, browser, native session or Wake starts.
+#[tokio::test(flavor = "current_thread")]
+async fn bounded_context_capture_is_independent_cancelled_and_generation_bound() {
+    use crate::web_context_control::capture_with;
+    use catdesk_wake::protocol::digest;
+    use serde_json::{Value, json};
+    use std::time::Duration;
+
+    fn snapshot(target: &catdesk_wake::protocol::Target) -> Value {
+        let text = "private captured assistant response";
+        json!({"messages":[{"role":"ASSISTANT","text":text,"visibleUnits":text.len(),
+            "textComplete":true,"turnHash":null,"roleTurnHash":null,
+            "messageHash":digest("capture-fixture-message"),"identityBasis":"MESSAGE_ID",
+            "revisionHash":digest(&format!("catdesk-snapshot-revision-v1\0{}\0{}",target.digest,text)),
+            "revisionComplete":true}],"truncated":false,
+            "coverage":{"selectorTier":"AUTHOR_ROLE","visibleRoleCount":1,"countOverflow":false,
+                "nestedCollapsed":0,"keyedCollapsed":0,"omittedBeforeWindow":0,"returned":1,
+                "identityMissing":0,"identityUncertain":0,"revisionIncomplete":0,"textIncomplete":0,
+                "anchorStability":"UNVERIFIED"}})
+    }
+    fn read(
+        control: &Path,
+        request: &crate::web_context_control::CaptureRequest,
+        keep_running: &dyn Fn() -> Result<(), String>,
+    ) -> Result<Value, String> {
+        operator_facade::capture_web_context_with_snapshot(
+            control,
+            &request.project_id,
+            (
+                request.expected_target_generation,
+                &request.expected_target_sha256,
+            ),
+            keep_running,
+            |_, project, target, guard| {
+                guard()?;
+                assert_eq!(project, request.project_id);
+                assert_eq!(target.generation, request.expected_target_generation);
+                assert_eq!(target.digest, request.expected_target_sha256);
+                Ok(snapshot(target))
+            },
+        )
+    }
+
+    let production_before = production_snapshot();
+    let parent = fixture_parent();
+    let control = parent.join("control");
+    fs::create_dir(&control).unwrap();
+    let (package, python) = package_and_python(&parent);
+    development_runtime::prepare(&control, &package, &python).unwrap();
+    let wake = Store::open(
+        &development_runtime::root_for_workspace(&control)
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+    let projects = [
+        ("catdesk", control.clone()),
+        ("alpha", parent.join("alpha")),
+        ("beta", parent.join("beta")),
+    ];
+    for (project, workspace) in &projects {
+        let origin = format!("https://example.test/{project}.git");
+        git_root(workspace, &origin);
+        web_action(
+            &control,
+            &[
+                "operator",
+                "web",
+                "project",
+                "register",
+                "--project-id",
+                project,
+                "--workspace",
+                workspace.to_str().unwrap(),
+                "--git-identity",
+                &origin,
+            ],
+        )
+        .await;
+        let url = format!("https://chatgpt.com/c/{}", uuid::Uuid::new_v4());
+        crate::mcp::operator_bind_project_web_target(&control, project, &url, None, 0).unwrap();
+    }
+    let bindings = wake.config().unwrap().targets;
+    let args = |project: &str| {
+        json!({"projectId":project,"expectedTargetGeneration":1,
+        "expectedTargetSha256":bindings[project].digest})
+    };
+
+    // Cancel an awaiting MCP operation while its blocking reader still owns the
+    // slot. Other projects remain runnable; the cancelled project cannot overlap.
+    let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+    let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let owned_control = control.clone();
+    let input = args("alpha");
+    let pending = tokio::spawn(async move {
+        capture_with(&owned_control, input, move |control, _, guard| {
+            assert!(
+                crate::mcp::operator_read_project_web_target(control, "beta")
+                    .unwrap()
+                    .is_some()
+            );
+            let _ = started_tx.send(());
+            let deadline = std::time::Instant::now() + Duration::from_secs(2);
+            let reason = loop {
+                if let Err(reason) = guard() {
+                    break reason;
+                }
+                if std::time::Instant::now() >= deadline {
+                    panic!("cancellation not observed");
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            };
+            let _ = cancel_tx.send(reason.clone());
+            let _ = release_rx.recv_timeout(Duration::from_secs(30));
+            Err(reason)
+        })
+        .await
+    });
+    tokio::time::timeout(Duration::from_secs(15), started_rx)
+        .await
+        .unwrap()
+        .unwrap();
+    pending.abort();
+    assert!(pending.await.unwrap_err().is_cancelled());
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(5), cancel_rx)
+            .await
+            .unwrap()
+            .unwrap(),
+        "WEB_CONTEXT_CAPTURE_CANCELLED"
+    );
+    assert_eq!(
+        capture_with(&control, args("alpha"), |_, _, _| panic!(
+            "duplicate reader"
+        ))
+        .await
+        .unwrap_err(),
+        "WEB_CONTEXT_CAPTURE_BUSY"
+    );
+    for project in ["catdesk", "beta"] {
+        let captured = capture_with(&control, args(project), read).await.unwrap();
+        assert_eq!(captured["recordedMessages"], 1);
+        assert_eq!(captured["observationSource"], "BOUND_BROWSER_SNAPSHOT");
+        assert_eq!(captured["browserBindingVerified"], true);
+        assert_eq!(captured["originAuthenticated"], false);
+        assert_eq!(captured["userMessageSent"], false);
+        assert_eq!(captured["hostStarted"], false);
+        assert!(!captured.to_string().contains("private captured"));
+    }
+    release_tx.send(()).unwrap();
+    // This includes the full registration/Git witness and first alpha ledger
+    // write, which may take seconds while the full suite runs in parallel.
+    tokio::time::timeout(Duration::from_secs(15), async {
+        loop {
+            match capture_with(&control, args("alpha"), read).await {
+                Ok(_) => break,
+                Err(reason) if reason == "WEB_CONTEXT_CAPTURE_BUSY" => {
+                    tokio::time::sleep(Duration::from_millis(5)).await
+                }
+                Err(reason) => panic!("{reason}"),
+            }
+        }
+    })
+    .await
+    .unwrap();
+
+    let meter = WebContextStore::open(control.join(".catdesk/web-context")).unwrap();
+    let mut before = meter.project_history("alpha").unwrap();
+    let replay = capture_with(&control, args("alpha"), read).await.unwrap();
+    assert_eq!(replay["recordedMessages"], 1);
+    let refreshed = meter.project_history("alpha").unwrap();
+    assert!(
+        refreshed[0]
+            .browser_coverage
+            .last_observed_at_unix
+            .is_some()
+    );
+    assert!(
+        refreshed[0].browser_coverage.last_observed_at_unix
+            >= before[0].browser_coverage.last_observed_at_unix
+    );
+    before[0].browser_coverage.last_observed_at_unix =
+        refreshed[0].browser_coverage.last_observed_at_unix;
+    assert_eq!(refreshed, before);
+    // A completed fake browser read must not strand its capture lease while
+    // waiting for a metadata writer. Its exact retry remains deduplicated.
+    let held = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(control.join(".catdesk/web-context/ledger.lock"))
+        .unwrap();
+    held.lock().unwrap();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let release = std::thread::spawn(move || {
+        let _ = release_rx.recv_timeout(Duration::from_secs(30));
+        drop(held);
+    });
+    let busy_capture = capture_with(&control, args("alpha"), read).await;
+    let released_before_timeout = release_tx.send(()).is_ok();
+    release.join().unwrap();
+    assert!(
+        released_before_timeout,
+        "capture waited for metadata release timeout"
+    );
+    assert_eq!(busy_capture.unwrap_err(), "WEB_CONTEXT_BUSY");
+    assert_eq!(meter.project_history("alpha").unwrap(), before);
+    capture_with(&control, args("alpha"), read).await.unwrap();
+    let refreshed = meter.project_history("alpha").unwrap();
+    assert!(
+        refreshed[0].browser_coverage.last_observed_at_unix
+            >= before[0].browser_coverage.last_observed_at_unix
+    );
+    before[0].browser_coverage.last_observed_at_unix =
+        refreshed[0].browser_coverage.last_observed_at_unix;
+    assert_eq!(refreshed, before);
+    let mut stale = args("alpha");
+    stale["expectedTargetGeneration"] = json!(2);
+    assert_eq!(
+        capture_with(&control, stale, |_, _, _| panic!("stale reader called"))
+            .await
+            .unwrap_err(),
+        "WEB_CONTEXT_TARGET_CHANGED"
+    );
+
+    // Rebind during a read must discard the old snapshot before ingestion.
+    let beta_before = meter.project_history("beta").unwrap();
+    assert_eq!(
+        capture_with(&control, args("beta"), |control, request, guard| {
+            operator_facade::capture_web_context_with_snapshot(
+                control,
+                &request.project_id,
+                (
+                    request.expected_target_generation,
+                    &request.expected_target_sha256,
+                ),
+                guard,
+                |_, project, target, _| {
+                    crate::mcp::operator_bind_project_web_target(
+                        control,
+                        project,
+                        &format!("https://chatgpt.com/c/{}", uuid::Uuid::new_v4()),
+                        Some(&target.digest),
+                        1,
+                    )
+                    .map_err(|_| "fixture rebind failed")?;
+                    Ok(snapshot(target))
+                },
+            )
+        })
+        .await
+        .unwrap_err(),
+        "WEB_CONTEXT_TARGET_CHANGED"
+    );
+    assert_eq!(meter.project_history("beta").unwrap(), beta_before);
+    assert_eq!(meter.project_history("alpha").unwrap(), before);
+
+    // A rebind after MCP preflight but before the reader's own check must not
+    // silently capture the new target under the caller's old witness.
+    let catdesk_before = meter.project_history("catdesk").unwrap();
+    assert_eq!(
+        capture_with(&control, args("catdesk"), |control, request, guard| {
+            crate::mcp::operator_bind_project_web_target(
+                control,
+                "catdesk",
+                &format!("https://chatgpt.com/c/{}", uuid::Uuid::new_v4()),
+                Some(&request.expected_target_sha256),
+                1,
+            )
+            .map_err(|_| "fixture rebind failed")?;
+            operator_facade::capture_web_context_with_snapshot(
+                control,
+                &request.project_id,
+                (
+                    request.expected_target_generation,
+                    &request.expected_target_sha256,
+                ),
+                guard,
+                |_, _, _, _| panic!("reader crossed target change"),
+            )
+        })
+        .await
+        .unwrap_err(),
+        "WEB_CONTEXT_TARGET_CHANGED"
+    );
+    assert_eq!(meter.project_history("catdesk").unwrap(), catdesk_before);
+
+    // Standalone selection resolves the actual replacement and passes its
+    // exact witness to the shared bounded reader, preserving history.
+    let current = crate::web_context_control::capture_current_with(&control, "catdesk", read)
+        .await
+        .unwrap();
+    assert_eq!(current["invocationSource"], "STANDALONE_OPERATOR");
+    assert_eq!(current["observationSource"], "BOUND_BROWSER_SNAPSHOT");
+    assert_eq!(current["pressure"]["key"]["targetGeneration"], 2);
+    assert_eq!(meter.project_history("catdesk").unwrap().len(), 2);
+    let mut predecessor = catdesk_before[0].clone();
+    predecessor.is_current = false;
+    assert_eq!(meter.project_history("catdesk").unwrap()[0], predecessor);
+    assert_eq!(
+        crate::web_context_control::capture_current_with(&control, "../alpha", |_, _, _| panic!(
+            "invalid current reader"
+        ))
+        .await
+        .unwrap_err(),
+        "WEB_CONTEXT_ARGUMENTS_INVALID"
+    );
+    assert_eq!(
+        crate::web_context_control::capture_current_with(
+            &control,
+            "unregistered",
+            |_, _, _| panic!("unregistered current reader")
+        )
+        .await
+        .unwrap_err(),
+        "WEB_CONTEXT_PROJECT_UNAVAILABLE"
+    );
+
+    // Failure/unwind also releases the worker's ownership without poisoning it.
+    assert_eq!(
+        capture_with(&control, args("alpha"), |_, _, _| panic!(
+            "fixture worker unwind"
+        ))
+        .await
+        .unwrap_err(),
+        "WEB_CONTEXT_CAPTURE_WORKER_FAILED"
+    );
+    capture_with(&control, args("alpha"), read).await.unwrap();
+    assert!(wake.events().unwrap().is_empty());
+    let control_state: Value =
+        serde_json::from_slice(&fs::read(wake.root().join("control.json")).unwrap()).unwrap();
+    assert_eq!(control_state["desired"], "STOPPED");
+    for (_, workspace) in &projects[1..] {
+        assert!(!workspace.join(".catdesk").exists());
+    }
+    assert!(
+        AutonomousProjectRegistryStoreV1::open_read_only(control.join(".catdesk/projects"))
+            .unwrap()
+            .load_registry()
+            .unwrap()
+            .projects
+            .iter()
+            .all(|p| p.codex_thread_id.is_none())
+    );
+    assert_eq!(production_snapshot(), production_before);
     cleanup(&parent);
 }

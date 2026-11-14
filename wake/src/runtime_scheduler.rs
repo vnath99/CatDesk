@@ -16,6 +16,7 @@ pub(super) fn fair_round(
 ) -> Result<Vec<Event>> {
     let mut chosen = BTreeMap::<String, Event>::new();
     let mut uncertain = BTreeMap::<String, Event>::new();
+    let mut blocked_projects = BTreeSet::new();
     // Existing created-time ordering is retained inside each project.
     for event in store.events()? {
         if targets
@@ -27,9 +28,33 @@ pub(super) fn fair_round(
         let delivery = store.delivery(&event.event_id)?;
         if delivery
             .as_ref()
+            .is_none_or(|value| !matches!(value.phase, Phase::Submitting | Phase::Sent))
+            && store.submission_witness_present(&event.event_id) != Ok(false)
+        {
+            // Partial/unreadable submission evidence reserves this project,
+            // including a crash after start-witness commit but before the
+            // SUBMITTING delivery write. Sibling projects remain eligible.
+            blocked_projects.insert(event.project_id.clone());
+            continue;
+        }
+        if delivery
+            .as_ref()
             .is_some_and(|value| matches!(value.phase, Phase::Sent | Phase::Stale))
         {
             continue;
+        }
+        if event.is_expired_at(observed_utc)? {
+            match delivery.as_ref().map(|value| &value.phase) {
+                None => continue,
+                Some(Phase::Claimed | Phase::Attention) => {
+                    // A pre-submit crash may have left an owned composer draft.
+                    // Expiry cannot discard it or authorize another event in
+                    // that conversation. Other projects remain schedulable.
+                    blocked_projects.insert(event.project_id.clone());
+                    continue;
+                }
+                _ => {}
+            }
         }
         if delivery.as_ref().is_some_and(|value| {
             value.phase == Phase::Attention && value.reason.as_deref() != Some("CHATGPT_NOT_IDLE")
@@ -45,6 +70,9 @@ pub(super) fn fair_round(
                 .or_insert_with(|| event.clone());
         }
         chosen.entry(event.project_id.clone()).or_insert(event);
+    }
+    for project in blocked_projects {
+        chosen.remove(&project);
     }
     // The crash boundary can precede same-tab acceptance and its timer.
     // Such a delivery still owns the conversation until read-only recovery.
@@ -102,11 +130,15 @@ pub(super) mod tests {
     use super::*;
     use crate::{
         PROTOCOL_VERSION,
-        protocol::digest,
+        protocol::{WakeMetadata, WakePurpose, digest},
         store::{Delivery, HostLease, Receipt, now},
     };
 
     pub(crate) fn fixture(label: &str) -> (Store, HostLease) {
+        fixture_projects(label, &["alpha", "beta", "gamma"])
+    }
+
+    fn fixture_projects(label: &str, projects: &[&str]) -> (Store, HostLease) {
         let unique = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -118,7 +150,7 @@ pub(super) mod tests {
         std::fs::create_dir_all(&base).unwrap();
         let store = Store::open_scoped_for_test(&base.join("wake"), &base).unwrap();
         store.initialize().unwrap();
-        for (index, project) in ["alpha", "beta", "gamma"].iter().enumerate() {
+        for (index, project) in projects.iter().enumerate() {
             store
                 .set_target(
                     project,
@@ -196,6 +228,140 @@ pub(super) mod tests {
             ids(&store, Some("gamma"), &BTreeMap::new()),
             ["alpha-1", "beta-1", "gamma-1"]
         );
+    }
+
+    #[test]
+    fn five_project_concurrent_intents_and_mixed_holds_survive_restart() {
+        let projects = ["alpha", "beta", "gamma", "delta", "epsilon"];
+        let (store, lease) = fixture_projects("five-project-restart", &projects);
+        let barrier = std::sync::Barrier::new(projects.len());
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = projects
+                .iter()
+                .map(|project| {
+                    let store = &store;
+                    let barrier = &barrier;
+                    scope.spawn(move || {
+                        barrier.wait();
+                        store.produce(
+                            &format!("{project}-parallel"),
+                            project,
+                            "review_ready",
+                            &format!("Review concurrent {project} work"),
+                        )
+                    })
+                })
+                .collect();
+            for handle in handles {
+                handle.join().unwrap().unwrap();
+            }
+        });
+        assert_eq!(store.events().unwrap().len(), 15);
+        let concurrent_intents: Vec<_> = projects
+            .iter()
+            .map(|project| {
+                let id = format!("{project}-parallel");
+                let event = store
+                    .events()
+                    .unwrap()
+                    .into_iter()
+                    .find(|event| event.event_id == id)
+                    .unwrap();
+                assert_eq!(&event.project_id, project);
+                assert_eq!(event.target_generation, 1);
+                let path = store.root().join(format!("queue/{id}.json"));
+                let bytes = std::fs::read(&path).unwrap();
+                (path, bytes)
+            })
+            .collect();
+        assert_eq!(
+            ids(&store, Some("beta"), &BTreeMap::new()),
+            ["delta-1", "epsilon-1", "gamma-1", "alpha-1", "beta-1"]
+        );
+        let event = |id: &str| {
+            store
+                .events()
+                .unwrap()
+                .into_iter()
+                .find(|event| event.event_id == id)
+                .unwrap()
+        };
+        // Alpha's later ambiguous submission must retain its exact identity,
+        // rather than selecting the older queue entry or authorizing a resend.
+        store.claim(&event("alpha-2"), &lease).unwrap();
+        store
+            .transition("alpha-2", lease.owner(), Phase::Submitting, None, None)
+            .unwrap();
+        let beta = sent(&store, &lease, "beta-1");
+        // Gamma has a claimed draft and a durable pre-submit witness but no
+        // acceptance timer. The scheduler may not replace its owner or draft.
+        let gamma = event("gamma-1");
+        store.claim(&gamma, &lease).unwrap();
+        let gamma_target = store.config().unwrap().targets["gamma"].clone();
+        let witness = store.root().join("logs/submission-start-gamma-1.json");
+        std::fs::write(
+            &witness,
+            serde_json::to_vec(&serde_json::json!({
+                "schemaVersion":PROTOCOL_VERSION,"eventId":gamma.event_id,
+                "targetGeneration":gamma_target.generation,
+                "targetDigest":gamma_target.digest,"startedUtc":gamma.created_utc
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let witness_bytes = std::fs::read(&witness).unwrap();
+        store
+            .set_target(
+                "delta",
+                1,
+                "https://chatgpt.com/c/five-project-delta-successor",
+            )
+            .unwrap();
+        let deadlines = BTreeMap::from([("beta-1".into(), now() + 3600)]);
+        let held = ["alpha-2", "beta-1", "gamma-1"].map(|id| {
+            (
+                id,
+                std::fs::read(store.root().join(format!("deliveries/{id}.json"))).unwrap(),
+            )
+        });
+        assert_eq!(ids(&store, None, &deadlines), ["alpha-2", "epsilon-1"]);
+        drop(lease);
+        let reopened =
+            Store::open_scoped_for_test(store.root(), store.root().parent().unwrap()).unwrap();
+        assert_eq!(
+            ids(&reopened, Some("alpha"), &deadlines),
+            ["epsilon-1", "alpha-2"]
+        );
+        let next_owner = reopened.host_lock().unwrap();
+        // Only the unaffected project advances through the existing receipt /
+        // response protocol. The other four projects' outcomes stay preserved.
+        let epsilon = sent(&reopened, &next_owner, "epsilon-1");
+        reopened
+            .record_response_probe("epsilon-1", &epsilon.target, true)
+            .unwrap();
+        assert_eq!(
+            ids(&reopened, Some("alpha"), &deadlines),
+            ["epsilon-2", "alpha-2"]
+        );
+        for (id, bytes) in held {
+            assert_eq!(
+                std::fs::read(reopened.root().join(format!("deliveries/{id}.json"))).unwrap(),
+                bytes
+            );
+        }
+        assert_eq!(std::fs::read(&witness).unwrap(), witness_bytes);
+        for (path, bytes) in concurrent_intents {
+            assert_eq!(std::fs::read(path).unwrap(), bytes);
+        }
+        assert_eq!(reopened.config().unwrap().targets["delta"].generation, 2);
+        assert_eq!(
+            reopened.timer("beta-1").unwrap().unwrap().target_digest,
+            beta.target.digest
+        );
+        assert!(reopened.timer("alpha-2").unwrap().is_none());
+        assert!(reopened.timer("gamma-1").unwrap().is_none());
+        drop(next_owner);
+        std::fs::remove_dir_all(store.root().parent().unwrap()).unwrap();
     }
 
     #[test]
@@ -281,5 +447,189 @@ pub(super) mod tests {
             ids(&store, None, &BTreeMap::new()),
             ["alpha-2", "beta-1", "gamma-1"]
         );
+    }
+
+    #[test]
+    fn orphaned_pre_submit_witness_holds_only_its_project_and_survives_restart() {
+        for claimed in [false, true] {
+            for kind in ["submission", "timer"] {
+                let (store, lease) = fixture("orphaned-pre-submit");
+                let event = store
+                    .events()
+                    .unwrap()
+                    .into_iter()
+                    .find(|event| event.event_id == "alpha-1")
+                    .unwrap();
+                if claimed {
+                    store.claim(&event, &lease).unwrap();
+                }
+                let target = store.config().unwrap().targets["alpha"].clone();
+                let (path, witness) = if kind == "submission" {
+                    (
+                        store.root().join("logs/submission-start-alpha-1.json"),
+                        serde_json::json!({
+                            "schemaVersion":PROTOCOL_VERSION,"eventId":event.event_id,
+                            "targetGeneration":target.generation,"targetDigest":target.digest,"startedUtc":event.created_utc
+                        }),
+                    )
+                } else {
+                    (
+                        store.root().join("turns/alpha-1.json"),
+                        serde_json::json!({
+                            "schemaVersion":PROTOCOL_VERSION,"eventId":event.event_id,"projectId":event.project_id,
+                            "targetGeneration":target.generation,"targetDigest":target.digest,"startedUtc":event.created_utc,
+                            "completedUtc":null,"responseState":"OBSERVING"
+                        }),
+                    )
+                };
+                let bytes = serde_json::to_vec(&witness).unwrap();
+                std::fs::write(&path, &bytes).unwrap();
+                let original_delivery = store.delivery(&event.event_id).unwrap();
+                let queue_path = store.root().join("queue/alpha-1.json");
+                let queue_bytes = std::fs::read(&queue_path).unwrap();
+                assert_eq!(ids(&store, None, &BTreeMap::new()), ["beta-1", "gamma-1"]);
+                assert_eq!(
+                    store.claim(&event, &lease).unwrap_err(),
+                    "SUBMISSION_RECONCILIATION_REQUIRED"
+                );
+                drop(lease);
+                let reopened =
+                    Store::open_scoped_for_test(store.root(), store.root().parent().unwrap())
+                        .unwrap();
+                assert_eq!(
+                    ids(&reopened, None, &BTreeMap::new()),
+                    ["beta-1", "gamma-1"]
+                );
+                assert_eq!(
+                    reopened.delivery(&event.event_id).unwrap(),
+                    original_delivery
+                );
+                assert_eq!(std::fs::read(path).unwrap(), bytes);
+                assert_eq!(std::fs::read(queue_path).unwrap(), queue_bytes);
+                std::fs::remove_dir_all(store.root().parent().unwrap()).unwrap();
+            }
+        }
+    }
+
+    fn manual_event(store: &Store, created_utc: u64, expires_utc: u64) -> Event {
+        let event = Event {
+            schema_version: PROTOCOL_VERSION,
+            event_id: "alpha-manual".into(),
+            project_id: "alpha".into(),
+            event_type: "engineering_attention".into(),
+            created_utc,
+            message: "Continue alpha's assigned task".into(),
+            target_generation: store.config().unwrap().targets["alpha"].generation,
+            audit_references: Vec::new(),
+        }
+        .with_wake_metadata(WakeMetadata {
+            purpose: WakePurpose::ManualEndTurn,
+            source_event_id: "alpha-source-event".into(),
+            source_turn_id: "alpha-source-turn".into(),
+            priority: 255,
+            expires_utc,
+        })
+        .unwrap();
+        store.publish(&event).unwrap();
+        event
+    }
+
+    #[test]
+    fn wake_metadata_expiry_skips_only_unclaimed_work_and_preserves_claimed_drafts_on_restart() {
+        let (store, lease) = fixture("expiry-claimed");
+        let event = manual_event(&store, now() - 120, now() - 60);
+        // The expired intent remains durable, but does not consume a slice.
+        assert_eq!(
+            ids(&store, None, &BTreeMap::new()),
+            ["alpha-1", "beta-1", "gamma-1"]
+        );
+        assert!(store.delivery(&event.event_id).unwrap().is_none());
+        let claimed = store.claim(&event, &lease).unwrap();
+        assert_eq!(ids(&store, None, &BTreeMap::new()), ["beta-1", "gamma-1"]);
+        drop(lease);
+        let reopened =
+            Store::open_scoped_for_test(store.root(), store.root().parent().unwrap()).unwrap();
+        assert_eq!(
+            ids(&reopened, None, &BTreeMap::new()),
+            ["beta-1", "gamma-1"]
+        );
+        assert_eq!(reopened.delivery(&event.event_id).unwrap(), Some(claimed));
+        assert!(reopened.events().unwrap().contains(&event));
+        std::fs::remove_dir_all(store.root().parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn wake_metadata_expiry_never_suppresses_unknown_submit_or_sent_response_observation() {
+        let (store, lease) = fixture("expiry-reconciliation");
+        let event = manual_event(&store, now(), now() + 300);
+        let delivery = store.claim(&event, &lease).unwrap();
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        let observed_after_expiry = event.wake_metadata().unwrap().unwrap().expires_utc;
+        let round = || {
+            fair_round(
+                &store,
+                &store.config().unwrap().targets,
+                None,
+                &BTreeMap::new(),
+                observed_after_expiry,
+            )
+            .unwrap()
+            .into_iter()
+            .map(|event| event.event_id)
+            .collect::<Vec<_>>()
+        };
+        assert_eq!(round(), ["alpha-manual", "beta-1", "gamma-1"]);
+        assert_eq!(
+            store.claim(&event, &lease).unwrap_err(),
+            "SUBMISSION_RECONCILIATION_REQUIRED"
+        );
+        let receipt = Receipt {
+            schema_version: PROTOCOL_VERSION,
+            event_id: event.event_id.clone(),
+            target_generation: delivery.target.generation,
+            target_digest: delivery.target.digest,
+            message_digest: digest(&event.message),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        store
+            .record_exact_receipt_timer(&event.event_id, &receipt)
+            .unwrap();
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Sent,
+                Some(receipt),
+                None,
+            )
+            .unwrap();
+        assert_eq!(round(), ["alpha-manual", "beta-1", "gamma-1"]);
+        assert_eq!(
+            store.delivery(&event.event_id).unwrap().unwrap().phase,
+            Phase::Sent
+        );
+        drop(lease);
+        std::fs::remove_dir_all(store.root().parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn wake_metadata_priority_does_not_override_fifo_or_project_rotation() {
+        let (store, lease) = fixture("priority-fairness");
+        manual_event(&store, now() + 1, now() + 300);
+        assert_eq!(
+            ids(&store, Some("alpha"), &BTreeMap::new()),
+            ["beta-1", "gamma-1", "alpha-1"]
+        );
+        drop(lease);
+        std::fs::remove_dir_all(store.root().parent().unwrap()).unwrap();
     }
 }

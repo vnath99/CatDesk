@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-03T04:09:16.916123+00:00",
+  "classification": "ACTUAL_WINDOWS_LOCAL_DIAGNOSTIC_READER_RECONCILIATION",
+  "rootCause": "LOCAL_PYTHON_DEFAULT_CP1252_READER_APPLIED_TO_UTF8_JSON",
+  "pythonDefaultCodec": "cp1252",
+  "pythonUtf8Mode": 0,
+  "inMemoryV5ResponsesContainCorrectUnicode": true,
+  "originalSavedArtifactBytesAreCorrectUtf8": true,
+  "explicitUtf8DecodeMatchesOriginalNativeSnapshotAndExpectedUpdatedPlan": true,
+  "defaultReaderReproducesExactlyTwoHeadingCharacterMismatches": true,
+  "rawAndAsciiJsonPrivateWriterCanariesPreserveSameEmDash": true,
+  "writerFailureReproduced": false,
+  "nativePlanBytesAlwaysMatchedExpectedUpdate": true,
+  "connectorEncodingFailureEstablished": false,
+  "earlierV5AttributionIncorrect": true,
+  "earlierArtifactWriterAttributionUnproven": true,
+  "requiredDiagnosticCorrection": "Always read persisted UTF-8 JSON with explicit utf-8-sig; do not attribute a default-codepage diagnostic mismatch to the connector or artifact writer.",
+  "supersedesInterpretationOf": [
+    "docs/verification/CURRENT90_FOLLOWUP_PREFLIGHT_AND_UTF8_PLAN_READBACK_2026_11_03.json:nativePlan.v5ResponseTextDiffersAtTwoUnicodeHeadingCharacters"
+  ],
+  "originalEvidencePreserved": true,
+  "productionChanges": 0,
+  "connectionOrAuthenticationChanges": 0,
+  "messagesSent": 0,
+  "newNativeClaims": 0,
+  "sourceAccepted": false
+}

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-29T01:54:52.615097+00:00",
+  "localDate": "2026-10-28",
+  "classification": "ACTUAL_WINDOWS_MANAGED_CLIENT_LOOPBACK_FIXTURE_NOT_CHATGPT_OR_PRODUCTION_ACCEPTANCE",
+  "sourceHelperCommit": "344ff8167e38c9bee59deffbe0bb9b20f679f5a7",
+  "sourceHeadAtTest": "c11719bcf084b59baff4b3c9640833c70a8d9133",
+  "clientSha256": "fcc85a69ec0ad82518e4f8964f60c45e31787957782a0fc9c1b0c44e82d61b9b",
+  "sourceHelperSha256": "d95a88b733a44c1466ecb165cb72ec965e3f2959b531ab36a3a8a2b670da42cd",
+  "boundedSeconds": 75,
+  "actualElapsedSeconds": 2.438,
+  "verified": {
+    "explicitTestStateDirectoryHonored": true,
+    "initialTestAliasesEmpty": true,
+    "separateTestProfileDirectory": true,
+    "sourceBoundedInvocationUsed": true,
+    "managedChildInheritedMcpBearer": true,
+    "mcpDiscoveryObservedAtLocalFixture": true,
+    "separateControlAndMcpOrigins": true,
+    "mcpBearerObservedAtControlOrigin": false,
+    "supportedManagedStop": true,
+    "supportedLocalAliasRemoval": true,
+    "testServersExited": true,
+    "ownedProcessTreeExit": true,
+    "remainingNativeClients": 0,
+    "protectedFiles": 136,
+    "changedProtectedFiles": 0
+  },
+  "effects": {
+    "externalTargetsConfigured": false,
+    "productionAuthChanges": 0,
+    "officialRuntimeStarts": 0,
+    "installedBackendStarts": 0,
+    "browserStarts": 0,
+    "wakeStarts": 0,
+    "providerMessages": 0,
+    "nativeProjectActions": 0,
+    "bindingChanges": 0,
+    "recurringStarts": 0
+  },
+  "harnessLimitations": {
+    "initialPreflightMissingEvidenceFilename": "FAILED_BEFORE_MARKER_OR_CHILD_START_CORRECTED_ONCE",
+    "finalPresentationError": "WRAPPER_READ_NONEXISTENT_STDOUT_PROPERTY_AFTER_SUCCESSFUL_RESULT_AND_PRESERVATION_WRITES",
+    "fixtureConnectionResetDuringSupportedStop": "RETAINED_EXPECTED_CLOSED_PEER_DIAGNOSTIC_NOT_A_RUNTIME_FAILURE",
+    "testReplayedAfterReportingError": false
+  },
+  "evidenceDigests": {
+    "result.private.json": "a00aa4a3e0834d569dee73ef04b73c8fb7986026558c3e2900b40efee1948e71",
+    "outer-result.private.json": "539a8fdab5d2ebef52f250af9fa0ab4f02e34164911ba15c5e3fc5228610da04",
+    "containment.private.json": "64d903d3909d663d621232d5f5fa23c31ecf2daa2c08d76267ece01af09d81d0",
+    "managed-connect.stdout.private.log": "ce94b73a08facfec6793fc119c4fdf707c6197a859effac6af48d2d85ac201e1",
+    "managed-status.stdout.private.log": "54b2854c7d4a62b585ee343a60434100d9868b8eeed1a4c10869a4045657ef8c",
+    "managed-stop.stdout.private.log": "55a1dafde7ddd2198ec183124e5d969bdc9847e4829943193adc4f7f44636ae5",
+    "managed-status-after-stop.stdout.private.log": "dedb43d0865af25889c76fafe2bab656886c7830a6a07343b94d6275e757f7b2",
+    "managed-remove.stdout.private.log": "3e2ee0b9cd6c66eba1e22c8914f1e5a94ebf6bf7866b55a6e3eb8e5071a62ee5"
+  },
+  "remaining": {
+    "officialBearerProfileMigration": "NOT_PERFORMED",
+    "providerToolCalls": "NOT_ESTABLISHED",
+    "connector": "LAST_PROBE_FRONTEND_TRANSPORT_FAILURE_NO_HTTP_STATUS_NO_RETRY",
+    "twoConversationWebCoding": "OPEN",
+    "unattendedRuntime": "NOT_ACTIVATED"
+  }
+}

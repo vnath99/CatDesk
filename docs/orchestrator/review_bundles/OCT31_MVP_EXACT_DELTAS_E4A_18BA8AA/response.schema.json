@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "marker",
+    "sourceCommit",
+    "verdict",
+    "findings",
+    "inspectedPaths",
+    "limitations"
+  ],
+  "properties": {
+    "sourceCommit": {
+      "const": "18ba8aa207f8977a772484f66e639e2603b938a6"
+    },
+    "limitations": {
+      "description": "Explain cumulative target assessment, base-context acceptance and actual tool/runtime limits; original timeout cause remains unproven.",
+      "maxItems": 64,
+      "type": "array",
+      "items": {
+        "minLength": 1,
+        "maxLength": 1000,
+        "type": "string"
+      }
+    },
+    "verdict": {
+      "enum": [
+        "PASS",
+        "FAIL",
+        "INCONCLUSIVE"
+      ],
+      "description": "Cumulative exact target assessment against genuinely acknowledged C254 base; no inherited authority. All64 changed code paths must be actually inspected for PASS."
+    },
+    "findings": {
+      "description": "Actionable defects only. No positive observations; use [] when no defects were found.",
+      "maxItems": 20,
+      "type": "array",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^(?!.*(?:^|/)\\.\\.?($|/))[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$",
+            "maxLength": 256,
+            "minLength": 1
+          },
+          "line": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "reason": {
+            "minLength": 1,
+            "maxLength": 1500,
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "line",
+          "reason"
+        ],
+        "type": "object"
+      }
+    },
+    "marker": {
+      "const": "OCT31_CURRENT64"
+    },
+    "inspectedPaths": {
+      "items": {
+        "type": "string",
+        "pattern": "^(?!.*(?:^|/)\\.\\.?($|/))[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$",
+        "maxLength": 256,
+        "minLength": 1,
+        "enum": [
+          "catdesk.ps1",
+          "scripts/catdesk-doctor.ps1",
+          "scripts/promote-reviewed-catdesk-build.ps1",
+          "scripts/setup-secure-mcp.ps1",
+          "scripts/start-catdesk-stack.ps1",
+          "scripts/test-backend-only-native-capability.ps1",
+          "scripts/test-catdesk-doctor.ps1",
+          "scripts/test-catdesk-lifecycle.ps1",
+          "scripts/test-local-mcp-readiness-strict.ps1",
+          "scripts/test-promotion-handoff-script-status.ps1",
+          "scripts/test-release-worker-command-line.ps1",
+          "scripts/test-secure-mcp-bearer-forwarding.ps1",
+          "scripts/test-start-catdesk-stack.ps1",
+          "scripts/wake_bridge.py",
+          "scripts/wake_profile_quiescence.py",
+          "scripts/wake_readiness_visual_probe.py",
+          "src/daemon_reload.rs",
+          "src/delegated/autonomy_projects.rs",
+          "src/delegated/autonomy_runtime.rs",
+          "src/delegated/autonomy_supervisor.rs",
+          "src/delegated/codex_app_server.rs",
+          "src/main.rs",
+          "src/mcp.rs",
+          "src/operator_codex_cli.rs",
+          "src/operator_codex_cli/queue.rs",
+          "src/operator_codex_cli/queue/native_continuation.rs",
+          "src/operator_codex_cli/queue/native_dispatch.rs",
+          "src/operator_codex_cli/queue/owned_native.rs",
+          "src/operator_facade.rs",
+          "src/operator_installed_backend.rs",
+          "src/operator_installed_project.rs",
+          "src/operator_web_cli.rs",
+          "src/operator_web_rollover.rs",
+          "src/project_mcp.rs",
+          "src/project_mcp_task.rs",
+          "src/promotion_retirement.rs",
+          "src/promotion_source_bridge.rs",
+          "src/reviewed_build.rs",
+          "src/server.rs",
+          "src/wake_protocol_client.rs",
+          "src/web_review_work.rs",
+          "src/web_task_dispatch.rs",
+          "src/web_work.rs",
+          "src/windows_protected_fs.rs",
+          "src/windows_supervisor_startup.rs",
+          "tests/test_wake_bridge.py",
+          "tests/test_wake_bridge_current_dom.py",
+          "tests/test_wake_profile_quiescence.py",
+          "tests/test_wake_readiness_probe.py",
+          "wake/adapter.py",
+          "wake/src/bin/CatDeskWakeProfileProbe.rs",
+          "wake/src/development_login_recovery.rs",
+          "wake/src/development_runtime.rs",
+          "wake/src/lib.rs",
+          "wake/src/protocol.rs",
+          "wake/src/readiness_probe.rs",
+          "wake/src/runtime_reobserve.rs",
+          "wake/src/runtime_response.rs",
+          "wake/src/runtime_scheduler.rs",
+          "wake/src/runtime_snapshot.rs",
+          "wake/src/store.rs",
+          "wake/tests/protocol_store.rs",
+          "wake/tests/test_adapter.py",
+          "wake/tests/test_new_conversation.py"
+        ]
+      },
+      "minItems": 0,
+      "maxItems": 128,
+      "type": "array",
+      "uniqueItems": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "verdict": {
+            "const": "PASS"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "findings": {
+            "maxItems": 0
+          },
+          "inspectedPaths": {
+            "minItems": 64
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "verdict": {
+            "const": "FAIL"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "findings": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ]
+}

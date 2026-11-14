@@ -1,0 +1,14 @@
+pub(crate) fn historical_response_observation(line: &str) -> Option<serde_json::Value> {
+    let text = line.strip_prefix("PROBE:HISTORY_RESPONSE:")?;
+    sent_response_observation(&format!("PROBE:RESPONSE:{text}"))
+}
+
+pub(crate) fn sent_response_observation(line: &str) -> Option<serde_json::Value> {
+    let text = line.strip_prefix("PROBE:RESPONSE:")?;
+    // The optional closed eight-button shape can exceed the legacy 2 KiB.
+    // Only this response frame grows; its metadata validator stays mandatory.
+    if text.len() > 4096 {
+        return None;
+    }
+    crate::runtime::canonical_response_observation(serde_json::from_str(text).ok()?)
+}

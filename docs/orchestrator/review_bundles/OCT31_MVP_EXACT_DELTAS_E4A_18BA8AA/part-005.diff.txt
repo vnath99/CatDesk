@@ -1,0 +1,97 @@
+-    Invoke-BoundedTunnelClient -Path $ClientPath -CommandArgs @("runtimes", "connect", "--alias", $RuntimeAlias, "--tunnel-id", $TunnelId, "--runtime-api-key", "env:CONTROL_PLANE_API_KEY", "--mcp-server-url", $localMcpUrl) -TimeoutSeconds $RuntimeCommandTimeoutSeconds | Out-Null
++    Invoke-BoundedTunnelClient -Path $ClientPath -CommandArgs @("runtimes", "connect", "--alias", $RuntimeAlias, "--tunnel-id", $TunnelId, "--runtime-api-key", "env:CONTROL_PLANE_API_KEY", "--mcp-server-url", $localMcpUrl) -TimeoutSeconds $RuntimeCommandTimeoutSeconds -McpAuthorization $mcpAuthorization | Out-Null
+     return "connect invoked"
+ }
+ 
+@@ -450,6 +484,7 @@ if ($clientPath -and $Mode -in @("status", "repair", "start_all", "connect")) {
+     RuntimeAlias = @{ Supplied = -not [string]::IsNullOrWhiteSpace($RuntimeAlias); Value = Redacted-String $RuntimeAlias }
+     TunnelId = @{ Supplied = -not [string]::IsNullOrWhiteSpace($TunnelId); Value = Redacted-String $TunnelId }
+     RuntimeCredential = @{ Name = "CONTROL_PLANE_API_KEY"; Present = [bool][Environment]::GetEnvironmentVariable("CONTROL_PLANE_API_KEY"); Value = "<redacted>" }
++    LocalMcpBearerForwarding = @{ Requested = [bool]$ForwardLocalMcpBearer; Value = '<redacted>'; Scope = 'OWNED_CONNECT_CHILD_ONLY' }
+     LocalMcp = @{ ConfigFound = if ($null -eq $mcpConfig) { $null } else { $mcpConfig.Found }; Endpoint = "<redacted-local-mcp-url>" }
+     RuntimeStatus = switch ($statusOutcome.State) {
+         "AVAILABLE" { "<redacted-status-output-present>" }
+diff --git a/scripts/start-catdesk-stack.ps1 b/scripts/start-catdesk-stack.ps1
+index 8f4e08f978c2e4ed96989da7993bfd3a87f0debd..49172c945d3c6148a7c6e238335aecfe41d66466 100644
+--- a/scripts/start-catdesk-stack.ps1
++++ b/scripts/start-catdesk-stack.ps1
+@@ -873,9 +873,23 @@ function Get-LocalMcpReadiness {
+             $content=[string]$response.Content
+             if($content.Length -gt $script:MaxMcpReplyBytes){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_RESPONSE_INVALID'}
+             try{$parsed=$content|ConvertFrom-Json -ErrorAction Stop}catch{return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_RESPONSE_INVALID'}
+-            if($parsed.error){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
+-            if($request.method -eq "initialize" -and $null -eq $parsed.result.serverInfo){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
+-            if($request.method -eq "tools/list"){$names=@($parsed.result.tools|ForEach-Object{$_.name});if($names -notcontains "catdesk_instruction" -or $names -notcontains "delegated_run_list"){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}}
++            # Successful JSON-RPC responses normally omit error. Inspect the
++            # member before reading it so caller strict mode cannot turn a
++            # healthy installed backend into a redacted ACTION_REQUIRED.
++            if($parsed -isnot [System.Management.Automation.PSCustomObject]){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_RESPONSE_INVALID'}
++            if($parsed.PSObject.Properties['error'] -and $parsed.error){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
++            if(-not $parsed.PSObject.Properties['result'] -or $parsed.result -isnot [System.Management.Automation.PSCustomObject]){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
++            $rpcResult=$parsed.result
++            if($request.method -eq "initialize" -and (-not $rpcResult.PSObject.Properties['serverInfo'] -or $rpcResult.serverInfo -isnot [System.Management.Automation.PSCustomObject])){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
++            if($request.method -eq "tools/list"){
++                if(-not $rpcResult.PSObject.Properties['tools']){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
++                $names=@()
++                foreach($tool in @($rpcResult.tools)){
++                    if($tool -isnot [System.Management.Automation.PSCustomObject] -or -not $tool.PSObject.Properties['name'] -or $tool.name -isnot [string]){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
++                    $names+=$tool.name
++                }
++                if($names -notcontains "catdesk_instruction" -or $names -notcontains "delegated_run_list"){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
++            }
+         }
+         return New-LocalMcpReadinessResult -Ready $true -Gate 'READY'
+     }
+@@ -1105,7 +1119,7 @@ function Test-BackendOnlySupport {
+     param($Canonical, [int]$TimeoutMilliseconds = 5000)
+     $raw = Invoke-BootstrapSeam -Name 'BackendOnlySupport' -Arguments @($Canonical, $TimeoutMilliseconds) -Default {
+         param($identity, $timeout)
+-        (Invoke-BoundedRecoveryHelper -FileName $identity.Path -Arguments @('--catdesk-daemon', '--backend-only', '--check-support') -TimeoutMilliseconds $timeout -FailureMessage 'backend-only support is unavailable').Output
++        (Invoke-BoundedRecoveryHelper -FileName $identity.Path -Arguments @('--catdesk-daemon', '--backend-only', '--check-support') -TimeoutMilliseconds $timeout -FailureMessage 'backend-only support is unavailable').Stdout
+     }
+     $text = [string]$raw
+     if ($text.Length -gt 1024) { return $false }
+diff --git a/scripts/test-backend-only-native-capability.ps1 b/scripts/test-backend-only-native-capability.ps1
+new file mode 100644
+index 0000000000000000000000000000000000000000..1ba610bc295c71e989351ee5c8790ed4e7ac329a
+--- /dev/null
++++ b/scripts/test-backend-only-native-capability.ps1
+@@ -0,0 +1,23 @@
++# Exercises the real bounded helper, not the BackendOnlySupport fixture seam.
++# The closed capability invocation creates no application state or services.
++[CmdletBinding()]
++param(
++    [Parameter(Mandatory=$true)][string]$Executable,
++    [Parameter(Mandatory=$true)][ValidatePattern('^[a-f0-9]{64}$')][string]$ExpectedSha256
++)
++$ErrorActionPreference='Stop'
++Set-StrictMode -Version Latest
++$resolved=(Resolve-Path -LiteralPath $Executable -ErrorAction Stop).Path
++if ((Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant() -cne $ExpectedSha256) {
++    throw 'capability test executable identity differs'
++}
++. (Join-Path $PSScriptRoot 'start-catdesk-stack.ps1')
++$canonical=[pscustomobject]@{Path=$resolved;Sha256=$ExpectedSha256}
++if (-not (Test-BackendOnlySupport -Canonical $canonical -TimeoutMilliseconds 5000)) {
++    throw 'native capability output was not accepted through the real bounded helper'
++}
++if ($script:BootstrapSeams.Count -ne 0) { throw 'native capability test unexpectedly installed fixture seams' }
++[pscustomobject]@{
++    state='NATIVE_CAPABILITY_VERIFIED';powerShellVersion=$PSVersionTable.PSVersion.ToString()
++    executableSha256=$ExpectedSha256;nativeCapabilityQueries=1;daemonStarts=0;runtimeWrites=0
++} | ConvertTo-Json -Compress
+diff --git a/scripts/test-catdesk-doctor.ps1 b/scripts/test-catdesk-doctor.ps1
+new file mode 100644
+index 0000000000000000000000000000000000000000..39c12cd0332ef2a4e4aabd9b3a8930ac902c4e20
+--- /dev/null
++++ b/scripts/test-catdesk-doctor.ps1
+@@ -0,0 +1,145 @@
++$ErrorActionPreference='Stop'
++Set-StrictMode -Version Latest
++$facade=Join-Path $PSScriptRoot '../catdesk.ps1'
++$tempParent=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar)
++$testRoot=Join-Path $tempParent ('catdesk-doctor-test-'+[Guid]::NewGuid().ToString('N'))
++$projectRoot=Join-Path $testRoot 'project';$wakeRoot=Join-Path $testRoot 'wake';$observation=Join-Path $testRoot 'observation.json'
++$script:forbidden=0;$checks=0
++function Require([bool]$Condition,[string]$Why){if(!$Condition){throw $Why};$script:checks++}
++function Save([string]$Path,$Value){[IO.File]::WriteAllText($Path,($Value|ConvertTo-Json -Depth 15 -Compress),[Text.UTF8Encoding]::new($false))}

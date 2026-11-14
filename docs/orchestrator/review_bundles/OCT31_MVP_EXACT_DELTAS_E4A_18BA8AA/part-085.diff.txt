@@ -1,0 +1,141 @@
++                    mock.patch.object(self.probe.time, "monotonic", side_effect=lambda: clock[0]), \
++                    mock.patch.object(self.probe.time, "sleep", side_effect=sleep), \
++                    contextlib.redirect_stdout(io.StringIO()):
++                self.assertEqual(self.probe.main(), 0)
++        self.assertEqual(cdp.get_tabs.call_count, 4)
++        self.assertEqual(clock[0], 30)
++        cdp.switch_to_tab.assert_not_called()
++        cdp.get.assert_not_called()
++
++    def test_unique_tab_requires_independent_metadata_and_document_agreement(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        home = "https://chatgpt.com/"
++        cdp, tabs = self.target_tabs([home, target], [home, target], target)
++        self.assertEqual(self.probe.select_registered_target_tab(cdp, target), "TARGET_TAB_EXACT")
++        cdp.switch_to_tab.assert_called_once_with(tabs[1])
++        cdp.get.assert_not_called()
++
++    def test_missing_or_ambiguous_target_does_not_select_a_tab(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        for urls, expected in [(["https://chatgpt.com/"], "TARGET_TAB_MISSING"),
++                               ([target, target], "TARGET_TAB_AMBIGUOUS")]:
++            cdp, _ = self.target_tabs(urls, urls)
++            self.assertEqual(self.probe.select_registered_target_tab(cdp, target), expected)
++            cdp.switch_to_tab.assert_not_called()
++
++    def test_stale_metadata_and_changed_selected_document_fail_closed(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        home = "https://chatgpt.com/"
++        cdp, _ = self.target_tabs([target], [home], target)
++        self.assertEqual(self.probe.select_registered_target_tab(cdp, target), "TARGET_TAB_DRIFT")
++        cdp.switch_to_tab.assert_not_called()
++        cdp, _ = self.target_tabs([target], [target], home)
++        self.assertEqual(self.probe.select_registered_target_tab(cdp, target), "TARGET_TAB_DRIFT")
++
++    def test_unavailable_or_excessive_tab_inventory_never_selects(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        cdp = mock.Mock()
++        for inventory in [None, [], [None] * 33]:
++            cdp.get_tabs.return_value = inventory
++            expected = "TARGET_TAB_MISSING" if inventory == [] else "TARGET_TAB_UNAVAILABLE"
++            self.assertEqual(self.probe.select_registered_target_tab(cdp, target), expected)
++        cdp.get_tabs.side_effect = RuntimeError("unavailable")
++        self.assertEqual(self.probe.select_registered_target_tab(cdp, target), "TARGET_TAB_UNAVAILABLE")
++        cdp.switch_to_tab.assert_not_called()
++
++    def test_target_comparison_refuses_credentials_ports_and_other_projects(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        for current in ["http://chatgpt.com/c/readiness-fixture", target + "?query=1",
++                        target + "#fragment", "https://user@chatgpt.com/c/readiness-fixture",
++                        "https://chatgpt.com:443/c/readiness-fixture",
++                        "https://other.example/c/readiness-fixture",
++                        "https://chatgpt.com/c/other"]:
++            self.assertFalse(self.probe.exact_url(current, target))
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/wake/adapter.py b/wake/adapter.py
+index 348d5085292eae2bcd0104edd292e32c487f63e6..786771bc11a2e5e74566fba45af1437e148fd081 100644
+--- a/wake/adapter.py
++++ b/wake/adapter.py
+@@ -522,13 +522,24 @@ def bounded_response_observation(bridge, sink, cdp, message, message_digest,
+     sleep = sleep or time.sleep
+     deadline = clock() + timeout
+     unmounted = object()
++    unmounted_reason = "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"
+ 
+     def sample():
++        nonlocal unmounted_reason
+         try:
+             return sink.observe_cooperative_response(cdp, message, message_digest)
+         except bridge.Attention as error:
+-            if str(error) != "RESPONSE_USER_DOCUMENT_NOT_HYDRATED":
++            reason = str(error)
++            if reason == "RESPONSE_TARGET_DRIFT":
++                current = cdp.get_current_url()
++                if not isinstance(current, str) or current not in {
++                        "about:blank", "https://chatgpt.com/", "https://chat.openai.com/"}:
++                    raise
++                # CDP activation can return before navigation/hydration. Only
++                # wait: never select, navigate, reload or inspect a foreign chat.
++            elif reason != "RESPONSE_USER_DOCUMENT_NOT_HYDRATED":
+                 raise
++            unmounted_reason = reason
+             # This is not positive pending/receipt evidence. If the document
+             # never mounts, preserve the refusal at the original deadline.
+             if clock() >= deadline:
+@@ -549,7 +560,7 @@ def bounded_response_observation(bridge, sink, cdp, message, message_digest,
+         remaining = deadline - clock()
+         if remaining <= 0:
+             if stage is unmounted:
+-                raise bridge.Attention("RESPONSE_USER_DOCUMENT_NOT_HYDRATED")
++                raise bridge.Attention(unmounted_reason)
+             return stage
+         sleep(min(.5, remaining))
+ 
+@@ -633,7 +644,7 @@ def bootstrap_quarantine_inspect(bridge, sb, request):
+ 
+ 
+ def bounded_source_snapshot(bridge, sink, cdp, *, timeout=10, clock=None, sleep=None,
+-                            max_message_bytes=None):
++                            max_message_bytes=None, review_pair=False):
+     """Wait in one document for matching complete final message frames.
+ 
+     A still-incomplete snapshot remains explicitly incomplete at the deadline;
+@@ -646,8 +657,10 @@ def bounded_source_snapshot(bridge, sink, cdp, *, timeout=10, clock=None, sleep=
+     while True:
+         if not sink.exact(cdp.get_current_url()):
+             raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
+-        snapshot = (sink.visible_message_snapshot(cdp) if max_message_bytes is None else
+-                    sink.visible_message_snapshot(cdp, max_message_bytes=max_message_bytes))
++        options = {} if max_message_bytes is None else {"max_message_bytes": max_message_bytes}
++        if review_pair:
++            options["review_pair"] = True
++        snapshot = sink.visible_message_snapshot(cdp, **options)
+         if not sink.exact(cdp.get_current_url()):
+             raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
+         messages = snapshot["messages"]
+@@ -677,7 +690,16 @@ def bounded_source_snapshot(bridge, sink, cdp, *, timeout=10, clock=None, sleep=
+ 
+ def source_snapshot(bridge, sb, request):
+     """Read an exact idle source chat only on an explicit private request."""
+-    if set(request) != {"snapshot", "projectId", "source"} or request["snapshot"] is not True:
++    review = request.get("reviewEvent")
++    keys = {"snapshot", "projectId", "source"} | ({"reviewEvent"} if review is not None else set())
++    if set(request) != keys or request["snapshot"] is not True:
++        raise bridge.Attention("SOURCE_SNAPSHOT_REQUEST_INVALID")
++    if review is not None and (
++            not isinstance(review, dict) or set(review) != {"eventId", "message", "messageDigest"} or
++            not isinstance(review["eventId"], str) or not bridge.SAFE_ID.fullmatch(review["eventId"]) or
++            not isinstance(review["message"], str) or not 0 < len(review["message"].encode("utf-8")) <= 2048 or
++            bridge.normalize_message(review["message"]) != review["message"] or
++            review["messageDigest"] != bridge.digest(review["message"])):
+         raise bridge.Attention("SOURCE_SNAPSHOT_REQUEST_INVALID")
+     if not isinstance(request["projectId"], str) or not bridge.SAFE_ID.fullmatch(request["projectId"]):
+         raise bridge.Attention("SOURCE_SNAPSHOT_REQUEST_INVALID")
+@@ -695,10 +717,24 @@ def source_snapshot(bridge, sb, request):
+     sink.wait_for_idle(cdp, sink.ui_timeout)
+     if not sink.exact(cdp.get_current_url()) or sink.readiness_reason(cdp) is not None:
+         raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
+-    snapshot = bounded_source_snapshot(bridge, sink, cdp, max_message_bytes=8192)

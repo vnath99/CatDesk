@@ -1,0 +1,212 @@
++            matches!(parse(&valid), Ok(WebAction::ReviewAuthorization { operation, .. }) if operation == "retry-pre-submit")
++        );
++        for flag in ["--url", "--message", "--force", "--submit"] {
++            let mut invalid = valid.clone();
++            invalid.extend(args(&[flag, "override"]));
++            assert!(parse(&invalid).is_err());
++        }
++    }
++
+     #[test]
+     fn review_reconcile_has_only_existing_project_event_inputs() {
+         let valid = args(&[
+@@ -2027,7 +2210,9 @@ mod tests {
+                 WebAction::WorkExecutionPermission {
+                     project_id: "alpha".into(),
+                     input_file: "pins.json".into(),
+-                    revoke
++                    revoke,
++                    allow_manual_wake: false,
++                    native_queue_task_id: None,
+                 }
+             );
+             for option in [
+@@ -2043,6 +2228,64 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn native_queue_permission_requires_exact_local_grant_option() {
++        let base = args(&[
++            "operator",
++            "web",
++            "work",
++            "execution-grant",
++            "--project-id",
++            "alpha",
++            "--input-file",
++            "pins.json",
++            "--native-queue-task-id",
++            "native-task",
++        ]);
++        assert!(
++            matches!(parse(&base), Ok(WebAction::WorkExecutionPermission { native_queue_task_id: Some(id), .. }) if id == "native-task")
++        );
++        for verb in ["execution-revoke", "resume-prepare", "request"] {
++            let mut refused = base.clone();
++            refused[3] = verb.into();
++            assert!(parse(&refused).is_err());
++        }
++    }
++
++    #[test]
++    fn manual_wake_permission_requires_explicit_local_grant_flag() {
++        let base = args(&[
++            "operator",
++            "web",
++            "work",
++            "execution-grant",
++            "--project-id",
++            "alpha",
++            "--input-file",
++            "pins.json",
++        ]);
++        let mut permitted = base.clone();
++        permitted.push("--allow-manual-wake".into());
++        assert!(matches!(
++            parse(&permitted),
++            Ok(WebAction::WorkExecutionPermission {
++                allow_manual_wake: true,
++                revoke: false,
++                ..
++            })
++        ));
++        let mut duplicate = permitted.clone();
++        duplicate.push("--allow-manual-wake".into());
++        assert!(parse(&duplicate).is_err());
++        let mut refused = permitted.clone();
++        refused[3] = "execution-revoke".into();
++        assert!(parse(&refused).is_err());
++        refused[3] = "request".into();
++        assert!(parse(&refused).is_err());
++        permitted.push("false".into());
++        assert!(parse(&permitted).is_err());
++    }
++
+     #[test]
+     fn web_only_registration_requires_exact_project_git_scope() {
+         let complete = args(&[
+diff --git a/src/operator_web_rollover.rs b/src/operator_web_rollover.rs
+index e4bc2e1434c699a0d5b77e022a46782c89fc72a4..684a6707116cba82ad2d0b63fc86869736c0b9f8 100644
+--- a/src/operator_web_rollover.rs
++++ b/src/operator_web_rollover.rs
+@@ -376,6 +376,35 @@ pub(crate) struct WorkLease {
+ }
+ 
+ impl WorkLease {
++    /// Native routing may follow only this lease's completed continuation.
++    /// The queue must also preserve its own no-effect and ownership evidence.
++    pub(crate) fn check_native_continuation(
++        &self,
++        workspace: &Path,
++        project: &str,
++        original: &Target,
++        current: &Target,
++        event_id: &str,
++    ) -> Result<(), String> {
++        self.check_source_task(original, current, event_id)?;
++        let root = workspace
++            .canonicalize()
++            .map_err(|_| "WEB_WORK_CONTINUATION_SOURCE_REQUIRED")?;
++        let store = self
++            ._store
++            .root
++            .canonicalize()
++            .map_err(|_| "WEB_WORK_CONTINUATION_SOURCE_REQUIRED")?;
++        if original == current
++            || store != root.join(".catdesk/web-rollovers").join(project)
++            || self.approved_target.as_ref() != Some(current)
++            || self.approved_source_task_id.as_deref() != Some(event_id)
++        {
++            return Err("WEB_WORK_CONTINUATION_SOURCE_REQUIRED".into());
++        }
++        Ok(())
++    }
++
+     /// A completed continuation authorizes only its proved generation.
+     /// Manual target binding does not take ProjectStore's lock, so the caller
+     /// rechecks its selected target against this witness before changing work.
+@@ -3754,10 +3783,136 @@ fn execute_with_mode(
+     Ok(summary(&record))
+ }
+ 
++#[cfg(all(test, windows))]
++pub(crate) fn native_continuation_fixture(
++    root: &Path,
++    wake: &Store,
++    project: &str,
++    source_event: &str,
++) -> (Target, Target) {
++    tests::native_continuation_fixture(root, wake, project, source_event)
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+ 
++    // Synthetic durable proof only: no browser, provider or native process.
++    #[cfg(windows)]
++    pub(super) fn native_continuation_fixture(
++        root: &Path,
++        wake: &Store,
++        project: &str,
++        source_event: &str,
++    ) -> (Target, Target) {
++        let registry_path = root.join(".catdesk/projects/projects.json");
++        let mut registry: crate::delegated::autonomy_projects::AutonomousProjectRegistryV1 =
++            serde_json::from_slice(&fs::read(&registry_path).unwrap()).unwrap();
++        let registered = registry
++            .projects
++            .iter_mut()
++            .find(|p| p.project_id == project)
++            .unwrap();
++        let source = wake.config().unwrap().targets[project].clone();
++        let current = wake
++            .set_target(
++                project,
++                source.generation,
++                &format!(
++                    "https://chatgpt.com/c/fixture-next-{}",
++                    uuid::Uuid::new_v4()
++                ),
++            )
++            .unwrap();
++        if !registered.chatgpt_target_history.contains(&source.url) {
++            registered.chatgpt_target_history.push(source.url.clone());
++        }
++        registered.chatgpt_target_history.push(current.url.clone());
++        registered.chatgpt_target_url = Some(current.url.clone());
++        registered.chatgpt_target_sha256 = Some(current.digest.clone());
++        let mut request = handoff_request(&registered.workspace);
++        request.project_id = project.into();
++        request.intent_id = uuid::Uuid::new_v4().to_string();
++        request.source_task_id = source_event.into();
++        request.source = source.clone();
++        request.native_thread_id = registered.codex_thread_id.clone();
++        request.event_id = format!("web-handoff-{}", request.intent_id);
++        request.message = handoff_request_message(
++            project,
++            &request.intent_id,
++            source_event,
++            &request.native_thread_id,
++        );
++        fs::write(registry_path, serde_json::to_vec(&registry).unwrap()).unwrap();
++        let mut record = record();
++        record.project_id = project.into();
++        record.source_task_id = source_event.into();
++        record.intent_id = request.intent_id.clone();
++        record.source = source.clone();
++        record.message_digest =
++            message_digest(project, &record.intent_id, &source.url, &record.handoff).unwrap();
++        record.phase = Phase::ContinuationQueued;
++        let mut bootstrap = receipt_for(&record);
++        bootstrap.destination_url = current.url.clone();
++        bootstrap.destination_digest = current.digest.clone();
++        record.receipt = Some(bootstrap);
++        record.bound_target = Some(current.clone());
++        record.handoff_event_id = Some(request.event_id.clone());
++        record.continuation_event_id = format!("web-continue-{}", record.intent_id);
++        record.context_meter_status = ContextMeterStatus::Recorded;
++        let store = ProjectStore::open(root, project).unwrap();
++        store.save_handoff_request(&request).unwrap();
++        store.save(&record).unwrap();

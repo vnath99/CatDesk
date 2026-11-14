@@ -1,0 +1,83 @@
+{
+  "observedUtc": "2026-11-02T06:00:00.208305+00:00",
+  "sourceCommit": "c52e9ef75490381becabaaf027f98f2845f1a183",
+  "classification": "TESTED_CONTROLLED_LIVE_ROLLOVER_AND_CONTINUATION_NOT_NATIVE_CODING",
+  "policyRefusal": {
+    "reason": "WEB_ROLLOVER_NOT_DUE_OR_DISABLED",
+    "phaseRetained": "PREPARED",
+    "sourceGuardBeforeBrowserAdmission": true,
+    "receiptAbsent": true,
+    "bootstrapProgressAbsent": true,
+    "originalEvidencePreserved": true
+  },
+  "reconciliation": {
+    "samePreparedIntent": true,
+    "frozenBootstrapContractPreserved": true,
+    "existingSupportedPolicyConfigurationUsed": true,
+    "thresholdsUnchanged": true,
+    "automaticObservationDisabled": true,
+    "sharedWakeHostNeverStarted": true,
+    "originalPolicyRestored": true,
+    "productGuardsChanged": false
+  },
+  "rollover": {
+    "sourceGeneration": 6,
+    "replacementGeneration": 7,
+    "elapsedSeconds": 141.532,
+    "oneBootstrapSubmission": true,
+    "actualIssuedUrlVerified": true,
+    "exactBootstrapUserReceipt": true,
+    "replacementResponseCompleted": true,
+    "sourceSnapshotRecheckedBeforeBinding": true,
+    "registryWakePaired": true,
+    "predecessorHistoryPreserved": true,
+    "siblingProjectBindingsPreserved": true,
+    "workspaceAndNativeOwnerPreserved": true
+  },
+  "continuation": {
+    "singleExactDelivery": true,
+    "responseState": "COMPLETE",
+    "eventVerified": true,
+    "responseUtf8Bytes": 1298,
+    "responseSha256": "cf941c743b677effe55d4d613f94e31cccd9066f155dc442bf8b908807514e44",
+    "readOnlyReadback": true,
+    "normalWorkResumed": false,
+    "remainingReason": "CANONICAL_VERSUS_CONTROLLED_REGISTRY_AUTHORITY_NOT_RECONCILED",
+    "sourceReviewHistoryPreserved": true,
+    "nativeProjectExecutionClaimed": false
+  },
+  "preparationFailuresPreserved": [
+    "PowerShell preparation parser refused before execution.",
+    "Private policy helper referenced an absent optional manifest before any product command; corrected to the existing manifest selection.",
+    "Private executor passed a string to a path reader before attempt marker or product command; corrected path conversion."
+  ],
+  "sourceReview": {
+    "sameManagedClaimRetained": true,
+    "declaredSourcePaths": 86,
+    "firstPartialReviewNotReplayed": true,
+    "sevenNeverSubmittedRequestsPreparedForSuccessor": true,
+    "messageBytesAndRequestIdsUnchanged": true,
+    "predecessorUnusedGrantRevoked": true,
+    "cumulativeSourceAccepted": false,
+    "producerAuthority": false
+  },
+  "cleanup": {
+    "testOwnedProcessCount": 0,
+    "allFiveBrowserOrPolicyOwnersExitedWithoutTimeout": true,
+    "trustedServingBackendPreserved": true,
+    "originalTunnelPreserved": true,
+    "sharedWakeHostStopped": true,
+    "loginMarkerAbsent": true,
+    "recurringAutomationEnabled": false
+  },
+  "remainingAcceptance": [
+    "Current C52 cumulative review and applicable protected release authority",
+    "Canonical first-conversation initialization and installed Wake qualification",
+    "Two actual Web callers making separate authorized source edits and native verification",
+    "Independent installed Wake and rollover acceptance",
+    "Unattended/reboot recovery",
+    "Full context calibration and authenticated attribution",
+    "Later provider-client MCP acceptance"
+  ],
+  "operatorActionRequiredForNextSourceReview": false
+}

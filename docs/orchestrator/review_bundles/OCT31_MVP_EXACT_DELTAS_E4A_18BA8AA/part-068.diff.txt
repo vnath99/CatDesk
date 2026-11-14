@@ -1,0 +1,185 @@
++            let mut invalid = body.clone();
++            invalid["params"]["arguments"]["arguments"] = arguments;
++            assert_eq!(
++                call(&f, invalid).await["error"]["message"],
++                "WEB_TASK_MANUAL_WAKE_ARGUMENTS_INVALID"
++            );
++        }
++        let native_before = fs::read(f.native.join("src/lib.rs")).unwrap();
++        let writer =
++            crate::delegated::autonomy_runtime::acquire_project_writer_lock(&f.task).unwrap();
++        let result = call(&f, body).await;
++        assert!(result.get("error").is_none(), "{result}");
++        assert_eq!(
++            result["result"]["_meta"]["catdeskTaskLifecycle"]["isolatedWorktreeWriterClaimed"],
++            false
++        );
++        assert_eq!(
++            result["result"]["structuredContent"]["deliveryProved"],
++            false
++        );
++        let id = result["result"]["structuredContent"]["eventId"]
++            .as_str()
++            .unwrap();
++        let event = wake
++            .events()
++            .unwrap()
++            .into_iter()
++            .find(|event| event.event_id == id)
++            .unwrap();
++        assert_eq!(event.project_id, "beta");
++        assert_eq!(
++            event.wake_metadata().unwrap().unwrap().purpose,
++            protocol::WakePurpose::ManualEndTurn
++        );
++        assert!(!event.message.contains(&f.key));
++        assert!(!event.message.contains(f.native.to_str().unwrap()));
++        assert!(event.message.contains("Project: beta"));
++        assert_eq!(
++            fs::read(f.native.join("src/lib.rs")).unwrap(),
++            native_before
++        );
++        drop(writer);
++        let ordinary = call(
++            &f,
++            request(
++                &f,
++                "after-manual-read",
++                "read",
++                json!({"path":"src/lib.rs"}),
++            ),
++        )
++        .await;
++        assert!(
++            ordinary.get("error").is_none(),
++            "manual journal stranded normal task: {ordinary}"
++        );
++        crate::web_work::execution_permission(&f.control, f.pins.clone(), true).unwrap();
++        assert_eq!(
++            call(&f, manual_request(&f, "revoked-manual", "turn-2")).await["error"]["message"],
++            "WEB_TASK_GRANT_REVOKED"
++        );
++    }
++
++    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
++    async fn manual_wake_dedupes_restart_and_preserves_material_conflicts_and_unknown_delivery() {
++        let f = fixture_with_manual_wake("alpha", true);
++        let wake = ready_manual_wake(&f);
++        let first = call(&f, manual_request(&f, "manual-1", "turn-1")).await;
++        assert!(first.get("error").is_none(), "{first}");
++        let result = &first["result"]["structuredContent"];
++        let id = result["eventId"].as_str().unwrap();
++        let queued = wake.root().join("queue").join(format!("{id}.json"));
++        let saved = fs::read(&queued).unwrap();
++        assert_eq!(
++            call(&f, manual_request(&f, "manual-1", "turn-1")).await["error"]["message"],
++            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
++        );
++        let cold = call(&f, manual_request(&f, "manual-2", "turn-1")).await;
++        assert_eq!(cold["result"]["structuredContent"], *result);
++        assert_eq!(fs::read(&queued).unwrap(), saved);
++        let mut conflict = manual_request(&f, "manual-conflict", "turn-1");
++        conflict["params"]["arguments"]["arguments"]["priority"] = json!(11);
++        assert_eq!(
++            call(&f, conflict).await["error"]["message"],
++            "QUEUE_EVENT_ID_CONFLICT"
++        );
++        let distinct = call(&f, manual_request(&f, "manual-next", "turn-2")).await;
++        assert!(distinct.get("error").is_none(), "{distinct}");
++        assert_ne!(
++            distinct["result"]["structuredContent"]["eventId"],
++            result["eventId"]
++        );
++        let event: protocol::Event = serde_json::from_slice(&saved).unwrap();
++        let host = wake.host_lock().unwrap();
++        let delivery = wake.claim(&event, &host).unwrap();
++        wake.transition(id, &delivery.owner, Phase::Submitting, None, None)
++            .unwrap();
++        drop(host);
++        let delivery_path = wake.root().join("deliveries").join(format!("{id}.json"));
++        let unknown = fs::read(&delivery_path).unwrap();
++        let retry = call(&f, manual_request(&f, "manual-known-identity", "turn-1")).await;
++        assert_eq!(retry["result"]["structuredContent"], *result);
++        assert_eq!(fs::read(&delivery_path).unwrap(), unknown);
++        assert_eq!(fs::read(&queued).unwrap(), saved);
++        assert_eq!(
++            wake.events()
++                .unwrap()
++                .iter()
++                .filter(|event| event.wake_metadata().unwrap().is_some())
++                .count(),
++            2
++        );
++    }
++
++    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
++    async fn manual_wake_unknown_journal_fences_new_identities_and_budget_is_shared() {
++        use crate::delegated::{
++            contracts::{ExecutionContractV1, RunId, ToolCallId},
++            journal::{DelegatedJournal, ToolCallRecordV1, ToolCallStatus, ToolMutationKind},
++        };
++        let f = fixture_with_manual_wake("alpha", true);
++        let wake = ready_manual_wake(&f);
++        let first = call(&f, manual_request(&f, "manual-initial", "turn-1")).await;
++        assert!(first.get("error").is_none(), "{first}");
++        let journal = DelegatedJournal::open(
++            f.control
++                .join(".catdesk/project-mcp-tasks/alpha/task-fixture/journal"),
++        )
++        .unwrap();
++        let run = RunId::new("task-fixture").unwrap();
++        let add = |id: &str, completed: bool| {
++            let call = ToolCallId::new(id).unwrap();
++            journal
++                .record_tool_call_requested(ToolCallRecordV1 {
++                    schema_version: 1,
++                    run_id: run.clone(),
++                    tool_call_id: call.clone(),
++                    tool_name: "read".into(),
++                    request_hash: "fixture".into(),
++                    arguments_hash: "fixture".into(),
++                    mutation_kind: ToolMutationKind::ReadOnly,
++                    status: ToolCallStatus::Requested,
++                    result_hash: None,
++                    outcome_summary: None,
++                })
++                .unwrap();
++            for phase in [
++                ToolCallStatus::PolicyAllowed,
++                ToolCallStatus::Executing,
++                if completed {
++                    ToolCallStatus::Completed
++                } else {
++                    ToolCallStatus::OutcomeUnknown
++                },
++            ] {
++                journal
++                    .transition_tool_call(&run, &call, phase, None, None)
++                    .unwrap();
++            }
++        };
++        let contract: ExecutionContractV1 = journal.load_contract(&run).unwrap();
++        for index in 1..contract.max_tool_calls {
++            add(&format!("budget-{index}"), true);
++        }
++        let queue_before = wake.events().unwrap();
++        assert_eq!(
++            call(&f, manual_request(&f, "over-budget", "new-turn")).await["error"]["message"],
++            "PROJECT_TASK_TOOL_BUDGET_EXCEEDED"
++        );
++        assert_eq!(wake.events().unwrap(), queue_before);
++        // A separate task with budget headroom still fences a new identity
++        // when its earlier call has an ambiguous journal outcome.
++        let g = fixture_with_manual_wake("beta", true);
++        let beta = ready_manual_wake(&g);
++        let initial = call(&g, manual_request(&g, "manual-initial", "turn-1")).await;
++        assert!(initial.get("error").is_none(), "{initial}");
++        let beta_journal = DelegatedJournal::open(
++            g.control
++                .join(".catdesk/project-mcp-tasks/beta/task-fixture/journal"),
++        )
++        .unwrap();
++        beta_journal
++            .record_tool_call_requested(ToolCallRecordV1 {
++                schema_version: 1,
++                run_id: run.clone(),

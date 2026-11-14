@@ -1,0 +1,175 @@
+{
+  "recordedUtc": "2026-10-23T05:30:24.0543352Z",
+  "localDate": "2026-10-23",
+  "task": "C13-MATCHED-SELECTED-DEVELOPMENT-RELEASE",
+  "classification": "SELECTED_STOPPED_DEVELOPMENT_IMAGE_LOCAL_MCP_FIXTURES",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "d453f06b7fa469acaffd4dd35fea5cd09fb9dcfc",
+  "sourceTree": "f6af3be903192c2a3c218ece474649c841650d3f",
+  "sourceFiles": [
+    {
+      "path": "src/project_mcp.rs",
+      "sha256": "71ce4f219ab71530af48af3071ce5e8dde277a83702887872b3d3eb528b700b0"
+    },
+    {
+      "path": "src/main.rs",
+      "sha256": "9a02c4430f30a5245d40580b0f2a4a2992d80703f2fa5c33f4b84e0d06d55de4"
+    },
+    {
+      "path": "src/project_mcp_task.rs",
+      "sha256": "91d2bdcb117be3e298cab403cbee4a7b0c0a17d7ef08676ade35cc575bf84fc5"
+    },
+    {
+      "path": "src/delegated/autonomy_supervisor.rs",
+      "sha256": "5f73a0ba8b237a7ef1a0a9812b9beb9a6e5ccdd5d628eba0ab7ee70c56c8b120"
+    }
+  ],
+  "newRuntimeSourceChanges": [],
+  "includedStages": [
+    "C9_HISTORY_NO_EVICTION",
+    "C10_FAIR_CREATION_ADMISSION",
+    "C11_IMMUTABLE_PROJECT_MCP",
+    "C12_ASSIGNED_LINKED_WORKTREE_PATCH_TOOLS"
+  ],
+  "releaseBuild": {
+    "startedUtc": "2026-10-23T05:19:21.0017366Z",
+    "finishedUtc": "2026-10-23T05:25:51.8681546Z",
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+    "exitCode": 0,
+    "maximumSeconds": 600,
+    "imageSha256": "85e6971d4c6fbbab67e42617dd39f3af5cb416c4b4ef58bd290bb418fe6b1f07",
+    "imageBytes": 33842176,
+    "logSha256": "1cdba007e9bb692de3a9d157ceb895b2a0eece04108ed3d8b4a319be1d38534d"
+  },
+  "hostBuild": {
+    "sourceCommit": "d453f06b7fa469acaffd4dd35fea5cd09fb9dcfc",
+    "profile": "NORMAL_RELEASE_WAKE_DEFAULT_FEATURES_NO_TEST_SUPPORT",
+    "exitCode": 0,
+    "imageSha256": "75c49dc855baf5aeb272fbffc4a25ada5e91786e1dd3888bbd41388d4a33fa84"
+  },
+  "artifacts": [
+    {
+      "name": "CatDeskBinagotchy.exe",
+      "sha256": "85e6971d4c6fbbab67e42617dd39f3af5cb416c4b4ef58bd290bb418fe6b1f07",
+      "bytes": 33842176
+    },
+    {
+      "name": "CatDeskWakeHost.exe",
+      "sha256": "75c49dc855baf5aeb272fbffc4a25ada5e91786e1dd3888bbd41388d4a33fa84",
+      "bytes": 2034176
+    },
+    {
+      "name": "adapter.py",
+      "sha256": "f742b36270dc10f34c47982d3f9fe811386f29d92b3eeb20ffb4d21cc551bdfb",
+      "bytes": 46664
+    },
+    {
+      "name": "wake_bridge.py",
+      "sha256": "7c519de51c29b1a530fb5541f7d2367edb23c8e864271115384d6e3d50dfed7e",
+      "bytes": 157819
+    }
+  ],
+  "foregroundGate": {
+    "classification": "REUSED_EXACT_IMAGE_FOREGROUND_GATE",
+    "imageSha256": "75c49dc855baf5aeb272fbffc4a25ada5e91786e1dd3888bbd41388d4a33fa84",
+    "priorExactImageGateReused": true,
+    "newHostProcessStarted": false
+  },
+  "selection": {
+    "finishedUtc": "2026-10-23T05:26:34.4022282Z",
+    "profile": "GUARDED_UNPROTECTED_DEVELOPMENT_UPDATE_PACKAGE",
+    "previousPackage": "1.0.0-dev.85-a78149232fc6af235dbce0fbec6e0c40dcd1fd0ccdd1cd247eb49174e97e7637",
+    "selectedPackage": "1.0.0-dev.85-38e15902a52caa75ef1f276da1fe69b7dd473326fd712221d31dad3f3936dd72",
+    "elapsedSeconds": 3.5355067,
+    "fiveOriginalRowsPaired": true,
+    "recordsChecked": 139,
+    "allowedPackagePointerChanges": 2,
+    "unchangedOtherRecords": 137,
+    "unexpectedChanges": 0,
+    "newStateRecords": 0,
+    "priorPackagePreserved": true,
+    "browserProfileTouched": false,
+    "wakeTargetsChanged": false,
+    "productionModified": false,
+    "ownedProcesses": 0,
+    "desired": "STOPPED"
+  },
+  "selectedImageHttp": {
+    "startedUtc": "2026-10-23T05:26:46.7846879Z",
+    "finishedUtc": "2026-10-23T05:27:38.0364708Z",
+    "maximumSeconds": 180,
+    "elapsedSeconds": 51.25,
+    "profile": "SELECTED_DEVELOPMENT_RELEASE_LOCAL_MCP_ASSIGNED_WORKTREE_EDITING",
+    "checks": [
+      "two-normal-process-parallel-own-root-reads",
+      "two-normal-process-parallel-contract-patches-original-roots-unchanged",
+      "recorded-patch-call-refused-without-replay",
+      "wrong-bearer-401",
+      "wrong-project-witness-refused",
+      "sibling-path-write-and-command-refused",
+      "simulated-independent-writer-progress",
+      "both-listeners-natural-deadline-exit-zero",
+      "normal-process-restart-exact-contract-recorded-call-refused-exit-zero"
+    ],
+    "twoParallelListeners": true,
+    "thirdProcessRestart": true,
+    "naturalLifetimesSeconds": [
+      35,
+      35,
+      10
+    ],
+    "exitCodes": [
+      0,
+      0,
+      0
+    ],
+    "containment": {
+      "ExitCode": 0,
+      "TimedOut": false,
+      "TerminationFailed": false
+    },
+    "protectedRecords": 139,
+    "changedRecords": 0,
+    "newRecords": 0,
+    "ownedProcesses": 0,
+    "actualChatGptWebCalls": false,
+    "testControl": "DISPOSABLE_REGISTRATIONS_AND_LINKED_WORKTREES",
+    "selectedRealPackageImage": true
+  },
+  "reusedSourceVerification": {
+    "evidence": "C12_PROJECT_TASK_EDITING_2026_10_23.json",
+    "distinctTests": 24,
+    "executions": 25,
+    "strictClippy": "PASS",
+    "format": "PASS",
+    "rerunThisStage": false
+  },
+  "external": {
+    "connectorStatusReadUtc": "2026-10-23T05:23:01Z",
+    "connectorHttpStatus": 429,
+    "connectorErrorCode": "UNAVAILABLE",
+    "connectorCalls": 1,
+    "retry": false,
+    "tunnelChanged": false,
+    "settingsChanged": false,
+    "browserStarted": false,
+    "wakeHostWorkerStarted": false,
+    "recurringStarted": false,
+    "messagesSent": 0,
+    "nativeSessionsChanged": false,
+    "completedCanaryReplayed": false,
+    "protectedProductionChanged": false
+  },
+  "acceptance": {
+    "matchedDevelopmentPackage": "SELECTED_STOPPED_V50",
+    "selectedImageParallelPatchAndRestart": "PASS_LOCAL_DISPOSABLE_TASKS",
+    "actualWebB": "OPEN",
+    "workspaceContainedCommandExecution": "REQUIRED",
+    "actualBrowserGHI": "OPEN",
+    "protectedProduction": "OPEN",
+    "unattended": "NOT_ACTIVATED",
+    "fullMilestone": "PARTIAL"
+  },
+  "commandExecutionFinding": "Existing run_program working-directory execution is not a write boundary and timeout does not establish owned descendant cleanup. Do not expose it as contained Web task verification unchanged.",
+  "nextTask": "Implement workspace-contained command execution using existing runtime/sandbox and ownership/lifecycle mechanisms. Qualify actual Web B and fresh simultaneous rollover/recovery G/H/I independently; connector HTTP429 only limits that dependency."
+}

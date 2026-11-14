@@ -1,0 +1,104 @@
+{
+  "checkpoint": "C245",
+  "date": "2026-10-26",
+  "evidenceThroughUtc": "2026-10-26T13:30:15.1288127Z",
+  "classification": "MANAGED_SOURCE_REVIEW_ACKNOWLEDGED_AND_TRANSPORT_COMPLETED_NOT_NEW_PRODUCTION_ACCEPTANCE",
+  "reviewedSourceCommit": "e5a3ca9a9fc713bfba5d6b7c21f2d6e8e32780d1",
+  "developmentHealth": {
+    "sourceCommit": "48625826f2241edc0e25151ad8c32b5e7942dafe",
+    "buildProfile": "NORMAL_DEBUG_DEVELOPMENT_ONLY",
+    "maximumRuntimeSeconds": 6,
+    "actualSelectedExecutableIdentityVerified": true,
+    "authenticatedMcpStatus": 200,
+    "unauthorizedMcpStatus": 401,
+    "toolCount": 79,
+    "naturalParentAndChildExit": true,
+    "testOwnedProcessesRemaining": 0,
+    "verificationRecorded": true,
+    "productionAuthorityCreated": false
+  },
+  "sourceReview": {
+    "newMessagesSent": 1,
+    "exactUserAttributionVerified": true,
+    "completedAssistantResponseVerified": true,
+    "assistantResponseBytes": 3206,
+    "assistantResponseSha256": "37fb50dc06012c816975c204ebbf5e5fb388485b28c66b60b6ad31d1e32ec13c",
+    "frozenSchema": "PASS",
+    "reportedVerdict": "PASS",
+    "actionableFindings": 0,
+    "changedPathsIndependentlyInspected": 5,
+    "cumulativeAssessmentAccepted": true,
+    "unchangedCodeContext": "Verified preceding review context was assessed without inheriting its managed authority.",
+    "limitations": [
+      "Static source assessment only; reviewer did not reproduce tests or builds.",
+      "Live MCP ownership queries returned HTTP 429; source review does not prove Web coding acceptance."
+    ]
+  },
+  "managedVerification": {
+    "state": "COMPLETED_VERIFIED",
+    "active": false,
+    "verification": "PASSED",
+    "finalizationHttpResponse": "TIMEOUT_AFTER_DURABLE_COMMIT",
+    "durableOutcomeIndependentlyVerified": true,
+    "finalizationReplays": 0,
+    "snapshotEntries": 217,
+    "requiredBuildInputsCovered": 202,
+    "sourceAndRetainedSnapshotBytesMatch": true,
+    "snapshotManifestSha256": "9ceed82c69d25f9313da85f61183d7b444319a6f0e1541804cc7bc354562aea1",
+    "acknowledgment": "PASS",
+    "acknowledgmentChangedOnlyTargetUnreadFlag": true,
+    "acknowledgmentOwnerExitCode": 0,
+    "acknowledgmentOwnerTimedOut": false,
+    "acknowledgmentFinalizations": 0,
+    "acknowledgmentMessagesSent": 0
+  },
+  "preservation": {
+    "fiveProjectBindings": true,
+    "predecessorHistory": true,
+    "nativeOwners": true,
+    "trustedPreviousArtifact": "C208",
+    "recurringAutomationStarted": false,
+    "productionActions": 0
+  },
+  "releaseStateAtEvidenceCutoff": {
+    "producerPrepare": "NOT_REQUESTED_PREFLIGHT_STOPPED",
+    "newCandidate": "NOT_BUILT",
+    "productionPromotion": "NOT_RUN",
+    "exactSourceGithubCi": "UNVERIFIED_NO_RECORDED_RUN",
+    "preflightReason": "Recursive historical build-cache hashing exceeded the bounded preparation scope.",
+    "attemptMarkerCreated": false,
+    "productRequestObserved": false,
+    "activeTrustedProducerPointerUnchanged": true
+  },
+  "remaining": [
+    "Freeze and review the new material source qualified separately under C246.",
+    "Continue the existing reviewed producer, genuine attested candidate qualification and supported promotion.",
+    "Qualify different-version rollback and genuine two-conversation Web coding.",
+    "Exact-source CI is unverified; last connector HTTP 429 remains a separate dependency."
+  ],
+  "milestoneComplete": false,
+  "sourceRemediation": {
+    "freshReviewRequiredAfterMaterialSourceCommit": true,
+    "completedC245MustNotBeResent": true,
+    "status": "SOURCE_QUALIFICATION_RECORDED_SEPARATELY_IN_C246"
+  },
+  "transportCompletion": {
+    "authority": "CALLER_REPORTED_TRANSPORT_COMPLETION_SEPARATE_FROM_MANAGED_REVIEW",
+    "ownerTimedOut": false,
+    "expectedRecordFieldsChanged": [
+      "phase",
+      "outcome",
+      "summarySha256"
+    ],
+    "ownerExitCode": 0,
+    "outcome": "completed",
+    "messagesSent": 0,
+    "protectedFilesVerified": 7545,
+    "productionActions": 0,
+    "bindingsChanged": 0,
+    "phase": "CLOSED",
+    "taskCompletionVerified": false,
+    "recurringAutomationStarted": false,
+    "nativeTaskActions": 0
+  }
+}

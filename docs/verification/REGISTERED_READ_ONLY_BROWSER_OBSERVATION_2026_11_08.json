@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-08T05:48:44.875124+00:00",
+  "scope": "C1_DIAGNOSIS_ONLY",
+  "baselineCommit": "3db3a5541425fd2d4da2dfb8492b0e88d9ca405f",
+  "implementation": {
+    "command": "operator web browser inspect --project-id REGISTERED_PROJECT_ID",
+    "runtimeScope": "INSTALLED_STORE_ONLY",
+    "owner": "EXISTING_HOST_AND_BROWSER_LEASES_AND_NATIVE_PROBE_JOB",
+    "wakeRequiredState": "STOPPED",
+    "helper": "EXISTING_READINESS_PROBE_EMBEDDED_AT_BUILD",
+    "primitives": "EXISTING_WAKE_BRIDGE_FIXED_SOURCE_PATH_AND_COMPILED_SHA256",
+    "browserMaximumSeconds": 90,
+    "observationSeconds": 20,
+    "outputMaximumBytes": 16384,
+    "outputMaximumRows": 64,
+    "partialTimeoutMetadata": true,
+    "concurrentBoundedOutputDrain": true,
+    "projectRegistrationAndTargetRechecked": true,
+    "sharedMetadataLocksHeldAcrossBrowserWait": false,
+    "unknownSubmissionOutcomeInferred": false,
+    "messageSendOrAssistantRetry": false,
+    "bindingOrProductionChange": false
+  },
+  "qualification": {
+    "pythonReadinessTests": {
+      "passed": 29,
+      "command": "python -I -m unittest discover -s tests -p test_wake_readiness_probe.py -v"
+    },
+    "wakeReadinessTests": {
+      "passed": 9,
+      "command": "cargo test --locked --offline --manifest-path wake/Cargo.toml --lib readiness -- --test-threads=2"
+    },
+    "existingProfileProbeTests": {
+      "passed": 4,
+      "command": "cargo test --locked --offline --manifest-path wake/Cargo.toml --bin CatDeskWakeProfileProbe -- --test-threads=2"
+    },
+    "webCliTests": {
+      "passed": 39,
+      "command": "cargo test --locked --offline --bin catdesk operator_facade::web::tests -- --test-threads=2"
+    },
+    "strictRootAndWakeAllTargetClippy": "PASS",
+    "realWindowsProcessTimeoutAndInheritedPipeCleanup": "PASS",
+    "overLimitOutputRefused": "PASS",
+    "unknownPhaseAndPrivateContentFiltered": "PASS",
+    "wrongProjectChangedTargetAndBusyLeasesRefused": "PASS",
+    "callerUrlProfileRuntimeAndMessageOverridesRefused": "PASS"
+  },
+  "retainedQualificationCorrections": [
+    "One new test fixture omitted store initialization; corrected before its passing run.",
+    "Initial coordinator test filter selected zero tests; excluded from passing test counts and rerun with the actual module path.",
+    "Strict Clippy requested a collapsed conditional; corrected before its passing run."
+  ],
+  "acceptance": {
+    "source": "TESTED_SOURCE",
+    "separateControllerBuild": "PASS_DEVELOPMENT_ONLY",
+    "actualInstalledProfileObservation": "PASS_OBSERVER_ROUTE_UNUSABLE",
+    "originalTimedOutInvitation": "ATTENTION_UNVERIFIED_NO_REPLAY",
+    "nativeEditAndVerification": "NOT_RUN",
+    "c1": "BLOCKED_REGISTERED_CONVERSATION_NOT_LOADED_NOT_COMPLETE",
+    "c2ThroughC5": "NOT_RUN"
+  },
+  "implementationCommit": "6403a44f96b7d1fa9d5b114b4735262f0da4dafa",
+  "developmentController": {
+    "classification": "BUILT_SEPARATELY_NOT_INSTALLED",
+    "sha256": "40c4a52d6f7ab4a62b2d13883ab83cb59c92703585b0b05bacfbedb317b0c203",
+    "buildSeconds": 60.015,
+    "preservationPins": 1048,
+    "preservationMismatches": 0
+  },
+  "liveObservation": {
+    "elapsedSeconds": 34.859,
+    "returnedStatus": "BROWSER_READINESS_OBSERVED",
+    "failureReason": null,
+    "lastPhase": "BROWSER_CLOSED",
+    "finalState": "HOME",
+    "browserObservation": {
+      "assistant": "ABSENT",
+      "composer": "UNKNOWN",
+      "document": "COMPLETE",
+      "editor": "MISSING",
+      "exchange": "UNATTRIBUTED",
+      "generation": "IDLE",
+      "history": "ABSENT",
+      "recovery": "OBSERVATION_ONLY",
+      "route": "HOME"
+    },
+    "tabObservation": {
+      "alternateRoute": false,
+      "candidateFrame": "UNKNOWN",
+      "candidateRoute": "UNKNOWN",
+      "candidateShape": "UNOBSERVED",
+      "controlledRoute": "HOME",
+      "controlledShape": "STRING",
+      "metadataMatches": 0,
+      "schemaVersion": 1,
+      "stage": "METADATA",
+      "state": "TARGET_TAB_MISSING",
+      "tabCount": 1,
+      "unreadableMetadata": 0
+    },
+    "ownedTreeExited": true,
+    "preservationPins": 1049,
+    "preservationMismatches": 0,
+    "messagesSent": 0,
+    "retries": 0,
+    "bindingChanges": 0,
+    "nativeGrantsCreated": 0,
+    "servingStarts": 0,
+    "recurringStarts": 0,
+    "wakeHostStopped": true,
+    "installedProfileProcessMatches": 0,
+    "wakeHostProcessMatches": 0,
+    "port3200ListenerPresent": false
+  },
+  "remainingBlocker": {
+    "layer": "BROWSER_REGISTERED_TARGET_ACCESS",
+    "observed": "HOME_WITHOUT_HISTORY_OR_EDITOR_AND_REGISTERED_TAB_MISSING",
+    "authenticationCause": "NOT_ESTABLISHED",
+    "priorInvitationOutcome": "UNCHANGED_UNVERIFIED_NO_REPLAY",
+    "operatorAction": "Confirm the expected account and registered-conversation access in the existing installed Wake profile through the qualified bounded observer. Do not send, clear drafts, switch profiles or change bindings. Sign-in, if required, needs a supported attended login owner; the development-isolation guard must not be bypassed.",
+    "nextExecutable": "Supported read-only receipt reconciliation only after exact registered conversation access is available. No new USER invitation or native execution grant while the old delivery remains unverified.",
+    "repeatedUnchangedChecks": "NOT_SCHEDULED"
+  }
+}

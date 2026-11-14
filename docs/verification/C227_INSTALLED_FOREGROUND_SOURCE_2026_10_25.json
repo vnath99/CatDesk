@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C227",
+  "status": "SOURCE_QUALIFIED_FOREGROUND_RUNTIME_NOT_YET_RUN",
+  "sourceParent": "687a2aa27cf42504f2cb3ba17ab402bbaed01640",
+  "branch": "codex/web-rollover-oct17",
+  "command": "operator installed-backend run --max-runtime-seconds <1..180>",
+  "implementation": {
+    "installedArtifactReplaced": false,
+    "developmentSelectorChanged": false,
+    "releaseAuthorityCreated": false,
+    "trust": "Existing selected pointer, slot and canonical pair must agree; completed stopped-release authority is validated by fixed existing recovery readers. No fallback or new promotion.",
+    "lease": "Fixed trusted PowerShell helper holds the actual exclusive lifecycle FileStream until shutdown. Holder loss exits the admitted dedicated controller and closes its armed lifetime Job.",
+    "ownership": "Exact finite CLI admission before children; suspended owned child spawn, retained armed Jobs, whole-tree exit and listener/image proofs. Existing detached-serving outside-Job guard remains unchanged.",
+    "inputs": "All four binary/helper/interpreter inputs are rehashed after deny-write/delete handles are held and before helper launch.",
+    "profile": "Read-only HEADLESS_LOCAL using a private copy of the settled qualification configuration and its known loopback route.",
+    "authentication": "Validated caller process bearer, never persisted or printed; helper receives no bearer. No authentication settings changed.",
+    "budget": "Whole command deadline, including startup and teardown. Child receives remaining time minus 30-second cleanup reserve; small accepted syntax values can refuse insufficient budget.",
+    "artifacts": "Unique recovery-evidence run metadata and copied configuration; settled release files, bindings, history and original transaction remain unchanged."
+  },
+  "qualification": {
+    "startedUtc": "2026-10-26T00:56:50.4279935+00:00",
+    "finishedUtc": "2026-10-26T00:58:25.0931391+00:00",
+    "steps": 6,
+    "allExitCodes": 0,
+    "timeout": false,
+    "sourcePinsPreserved": true,
+    "rustPassed": 30,
+    "optInHelpersDirectlyIgnored": 2,
+    "groups": {
+      "closedCli": 1,
+      "installedBackend": 8,
+      "ownership": 16,
+      "stoppedRegression": 5
+    },
+    "format": "PASS",
+    "strictRootClippy": "PASS",
+    "independentStaticReviews": 2,
+    "evidenceType": "SOURCE_FIXTURES_AND_DISPOSABLE_WINDOWS_PROCESS_CANARIES",
+    "manifestSha256": "5fb8386106c7f8c16780adf4b2871108786bfbf72150f09ac574fd7788ab5649",
+    "resultSha256": "1f2128a61d0cf008e1a5c87c4e60fe323cd86be260aa1d94432db96b9b928458",
+    "outerSha256": "7cd02121b7ee16df2258526eb75ddc13db17a40bb55af1b66e3fa5c006c61065"
+  },
+  "cleanup": {
+    "observedUtc": "2026-10-26T01:00:45.0805548+00:00",
+    "evidenceSha256": "02d34071ae5ddb36f82c96c30f50cbdb05dda55cf98cf82e09ee3b96c4f25f60",
+    "scope": "C227 source test image/run prefixes plus installed image and port 3200",
+    "testOwnedProcesses": 0,
+    "installedProcesses": 0,
+    "listeners": 0,
+    "processActions": 0
+  },
+  "qualifiedWorkingFileSha256": {
+    "src/operator_facade.rs": "dc11b781514338546e59378eb5c5afc18efe900f04b466f4e06fe65250658cd0",
+    "src/operator_installed_backend.rs": "01f359ec53b2d70de600921b0ced2fa066cc726a823a642f770d65b9eeacc1d3",
+    "src/reviewed_candidate_owner.rs": "526d03b7ad9e60dfc16b42c781363bc0f6c080f3e033ec5f9157ddab254f6548"
+  },
+  "limits": [
+    "Requires a newly qualified controller containing this command; installed older C208 and prior C224 controller do not acquire it automatically.",
+    "First slice accepts the existing slot-b generation-2 stopped qualification, unscoped read-only profile and known local route; it does not expose project writes or the official connector route.",
+    "No native-daemon, unattended serving, different-version rollback, connector or two-Web-conversation acceptance.",
+    "Normal controller build and actual foreground live qualification remain next gates. Connector HTTP 429 was not retried."
+  ],
+  "productionActions": 0,
+  "browserWakeRecurringStarts": 0,
+  "milestoneComplete": false
+}

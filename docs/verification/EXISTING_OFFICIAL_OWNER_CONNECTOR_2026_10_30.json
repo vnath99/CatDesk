@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T14:04:00.765165+00:00",
+  "classification": "ACTUAL_INSTALLED_C254_EXISTING_OFFICIAL_OWNER_AND_CONNECTOR_TOOL_RESPONSE_PASS",
+  "sourceBranch": "codex/web-rollover-oct17",
+  "documentationBaseCommit": "ce8e45158b48929f3a4f9f53ae8ada2b3b38acf7",
+  "installedReviewedSourceCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "installedSha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf",
+  "authorization": {
+    "basis": "EXISTING_USER_STANDING_MONITORED_TEST_AUTHORIZATION_AND_SEPARATE_BOUNDED_EXISTING_OWNER_EXCEPTION",
+    "freshExactHashApprovalClaimed": false,
+    "originalFrozenWorkflowPreserved": true,
+    "priorTerminalAttemptPreservedAndNotReplayed": true,
+    "freshWorkflowSha256": "dcbf6263141f7a2b8cc49970bb3e94a8795fe56cb77d0c4da2af2106eef3068e",
+    "maximumSeconds": 180,
+    "elapsedSeconds": 39.544,
+    "connectorProbes": 1,
+    "providerMessages": 0
+  },
+  "installedAndOwner": {
+    "publicBackendOnlyStart": "LOCAL_BACKEND_READY",
+    "existingAliasAndProfileReused": true,
+    "existingTunnelVerified": true,
+    "existingKeyReferenceReused": true,
+    "runtimeReady": true,
+    "runtimeStopVerified": true,
+    "backendStopVerified": true,
+    "profileBytesUnchanged": true,
+    "currentServingState": "STOPPED_AFTER_BOUNDED_TEST"
+  },
+  "connector": {
+    "tool": "catdesk_transport_status",
+    "responseReceived": true,
+    "isError": false,
+    "started": {
+      "current_time": "2026-10-30 14:01:19 UTC"
+    },
+    "finished": {
+      "current_time": "2026-10-30 14:01:23 UTC"
+    },
+    "httpStatus": null,
+    "httpStatusNotExposedByTool": true,
+    "servingCanonicalParity": "MATCH",
+    "transportReportedHealth": "CONFIGURED_UNVERIFIED",
+    "localMcpReportedCheck": "NOT_CHECKED",
+    "authReportedMode": "LEGACY_NO_BEARER",
+    "latestHistorical429SupersededBySuccessfulToolResponse": true,
+    "continuousAvailabilityOrWebCodingProved": false,
+    "storedWakeSnapshotIsNotCurrentProcessOrTargetVerification": true,
+    "rawPrivateResponseSha256": "ef99ced50bc0967b4ab331779cac19aa7d21ddc288119d72fee224a66289efc0"
+  },
+  "preservation": {
+    "protectedFilesUnchanged": 131,
+    "profileUnchanged": true,
+    "productionExecutableChanged": false,
+    "developmentSelectionChanged": false,
+    "bindingChanges": 0,
+    "nativeProjectActions": 0,
+    "browserActions": 0,
+    "wakeActions": 0,
+    "newTunnels": 0,
+    "authenticationSettingChanges": 0,
+    "recurringAutomationStarts": 0,
+    "remainingBackendListeners": 0,
+    "remainingRuntimeOwners": 0,
+    "containmentExitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false,
+    "terminalResultSha256": "26fd306a140c9c32ce0fc4e0c41e9658f353b06811093b890e37d5f88c6049a0",
+    "outerResultSha256": "e3528e3a88c8293088af3b3772caf9bb599ffa70e8f2c71e951f9bc7c53b4508"
+  },
+  "remaining": {
+    "twoIndependentWebCodingConversations": "OPEN_NO_WEB_ORIGIN_TOOL_CALLS",
+    "registeredBrowserReadiness": "SAME_PENDING_EXISTING_PROFILE_INSPECTION_NO_NEW_SIGNIN_REQUEST",
+    "currentFullSourcePromotion": "GENUINE_MANAGED_REVIEW_ACK_SNAPSHOT_AND_CONTROLLED_PRODUCER_AUTHORITY_NOT_ESTABLISHED",
+    "managedSolLaunch": "REFUSED_BY_EXISTING_HOST_AUTHORITY_AND_OS_ISOLATION_GATES",
+    "centralDefaultConnection": "LEGACY_NO_BEARER_NOT_QUALIFIED_FOR_CENTRAL_TASK_DISPATCH",
+    "currentRealDevelopment": "B322_VERIFIED_PREVIOUS_DF0CAB_RETAINED_BOTH_STOPPED",
+    "unattendedOperation": "NOT_ACTIVATED"
+  },
+  "goal": "ACTIVE"
+}

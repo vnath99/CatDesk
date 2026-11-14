@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T00:33:48.027413+00:00",
+  "classification": "SOURCE_PATH_BOUNDARY_CORRECTION_WITH_PREVIOUS_REAL_TAB_OBSERVATION",
+  "sourceBaseCommit": "520160546daa076413ff9dd1d54dc7b03c5368f5",
+  "previousLive": {
+    "sourceCommit": "520160546daa076413ff9dd1d54dc7b03c5368f5",
+    "candidateSha256": "2540934b5a64e16ccdc7106876ebffc92dfa1a66bcbe64ce3b824870495e5840",
+    "previousSha256": "487382841885e236394782a0f1c5e020c58d5fb4a51e9eadf763bb3054d51b4a",
+    "profile": "DEV_DEBUG",
+    "browserObservation": {
+      "assistant": "ABSENT",
+      "composer": "UNKNOWN",
+      "document": "COMPLETE",
+      "editor": "MISSING",
+      "exchange": "UNATTRIBUTED",
+      "generation": "IDLE",
+      "history": "ABSENT",
+      "recovery": "OBSERVATION_ONLY",
+      "route": "HOME"
+    },
+    "tabObservation": {
+      "alternateRoute": false,
+      "candidateFrame": "TOP",
+      "candidateRoute": "HOME",
+      "candidateShape": "STRING",
+      "controlledRoute": "HOME",
+      "controlledShape": "STRING",
+      "metadataMatches": 1,
+      "schemaVersion": 1,
+      "stage": "DOCUMENT",
+      "state": "TARGET_TAB_DRIFT",
+      "tabCount": 1,
+      "unreadableMetadata": 0
+    },
+    "finalBrowserState": "HOME",
+    "messagesSent": 0,
+    "productionChanged": false,
+    "elapsedSeconds": 94.938,
+    "criticalPinsChecked": 128,
+    "criticalMismatchCount": 0,
+    "statePinsChecked": 200,
+    "stateMismatchCount": 0,
+    "previousFilesChecked": 6,
+    "previousMismatchCount": 0
+  },
+  "earlierSelectionStage": {
+    "alternateRoute": false,
+    "candidateFrame": "TOP",
+    "candidateRoute": "EXACT",
+    "candidateShape": "STRING",
+    "controlledRoute": "HOME",
+    "controlledShape": "STRING",
+    "metadataMatches": 1,
+    "schemaVersion": 1,
+    "stage": "SWITCH",
+    "state": "TARGET_TAB_DRIFT",
+    "tabCount": 1,
+    "unreadableMetadata": 0
+  },
+  "finding": "MANUAL_LOGIN_NORMALIZED_BROWSER_PATHS_BUT_SHARED_READINESS_PREFLIGHT_DID_NOT",
+  "correction": "REUSE_EXISTING_BROWSER_PROCESS_ROOT_WITH_EXACT_OS_OBJECT_IDENTITY_CHECK_FOR_PYTHON_AND_PROFILE",
+  "notProven": "PATH_SPELLING_CAUSED_LIVE_HOME_DRIFT",
+  "tests": {
+    "newWindowsRegressionFailedBeforeFix": true,
+    "developmentRuntimeTestsPassed": 48,
+    "rootAndWakeAllTargetClippyWarningsDenied": "PASS"
+  },
+  "privateEvidenceSha256": {
+    "oct31-tab-route-debug-live-result.private.json": "258a06c8b5a2df901093e91d27d720fa80052c48531fd5bb046af628094dd712",
+    "oct31-tab-route-debug-live-owner.private.json": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "oct31-browser-path-regression-before.private.log": "47ea897fb553f26c207d48bff0ba3cc6165c54f6a47664751f65fd8e1e81bdb1",
+    "oct31-browser-path-development48.private.log": "375e17dac30583f1c5145a6d9aac31bad4ab255f43142eb26b6f0f0941a771e7",
+    "oct31-browser-path-wake-clippy.private.log": "8588a2d02a6e9591e84f4f5f1e8a22c4436569248e36fd301b0e051b43fab02d",
+    "oct31-browser-path-root-clippy.private.log": "e6e6833a368a245e8acc6ccb69b1d402f6d8344fabe079e14c11093a4d78e11b"
+  },
+  "guardsPreserved": [
+    "approved profile identity",
+    "source and artifact authority",
+    "lease/CAS/draft/route",
+    "unknown and completed submissions",
+    "all original project bindings",
+    "existing Job lifecycle"
+  ],
+  "acceptance": {
+    "newPathFixInstalled": "PENDING",
+    "exactConversationReached": "OPEN",
+    "assistantLoadErrorLive": "OPEN",
+    "twoWebCodingAndIndependentWake": "OPEN",
+    "protectedProductionSourcePromotion": "OPEN"
+  },
+  "nextExecutableTask": "EXACT_COMMIT_DEBUG_BUILD_AND_ONE_BOUNDED_SELECTED_PROFILE_READONLY_OBSERVATION",
+  "operatorActionRequired": false
+}
