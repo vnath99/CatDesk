@@ -45,7 +45,7 @@ class ContinuityTests(unittest.TestCase):
         for p, raw in self.supporting_baseline.items(): (self.root / p).write_bytes(raw)
         self.event_path = pathlib.Path(self.temp.name) / "event.json"
         evidence = "docs/verification/WIDGET_RESOURCE_DIAGNOSTIC_2026_11_14.json"
-        current=docs.machine_handoff((self.root/docs.PRIMARY[0]).read_text())
+        current=docs.machine_handoff((self.root/docs.PRIMARY[0]).read_text(encoding="utf-8"))
         self.event = dict(event_id="test-progress", timestamp_utc="2026-11-14T17:00:00Z", agent="Fixture",
             ticket=current["ticket"], milestone=current["milestone"], source_sha=self.head,
             status="IN_PROGRESS", milestone_status="ACTIVE", maturity="SOURCE_TESTED", outcome="partial",
@@ -125,27 +125,27 @@ class ContinuityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "PRIVATE_EVENT"): docs.record(self.root, self.event_path, True)
 
     def test_duplicate_ticket_and_status_conflicts_detected(self):
-        p = self.root/docs.PRIMARY[4]; t=p.read_text(); row=next(x for x in t.splitlines() if x.startswith("| DOC-CONTINUITY |"));p.write_text(t+'\n'+row+'\n')
+        p = self.root/docs.PRIMARY[4]; t=p.read_text(encoding="utf-8"); row=next(x for x in t.splitlines() if x.startswith("| DOC-CONTINUITY |"));p.write_text(t+'\n'+row+'\n',encoding="utf-8")
         self.assertIn("DUPLICATE_TICKET_ID", docs.inspect(self.root)["errors"])
 
     def test_missing_link_detected(self):
-        p=self.root/docs.PRIMARY[0];p.write_text(p.read_text()+'\n[missing](not-present.md)\n')
+        p=self.root/docs.PRIMARY[0];p.write_text(p.read_text(encoding="utf-8")+'\n[missing](not-present.md)\n',encoding="utf-8")
         self.assertTrue(any(x.startswith("MISSING_LINK:") for x in docs.inspect(self.root)["errors"]))
 
     def test_unknown_handoff_commit_detected(self):
-        p=self.root/docs.PRIMARY[0];p.write_text(p.read_text().replace('"source_sha":"'+docs.machine_handoff(p.read_text())["source_sha"]+'"','"source_sha":"'+'0'*40+'"'))
+        p=self.root/docs.PRIMARY[0];p.write_text(p.read_text(encoding="utf-8").replace('"source_sha":"'+docs.machine_handoff(p.read_text(encoding="utf-8"))["source_sha"]+'"','"source_sha":"'+'0'*40+'"'),encoding="utf-8")
         self.assertIn("HANDOFF_IDENTITY_UNPROVEN", docs.inspect(self.root)["errors"])
 
     def test_unknown_commit_in_human_handoff_is_detected(self):
-        p=self.root/docs.PRIMARY[0];p.write_text(p.read_text()+'\nClaimed source: '+'1'*40+'\n')
+        p=self.root/docs.PRIMARY[0];p.write_text(p.read_text(encoding="utf-8")+'\nClaimed source: '+'1'*40+'\n',encoding="utf-8")
         self.assertIn("HANDOFF_COMMIT_UNRESOLVED:"+'1'*40,docs.inspect(self.root)["errors"])
 
     def test_legacy_master_cannot_compete_with_primary_authority(self):
-        p=self.root/'docs/orchestrator/CATDESK_PROJECT_HANDOFF.md';p.write_text('# Current master handoff\n')
+        p=self.root/'docs/orchestrator/CATDESK_PROJECT_HANDOFF.md';p.write_text('# Current master handoff\n',encoding="utf-8")
         self.assertIn("LEGACY_AUTHORITY_CONFLICT:CATDESK_PROJECT_HANDOFF.md",docs.inspect(self.root)["errors"])
 
     def test_readme_must_advertise_all_five_primary_documents(self):
-        p=self.root/'README.md';p.write_text('# CatDesk\n')
+        p=self.root/'README.md';p.write_text('# CatDesk\n',encoding="utf-8")
         self.assertIn("README_PRIMARY_AUTHORITY_LINKS_MISSING",docs.inspect(self.root)["errors"])
 
     @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 unavailable")

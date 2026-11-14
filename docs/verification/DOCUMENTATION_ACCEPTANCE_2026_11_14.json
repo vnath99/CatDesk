@@ -1,0 +1,110 @@
+{
+  "observedUtc": "2026-11-14T17:26:20.749796+00:00",
+  "scope": "DOCUMENTATION_CONTINUITY_NOT_PRODUCT_MVP_ACCEPTANCE",
+  "codeAndVerificationCheckpoint": "077e954de2c7ad399425f2272b8145cbe4a508e5",
+  "branch": "codex/docs-consolidation-nov14",
+  "pullRequest": "https://github.com/vnath99/CatDesk/pull/5",
+  "mainMerged": false,
+  "productionDeployment": false,
+  "sourceQualification": {
+    "testsPassed": 20,
+    "localExitStatus": 0,
+    "cleanGithubCloneExitStatus": 0,
+    "fullRustSuite": "NOT_RERUN_NO_APPLICATION_RUNTIME_CODE_CHANGE",
+    "hostedCI": "NOT_CLAIMED"
+  },
+  "githubOnlyRecovery": {
+    "startedUtc": "2026-11-14T17:23:41.831714+00:00",
+    "usesCatDeskConnector": false,
+    "usesLocalObjectCache": false,
+    "browserStarts": 0,
+    "messagesSent": 0,
+    "runtimeActions": 0,
+    "failure": null,
+    "firstAttemptRetained": true,
+    "cloneSha": "077e954de2c7ad399425f2272b8145cbe4a508e5",
+    "cloneClean": true,
+    "docsCheck": {
+      "errors": [],
+      "internalLinksChecked": 472,
+      "milestones": 4,
+      "passed": true,
+      "primaryDocuments": 5,
+      "scope": "FIVE_PRIMARY_AND_NEW_SUPPORTING_DOCS; LEGACY_LINKS_GRANDFATHERED_NOT_SILENTLY_FIXED",
+      "tickets": 441
+    },
+    "testsPassed": 20,
+    "localRuntimeStatePresent": false,
+    "evidenceLFStable": true,
+    "successfulSourceRecovery": true,
+    "finishedUtc": "2026-11-14T17:24:03.486730+00:00"
+  },
+  "freshAIExercises": [
+    {
+      "mode": "FRESH_CONTEXT_LOCAL_ENTRYPOINT_ONLY",
+      "tenQuestionsAnswered": true,
+      "issues": [
+        "Initial publication pending",
+        "Historical inferred titles",
+        "Old architecture current-health/local-state wording"
+      ],
+      "resolution": "Published branch; titles made explicitly uncertain; architecture subordinate to current roots"
+    },
+    {
+      "mode": "FRESH_CONTEXT_GITHUB_ONLY_NO_CATDESK",
+      "commitRead": "f3dde7f2c8e647e83e85524c0f45ff101cd02ee6",
+      "tenQuestionsAnswered": true,
+      "sourceRecoveryPassed": true,
+      "runtimeHealthInferred": false,
+      "remainingIssues": "Pre-push wording and owner identity were acknowledged snapshots; corrected in final handoff"
+    }
+  ],
+  "preservedHistory": {
+    "originalMilestoneChronology": "Exact published Git blob linked, not deleted from history",
+    "legacyHandoffAndCommands": "Full body retained after compatibility notice",
+    "localOperationalFiles": "Not copied or reset",
+    "historicalTicketState": "UNVERIFIED where no attributable acceptance; OPEN index row does not reopen old implementation"
+  },
+  "maintenance": {
+    "actualFourDocumentEventApplied": true,
+    "idempotencyAndPostCommitRepeatTested": true,
+    "changedEventRefused": true,
+    "interruptedUpdateRefused": true,
+    "acceptanceEscalationRefused": true,
+    "hook": "Existing development verify command; not an installed runtime hook"
+  },
+  "initialFailure": {
+    "cloneAndDocCheckPassed": true,
+    "testFixtureCommitFailedOnCleanClone": true,
+    "correction": "Fixture permits its isolated identity commit when there is no overlay delta",
+    "fixCommit": "8776396911e78787442f40f8b15341e4173ce61d",
+    "finalColdCloneTestsPassed": 20
+  },
+  "normalization": {
+    "ownedContinuityFilesOnly": true,
+    "originalPreNormalizationQualificationBytesRetainedPrivately": true,
+    "oldSourceEventHashDescribesHistoricalWorkingBytes": true,
+    "publishedGitBlobHashesSeparate": true
+  },
+  "remainingProductGates": [
+    "Embedded client rendering and host bridge unqualified",
+    "Original held C1/C49/native and unknown external-review operations not replayed",
+    "Protected Wake migration requires coherent original state and legitimate purpose-bound authority",
+    "Full Web edit/checkpoint/self-Wake and two-project independence remain open",
+    "Unattended/reboot restoration remains unqualified"
+  ],
+  "finalDocumentStateValidation": {
+    "testsPassed": 20,
+    "sourcePatch": "Explicit UTF-8 reads/writes in Windows fixtures; no runtime logic change",
+    "priorFailure": "One fixture used the Windows cp1252 default to read UTF-8 Markdown; decoder refusal retained in tool audit"
+  },
+  "finalProcessObservation": {
+    "observedUtc": "2026-11-14T17:28:20.2384587Z",
+    "canonicalBackendOwners": 1,
+    "readOnlyTestControllerOwners": 0,
+    "port3200ListenerPresent": true,
+    "wakeHostProcesses": 0,
+    "browserStarts": 0,
+    "processActions": 0
+  }
+}
