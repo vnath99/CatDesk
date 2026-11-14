@@ -42,6 +42,9 @@ function Invoke-VerificationCommands {
     $priorIncrementalValue = if ($hadIncremental) { [string]$priorIncremental.Value } else { $null }
     try {
         $env:CARGO_INCREMENTAL = '0'
+        # Documentation continuity is source-only and works with CatDesk down.
+        # It cannot grant installation, review, or runtime acceptance authority.
+        Invoke-FixedCommand 'python' @('-I', '-B', 'scripts/catdesk_docs.py', 'check')
         Invoke-FixedCommand 'cargo' @('fmt', '--all', '--', '--check')
         Invoke-FixedCommand 'cargo' @('clippy', '--locked', '--offline', '--workspace', '--all-targets', '--all-features', '--', '-D', 'warnings')
         Invoke-FixedCommand 'cargo' @('test', '--locked', '--offline', '--bin', 'catdesk')

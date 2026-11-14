@@ -1,0 +1,46 @@
+{
+  "observedUtc": "2026-11-14T17:11:04.218948+00:00",
+  "sourceBase": "5d51a1dd9d176f94ac8e1ec04f44d6c91d18d4e5",
+  "branch": "codex/docs-consolidation-nov14",
+  "commands": [
+    {
+      "command": "python -I -B -m unittest discover -s tests -p test_catdesk_docs.py -v",
+      "exitStatus": 0,
+      "passed": 16
+    },
+    {
+      "command": "python -I -B scripts/catdesk_docs.py check",
+      "exitStatus": 0,
+      "result": {
+        "errors": [],
+        "internalLinksChecked": 471,
+        "milestones": 4,
+        "passed": true,
+        "primaryDocuments": 5,
+        "scope": "FIVE_PRIMARY_AND_NEW_SUPPORTING_DOCS; LEGACY_LINKS_GRANDFATHERED_NOT_SILENTLY_FIXED",
+        "tickets": 441
+      }
+    },
+    {
+      "command": "git diff --check",
+      "exitStatus": 0
+    }
+  ],
+  "privacyScan": "NO_MATCHES_IN_ADDITIONS_OR_NEW_FILES_FOR_FIXED_PATTERNS; HUMAN_SCOPE_REVIEW_STILL_REQUIRED",
+  "initialFailure": "First 15-case run had one test expecting four changed files; milestone progress was not being refreshed. Fixed existing updater to refresh progress while preserving baseline text; final 16 cases pass.",
+  "handoffExercise": {
+    "kind": "FRESH_CONTEXT_AGENT_LOCAL_READONLY",
+    "result": "All ten questions answered with references; publication not yet proven",
+    "findingsResolved": [
+      "Historical ticket title inference removed where evidence did not supply title",
+      "Architecture now treats old transport health as historical and local operational files as clone-optional",
+      "Pre-publication reconciliation no longer called publication proof"
+    ],
+    "githubOnlyExercise": "PENDING_PUBLICATION"
+  },
+  "runtimeChanges": 0,
+  "sourceRuntimeBehaviorChanged": false,
+  "maintenanceHook": "Existing catdesk-dev-lane verify checks docs before unchanged Rust verification commands; actual extracted PowerShell function tested with inert command seam",
+  "hostedCI": "NOT_RUN_NO_CURRENT_CI_ACCEPTANCE_CLAIM",
+  "historicalStatusLimitation": "OPEN/UNVERIFIED historical index rows mean status reconciliation pending, not reopened implementation; no acceptance fabricated"
+}
