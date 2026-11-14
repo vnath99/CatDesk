@@ -72,6 +72,11 @@ pub(crate) enum WebAction {
     InitializeStatus {
         project_id: String,
     },
+    InitializeRecover {
+        project_id: String,
+        input_file: PathBuf,
+        execute: bool,
+    },
     RegisterProject {
         project_id: String,
         workspace: PathBuf,
@@ -311,6 +316,10 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         .ok_or("WEB_USAGE: missing target action")?;
     let mut options = BTreeMap::new();
     let tail = &args[4..];
+    let execute_flags = tail.iter().filter(|v| v.as_str() == "--execute").count();
+    if execute_flags > 1 || (execute_flags == 1 && (group != "initialize" || verb != "recover")) {
+        return Err("WEB_USAGE: --execute is initialization recovery only".into());
+    }
     let manual_flags = tail
         .iter()
         .filter(|value| value.as_str() == "--allow-manual-wake")
@@ -341,6 +350,7 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                 "--allow-manual-wake",
                 "--allow-git-checkpoint",
                 "--allow-git-sync",
+                "--execute",
             ]
             .contains(&value.as_str())
         })
@@ -791,6 +801,21 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         ("initialize", "status") if options.is_empty() => Ok(WebAction::InitializeStatus {
             project_id: project_id.into(),
         }),
+        ("initialize", "recover") => {
+            let input_file = PathBuf::from(
+                options
+                    .remove("--input-file")
+                    .ok_or("WEB_USAGE: --input-file is required")?,
+            );
+            if !options.is_empty() {
+                return Err("WEB_USAGE: unexpected recovery option".into());
+            }
+            Ok(WebAction::InitializeRecover {
+                project_id: project_id.into(),
+                input_file,
+                execute: execute_flags == 1,
+            })
+        }
         ("rollover", "status") if options.is_empty() => Ok(WebAction::RolloverStatus {
             project_id: project_id.into(),
         }),
@@ -2259,6 +2284,17 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
         WebAction::InitializeStatus { project_id } => {
             rollover::onboarding::status(&workspace, &project_id)
         }
+        WebAction::InitializeRecover {
+            project_id,
+            input_file,
+            execute,
+        } => rollover::onboarding::recover(
+            &workspace,
+            &project_id,
+            read_input(&input_file)?,
+            execute,
+            &|| Ok(()),
+        ),
         WebAction::RolloverPrepare {
             project_id,
             handoff_file,
@@ -2533,6 +2569,52 @@ mod tests {
                 changed.extend(args(&[option, "foreign"]));
                 assert!(parse(&changed).is_err());
             }
+        }
+    }
+
+    #[test]
+    fn initialization_recovery_requires_frozen_input_and_explicit_commit() {
+        let base = args(&[
+            "operator",
+            "web",
+            "initialize",
+            "recover",
+            "--project-id",
+            "first",
+            "--input-file",
+            "recovery.json",
+        ]);
+        assert!(matches!(
+            parse(&base).unwrap(),
+            WebAction::InitializeRecover { execute: false, .. }
+        ));
+        let mut commit = base.clone();
+        commit.push("--execute".into());
+        assert!(matches!(
+            parse(&commit).unwrap(),
+            WebAction::InitializeRecover { execute: true, .. }
+        ));
+        commit.push("--execute".into());
+        assert!(parse(&commit).is_err());
+        assert!(parse(&base[..6]).is_err());
+        for option in ["--url", "--force", "--message", "--submit"] {
+            let mut invalid = base.clone();
+            invalid.extend(args(&[option, "foreign"]));
+            assert!(parse(&invalid).is_err());
+        }
+        for verb in ["execute", "status"] {
+            assert!(
+                parse(&args(&[
+                    "operator",
+                    "web",
+                    "initialize",
+                    verb,
+                    "--project-id",
+                    "first",
+                    "--execute"
+                ]))
+                .is_err()
+            );
         }
     }
 

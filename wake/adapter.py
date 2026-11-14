@@ -16,6 +16,7 @@ CHANNEL = sys.stdout
 ROOT = Path(sys.argv[1])
 MAX_BOOTSTRAP_REQUEST_BYTES = 32 * 1024
 SOURCE_SNAPSHOT_RESPONSE_BYTES = 64 * 1024
+BOOTSTRAP_RESPONSE_LIFECYCLE_V1 = True
 
 
 def emit(value):
@@ -40,7 +41,7 @@ def read_job_request():
     request = json.loads(line)
     if not isinstance(request, dict) or (not any(request.get(kind) is True for kind in
             ("bootstrap", "bootstrapProbe", "bootstrapDraftInspect", "bootstrapDraftArchive",
-             "bootstrapDraftRepair", "bootstrapQuarantineInspect")) and len(line) > 8192):
+             "bootstrapDraftRepair", "bootstrapQuarantineInspect", "initializationReadback")) and len(line) > 8192):
         raise ValueError("invalid job request")
     return request
 
@@ -362,14 +363,24 @@ def bootstrap_attempt(bridge, sb, request):
             sink.check_plain_home_draft(cdp)
         sink.smoke_path_submit(cdp, send_selector, sink.ui_timeout, editor_selector)
         sink.latch_issued_url(cdp)
+        if protocol_v2:
+            # A task-bound observation only: this is not a USER receipt or
+            # permission to bind the project, retry, or submit another message.
+            emit({"stage": "BOOTSTRAP_DESTINATION_OBSERVED", "projectId": project_id,
+                  "intentId": intent_id, "sourceGeneration": source["generation"],
+                  "sourceDigest": source["digest"], "messageDigest": message_digest,
+                  "destinationUrl": sink.url, "destinationDigest": bridge.digest(sink.url)})
         accepted_at = sink.wait_for_submission_accepted(cdp, 0, message_digest, message)
         emit({"stage": "BOOTSTRAP_SUBMISSION_ACCEPTED"})
-        if not cooperative:
-            sink.wait_for_response_completion(
-                cdp, message, allow_retry=False,
-                observer=lambda stage: emit({"stage": stage}),
-            )
-        sink.durable_receipt_round_trip(cdp)
+        # Cooperative bootstrap has the same owned-browser lifecycle as Wake:
+        # keep the generating document open, then refresh and verify persistence.
+        # Never turn a failed assistant response into another USER submission.
+        sink.wait_for_response_completion(
+            cdp, message, allow_retry=False,
+            observer=lambda stage: emit({"stage": stage}),
+        )
+        sink.durable_receipt_round_trip(cdp, completed_response=True)
+        sink.wait_for_persisted_response(cdp, message)
         sink.latch_issued_url(cdp)
         receipt = sink.confirm_exact_receipt(
             cdp, 0, message_digest, intent_id, message,
@@ -688,6 +699,44 @@ def bootstrap_probe(bridge, sb, request):
         emit({"stage": "BOOTSTRAP_COMPLETE", "receipt": completed})
     else:
         raise bridge.Attention("BOOTSTRAP_PROBE_STATE_INVALID")
+
+
+def initialization_readback(bridge, sb, request):
+    """Observe one original unknown initialization; no draft/edit/send path."""
+    if (set(request) != {"initializationReadback", "projectId", "intentId",
+                         "registrationDigest", "handoff", "candidateUrl", "nativeTurnStartedUtc"}
+            or request["initializationReadback"] is not True
+            or type(request["nativeTurnStartedUtc"]) is not int
+            or not 0 < request["nativeTurnStartedUtc"] <= int(time.time())):
+        raise bridge.Attention("INITIALIZATION_READBACK_REQUEST_INVALID")
+    project, intent, registration = request["projectId"], request["intentId"], request["registrationDigest"]
+    message = bridge.compose_initialization_message(project, intent, registration, request["handoff"])
+    expected = bridge.digest(bridge.normalize_message(message))
+    candidate = bridge.canonical_conversation_url(request["candidateUrl"])
+    if candidate != request["candidateUrl"]:
+        raise bridge.Attention("INITIALIZATION_READBACK_REQUEST_INVALID")
+    sink = bridge.NewConversationSink(None, ROOT / "browser-profile", 30, 20)
+    sink.url, sink.destination_url = candidate, candidate
+    cdp = prepare_cdp_target(bridge, sb, candidate)
+    # The ordinary pre-write readiness path can reload a blank shell. Recovery
+    # must instead wait read-only until this original exchange is mounted.
+    bounded_response_observation(bridge, sink, cdp, message, expected)
+    # No result may escape until the original USER is independently observed.
+    if not sink.exact(str(cdp.get_current_url())) or sink.user_message_digests(cdp) != [expected]:
+        raise bridge.Attention("INITIALIZATION_READBACK_USER_UNPROVEN")
+    sink.wait_for_response_completion(cdp, message, allow_retry=False,
+        observer=lambda stage: emit({"stage": stage}))
+    sink.durable_receipt_round_trip(cdp, completed_response=True)
+    sink.wait_for_persisted_response(cdp, message)
+    sink.verify_initialization_ack(cdp, project, intent, registration, message)
+    if not sink.exact(str(cdp.get_current_url())) or sink.user_message_digests(cdp) != [expected]:
+        raise bridge.Attention("INITIALIZATION_READBACK_USER_UNPROVEN")
+    emit({"stage": "INITIALIZATION_READBACK_COMPLETE", "receipt": {
+        "schemaVersion": 2, "projectId": project, "intentId": intent,
+        "sourceGeneration": 0, "sourceDigest": registration,
+        "destinationUrl": candidate, "destinationDigest": bridge.digest(candidate),
+        "messageDigest": expected, "sentUtc": request["nativeTurnStartedUtc"],
+        "evidence": "EXACT_USER_MESSAGE_APPENDED", "completion": "RESPONSE_COMPLETED"}})
 
 
 def bootstrap_quarantine_inspect(bridge, sb, request):
@@ -1114,7 +1163,9 @@ def main():
                     request = None
                     try:
                         request = read_job_request()
-                        if request.get("bootstrapQuarantineInspect") is True:
+                        if request.get("initializationReadback") is True:
+                            initialization_readback(bridge, sb, request)
+                        elif request.get("bootstrapQuarantineInspect") is True:
                             bootstrap_quarantine_inspect(bridge, sb, request)
                         elif request.get("bootstrapDraftRepair") is True:
                             bootstrap_draft_repair(bridge, sb, request)

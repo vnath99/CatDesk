@@ -768,6 +768,7 @@ mod tests {
             source: source.clone(),
             phase: Phase::Quarantined,
             bootstrap_progress: None,
+            bootstrap_readback: None,
             handoff: "preserved unknown handoff".into(),
             task_handoff: None,
             task_resume_event_id: None,

@@ -77,9 +77,49 @@ struct InitialConversation {
     context: InitialContext,
     phase: Phase,
     progress: Option<runtime::BootstrapProgress>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    bootstrap_readback: Option<runtime::BootstrapReadback>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    recovery: Option<InitialRecovery>,
     message_digest: String,
     receipt: Option<runtime::BootstrapReceipt>,
     created_utc: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct RecoveryInput {
+    schema_version: u32,
+    project_id: String,
+    intent_id: String,
+    registration_digest: String,
+    message_digest: String,
+    expected_record_sha256: String,
+    native_proof_sha256: String,
+    candidate_url: String,
+    native_turn_started_utc: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct InitialRecovery {
+    original_record_sha256: String,
+    input_sha256: String,
+    native_proof_sha256: String,
+    timestamp_basis: String,
+}
+
+fn recovery_hash(value: &impl Serialize) -> Result<String, String> {
+    serde_json::to_string(value)
+        .map(|value| digest(&value))
+        .map_err(|_| "WEB_INITIAL_RECOVERY_INPUT_INVALID".into())
+}
+
+fn sha64(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 fn registration_digest(value: &AutonomousProjectV1) -> Result<String, String> {
@@ -149,6 +189,30 @@ impl InitialConversation {
             )? != self.message_digest
         {
             return Err("WEB_INITIAL_JOURNAL_INVALID".into());
+        }
+        if let Some(readback) = &self.bootstrap_readback {
+            if self.progress != Some(runtime::BootstrapProgress::SendAttempted) {
+                return Err("WEB_INITIAL_JOURNAL_INVALID".into());
+            }
+            if let Some(hint) = &readback.unverified_destination {
+                hint.validate_scope(
+                    project,
+                    &self.intent_id,
+                    0,
+                    &self.registration_digest,
+                    &self.message_digest,
+                )?;
+            }
+        }
+        if let Some(recovery) = &self.recovery {
+            if !matches!(self.phase, Phase::Created | Phase::Bound)
+                || !sha64(&recovery.original_record_sha256)
+                || !sha64(&recovery.input_sha256)
+                || !sha64(&recovery.native_proof_sha256)
+                || recovery.timestamp_basis != "PROVIDER_TURN_STARTED_AT_NOT_EXACT_SEND_TIME"
+            {
+                return Err("WEB_INITIAL_RECOVERY_RECORD_INVALID".into());
+            }
         }
         match self.phase {
             Phase::Prepared if self.progress.is_none() && self.receipt.is_none() => {}
@@ -222,6 +286,10 @@ fn summary(record: &InitialConversation) -> Value {
         "messageDigest":record.message_digest,"contextBound":record.phase==Phase::Bound,
         "nativeOwnerChanged":false,"executionGranted":false,
         "submissionOutcomeUnknown":record.phase==Phase::Submitting && record.progress==Some(runtime::BootstrapProgress::SendAttempted),
+        "bootstrapReadback":record.bootstrap_readback.as_ref().map(|r|json!({
+            "hasUnverifiedDestinationHint":r.unverified_destination.is_some(),
+            "postSubmitDiagnostic":r.post_submit_diagnostic,"receiptAuthority":false})),
+        "recoveredWithoutSend":record.recovery.is_some(),
         "destination":record.receipt.as_ref().map(|receipt|&receipt.destination_url)})
 }
 
@@ -274,6 +342,8 @@ pub(crate) fn prepare(
         context: input,
         phase: Phase::Prepared,
         progress: None,
+        bootstrap_readback: None,
+        recovery: None,
         message_digest: String::new(),
         receipt: None,
         created_utc: now(),
@@ -415,6 +485,12 @@ pub(crate) fn execute(
                 checkpoint: &mut |checkpoint| {
                     keep_running()?;
                     unbound(workspace, &wake, &record)?;
+                    if runtime::capture_bootstrap_readback(
+                        &mut record.bootstrap_readback,
+                        &checkpoint,
+                    ) {
+                        return save(&store, &record);
+                    }
                     if let runtime::BootstrapCheckpoint::Progress(stage) = checkpoint {
                         record.phase = Phase::Submitting;
                         record.progress = Some(record.progress.map_or(stage, |old| old.max(stage)));
@@ -448,6 +524,160 @@ pub(crate) fn execute(
         record.phase = Phase::Created;
         save(&store, &record)?;
     }
+    bind_completed(workspace, &store, &wake, &mut record, keep_running)?;
+    Ok(summary(&record))
+}
+
+pub(crate) fn recover(
+    workspace: &Path,
+    project: &str,
+    input: RecoveryInput,
+    execute: bool,
+    keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<Value, String> {
+    recover_with_observer(
+        workspace,
+        project,
+        input,
+        execute,
+        keep_running,
+        |wake, record, input| {
+            runtime::read_initialization_candidate_guarded(
+                wake,
+                runtime::InitializationReadbackRequest {
+                    project,
+                    intent: &record.intent_id,
+                    registration: &record.registration_digest,
+                    handoff: &record.handoff()?,
+                    candidate: &input.candidate_url,
+                    native_turn_started_utc: input.native_turn_started_utc,
+                },
+                keep_running,
+            )
+        },
+    )
+}
+
+fn recover_with_observer(
+    workspace: &Path,
+    project: &str,
+    input: RecoveryInput,
+    execute: bool,
+    keep_running: &dyn Fn() -> Result<(), String>,
+    observe: impl FnOnce(
+        &Store,
+        &InitialConversation,
+        &RecoveryInput,
+    ) -> Result<runtime::BootstrapReceipt, String>,
+) -> Result<Value, String> {
+    keep_running()?;
+    let store = ProjectStore::open_existing(workspace, project)?;
+    let mut record = load(&store)?.ok_or("WEB_INITIAL_INTENT_REQUIRED")?;
+    if input.schema_version != 1
+        || input.project_id != project
+        || input.intent_id != record.intent_id
+        || input.registration_digest != record.registration_digest
+        || input.message_digest != record.message_digest
+        || !sha64(&input.expected_record_sha256)
+        || !sha64(&input.native_proof_sha256)
+        || input.native_turn_started_utc < record.created_utc
+        || input.native_turn_started_utc > now()
+    {
+        return Err("WEB_INITIAL_RECOVERY_INPUT_INVALID".into());
+    }
+    let candidate = Target::new(1, input.candidate_url.clone())?;
+    let input_hash = recovery_hash(&input)?;
+    let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
+        workspace,
+    )?)?;
+    if let Some(recovery) = &record.recovery {
+        if recovery.original_record_sha256 != input.expected_record_sha256
+            || recovery.input_sha256 != input_hash
+            || recovery.native_proof_sha256 != input.native_proof_sha256
+            || record.receipt_target("RESPONSE_COMPLETED")? != candidate
+        {
+            return Err("WEB_INITIAL_RECOVERY_INPUT_CHANGED".into());
+        }
+        if !execute {
+            return Ok(summary(&record));
+        }
+        admission::record_initialization_readback(
+            wake.root(),
+            &record.identity(),
+            record.receipt.as_ref().unwrap(),
+        )?;
+        if record.phase == Phase::Created {
+            bind_completed(workspace, &store, &wake, &mut record, keep_running)?;
+        } else if record.phase != Phase::Bound || paired(workspace, project)? != candidate {
+            return Err("WEB_INITIAL_RECOVERY_BINDING_CHANGED".into());
+        }
+        return Ok(summary(&record));
+    }
+    if record.phase != Phase::Submitting
+        || record.progress != Some(runtime::BootstrapProgress::SendAttempted)
+        || record.receipt.is_some()
+    {
+        return Err("WEB_INITIAL_RECOVERY_UNKNOWN_SUBMISSION_REQUIRED".into());
+    }
+    let path = store.root.join(FILE);
+    let record_hash = || {
+        std::fs::read(&path)
+            .map(|bytes| {
+                use sha2::Digest;
+                format!("{:x}", sha2::Sha256::digest(bytes))
+            })
+            .map_err(|_| "WEB_INITIAL_JOURNAL_UNAVAILABLE".to_string())
+    };
+    if record_hash()? != input.expected_record_sha256 {
+        return Err("WEB_INITIAL_RECOVERY_RECORD_CHANGED".into());
+    }
+    unbound(workspace, &wake, &record)?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        workspace,
+        wake.root(),
+        &candidate.url,
+    )?;
+    let receipt = observe(&wake, &record, &input)?;
+    runtime::validate_initialization_receipt(
+        &receipt,
+        project,
+        &record.intent_id,
+        &record.registration_digest,
+        &record.handoff()?,
+        "RESPONSE_COMPLETED",
+    )?;
+    if receipt.destination_url != candidate.url
+        || receipt.destination_digest != candidate.digest
+        || receipt.sent_utc != input.native_turn_started_utc
+    {
+        return Err("WEB_INITIAL_RECOVERY_RECEIPT_INVALID".into());
+    }
+    keep_running()?;
+    unbound(workspace, &wake, &record)?;
+    if record_hash()? != input.expected_record_sha256 {
+        return Err("WEB_INITIAL_RECOVERY_RECORD_CHANGED".into());
+    }
+    if !execute {
+        return Ok(
+            json!({"status":"INITIALIZATION_READBACK_VERIFIED_NOT_COMMITTED",
+            "projectId":project,"intentId":record.intent_id,"messageDigest":record.message_digest,
+            "observationOnly":true,"messagesSent":0,"bindingsChanged":false,"receiptVerified":true}),
+        );
+    }
+    record.receipt = Some(receipt);
+    record.phase = Phase::Created;
+    record.recovery = Some(InitialRecovery {
+        original_record_sha256: input.expected_record_sha256,
+        input_sha256: input_hash,
+        native_proof_sha256: input.native_proof_sha256,
+        timestamp_basis: "PROVIDER_TURN_STARTED_AT_NOT_EXACT_SEND_TIME".into(),
+    });
+    save(&store, &record)?;
+    admission::record_initialization_readback(
+        wake.root(),
+        &record.identity(),
+        record.receipt.as_ref().unwrap(),
+    )?;
     bind_completed(workspace, &store, &wake, &mut record, keep_running)?;
     Ok(summary(&record))
 }
@@ -568,6 +798,196 @@ mod first_conversation_tests {
             evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
             completion: "RESPONSE_COMPLETED".into(),
         });
+    }
+
+    fn unknown_fixture() -> (PathBuf, PathBuf, PathBuf, RecoveryInput) {
+        use sha2::Digest;
+        let (parent, control, wake) = fixture();
+        prepare(&control, "first", "initial-first", context("first")).unwrap();
+        let store = ProjectStore::open_existing(&control, "first").unwrap();
+        let mut record = load(&store).unwrap().unwrap();
+        let ticket = admission::try_acquire(&wake, record.identity(), |_| true)
+            .unwrap()
+            .unwrap();
+        record.phase = Phase::Submitting;
+        record.progress = Some(runtime::BootstrapProgress::SendAttempted);
+        save(&store, &record).unwrap();
+        let bytes = fs::read(store.root.join(FILE)).unwrap();
+        let input = RecoveryInput {
+            schema_version: 1,
+            project_id: "first".into(),
+            intent_id: record.intent_id,
+            registration_digest: record.registration_digest,
+            message_digest: record.message_digest,
+            expected_record_sha256: format!("{:x}", sha2::Sha256::digest(bytes)),
+            native_proof_sha256: "a".repeat(64),
+            candidate_url: "https://chatgpt.com/c/source-fixture-only-initial".into(),
+            native_turn_started_utc: now(),
+        };
+        drop(ticket);
+        drop(store);
+        (parent, control, wake, input)
+    }
+
+    fn observed(record: &InitialConversation, input: &RecoveryInput) -> runtime::BootstrapReceipt {
+        let mut complete = record.clone();
+        completed(&mut complete);
+        let mut receipt = complete.receipt.unwrap();
+        receipt.sent_utc = input.native_turn_started_utc;
+        receipt
+    }
+
+    #[test]
+    fn first_conversation_readback_recovers_original_unknown_without_another_send() {
+        let (_parent, control, wake, input) = unknown_fixture();
+        let path = control.join(".catdesk/web-rollovers/first").join(FILE);
+        let original = fs::read(&path).unwrap();
+        let admission_before = fs::read(wake.join("rollover-admission.json")).unwrap();
+        let sibling = registered_project(&control, "second").unwrap();
+        let read_only = recover_with_observer(
+            &control,
+            "first",
+            input.clone(),
+            false,
+            &|| Ok(()),
+            |_, record, input| Ok(observed(record, input)),
+        )
+        .unwrap();
+        assert_eq!(read_only["receiptVerified"], true);
+        assert_eq!(read_only["messagesSent"], 0);
+        assert_eq!(fs::read(&path).unwrap(), original);
+        assert_eq!(
+            fs::read(wake.join("rollover-admission.json")).unwrap(),
+            admission_before
+        );
+        let bound = recover_with_observer(
+            &control,
+            "first",
+            input.clone(),
+            true,
+            &|| Ok(()),
+            |_, record, input| Ok(observed(record, input)),
+        )
+        .unwrap();
+        assert_eq!(bound["phase"], "BOUND");
+        assert_eq!(paired(&control, "first").unwrap().generation, 1);
+        assert_eq!(registered_project(&control, "second").unwrap(), sibling);
+        let before = fs::read(&path).unwrap();
+        recover_with_observer(
+            &control,
+            "first",
+            input.clone(),
+            true,
+            &|| Ok(()),
+            |_, _, _| panic!("already recovered: must not reopen or send"),
+        )
+        .unwrap();
+        assert_eq!(fs::read(&path).unwrap(), before);
+        let mut changed = input;
+        changed.native_proof_sha256 = "b".repeat(64);
+        assert_eq!(
+            recover_with_observer(
+                &control,
+                "first",
+                changed,
+                true,
+                &|| Ok(()),
+                |_, _, _| panic!("changed recovery")
+            )
+            .unwrap_err(),
+            "WEB_INITIAL_RECOVERY_INPUT_CHANGED"
+        );
+    }
+
+    #[test]
+    fn first_conversation_readback_refuses_stale_mixed_or_incomplete_evidence() {
+        let (_parent, control, _wake, input) = unknown_fixture();
+        let path = control.join(".catdesk/web-rollovers/first").join(FILE);
+        let before = fs::read(&path).unwrap();
+        for field in 0..6 {
+            let mut changed = input.clone();
+            match field {
+                0 => changed.project_id = "second".into(),
+                1 => changed.intent_id = "other".into(),
+                2 => changed.registration_digest = "b".repeat(64),
+                3 => changed.message_digest = "b".repeat(64),
+                4 => changed.expected_record_sha256 = "b".repeat(64),
+                _ => changed.native_turn_started_utc = 0,
+            }
+            assert!(
+                recover_with_observer(
+                    &control,
+                    "first",
+                    changed,
+                    true,
+                    &|| Ok(()),
+                    |_, _, _| panic!("invalid identity must refuse before browser")
+                )
+                .is_err()
+            );
+        }
+        for field in 0..4 {
+            assert!(
+                recover_with_observer(
+                    &control,
+                    "first",
+                    input.clone(),
+                    true,
+                    &|| Ok(()),
+                    |_, record, input| {
+                        let mut receipt = observed(record, input);
+                        match field {
+                            0 => receipt.completion = "RESPONSE_PENDING".into(),
+                            1 => receipt.destination_url = "https://chatgpt.com/c/other".into(),
+                            2 => receipt.message_digest = "b".repeat(64),
+                            _ => receipt.sent_utc = 1,
+                        }
+                        Ok(receipt)
+                    }
+                )
+                .is_err()
+            );
+        }
+        assert!(
+            recover_with_observer(&control, "first", input, true, &|| Ok(()), |_, _, _| Err(
+                "LOGIN_OR_PROFILE_REQUIRED".into()
+            ))
+            .is_err()
+        );
+        assert_eq!(fs::read(&path).unwrap(), before);
+        assert_eq!(
+            execute(&control, "first", &|| Ok(())).unwrap_err(),
+            "WEB_INITIAL_SUBMISSION_UNKNOWN_NO_REPLAY"
+        );
+    }
+
+    #[test]
+    fn first_conversation_readback_resumes_after_receipt_save_without_reobserving() {
+        let (_parent, control, _wake, input) = unknown_fixture();
+        let store = ProjectStore::open_existing(&control, "first").unwrap();
+        let mut record = load(&store).unwrap().unwrap();
+        record.receipt = Some(observed(&record, &input));
+        record.phase = Phase::Created;
+        record.recovery = Some(InitialRecovery {
+            original_record_sha256: input.expected_record_sha256.clone(),
+            input_sha256: recovery_hash(&input).unwrap(),
+            native_proof_sha256: input.native_proof_sha256.clone(),
+            timestamp_basis: "PROVIDER_TURN_STARTED_AT_NOT_EXACT_SEND_TIME".into(),
+        });
+        save(&store, &record).unwrap();
+        drop(store);
+        assert_eq!(
+            recover_with_observer(
+                &control,
+                "first",
+                input,
+                true,
+                &|| Ok(()),
+                |_, _, _| panic!("receipt already saved")
+            )
+            .unwrap()["phase"],
+            "BOUND"
+        );
     }
 
     #[test]

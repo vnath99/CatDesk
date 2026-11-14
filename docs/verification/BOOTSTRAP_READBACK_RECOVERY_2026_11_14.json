@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-14T23:36:09Z",
+  "scope": "SOURCE_QUALIFICATION_AND_ONE_ORIGINAL_NO_SEND_DEVELOPMENT_READBACK",
+  "sourceCommit": "cc7b9aac8d920975125a5079fc9b69383d6490fb",
+  "branch": "codex/wake-lifecycle-nov14",
+  "remoteSourceShaReadbackMatched": true,
+  "goalState": "ACTIVE",
+  "implementation": {
+    "cooperativeBootstrapWaitsForIdleBeforeRefresh": true,
+    "completedResponsePersistenceRequired": true,
+    "destinationHintsAreNotReceipts": true,
+    "postSubmitDiagnosticsUseClosedVocabulary": true,
+    "readbackRequiresOriginalJournalHashAndTaskIdentity": true,
+    "readbackHasNoSubmitAcknowledgmentOrSendPath": true,
+    "receiptSaveInterruptionResumesWithoutResend": true,
+    "localBindingUsesExistingPairedCommit": true,
+    "providerTurnStartIsNotClaimedAsExactSendTime": true
+  },
+  "sourceChecks": {
+    "pythonInitializationNewConversationAndAdapter": {"passed": 149, "failed": 0},
+    "rustFirstConversation": {"passed": 9, "failed": 0},
+    "rustInitializationRelated": {"passed": 8, "failed": 0},
+    "rustBootstrapRuntimeFocused": {"passed": 21, "failed": 0},
+    "strictRootAndWakeClippy": "PASS",
+    "documentationTests": {"passed": 23, "failed": 0},
+    "documentationLinksChecked": 489,
+    "countsAreSeparateRunsAndNotAdditive": true
+  },
+  "nativeHistoryReadback": {
+    "originalUserDigestMatches": true,
+    "completedTurnCount": 1,
+    "historyPaginationComplete": true,
+    "rawMarkdownAcknowledgmentExact": false,
+    "acknowledgmentMatchesAfterKnownPrefixEscape": true,
+    "candidateIsNotBrowserOrBindingAuthority": true,
+    "messagesSent": 0
+  },
+  "developmentPackage": {
+    "selection": "PACKAGE_UPDATED_STOPPED",
+    "packageId": "1.0.0-dev.85-edf93f4cdc685851e613bd4a4143143125490bee1c25149c5b3708478333cf77",
+    "controllerSha256": "fa3772834474ad15f1d4ecf06b714381f6facc792805266c6a3c2f046942864f",
+    "hostSha256": "8b73d7efdccd2efb7a5c7801f9a4c1d0521845585f4f0f87f89289545fd6c410",
+    "adapterSha256": "40b53b8d48c255e07f92ebcc7ac1744c9a16b285d086450d14e00362ce1322a1",
+    "bridgeSha256": "22f700095e57103d40b7df536177c62bac954e97b3d990d79f025ca3065eb191",
+    "verifiedPreviousPackageRetained": true,
+    "protectedInstallationChanged": false,
+    "workingHealthOrReleaseAuthorityGranted": false
+  },
+  "liveReadback": {
+    "startedUtc": "2026-11-14T23:33:43Z",
+    "finishedUtc": "2026-11-14T23:34:28Z",
+    "executionBudgetSeconds": 180,
+    "outerContainmentSeconds": 210,
+    "result": "RESPONSE_TARGET_DRIFT",
+    "originalPhase": "SUBMITTING",
+    "originalProgress": "SEND_ATTEMPTED",
+    "receiptCreated": false,
+    "bindingCommitted": false,
+    "messagesSubmitted": 0,
+    "historicalOperationReplayed": false,
+    "routeClassAndObservationPhaseRetained": false,
+    "underlyingNavigationCauseEstablished": false,
+    "profileQuiescentAfter": true,
+    "developmentControlStopped": true,
+    "otherRegistrationsAndTargetsUnchanged": true,
+    "predecessorArtifactsUnchanged": true,
+    "ownerTimedOut": false,
+    "ownerTerminationFailed": false
+  },
+  "firstWrapperAttempt": {
+    "result": "QUIESCENCE_PROBE_PROTOCOL_NOT_STARTED",
+    "cause": "TEST_WRAPPER_OMITTED_REQUIRED_START_LINE",
+    "packageSelectionOrBrowserAttempted": false,
+    "originalEvidencePreserved": true,
+    "correctedWrapperUsesExistingStartHandshake": true
+  },
+  "preservation": {
+    "pinsChecked": 1686,
+    "changedPinCount": 1,
+    "onlyExpectedDevelopmentPointerChanged": true,
+    "profileIdentitiesUnchanged": true,
+    "taskInventoryUnchanged": true
+  },
+  "acceptance": {
+    "sourceTested": true,
+    "developmentSelectionQualified": true,
+    "browserReadbackAndBindingAccepted": false,
+    "twoTurnTimerWakeAccepted": false,
+    "directWebEditAndSelfWakeAccepted": false,
+    "multiProjectAcceptance": false,
+    "nextAction": "Retain bounded route class and observation phase for original readback refusal; recover only the original exchange without sending again."
+  }
+}

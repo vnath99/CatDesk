@@ -2088,10 +2088,20 @@ pub enum BootstrapProgress {
     SendAttempted,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[path = "runtime_bootstrap_observation.rs"]
+mod bootstrap_observation;
+pub use bootstrap_observation::{
+    BootstrapDestinationHint, BootstrapDiagnostic, BootstrapReadback,
+    InitializationReadbackRequest, capture_bootstrap_readback,
+    read_initialization_candidate_guarded,
+};
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BootstrapCheckpoint {
     Progress(BootstrapProgress),
     PreSendUnknown,
+    DestinationObserved(BootstrapDestinationHint),
+    PostSubmitDiagnostic(BootstrapDiagnostic),
 }
 
 pub struct BootstrapCallbacks<'a> {
@@ -3158,6 +3168,12 @@ fn submit_conversation_origin_guarded(
     {
         return Err("COOPERATIVE_BOOTSTRAP_PACKAGE_REQUIRED".into());
     }
+    if !adapter_bytes
+        .windows(b"BOOTSTRAP_RESPONSE_LIFECYCLE_V1 = True".len())
+        .any(|part| part == b"BOOTSTRAP_RESPONSE_LIFECYCLE_V1 = True")
+    {
+        return Err("BOOTSTRAP_IDLE_BEFORE_REFRESH_PACKAGE_REQUIRED".into());
+    }
     let mut adapter = Adapter::spawn_from_installed_guarded(
         store.root(),
         &installed,
@@ -3166,7 +3182,7 @@ fn submit_conversation_origin_guarded(
     )?;
     keep_running()?;
     adapter.send(request)?;
-    let absolute_deadline = Instant::now() + BOOTSTRAP_SETUP_RECEIPT_ALLOWANCE;
+    let mut absolute_deadline = Instant::now() + BOOTSTRAP_SETUP_RECEIPT_ALLOWANCE;
     let mut progress_deadline = Instant::now() + BOOTSTRAP_PROGRESS_WINDOW;
     let mut submit_dispatched = false;
     let mut acknowledged = None;
@@ -3177,6 +3193,12 @@ fn submit_conversation_origin_guarded(
             absolute_deadline,
             submit_dispatched,
         ) {
+            if submit_dispatched {
+                return Err(bootstrap_observation::outcome_unknown(
+                    checkpoint,
+                    BootstrapDiagnostic::ResponseTimeout,
+                ));
+            }
             return Err(reason.into());
         }
         let value = match guarded_browser_receive(&adapter.output, keep_running)? {
@@ -3186,11 +3208,26 @@ fn submit_conversation_origin_guarded(
                 return Err("BROWSER_ADAPTER_EXITED".into());
             }
             Ok(Err(_)) | Err(mpsc::RecvTimeoutError::Disconnected) => {
-                return Err("BOOTSTRAP_OUTCOME_UNKNOWN".into());
+                return Err(bootstrap_observation::outcome_unknown(
+                    checkpoint,
+                    BootstrapDiagnostic::AdapterExited,
+                ));
             }
             Err(mpsc::RecvTimeoutError::Timeout) => continue,
         };
-        if let Some(stage) = origin.progress(&value, project_id, intent_id, &message_digest)? {
+        if let Some(stage) = origin
+            .progress(&value, project_id, intent_id, &message_digest)
+            .map_err(|reason| {
+                if submit_dispatched {
+                    bootstrap_observation::outcome_unknown(
+                        checkpoint,
+                        BootstrapDiagnostic::AdapterProtocolInvalid,
+                    )
+                } else {
+                    reason
+                }
+            })?
+        {
             let expected = match acknowledged {
                 None => BootstrapProgress::TextEntryAuthorized,
                 Some(BootstrapProgress::TextEntryAuthorized) => BootstrapProgress::DraftReady,
@@ -3208,6 +3245,9 @@ fn submit_conversation_origin_guarded(
             acknowledged = Some(stage);
             if stage == BootstrapProgress::SendAttempted {
                 submit_dispatched = true;
+                // The shared 20-minute turn budget starts at the send boundary;
+                // browser setup must not consume it, or permit a 90-minute turn.
+                absolute_deadline = Instant::now() + Duration::from_secs(TURN_TARGET_SECONDS);
             }
             adapter.send(stage.acknowledgement()).map_err(|_| {
                 if submit_dispatched {
@@ -3220,6 +3260,24 @@ fn submit_conversation_origin_guarded(
             continue;
         }
         match value.get("stage").and_then(|stage| stage.as_str()) {
+            Some("BOOTSTRAP_DESTINATION_OBSERVED") if submit_dispatched => {
+                let hint = bootstrap_observation::destination_frame(
+                    &value,
+                    project_id,
+                    intent_id,
+                    origin,
+                    &message_digest,
+                )
+                .map_err(|_| {
+                    bootstrap_observation::outcome_unknown(
+                        checkpoint,
+                        BootstrapDiagnostic::AdapterProtocolInvalid,
+                    )
+                })?;
+                checkpoint(BootstrapCheckpoint::DestinationObserved(hint))
+                    .map_err(|_| "BOOTSTRAP_OUTCOME_UNKNOWN")?;
+                progress_deadline = Instant::now() + BOOTSTRAP_PROGRESS_WINDOW;
+            }
             Some("BEFORE_BOOTSTRAP_SUBMIT") => {
                 // A v1 helper must never receive authorization to type or send.
                 return Err("BOOTSTRAP_PROTOCOL_V2_REQUIRED".into());
@@ -3245,7 +3303,10 @@ fn submit_conversation_origin_guarded(
                 return Ok(receipt);
             }
             Some("BOOTSTRAP_UNKNOWN") if submit_dispatched => {
-                return Err("BOOTSTRAP_OUTCOME_UNKNOWN".into());
+                return Err(bootstrap_observation::outcome_unknown(
+                    checkpoint,
+                    bootstrap_observation::diagnostic(&value),
+                ));
             }
             Some("BOOTSTRAP_UNKNOWN") => {
                 checkpoint(BootstrapCheckpoint::PreSendUnknown)?;
@@ -3268,9 +3329,16 @@ fn submit_conversation_origin_guarded(
                 | "BOOTSTRAP_HOME_READY"
                 | "BOOTSTRAP_SUBMISSION_ACCEPTED"
                 | "GENERATION_WAIT"
-                | "GENERATION_ACTIVE",
+                | "GENERATION_ACTIVE"
+                | "RESPONSE_COMPLETED"
+                | "RESPONSE_COMPLETED_AFTER_REOPEN",
             ) => progress_deadline = Instant::now() + BOOTSTRAP_PROGRESS_WINDOW,
-            _ if submit_dispatched => return Err("BOOTSTRAP_OUTCOME_UNKNOWN".into()),
+            _ if submit_dispatched => {
+                return Err(bootstrap_observation::outcome_unknown(
+                    checkpoint,
+                    BootstrapDiagnostic::AdapterProtocolInvalid,
+                ));
+            }
             _ => return Err("BROWSER_ADAPTER_RESPONSE_INVALID".into()),
         }
     }
