@@ -362,9 +362,98 @@ pub(super) fn status(root: &Path, identity: &Identity) -> Result<Value, String> 
     })
 }
 
+/// Close only an original first-conversation entry after its project journal
+/// retains a fully verified readback receipt. This neither queues creation nor
+/// authorizes another send and is idempotent after a lost local reply.
+pub(super) fn record_initialization_readback(
+    root: &Path,
+    identity: &Identity,
+    receipt: &catdesk_wake::runtime::BootstrapReceipt,
+) -> Result<(), String> {
+    identity.validate()?;
+    if identity.purpose != Purpose::InitialConversation
+        || receipt.schema_version != 2
+        || receipt.project_id != identity.project_id
+        || receipt.intent_id != identity.intent_id
+        || receipt.source_generation != 0
+        || receipt.source_digest != identity.source_digest
+        || receipt.message_digest != identity.message_digest
+        || receipt.evidence != "EXACT_USER_MESSAGE_APPENDED"
+        || receipt.completion != "RESPONSE_COMPLETED"
+        || receipt.sent_utc == 0
+        || receipt.sent_utc > now()
+        || catdesk_wake::protocol::Target::new(1, receipt.destination_url.clone())
+            .map(|target| target.digest != receipt.destination_digest)
+            .unwrap_or(true)
+    {
+        return Err("WEB_INITIAL_RECOVERY_RECEIPT_REQUIRED".into());
+    }
+    let _owner = open_lock(root, "rollover-admission-owner.lock")?;
+    _owner
+        .try_lock()
+        .map_err(|_| "WEB_ROLLOVER_ADMISSION_BUSY")?;
+    let _journal = locked_journal(root)?;
+    let mut journal = load(root)?;
+    let entry = journal
+        .entries
+        .iter_mut()
+        .find(|v| v.identity == *identity)
+        .ok_or("WEB_ROLLOVER_ADMISSION_CHANGED")?;
+    if entry.phase != Phase::CreationRecorded {
+        entry.phase = Phase::CreationRecorded;
+        entry.updated_utc = now();
+        save(root, &journal)?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn initialization_readback_closes_only_the_original_inactive_owner_entry() {
+        let root = fixture();
+        let mut identity = key("alpha");
+        identity.purpose = Purpose::InitialConversation;
+        identity.source_generation = 0;
+        let owner = try_acquire(&root, identity.clone(), |_| true)
+            .unwrap()
+            .unwrap();
+        let url = "https://chatgpt.com/c/original-initialization";
+        let receipt = catdesk_wake::runtime::BootstrapReceipt {
+            schema_version: 2,
+            project_id: identity.project_id.clone(),
+            intent_id: identity.intent_id.clone(),
+            source_generation: 0,
+            source_digest: identity.source_digest.clone(),
+            message_digest: identity.message_digest.clone(),
+            destination_url: url.into(),
+            destination_digest: catdesk_wake::protocol::digest(url),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+            completion: "RESPONSE_COMPLETED".into(),
+        };
+        let before = std::fs::read(journal_path(&root)).unwrap();
+        assert_eq!(
+            record_initialization_readback(&root, &identity, &receipt).unwrap_err(),
+            "WEB_ROLLOVER_ADMISSION_BUSY"
+        );
+        assert_eq!(std::fs::read(journal_path(&root)).unwrap(), before);
+        drop(owner);
+        let mut wrong = receipt.clone();
+        wrong.message_digest = "c".repeat(64);
+        assert!(record_initialization_readback(&root, &identity, &wrong).is_err());
+        assert_eq!(std::fs::read(journal_path(&root)).unwrap(), before);
+        record_initialization_readback(&root, &identity, &receipt).unwrap();
+        let saved = std::fs::read(journal_path(&root)).unwrap();
+        record_initialization_readback(&root, &identity, &receipt).unwrap();
+        assert_eq!(std::fs::read(journal_path(&root)).unwrap(), saved);
+        assert_eq!(
+            status(&root, &identity).unwrap()["phase"],
+            "CREATION_RECORDED"
+        );
+    }
 
     #[test]
     fn first_conversation_and_rollover_share_fifo_with_explicit_noninterchangeable_origins() {

@@ -195,6 +195,8 @@ struct Record {
     phase: Phase,
     #[serde(default)]
     bootstrap_progress: Option<runtime::BootstrapProgress>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    bootstrap_readback: Option<runtime::BootstrapReadback>,
     handoff: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     task_handoff: Option<task_handoff::Reference>,
@@ -782,6 +784,20 @@ impl ProjectStore {
             return Err("WEB_ROLLOVER_STATE_INVALID".into());
         }
         record.source.validate()?;
+        if let Some(readback) = &record.bootstrap_readback {
+            if record.bootstrap_progress != Some(runtime::BootstrapProgress::SendAttempted) {
+                return Err("WEB_ROLLOVER_STATE_INVALID".into());
+            }
+            if let Some(hint) = &readback.unverified_destination {
+                hint.validate_scope(
+                    &record.project_id,
+                    &record.intent_id,
+                    record.source.generation,
+                    &record.source.digest,
+                    &record.message_digest,
+                )?;
+            }
+        }
         if record.bootstrap_progress.is_some() && record.phase == Phase::Prepared {
             return Err("WEB_ROLLOVER_STATE_INVALID".into());
         }
@@ -1464,6 +1480,9 @@ fn summary(record: &Record) -> Value {
         "sourceTaskId":record.source_task_id,"source":record.source,"phase":record.phase,
         "messageDigest":record.message_digest,"receipt":record.receipt,
         "bootstrapProgress":record.bootstrap_progress,
+        "bootstrapReadback":record.bootstrap_readback.as_ref().map(|r|json!({
+            "hasUnverifiedDestinationHint":r.unverified_destination.is_some(),
+            "postSubmitDiagnostic":r.post_submit_diagnostic,"receiptAuthority":false})),
         "continuationEventId":record.continuation_event_id,
         "boundTarget":record.bound_target,
         "reconciliationRequired":record.reconciliation_reason.is_some(),
@@ -2769,6 +2788,7 @@ fn prepare_with_request(
         source,
         phase: Phase::Prepared,
         bootstrap_progress: None,
+        bootstrap_readback: None,
         handoff: content,
         task_handoff: None,
         task_resume_event_id: None,
@@ -4092,6 +4112,20 @@ fn execute_with_mode(
                 checkpoint: &mut |checkpoint| {
                     keep_running()?;
                     let stage = match checkpoint {
+                        runtime::BootstrapCheckpoint::DestinationObserved(value) => {
+                            runtime::capture_bootstrap_readback(
+                                &mut record.bootstrap_readback,
+                                &runtime::BootstrapCheckpoint::DestinationObserved(value),
+                            );
+                            return store.save(&record);
+                        }
+                        runtime::BootstrapCheckpoint::PostSubmitDiagnostic(value) => {
+                            runtime::capture_bootstrap_readback(
+                                &mut record.bootstrap_readback,
+                                &runtime::BootstrapCheckpoint::PostSubmitDiagnostic(value),
+                            );
+                            return store.save(&record);
+                        }
                         runtime::BootstrapCheckpoint::PreSendUnknown => {
                             if record.phase == Phase::Submitting
                                 && record.bootstrap_progress
@@ -5355,6 +5389,7 @@ mod tests {
             source,
             phase: Phase::Prepared,
             bootstrap_progress: None,
+            bootstrap_readback: None,
             handoff: "private handoff".into(),
             task_handoff: None,
             task_resume_event_id: None,

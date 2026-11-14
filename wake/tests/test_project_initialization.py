@@ -95,6 +95,23 @@ class ProjectInitializationTests(unittest.TestCase):
         self.assertEqual(receipt["sourceDigest"], "a" * 64)
         self.assertEqual(receipt["destinationUrl"], ISSUED)
         self.assertEqual(receipt["completion"], "RESPONSE_PENDING")
+        self.assertLess(cdp.timeline.index("completion"), cdp.timeline.index("fresh-document"))
+        self.assertLess(cdp.timeline.index("fresh-document"), cdp.timeline.index("persisted-response"))
+        observed = [item for item in emitted if item["stage"] == "BOOTSTRAP_DESTINATION_OBSERVED"]
+        self.assertEqual(len(observed), 1)
+        self.assertEqual(observed[0]["messageDigest"], receipt["messageDigest"])
+        self.assertEqual(observed[0]["destinationUrl"], ISSUED)
+        self.assertNotIn("receipt", observed[0])
+
+    def test_failed_assistant_after_append_never_reloads_or_sends_again(self):
+        with patch.object(AttemptSink, "wait_for_response_completion",
+                          side_effect=bridge.Attention("RESPONSE_LOAD_ERROR")):
+            cdp, events, _, failure = self.run_case()
+        self.assertIsNone(failure)
+        self.assertEqual(cdp.sent, 1)
+        self.assertNotIn("fresh-document", cdp.timeline)
+        self.assertEqual(events[-1], {"stage":"BOOTSTRAP_UNKNOWN", "reason":"RESPONSE_LOAD_ERROR"})
+        self.assertFalse(any("receipt" in event for event in events))
 
     def test_unknown_draft_or_existing_history_is_never_modified(self):
         for draft, users in [("operator draft", 0), ("", 1)]:
@@ -222,6 +239,92 @@ class ProjectInitializationTests(unittest.TestCase):
                 with self.assertRaises(bridge.Attention):
                     bridge.compose_initialization_message("project-first", "initialize-first",
                         registration, body)
+
+    def readback_case(self, *, request_change=None, fault=None):
+        original = self.request()
+        request = {key: original[key] for key in ["projectId", "intentId", "registrationDigest", "handoff"]}
+        request.update(initializationReadback=True, candidateUrl=ISSUED, nativeTurnStartedUtc=1)
+        request.update(request_change or {})
+        message = bridge.compose_initialization_message(original["projectId"], original["intentId"],
+            original["registrationDigest"], original["handoff"])
+        expected = bridge.digest(bridge.normalize_message(message))
+        cdp = AttemptCdp()
+        cdp.url, cdp.typed_message, cdp.draft = ISSUED, message, "untouched operator draft"
+        output = []
+
+        class ReadbackSink(AttemptSink):
+            def observe_cooperative_response(self, cdp, message, digest):
+                if fault in {"LOGIN_OR_PROFILE_REQUIRED", "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"}:
+                    raise bridge.Attention(fault)
+                return "RESPONSE_COMPLETE"
+
+            def user_message_digests(self, cdp):
+                if fault == "duplicate-user": return [expected, expected]
+                if fault == "wrong-user": return ["f" * 64]
+                return [expected]
+
+            def wait_for_response_completion(self, cdp, message, **kwargs):
+                if fault == "RESPONSE_LOAD_ERROR": raise bridge.Attention(fault)
+                if fault == "interrupt": raise KeyboardInterrupt()
+                return super().wait_for_response_completion(cdp, message, **kwargs)
+
+            def durable_receipt_round_trip(self, cdp, **kwargs):
+                super().durable_receipt_round_trip(cdp, **kwargs)
+                if fault == "target-drift": cdp.url = SOURCE
+
+            def wait_for_persisted_response(self, cdp, message):
+                if fault == "target-drift": raise bridge.Attention("RESPONSE_TARGET_DRIFT")
+                return super().wait_for_persisted_response(cdp,message)
+
+            def verify_initialization_ack(self, cdp, project, intent, registration, message):
+                if fault == "missing-ack": raise bridge.Attention("BOOTSTRAP_INITIALIZATION_ACK_UNVERIFIED")
+                cdp.timeline.append("ack-verified")
+
+        with patch.object(bridge,"NewConversationSink",ReadbackSink), patch.object(adapter,"emit",output.append), \
+             patch.object(adapter,"prepare_cdp_target",return_value=cdp) as opened, \
+             patch.object(adapter,"read_request",side_effect=AssertionError("readback must not request submit ACK")), \
+             patch.object(adapter.time,"sleep",return_value=None):
+            try:
+                adapter.initialization_readback(bridge,types.SimpleNamespace(cdp=cdp),request)
+                error = None
+            except (bridge.Attention, KeyboardInterrupt) as failure:
+                error = failure
+        return cdp, output, error, opened.call_count
+
+    def test_initialization_readback_is_exact_completed_fresh_and_never_sends(self):
+        cdp, output, error, opens = self.readback_case()
+        self.assertIsNone(error)
+        self.assertEqual(opens,1)
+        self.assertEqual(cdp.sent,0)
+        self.assertEqual(cdp.draft,"untouched operator draft")
+        self.assertEqual(cdp.timeline,["completion","fresh-document","persisted-response","ack-verified"])
+        self.assertEqual(output[-1]["stage"],"INITIALIZATION_READBACK_COMPLETE")
+        self.assertEqual(output[-1]["receipt"]["completion"],"RESPONSE_COMPLETED")
+        self.assertEqual(output[-1]["receipt"]["sentUtc"],1)
+        self.assertNotIn("handoff",json.dumps(output))
+
+    def test_initialization_readback_uncertain_cases_never_export_receipt_or_submit(self):
+        for fault in ["duplicate-user","wrong-user","LOGIN_OR_PROFILE_REQUIRED","RESPONSE_LOAD_ERROR",
+                      "target-drift","missing-ack","interrupt"]:
+            with self.subTest(fault=fault):
+                cdp, output, error, _ = self.readback_case(fault=fault)
+                self.assertIsNotNone(error)
+                self.assertEqual(cdp.sent,0)
+                self.assertEqual(cdp.draft,"untouched operator draft")
+                self.assertFalse(any("receipt" in row for row in output))
+                if fault in {"wrong-user","duplicate-user","LOGIN_OR_PROFILE_REQUIRED","RESPONSE_LOAD_ERROR","interrupt"}:
+                    self.assertNotIn("fresh-document",cdp.timeline)
+
+    def test_initialization_readback_invalid_input_never_opens_browser_target(self):
+        for change in [{"initializationReadback":1},{"nativeTurnStartedUtc":True},
+                       {"nativeTurnStartedUtc":0},{"candidateUrl":"https://example.test/c/other"},
+                       {"submit":True},{"registrationDigest":"bad"}]:
+            with self.subTest(change=change):
+                cdp, output, error, opens = self.readback_case(request_change=change)
+                self.assertIsNotNone(error)
+                self.assertEqual(opens,0)
+                self.assertEqual(cdp.sent,0)
+                self.assertEqual(output,[])
 
 
 if __name__ == "__main__":

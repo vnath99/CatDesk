@@ -243,9 +243,16 @@ class AttemptSink:
         cdp.timeline.append("completion")
         observer("RESPONSE_COMPLETED")
 
-    def durable_receipt_round_trip(self, cdp):
+    def durable_receipt_round_trip(self, cdp, *, completed_response=False):
         self._check_issued(cdp)
+        assert completed_response is True
+        assert "completion" in cdp.timeline
         cdp.timeline.append("fresh-document")
+
+    def wait_for_persisted_response(self, cdp, message):
+        self._check_issued(cdp)
+        assert "fresh-document" in cdp.timeline
+        cdp.timeline.append("persisted-response")
 
     def confirm_exact_receipt(self, cdp, prior, message_digest, intent_id, message, *, wall_time):
         self._check_issued(cdp)
@@ -1461,7 +1468,7 @@ class NewConversationTests(unittest.TestCase):
         cdp, emitted, acks, error = self.run_v2_attempt(
             request=request, draft=expected, rich_link=True)
         self.assertIsNone(error)
-        self.assertEqual(cdp.timeline, ["unlink", "submit", "accepted", "fresh-document", "exact-receipt"])
+        self.assertEqual(cdp.timeline, ["unlink", "submit", "accepted", "completion", "fresh-document", "persisted-response", "exact-receipt"])
         self.assertEqual(cdp.sent, 1)
         self.assertEqual(acks, ["TEXT_ENTRY_AUTHORIZED", "DRAFT_READY", "SEND_ATTEMPTED"])
         self.assertEqual(emitted[-1]["stage"], "BOOTSTRAP_SUBMITTED")
@@ -1912,8 +1919,8 @@ class NewConversationTests(unittest.TestCase):
         self.assertEqual((cdp.sent, len(acknowledgements)), (1, 1))
         self.assertEqual(cdp.navigation, [SOURCE, bridge.NEW_CONVERSATION_HOME])
         self.assertEqual(
-            cdp.timeline[-5:],
-            ["submit", "accepted", "completion", "fresh-document", "exact-receipt"],
+            cdp.timeline[-6:],
+            ["submit", "accepted", "completion", "fresh-document", "persisted-response", "exact-receipt"],
         )
         before = next(item for item in emitted if item["stage"] == "BEFORE_BOOTSTRAP_SUBMIT")
         receipt = emitted[-1]["receipt"]
@@ -1927,14 +1934,13 @@ class NewConversationTests(unittest.TestCase):
         self.assertEqual(receipt["completion"], "RESPONSE_COMPLETED")
         self.assertNotIn("handoff", json.dumps(emitted))
 
-    def test_cooperative_bootstrap_saves_pending_receipt_without_response_wait(self):
+    def test_cooperative_bootstrap_keeps_browser_until_completion_and_fresh_persistence(self):
         request = self.request()
         request["cooperative"] = True
         cdp, emitted, acknowledgements, error = self.run_attempt(request=request)
         self.assertIsNone(error)
         self.assertEqual((cdp.sent, len(acknowledgements)), (1, 1))
-        self.assertNotIn("completion", cdp.timeline)
-        self.assertEqual(cdp.timeline[-2:], ["fresh-document", "exact-receipt"])
+        self.assertEqual(cdp.timeline[-4:], ["completion", "fresh-document", "persisted-response", "exact-receipt"])
         self.assertEqual(emitted[-1]["stage"], "BOOTSTRAP_SUBMITTED")
         receipt = emitted[-1]["receipt"]
         self.assertEqual(receipt["destinationUrl"], ISSUED)
