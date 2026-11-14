@@ -1,6 +1,6 @@
 # CatDesk activity log
 
-Recent audited engineering activity only. This is the chronological record, not task or milestone authority. Detailed original evidence stays in its owning records. [November archive](docs/activity/2026-11.md); [prior logs and immutable identities](docs/archive/PRE_CONSOLIDATION_2026_11_14.md). Historical reconstructed statements are explicitly labeled; unknown actors/times remain UNKNOWN.
+Recent audited engineering activity only. Dated next-action statements below are historical; only the root handoff specifies the current task. This is the chronological record, not task or milestone authority. Detailed original evidence stays in its owning records. [November archive](docs/activity/2026-11.md); [prior logs and immutable identities](docs/archive/PRE_CONSOLIDATION_2026_11_14.md). Historical reconstructed statements are explicitly labeled; unknown actors/times remain UNKNOWN.
 
 ## 2026-11-14T16:59:01.261957+00:00 â€” DOC-CONTINUITY discovery and implementation
 
@@ -35,3 +35,7 @@ User clarified that prior source publication is not completed integration/local 
 ## 2026-11-14T18:12:15.426663+00:00 — development integration and primary local synchronization
 
 PR #5 merged through GitHub without administrator override at 23e26e9. Its tree equals the reviewed feature tree. The development checkout fast-forwarded. A separate 23-path documentation-only backport was reviewed, published and applied to the primary folder without branch switching. Application source, older developer facade and installed bytes were not upgraded. Original untracked content passed the preflight hash comparison. Primary manual documentation checking passes with 473 internal links; isolated primary suite passed 22 cases before the fixture-scope correction. The fixture now selects tracked changes only, preventing unrelated untracked private files from entering temporary test repositories. Final qualification follows; architecture work remains excluded. [State](docs/verification/DOC_SYNC_STATE_2026_11_14.json).
+
+## 2026-11-14T18:21:50.654059+00:00 — DOC-CONTINUITY final qualification
+
+Actual development and primary folders each pass 23 focused tests and 475 documentation checks. A fresh GitHub clone of integrated 78b6c98 also passes all 23 tests without CatDesk or a local object cache. Two fresh-context AI exercises answer all ten resumption questions from the final integrated source; minor checkpoint/ref wording findings are corrected here. All 1,685 protected pins match exactly, with unchanged profiles/task inventory; all 23 original primary untracked files retain their hashes. Primary application and developer facade are byte-equivalent to baseline 313f6a3; its branch was not switched, and the old named remote was not advanced or retracked. Runtime, credentials, bindings, journals and unknown deliveries were not changed. Documentation goal is complete; architecture review is the separate next task and remains unstarted. [Evidence](docs/verification/DOC_SYNC_STATE_2026_11_14.json).
