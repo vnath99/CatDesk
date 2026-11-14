@@ -10760,3 +10760,27 @@ evidence. No source tests were repeated, and no browser, Wake, native provider,
 binding, production or installation operation ran. Next address the demonstrated
 detached-review compatibility issue in source while preserving the unknown send.
 Evidence: `docs/verification/AUTHORIZED_REVIEW_CLAIM_AND_DELIVERY_2026_11_14.json`.
+
+### 2026-11-14 Eastern - Detached review verifier compatibility implemented in source
+
+The existing verifier now admits explicit detached HEAD descriptors only in direct
+ChatGPT mode with all eight Git mutation/publication flags false, the exact full
+base commit selected, expected origin and unchanged tracked source. A new untracked
+review report remains possible. Named branch checks and main refusal are retained;
+identity is checked before and after verification commands to detect later drift.
+The Git policy match is exhaustive, so adding a new policy field requires revisiting
+the detached admission rule rather than silently enabling it.
+
+Actual temporary Git repositories passed 12 verifier tests, including staged and
+unstaged changes, commit/origin/branch drift, Git permissions and report creation.
+Six direct-controller and two direct-work supervisor tests also passed, with fmt
+and strict Clippy. Both qualification owners exited; the initial undeclared test
+dependency compile failure is retained. The fixture uses the existing UUID crate,
+with no dependency or lock change, and validates its owned cleanup path.
+
+This is SOURCE_IMPLEMENTED/SOURCE_TESTED and a built test target only. No installed
+controller, approved contract, frozen source checkout, queued claim or unknown send
+was changed. No message, browser, Wake, provider or production action ran. Qualify
+the exact development artifact and existing recovery path before attempting live
+claim recovery; source tests alone are not installation or release authority.
+Evidence: `docs/verification/DETACHED_REVIEW_VERIFIER_SOURCE_2026_11_14.json`.

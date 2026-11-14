@@ -1001,6 +1001,19 @@ after downstream admission. Actual November 13 no-send preflight refused
 WEB_REVIEW_HOST_NOT_STOPPED, so no replacement approval was requested. See the
 approved-review lease/start-readiness verification record.
 
+November 14 source supports an explicit detached read-only-Git direct review:
+both branch descriptors must be HEAD, all Git mutation/publication flags false,
+and the actual detached checkout must select the full exact base commit with
+matching origin and unchanged tracked source. The existing verifier rechecks this
+identity before and after verification. Named branches retain their existing rule.
+Real temporary-repository tests, related direct-work regressions, fmt and strict
+Clippy passed. This change is source-tested, not installed. Do not rewrite a live
+contract or create a special HEAD branch to pass the older verifier. Preserve a
+pending recovery request until the exact qualified runtime and supported recovery
+procedure are established. This does not waive independent review, producer or
+protected promotion checks. See
+`docs/verification/DETACHED_REVIEW_VERIFIER_SOURCE_2026_11_14.json`.
+
 ### 2026-11-13 Eastern — Establish the required operator security context
 
 The reviewed comparison requires elevated 64-bit PowerShell 7 under the approved
