@@ -17,6 +17,7 @@ ROOT = Path(sys.argv[1])
 MAX_BOOTSTRAP_REQUEST_BYTES = 32 * 1024
 SOURCE_SNAPSHOT_RESPONSE_BYTES = 64 * 1024
 BOOTSTRAP_RESPONSE_LIFECYCLE_V1 = True
+INITIALIZATION_READBACK_DIAGNOSTICS_V1 = True
 
 
 def emit(value):
@@ -717,20 +718,42 @@ def initialization_readback(bridge, sb, request):
         raise bridge.Attention("INITIALIZATION_READBACK_REQUEST_INVALID")
     sink = bridge.NewConversationSink(None, ROOT / "browser-profile", 30, 20)
     sink.url, sink.destination_url = candidate, candidate
-    cdp = prepare_cdp_target(bridge, sb, candidate)
-    # The ordinary pre-write readiness path can reload a blank shell. Recovery
-    # must instead wait read-only until this original exchange is mounted.
-    bounded_response_observation(bridge, sink, cdp, message, expected)
-    # No result may escape until the original USER is independently observed.
-    if not sink.exact(str(cdp.get_current_url())) or sink.user_message_digests(cdp) != [expected]:
-        raise bridge.Attention("INITIALIZATION_READBACK_USER_UNPROVEN")
-    sink.wait_for_response_completion(cdp, message, allow_retry=False,
-        observer=lambda stage: emit({"stage": stage}))
-    sink.durable_receipt_round_trip(cdp, completed_response=True)
-    sink.wait_for_persisted_response(cdp, message)
-    sink.verify_initialization_ack(cdp, project, intent, registration, message)
-    if not sink.exact(str(cdp.get_current_url())) or sink.user_message_digests(cdp) != [expected]:
-        raise bridge.Attention("INITIALIZATION_READBACK_USER_UNPROVEN")
+    cdp, phase = None, "NAVIGATION"
+    try:
+        cdp = prepare_cdp_target(bridge, sb, candidate)
+        phase = "INITIAL_OBSERVATION"
+        # Never use the pre-write readiness path's blank-shell reload here.
+        bounded_response_observation(bridge, sink, cdp, message, expected)
+        phase = "ORIGINAL_USER_CHECK"
+        if not sink.exact(str(cdp.get_current_url())) or sink.user_message_digests(cdp) != [expected]:
+            raise bridge.Attention("INITIALIZATION_READBACK_USER_UNPROVEN")
+        phase = "COMPLETION"
+        sink.wait_for_response_completion(cdp, message, allow_retry=False,
+            observer=lambda stage: emit({"stage": stage}))
+        phase = "REFRESH"
+        sink.durable_receipt_round_trip(cdp, completed_response=True)
+        phase = "PERSISTENCE"
+        sink.wait_for_persisted_response(cdp, message)
+        phase = "ACKNOWLEDGMENT"
+        sink.verify_initialization_ack(cdp, project, intent, registration, message)
+        phase = "FINAL_USER_CHECK"
+        if not sink.exact(str(cdp.get_current_url())) or sink.user_message_digests(cdp) != [expected]:
+            raise bridge.Attention("INITIALIZATION_READBACK_USER_UNPROVEN")
+    except Exception:
+        # Driver metadata is not document identity. Read both independently,
+        # classify in this process, and emit only the closed structural labels.
+        def route(read):
+            try:
+                value = read()
+                return bridge.bounded_route_class(value, candidate) if isinstance(value, str) else "INVALID_ROUTE"
+            except Exception:
+                return "INVALID_ROUTE"
+        emit({"stage":"INITIALIZATION_READBACK_DIAGNOSTIC", "schemaVersion":1,
+              "projectId":project, "intentId":intent, "registrationDigest":registration,
+              "messageDigest":expected, "candidateDigest":bridge.digest(candidate),
+              "phase":phase, "driverRoute":route(lambda:cdp.get_current_url()),
+              "documentRoute":route(lambda:bridge.CdpSink.cdp_value(cdp.evaluate("location.href")))})
+        raise
     emit({"stage": "INITIALIZATION_READBACK_COMPLETE", "receipt": {
         "schemaVersion": 2, "projectId": project, "intentId": intent,
         "sourceGeneration": 0, "sourceDigest": registration,

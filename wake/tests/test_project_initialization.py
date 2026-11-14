@@ -250,10 +250,12 @@ class ProjectInitializationTests(unittest.TestCase):
         expected = bridge.digest(bridge.normalize_message(message))
         cdp = AttemptCdp()
         cdp.url, cdp.typed_message, cdp.draft = ISSUED, message, "untouched operator draft"
+        cdp.evaluate = lambda script: "https://chatgpt.com/" if fault == "document-home" else cdp.url
         output = []
 
         class ReadbackSink(AttemptSink):
             def observe_cooperative_response(self, cdp, message, digest):
+                if fault == "document-home": raise bridge.Attention("RESPONSE_TARGET_DRIFT")
                 if fault in {"LOGIN_OR_PROFILE_REQUIRED", "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"}:
                     raise bridge.Attention(fault)
                 return "RESPONSE_COMPLETE"
@@ -325,6 +327,31 @@ class ProjectInitializationTests(unittest.TestCase):
                 self.assertEqual(opens,0)
                 self.assertEqual(cdp.sent,0)
                 self.assertEqual(output,[])
+
+    def test_initialization_readback_distinguishes_driver_and_document_routes_without_content(self):
+        cdp, output, error, opens = self.readback_case(fault="document-home")
+        self.assertEqual(str(error),"RESPONSE_TARGET_DRIFT")
+        self.assertEqual(opens,1)
+        self.assertEqual(cdp.sent,0)
+        diagnostics=[row for row in output if row["stage"]=="INITIALIZATION_READBACK_DIAGNOSTIC"]
+        self.assertEqual(len(diagnostics),1)
+        diagnostic=diagnostics[0]
+        self.assertEqual(diagnostic["phase"],"INITIAL_OBSERVATION")
+        self.assertEqual(diagnostic["driverRoute"],"SAME_CONVERSATION")
+        self.assertEqual(diagnostic["documentRoute"],"HOME")
+        wire=json.dumps(diagnostic)
+        for private in [ISSUED,"https://chatgpt.com/","untouched operator draft","handoff","workspace"]:
+            self.assertNotIn(private,wire)
+        self.assertEqual(set(diagnostic),{"stage","schemaVersion","projectId","intentId",
+            "registrationDigest","messageDigest","candidateDigest","phase","driverRoute","documentRoute"})
+
+    def test_initialization_readback_failure_records_the_actual_phase_only(self):
+        for fault,phase in [("wrong-user","ORIGINAL_USER_CHECK"),("RESPONSE_LOAD_ERROR","COMPLETION"),
+                            ("target-drift","PERSISTENCE"),("missing-ack","ACKNOWLEDGMENT")]:
+            with self.subTest(fault=fault):
+                _,output,_,_=self.readback_case(fault=fault)
+                self.assertEqual(output[-1]["stage"],"INITIALIZATION_READBACK_DIAGNOSTIC")
+                self.assertEqual(output[-1]["phase"],phase)
 
 
 if __name__ == "__main__":

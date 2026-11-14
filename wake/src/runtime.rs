@@ -2092,7 +2092,7 @@ pub enum BootstrapProgress {
 mod bootstrap_observation;
 pub use bootstrap_observation::{
     BootstrapDestinationHint, BootstrapDiagnostic, BootstrapReadback,
-    InitializationReadbackRequest, capture_bootstrap_readback,
+    InitializationReadbackObservation, InitializationReadbackRequest, capture_bootstrap_readback,
     read_initialization_candidate_guarded,
 };
 
