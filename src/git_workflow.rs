@@ -7,6 +7,11 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const GIT_TIMEOUT_MS: u64 = 120_000;
+/// Keep the status result comfortably inside the MCP presentation budget. The
+/// full porcelain stream is useful to Git itself, but returning it twice (as
+/// `raw` and in the human summary) makes an otherwise fast status call needlessly
+/// expensive for clients with bounded tool-result cards.
+const MAX_GIT_STATUS_RAW_CHARS: usize = 12_000;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -15,6 +20,9 @@ pub struct GitStatusSummary {
     pub clean: bool,
     pub warn_on_main: bool,
     pub raw: String,
+    pub raw_truncated: bool,
+    pub raw_utf8_bytes: usize,
+    pub raw_returned_utf8_bytes: usize,
     pub summary: String,
 }
 
@@ -92,6 +100,10 @@ fn current_branch_from_status(raw: &str) -> String {
         .unwrap_or_else(|| "unknown".into())
 }
 
+fn status_facts(raw: &str) -> (String, bool) {
+    (current_branch_from_status(raw), raw.lines().count() <= 1)
+}
+
 fn status_summary_text(branch: &str, clean: bool, warn_on_main: bool, raw: &str) -> String {
     let mut summary = format!(
         "branch: {branch}\nclean: {}\n",
@@ -108,6 +120,22 @@ fn status_summary_text(branch: &str, clean: bool, warn_on_main: bool, raw: &str)
     summary
 }
 
+fn bounded_status_raw(raw: &str) -> (String, bool) {
+    if raw.chars().count() <= MAX_GIT_STATUS_RAW_CHARS {
+        return (raw.to_string(), false);
+    }
+    let marker = "\n[... git status output truncated by CatDesk ...]\n";
+    let retained = MAX_GIT_STATUS_RAW_CHARS.saturating_sub(marker.chars().count());
+    let head = retained / 2;
+    let tail = retained.saturating_sub(head);
+    let mut out = String::with_capacity(MAX_GIT_STATUS_RAW_CHARS);
+    out.extend(raw.chars().take(head));
+    out.push_str(marker);
+    let total = raw.chars().count();
+    out.extend(raw.chars().skip(total.saturating_sub(tail)));
+    (out, true)
+}
+
 pub async fn status_summary(workspace_root: &str) -> Result<GitStatusSummary, String> {
     let root = workspace_root_path(workspace_root)?;
     let result = command::run_program(
@@ -120,9 +148,12 @@ pub async fn status_summary(workspace_root: &str) -> Result<GitStatusSummary, St
     if !result.success {
         return Err(command::format_result(&result));
     }
-    let raw = result.stdout;
-    let branch = current_branch_from_status(&raw);
-    let clean = raw.lines().count() <= 1;
+    let raw_utf8_bytes = result.stdout.len();
+    // Cleanliness and branch identity are facts about the complete Git result,
+    // never the presentation-capped copy returned to MCP clients.
+    let (branch, clean) = status_facts(&result.stdout);
+    let (raw, raw_truncated) = bounded_status_raw(&result.stdout);
+    let raw_returned_utf8_bytes = raw.len();
     let warn_on_main = matches!(branch.as_str(), "main" | "master");
     let summary = status_summary_text(&branch, clean, warn_on_main, &raw);
     Ok(GitStatusSummary {
@@ -130,6 +161,9 @@ pub async fn status_summary(workspace_root: &str) -> Result<GitStatusSummary, St
         clean,
         warn_on_main,
         raw,
+        raw_truncated,
+        raw_utf8_bytes,
+        raw_returned_utf8_bytes,
         summary,
     })
 }
@@ -591,6 +625,31 @@ mod tests {
         );
         let summary = status_summary_text(&branch, false, true, raw);
         assert!(summary.contains("warning: currently on main"));
+    }
+
+    #[test]
+    fn status_raw_is_bounded_with_explicit_truncation() {
+        let raw = format!(
+            "## feature/ui\n{}\n",
+            "? a\n".repeat(MAX_GIT_STATUS_RAW_CHARS)
+        );
+        let (bounded, truncated) = bounded_status_raw(&raw);
+        assert!(truncated);
+        assert!(bounded.chars().count() <= MAX_GIT_STATUS_RAW_CHARS);
+        assert!(bounded.contains("git status output truncated by CatDesk"));
+        assert!(bounded.starts_with("## feature/ui"));
+    }
+
+    #[test]
+    fn truncation_does_not_define_cleanliness() {
+        let raw = format!(
+            "## feature/ui\n{}",
+            "? a\n".repeat(MAX_GIT_STATUS_RAW_CHARS)
+        );
+        let (_, clean) = status_facts(&raw);
+        let (_, truncated) = bounded_status_raw(&raw);
+        assert!(truncated);
+        assert!(!clean);
     }
 
     #[test]

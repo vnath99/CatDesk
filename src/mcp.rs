@@ -77,6 +77,8 @@ const INITIAL_TOOL_NAME_PLACEHOLDER: &str = "__catdeskInitialToolNamePlaceholder
 const MAX_DIFF_FILES: usize = 16;
 const MAX_DIFF_CHARS_PER_FILE: usize = 12_000;
 const MAX_COMMAND_OUTPUT_CHARS: usize = 24_000;
+const MAX_HUMAN_READABLE_TOOL_CONTENT_CHARS: usize = 8_000;
+const PRESERVE_BOUNDED_TEXT_CONTENT_META_KEY: &str = "catdesk/preserveBoundedTextContent";
 const MAX_WATCHED_FILES: usize = 512;
 const MAX_FILE_CAPTURE_BYTES: usize = 128 * 1024;
 const MAX_TEXT_CAPTURE_LINES: usize = 420;
@@ -1945,11 +1947,6 @@ async fn handle_run_command(
         Ok(path) => path,
         Err(e) => return tool_error_response(req, e),
     };
-    let output = if include_full_output {
-        full_output
-    } else {
-        render_command_summary_text(&summary, &log_path)
-    };
     let structured = build_run_command_structured(
         &effective_command,
         &cwd,
@@ -1959,11 +1956,12 @@ async fn handle_run_command(
         &summary,
     );
 
-    if result.success {
-        tool_success_response_with_structured(req, output, structured)
-    } else {
-        tool_error_response_with_structured(req, output, structured)
-    }
+    tool_response_with_bounded_content(
+        req,
+        run_command_content_fallback(&summary),
+        structured,
+        !result.success,
+    )
 }
 
 fn build_run_command_structured(
@@ -5094,35 +5092,6 @@ fn command_summary_json(summary: &command::CommandSummary) -> Value {
     })
 }
 
-fn render_command_summary_text(summary: &command::CommandSummary, log_path: &str) -> String {
-    let mut out = format!(
-        "status: {}\nexit_code: {}\nlog: {}\n",
-        summary.status,
-        summary
-            .exit_code
-            .map(|code| code.to_string())
-            .unwrap_or_else(|| "none".into()),
-        log_path,
-    );
-    if !summary.errors.is_empty() {
-        out.push_str("\nerrors:\n");
-        for line in &summary.errors {
-            out.push_str("- ");
-            out.push_str(line);
-            out.push('\n');
-        }
-    }
-    if !summary.key_output.is_empty() {
-        out.push_str("\nkey output:\n");
-        for line in &summary.key_output {
-            out.push_str("- ");
-            out.push_str(line);
-            out.push('\n');
-        }
-    }
-    out
-}
-
 fn write_command_log(
     workspace_root: &str,
     command_text: &str,
@@ -5722,6 +5691,71 @@ fn tool_response(
         }
     }
     JsonRpcResponse::success(req.id.clone(), result)
+}
+
+/// Some MCP clients render a tool card from `content` before consulting
+/// `structuredContent`. Keep the normal structured contract intact while
+/// supplying a deliberately small, human-readable fallback for the two
+/// read/result tools that already construct a bounded presentation summary.
+fn tool_response_with_bounded_content(
+    req: &JsonRpcRequest,
+    text: String,
+    structured: Value,
+    is_error: bool,
+) -> JsonRpcResponse {
+    let text = bounded_human_readable_tool_content(&text);
+    let mut result = json!({
+        "content": [{"type": "text", "text": text}],
+        "structuredContent": structured,
+        "_meta": {"catdesk/preserveBoundedTextContent": true},
+    });
+    if is_error {
+        result
+            .as_object_mut()
+            .expect("tool result is an object")
+            .insert("isError".into(), Value::Bool(true));
+    }
+    JsonRpcResponse::success(req.id.clone(), result)
+}
+
+fn bounded_human_readable_tool_content(text: &str) -> String {
+    if text.chars().count() <= MAX_HUMAN_READABLE_TOOL_CONTENT_CHARS {
+        return text.to_string();
+    }
+    let marker = "\n[... CatDesk tool-result fallback truncated ...]";
+    let keep = MAX_HUMAN_READABLE_TOOL_CONTENT_CHARS.saturating_sub(marker.chars().count());
+    let mut out = String::with_capacity(MAX_HUMAN_READABLE_TOOL_CONTENT_CHARS);
+    out.extend(text.chars().take(keep));
+    out.push_str(marker);
+    out
+}
+
+fn run_command_content_fallback(summary: &command::CommandSummary) -> String {
+    format!(
+        "CatDesk run_command result\nstatus: {}\nexit_code: {}",
+        summary.status,
+        summary
+            .exit_code
+            .map(|code| code.to_string())
+            .unwrap_or_else(|| "none".into())
+    )
+}
+
+fn git_status_content_fallback(output: &git_workflow::GitStatusSummary) -> String {
+    let mut text = format!(
+        "CatDesk Git status\nbranch: {}\nclean: {}\nraw_status: {}",
+        output.branch,
+        if output.clean { "yes" } else { "no" },
+        if output.raw_truncated {
+            "truncated"
+        } else {
+            "complete"
+        }
+    );
+    if output.warn_on_main {
+        text.push_str("\nwarning: currently on main; create a feature branch before committing.");
+    }
+    text
 }
 
 fn tool_message_structured(req: &JsonRpcRequest, message: String, is_error: bool) -> Value {
@@ -9215,6 +9249,12 @@ fn enrich_tool_result(
             }
         });
     }
+    let preserve_bounded_text_content = result
+        .get("_meta")
+        .and_then(Value::as_object)
+        .and_then(|meta| meta.get(PRESERVE_BOUNDED_TEXT_CONTENT_META_KEY))
+        .and_then(Value::as_bool)
+        == Some(true);
     let has_widget_payload = result
         .get("_meta")
         .and_then(Value::as_object)
@@ -9229,12 +9269,17 @@ fn enrich_tool_result(
         let meta_value = result_obj
             .entry("_meta".to_string())
             .or_insert_with(|| json!({}));
+        if let Some(meta) = meta_value.as_object_mut() {
+            meta.remove(PRESERVE_BOUNDED_TEXT_CONTENT_META_KEY);
+        }
         ensure_output_template_meta(meta_value);
     }
     if let Some(widget_payload) = widget_payload {
         attach_widget_payload_meta(&mut result, widget_payload);
     }
-    remove_text_content_from_tool_result(req, &mut result);
+    if !preserve_bounded_text_content {
+        remove_text_content_from_tool_result(req, &mut result);
+    }
     result
 }
 
@@ -10407,8 +10452,8 @@ async fn handle_verify_project(req: &JsonRpcRequest, workspace_root: &str) -> Js
 async fn handle_git_status_summary(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcResponse {
     match git_workflow::status_summary(workspace_root).await {
         Ok(output) => {
-            let text = output.summary.clone();
-            tool_success_response_with_structured(
+            let text = git_status_content_fallback(&output);
+            tool_response_with_bounded_content(
                 req,
                 text,
                 json!({
@@ -10417,8 +10462,12 @@ async fn handle_git_status_summary(req: &JsonRpcRequest, workspace_root: &str) -
                     "clean": output.clean,
                     "warnOnMain": output.warn_on_main,
                     "raw": output.raw,
+                    "rawTruncated": output.raw_truncated,
+                    "rawUtf8Bytes": output.raw_utf8_bytes,
+                    "rawReturnedUtf8Bytes": output.raw_returned_utf8_bytes,
                     "summary": output.summary,
                 }),
+                false,
             )
         }
         Err(e) => tool_error_response(req, e),
@@ -16875,7 +16924,13 @@ mod tests {
             &None,
         )
         .await;
-        assert_no_text_content(&response);
+        let content = response
+            .result
+            .as_ref()
+            .map(extract_tool_result_content_text)
+            .unwrap_or_default();
+        assert!(content.contains("branch: main"));
+        assert!(!content.contains("## main"));
         let structured = response
             .result
             .as_ref()
@@ -16888,6 +16943,10 @@ mod tests {
         assert_eq!(
             structured.get("warnOnMain").and_then(Value::as_bool),
             Some(true)
+        );
+        assert_eq!(
+            structured.get("rawTruncated").and_then(Value::as_bool),
+            Some(false)
         );
 
         let _ = std::fs::remove_dir_all(workspace_root);
@@ -17231,6 +17290,52 @@ mod tests {
         );
     }
 
+    #[test]
+    fn human_readable_tool_content_is_explicitly_bounded() {
+        let input = "x".repeat(MAX_HUMAN_READABLE_TOOL_CONTENT_CHARS + 1);
+        let bounded = bounded_human_readable_tool_content(&input);
+        assert!(bounded.chars().count() <= MAX_HUMAN_READABLE_TOOL_CONTENT_CHARS);
+        assert!(bounded.contains("CatDesk tool-result fallback truncated"));
+    }
+
+    #[test]
+    fn command_content_fallback_never_copies_command_output() {
+        let summary = command::CommandSummary {
+            status: "failed".into(),
+            exit_code: Some(7),
+            errors: vec!["token=not-for-content".into()],
+            key_output: vec!["private output".into()],
+        };
+        let fallback = run_command_content_fallback(&summary);
+        assert!(fallback.contains("status: failed"));
+        assert!(fallback.contains("exit_code: 7"));
+        assert!(!fallback.contains("token="));
+        assert!(!fallback.contains("private output"));
+    }
+
+    #[test]
+    fn bounded_content_fallback_survives_enrichment_without_its_internal_marker() {
+        let req = tool_call_request("run_command", json!({}));
+        let response = tool_response_with_bounded_content(
+            &req,
+            "status: success".into(),
+            json!({"toolName":"run_command", "stdout":"private output"}),
+            false,
+        );
+        let enriched =
+            enrich_tool_result(&req, response.result.expect("tool response result"), None);
+        assert_eq!(
+            extract_tool_result_content_text(&enriched),
+            "status: success"
+        );
+        assert!(!extract_tool_result_content_text(&enriched).contains("private output"));
+        assert!(
+            enriched
+                .pointer("/_meta/catdesk~1preserveBoundedTextContent")
+                .is_none()
+        );
+    }
+
     #[tokio::test]
     async fn run_command_returns_exit_code_and_summary_for_failures() {
         let workspace_root =
@@ -17256,7 +17361,13 @@ mod tests {
         )
         .await;
 
-        assert_no_text_content(&response);
+        let content = response
+            .result
+            .as_ref()
+            .map(extract_tool_result_content_text)
+            .unwrap_or_default();
+        assert!(content.contains("status: failed"));
+        assert!(content.chars().count() <= MAX_HUMAN_READABLE_TOOL_CONTENT_CHARS);
         assert_eq!(
             response
                 .result
