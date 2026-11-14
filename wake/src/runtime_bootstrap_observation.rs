@@ -193,6 +193,7 @@ impl InitializationReadbackObservation {
         let phases = [
             "NAVIGATION",
             "INITIAL_OBSERVATION",
+            "HOME_RECOVERY",
             "ORIGINAL_USER_CHECK",
             "COMPLETION",
             "REFRESH",
@@ -226,7 +227,10 @@ fn readback_observation(
     request: &InitializationReadbackRequest<'_>,
 ) -> Result<InitializationReadbackObservation> {
     if frame.as_object().map(|v| v.len()) != Some(10)
-        || frame["stage"] != "INITIALIZATION_READBACK_DIAGNOSTIC"
+        || !matches!(
+            frame["stage"].as_str(),
+            Some("INITIALIZATION_READBACK_DIAGNOSTIC" | "INITIALIZATION_READBACK_HOME_RECOVERED")
+        )
         || frame["schemaVersion"] != 1
         || frame["projectId"] != request.project
         || frame["intentId"] != request.intent
@@ -245,6 +249,13 @@ fn readback_observation(
         "phase":frame["phase"],"driverRoute":frame["driverRoute"],"documentRoute":frame["documentRoute"]}))
         .map_err(|_|"INITIALIZATION_READBACK_DIAGNOSTIC_INVALID")?;
     observation.validate()?;
+    if frame["stage"] == "INITIALIZATION_READBACK_HOME_RECOVERED"
+        && (observation.phase != "HOME_RECOVERY"
+            || observation.driver_route != "SAME_CONVERSATION"
+            || observation.document_route != "SAME_CONVERSATION")
+    {
+        return Err("INITIALIZATION_READBACK_DIAGNOSTIC_INVALID".into());
+    }
     Ok(observation)
 }
 
@@ -287,6 +298,12 @@ pub fn read_initialization_candidate_guarded(
     {
         return Err("INITIALIZATION_READBACK_DIAGNOSTICS_PACKAGE_REQUIRED".into());
     }
+    if !bytes
+        .windows(b"INITIALIZATION_READBACK_HOME_RECOVERY_V1 = True".len())
+        .any(|part| part == b"INITIALIZATION_READBACK_HOME_RECOVERY_V1 = True")
+    {
+        return Err("INITIALIZATION_READBACK_HOME_RECOVERY_PACKAGE_REQUIRED".into());
+    }
     let mut adapter = Adapter::spawn_from_installed_guarded(
         store.root(),
         &installed,
@@ -300,6 +317,7 @@ pub fn read_initialization_candidate_guarded(
     )?;
     let deadline = Instant::now() + Duration::from_secs(TURN_TARGET_SECONDS);
     let mut diagnostic_seen = false;
+    let mut home_recovered = false;
     while Instant::now() < deadline {
         let value = match guarded_browser_receive(&adapter.output, keep_running)? {
             Ok(Ok(value)) => value,
@@ -312,6 +330,20 @@ pub fn read_initialization_candidate_guarded(
             return Err("INITIALIZATION_READBACK_PROTOCOL_INVALID".into());
         }
         match value["stage"].as_str() {
+            Some("INITIALIZATION_READBACK_HOME_RECOVERED") if !home_recovered => {
+                let request = InitializationReadbackRequest {
+                    project,
+                    intent,
+                    registration,
+                    handoff,
+                    candidate,
+                    native_turn_started_utc,
+                };
+                let observation = readback_observation(&value, &request)?;
+                keep_running()?;
+                observe(observation)?;
+                home_recovered = true;
+            }
             Some("INITIALIZATION_READBACK_DIAGNOSTIC") => {
                 let request = InitializationReadbackRequest {
                     project,
@@ -373,6 +405,16 @@ pub fn read_initialization_candidate_guarded(
                         "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"
                     }
                     Some("RESPONSE_NETWORK_ERROR") => "RESPONSE_NETWORK_ERROR",
+                    Some("EXISTING_DRAFT" | "BOOTSTRAP_RICH_DRAFT_UNVERIFIED") => {
+                        "INITIALIZATION_READBACK_HOME_DRAFT_PRESERVED"
+                    }
+                    Some("CHATGPT_NOT_IDLE") => "INITIALIZATION_READBACK_HOME_GENERATION_ACTIVE",
+                    Some("BOOTSTRAP_HOME_NOT_READY" | "BOOTSTRAP_HOME_HAS_TURNS") => {
+                        "INITIALIZATION_READBACK_HOME_STATE_UNPROVEN"
+                    }
+                    Some("INITIALIZATION_READBACK_FIXED_NAVIGATION_UNAVAILABLE") => {
+                        "INITIALIZATION_READBACK_FIXED_NAVIGATION_UNAVAILABLE"
+                    }
                     _ => "INITIALIZATION_READBACK_OBSERVATION_UNPROVEN",
                 };
                 return Err(reason.into());
@@ -429,6 +471,18 @@ mod tests {
             changed[key] = value;
             assert!(readback_observation(&changed, &request).is_err());
         }
+        let mut recovered = frame.clone();
+        recovered["stage"] = serde_json::json!("INITIALIZATION_READBACK_HOME_RECOVERED");
+        recovered["phase"] = serde_json::json!("HOME_RECOVERY");
+        recovered["documentRoute"] = serde_json::json!("SAME_CONVERSATION");
+        assert!(readback_observation(&recovered, &request).is_ok());
+        for field in ["driverRoute", "documentRoute"] {
+            let mut invalid = recovered.clone();
+            invalid[field] = serde_json::json!("HOME");
+            assert!(readback_observation(&invalid, &request).is_err());
+        }
+        recovered["phase"] = serde_json::json!("INITIAL_OBSERVATION");
+        assert!(readback_observation(&recovered, &request).is_err());
         let mut changed = frame;
         changed["body"] = serde_json::json!("private context");
         assert!(readback_observation(&changed, &request).is_err());

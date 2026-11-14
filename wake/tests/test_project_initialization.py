@@ -250,15 +250,42 @@ class ProjectInitializationTests(unittest.TestCase):
         expected = bridge.digest(bridge.normalize_message(message))
         cdp = AttemptCdp()
         cdp.url, cdp.typed_message, cdp.draft = ISSUED, message, "untouched operator draft"
+        home_fault = bool(fault and fault.startswith("home-"))
+        if home_fault:
+            cdp.url = bridge.NEW_CONVERSATION_HOME
+            cdp.draft = "untouched operator draft" if fault == "home-draft" else ""
         cdp.evaluate = lambda script: "https://chatgpt.com/" if fault == "document-home" else cdp.url
         output = []
 
         class ReadbackSink(AttemptSink):
+            cdp_value = staticmethod(bridge.CdpSink.cdp_value)
             def observe_cooperative_response(self, cdp, message, digest):
+                if home_fault and cdp.url == bridge.NEW_CONVERSATION_HOME:
+                    raise bridge.Attention("RESPONSE_TARGET_DRIFT")
                 if fault == "document-home": raise bridge.Attention("RESPONSE_TARGET_DRIFT")
                 if fault in {"LOGIN_OR_PROFILE_REQUIRED", "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"}:
                     raise bridge.Attention(fault)
                 return "RESPONSE_COMPLETE"
+
+            def error(self, cdp, current=None): return False
+
+            def check_empty_home(self, cdp):
+                if cdp.draft: raise bridge.Attention("EXISTING_DRAFT")
+                for condition,code in [("home-login","LOGIN_OR_PROFILE_REQUIRED"),
+                                       ("home-active","CHATGPT_NOT_IDLE"),
+                                       ("home-editor","BOOTSTRAP_HOME_NOT_READY")]:
+                    if fault == condition: raise bridge.Attention(code)
+                assert cdp.url == bridge.NEW_CONVERSATION_HOME
+
+            def check_plain_home_draft(self, cdp):
+                if fault == "home-rich": raise bridge.Attention("BOOTSTRAP_RICH_DRAFT_UNVERIFIED")
+
+            def retry_page_readiness(self, sb, cdp):
+                if fault == "home-stuck": return cdp
+                return bridge.CdpSink.retry_page_readiness(self,sb,cdp)
+
+            def require_response_document(self, cdp):
+                return bridge.CdpSink.require_response_document(self,cdp)
 
             def user_message_digests(self, cdp):
                 if fault == "duplicate-user": return [expected, expected]
@@ -282,8 +309,13 @@ class ProjectInitializationTests(unittest.TestCase):
                 if fault == "missing-ack": raise bridge.Attention("BOOTSTRAP_INITIALIZATION_ACK_UNVERIFIED")
                 cdp.timeline.append("ack-verified")
 
+        bounded_observe=adapter.bounded_response_observation
+        def observation(module,sink,cdp,message,expected):
+            if home_fault: return sink.observe_cooperative_response(cdp,message,expected)
+            return bounded_observe(module,sink,cdp,message,expected)
         with patch.object(bridge,"NewConversationSink",ReadbackSink), patch.object(adapter,"emit",output.append), \
              patch.object(adapter,"prepare_cdp_target",return_value=cdp) as opened, \
+             patch.object(adapter,"bounded_response_observation",side_effect=observation), \
              patch.object(adapter,"read_request",side_effect=AssertionError("readback must not request submit ACK")), \
              patch.object(adapter.time,"sleep",return_value=None):
             try:
@@ -352,6 +384,30 @@ class ProjectInitializationTests(unittest.TestCase):
                 _,output,_,_=self.readback_case(fault=fault)
                 self.assertEqual(output[-1]["stage"],"INITIALIZATION_READBACK_DIAGNOSTIC")
                 self.assertEqual(output[-1]["phase"],phase)
+
+    def test_initialization_readback_recovers_empty_home_once_in_the_same_cdp_without_send(self):
+        cdp,output,error,_=self.readback_case(fault="home-empty")
+        self.assertIsNone(error)
+        self.assertEqual(cdp.sent,0)
+        self.assertEqual(cdp.navigation,[ISSUED])
+        recovered=[row for row in output if row["stage"]=="INITIALIZATION_READBACK_HOME_RECOVERED"]
+        self.assertEqual(len(recovered),1)
+        self.assertEqual(recovered[0]["phase"],"HOME_RECOVERY")
+        self.assertEqual(recovered[0]["driverRoute"],"SAME_CONVERSATION")
+        self.assertEqual(recovered[0]["documentRoute"],"SAME_CONVERSATION")
+        self.assertEqual(output[-1]["stage"],"INITIALIZATION_READBACK_COMPLETE")
+
+    def test_initialization_readback_home_safety_gates_preserve_drafts_and_original_unknown(self):
+        for fault in ["home-draft","home-login","home-active","home-editor","home-rich","home-stuck"]:
+            with self.subTest(fault=fault):
+                cdp,output,error,_=self.readback_case(fault=fault)
+                self.assertIsNotNone(error)
+                self.assertEqual(cdp.sent,0)
+                self.assertEqual(cdp.navigation,[])
+                self.assertEqual(output[-1]["stage"],"INITIALIZATION_READBACK_DIAGNOSTIC")
+                self.assertEqual(output[-1]["phase"],"HOME_RECOVERY")
+                self.assertFalse(any("receipt" in row for row in output))
+                if fault=="home-draft":self.assertEqual(cdp.draft,"untouched operator draft")
 
 
 if __name__ == "__main__":

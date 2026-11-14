@@ -18,6 +18,7 @@ MAX_BOOTSTRAP_REQUEST_BYTES = 32 * 1024
 SOURCE_SNAPSHOT_RESPONSE_BYTES = 64 * 1024
 BOOTSTRAP_RESPONSE_LIFECYCLE_V1 = True
 INITIALIZATION_READBACK_DIAGNOSTICS_V1 = True
+INITIALIZATION_READBACK_HOME_RECOVERY_V1 = True
 
 
 def emit(value):
@@ -719,11 +720,43 @@ def initialization_readback(bridge, sb, request):
     sink = bridge.NewConversationSink(None, ROOT / "browser-profile", 30, 20)
     sink.url, sink.destination_url = candidate, candidate
     cdp, phase = None, "NAVIGATION"
+    def report(stage):
+        def route(read):
+            try:
+                value = read()
+                return bridge.bounded_route_class(value, candidate) if isinstance(value, str) else "INVALID_ROUTE"
+            except Exception:
+                return "INVALID_ROUTE"
+        emit({"stage":stage, "schemaVersion":1,
+              "projectId":project, "intentId":intent, "registrationDigest":registration,
+              "messageDigest":expected, "candidateDigest":bridge.digest(candidate),
+              "phase":phase, "driverRoute":route(lambda:cdp.get_current_url()),
+              "documentRoute":route(lambda:bridge.CdpSink.cdp_value(cdp.evaluate("location.href")))})
     try:
         cdp = prepare_cdp_target(bridge, sb, candidate)
         phase = "INITIAL_OBSERVATION"
         # Never use the pre-write readiness path's blank-shell reload here.
-        bounded_response_observation(bridge, sink, cdp, message, expected)
+        try:
+            bounded_response_observation(bridge, sink, cdp, message, expected)
+        except bridge.Attention as error:
+            if (str(error) != "RESPONSE_TARGET_DRIFT"
+                    or cdp.get_current_url() != bridge.NEW_CONVERSATION_HOME
+                    or bridge.CdpSink.cdp_value(cdp.evaluate("location.href")) != bridge.NEW_CONVERSATION_HOME):
+                raise
+            phase = "HOME_RECOVERY"
+            # Reuse the qualified native Home/draft/login/generation checks.
+            # Only a positively empty, idle Home can navigate once in-place.
+            sink.check_empty_home(cdp)
+            sink.check_plain_home_draft(cdp)
+            if not callable(getattr(cdp,"get",None)):
+                raise bridge.Attention("INITIALIZATION_READBACK_FIXED_NAVIGATION_UNAVAILABLE")
+            cdp = sink.retry_page_readiness(sb, cdp)
+            sink.require_response_document(cdp)
+            if not sink.exact(str(cdp.get_current_url())):
+                raise bridge.Attention("RESPONSE_TARGET_DRIFT")
+            report("INITIALIZATION_READBACK_HOME_RECOVERED")
+            phase = "INITIAL_OBSERVATION"
+            bounded_response_observation(bridge, sink, cdp, message, expected)
         phase = "ORIGINAL_USER_CHECK"
         if not sink.exact(str(cdp.get_current_url())) or sink.user_message_digests(cdp) != [expected]:
             raise bridge.Attention("INITIALIZATION_READBACK_USER_UNPROVEN")
@@ -742,17 +775,7 @@ def initialization_readback(bridge, sb, request):
     except Exception:
         # Driver metadata is not document identity. Read both independently,
         # classify in this process, and emit only the closed structural labels.
-        def route(read):
-            try:
-                value = read()
-                return bridge.bounded_route_class(value, candidate) if isinstance(value, str) else "INVALID_ROUTE"
-            except Exception:
-                return "INVALID_ROUTE"
-        emit({"stage":"INITIALIZATION_READBACK_DIAGNOSTIC", "schemaVersion":1,
-              "projectId":project, "intentId":intent, "registrationDigest":registration,
-              "messageDigest":expected, "candidateDigest":bridge.digest(candidate),
-              "phase":phase, "driverRoute":route(lambda:cdp.get_current_url()),
-              "documentRoute":route(lambda:bridge.CdpSink.cdp_value(cdp.evaluate("location.href")))})
+        report("INITIALIZATION_READBACK_DIAGNOSTIC")
         raise
     emit({"stage": "INITIALIZATION_READBACK_COMPLETE", "receipt": {
         "schemaVersion": 2, "projectId": project, "intentId": intent,
