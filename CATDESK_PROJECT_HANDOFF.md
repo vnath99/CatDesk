@@ -6,7 +6,7 @@ Single resumption entry point for this checkout. Reconciled 2026-11-14T17:26:20.
 
 ## Mission and priority
 
-CatDesk lets independent ChatGPT Web project conversations use authenticated v5 tools to edit their assigned local files, verify work, checkpoint Git, wake themselves and roll over with durable context. Native Codex delegation and a central coordinator are optional. The five-document implementation is source-qualified. The current P0 continuation is DOC-CONTINUITY: review and integrate PR #5, synchronize development, and safely expose the five documents in the primary operational checkout. Architecture, UI, Wake and native-dispatch work are excluded from this task.
+CatDesk lets independent ChatGPT Web project conversations use authenticated v5 tools to edit their assigned local files, verify work, checkpoint Git, wake themselves and roll over with durable context. Native Codex delegation and a central coordinator are optional. The five-document implementation is source-qualified. The current P0 continuation is DOC-CONTINUITY: finish final verification and handoff after PR #5 integration, development synchronization and the primary documentation-only backport. Architecture, UI, Wake and native-dispatch work are excluded from this task.
 
 ## Source identity
 
@@ -28,7 +28,7 @@ Registry/scoped routing/context ledgers and actual controlled rollovers have evi
 
 | Work / owner | State / evidence | Next eligible action |
 | --- | --- | --- |
-| DOC-CONTINUITY / Codex documentation owner, separate worktree | IN_PROGRESS / SOURCE_TESTED; original implementation qualified; integration/local usability remain | Integrate reviewed PR #5 through GitHub, then validate a primary documentation-only backport |
+| DOC-CONTINUITY / Codex documentation owner | IN_REVIEW / SOURCE_TESTED; PR #5 merged, development synchronized, five docs present in primary | Finish current-state suite/preservation checks and both fresh-AI exercises; no architecture work |
 | C1-UI-002 / existing feature owner; resume ownership check required | IN_PROGRESS / SOURCE_TESTED; exact HTML serves locally, client times out; fallback is not installed | On existing UI feature branch, qualify a standard host-bridge fixture; do not replay a mutating tool to test UI |
 | Original C1 and C49 / original task owners | Held original task/grant/journals; cached native refusal not safely replayable | Reconcile authoritative receipts before any original operation; never replace grant/fences |
 | REVIEW-D22 / original authorized reviewer workflow | f410 contract QUEUED v3, zero provider turns; external batch prompt delivery UNKNOWN, no attributable new USER/response | Preserve original request; do not resend external batch or fabricate review/producer evidence |
@@ -46,5 +46,5 @@ No force-push, reset, blind pull/rebase, bulk staging, main merge, protected ins
 Without a connector: clone GitHub, check out this documentation branch, inspect the exact integration SHA and run offline checks. This permits source work only; runtime health is UNVERIFIED and no task effects may be inferred. The [GitHub-only procedure](CATDESK_IMPORTANT_COMMANDS.md#git-and-github-only-recovery) requires no CatDesk daemon.
 
 ```json
-{"schemaVersion":1,"milestone":"M-CONTINUITY","ticket":"DOC-CONTINUITY","source_sha":"313f6a31f13c04c90d6098fad57f1e6a6c99cfd7","branch":"orchestrator/chatgpt-codex-autonomous-loop","status":"IN_PROGRESS","runtime_status":"UNVERIFIED","blocker":"NONE_FOR_REVIEW; PRIMARY_RUNTIME_AND_RETAINED_STATE_MUST_BE_PRESERVED","next_action":"Verify documentation-only primary publication and complete synchronization; retain older application source and protected runtime"}
+{"schemaVersion":1,"milestone":"M-CONTINUITY","ticket":"DOC-CONTINUITY","source_sha":"313f6a31f13c04c90d6098fad57f1e6a6c99cfd7","branch":"orchestrator/chatgpt-codex-autonomous-loop","status":"IN_REVIEW","runtime_status":"UNVERIFIED","blocker":"NONE_FOR_DOCUMENTATION; FINAL_VERIFICATION_PENDING","next_action":"Finish final integrated and primary documentation qualification and handoff; keep architecture, runtime, UI and dispatch work excluded"}
 ```

@@ -84,3 +84,5 @@ Only the integration edition of `.\scripts\catdesk-dev-lane.ps1 verify` runs the
 | FIXED_DIRECT_WAKE_ROOT_IDENTITY_CHANGED | Physical root mismatch; do not rewrite IDs or sign expired proposal |
 | CatDesk app view timed out | Client/resource/rendering evidence needed; does not itself prove tool failure; never replay mutating call to test UI |
 | HTTP 429 / Session terminated | Connector/upstream/session; diagnose once after serving/auth ready and preserve exact error |
+
+The primary named remote remains historically older. Compare this local documentation HEAD against `origin/codex/docs-primary-sync-nov14`, not against the old orchestrator remote tip. No upstream was silently changed. The canonical global documentation is separately maintained on `codex/web-rollover-oct17`. [Synchronization roles](docs/verification/DOC_SYNC_STATE_2026_11_14.json).

@@ -1,0 +1,40 @@
+{
+  "observedUtc": "2026-11-14T18:12:15.426663+00:00",
+  "pr5": {
+    "state": "MERGED",
+    "head": "14b2c8d1c749ffa85d35ec593d49b8e8de8a3232",
+    "merge": "23e26e9afdb560cfe447cd8f6454cc952b4e3702",
+    "mergedAt": "2026-11-14T18:00:30Z",
+    "url": "https://github.com/vnath99/CatDesk/pull/5"
+  },
+  "development": {
+    "branch": "codex/web-rollover-oct17",
+    "lastVerifiedLocalAndRemote": "23e26e9afdb560cfe447cd8f6454cc952b4e3702",
+    "directory": "CatDesk-web-rollover-oct17",
+    "subsequentHead": "Resolve actual branch ref; this is a dated synchronization receipt"
+  },
+  "primary": {
+    "localBranch": "orchestrator/chatgpt-codex-autonomous-loop",
+    "publicationBranch": "codex/docs-primary-sync-nov14",
+    "documentationCheckpoint": "79f09ccb7191f30c704785c37232c74414790e37",
+    "applicationBaseline": "313f6a31f13c04c90d6098fad57f1e6a6c99cfd7",
+    "directory": "CatDesk-codex-loop",
+    "fiveRootDocumentsPresent": true,
+    "backportPaths": 23,
+    "validationPassed": true,
+    "linkChecks": 473,
+    "sourceFilesChanged": false,
+    "developerFacadeChanged": false,
+    "originalNamedRemote": "Retained at its historical head; not silently advanced or retracked"
+  },
+  "maintenance": {
+    "helper": "Same existing scripts/catdesk_docs.py",
+    "development": "Existing developer verify hook plus manual CLI",
+    "primary": "Manual CLI; old facade deliberately retained",
+    "tests": "Same suite; one primary-specific compatibility assertion replaces the integration hook assertion",
+    "fixtureCorrection": "Tracked overlays only; unrelated untracked files never copied"
+  },
+  "protectedState": "Final preservation comparison pending; no protected operation performed",
+  "finalQualification": "Pending current integrated/primary suites and both final-state fresh-AI exercises",
+  "excludedArchitectureWork": "NOT_STARTED"
+}
