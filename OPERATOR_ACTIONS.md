@@ -1234,3 +1234,26 @@ root and leaf evidence with the retained history before choosing an existing
 supported recovery transition. Expired signing inputs and review leases remain
 expired. No new signature, credentials or review approval is requested now.
 See `docs/verification/RECORDED_WAKE_ROOT_DIAGNOSTIC_2026_11_13.json`.
+
+## 2026-11-13 Eastern — Serving restored; no PowerShell repair required for v5
+
+The existing installed backend and retained official Secure MCP owner are now
+running. Public diagnosis is HEALTHY; authenticated local catalog and a genuine
+published v5 call from Codex passed. No operator restart, signing, root comparison,
+new plugin/tunnel or connection-setting change is needed for this restoration.
+Do not stop these intended production owners as temporary-test cleanup.
+
+One client-specific acceptance check remains: in the affected ChatGPT Web
+conversation, invoke `catdesk_transport_status` once through its existing v5 app.
+Return only success or the exact error, localMcpAuth and servingCanonicalParity.
+Do not retry C1/C49, project tasks or unknown deliveries. A successful Codex app
+connector call does not establish that separate Web client's session recovery.
+If it fails, preserve the exact error and any correlation ID; do not immediately
+reconnect, change settings or repeat the request.
+
+Unattended recovery is a separate gap. Existing autostart is registered but its
+monitor is stopped; fixed stable-supervisor status/preflight reports unavailable
+root and absent startup definition. No new service, task registration or monitor
+activation was performed. The broader legacy autostart monitor can invoke full
+recovery; do not use it as an undocumented backend-only repair that changes Wake.
+See `docs/verification/V5_SESSION_CONNECTIVITY_RESTORATION_2026_11_13.json`.

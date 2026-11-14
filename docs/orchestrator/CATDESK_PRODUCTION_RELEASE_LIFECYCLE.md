@@ -1207,6 +1207,27 @@ one blocked project with sibling progress. Qualify project Wake/context operatio
 without replaying completed canaries. Stop all test-owned browser/Wake processes;
 preserve the authorized production daemon owner and record final inventory.
 
+#### 2026-11-13 Eastern — Connectivity restoration scope
+
+Current restoration used the verified installed executable through public
+`start -BackendOnly`, then the existing official runtime manager's retained
+alias/profile/tunnel with the already qualified process-only bearer forwarding.
+No release promotion, Wake migration or root comparison was required. Existing
+runtime profile and credentials remained unchanged. Local authenticated MCP and
+official health/readiness passed, followed by one genuine v5 call from Codex.
+The separate affected ChatGPT Web client still needs its own fresh read-only call;
+do not relabel another client's evidence as Web acceptance.
+
+Production serving remains intentionally running after restoration. Earlier
+bounded qualifications deliberately stopped serving and do not promise continuous
+availability. The current autostart monitor is stopped; fixed supervisor preflight
+refuses SUPERVISOR_ROOT_UNAVAILABLE and its startup definition is absent. Starting
+another monitor, installing a supervisor or broadening recovery is not implicit in
+a successful connector call. Persistent recovery and launcher-lifetime independence
+remain unqualified. Preserve working normal owners while reconciling that authority;
+never replace the tunnel or weaken bearer authentication as a session repair.
+See `docs/verification/V5_SESSION_CONNECTIVITY_RESTORATION_2026_11_13.json`.
+
 ### 11. Publish evidence and retain the working release
 
 Keep sensitive receipts, raw logs, machine identities, actual private conversation

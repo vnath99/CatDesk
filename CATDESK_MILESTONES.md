@@ -10521,3 +10521,36 @@ Previous installed backend/restart/auth/MCP/connector acceptance remains preserv
 Wake migration, independent review/producer and full Web edit/checkpoint/self-Wake
 remain separately blocked as recorded; no expired authority was reused. Evidence:
 `docs/verification/RECORDED_WAKE_ROOT_DIAGNOSTIC_2026_11_13.json`.
+
+### 2026-11-13 Eastern — Existing v5 serving pipeline restored independently
+
+New user-reported `Session terminated` evidence triggered serving diagnosis, not a
+Wake-root retry. The canonical release/config passed, but port 3200 had no listener
+and both backend and official runtime were stopped. Existing autostart registration
+had no running monitor. Previous bounded qualification explicitly stopped serving;
+that evidence does not prove a crash or the exact upstream session termination.
+
+Public `start -BackendOnly` restored the exact installed release. The retained
+Secure MCP manager reconnected only its existing alias/profile/tunnel with the
+qualified child-only bearer forwarding. Authenticated MCP returns 200 with 102
+tools; missing/wrong bearer return 401. Official health/readiness and public
+diagnosis pass. One fresh published v5 transport-status call from this Codex session
+returns structured content, isError=false and canonical/serving MATCH. Its advisory
+CONFIGURED_UNVERIFIED field remains unchanged; independent live evidence is recorded
+separately. Local catalog publication and this client's 101-tool metadata are
+distinct; the named central dispatcher remains absent from client metadata.
+
+This restores production serving rather than ending another temporary test.
+Verified backend and existing tunnel owners remain running; no Wake, browser,
+new service/tunnel, recurring automation, install or task operation was started.
+All 1,685 preservation checks, task inventory and profile identities pass.
+
+The affected ChatGPT Web client's own fresh status call remains unverified; the
+Codex connector success is not substituted for that acceptance. No historical task
+retry or connection-setting change is needed for the requested single read-only
+client check. Unattended serving also remains unqualified: the legacy monitor is
+stopped and fixed supervisor preflight refuses SUPERVISOR_ROOT_UNAVAILABLE, with
+its startup definition absent. No activation or broader recovery was attempted.
+Wake migration/review/scoped-Git gates remain separate and did not block this
+restoration. Evidence:
+`docs/verification/V5_SESSION_CONNECTIVITY_RESTORATION_2026_11_13.json`.
