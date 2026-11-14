@@ -3132,3 +3132,20 @@ preferred test projects. Resolve that actual routing gate without assuming the
 separate protected update migration must precede all useful development. The UI
 compatibility branch remains isolated pending tests, strict checks and independent
 review; no merge or installation follows from local source qualification alone.
+
+### 2026-11-14 Eastern — Separate physical state from exact project routing recovery
+
+The elevated comparison is fulfilled, with retained state still unproved as one
+physical directory. Original pointer identity/bytes exist in the ordinary store;
+recorded directory/control/config identities exist in the package store. Do not
+copy a selection pointer or regenerate expired bootstrap inputs from that split.
+
+Exact project routing can nevertheless recover independently when the existing
+native guard proves the registry URL and missing selected-store counterpart.
+Retained controlled targets are generation 1 with no predecessors; one Bug target
+was restored through the existing expected-generation-0 prebound-URL CAS path,
+with identical retained URL/digest/generation and PAIRED readback. The operation
+changed no registry, old store, grant or task journal. It is not arbitrary root
+selection, conversation rotation, protected enrollment or full Web acceptance.
+Recover the second counterpart only after the same fresh exact checks. See the
+retained-root/exact-target recovery verification record.

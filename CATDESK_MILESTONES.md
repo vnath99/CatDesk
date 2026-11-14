@@ -10590,3 +10590,32 @@ at 53e9f4d, with exact remote SHA readback. This is a compiled test target, not 
 production release build, genuine independent review, merge, installation or live
 UI acceptance. Preserve the WIP branch until those separate gates pass; do not
 spend further turns repeating the same UI tests while Phase 1 routing remains open.
+
+### 2026-11-14 Eastern — Operator view reconciled; one exact Wake counterpart restored
+
+The elevated account-first comparison returned RECORDED_ROOT_FOUND_STATE_NOT_PROVEN
+with correct account and verified cleanup. This fulfills the requested observation;
+do not request it again. The old proposal remains expired and grants no signing or
+installation authority. A pinned read-only object comparison then established that
+the original pointer object/bytes remain in the ordinary store, while the recorded
+root/control/config objects remain in the package store. The latter lacks both
+pointers and a pending handoff, and its three early versions do not contain the
+selected release. Original namespace mapping/relocation cause remains unproved.
+No pointer or identity was rewritten.
+
+Both controlled project targets retained in the package config exactly match their
+registry URLs at generation 1 with one history entry and no predecessors. Their
+ordinary-store counterparts were absent. The existing installed source and native
+command support exact prebound-URL recovery; no new recovery subsystem was added.
+After freezing arguments and confirming zero selected-store events for the Bug
+project, one native CAS target-bind restored that counterpart. Independent native
+status now reports PAIRED with the same URL/digest/generation. Registry bytes,
+recorded store, sibling targets, prior history and task journals remain unchanged.
+
+Of 1,685 preservation pins, only the intended ordinary-store config changed. The
+original one-mismatch result remains retained; qualified preservation accepts only
+that exact verified delta. No message, task, grant, replay fence, browser, host,
+binary, installation or signing operation ran. BYOVD recovery was not attempted
+in this bounded task. This accepts native pairing readback only; the actual Web
+edit/checkpoint/self-Wake cycle and genuine review/producer remain incomplete.
+Evidence: `docs/verification/RETAINED_ROOT_AND_EXACT_TARGET_RECOVERY_2026_11_14.json`.

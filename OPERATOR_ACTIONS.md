@@ -1274,3 +1274,22 @@ copy pointers between stores, reuse expired work approvals or replay old tasks.
 Source UI qualification proceeds independently on its existing WIP branch; no
 merge or installation is authorized by a successful test alone. See the current
 Web connectivity confirmation record.
+
+## 2026-11-14 Eastern — Elevated comparison received; no repeat requested
+
+The correct elevated-account comparison is complete. Its negative retained-state
+result is preserved; old proposals remain expired and are not ready for signing.
+No further execution of that comparison, collector or sign-in is requested.
+
+Read-only evidence found the retained pointer object in the ordinary store and
+retained root/control/config objects in the package store. Do not copy pointers
+or change identity pins. Exact registered-target metadata independently allowed
+the existing guarded prebound-URL binding operation: Bug's missing counterpart
+was restored once at the same URL/digest/generation and native readback is PAIRED.
+The recorded store, registry, siblings and historical tasks remain unchanged.
+
+Next revalidate and recover BYOVD's exact missing counterpart through the same
+supported guards, then assess actual task/review admission. No operator action is
+currently required for that next eligible operation. This does not authorize a
+new project URL, old-task replay, release promotion, signing or installation.
+See `docs/verification/RETAINED_ROOT_AND_EXACT_TARGET_RECOVERY_2026_11_14.json`.
