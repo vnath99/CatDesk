@@ -1,11 +1,15 @@
+> Continuity authority update, 2026-11-14: the five root documents own handoff, status and commands. This file remains technical design authority. Historical operating observations below do not supersede original journals or current root status. See [root handoff](../../CATDESK_PROJECT_HANDOFF.md).
+
 # CatDesk Canonical Current Architecture and Security Model
 
 This is the current architecture and security authority for CatDesk. It
 summarizes accepted durable state; it does not authorize a host operation.
-For current milestone status, active control state, and ticket eligibility,
-read [`CATDESK_MILESTONES.md`](../../CATDESK_MILESTONES.md),
-[`.catdesk/current_plan.md`](../../.catdesk/current_plan.md), and
-[`.catdesk/todo.md`](../../.catdesk/todo.md) first. The companion
+For current milestone status and ticket eligibility, begin with the
+[root handoff](../../CATDESK_PROJECT_HANDOFF.md), then the root
+[milestones](../../CATDESK_MILESTONES.md) and [tickets](../../CATDESK_TICKETS.md).
+Local `.catdesk/current_plan.md` and `.catdesk/todo.md` are supporting operational
+records in their original checkout, may be absent in a clone, and never prove
+fresh runtime health. Original execution journals remain authoritative. The companion
 [architecture/document index](ARCHITECTURE_DOCUMENT_INDEX.md) identifies
 superseded and historical material.
 
@@ -116,7 +120,7 @@ continuity metadata; it does not create, select, scrape, or retarget a ChatGPT
 conversation. Browser Wake does not establish or replace a native thread's
 identity.
 
-The current stable control transport is recorded as `CONNECTED_VERIFIED` in
+The historical stable control transport was recorded as `CONNECTED_VERIFIED` in
 the durable plan. A legacy `CatDesk_Local` HTTP 404 is not evidence to replace,
 restart, or reconfigure the healthy stable tunnel.
 

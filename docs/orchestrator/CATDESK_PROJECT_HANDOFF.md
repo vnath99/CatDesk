@@ -1,3 +1,5 @@
+> SUPERSEDED AS CURRENT AUTHORITY — 2026-11-14. Start with [the root CATDESK_PROJECT_HANDOFF.md](../../CATDESK_PROJECT_HANDOFF.md). The content below is preserved historical evidence, not current instructions. [Exact pre-consolidation identity](../archive/PRE_CONSOLIDATION_2026_11_14.md).
+
 ## 2026-11-10 12:58 UTC — current handoff: D qualified in development; installed parser blocks normal admission
 
 Published source `da1608a15b960cbce01a3cc75b2482a2d1a2e985` / tree

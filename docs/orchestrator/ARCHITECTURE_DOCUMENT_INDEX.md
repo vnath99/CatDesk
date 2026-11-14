@@ -6,17 +6,17 @@ actions. Status is reconciled from the milestone tracker and current plan.
 
 ## CURRENT
 
-| Artifact | Role | Use |
-| --- | --- | --- |
-| [`CANONICAL_CURRENT_ARCHITECTURE.md`](CANONICAL_CURRENT_ARCHITECTURE.md) | Current architecture/security model and text runtime diagram | Primary design, ownership, trust-boundary, recovery, and non-ownership reference. |
-| [`CATDESK_PROJECT_HANDOFF.md`](CATDESK_PROJECT_HANDOFF.md) | Current continuity handoff and text continuation diagram | Start here when resuming work or selecting an eligible ticket. |
-| [`CATDESK_MILESTONES.md`](../../CATDESK_MILESTONES.md) | Current milestone/acceptance authority | Resolves whether a design or acceptance boundary is open. |
-| [`.catdesk/current_plan.md`](../../.catdesk/current_plan.md) | Current operating state and next-safe-work authority | Read before every continuation; it may park live or operator-only action. |
-| [`.catdesk/todo.md`](../../.catdesk/todo.md) | Durable ticket queue | Select only a currently eligible scoped item. |
+The five root documents are the only primary continuity references:
 
-The two CURRENT text diagrams intentionally omit route IDs, tunnel IDs,
-credentials, browser state, and ChatGPT URLs. There is no current graphical
-architecture diagram whose pixels are authority.
+| Artifact | Primary responsibility |
+| --- | --- |
+| [Project handoff](../../CATDESK_PROJECT_HANDOFF.md) | Rapid resumption and next action |
+| [Milestones](../../CATDESK_MILESTONES.md) | Long-term scope and acceptance dashboard |
+| [Commands](../../CATDESK_IMPORTANT_COMMANDS.md) | Verified operational/developer syntax |
+| [Activity](../../CATDESK_ACTIVITY_LOG.md) | Chronological audited actions |
+| [Tickets](../../CATDESK_TICKETS.md) | Compact status/evidence index |
+
+[CANONICAL_CURRENT_ARCHITECTURE.md](CANONICAL_CURRENT_ARCHITECTURE.md) remains the supporting technical design/security authority. Local `.catdesk/current_plan.md`, `.catdesk/session.md` and `.catdesk/todo.md` retain native runtime compatibility and original journals; they are not competing master documentation and may be absent in a clone. Old handoff/commands below their compatibility notices are HISTORICAL. [Inventory/migration](../verification/REPOSITORY_RECONCILIATION_2026_11_14.md).
 
 ## SUPERSEDED
 

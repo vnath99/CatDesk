@@ -1,0 +1,1183 @@
+{
+  "observedUtc": "2026-11-14T16:50:51.082837+00:00",
+  "source": "5d51a1dd9d176f94ac8e1ec04f44d6c91d18d4e5",
+  "branches": [
+    {
+      "ref": "codex/advisory-stdin-eof",
+      "sha": "67a9c10b900a1a28e48d64081d50d8805cf3d4c3",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 303,
+      "integrationOnly": 805,
+      "refOnlyVsIntegration": 4,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T03:06:41-04:00"
+    },
+    {
+      "ref": "codex/benchmark-cache-hold-diagnostics",
+      "sha": "e911c6dd9f37db28ca8446172bc32304bb6e8722",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 950,
+      "integrationOnly": 154,
+      "refOnlyVsIntegration": 0,
+      "published": false,
+      "latestCommitUtc": "2026-11-04T07:53:18-05:00"
+    },
+    {
+      "ref": "codex/binagotchy-queue-binding-oct16",
+      "sha": "13122376b6174c40ff20aa335d95f85c607286dc",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 316,
+      "integrationOnly": 789,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T07:38:03-04:00"
+    },
+    {
+      "ref": "codex/byovd-verifier-v2-oct16",
+      "sha": "d34f396bb44bf8959fba0142a6fde51b031f2c4f",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 380,
+      "integrationOnly": 725,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T16:31:14-04:00"
+    },
+    {
+      "ref": "codex/c1-ui-002-content-fallback",
+      "sha": "53e9f4db3236ee45ed8f4d9eed567ecef0fa14e2",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 1098,
+      "integrationOnly": 8,
+      "refOnlyVsIntegration": 2,
+      "published": true,
+      "latestCommitUtc": "2026-11-14T02:17:59-05:00"
+    },
+    {
+      "ref": "codex/cli163-stdout-cap-oct17",
+      "sha": "605380617fe7f2b277f782d3e4a3d183671a5cc9",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 384,
+      "integrationOnly": 721,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-17T19:36:22-04:00"
+    },
+    {
+      "ref": "codex/context-literal-tokenizer-nov03",
+      "sha": "f71a17be41d73875a82a553eda77a40e81cb72fc",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 940,
+      "integrationOnly": 164,
+      "refOnlyVsIntegration": 0,
+      "published": false,
+      "latestCommitUtc": "2026-11-03T14:32:55-05:00"
+    },
+    {
+      "ref": "codex/core-recovery-wake-pending",
+      "sha": "8b52a0eb5fe046b0f0824735f4b9582b693f794c",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 316,
+      "integrationOnly": 789,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T07:38:51-04:00"
+    },
+    {
+      "ref": "codex/delegated-loop-qwen36-stabilization",
+      "sha": "d9843f5d43a9fa86a99cb0c2c8a33da27c74d73d",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 1,
+      "integrationOnly": 1103,
+      "refOnlyVsIntegration": 0,
+      "published": false,
+      "latestCommitUtc": "2026-08-01T16:37:26-04:00"
+    },
+    {
+      "ref": "codex/native-cli-canary-20261015",
+      "sha": "24803f9d630d6ab7401a201acf94ff3adcebf2ec",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 272,
+      "integrationOnly": 835,
+      "refOnlyVsIntegration": 3,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T09:01:00-04:00"
+    },
+    {
+      "ref": "codex/native-operator-review",
+      "sha": "b551384b07c48ecf3f9d7d9a3c98e815199a6aa2",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 327,
+      "integrationOnly": 779,
+      "refOnlyVsIntegration": 2,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T09:19:05-04:00"
+    },
+    {
+      "ref": "codex/oct16-acceptance-freshness",
+      "sha": "beff9d477d4f296d0c8afae4a2d5a24c1792fd81",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 332,
+      "integrationOnly": 773,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T09:37:14-04:00"
+    },
+    {
+      "ref": "codex/oct16-ci-readonly-evidence",
+      "sha": "bc795629c7bd1eff2aa4f2eca665850a0934bd9a",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 375,
+      "integrationOnly": 730,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T15:30:01-04:00"
+    },
+    {
+      "ref": "codex/oct16-cli-diagnose",
+      "sha": "1f54b0585109c27e907a0e54e8405c1ca4b65814",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 379,
+      "integrationOnly": 726,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T16:20:06-04:00"
+    },
+    {
+      "ref": "codex/oct16-queue-readback-race",
+      "sha": "88c3cfb01543fe991c111717a4bbdf4cb86b0cb4",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 377,
+      "integrationOnly": 729,
+      "refOnlyVsIntegration": 2,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T15:52:05-04:00"
+    },
+    {
+      "ref": "codex/oct16-recovery-acceptance",
+      "sha": "a63f4d1ce46b426f39a5659d3750c08087f40d31",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 335,
+      "integrationOnly": 771,
+      "refOnlyVsIntegration": 2,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T09:57:46-04:00"
+    },
+    {
+      "ref": "codex/oct16-verification-evidence",
+      "sha": "1adeaf1815438b777822ac281cefef8c7d2409c3",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 336,
+      "integrationOnly": 769,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T10:11:03-04:00"
+    },
+    {
+      "ref": "codex/operator-queue-review-candidate-20261015",
+      "sha": "fc15603d650ecf3034be9dee81e27f9fbb00de6f",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 285,
+      "integrationOnly": 820,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-15T23:50:12-04:00"
+    },
+    {
+      "ref": "codex/operator-queue-verify-oct16",
+      "sha": "793967513340916f6545fc307433ba33e0d29196",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 288,
+      "integrationOnly": 817,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T00:28:34-04:00"
+    },
+    {
+      "ref": "codex/p0-direct-prompt-bound",
+      "sha": "01122a8a45a9a9f4844bbc6916df74bd8158139f",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 308,
+      "integrationOnly": 797,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T03:38:14-04:00"
+    },
+    {
+      "ref": "codex/p0-direct-turn-timeout",
+      "sha": "83be20b921e6fde108a0b4005ac264c3e9ee7882",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 314,
+      "integrationOnly": 791,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T07:29:50-04:00"
+    },
+    {
+      "ref": "codex/p0-status-turn-gate",
+      "sha": "51b873eacd2b115f975c6f5d8e74ac9bb9f59dfb",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 311,
+      "integrationOnly": 794,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T06:39:13-04:00"
+    },
+    {
+      "ref": "codex/p2-candidate-health-oct16",
+      "sha": "75fe6754d8b8c913ebc5a1d2e3e02ae5e0015b1e",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 341,
+      "integrationOnly": 764,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T11:04:13-04:00"
+    },
+    {
+      "ref": "codex/python-pytest-module-oct16",
+      "sha": "009645bfbfb8bf62e0137cb5fe108643f597315c",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 375,
+      "integrationOnly": 730,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T15:34:02-04:00"
+    },
+    {
+      "ref": "codex/python-queue-profiles-oct16",
+      "sha": "895a2ed5f25a69ed8cc46ff3233f08d062e100a6",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 290,
+      "integrationOnly": 815,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T00:48:52-04:00"
+    },
+    {
+      "ref": "codex/python-touched-verification-oct16",
+      "sha": "773113a57fd8c176c95cfebd5c7294ea0b70e06c",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 371,
+      "integrationOnly": 734,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T15:04:49-04:00"
+    },
+    {
+      "ref": "codex/queue-advisory-review-oct16",
+      "sha": "f8c3c5263300a2dfd8c7673a9ac6f8bbfa1e8b84",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 296,
+      "integrationOnly": 809,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T01:38:38-04:00"
+    },
+    {
+      "ref": "codex/queue-cyber-access-oct17",
+      "sha": "5ecdf90e857c57e9cda7629adb9ec9636a3e46f8",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 385,
+      "integrationOnly": 722,
+      "refOnlyVsIntegration": 3,
+      "published": false,
+      "latestCommitUtc": "2026-10-17T19:29:48-04:00"
+    },
+    {
+      "ref": "codex/queue-profile-bind-oct16",
+      "sha": "f173ae4cd52e36ed361162220047551e86d85a47",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 298,
+      "integrationOnly": 808,
+      "refOnlyVsIntegration": 2,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T01:41:06-04:00"
+    },
+    {
+      "ref": "codex/queue-review-handoff-oct16",
+      "sha": "711192a6027f36e6d1d8f6da8943df01d754b86d",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 336,
+      "integrationOnly": 768,
+      "refOnlyVsIntegration": 0,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T10:11:15-04:00"
+    },
+    {
+      "ref": "codex/queue-review-package-oct16",
+      "sha": "d2c67b45a6b2d236ff6a7cdf26665b2426437583",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 292,
+      "integrationOnly": 813,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T01:07:48-04:00"
+    },
+    {
+      "ref": "codex/queue-review-package-reader",
+      "sha": "63304125e510f3fa25e38ed5b23b9df97edf61df",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 320,
+      "integrationOnly": 785,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T08:23:41-04:00"
+    },
+    {
+      "ref": "codex/queue-stdin-eof",
+      "sha": "d6b9a36de985b22a0ee508cc40ed1a5a89639ac0",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 320,
+      "integrationOnly": 784,
+      "refOnlyVsIntegration": 0,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T08:01:36-04:00"
+    },
+    {
+      "ref": "codex/queue-writer-marker-binding",
+      "sha": "d6d88dfbd40142b5e760e8c66c7efe92c8768416",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 311,
+      "integrationOnly": 794,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T06:38:55-04:00"
+    },
+    {
+      "ref": "codex/reader-e2e-test",
+      "sha": "17334673ff871be223fffa1cab0b45e18549e70e",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 324,
+      "integrationOnly": 781,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T08:44:25-04:00"
+    },
+    {
+      "ref": "codex/recovery-candidate-20261016",
+      "sha": "6d68cd93443187132da4662b9113c997f8f58bf9",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 333,
+      "integrationOnly": 772,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T09:47:36-04:00"
+    },
+    {
+      "ref": "codex/recovery-gaps-oct16",
+      "sha": "71c6d6d3acf5ed95fa96e514d18b7d7c7f4c23d7",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 291,
+      "integrationOnly": 814,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T01:04:27-04:00"
+    },
+    {
+      "ref": "codex/response-observer-release-nov09",
+      "sha": "8d96edea45ba759ccd809d5b4d52d1e3126db4f9",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 877,
+      "integrationOnly": 229,
+      "refOnlyVsIntegration": 2,
+      "published": true,
+      "latestCommitUtc": "2026-11-09T10:16:51-05:00"
+    },
+    {
+      "ref": "codex/supervisor-recovery-gates",
+      "sha": "862f41689a92afcb2dbbcf3906fd8a1d6c327868",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 308,
+      "integrationOnly": 797,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T05:59:11-04:00"
+    },
+    {
+      "ref": "codex/wake-review-fixture-unique",
+      "sha": "f82fa69f6f5f2a557ead48d1a82cdd891d1411d7",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 313,
+      "integrationOnly": 792,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T06:52:15-04:00"
+    },
+    {
+      "ref": "codex/wake2-fixed-profile-oct16",
+      "sha": "d01f63fb8ce2edfe981cb0ee38bffb27a8d27ccf",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 382,
+      "integrationOnly": 723,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-17T18:52:04-04:00"
+    },
+    {
+      "ref": "codex/web-context-oct17",
+      "sha": "9b75d611fa6741af90544084eb4139f298cbb187",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 388,
+      "integrationOnly": 718,
+      "refOnlyVsIntegration": 2,
+      "published": false,
+      "latestCommitUtc": "2026-10-17T20:05:11-04:00"
+    },
+    {
+      "ref": "codex/web-project-routing-oct17",
+      "sha": "87876602a220a601ba0335bc1643daf11b5602d9",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 387,
+      "integrationOnly": 718,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-17T20:05:27-04:00"
+    },
+    {
+      "ref": "codex/web-rollover-oct17",
+      "sha": "5d51a1dd9d176f94ac8e1ec04f44d6c91d18d4e5",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 1104,
+      "integrationOnly": 0,
+      "refOnlyVsIntegration": 0,
+      "published": true,
+      "latestCommitUtc": "2026-11-14T11:27:17-05:00"
+    },
+    {
+      "ref": "codex/workspace-rebind-oct16",
+      "sha": "cf7b6a41b06ced2dbd28c13ca2fe879f449f58a1",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 371,
+      "integrationOnly": 734,
+      "refOnlyVsIntegration": 1,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T14:59:52-04:00"
+    },
+    {
+      "ref": "codex/workspace-rebind-production-oct16",
+      "sha": "3bba1967133bc07b1771ff31eff996d7f31f000c",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 372,
+      "integrationOnly": 732,
+      "refOnlyVsIntegration": 0,
+      "published": false,
+      "latestCommitUtc": "2026-10-16T15:05:03-04:00"
+    },
+    {
+      "ref": "feature/web-intelligence-advisor",
+      "sha": "3ff877a0fd93a7f18e74da3a77481f5021329f59",
+      "mergeBaseWithMain": "3ff877a0fd93a7f18e74da3a77481f5021329f59",
+      "mainOnly": 1,
+      "refOnly": 0,
+      "integrationOnly": 1105,
+      "refOnlyVsIntegration": 0,
+      "published": true,
+      "latestCommitUtc": "2026-07-26T15:08:10-04:00"
+    },
+    {
+      "ref": "hardening/t-0011",
+      "sha": "4d122985f143ab47282913a79d56a6a019b75949",
+      "mergeBaseWithMain": "4d122985f143ab47282913a79d56a6a019b75949",
+      "mainOnly": 41,
+      "refOnly": 0,
+      "integrationOnly": 1145,
+      "refOnlyVsIntegration": 0,
+      "published": true,
+      "latestCommitUtc": "2026-07-10T20:23:42-04:00"
+    },
+    {
+      "ref": "infra/openai-secure-mcp-operations",
+      "sha": "7da3013af6661fa83c1d295cb9fff150327b336d",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 17,
+      "integrationOnly": 1087,
+      "refOnlyVsIntegration": 0,
+      "published": true,
+      "latestCommitUtc": "2026-08-02T02:05:08-04:00"
+    },
+    {
+      "ref": "infra/openai-secure-mcp-tunnel",
+      "sha": "e07e3f16db2f7f2746aa6e918f2750194a1b7753",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 16,
+      "integrationOnly": 1088,
+      "refOnlyVsIntegration": 0,
+      "published": true,
+      "latestCommitUtc": "2026-08-02T00:25:27-04:00"
+    },
+    {
+      "ref": "infra/stable-mcp-transport",
+      "sha": "fabcfffedb8bd66488adb071a1b055c1169f3eef",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 8,
+      "integrationOnly": 1096,
+      "refOnlyVsIntegration": 0,
+      "published": true,
+      "latestCommitUtc": "2026-08-01T21:21:54-04:00"
+    },
+    {
+      "ref": "main",
+      "sha": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 0,
+      "integrationOnly": 1104,
+      "refOnlyVsIntegration": 0,
+      "published": true,
+      "latestCommitUtc": "2026-07-26T16:45:59-04:00"
+    },
+    {
+      "ref": "orchestrator/chatgpt-codex-autonomous-loop",
+      "sha": "313f6a31f13c04c90d6098fad57f1e6a6c99cfd7",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 875,
+      "integrationOnly": 229,
+      "refOnlyVsIntegration": 0,
+      "published": false,
+      "latestCommitUtc": "2026-11-01T20:10:30-05:00"
+    },
+    {
+      "ref": "orchestrator/t-0012-feasibility",
+      "sha": "d0cc25e99883cf21b52615ced165a8ef56bd5419",
+      "mergeBaseWithMain": "d0cc25e99883cf21b52615ced165a8ef56bd5419",
+      "mainOnly": 38,
+      "refOnly": 0,
+      "integrationOnly": 1142,
+      "refOnlyVsIntegration": 0,
+      "published": false,
+      "latestCommitUtc": "2026-07-25T09:02:19-04:00"
+    },
+    {
+      "ref": "orchestrator/v1-coding-sprint",
+      "sha": "801969e6bebfb1b15001e460a63f04de5775c18c",
+      "mergeBaseWithMain": "801969e6bebfb1b15001e460a63f04de5775c18c",
+      "mainOnly": 17,
+      "refOnly": 0,
+      "integrationOnly": 1121,
+      "refOnlyVsIntegration": 0,
+      "published": true,
+      "latestCommitUtc": "2026-07-25T18:06:54-04:00"
+    },
+    {
+      "ref": "origin",
+      "sha": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 0,
+      "integrationOnly": 1104,
+      "refOnlyVsIntegration": 0,
+      "published": true,
+      "latestCommitUtc": "2026-07-26T16:45:59-04:00"
+    },
+    {
+      "ref": "origin/codex/c1-ui-002-content-fallback",
+      "sha": "53e9f4db3236ee45ed8f4d9eed567ecef0fa14e2",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 1098,
+      "integrationOnly": 8,
+      "refOnlyVsIntegration": 2,
+      "published": true,
+      "latestCommitUtc": "2026-11-14T02:17:59-05:00"
+    },
+    {
+      "ref": "origin/codex/response-observer-release-nov09",
+      "sha": "8d96edea45ba759ccd809d5b4d52d1e3126db4f9",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 877,
+      "integrationOnly": 229,
+      "refOnlyVsIntegration": 2,
+      "published": true,
+      "latestCommitUtc": "2026-11-09T10:16:51-05:00"
+    },
+    {
+      "ref": "origin/codex/web-rollover-oct17",
+      "sha": "5d51a1dd9d176f94ac8e1ec04f44d6c91d18d4e5",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 1104,
+      "integrationOnly": 0,
+      "refOnlyVsIntegration": 0,
+      "published": true,
+      "latestCommitUtc": "2026-11-14T11:27:17-05:00"
+    },
+    {
+      "ref": "origin/feature/web-intelligence-advisor",
+      "sha": "3ff877a0fd93a7f18e74da3a77481f5021329f59",
+      "mergeBaseWithMain": "3ff877a0fd93a7f18e74da3a77481f5021329f59",
+      "mainOnly": 1,
+      "refOnly": 0,
+      "integrationOnly": 1105,
+      "refOnlyVsIntegration": 0,
+      "published": true,
+      "latestCommitUtc": "2026-07-26T15:08:10-04:00"
+    },
+    {
+      "ref": "origin/hardening/t-0011",
+      "sha": "4d122985f143ab47282913a79d56a6a019b75949",
+      "mergeBaseWithMain": "4d122985f143ab47282913a79d56a6a019b75949",
+      "mainOnly": 41,
+      "refOnly": 0,
+      "integrationOnly": 1145,
+      "refOnlyVsIntegration": 0,
+      "published": true,
+      "latestCommitUtc": "2026-07-10T20:23:42-04:00"
+    },
+    {
+      "ref": "origin/infra/openai-secure-mcp-operations",
+      "sha": "7da3013af6661fa83c1d295cb9fff150327b336d",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 17,
+      "integrationOnly": 1087,
+      "refOnlyVsIntegration": 0,
+      "published": true,
+      "latestCommitUtc": "2026-08-02T02:05:08-04:00"
+    },
+    {
+      "ref": "origin/infra/openai-secure-mcp-tunnel",
+      "sha": "e07e3f16db2f7f2746aa6e918f2750194a1b7753",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 16,
+      "integrationOnly": 1088,
+      "refOnlyVsIntegration": 0,
+      "published": true,
+      "latestCommitUtc": "2026-08-02T00:25:27-04:00"
+    },
+    {
+      "ref": "origin/infra/stable-mcp-transport",
+      "sha": "fabcfffedb8bd66488adb071a1b055c1169f3eef",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 8,
+      "integrationOnly": 1096,
+      "refOnlyVsIntegration": 0,
+      "published": true,
+      "latestCommitUtc": "2026-08-01T21:21:54-04:00"
+    },
+    {
+      "ref": "origin/main",
+      "sha": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 0,
+      "integrationOnly": 1104,
+      "refOnlyVsIntegration": 0,
+      "published": true,
+      "latestCommitUtc": "2026-07-26T16:45:59-04:00"
+    },
+    {
+      "ref": "origin/orchestrator/chatgpt-codex-autonomous-loop",
+      "sha": "5cedbb78ea5e6af90fd8aa1f2b3282aebd551548",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 422,
+      "integrationOnly": 682,
+      "refOnlyVsIntegration": 0,
+      "published": true,
+      "latestCommitUtc": "2026-10-18T02:14:18-04:00"
+    },
+    {
+      "ref": "origin/orchestrator/t-0012-feasibility",
+      "sha": "0220120943b17d11d2546936b12c7ee402f9b706",
+      "mergeBaseWithMain": "0220120943b17d11d2546936b12c7ee402f9b706",
+      "mainOnly": 39,
+      "refOnly": 0,
+      "integrationOnly": 1143,
+      "refOnlyVsIntegration": 0,
+      "published": true,
+      "latestCommitUtc": "2026-07-24T19:02:47-04:00"
+    },
+    {
+      "ref": "origin/orchestrator/v1-coding-sprint",
+      "sha": "801969e6bebfb1b15001e460a63f04de5775c18c",
+      "mergeBaseWithMain": "801969e6bebfb1b15001e460a63f04de5775c18c",
+      "mainOnly": 17,
+      "refOnly": 0,
+      "integrationOnly": 1121,
+      "refOnlyVsIntegration": 0,
+      "published": true,
+      "latestCommitUtc": "2026-07-25T18:06:54-04:00"
+    },
+    {
+      "ref": "origin/t0460-r4-supervisor-com-diagnostics-20261009",
+      "sha": "713e212d4093318fec3a68b06d72b6ab4d092372",
+      "mergeBaseWithMain": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+      "mainOnly": 0,
+      "refOnly": 107,
+      "integrationOnly": 998,
+      "refOnlyVsIntegration": 1,
+      "published": true,
+      "latestCommitUtc": "2026-10-09T23:05:15-04:00"
+    },
+    {
+      "ref": "upstream/main",
+      "sha": "5d11c3640b574efaa36b925d79d4846919fa7aca",
+      "mergeBaseWithMain": "7d060d807fdab1b6e5f05a63975b1bf503a67a93",
+      "mainOnly": 53,
+      "refOnly": 189,
+      "integrationOnly": 1157,
+      "refOnlyVsIntegration": 189,
+      "published": false,
+      "latestCommitUtc": "2026-10-25T21:44:38+08:00"
+    }
+  ],
+  "worktrees": [
+    {
+      "head": "d9843f5d43a9fa86a99cb0c2c8a33da27c74d73d",
+      "branch": "refs/heads/codex/delegated-loop-qwen36-stabilization",
+      "trackedChanges": 0,
+      "untrackedEntries": 5,
+      "ignoredEntries": 50
+    },
+    {
+      "head": "e911c6dd9f37db28ca8446172bc32304bb6e8722",
+      "branch": "refs/heads/codex/benchmark-cache-hold-diagnostics",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 0
+    },
+    {
+      "head": "f8c3c5263300a2dfd8c7673a9ac6f8bbfa1e8b84",
+      "branch": "refs/heads/codex/queue-advisory-review-oct16",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    },
+    {
+      "head": "67a9c10b900a1a28e48d64081d50d8805cf3d4c3",
+      "branch": "refs/heads/codex/advisory-stdin-eof",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    },
+    {
+      "head": "1f54b0585109c27e907a0e54e8405c1ca4b65814",
+      "branch": "refs/heads/codex/oct16-cli-diagnose",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    },
+    {
+      "head": "313f6a31f13c04c90d6098fad57f1e6a6c99cfd7",
+      "branch": "refs/heads/orchestrator/chatgpt-codex-autonomous-loop",
+      "trackedChanges": 0,
+      "untrackedEntries": 23,
+      "ignoredEntries": 45
+    },
+    {
+      "head": "24803f9d630d6ab7401a201acf94ff3adcebf2ec",
+      "branch": "refs/heads/codex/native-cli-canary-20261015",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 2
+    },
+    {
+      "head": "8b52a0eb5fe046b0f0824735f4b9582b693f794c",
+      "branch": "refs/heads/codex/core-recovery-wake-pending",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    },
+    {
+      "head": "fc15603d650ecf3034be9dee81e27f9fbb00de6f",
+      "branch": "refs/heads/codex/operator-queue-review-candidate-20261015",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    },
+    {
+      "head": "01122a8a45a9a9f4844bbc6916df74bd8158139f",
+      "branch": "refs/heads/codex/p0-direct-prompt-bound",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    },
+    {
+      "head": "83be20b921e6fde108a0b4005ac264c3e9ee7882",
+      "branch": "refs/heads/codex/p0-direct-turn-timeout",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    },
+    {
+      "head": "51b873eacd2b115f975c6f5d8e74ac9bb9f59dfb",
+      "branch": "refs/heads/codex/p0-status-turn-gate",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    },
+    {
+      "head": "f173ae4cd52e36ed361162220047551e86d85a47",
+      "branch": "refs/heads/codex/queue-profile-bind-oct16",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    },
+    {
+      "head": "895a2ed5f25a69ed8cc46ff3233f08d062e100a6",
+      "branch": "refs/heads/codex/python-queue-profiles-oct16",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 3
+    },
+    {
+      "head": "d6d88dfbd40142b5e760e8c66c7efe92c8768416",
+      "branch": "refs/heads/codex/queue-writer-marker-binding",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    },
+    {
+      "head": "793967513340916f6545fc307433ba33e0d29196",
+      "branch": "refs/heads/codex/operator-queue-verify-oct16",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 3
+    },
+    {
+      "head": "71c6d6d3acf5ed95fa96e514d18b7d7c7f4c23d7",
+      "branch": "refs/heads/codex/recovery-gaps-oct16",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 3
+    },
+    {
+      "head": "d2c67b45a6b2d236ff6a7cdf26665b2426437583",
+      "branch": "refs/heads/codex/queue-review-package-oct16",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 3
+    },
+    {
+      "head": "862f41689a92afcb2dbbcf3906fd8a1d6c327868",
+      "branch": "refs/heads/codex/supervisor-recovery-gates",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 0
+    },
+    {
+      "head": "f82fa69f6f5f2a557ead48d1a82cdd891d1411d7",
+      "branch": "refs/heads/codex/wake-review-fixture-unique",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 3
+    },
+    {
+      "head": "beff9d477d4f296d0c8afae4a2d5a24c1792fd81",
+      "branch": "refs/heads/codex/oct16-acceptance-freshness",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 0
+    },
+    {
+      "head": "13122376b6174c40ff20aa335d95f85c607286dc",
+      "branch": "refs/heads/codex/binagotchy-queue-binding-oct16",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    },
+    {
+      "head": "d34f396bb44bf8959fba0142a6fde51b031f2c4f",
+      "branch": "refs/heads/codex/byovd-verifier-v2-oct16",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 0
+    },
+    {
+      "head": "bc795629c7bd1eff2aa4f2eca665850a0934bd9a",
+      "branch": "refs/heads/codex/oct16-ci-readonly-evidence",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 0
+    },
+    {
+      "head": "605380617fe7f2b277f782d3e4a3d183671a5cc9",
+      "branch": "refs/heads/codex/cli163-stdout-cap-oct17",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    },
+    {
+      "head": "f71a17be41d73875a82a553eda77a40e81cb72fc",
+      "branch": "refs/heads/codex/context-literal-tokenizer-nov03",
+      "trackedChanges": 2,
+      "untrackedEntries": 1,
+      "ignoredEntries": 0
+    },
+    {
+      "head": "1adeaf1815438b777822ac281cefef8c7d2409c3",
+      "branch": "refs/heads/codex/oct16-verification-evidence",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 0
+    },
+    {
+      "head": "75fe6754d8b8c913ebc5a1d2e3e02ae5e0015b1e",
+      "branch": "refs/heads/codex/p2-candidate-health-oct16",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    },
+    {
+      "head": "773113a57fd8c176c95cfebd5c7294ea0b70e06c",
+      "branch": "refs/heads/codex/python-touched-verification-oct16",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    },
+    {
+      "head": "009645bfbfb8bf62e0137cb5fe108643f597315c",
+      "branch": "refs/heads/codex/python-pytest-module-oct16",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    },
+    {
+      "head": "5ecdf90e857c57e9cda7629adb9ec9636a3e46f8",
+      "branch": "refs/heads/codex/queue-cyber-access-oct17",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    },
+    {
+      "head": "633eb79427d52e8481fd9944155fb0a59cf59d23",
+      "branch": "DETACHED",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    },
+    {
+      "head": "88c3cfb01543fe991c111717a4bbdf4cb86b0cb4",
+      "branch": "refs/heads/codex/oct16-queue-readback-race",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    },
+    {
+      "head": "711192a6027f36e6d1d8f6da8943df01d754b86d",
+      "branch": "refs/heads/codex/queue-review-handoff-oct16",
+      "trackedChanges": 3,
+      "untrackedEntries": 0,
+      "ignoredEntries": 0
+    },
+    {
+      "head": "a63f4d1ce46b426f39a5659d3750c08087f40d31",
+      "branch": "refs/heads/codex/oct16-recovery-acceptance",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 0
+    },
+    {
+      "head": "8d96edea45ba759ccd809d5b4d52d1e3126db4f9",
+      "branch": "refs/heads/codex/response-observer-release-nov09",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 5
+    },
+    {
+      "head": "53e9f4db3236ee45ed8f4d9eed567ecef0fa14e2",
+      "branch": "refs/heads/codex/c1-ui-002-content-fallback",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    },
+    {
+      "head": "d01f63fb8ce2edfe981cb0ee38bffb27a8d27ccf",
+      "branch": "refs/heads/codex/wake2-fixed-profile-oct16",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 0
+    },
+    {
+      "head": "9b75d611fa6741af90544084eb4139f298cbb187",
+      "branch": "refs/heads/codex/web-context-oct17",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    },
+    {
+      "head": "87876602a220a601ba0335bc1643daf11b5602d9",
+      "branch": "refs/heads/codex/web-project-routing-oct17",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 2
+    },
+    {
+      "head": "5d51a1dd9d176f94ac8e1ec04f44d6c91d18d4e5",
+      "branch": "refs/heads/codex/web-rollover-oct17",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 13
+    },
+    {
+      "head": "57ab32f8cd7440e3de9fbd7e29da873f7b22ae09",
+      "branch": "DETACHED",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 0
+    },
+    {
+      "head": "f6a4054940e9a308ac3cbedc47d8d7ac6d4630c7",
+      "branch": "DETACHED",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 0
+    },
+    {
+      "head": "9fefacec2d238c8d66ab8b0770285b2c2ea81c8b",
+      "branch": "DETACHED",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 0
+    },
+    {
+      "head": "8cb928f5d30a03785247a4c3e2265692f11cebb9",
+      "branch": "DETACHED",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 0
+    },
+    {
+      "head": "da1608a15b960cbce01a3cc75b2482a2d1a2e985",
+      "branch": "DETACHED",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 0
+    },
+    {
+      "head": "5de26e8e9f9d60b8e823dd0a8278539231a1c897",
+      "branch": "DETACHED",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 0
+    },
+    {
+      "head": "dba8fc374622c93f9b8ca3744f8ba59f99fb7030",
+      "branch": "DETACHED",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 0
+    },
+    {
+      "head": "9c521ba5d287c0f6646886d24c57ffdee3d912b9",
+      "branch": "DETACHED",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 0
+    },
+    {
+      "head": "d22e96ca8df48786737ca0a7b78e3e7439531e5a",
+      "branch": "DETACHED",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 4
+    },
+    {
+      "head": "b551384b07c48ecf3f9d7d9a3c98e815199a6aa2",
+      "branch": "refs/heads/codex/native-operator-review",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    },
+    {
+      "head": "6d68cd93443187132da4662b9113c997f8f58bf9",
+      "branch": "refs/heads/codex/recovery-candidate-20261016",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    },
+    {
+      "head": "3bba1967133bc07b1771ff31eff996d7f31f000c",
+      "branch": "refs/heads/codex/workspace-rebind-production-oct16",
+      "trackedChanges": 0,
+      "untrackedEntries": 0,
+      "ignoredEntries": 1
+    }
+  ],
+  "stashCount": 3,
+  "worktreeCount": 53,
+  "dirtyWorktrees": 2,
+  "defaultBranch": "main",
+  "visibility": "PUBLIC",
+  "branchProtection": {
+    "main": "UNPROTECTED_HTTP_404",
+    "settingsChanged": false
+  },
+  "openPullRequests": [
+    {
+      "number": 4,
+      "base": "orchestrator/chatgpt-codex-autonomous-loop",
+      "head": "codex/web-rollover-oct17",
+      "url": "https://github.com/vnath99/CatDesk/pull/4"
+    }
+  ],
+  "hostedCI": {
+    "latestVisibleSuccessSha": "4e9a2e212c47b0b7229b41874a3b1ec5bfd7d083",
+    "createdAt": "2026-10-14T22:14:12Z",
+    "currentCheckpointAcceptance": false
+  },
+  "sourceOnly": true,
+  "remoteTags": [],
+  "githubReleases": [],
+  "localTags": [
+    "v0.1.0",
+    "v0.1.1",
+    "v0.1.2",
+    "v0.1.3",
+    "v0.1.4",
+    "v0.1.5",
+    "v0.1.6"
+  ]
+}

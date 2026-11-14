@@ -1,3 +1,5 @@
+> SUPERSEDED AS CURRENT AUTHORITY — 2026-11-14. Start with [the root CATDESK_IMPORTANT_COMMANDS.md](../../CATDESK_IMPORTANT_COMMANDS.md). The content below is preserved historical evidence, not current instructions. [Exact pre-consolidation identity](../archive/PRE_CONSOLIDATION_2026_11_14.md).
+
 ## 2026-11-10 12:58 UTC — actual installed parser prerequisite; D remains development-only
 
 Do not start dev.84 against the current store or rewrite target/history URLs to
