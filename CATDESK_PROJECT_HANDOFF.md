@@ -2,17 +2,17 @@
 
 Primary local documentation compatibility edition. Canonical global continuity lives on [the development branch](https://github.com/vnath99/CatDesk/blob/codex/web-rollover-oct17/CATDESK_PROJECT_HANDOFF.md). This edition makes the same five-document structure accessible in the primary folder without upgrading its application source.
 
-Single resumption entry point for this checkout. Reconciled 2026-11-14T17:26:20.749796+00:00. Source facts below are dated; live health becomes UNVERIFIED after interruption until checked.
+Single resumption entry point for this checkout. Reconciled 2026-11-14T18:21:50.654059+00:00. Source facts below are dated; live health becomes UNVERIFIED after interruption until checked.
 
 ## Mission and priority
 
-CatDesk lets independent ChatGPT Web project conversations use authenticated v5 tools to edit their assigned local files, verify work, checkpoint Git, wake themselves and roll over with durable context. Native Codex delegation and a central coordinator are optional. The five-document implementation is source-qualified. The current P0 continuation is DOC-CONTINUITY: finish final verification and handoff after PR #5 integration, development synchronization and the primary documentation-only backport. Architecture, UI, Wake and native-dispatch work are excluded from this task.
+CatDesk lets independent ChatGPT Web project conversations use authenticated v5 tools to edit their assigned local files, verify work, checkpoint Git, wake themselves and roll over with durable context. Native Codex delegation and a central coordinator are optional. Documentation consolidation, development integration and primary local synchronization are complete. PR #5 and the focused follow-up are merged. The next task is a separate architecture-documentation review; it was not started here. UI, Wake, native-dispatch, production promotion and architecture design were excluded from this completed documentation task.
 
 ## Source identity
 
 - Repository: [https://github.com/vnath99/CatDesk](https://github.com/vnath99/CatDesk), PUBLIC. Stable source branch `main`: `db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8`; installed acceptance is separate.
 - Separate integration branch `codex/web-rollover-oct17`, merged PR #5 at `23e26e9afdb560cfe447cd8f6454cc952b4e3702`. That source is in the separate development checkout, not this primary checkout or a newly approved production release.
-- Primary application source baseline remains `313f6a31f13c04c90d6098fad57f1e6a6c99cfd7`. Local branch remains `orchestrator/chatgpt-codex-autonomous-loop`; only documentation and its maintenance helpers are backported. This branch is not switched to development. The original named remote is historically older; the documentation-only publication branch is `codex/docs-primary-sync-nov14`. Verify exact local and publication heads before maintenance.
+- Primary application source baseline remains `313f6a31f13c04c90d6098fad57f1e6a6c99cfd7`. Local branch remains `orchestrator/chatgpt-codex-autonomous-loop`; only documentation and its maintenance helpers are backported. This branch is not switched to development. The original named remote is historically older; the documentation-only publication branch is `codex/docs-primary-sync-nov14`. This is a primary compatibility edition, not the global development source. Verify exact local and publication heads before maintenance.
 - Earlier historical source map and acceptance records retain their dates/scopes. The primary developer facade remains unchanged; run `python scripts/catdesk_docs.py check` manually. Its old `verify` command does not automatically run the new docs hook. No source-only feature is made installed by copying documentation.
 
 
@@ -28,7 +28,7 @@ Registry/scoped routing/context ledgers and actual controlled rollovers have evi
 
 | Work / owner | State / evidence | Next eligible action |
 | --- | --- | --- |
-| DOC-CONTINUITY / Codex documentation owner | IN_REVIEW / SOURCE_TESTED; PR #5 merged, development synchronized, five docs present in primary | Finish current-state suite/preservation checks and both fresh-AI exercises; no architecture work |
+| DOC-CONTINUITY / Codex documentation owner | DONE / SOURCE_TESTED; development and primary synchronized, 23 tests each, both fresh-AI exercises pass | Review the recorded sync evidence; separate architecture task may begin only under its own scope |
 | C1-UI-002 / existing feature owner; resume ownership check required | IN_PROGRESS / SOURCE_TESTED; exact HTML serves locally, client times out; fallback is not installed | On existing UI feature branch, qualify a standard host-bridge fixture; do not replay a mutating tool to test UI |
 | Original C1 and C49 / original task owners | Held original task/grant/journals; cached native refusal not safely replayable | Reconcile authoritative receipts before any original operation; never replace grant/fences |
 | REVIEW-D22 / original authorized reviewer workflow | f410 contract QUEUED v3, zero provider turns; external batch prompt delivery UNKNOWN, no attributable new USER/response | Preserve original request; do not resend external batch or fabricate review/producer evidence |
@@ -45,6 +45,8 @@ No force-push, reset, blind pull/rebase, bulk staging, main merge, protected ins
 
 Without a connector: clone GitHub, check out this documentation branch, inspect the exact integration SHA and run offline checks. This permits source work only; runtime health is UNVERIFIED and no task effects may be inferred. The [GitHub-only procedure](CATDESK_IMPORTANT_COMMANDS.md#git-and-github-only-recovery) requires no CatDesk daemon.
 
+The machine `source_sha` identifies the retained primary application baseline, not the self-referential publication SHA of this document. Read actual checkout HEAD and remote refs before work.
+
 ```json
-{"schemaVersion":1,"milestone":"M-CONTINUITY","ticket":"DOC-CONTINUITY","source_sha":"313f6a31f13c04c90d6098fad57f1e6a6c99cfd7","branch":"orchestrator/chatgpt-codex-autonomous-loop","status":"IN_REVIEW","runtime_status":"UNVERIFIED","blocker":"NONE_FOR_DOCUMENTATION; FINAL_VERIFICATION_PENDING","next_action":"Finish final integrated and primary documentation qualification and handoff; keep architecture, runtime, UI and dispatch work excluded"}
+{"schemaVersion":1,"milestone":"M-CONTINUITY","ticket":"DOC-CONTINUITY","source_sha":"313f6a31f13c04c90d6098fad57f1e6a6c99cfd7","branch":"orchestrator/chatgpt-codex-autonomous-loop","status":"DONE","runtime_status":"UNVERIFIED","blocker":"NONE_FOR_DOCUMENTATION_SYNC; PRODUCT_GATES_REMAIN_SEPARATE","next_action":"Separate architecture documentation review under a new task; retain all runtime and no-replay boundaries"}
 ```

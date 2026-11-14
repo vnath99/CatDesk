@@ -50,7 +50,7 @@ Manual Wake uses existing bounded event/receipt APIs; queue admission is not SEN
 
 ## Git and GitHub-only recovery
 
-These require Git/network access, not CatDesk. `main` is stable source; development is `codex/web-rollover-oct17`; docs are `codex/docs-primary-sync-nov14`. Clone into a new unused destination, never over another owner's checkout.
+These require Git/network access, not CatDesk. `main` is stable source; development is `codex/web-rollover-oct17`; primary compatibility docs are `codex/docs-primary-sync-nov14`; global canonical docs remain on development. Clone into a new unused destination, never over another owner's checkout.
 
 ```powershell
 git clone --branch codex/docs-primary-sync-nov14 https://github.com/vnath99/CatDesk.git CatDesk-recovery
@@ -86,3 +86,5 @@ Only the integration edition of `.\scripts\catdesk-dev-lane.ps1 verify` runs the
 | HTTP 429 / Session terminated | Connector/upstream/session; diagnose once after serving/auth ready and preserve exact error |
 
 The primary named remote remains historically older. Compare this local documentation HEAD against `origin/codex/docs-primary-sync-nov14`, not against the old orchestrator remote tip. No upstream was silently changed. The canonical global documentation is separately maintained on `codex/web-rollover-oct17`. [Synchronization roles](docs/verification/DOC_SYNC_STATE_2026_11_14.json).
+
+For completed integration, primary edition differences and preservation evidence, read the [final synchronization record](docs/verification/DOC_SYNC_STATE_2026_11_14.json). These are documentation/source checks, not fresh runtime health or installed product acceptance.
