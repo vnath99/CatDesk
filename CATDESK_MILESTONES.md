@@ -10493,3 +10493,31 @@ All 1,685 preservation checks matched and bounded owner cleanup passed. The firs
 manual action is the reviewed read-only comparison in elevated PowerShell 7 under
 the same account; expected expired-match classification grants no signing authority.
 Evidence: `docs/verification/AUTONOMOUS_BLOCKER_RECONCILIATION_2026_11_13.json`.
+
+### 2026-11-13 Eastern — Elevated root refusal reconciled; diagnostic defect isolated
+
+The actual operator result confirms PowerShell 7.7 and elevation. Root validation
+failed before account comparison: a retained helper opens the root during its
+initializer. The false account field is unobserved, not a demonstrated account
+mismatch. Frozen scripts and identity guards remain unchanged.
+
+One bounded reuse of the existing two-root/three-leaf observer found distinct
+directories in the current Codex view. The recorded package directory retains
+matching STOPPED control/config but lacks its current pointer. The ordinary
+directory has matching pointer bytes but different control/config. Neither
+observation establishes a safe pointer-copy or identity-reset transition, the
+historical cause, or intended elevated-operator authority.
+
+A private diagnostic successor checks elevation/account before the pinned existing
+observer, reports unobserved fields explicitly and bounds its owned child. Thirteen
+classification cases, five ordering checks and an actual non-elevated refusal passed.
+This is SOURCE_TESTED diagnostic preparation, not installed product qualification.
+The same already elevated operator terminal is needed for one account-first,
+two-root observation; no repeated elevation or old collector is requested.
+
+All 1,685 preservation pins and browser-profile identities match. No product,
+signing, protected installation, binding, message or native-session action occurred.
+Previous installed backend/restart/auth/MCP/connector acceptance remains preserved.
+Wake migration, independent review/producer and full Web edit/checkpoint/self-Wake
+remain separately blocked as recorded; no expired authority was reused. Evidence:
+`docs/verification/RECORDED_WAKE_ROOT_DIAGNOSTIC_2026_11_13.json`.

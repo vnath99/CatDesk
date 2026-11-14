@@ -3095,3 +3095,22 @@ current.json does. No reviewed-install handoff exists in this view. Thus correct
 view precedes control recovery, without making healthy backend source integrity
 depend on Wake enrollment. No state, signer, installer, contract, build or test was
 recreated. Existing stage distinctions remain; see the autonomous-blocker record.
+
+### 2026-11-13 Eastern — Root identity, leaf state and account observation are distinct
+
+The returned elevated comparison failed root validation during helper
+initialization, before account measurement. Its false account field is not account
+mismatch evidence. The frozen authority and comparison remain unchanged. A bounded
+reuse of the existing observer finds the recorded package directory with matching
+STOPPED control/config but a missing current pointer in the Codex view; the ordinary
+directory is a different object with different control/config. Matching pointer
+bytes elsewhere do not authorize moving state or rebinding authority.
+
+The private diagnostic correction checks account first, then observes both fixed
+roots through the existing pinned helper. Source classifications and an actual
+non-elevated refusal are qualified; the intended elevated result remains pending.
+This creates no release, signer, installer, registry or recovery authority. Migration
+requires actual state reconciliation before fresh inputs and separate delegation
+approval. Backend review/producer and installed scoped-Git capability remain separate
+gates; prior bounded serving/restart/authenticated connector evidence is preserved.
+See the recorded-root diagnostic verification record.

@@ -1209,3 +1209,28 @@ STOPPED based only on process absence. After receiving the comparison, reconcile
 the correct view, revalidate ownership/journals, and execute eligible supported
 recovery before preparing a fresh review successor. Do not present later operator
 steps prematurely. See the autonomous-blocker reconciliation record.
+
+## 2026-11-13 Eastern — Elevated comparison returned; account-first successor
+
+This supersedes the preceding instruction to repeat the original comparison or
+open another Administrator window. Elevation is now confirmed. The root guard
+ran inside helper initialization before the account check, so false account
+output was unobserved. Preserve both operator results and frozen scripts.
+
+Use the same already elevated 64-bit PowerShell 7 window under the approved
+account. Run the complete hash-checked private diagnostic command provided in
+the current handoff/user response once. It reuses the existing fixed two-root
+observer and changes no protected state. Expected diagnostic prerequisites are
+elevated=true, accountObserved=true, operatorAccountMatches=true and
+childCleanupVerified=true. Full retained-state classifications identify a matching
+store, but never authorize signing or installation. A legitimate negative result
+is RECORDED_ROOT_FOUND_STATE_NOT_PROVEN if a retained leaf is missing or differs.
+Return the full bounded JSON even on exit 2, then stop without repair or retry.
+
+The Codex view found the recorded package directory but no current pointer there;
+the ordinary directory is different. Do not copy the pointer, change identity pins
+or force control STOPPED. After the operator observation, reconcile its account,
+root and leaf evidence with the retained history before choosing an existing
+supported recovery transition. Expired signing inputs and review leases remain
+expired. No new signature, credentials or review approval is requested now.
+See `docs/verification/RECORDED_WAKE_ROOT_DIAGNOSTIC_2026_11_13.json`.
