@@ -10733,3 +10733,30 @@ Actual source review must still precede finalization, ACK, source snapshot and
 producer. This is concrete source-bound admission, not a replacement installation
 or Web-to-Wake acceptance. Evidence:
 `docs/verification/SOURCE_BOUND_REVIEW_DRAFT_ADMISSION_2026_11_14.json`.
+
+### 2026-11-14 Eastern - Exact review authorized; claim and delivery outcomes preserved
+
+The operator authorized the exact source-bound contract and frozen review batch.
+Its approval is now recorded natively at the unchanged contract hash. Claim was
+requested once and returned PENDING_RECOVERY before task/provider execution: the
+verifier rejects the frozen HEAD branch descriptor in a detached exact checkout.
+Native state is QUEUED/version 3, with no current task or provider turn/handle.
+Neither branch nor approved contract was changed, and no claim replay occurred.
+
+The initial private runner checks also exposed a default uninitialized INDEFINITE
+policy and an incorrect runner assumption that DRAFT must be inactive. The existing
+CAS API initialized only the new review scope to MANUAL_OFF; the runner was corrected
+against attested source semantics. Both earlier refusals preceded approval/claim.
+All three bounded owners exited and their endpoints closed. Old records and source
+remain exact; only existing usage counters changed among protected preservation pins.
+
+The separately authorized public-source starter was submitted once via the desktop
+tool. That tool returned the conversation ID, but two readbacks report systemError
+and show only an older turn. No new USER turn, assistant review or new task handle
+was verified. Delivery remains UNKNOWN, not known failed or completed. The seven
+remaining messages are held; there is no resend or alternate transport attempt.
+External public-source review must not be relabeled as native completion/producer
+evidence. No source tests were repeated, and no browser, Wake, native provider,
+binding, production or installation operation ran. Next address the demonstrated
+detached-review compatibility issue in source while preserving the unknown send.
+Evidence: `docs/verification/AUTHORIZED_REVIEW_CLAIM_AND_DELIVERY_2026_11_14.json`.
