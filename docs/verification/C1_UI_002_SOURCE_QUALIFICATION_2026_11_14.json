@@ -1,0 +1,211 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-14T07:17:40.090602+00:00",
+  "userFacingDateZone": "America/New_York",
+  "taskId": "C1-UI-002",
+  "scope": "Qualify existing bounded text fallback and Git status presentation work without merge or installation",
+  "branch": "codex/c1-ui-002-content-fallback",
+  "qualifiedSourceCommit": "b35793173c6189962fc57be910c5b535bb8f0e43",
+  "baseCommit": "3199a7a7f3156584587f8b67edaaeeb9479ea9cc",
+  "changedSourceFiles": [
+    "src/mcp.rs",
+    "src/git_workflow.rs"
+  ],
+  "sourceUnchangedDuringQualification": true,
+  "sourceHashes": {
+    "src/git_workflow.rs": "3c32b2419c190a605cf4feec321083ab8b7e4c49188a667e563b05f79f1c3a51",
+    "src/mcp.rs": "23e5e7e1b76d50c92d56a4801771e778d87ffacb4cedf254ac983efcbe0cefd1",
+    "Cargo.lock": "2533e7de0170581cb7f1f7eb740540feb20d14ed1de7b3a877952ff31af3f6bb"
+  },
+  "formatCheckPassed": true,
+  "focusedTests": {
+    "passed": 25,
+    "failed": 0,
+    "batches": 8,
+    "results": [
+      {
+        "name": "git_workflow--tests--",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "git_workflow::tests::",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "nonzeroTestsObserved": true,
+        "logSha256": "825bd4df9324c7db83157c3a0e95215fbe016cd2d9020f20fa7cb67b29ab5a63"
+      },
+      {
+        "name": "mcp--tests--human_readable_tool_content_is_explicitly_bounded",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "mcp::tests::human_readable_tool_content_is_explicitly_bounded",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "nonzeroTestsObserved": true,
+        "logSha256": "865500a9f7c334fc515604dc95fb270851690ab1c9145f44880171f945576a09"
+      },
+      {
+        "name": "mcp--tests--command_content_fallback_never_copies_command_output",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "mcp::tests::command_content_fallback_never_copies_command_output",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "nonzeroTestsObserved": true,
+        "logSha256": "b9f68480fb7850e24f5a24b8998499d8e115c429716532898817b744e874ab59"
+      },
+      {
+        "name": "mcp--tests--bounded_content_fallback_survives_enrichment_without_its_internal_marker",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "mcp::tests::bounded_content_fallback_survives_enrichment_without_its_internal_marker",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "nonzeroTestsObserved": true,
+        "logSha256": "b8810a567313ac6ce599e1fd8cde3159969d885cd5c30f2968dd379100f576b2"
+      },
+      {
+        "name": "mcp--tests--git_status_summary_warns_on_main_branch",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "mcp::tests::git_status_summary_warns_on_main_branch",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "nonzeroTestsObserved": true,
+        "logSha256": "ce59716c12b431f0d43e774751272e054911b3c419519213dd02ca2145e45ff0"
+      },
+      {
+        "name": "mcp--tests--run_command_",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "mcp::tests::run_command_",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "nonzeroTestsObserved": true,
+        "logSha256": "46186538c41ef231ca3af6e68c5afc2c192acded50755ecda3a6d6e8fd48f7e2"
+      },
+      {
+        "name": "mcp--tests--catdesk_instruction_result_does_not_emit_text_content",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "mcp::tests::catdesk_instruction_result_does_not_emit_text_content",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "nonzeroTestsObserved": true,
+        "logSha256": "28c36c6acf7af9cdf1fdb2cc6ecd26981a06a8a9b7b9b682f167c1d4930e3baa"
+      },
+      {
+        "name": "mcp--tests--read_tool_returns_structured_text_without_text_content",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "mcp::tests::read_tool_returns_structured_text_without_text_content",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "nonzeroTestsObserved": true,
+        "logSha256": "bdbc0cf3bd065ef482fa9d83bb02b6c2c47f3b79b55c2d901b73b18335284830"
+      }
+    ],
+    "scope": [
+      "Bounded Git-status presentation and cleanliness from unabridged captured status",
+      "Bounded plain-text fallback and preservation through response enrichment",
+      "Fallback does not copy captured command stdout/stderr",
+      "Git main-branch warning and truncation metadata",
+      "Command status, captured UTF-8 identity and summary-mode regressions",
+      "Unchanged content suppression for instruction/read tools"
+    ]
+  },
+  "strictCheck": {
+    "command": "cargo clippy --locked --offline --bin catdesk --tests -- -D warnings",
+    "passed": true,
+    "logSha256": "8e9b65e4fe9aae96fb24b4e3a6d8f43f03e54c4721b963579d7bce9e9d1f93e4"
+  },
+  "execution": {
+    "offline": true,
+    "buildJobs": 1,
+    "minimumFreeMemoryAdmissionGiB": 4,
+    "ownerMaximumSecondsEach": 900,
+    "testsOwnerStartedUtc": "2026-11-14T07:10:03.7478596+00:00",
+    "testsOwnerFinishedUtc": "2026-11-14T07:12:22.8171877+00:00",
+    "clippyOwnerStartedUtc": "2026-11-14T07:13:06.5462477+00:00",
+    "clippyOwnerFinishedUtc": "2026-11-14T07:16:26.8752658+00:00",
+    "killOnJobCloseContainment": true,
+    "ownedProcessesExited": true,
+    "timedOut": false,
+    "terminationFailed": false,
+    "credentialsRemovedFromTestWorkerEnvironment": true,
+    "productionLifecycleCommands": 0,
+    "browserWakeOrTunnelStarts": 0,
+    "projectTaskExecution": 0
+  },
+  "acceptance": {
+    "implementation": "SOURCE_IMPLEMENTED_EXISTING_WIP",
+    "qualification": "SOURCE_TESTED",
+    "build": "TEST_TARGET_COMPILED_NOT_PRODUCTION_RELEASE_BUILT",
+    "independentReview": "PENDING_GENUINE_REVIEW_NO_SELF_APPROVAL",
+    "merged": false,
+    "installed": false,
+    "liveUiAccepted": false,
+    "webEditCheckpointSelfWakeAccepted": false
+  },
+  "reviewReadiness": {
+    "exactPublicSourceAndTestEvidenceAvailable": true,
+    "reviewVerdictOrProducerAuthorityFabricated": false,
+    "existingExpiredReviewContractsReused": false,
+    "newEquivalentReviewRequestCreated": false,
+    "nextAction": "Independent review of the exact source/diff and qualification evidence through an admitted existing reviewer route; retain WIP until review and separate release gates pass."
+  },
+  "qualificationOwnerSha256": "b5ca3365a93781b81ed2c944831abac7ff90348941cd85ac5632e8133dcfada6",
+  "proofHashes": {
+    "testsResult": "6f34a7962f69329241040ca78fee2738b0fe317dff69e731c0dd805df09f02d4",
+    "testsOwner": "ff0255725cf42eba53877e17b7c2a06c0dde34ace0a48610fc95486a5fdf1560",
+    "clippyResult": "6803e0c056910fb65d2034af49d94db44810189f681fd10ca3b8bd0decdb4256",
+    "clippyOwner": "01153f687f4829aa4a73a98c15469008a76590236605933eea6e5c7942fc0b38"
+  }
+}
