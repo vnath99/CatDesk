@@ -1,10 +1,10 @@
 # CatDesk project handoff
 
-Single resumption entry point. Reconciled 2026-11-14T18:21:50.654059+00:00. Source facts below are dated; live health becomes UNVERIFIED after interruption until checked.
+Single resumption entry point. Reconciled 2026-11-14T21:28:42Z. Source facts below are dated; live health becomes UNVERIFIED after interruption until checked.
 
 ## Mission and priority
 
-CatDesk lets independent ChatGPT Web project conversations use authenticated v5 tools to edit their assigned local files, verify work, checkpoint Git, wake themselves and roll over with durable context. Native Codex delegation and a central coordinator are optional. Documentation consolidation, development integration and primary local synchronization are complete. PR #5 and the focused follow-up are merged. The next task is a separate architecture-documentation review; it was not started here. UI, Wake, native-dispatch, production promotion and architecture design were excluded from this completed documentation task.
+CatDesk lets ChatGPT Web project conversations use authenticated v5 tools to edit their assigned local files, verify work, checkpoint Git, wake themselves and roll over with durable context. Native Codex model calls and a central coordinator are optional. The November 14 product goal prioritizes one verified two-turn Wake loop, then useful direct Web work, then multiple registered projects sharing one active mutation/browser lane. Documentation continuity is complete; product acceptance remains ACTIVE. Architecture consolidation is reviewed in PR #8, separately from runtime acceptance.
 
 ## Source identity
 
@@ -20,12 +20,15 @@ Protected canonical executable SHA-256 `0c19770e1a73101a260778a19b8d4c8d94f7c44b
 
 Development-only controller from `5d51a1dd9d176f94ac8e1ec04f44d6c91d18d4e5` SHA-256 `5b345c4b3c22203b1d30659e5a5c05a049d09ac2fd5b9a4c1f56d3bbe034df59` built and completed bounded read-only qualification; endpoint closed. It is not installed or release authority. Last independently trusted production/rollback selection remains governed by existing local signed release records; do not guess a new LKG from a Git tag. Protected Wake dev.84 remains selected. Other retained development packages are not protected installation authority.
 
-Registry/scoped routing/context ledgers and actual controlled rollovers have evidence; do not repeat those canaries. Two canonical controlled project contexts have retained pairing evidence. Full Web edit/checkpoint/self-Wake and two independent project execution are still OPEN. See [milestones](CATDESK_MILESTONES.md) and [technical architecture](docs/orchestrator/CANONICAL_CURRENT_ARCHITECTURE.md).
+Registry/scoped routing/context ledgers and actual controlled rollovers have evidence; do not repeat those canaries. Two canonical controlled project contexts have retained pairing evidence. Full Web edit/checkpoint/self-Wake and two-project serial independence remain OPEN. See [milestones](CATDESK_MILESTONES.md) and [technical architecture](docs/architecture/CATDESK_ARCHITECTURE.md).
+
+Fresh read-only baseline on November 14: authenticated loopback catalog has 102 tools, including timer/Wake/central task tools; missing bearer is rejected with 401. Canonical/serving parity remains intact. The existing official tunnel owner reports running, healthy and ready. This session's two connector probes failed at outer HTTP send without an HTTP status, so current Web connectivity is UNVERIFIED. The authoritative Wake lifecycle view is STOPPED/PID 0 with no matching host process. The conflicting RUNNING transport projection is an October 15 status-file snapshot whose PID is absent. All four selected dev.84 artifacts match the pointer. The historical `STATE_REPLACE_FAILED` was not reproduced. [Bounded baseline](docs/verification/WAKE_LIFECYCLE_BASELINE_2026_11_14.json).
 
 ## Active work, blockers and no-replay boundaries
 
 | Work / owner | State / evidence | Next eligible action |
 | --- | --- | --- |
+| WAKE-LIFECYCLE / current product owner | IN_PROGRESS / UNVERIFIED for fresh end-to-end acceptance; baseline and architecture review recorded | Establish an eligible fresh canary using the existing authenticated profile and owner. The retained development root identity fence and default-only timer binding must be resolved without changing protected roots or held events |
 | DOC-CONTINUITY / Codex documentation owner | DONE / SOURCE_TESTED; development and primary synchronized, 23 tests each, both fresh-AI exercises pass | Review the recorded sync evidence; separate architecture task may begin only under its own scope |
 | C1-UI-002 / existing feature owner; resume ownership check required | IN_PROGRESS / SOURCE_TESTED; exact HTML serves locally, client times out; fallback is not installed | On existing UI feature branch, qualify a standard host-bridge fixture; do not replay a mutating tool to test UI |
 | Original C1 and C49 / original task owners | Held original task/grant/journals; cached native refusal not safely replayable | Reconcile authoritative receipts before any original operation; never replace grant/fences |
@@ -46,5 +49,5 @@ Without a connector: clone GitHub, check out the canonical development branch, i
 The machine `source_sha` identifies the qualified integration checkpoint, not the self-referential publication SHA of this document. Read actual checkout HEAD and remote refs before work.
 
 ```json
-{"schemaVersion":1,"milestone":"M-CONTINUITY","ticket":"DOC-CONTINUITY","source_sha":"78b6c98c6fdc84b98a019c3ea254e196a278d564","branch":"codex/web-rollover-oct17","status":"DONE","runtime_status":"UNVERIFIED","blocker":"NONE_FOR_DOCUMENTATION_SYNC; PRODUCT_GATES_REMAIN_SEPARATE","next_action":"Separate architecture documentation review under a new task; retain all runtime and no-replay boundaries"}
+{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"9d1c9db08b86754da7a1b2e2662d9538a80025df","branch":"codex/web-rollover-oct17","status":"IN_PROGRESS","runtime_status":"UNVERIFIED","blocker":"FRESH_CANARY_OWNER_AND_TARGET_NOT_QUALIFIED; CONNECTOR_HTTP_SEND_FAILED_WITHOUT_STATUS","next_action":"Qualify the existing profile and owner for one isolated new Wake canary; preserve held events and protected root identities"}
 ```

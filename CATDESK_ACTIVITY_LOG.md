@@ -1,5 +1,11 @@
 # CatDesk activity log
 
+## 2026-11-14T21:28:42Z — WAKE-LIFECYCLE baseline and architecture review
+
+Agent: current product owner. Source review at `9d1c9db08b86754da7a1b2e2662d9538a80025df` against development `a1fbd1aaf68b4f6748f6175ec6ba9cdb0ad284ae`. Read the relocated user goal and all four PR #8 candidates. Checked 51 architecture links and existing source references; corrected lifecycle syntax and backend-versus-tunnel endpoint attribution. Indexed consolidated design and retained prior architecture/history. Documentation continuity remains complete; product work is IN_PROGRESS, with serial execution prioritized over parallel mutation.
+
+Read-only live evidence: loopback bearer rejection 401, authenticated catalog 200/102 tools, canonical/serving identity retained, official owner running/healthy/ready, selected Wake artifacts match the pointer. Fresh Wake lifecycle is STOPPED/PID 0; the conflicting transport projection is an October 15 file snapshot, not a live owner. The historical replacement error was not reproduced. Two v5 connector probes failed at HTTP send without a status code; no repeated discovery was attempted. No host/browser/timer starts, message sends, queue resets, binding changes, installation or provider-model calls. Private evidence remains local; [sanitized baseline](docs/verification/WAKE_LIFECYCLE_BASELINE_2026_11_14.json). Next: qualify the existing profile/owner/target for one new isolated Wake canary without changing the protected-root fence or replaying held events.
+
 Recent audited engineering activity only. Dated next-action statements below are historical; only the root handoff specifies the current task. This is the chronological record, not task or milestone authority. Detailed original evidence stays in its owning records. [November archive](docs/activity/2026-11.md); [prior logs and immutable identities](docs/archive/PRE_CONSOLIDATION_2026_11_14.md). Historical reconstructed statements are explicitly labeled; unknown actors/times remain UNKNOWN.
 
 ## 2026-11-14T16:59:01.261957+00:00 â€” DOC-CONTINUITY discovery and implementation

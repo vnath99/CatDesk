@@ -1,9 +1,9 @@
-> Continuity authority update, 2026-11-14: the five root documents own handoff, status and commands. This file remains technical design authority. Historical operating observations below do not supersede original journals or current root status. See [root handoff](../../CATDESK_PROJECT_HANDOFF.md).
+> Design supersession, 2026-11-14: [the consolidated architecture](../architecture/CATDESK_ARCHITECTURE.md) and its three focused companions now own current design. This file is retained technical/history evidence. The five root documents own handoff, status and commands. Original journals remain authoritative for execution; no history below grants a replay. See [architecture index](ARCHITECTURE_DOCUMENT_INDEX.md).
 
 # CatDesk Canonical Current Architecture and Security Model
 
-This is the current architecture and security authority for CatDesk. It
-summarizes accepted durable state; it does not authorize a host operation.
+This was the preceding architecture and security authority for CatDesk. It
+preserves accepted durable state and historical decisions; it does not authorize a host operation.
 For current milestone status and ticket eligibility, begin with the
 [root handoff](../../CATDESK_PROJECT_HANDOFF.md), then the root
 [milestones](../../CATDESK_MILESTONES.md) and [tickets](../../CATDESK_TICKETS.md).

@@ -14,7 +14,8 @@ Milestone dashboard; detailed runs belong in the [activity log](CATDESK_ACTIVITY
 - 2026-10-17: context-aware continuation and genuine per-project rollover joined the multi-project MVP. Native CLI threads alone never establish Web acceptance.
 - 2026-10-24 onward: production release and isolated development are separate. Signed product authority is not automatically Wake-broker issuer authority.
 - 2026-11-10: direct ChatGPT Web → v5 → authorized local project work → verification → manual self-Wake is primary. Native Codex delegation and central coordination are optional. Preserve original C1/C49 identities and unresolved deliveries.
-- 2026-11-14: infrastructure/continuity is P0; no production deployment or main merge under this documentation goal. A widget timeout is separate from successful tool execution. Current source tests and a local HTML response do not establish installed client rendering.
+- 2026-11-14: infrastructure/continuity is P0; the completed documentation task authorized no production deployment or main merge. A widget timeout is separate from successful tool execution. Current source tests and a local HTML response do not establish installed client rendering.
+- 2026-11-14T21:28:42Z: the new product goal advances M-WEB in order: fresh timer/two-turn manual Wake, direct Web edit/verification/Git with zero required Codex model turns, then serial multi-project isolation and T-0484 context/rollover. One active mutation/browser lane is the MVP; parallel mutation is deferred. Existing controlled rollover and backend results remain credited. Architecture PR #8 is design integration, not runtime acceptance. [Fresh baseline](docs/verification/WAKE_LIFECYCLE_BASELINE_2026_11_14.json).
 
 ## Completion rule
 

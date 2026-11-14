@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-14T21:28:42.983540+00:00",
+  "ticket": "WAKE-LIFECYCLE",
+  "goalState": "ACTIVE",
+  "sourceReviewed": "9d1c9db08b86754da7a1b2e2662d9538a80025df",
+  "installedBackend": {
+    "sha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "servingCanonicalParity": true,
+    "missingBearerHttpStatus": 401,
+    "authenticatedCatalogHttpStatus": 200,
+    "tools": 102,
+    "timerAndWakeAndCentralTaskPublished": true
+  },
+  "officialOwner": {
+    "processRunning": true,
+    "healthy": true,
+    "ready": true
+  },
+  "connector": {
+    "attempts": 2,
+    "state": "HTTP_SEND_FAILED",
+    "httpStatus": null,
+    "currentWebAcceptance": "UNVERIFIED",
+    "automaticRetries": 0
+  },
+  "wake": {
+    "selectedVersion": "1.0.0-dev.84",
+    "allFourArtifactsMatchPointer": true,
+    "selectedPointerSha256": "25b8430dc25fdb7cf2be3465d5f6c5431f6ff274d0dfcf3e09f9c2aa3cb50185",
+    "freshLifecycle": "STOPPED",
+    "freshLifecyclePid": 0,
+    "hostProcessPresent": false,
+    "transportSnapshot": "HISTORICAL_RUNNING_WITH_ABSENT_PID",
+    "transportSnapshotUpdatedUtc": "2026-10-15T04:59:48Z",
+    "stateReplaceFailure": "HISTORICAL_NOT_REPRODUCED",
+    "sourceFreshnessAnnotation": "ALREADY_IMPLEMENTED_NOT_INSTALLED",
+    "manualTimerProjectSelection": "DEFAULT_CATDESK_ONLY"
+  },
+  "remainingGates": [
+    "Qualify existing authenticated profile and owner for a fresh isolated canary",
+    "Fresh exact USER receipt, same-task continuation and timer evidence",
+    "Direct Web edit, independent verification and Git checkpoint",
+    "Two-project serial routing and isolation",
+    "Context pressure and existing guarded rollover acceptance"
+  ],
+  "developmentFence": "DEV_PRODUCTION_ROOT_MISMATCH; retained authority not rewritten",
+  "effects": {
+    "backendOrTunnelStarts": 0,
+    "wakeOrBrowserStarts": 0,
+    "timerStarts": 0,
+    "messagesSent": 0,
+    "bindingOrProtectedStateChanges": 0,
+    "modelProviderCalls": 0
+  },
+  "privateEvidenceRetained": true,
+  "fullProductAcceptance": "NOT_ESTABLISHED",
+  "documentationQualification": {
+    "testsPassed": 23,
+    "primaryInternalLinksChecked": 484,
+    "architectureInternalLinksChecked": 51,
+    "sourceChanges": false,
+    "installedAcceptanceAdded": false
+  }
+}
