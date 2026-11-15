@@ -530,6 +530,12 @@ fn settled_read_history(
         return Err(refused());
     }
     for proposal in retained {
+        // Validate the retained operations against their original full diff
+        // hash without executing a tool call or rewriting its proposal.
+        let preview =
+            crate::delegated::patch_engine::PatchEngine::new(&inspected.root, &inspected.contract)
+                .and_then(|engine| engine.preview(&proposal))
+                .map_err(|_| refused())?;
         let record = proposals
             .iter()
             .find(|p| p.patch_id == proposal.patch_id)
@@ -550,6 +556,7 @@ fn settled_read_history(
                     .collect::<Vec<_>>()
             || record.model_rationale != proposal.model_rationale
             || !hash_ok(&record.proposed_diff_hash)
+            || record.proposed_diff_hash != stable_text_hash(&preview.preview_diff)
             || !preview_ids.insert(proposal.patch_id.as_str().to_owned())
         {
             return Err(refused());
@@ -1458,6 +1465,15 @@ mod tests {
                 "PROJECT_TASK_RECOVERY_ACTIVITY_RECORDED"
             );
         }
+        fs::write(&state_path, bytes).unwrap();
+        let bytes = fs::read(&state_path).unwrap();
+        let mut changed: Value = serde_json::from_slice(&bytes).unwrap();
+        changed["patchProposals"][0]["operations"][0]["new"] = json!("{ 99 }");
+        fs::write(&state_path, serde_json::to_vec(&changed).unwrap()).unwrap();
+        assert_eq!(
+            nonmutating_journal(&directory, &inspected, true).unwrap_err(),
+            "PROJECT_TASK_RECOVERY_ACTIVITY_RECORDED"
+        );
         fs::write(&state_path, bytes).unwrap();
         assert!(nonmutating_journal(&directory, &inspected, true).is_ok());
     }
