@@ -109,3 +109,19 @@ Evidence: [docs/verification/ORIGINAL_RECOVERY_AND_FRESH_WAKE_2026_11_15.json](d
 Agent: Codex. Source: f7f1dedeb2584469e252969f195c43c5b4d3aa6a. Outcome: partial. Fresh same-task two-turn Wake and timer passed in the bounded development runtime after causal hash-cost correction and exact pre-input recovery; original failure retained, no duplicate USER and cleanup verified; useful Web edit and self-Wake remain open. Next: Qualify a new scoped direct-Web file-edit, independent verification and Git checkpoint assignment with self-Wake permission; preserve historical uncertain tasks; no operator action needed now.
 
 Evidence: [docs/verification/FRESH_WAKE_RECOVERY_ACCEPTANCE_2026_11_15.json](docs/verification/FRESH_WAKE_RECOVERY_ACCEPTANCE_2026_11_15.json); command: 22 targeted Rust tests, strict Clippy, matched development build, exact pre-input recovery, one bounded deliver and automatic native readback; exit 0; SHA-256 72cde4af485b093b164cbaf4e1028cbb5fc2c7f73fd3299dbacd3251bf763fba.
+
+<!-- catdesk-activity:project-work-readiness-and-serving-scope-nov15 sha256:7b38b9385a02ed5092dc77efcba5d7edca6dd6b04fad7617e5dbaebe9a5b6350 -->
+
+## 2026-11-15T03:31:29.533192+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: f5d535e5fd81d36948d06e159c5d1de27c4a9687. Outcome: partial. Existing doctor now distinguishes project-specific source receipts and grant presence; 206 assertions and three actual read-only Windows scopes passed with 1699 unchanged pins; v5 reserved dispatcher reached validation, while old invitations and native-only contracts remain held and no Web code edit was attempted. Next: Prepare source-bound independent review of the qualified current Wake candidate using the existing reviewer workflow; preserve d22, historical deliveries and protected migration authority; no new send or grant before exact guards pass.
+
+Evidence: [docs/verification/PROJECT_WORK_READINESS_2026_11_15.json](docs/verification/PROJECT_WORK_READINESS_2026_11_15.json); command: PowerShell doctor regression and three bounded source-facade observations; one empty reserved v5 envelope and immutable history classification; exit 0; SHA-256 b166ef10ebf20cc6b09b2d1e44d04d877189a50289f506bdc70abc9b2646c737.
+
+<!-- catdesk-activity:retained-quarantine-terminal-status-nov15 sha256:74ab451253169e286f28336698f0442809e5041c48ec04af2ddfacb2251f13ff -->
+
+## 2026-11-15T03:41:40.478446+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: f5d535e5fd81d36948d06e159c5d1de27c4a9687. Outcome: partial. Original CatDesk quarantine already has a valid completed ABANDONED_UNKNOWN_NO_REPLAY disposition; supported native no-send status verified its digest chain without repeating recovery, while preserving the original unknown outcome and source-task fence. Next: Prepare source-bound independent review of the qualified current Wake candidate using the existing reviewer workflow; preserve d22, historical deliveries and protected migration authority; no new send or grant before exact guards pass.
+
+Evidence: [docs/verification/RETAINED_QUARANTINE_STATUS_2026_11_15.json](docs/verification/RETAINED_QUARANTINE_STATUS_2026_11_15.json); command: Qualified development controller operator web rollover status for the original registered project; no browser or send; exit 0; SHA-256 8049e8aedc9fb8642aa9665d0515b82fe9f5929d2ba6ec6e7f3c20419e3759f6.
