@@ -6053,7 +6053,7 @@ fn execution_contract_input_schema() -> Value {
                     ]
                 }
             },
-            "retryBudget": { "type": "integer", "minimum": 1 },
+            "retryBudget": { "type": "integer", "minimum": 0, "description": "Zero requests no retries. This budget never authorizes replay of journaled or uncertain operations." },
             "maxTurns": { "type": "integer", "minimum": 1 },
             "maxToolCalls": { "type": "integer", "minimum": 1 },
             "maxElapsedSeconds": { "type": "integer", "minimum": 1 },
@@ -14392,6 +14392,15 @@ mod tests {
         );
     }
 
+    #[test]
+    fn zero_retry_budget_schema_keeps_execution_limits_positive() {
+        let schema = execution_contract_input_schema();
+        assert_eq!(schema["properties"]["retryBudget"]["minimum"], 0);
+        for field in ["maxTurns", "maxToolCalls", "maxElapsedSeconds"] {
+            assert_eq!(schema["properties"][field]["minimum"], 1);
+        }
+    }
+
     #[tokio::test]
     async fn supervisor_create_schema_publishes_execution_contract_shape() {
         let req = JsonRpcRequest {
@@ -14447,7 +14456,7 @@ mod tests {
                 .get("retryBudget")
                 .and_then(|retry| retry.get("minimum"))
                 .and_then(Value::as_i64),
-            Some(1)
+            Some(0)
         );
         let acceptance_enum = contract_properties
             .get("acceptanceCriteria")

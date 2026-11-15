@@ -325,7 +325,8 @@ pub fn validate_contract(contract: &ExecutionContractV1) -> Result<(), String> {
     validate_non_empty_list("ordered_steps", &contract.ordered_steps)?;
     validate_non_empty_list("acceptance_criteria", &contract.acceptance_criteria)?;
     validate_non_empty("verification_profile", &contract.verification_profile)?;
-    validate_positive_budget("retry_budget", contract.retry_budget as u64)?;
+    // Zero expresses no retries. Initial work is bounded by the positive
+    // execution budgets below; this field never grants journal replay.
     validate_positive_budget("max_turns", contract.max_turns as u64)?;
     validate_positive_budget("max_tool_calls", contract.max_tool_calls as u64)?;
     validate_positive_budget("max_elapsed_seconds", contract.max_elapsed_seconds)?;
@@ -562,6 +563,36 @@ mod tests {
         let mut contract = fixture_contract();
         contract.feature_branch = "bad branch".into();
         assert!(validate_contract(&contract).is_err());
+    }
+
+    #[test]
+    fn zero_retry_budget_is_valid_but_execution_budgets_remain_positive() {
+        let mut contract = fixture_contract();
+        contract.retry_budget = 0;
+        validate_contract(&contract).expect("a no-retry contract still permits its initial work");
+        let encoded = serde_json::to_value(&contract).unwrap();
+        let round_trip: ExecutionContractV1 = serde_json::from_value(encoded.clone()).unwrap();
+        assert_eq!(round_trip.retry_budget, 0);
+        assert_eq!(
+            contract.request_hash().unwrap(),
+            round_trip.request_hash().unwrap()
+        );
+
+        for field in ["maxTurns", "maxToolCalls", "maxElapsedSeconds"] {
+            let mut invalid = encoded.clone();
+            invalid[field] = serde_json::json!(0);
+            let invalid: ExecutionContractV1 = serde_json::from_value(invalid).unwrap();
+            assert!(
+                validate_contract(&invalid).is_err(),
+                "{field} must stay positive"
+            );
+        }
+        let mut negative = encoded.clone();
+        negative["retryBudget"] = serde_json::json!(-1);
+        assert!(serde_json::from_value::<ExecutionContractV1>(negative).is_err());
+        let mut escaped = contract;
+        escaped.allowed_paths = vec!["../outside".into()];
+        assert!(validate_contract(&escaped).is_err());
     }
 
     #[test]
