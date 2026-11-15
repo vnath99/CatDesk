@@ -192,6 +192,8 @@ pub struct InitializationReadbackObservation {
     pub surface: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tab: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub navigation: Option<serde_json::Value>,
 }
 
 impl InitializationReadbackObservation {
@@ -262,6 +264,53 @@ impl InitializationReadbackObservation {
         }) {
             return Err("INITIALIZATION_READBACK_DIAGNOSTIC_INVALID".into());
         }
+        if self.navigation.as_ref().is_some_and(|value| {
+            value.as_object().is_none_or(|v| {
+                v.len() != 7
+                    || !v.keys().all(|key| {
+                        matches!(
+                            key.as_str(),
+                            "schemaVersion"
+                                | "documentRoute"
+                                | "historyRoute"
+                                | "title"
+                                | "body"
+                                | "notice"
+                                | "responseStatus"
+                        )
+                    })
+            }) || value["schemaVersion"] != 1
+                || !["documentRoute", "historyRoute"].iter().all(|field| {
+                    value[*field].as_str().is_some_and(|route| {
+                        routes.contains(&route)
+                            || (*field == "historyRoute" && route == "UNAVAILABLE")
+                    })
+                })
+                || !matches!(
+                    value["title"].as_str(),
+                    Some("EMPTY" | "SECURITY_CHECK" | "NETWORK_ERROR" | "CHATGPT" | "OTHER")
+                )
+                || !matches!(
+                    value["body"].as_str(),
+                    Some("ABSENT" | "EMPTY" | "NONEMPTY")
+                )
+                || !matches!(
+                    value["notice"].as_str(),
+                    Some(
+                        "NOT_INSPECTED"
+                            | "NONE"
+                            | "RATE_LIMITED"
+                            | "SECURITY_CHECK"
+                            | "ACCESS_DENIED"
+                            | "LOGIN_REQUIRED"
+                            | "NETWORK_ERROR"
+                    )
+                )
+                || !(value["responseStatus"].is_null()
+                    || value["responseStatus"].as_u64().is_some_and(|n| n <= 599))
+        }) {
+            return Err("INITIALIZATION_READBACK_DIAGNOSTIC_INVALID".into());
+        }
         Ok(())
     }
 }
@@ -274,7 +323,8 @@ fn readback_observation(
         != Some(
             10 + usize::from(frame.get("failureCode").is_some())
                 + usize::from(frame.get("surface").is_some())
-                + usize::from(frame.get("tab").is_some()),
+                + usize::from(frame.get("tab").is_some())
+                + usize::from(frame.get("navigation").is_some()),
         )
         || !matches!(
             frame["stage"].as_str(),
@@ -299,7 +349,7 @@ fn readback_observation(
         return Err("INITIALIZATION_READBACK_DIAGNOSTIC_INVALID".into());
     }
     let observation: InitializationReadbackObservation = serde_json::from_value(serde_json::json!({
-        "phase":frame["phase"],"driverRoute":frame["driverRoute"],"documentRoute":frame["documentRoute"],"failureCode":frame["failureCode"],"surface":frame["surface"],"tab":frame["tab"]}))
+        "phase":frame["phase"],"driverRoute":frame["driverRoute"],"documentRoute":frame["documentRoute"],"failureCode":frame["failureCode"],"surface":frame["surface"],"tab":frame["tab"],"navigation":frame["navigation"]}))
         .map_err(|_|"INITIALIZATION_READBACK_DIAGNOSTIC_INVALID")?;
     observation.validate()?;
     if frame["stage"] == "INITIALIZATION_READBACK_HOME_RECOVERED"
@@ -391,6 +441,12 @@ pub fn read_initialization_candidate_guarded(
     if !bytes
         .windows(b"INITIALIZATION_READBACK_TAB_SELECTION_V1 = True".len())
         .any(|part| part == b"INITIALIZATION_READBACK_TAB_SELECTION_V1 = True")
+    {
+        return Err("INITIALIZATION_READBACK_DIAGNOSTICS_PACKAGE_REQUIRED".into());
+    }
+    if !bytes
+        .windows(b"INITIALIZATION_READBACK_NAVIGATION_V1 = True".len())
+        .any(|part| part == b"INITIALIZATION_READBACK_NAVIGATION_V1 = True")
     {
         return Err("INITIALIZATION_READBACK_DIAGNOSTICS_PACKAGE_REQUIRED".into());
     }
@@ -590,6 +646,28 @@ mod tests {
         assert!(readback_observation(&surfaced, &request).is_ok());
         surfaced["surface"]["body"] = serde_json::json!("private context");
         assert!(readback_observation(&surfaced, &request).is_err());
+        let mut navigation = frame.clone();
+        navigation["navigation"] = serde_json::json!({"schemaVersion":1,"documentRoute":"HOME",
+            "historyRoute":"SAME_CONVERSATION","title":"SECURITY_CHECK","body":"NONEMPTY",
+            "notice":"SECURITY_CHECK","responseStatus":403});
+        assert!(readback_observation(&navigation, &request).is_ok());
+        for (field, bad) in [
+            ("title", serde_json::json!("PRIVATE_TITLE")),
+            ("notice", serde_json::json!("PRIVATE_BODY")),
+            ("historyRoute", serde_json::json!(request.candidate)),
+            ("responseStatus", serde_json::json!(true)),
+            ("responseStatus", serde_json::json!(600)),
+        ] {
+            let mut invalid = navigation.clone();
+            invalid["navigation"][field] = bad;
+            assert!(readback_observation(&invalid, &request).is_err());
+        }
+        navigation["navigation"]
+            .as_object_mut()
+            .unwrap()
+            .remove("responseStatus");
+        navigation["navigation"]["rawBody"] = serde_json::json!("PRIVATE_BODY");
+        assert!(readback_observation(&navigation, &request).is_err());
         let mut reasoned = frame.clone();
         reasoned["failureCode"] = serde_json::json!("BOOTSTRAP_HOME_NOT_READY");
         assert_eq!(
@@ -631,11 +709,9 @@ mod tests {
         let mut changed = frame;
         changed["body"] = serde_json::json!("private context");
         assert!(readback_observation(&changed, &request).is_err());
-        assert!(
-            !serde_json::to_string(&observed)
-                .unwrap()
-                .contains(request.candidate)
-        );
+        assert!(!serde_json::to_string(&observed)
+            .unwrap()
+            .contains(request.candidate));
     }
 
     fn frame() -> serde_json::Value {
@@ -689,11 +765,9 @@ mod tests {
             saved.post_submit_diagnostic,
             Some(BootstrapDiagnostic::ResponseLoadError)
         );
-        assert!(
-            !serde_json::to_string(&saved)
-                .unwrap()
-                .contains("EXACT_USER_MESSAGE_APPENDED")
-        );
+        assert!(!serde_json::to_string(&saved)
+            .unwrap()
+            .contains("EXACT_USER_MESSAGE_APPENDED"));
     }
 
     #[test]
@@ -701,11 +775,9 @@ mod tests {
         let unknown =
             diagnostic(&serde_json::json!({"reason":"PRIVATE_CONTEXT_AND_EXECUTION_KEY"}));
         assert_eq!(unknown, BootstrapDiagnostic::UnclassifiedPostSubmitFailure);
-        assert!(
-            !serde_json::to_string(&unknown)
-                .unwrap()
-                .contains("PRIVATE_CONTEXT")
-        );
+        assert!(!serde_json::to_string(&unknown)
+            .unwrap()
+            .contains("PRIVATE_CONTEXT"));
         assert_eq!(
             diagnostic(&serde_json::json!({"reason":"BOOTSTRAP_URL_UNISSUED"})),
             BootstrapDiagnostic::UrlUnissued

@@ -1248,6 +1248,62 @@ class CdpSink:
     def visible(cdp: Any, selector: str) -> bool:
         try: return bool(cdp.is_element_visible(selector))
         except Exception: return False
+    def browser_navigation_observation(self, cdp: Any) -> dict[str, Any]:
+        """Classify a failed document without exporting title, body or URLs.
+
+        Browser navigation history is independent of Runtime.evaluate's realm.
+        Neither source is receipt authority. Inspect fixed error notices only
+        on Home with no editor or conversation turns; never scan a chat body.
+        """
+        script = """(() => {
+            const title = String(document.title || '').trim().toLowerCase();
+            const result = {documentUrl: document.URL, title:
+                !title ? 'EMPTY' : /^(just a moment|checking your browser|attention required)/.test(title)
+                    ? 'SECURITY_CHECK' : /^(this site can.t be reached|privacy error)/.test(title)
+                    ? 'NETWORK_ERROR' : title === 'chatgpt' ? 'CHATGPT' : 'OTHER',
+                body: document.body ? (document.body.childNodes.length ? 'NONEMPTY' : 'EMPTY') : 'ABSENT',
+                notice: 'NOT_INSPECTED', responseStatus: null};
+            try {
+                const entries = performance.getEntriesByType('navigation');
+                const status = entries.length === 1 ? entries[0].responseStatus : null;
+                if (Number.isInteger(status) && status >= 0 && status <= 599) result.responseStatus = status;
+            } catch (_) {}
+            let route;
+            try { route = new URL(location.href); } catch (_) { return result; }
+            if (route.protocol !== 'https:' || !['chatgpt.com','chat.openai.com'].includes(route.hostname) ||
+                route.username || route.password || route.port || route.search || route.hash ||
+                !['','/'].includes(route.pathname) ||
+                document.querySelector('#prompt-textarea,textarea[data-testid="prompt-textarea"], [data-message-author-role], [data-content-search-turn-key], [data-testid^="conversation-turn-"], article[data-turn]')) return result;
+            const text = String(document.body?.innerText || '').slice(0, 4096).toLowerCase();
+            result.notice = /too many requests|you have been rate limited|rate limit exceeded/.test(text) ? 'RATE_LIMITED' :
+                /verify you are human|checking your browser|performing security verification/.test(text) ? 'SECURITY_CHECK' :
+                /access denied|sorry, you have been blocked/.test(text) ? 'ACCESS_DENIED' :
+                /please (log|sign) in|you are logged out/.test(text) ? 'LOGIN_REQUIRED' :
+                /err_(internet_disconnected|connection_reset|name_not_resolved)|network connection (lost|failed)/.test(text) ? 'NETWORK_ERROR' : 'NONE';
+            return result;
+        })()"""
+        try:
+            value = self.cdp_value(cdp.evaluate(script))
+        except Exception as error:
+            raise Attention("BROWSER_NAVIGATION_OBSERVATION_UNAVAILABLE") from error
+        if (not isinstance(value, dict) or set(value) != {'documentUrl','title','body','notice','responseStatus'}
+                or not isinstance(value['documentUrl'], str)
+                or value['title'] not in {'EMPTY','SECURITY_CHECK','NETWORK_ERROR','CHATGPT','OTHER'}
+                or value['body'] not in {'ABSENT','EMPTY','NONEMPTY'}
+                or value['notice'] not in {'NOT_INSPECTED','NONE','RATE_LIMITED','SECURITY_CHECK','ACCESS_DENIED','LOGIN_REQUIRED','NETWORK_ERROR'}
+                or (value['responseStatus'] is not None and (type(value['responseStatus']) is not int or not 0 <= value['responseStatus'] <= 599))):
+            raise Attention("BROWSER_NAVIGATION_OBSERVATION_INVALID")
+        result = dict(schemaVersion=1, documentRoute=bounded_route_class(value['documentUrl'], self.url),
+            historyRoute='UNAVAILABLE', **{k:value[k] for k in ('title','body','notice','responseStatus')})
+        try:
+            history = cdp.get_navigation_history()
+            if (isinstance(history, (tuple,list)) and len(history) == 2 and type(history[0]) is int
+                    and isinstance(history[1], (tuple,list)) and 0 <= history[0] < len(history[1]) <= 64):
+                url = history[1][history[0]].url
+                if isinstance(url, str): result['historyRoute'] = bounded_route_class(url, self.url)
+        except Exception:
+            pass
+        return result
     def browser_surface_observation(self, cdp: Any) -> dict[str, str]:
         """Metadata only, with the route checked inside the same DOM read.
 

@@ -1051,6 +1051,7 @@ mod first_conversation_tests {
             failure_code: None,
             surface: None,
             tab: None,
+            navigation: None,
         };
         retain_readback_observation(&control, &record, &input, &observation).unwrap();
         retain_readback_observation(&control, &record, &input, &observation).unwrap();
