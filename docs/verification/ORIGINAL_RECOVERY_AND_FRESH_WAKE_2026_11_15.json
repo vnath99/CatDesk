@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-15T01:51:50.527487+00:00",
+  "sourceCommit": "302fcff721c2bfd61f66915fb66aff860bd92e5c",
+  "scope": "DEVELOPMENT_LOGIN_ORIGINAL_RECOVERY_AND_ONE_FROZEN_WAKE_ATTEMPT",
+  "goalState": "ACTIVE",
+  "login": {
+    "standardOwnerClosed": true,
+    "firstWrongCwdAttemptRefusedBeforeBrowser": true,
+    "operatorWorkspaceSelection": "CURRENT_DIRECTORY_NOT_WORKSPACE_ROOT_ENV",
+    "correctedLaunchReusedSameProfile": true
+  },
+  "originalRecovery": {
+    "startedUtc": "2026-11-15T01:26:04.404361+00:00",
+    "finishedUtc": "2026-11-15T01:26:38.708727+00:00",
+    "passed": true,
+    "messagesSubmittedByRecovery": 0,
+    "durablePhase": "BOUND",
+    "sameTaskAndMessage": true,
+    "profileQuiescentAfter": true,
+    "otherRegistrationsUnchanged": true,
+    "otherWakeTargetsUnchanged": true
+  },
+  "originalRecoveryProof": {
+    "exactOriginalUserAndCompletedAcknowledgment": true,
+    "completedThenRefreshedAndPersisted": true,
+    "pairedRegistryAndWakeExact": true,
+    "generation": 1,
+    "originalTaskAndIntentPreserved": true,
+    "productionPromotion": false
+  },
+  "compatibility": {
+    "baselineSource": "2ea053eb2c9d8b7be1feed5d522338e133d5b359",
+    "pythonSource": "5f45ce9e4c4c27be6a67998c822305a4ca4c5130",
+    "ordinaryAttemptAndEightCriticalPrimitiveAstsUnchanged": true,
+    "baselineNativePassed": 3,
+    "baselineNativeFailed": 2,
+    "afterNativePassed": 5,
+    "pythonBridgeDomAdapterPassed": 329,
+    "strictWakeClippy": "PASS",
+    "oldPairRetained": true,
+    "alteredCodeRefused": true,
+    "releaseAuthorityGranted": false
+  },
+  "freshWake": {
+    "startedUtc": "2026-11-15T01:40:26.767641+00:00",
+    "finishedUtc": "2026-11-15T01:43:11.309481+00:00",
+    "sameOriginalTask": true,
+    "deliveryInvocations": 1,
+    "phase": "ATTENTION",
+    "errorCode": "SCOPED_REVIEW_TIMEOUT",
+    "nativeReportedSubmissionOutcome": "UNKNOWN",
+    "diagnosis": {
+      "beforeSubmitCalls": 1,
+      "beforeSubmitMaxMs": 4729,
+      "elapsedMs": 123852,
+      "guardCheckCalls": 25,
+      "guardCheckMaxMs": 5365,
+      "lastAdapterStage": "BEFORE_SUBMIT",
+      "maximumSeconds": 120,
+      "schemaVersion": 1,
+      "timingCapped": false
+    },
+    "receiptPresent": false,
+    "timerPresent": false,
+    "submissionWitnessPresent": false,
+    "retryAuthorizedByNativeFrame": false,
+    "retryExecuted": false,
+    "nativeObservedFrozenUserCount": 0,
+    "nativeHistoryPaginationComplete": true,
+    "nativeModelInvocations": 0,
+    "selfWakeAccepted": false
+  },
+  "preservation": {
+    "pinsChecked": 1695,
+    "expectedPinnedChanges": [
+      ".catdesk/web-development/runtime/current.json",
+      ".catdesk/web-development/runtime/readiness-history.json"
+    ],
+    "profileIdentityUnchanged": true,
+    "originalBoundInitializationUnchanged": true,
+    "otherRegistrationsUnchanged": true,
+    "otherWakeTargetsUnchanged": true,
+    "verifiedPreviousArtifactsUnchanged": true,
+    "profileQuiescentAfter": true,
+    "sharedHostStarted": false,
+    "recurringAutomationEnabled": false,
+    "protectedInstallationChanged": false
+  },
+  "remaining": {
+    "freshWakeReceiptAndTimer": "NOT_ACCEPTED",
+    "directWebEditCheckpointSelfWake": "OPEN",
+    "serialMultiProject": "OPEN",
+    "contextRollover": "OPEN",
+    "operatorActionRequiredNow": false,
+    "nextExecutableTask": "Profile expensive target guards and preserve equivalent integrity while eliminating redundant work; qualify explicit same-request pre-submit recovery, with no blind retry"
+  }
+}

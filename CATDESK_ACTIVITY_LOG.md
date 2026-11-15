@@ -93,3 +93,11 @@ Evidence: [docs/verification/VERIFIED_TAB_READBACK_2026_11_15.json](docs/verific
 Agent: Codex. Source: cf5ea47b5d22f041b1bb68cfc5466785bc7a30e0. Outcome: partial. Source now returns the explicit login refusal from exact Home navigation diagnostics while preserving draft, generation and no-replay fences; no new browser or package run. Next: Authenticate the same existing development profile, then recover the original candidate without resend; qualify project-bound timer bookkeeping before multi-project acceptance.
 
 Evidence: [docs/verification/LOGIN_REFUSAL_CLASSIFICATION_2026_11_15.json](docs/verification/LOGIN_REFUSAL_CLASSIFICATION_2026_11_15.json); command: Targeted adapter/conversation/initialization tests, then initialization guard regression; exit 0; SHA-256 beb5ba43e769db87027348fa9733eeb06c398485b1da1ed2d5503f07ba066a4b.
+
+<!-- catdesk-activity:wake-original-bound-and-fresh-timeout-nov15 sha256:28a47e40bcc52510a95e1ac21d68aab750028cb9777d4d652c1c9837a4a1c954 -->
+
+## 2026-11-15T01:51:50.533000+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 302fcff721c2bfd61f66915fb66aff860bd92e5c. Outcome: partial. Original initialization recovered and paired after standard login; exact browser pair qualified; one fresh same-task Wake timed out at its pre-submit boundary with slow target guards, no new USER observed and cleanup passed. Next: Profile expensive guard validation, retain equivalent integrity proofs and qualify explicit recovery of the same pre-submit request; no operator action is needed now.
+
+Evidence: [docs/verification/ORIGINAL_RECOVERY_AND_FRESH_WAKE_2026_11_15.json](docs/verification/ORIGINAL_RECOVERY_AND_FRESH_WAKE_2026_11_15.json); command: Standard login, original initialize recover, compatibility and DOM regressions, one bounded ordinary work deliver; exit 2; SHA-256 af95064eaea268f8721c283d3cf46cadf2dd32da24ec2c8df3fdcc564fbfe675.
