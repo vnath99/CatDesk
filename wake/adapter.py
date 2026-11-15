@@ -18,7 +18,7 @@ MAX_BOOTSTRAP_REQUEST_BYTES = 32 * 1024
 SOURCE_SNAPSHOT_RESPONSE_BYTES = 64 * 1024
 BOOTSTRAP_RESPONSE_LIFECYCLE_V1 = True
 INITIALIZATION_READBACK_DIAGNOSTICS_V1 = True
-INITIALIZATION_READBACK_HOME_RECOVERY_V1 = True
+INITIALIZATION_READBACK_HOME_ONLY_V1 = True
 
 
 def emit(value):
@@ -750,7 +750,7 @@ def initialization_readback(bridge, sb, request):
             sink.check_plain_home_draft(cdp)
             if not callable(getattr(cdp,"get",None)):
                 raise bridge.Attention("INITIALIZATION_READBACK_FIXED_NAVIGATION_UNAVAILABLE")
-            cdp = sink.retry_page_readiness(sb, cdp)
+            cdp = sink.retry_page_readiness(sb, cdp, home_only=True)
             sink.require_response_document(cdp)
             if not sink.exact(str(cdp.get_current_url())):
                 raise bridge.Attention("RESPONSE_TARGET_DRIFT")

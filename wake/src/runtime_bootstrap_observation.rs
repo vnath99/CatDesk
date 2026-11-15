@@ -299,8 +299,8 @@ pub fn read_initialization_candidate_guarded(
         return Err("INITIALIZATION_READBACK_DIAGNOSTICS_PACKAGE_REQUIRED".into());
     }
     if !bytes
-        .windows(b"INITIALIZATION_READBACK_HOME_RECOVERY_V1 = True".len())
-        .any(|part| part == b"INITIALIZATION_READBACK_HOME_RECOVERY_V1 = True")
+        .windows(b"INITIALIZATION_READBACK_HOME_ONLY_V1 = True".len())
+        .any(|part| part == b"INITIALIZATION_READBACK_HOME_ONLY_V1 = True")
     {
         return Err("INITIALIZATION_READBACK_HOME_RECOVERY_PACKAGE_REQUIRED".into());
     }

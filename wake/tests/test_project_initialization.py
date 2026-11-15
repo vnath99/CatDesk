@@ -280,9 +280,10 @@ class ProjectInitializationTests(unittest.TestCase):
             def check_plain_home_draft(self, cdp):
                 if fault == "home-rich": raise bridge.Attention("BOOTSTRAP_RICH_DRAFT_UNVERIFIED")
 
-            def retry_page_readiness(self, sb, cdp):
+            def retry_page_readiness(self, sb, cdp, *, home_only):
+                assert home_only is True
                 if fault == "home-stuck": return cdp
-                return bridge.CdpSink.retry_page_readiness(self,sb,cdp)
+                return bridge.CdpSink.retry_page_readiness(self,sb,cdp,home_only=home_only)
 
             def require_response_document(self, cdp):
                 return bridge.CdpSink.require_response_document(self,cdp)
@@ -408,6 +409,31 @@ class ProjectInitializationTests(unittest.TestCase):
                 self.assertEqual(output[-1]["phase"],"HOME_RECOVERY")
                 self.assertFalse(any("receipt" in row for row in output))
                 if fault=="home-draft":self.assertEqual(cdp.draft,"untouched operator draft")
+
+    def test_home_only_recovery_cannot_fall_through_to_reload_or_another_cdp_context(self):
+        actions=[]
+        sb=types.SimpleNamespace(activate_cdp_mode=lambda *_:actions.append("activate"))
+        for url in [ISSUED,SOURCE,"chrome-error://chromewebdata/","https://example.test/"]:
+            cdp=types.SimpleNamespace(get_current_url=lambda:url,
+                reload=lambda **_:actions.append("reload"),get=lambda _:actions.append("navigate"))
+            sink=types.SimpleNamespace(url=ISSUED,error=lambda *_:True)
+            self.assertIs(bridge.CdpSink.retry_page_readiness(sink,sb,cdp,home_only=True),cdp)
+            self.assertEqual(actions,[])
+        for guard in ["draft","rich","missing-native-navigation"]:
+            cdp=types.SimpleNamespace(get_current_url=lambda:bridge.NEW_CONVERSATION_HOME,
+                reload=lambda **_:actions.append("reload"))
+            if guard != "missing-native-navigation": cdp.get=lambda _:actions.append("navigate")
+            def empty(_):
+                if guard == "draft":raise bridge.Attention("EXISTING_DRAFT")
+            def plain(_):
+                if guard == "rich":raise bridge.Attention("BOOTSTRAP_RICH_DRAFT_UNVERIFIED")
+            sink=types.SimpleNamespace(url=ISSUED,error=lambda *_:False,
+                check_empty_home=empty,check_plain_home_draft=plain)
+            if guard=="missing-native-navigation":
+                self.assertIs(bridge.CdpSink.retry_page_readiness(sink,sb,cdp,home_only=True),cdp)
+            else:
+                with self.assertRaises(bridge.Attention):bridge.CdpSink.retry_page_readiness(sink,sb,cdp,home_only=True)
+            self.assertEqual(actions,[])
 
 
 if __name__ == "__main__":
