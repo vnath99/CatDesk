@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-15T04:49:38.647783+00:00",
+  "sourceCommit": "288ab492f0983ff19337b6da26ad15762a5aa128",
+  "sourceBase": "c366198ce5f5e49b5e5625bdb4eb2277b1e90ed8",
+  "scope": "REQUIRED_SOURCE_VERIFICATION_FORMAT_GATE_ONLY",
+  "reason": "The supported development verify command runs cargo fmt --all before later checks; retained source formatting failures prevented that gate from passing",
+  "files": [
+    {
+      "path": "src/operator_facade.rs",
+      "exactFormatterOutputFromGitBaseline": true,
+      "beforeSha256": "f378192e617ca8a26ab773da4f54c4cda6db3ba18cd98eefbfcc06e7f84a8638",
+      "afterSha256": "abbc79f3dc1625a853613b9803496f58c3cf67694852cf8629ada774a3c31a59"
+    },
+    {
+      "path": "wake/src/development_root_view.rs",
+      "exactFormatterOutputFromGitBaseline": true,
+      "beforeSha256": "387ad4b4b1a9810f017f2b79ea6231b6b977cc2d2417d0d72cc2e36f6643609f",
+      "afterSha256": "e90839c99ad76d1dfb59f47374cae96c46eab8a19d449a51ffd857e025eb9a90"
+    },
+    {
+      "path": "wake/src/runtime_bootstrap_observation.rs",
+      "exactFormatterOutputFromGitBaseline": true,
+      "beforeSha256": "a3019dadbe9b08431c4cf06b04cc22da82e5a4f3344bc14d3cc4c4ca746fccad",
+      "afterSha256": "c9b0f1dd150f9039a2dd24725286c809f5c439911151320a6957fd6384279f70"
+    }
+  ],
+  "qualifiedChecks": [
+    {
+      "command": "cargo fmt --all -- --check",
+      "exitCode": 0
+    },
+    {
+      "command": "cargo fmt --manifest-path wake/Cargo.toml --all -- --check",
+      "exitCode": 0
+    }
+  ],
+  "initialFailedChecksRetained": true,
+  "handwrittenBehaviorChange": false,
+  "newTestsOrCompiledCandidates": 0,
+  "claims": {
+    "requiredFormatGateRestored": true,
+    "entireDevelopmentVerifyReexecuted": false,
+    "newFunctionalAcceptance": false,
+    "newInstalledAcceptance": false,
+    "reviewOrProducerAuthorityCreated": false
+  },
+  "effects": {
+    "protectedInstallationWrites": 0,
+    "runtimeStarts": 0,
+    "browserOrWakeActions": 0,
+    "projectBindingOrGrantChanges": 0,
+    "originalUnknownDeliveriesPreserved": true
+  },
+  "remainingIndependentTracks": {
+    "operatorWakeMigration": "BLOCKED_PHYSICAL_STATE_AND_PURPOSE_AUTHORITY",
+    "d22IndependentBackendReview": "BLOCKED_MISSING_ORIGINAL_REVIEW_REPORT_CLAIM_ALREADY_ACCEPTED",
+    "liveDirectWebMvp": "BLOCKED_INSTALLED_PROJECT_SCOPED_EXECUTION_AND_CHECKPOINT_ACCEPTANCE",
+    "currentWakeReviewDraft": "BLOCKED_PENDING_OPERATOR_DRAFT_ONLY_DECISION_AFTER_TOOL_REFUSAL"
+  },
+  "goalComplete": false
+}
