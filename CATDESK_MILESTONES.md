@@ -1,5 +1,9 @@
 # CatDesk milestones
 
+Source-only follow-up 2026-11-15T20:32:08Z: `9d96f8e32f3fdf8b528d15eda453e9398f74a392` additionally validates retained operations against the original full preview-diff hash without executing or recording a tool call. The changed-operations denial, all eight native recovery tests, strict Clippy and formatting pass. The live-tested selected app remains the exact `79a449b` build; no candidate rebuild or protected promotion was performed for this follow-up.
+
+Latest verified progress 2026-11-15T20:23:03Z: the original local task recovered through the existing transaction, preserved its read/preview call IDs and applied one assigned-file patch through local MCP. Its fixed verification remains BLOCKED by Windows sandbox CreateProcessAsUserW error 5; no command replay, Git checkpoint or task completion. A separate fresh diagnostic Wake was delivered once, timer COMPLETE, and its task-bound acknowledgment was read automatically using the existing `review read` body reader. Production/v5 unchanged; all test owners cleaned up. This supersedes the earlier same-day HELD/read-preview-only state; full Web edit/verify/checkpoint/self-Wake remains OPEN. [recovery and live evidence](docs/verification/SETTLED_READ_ONLY_TASK_RECOVERY_2026_11_15.json).
+
 Latest decision 2026-11-15T19:33:36Z: one system and canonical v5 connection; frozen releases are production, source/builds are development. Existing local test facilities require no external setup or production upgrade. Local task test reached accepted read/preview only, then stopped on a harness receipt-parsing error; its original task remains fenced, with no edit/verify/Git/Wake acceptance. Production/profiles preserved and test-process cleanup verified. See [dated audit](CATDESK_ACTIVITY_LOG.md) and [qualification](docs/verification/DEVELOPMENT_PRODUCTION_SEPARATION_2026_11_15.json).
 
 ## 2026-11-15T19:18:45Z — Three independent tracks

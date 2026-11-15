@@ -1,5 +1,9 @@
 # CatDesk — Components and Interface Contracts
 
+**Source validation 2026-11-15T20:32:08Z:** retained proposal operations are now checked against their original full diff hash within the existing non-writing recovery validation. This adds no tool call, replay, authority, install or service. Source `9d96f8e32f3fdf8b528d15eda453e9398f74a392` passes eight native recovery tests and strict checks; selected live test app remains source `79a449b`.
+
+**Decision 2026-11-15T20:23:03Z:** Dedicated-owner task recovery now admits exact settled read/search/preview histories using the existing retirement transaction. `coldRecoveryProfile` describes this as DEDICATED_NAMED_JOB_NONMUTATING; the legacy zeroCallRecoveryOwnerClaim field remains for interface compatibility. The existing `review read` command is the event-bound body reader; `work response` reobserves installed timer state. No tool publication, connection or second reader service is added. See [dated proof](../verification/SETTLED_READ_ONLY_TASK_RECOVERY_2026_11_15.json).
+
 **Release-model clarification 2026-11-15T19:33:36Z:** one system and one unchanged canonical v5 interface. Frozen independently verified releases are production; authorized source/worktrees/builds and isolated local fixture tests are development. Reuse current selection, immutable artifacts, existing fallback/promotion/rollback and bounded owners. No new installation, release manager, tunnel, plugin, external connection or backend infrastructure. Local source work proceeds independently of protected-release acceptance.
 
 ## 2026-11-15T19:18:45Z — Development/production separation decision

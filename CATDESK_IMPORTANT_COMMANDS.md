@@ -1,5 +1,17 @@
 # CatDesk important commands
 
+Source-only follow-up 2026-11-15T20:32:08Z: `9d96f8e32f3fdf8b528d15eda453e9398f74a392` additionally validates retained operations against the original full preview-diff hash without executing or recording a tool call. The changed-operations denial, all eight native recovery tests, strict Clippy and formatting pass. The live-tested selected app remains the exact `79a449b` build; no candidate rebuild or protected promotion was performed for this follow-up.
+
+## 2026-11-15T20:23:03Z — Use the existing event-bound body reader
+
+```text
+<qualified-controller> operator web review read --project-id <registered-id> --event-id <exact-SENT-event>
+```
+
+Despite its historical `review` name, this existing reader handles the exact ordinary diagnostic event after delivery. It requires matching project, paired target generation/digest, SENT receipt and message hash, then uses the selected qualified browser owner for bounded read-only snapshotting. Require `eventVerified: true`; extract only necessary markers/errors, never arbitrary fallback snapshots. This grants no review verdict, execution, retry or release authority. `operator web work response` is installed timer re-observation and can return already-COMPLETE metadata without a body; do not treat its development refusal as proof that the body reader is missing.
+
+The original local task now has one completed patch and a failed native sandbox verifier receipt. Keep its exact assignment, original HEAD, uncommitted assigned-file edit and call IDs. Do not repeat the completed read/preview/apply/verify, change its command profile or create a replacement grant. After genuine new environment evidence, revalidate the existing task through supported controls before any new verification action. The observed CLI is 0.163.0; its help does not support the newer documented `sandbox setup` command, so no setup command is currently prescribed. Preserve all managed permissions and existing sandbox selection. [recovery and live evidence](docs/verification/SETTLED_READ_ONLY_TASK_RECOVERY_2026_11_15.json).
+
 Latest decision 2026-11-15T19:33:36Z: one system and canonical v5 connection; frozen releases are production, source/builds are development. Existing local test facilities require no external setup or production upgrade. Local task test reached accepted read/preview only, then stopped on a harness receipt-parsing error; its original task remains fenced, with no edit/verify/Git/Wake acceptance. Production/profiles preserved and test-process cleanup verified. See [dated audit](CATDESK_ACTIVITY_LOG.md) and [qualification](docs/verification/DEVELOPMENT_PRODUCTION_SEPARATION_2026_11_15.json).
 
 ## 2026-11-15T19:18:45Z — Use the existing development owner, not production promotion
