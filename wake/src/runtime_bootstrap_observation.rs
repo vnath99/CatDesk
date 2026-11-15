@@ -180,10 +180,130 @@ pub struct InitializationReadbackRequest<'a> {
     pub native_turn_started_utc: u64,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct InitializationReadbackObservation {
+    pub phase: String,
+    pub driver_route: String,
+    pub document_route: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub surface: Option<serde_json::Value>,
+}
+
+impl InitializationReadbackObservation {
+    pub fn validate(&self) -> Result<()> {
+        let phases = [
+            "NAVIGATION",
+            "INITIAL_OBSERVATION",
+            "HOME_RECOVERY",
+            "ORIGINAL_USER_CHECK",
+            "COMPLETION",
+            "REFRESH",
+            "PERSISTENCE",
+            "ACKNOWLEDGMENT",
+            "FINAL_USER_CHECK",
+        ];
+        let routes = [
+            "CHROME_ERROR",
+            "OTHER_HOST",
+            "AUTH",
+            "HOME",
+            "SAME_CONVERSATION",
+            "DIFFERENT_CONVERSATION",
+            "PROJECT_OTHER",
+            "OTHER_ROUTE",
+            "INVALID_ROUTE",
+        ];
+        if !phases.contains(&self.phase.as_str())
+            || !routes.contains(&self.driver_route.as_str())
+            || !routes.contains(&self.document_route.as_str())
+        {
+            return Err("INITIALIZATION_READBACK_DIAGNOSTIC_INVALID".into());
+        }
+        if self.failure_code.as_deref().is_some_and(|code| {
+            !matches!(
+                code,
+                "INITIALIZATION_READBACK_USER_UNPROVEN"
+                    | "INITIALIZATION_READBACK_FIXED_NAVIGATION_UNAVAILABLE"
+                    | "RESPONSE_TARGET_DRIFT"
+                    | "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"
+                    | "RESPONSE_STATE_QUERY_FAILED"
+                    | "BOOTSTRAP_INITIALIZATION_ACK_UNVERIFIED"
+                    | "LOGIN_OR_PROFILE_REQUIRED"
+                    | "CAPTCHA_OR_SECURITY_CHECK"
+                    | "EXISTING_DRAFT"
+                    | "BOOTSTRAP_HOME_NOT_READY"
+                    | "BOOTSTRAP_HOME_HAS_TURNS"
+                    | "BOOTSTRAP_HOME_DRIFT"
+                    | "BOOTSTRAP_DRAFT_SERIALIZATION_UNVERIFIED"
+                    | "BOOTSTRAP_RICH_DRAFT_UNVERIFIED"
+                    | "CHATGPT_NOT_IDLE"
+                    | "RESPONSE_LOAD_ERROR"
+                    | "RESPONSE_REFRESH_DRAFT_OR_EDITOR_UNPROVEN"
+                    | "RESPONSE_PERSISTENCE_UNPROVEN"
+                    | "OBSERVATION_UNPROVEN"
+            )
+        }) {
+            return Err("INITIALIZATION_READBACK_DIAGNOSTIC_INVALID".into());
+        }
+        if self.surface.as_ref().is_some_and(|value| {
+            crate::readiness_probe::surface_observation(&format!("PROBE:SURFACE:{value}")).is_none()
+        }) {
+            return Err("INITIALIZATION_READBACK_DIAGNOSTIC_INVALID".into());
+        }
+        Ok(())
+    }
+}
+
+fn readback_observation(
+    frame: &serde_json::Value,
+    request: &InitializationReadbackRequest<'_>,
+) -> Result<InitializationReadbackObservation> {
+    if frame.as_object().map(|v| v.len())
+        != Some(
+            10 + usize::from(frame.get("failureCode").is_some())
+                + usize::from(frame.get("surface").is_some()),
+        )
+        || !matches!(
+            frame["stage"].as_str(),
+            Some("INITIALIZATION_READBACK_DIAGNOSTIC" | "INITIALIZATION_READBACK_HOME_RECOVERED")
+        )
+        || frame["schemaVersion"] != 1
+        || frame["projectId"] != request.project
+        || frame["intentId"] != request.intent
+        || frame["registrationDigest"] != request.registration
+        || frame["messageDigest"]
+            != BootstrapOrigin::InitialRegistration(request.registration).message_digest(
+                request.project,
+                request.intent,
+                request.handoff,
+            )?
+        || frame["candidateDigest"] != crate::protocol::digest(request.candidate)
+    {
+        return Err("INITIALIZATION_READBACK_DIAGNOSTIC_INVALID".into());
+    }
+    let observation: InitializationReadbackObservation = serde_json::from_value(serde_json::json!({
+        "phase":frame["phase"],"driverRoute":frame["driverRoute"],"documentRoute":frame["documentRoute"],"failureCode":frame["failureCode"],"surface":frame["surface"]}))
+        .map_err(|_|"INITIALIZATION_READBACK_DIAGNOSTIC_INVALID")?;
+    observation.validate()?;
+    if frame["stage"] == "INITIALIZATION_READBACK_HOME_RECOVERED"
+        && (observation.phase != "HOME_RECOVERY"
+            || observation.driver_route != "SAME_CONVERSATION"
+            || observation.document_route != "SAME_CONVERSATION"
+            || observation.failure_code.is_some())
+    {
+        return Err("INITIALIZATION_READBACK_DIAGNOSTIC_INVALID".into());
+    }
+    Ok(observation)
+}
+
 pub fn read_initialization_candidate_guarded(
     store: &Store,
     request: InitializationReadbackRequest<'_>,
     keep_running: &dyn Fn() -> Result<()>,
+    observe: &mut dyn FnMut(InitializationReadbackObservation) -> Result<()>,
 ) -> Result<BootstrapReceipt> {
     let InitializationReadbackRequest {
         project,
@@ -212,6 +332,30 @@ pub fn read_initialization_candidate_guarded(
     {
         return Err("INITIALIZATION_READBACK_PACKAGE_REQUIRED".into());
     }
+    if !bytes
+        .windows(b"INITIALIZATION_READBACK_DIAGNOSTICS_V1 = True".len())
+        .any(|part| part == b"INITIALIZATION_READBACK_DIAGNOSTICS_V1 = True")
+    {
+        return Err("INITIALIZATION_READBACK_DIAGNOSTICS_PACKAGE_REQUIRED".into());
+    }
+    if !bytes
+        .windows(b"INITIALIZATION_READBACK_SURFACE_V1 = True".len())
+        .any(|part| part == b"INITIALIZATION_READBACK_SURFACE_V1 = True")
+    {
+        return Err("INITIALIZATION_READBACK_DIAGNOSTICS_PACKAGE_REQUIRED".into());
+    }
+    if !bytes
+        .windows(b"INITIALIZATION_READBACK_FAILURE_CODES_V1 = True".len())
+        .any(|part| part == b"INITIALIZATION_READBACK_FAILURE_CODES_V1 = True")
+    {
+        return Err("INITIALIZATION_READBACK_DIAGNOSTICS_PACKAGE_REQUIRED".into());
+    }
+    if !bytes
+        .windows(b"INITIALIZATION_READBACK_HOME_ONLY_V1 = True".len())
+        .any(|part| part == b"INITIALIZATION_READBACK_HOME_ONLY_V1 = True")
+    {
+        return Err("INITIALIZATION_READBACK_HOME_RECOVERY_PACKAGE_REQUIRED".into());
+    }
     let mut adapter = Adapter::spawn_from_installed_guarded(
         store.root(),
         &installed,
@@ -224,6 +368,8 @@ pub fn read_initialization_candidate_guarded(
         "candidateUrl":candidate,"nativeTurnStartedUtc":native_turn_started_utc}),
     )?;
     let deadline = Instant::now() + Duration::from_secs(TURN_TARGET_SECONDS);
+    let mut diagnostic_seen = false;
+    let mut home_recovered = false;
     while Instant::now() < deadline {
         let value = match guarded_browser_receive(&adapter.output, keep_running)? {
             Ok(Ok(value)) => value,
@@ -232,7 +378,38 @@ pub fn read_initialization_candidate_guarded(
             }
             Err(mpsc::RecvTimeoutError::Timeout) => continue,
         };
+        if diagnostic_seen && value["stage"] != "ATTENTION" {
+            return Err("INITIALIZATION_READBACK_PROTOCOL_INVALID".into());
+        }
         match value["stage"].as_str() {
+            Some("INITIALIZATION_READBACK_HOME_RECOVERED") if !home_recovered => {
+                let request = InitializationReadbackRequest {
+                    project,
+                    intent,
+                    registration,
+                    handoff,
+                    candidate,
+                    native_turn_started_utc,
+                };
+                let observation = readback_observation(&value, &request)?;
+                keep_running()?;
+                observe(observation)?;
+                home_recovered = true;
+            }
+            Some("INITIALIZATION_READBACK_DIAGNOSTIC") => {
+                let request = InitializationReadbackRequest {
+                    project,
+                    intent,
+                    registration,
+                    handoff,
+                    candidate,
+                    native_turn_started_utc,
+                };
+                let diagnostic = readback_observation(&value, &request)?;
+                keep_running()?;
+                observe(diagnostic)?;
+                diagnostic_seen = true;
+            }
             Some("INITIALIZATION_READBACK_COMPLETE") => {
                 let receipt: BootstrapReceipt = serde_json::from_value(value["receipt"].clone())
                     .map_err(|_| "INITIALIZATION_READBACK_RECEIPT_INVALID")?;
@@ -280,6 +457,16 @@ pub fn read_initialization_candidate_guarded(
                         "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"
                     }
                     Some("RESPONSE_NETWORK_ERROR") => "RESPONSE_NETWORK_ERROR",
+                    Some("EXISTING_DRAFT" | "BOOTSTRAP_RICH_DRAFT_UNVERIFIED") => {
+                        "INITIALIZATION_READBACK_HOME_DRAFT_PRESERVED"
+                    }
+                    Some("CHATGPT_NOT_IDLE") => "INITIALIZATION_READBACK_HOME_GENERATION_ACTIVE",
+                    Some("BOOTSTRAP_HOME_NOT_READY" | "BOOTSTRAP_HOME_HAS_TURNS") => {
+                        "INITIALIZATION_READBACK_HOME_STATE_UNPROVEN"
+                    }
+                    Some("INITIALIZATION_READBACK_FIXED_NAVIGATION_UNAVAILABLE") => {
+                        "INITIALIZATION_READBACK_FIXED_NAVIGATION_UNAVAILABLE"
+                    }
                     _ => "INITIALIZATION_READBACK_OBSERVATION_UNPROVEN",
                 };
                 return Err(reason.into());
@@ -303,6 +490,78 @@ pub fn read_initialization_candidate_guarded(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn initialization_readback_diagnostic_is_closed_and_exactly_scoped() {
+        let request = InitializationReadbackRequest {
+            project: "alpha",
+            intent: "initial-one",
+            registration: &"a".repeat(64),
+            handoff: "original handoff",
+            candidate: "https://chatgpt.com/c/original",
+            native_turn_started_utc: 1,
+        };
+        let frame = serde_json::json!({"stage":"INITIALIZATION_READBACK_DIAGNOSTIC","schemaVersion":1,
+            "projectId":request.project,"intentId":request.intent,"registrationDigest":request.registration,
+            "messageDigest":BootstrapOrigin::InitialRegistration(request.registration).message_digest(request.project,request.intent,request.handoff).unwrap(),
+            "candidateDigest":crate::protocol::digest(request.candidate),"phase":"INITIAL_OBSERVATION",
+            "driverRoute":"SAME_CONVERSATION","documentRoute":"HOME"});
+        let observed = readback_observation(&frame, &request).unwrap();
+        assert_eq!(observed.document_route, "HOME");
+        let mut surfaced = frame.clone();
+        surfaced["surface"] = serde_json::json!({"route":"HOME","document":"COMPLETE","history":"ABSENT",
+            "editor":"MISSING","composer":"UNKNOWN","generation":"IDLE","assistant":"ABSENT",
+            "exchange":"UNATTRIBUTED","recovery":"OBSERVATION_ONLY"});
+        assert!(readback_observation(&surfaced, &request).is_ok());
+        surfaced["surface"]["body"] = serde_json::json!("private context");
+        assert!(readback_observation(&surfaced, &request).is_err());
+        let mut reasoned = frame.clone();
+        reasoned["failureCode"] = serde_json::json!("BOOTSTRAP_HOME_NOT_READY");
+        assert_eq!(
+            readback_observation(&reasoned, &request)
+                .unwrap()
+                .failure_code
+                .as_deref(),
+            Some("BOOTSTRAP_HOME_NOT_READY")
+        );
+        reasoned["failureCode"] = serde_json::json!("private context execution key");
+        assert!(readback_observation(&reasoned, &request).is_err());
+        for (key, value) in [
+            ("projectId", serde_json::json!("other")),
+            ("intentId", serde_json::json!("other")),
+            ("registrationDigest", serde_json::json!("b".repeat(64))),
+            ("messageDigest", serde_json::json!("b".repeat(64))),
+            ("candidateDigest", serde_json::json!("b".repeat(64))),
+            ("phase", serde_json::json!("private draft")),
+            ("driverRoute", serde_json::json!(request.candidate)),
+            ("documentRoute", serde_json::json!("private context")),
+            ("schemaVersion", serde_json::json!(true)),
+        ] {
+            let mut changed = frame.clone();
+            changed[key] = value;
+            assert!(readback_observation(&changed, &request).is_err());
+        }
+        let mut recovered = frame.clone();
+        recovered["stage"] = serde_json::json!("INITIALIZATION_READBACK_HOME_RECOVERED");
+        recovered["phase"] = serde_json::json!("HOME_RECOVERY");
+        recovered["documentRoute"] = serde_json::json!("SAME_CONVERSATION");
+        assert!(readback_observation(&recovered, &request).is_ok());
+        for field in ["driverRoute", "documentRoute"] {
+            let mut invalid = recovered.clone();
+            invalid[field] = serde_json::json!("HOME");
+            assert!(readback_observation(&invalid, &request).is_err());
+        }
+        recovered["phase"] = serde_json::json!("INITIAL_OBSERVATION");
+        assert!(readback_observation(&recovered, &request).is_err());
+        let mut changed = frame;
+        changed["body"] = serde_json::json!("private context");
+        assert!(readback_observation(&changed, &request).is_err());
+        assert!(
+            !serde_json::to_string(&observed)
+                .unwrap()
+                .contains(request.candidate)
+        );
+    }
 
     fn frame() -> serde_json::Value {
         let url = "https://chatgpt.com/c/readback-candidate";

@@ -1,6 +1,6 @@
 # CatDesk project handoff
 
-Single resumption entry point. Reconciled 2026-11-14T21:28:42Z. Source facts below are dated; live health becomes UNVERIFIED after interruption until checked.
+Single resumption entry point. Reconciled 2026-11-15T00:26:51Z. Source facts below are dated; live health becomes UNVERIFIED after interruption until checked.
 
 ## Mission and priority
 
@@ -28,7 +28,7 @@ Fresh read-only baseline on November 14: authenticated loopback catalog has 102 
 
 | Work / owner | State / evidence | Next eligible action |
 | --- | --- | --- |
-| WAKE-LIFECYCLE / current product owner | IN_PROGRESS / SOURCE_TESTED; original USER and acknowledgment found through native history; development readback package selected; browser readback refused RESPONSE_TARGET_DRIFT | Retain bounded route class and readback phase, then reconcile the same original intent without any resend. Two-turn Wake and direct Web work remain OPEN |
+| WAKE-LIFECYCLE / current product owner | IN_PROGRESS / SOURCE_TESTED; actual diagnostic captures complete Home, missing editor/history and unknown composer; original journal unchanged; native history still contains one USER | Connect the existing verified-tab selector to immutable readback primitives, then reobserve the original candidate without send, draft mutation or another browser owner |
 | DOC-CONTINUITY / Codex documentation owner | DONE / SOURCE_TESTED; development and primary synchronized, 23 tests each, both fresh-AI exercises pass | Review the recorded sync evidence; separate architecture task may begin only under its own scope |
 | C1-UI-002 / existing feature owner; resume ownership check required | IN_PROGRESS / SOURCE_TESTED; exact HTML serves locally, client times out; fallback is not installed | On existing UI feature branch, qualify a standard host-bridge fixture; do not replay a mutating tool to test UI |
 | Original C1 and C49 / original task owners | Held original task/grant/journals; cached native refusal not safely replayable | Reconcile authoritative receipts before any original operation; never replace grant/fences |
@@ -44,6 +44,10 @@ The newly registered disposable project `catdesk-wake-turn-canary-nov14`, task `
 
 ## Resume procedure and safety
 
+Latest observation, 2026-11-15T00:26:51Z: source `c43265ad4d6054f92afd22762beb2740ffc34c81` is selected only in the existing unprotected development runtime. Readback now automatically retains project/task-bound driver/document route classes, phase, closed failure code and the existing nine-field browser-surface observation. Its actual refusal is `INITIALIZATION_READBACK_HOME_STATE_UNPROVEN`, underlying `BOOTSTRAP_HOME_NOT_READY`: document COMPLETE, route HOME, editor MISSING, history ABSENT, generation IDLE, composer UNKNOWN. This is not proof of lost authentication or an empty draft. No receipt/binding was committed. The original journal bytes remain unchanged; native ChatGPT history independently confirms exactly one original matching USER and one completed assistant turn. Cleanup passed and production/other project state is preserved. [Actual diagnostic and preservation evidence](docs/verification/READBACK_HOME_DIAGNOSTICS_2026_11_15.json).
+
+The existing readiness probe already implements `select_registered_target_tab`, requiring a unique metadata and document match before switching within the same CDP session. The adapter readback does not yet use it. Integrating that qualified selector through the immutable browser primitives is the next source task; do not bypass the empty-Home/draft guard, retry an unknown send, create another profile/context, or ask the operator to classify this state manually. Full two-turn Wake, useful direct Web work and serial multi-project acceptance remain OPEN.
+
 At 2026-11-14T23:34:28Z, the matched package from feature source `cc7b9aac8d920975125a5079fc9b69383d6490fb` was selected through the existing **unprotected development** update procedure. Its verified predecessor remains intact. Native ChatGPT history independently shows exactly one original matching USER and one completed acknowledgment; raw Markdown contains a known escape in the acknowledgment prefix. This is a candidate witness, not a browser receipt or release-review authority. One no-send browser recovery refused `RESPONSE_TARGET_DRIFT`; no receipt or binding was committed, and the original journal remains fenced. The failing observation's route class and phase were not retained, so the underlying navigation cause is not established. Cleanup passed; protected production, other bindings, profiles and task inventories are preserved. [Source and actual readback evidence](docs/verification/BOOTSTRAP_READBACK_RECOVERY_2026_11_14.json). Next: improve those bounded diagnostics through the same adapter/runtime and retry only the permitted read-only observation after a material correction. Do not resubmit initialization or replace its task.
 
 The operator's current local execution specification is in the primary checkout's `docs/handoffs` directory under `CATDESK_WAKE_LIFECYCLE_AND_PRODUCT_PROGRESS_GOAL_2026-11-14.md`. Its dated baseline statements are historical; current journals and the verification records above govern observed execution.
@@ -57,5 +61,5 @@ Without a connector: clone GitHub, check out the canonical development branch, i
 The machine `source_sha` identifies the qualified integration checkpoint, not the self-referential publication SHA of this document. Read actual checkout HEAD and remote refs before work.
 
 ```json
-{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"cc7b9aac8d920975125a5079fc9b69383d6490fb","branch":"codex/wake-lifecycle-nov14","status":"IN_PROGRESS","runtime_status":"UNVERIFIED","blocker":"ORIGINAL_READBACK_RESPONSE_TARGET_DRIFT_ROUTE_CLASS_AND_PHASE_NOT_RETAINED","next_action":"Add bounded route-class and observation-phase diagnostics, then recover the original exchange without resending before the two-turn Wake test"}
+{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"c43265ad4d6054f92afd22762beb2740ffc34c81","branch":"codex/wake-lifecycle-nov14","status":"IN_PROGRESS","runtime_status":"UNVERIFIED","blocker":"HOME_DOCUMENT_COMPLETE_EDITOR_MISSING_VERIFIED_TAB_SELECTION_NOT_IN_ADAPTER","next_action":"Reuse the existing verified-tab selector in immutable readback primitives, then verify the original conversation without sending again"}
 ```

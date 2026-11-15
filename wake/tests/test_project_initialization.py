@@ -240,7 +240,7 @@ class ProjectInitializationTests(unittest.TestCase):
                     bridge.compose_initialization_message("project-first", "initialize-first",
                         registration, body)
 
-    def readback_case(self, *, request_change=None, fault=None):
+    def readback_case(self, *, request_change=None, fault=None, surface=False):
         original = self.request()
         request = {key: original[key] for key in ["projectId", "intentId", "registrationDigest", "handoff"]}
         request.update(initializationReadback=True, candidateUrl=ISSUED, nativeTurnStartedUtc=1)
@@ -250,13 +250,50 @@ class ProjectInitializationTests(unittest.TestCase):
         expected = bridge.digest(bridge.normalize_message(message))
         cdp = AttemptCdp()
         cdp.url, cdp.typed_message, cdp.draft = ISSUED, message, "untouched operator draft"
+        home_fault = bool(fault and fault.startswith("home-"))
+        if home_fault:
+            cdp.url = bridge.NEW_CONVERSATION_HOME
+            cdp.draft = "untouched operator draft" if fault == "home-draft" else ""
+        cdp.evaluate = lambda script: "https://chatgpt.com/" if fault == "document-home" else cdp.url
         output = []
 
         class ReadbackSink(AttemptSink):
+            cdp_value = staticmethod(bridge.CdpSink.cdp_value)
             def observe_cooperative_response(self, cdp, message, digest):
+                if fault == "private-error":raise RuntimeError("private context execution key")
+                if home_fault and cdp.url == bridge.NEW_CONVERSATION_HOME:
+                    raise bridge.Attention("RESPONSE_TARGET_DRIFT")
+                if fault == "document-home": raise bridge.Attention("RESPONSE_TARGET_DRIFT")
                 if fault in {"LOGIN_OR_PROFILE_REQUIRED", "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"}:
                     raise bridge.Attention(fault)
                 return "RESPONSE_COMPLETE"
+
+            def error(self, cdp, current=None): return False
+
+            def browser_surface_observation(self, cdp):
+                if not surface:raise AttributeError("fixture has no surface reader")
+                return {"route":"HOME","document":"COMPLETE","history":"ABSENT","editor":"MISSING",
+                    "composer":"UNKNOWN","generation":"IDLE","assistant":"ABSENT",
+                    "exchange":"UNATTRIBUTED","recovery":"OBSERVATION_ONLY"}
+
+            def check_empty_home(self, cdp):
+                if cdp.draft: raise bridge.Attention("EXISTING_DRAFT")
+                for condition,code in [("home-login","LOGIN_OR_PROFILE_REQUIRED"),
+                                       ("home-active","CHATGPT_NOT_IDLE"),
+                                       ("home-editor","BOOTSTRAP_HOME_NOT_READY")]:
+                    if fault == condition: raise bridge.Attention(code)
+                assert cdp.url == bridge.NEW_CONVERSATION_HOME
+
+            def check_plain_home_draft(self, cdp):
+                if fault == "home-rich": raise bridge.Attention("BOOTSTRAP_RICH_DRAFT_UNVERIFIED")
+
+            def retry_page_readiness(self, sb, cdp, *, home_only):
+                assert home_only is True
+                if fault == "home-stuck": return cdp
+                return bridge.CdpSink.retry_page_readiness(self,sb,cdp,home_only=home_only)
+
+            def require_response_document(self, cdp):
+                return bridge.CdpSink.require_response_document(self,cdp)
 
             def user_message_digests(self, cdp):
                 if fault == "duplicate-user": return [expected, expected]
@@ -280,14 +317,19 @@ class ProjectInitializationTests(unittest.TestCase):
                 if fault == "missing-ack": raise bridge.Attention("BOOTSTRAP_INITIALIZATION_ACK_UNVERIFIED")
                 cdp.timeline.append("ack-verified")
 
+        bounded_observe=adapter.bounded_response_observation
+        def observation(module,sink,cdp,message,expected):
+            if home_fault: return sink.observe_cooperative_response(cdp,message,expected)
+            return bounded_observe(module,sink,cdp,message,expected)
         with patch.object(bridge,"NewConversationSink",ReadbackSink), patch.object(adapter,"emit",output.append), \
              patch.object(adapter,"prepare_cdp_target",return_value=cdp) as opened, \
+             patch.object(adapter,"bounded_response_observation",side_effect=observation), \
              patch.object(adapter,"read_request",side_effect=AssertionError("readback must not request submit ACK")), \
              patch.object(adapter.time,"sleep",return_value=None):
             try:
                 adapter.initialization_readback(bridge,types.SimpleNamespace(cdp=cdp),request)
                 error = None
-            except (bridge.Attention, KeyboardInterrupt) as failure:
+            except (Exception, KeyboardInterrupt) as failure:
                 error = failure
         return cdp, output, error, opened.call_count
 
@@ -325,6 +367,95 @@ class ProjectInitializationTests(unittest.TestCase):
                 self.assertEqual(opens,0)
                 self.assertEqual(cdp.sent,0)
                 self.assertEqual(output,[])
+
+    def test_initialization_readback_distinguishes_driver_and_document_routes_without_content(self):
+        cdp, output, error, opens = self.readback_case(fault="document-home")
+        self.assertEqual(str(error),"RESPONSE_TARGET_DRIFT")
+        self.assertEqual(opens,1)
+        self.assertEqual(cdp.sent,0)
+        diagnostics=[row for row in output if row["stage"]=="INITIALIZATION_READBACK_DIAGNOSTIC"]
+        self.assertEqual(len(diagnostics),1)
+        diagnostic=diagnostics[0]
+        self.assertEqual(diagnostic["phase"],"INITIAL_OBSERVATION")
+        self.assertEqual(diagnostic["driverRoute"],"SAME_CONVERSATION")
+        self.assertEqual(diagnostic["documentRoute"],"HOME")
+        self.assertEqual(diagnostic["failureCode"],"RESPONSE_TARGET_DRIFT")
+        wire=json.dumps(diagnostic)
+        for private in [ISSUED,"https://chatgpt.com/","untouched operator draft","handoff","workspace"]:
+            self.assertNotIn(private,wire)
+        self.assertEqual(set(diagnostic),{"stage","schemaVersion","projectId","intentId",
+            "registrationDigest","messageDigest","candidateDigest","phase","driverRoute","documentRoute","failureCode"})
+
+    def test_initialization_readback_never_exports_an_unknown_exception_message(self):
+        _,output,error,_=self.readback_case(fault="private-error")
+        self.assertIsNotNone(error)
+        self.assertEqual(output[-1]["failureCode"],"OBSERVATION_UNPROVEN")
+        self.assertNotIn("private context execution key",json.dumps(output))
+
+    def test_initialization_readback_reuses_closed_browser_surface_metadata(self):
+        _,output,error,_=self.readback_case(fault="document-home",surface=True)
+        self.assertEqual(str(error),"RESPONSE_TARGET_DRIFT")
+        self.assertEqual(output[-1]["surface"]["editor"],"MISSING")
+        self.assertEqual(output[-1]["surface"]["document"],"COMPLETE")
+        self.assertEqual(output[-1]["surface"]["exchange"],"UNATTRIBUTED")
+        self.assertNotIn(ISSUED,json.dumps(output))
+
+    def test_initialization_readback_failure_records_the_actual_phase_only(self):
+        for fault,phase in [("wrong-user","ORIGINAL_USER_CHECK"),("RESPONSE_LOAD_ERROR","COMPLETION"),
+                            ("target-drift","PERSISTENCE"),("missing-ack","ACKNOWLEDGMENT")]:
+            with self.subTest(fault=fault):
+                _,output,_,_=self.readback_case(fault=fault)
+                self.assertEqual(output[-1]["stage"],"INITIALIZATION_READBACK_DIAGNOSTIC")
+                self.assertEqual(output[-1]["phase"],phase)
+
+    def test_initialization_readback_recovers_empty_home_once_in_the_same_cdp_without_send(self):
+        cdp,output,error,_=self.readback_case(fault="home-empty")
+        self.assertIsNone(error)
+        self.assertEqual(cdp.sent,0)
+        self.assertEqual(cdp.navigation,[ISSUED])
+        recovered=[row for row in output if row["stage"]=="INITIALIZATION_READBACK_HOME_RECOVERED"]
+        self.assertEqual(len(recovered),1)
+        self.assertEqual(recovered[0]["phase"],"HOME_RECOVERY")
+        self.assertEqual(recovered[0]["driverRoute"],"SAME_CONVERSATION")
+        self.assertEqual(recovered[0]["documentRoute"],"SAME_CONVERSATION")
+        self.assertEqual(output[-1]["stage"],"INITIALIZATION_READBACK_COMPLETE")
+
+    def test_initialization_readback_home_safety_gates_preserve_drafts_and_original_unknown(self):
+        for fault in ["home-draft","home-login","home-active","home-editor","home-rich","home-stuck"]:
+            with self.subTest(fault=fault):
+                cdp,output,error,_=self.readback_case(fault=fault)
+                self.assertIsNotNone(error)
+                self.assertEqual(cdp.sent,0)
+                self.assertEqual(cdp.navigation,[])
+                self.assertEqual(output[-1]["stage"],"INITIALIZATION_READBACK_DIAGNOSTIC")
+                self.assertEqual(output[-1]["phase"],"HOME_RECOVERY")
+                self.assertFalse(any("receipt" in row for row in output))
+                if fault=="home-draft":self.assertEqual(cdp.draft,"untouched operator draft")
+
+    def test_home_only_recovery_cannot_fall_through_to_reload_or_another_cdp_context(self):
+        actions=[]
+        sb=types.SimpleNamespace(activate_cdp_mode=lambda *_:actions.append("activate"))
+        for url in [ISSUED,SOURCE,"chrome-error://chromewebdata/","https://example.test/"]:
+            cdp=types.SimpleNamespace(get_current_url=lambda:url,
+                reload=lambda **_:actions.append("reload"),get=lambda _:actions.append("navigate"))
+            sink=types.SimpleNamespace(url=ISSUED,error=lambda *_:True)
+            self.assertIs(bridge.CdpSink.retry_page_readiness(sink,sb,cdp,home_only=True),cdp)
+            self.assertEqual(actions,[])
+        for guard in ["draft","rich","missing-native-navigation"]:
+            cdp=types.SimpleNamespace(get_current_url=lambda:bridge.NEW_CONVERSATION_HOME,
+                reload=lambda **_:actions.append("reload"))
+            if guard != "missing-native-navigation": cdp.get=lambda _:actions.append("navigate")
+            def empty(_):
+                if guard == "draft":raise bridge.Attention("EXISTING_DRAFT")
+            def plain(_):
+                if guard == "rich":raise bridge.Attention("BOOTSTRAP_RICH_DRAFT_UNVERIFIED")
+            sink=types.SimpleNamespace(url=ISSUED,error=lambda *_:False,
+                check_empty_home=empty,check_plain_home_draft=plain)
+            if guard=="missing-native-navigation":
+                self.assertIs(bridge.CdpSink.retry_page_readiness(sink,sb,cdp,home_only=True),cdp)
+            else:
+                with self.assertRaises(bridge.Attention):bridge.CdpSink.retry_page_readiness(sink,sb,cdp,home_only=True)
+            self.assertEqual(actions,[])
 
 
 if __name__ == "__main__":

@@ -3467,6 +3467,7 @@ class CdpSink:
         *,
         monotonic=time.monotonic,
         sleeper=time.sleep,
+        home_only: bool = False,
     ) -> Any:
         """Perform one bounded pre-submit recovery at a readiness boundary.
 
@@ -3475,6 +3476,10 @@ class CdpSink:
         still positively classified as a network error may recovery reopen the
         same canonical target. No caller-selected URL or second browser
         context is introduced.
+
+        Readback's home_only mode requires the native empty-Home guards and
+        permits only same-CDP navigation. It never falls through to a reload,
+        handles another route, or activates a replacement CDP context.
         """
         try:
             current = str(cdp.get_current_url())
@@ -3482,7 +3487,12 @@ class CdpSink:
             current = None
         try:
             route = bounded_route_class(current, self.url) if current else "INVALID_ROUTE"
+            if home_only and route != "HOME":
+                return cdp
             if self.error(cdp, current) or route == "HOME":
+                if home_only:
+                    self.check_empty_home(cdp)
+                    self.check_plain_home_draft(cdp)
                 if observer is not None:
                     observer(route, "RECOVERY_BEGIN")
                 # Navigate the already-active CDP tab in place. The proven
@@ -3493,6 +3503,8 @@ class CdpSink:
                 navigate = getattr(cdp, "get", None)
                 if callable(navigate):
                     navigate(self.url)
+                elif home_only:
+                    return cdp
                 else:
                     sb.activate_cdp_mode(self.url)
                     replacement = getattr(sb, "cdp", None)
@@ -3530,11 +3542,15 @@ class CdpSink:
                     observer(recovered_route, "RECOVERY_RETURN")
                 return cdp
         except Exception:
+            if home_only:
+                raise
             # The next readiness window retains the bounded network/HOME
             # diagnostic; recovery never converts an exception into ready
             # without re-checking the exact target and editor.
             return cdp
 
+        if home_only:
+            return cdp
         reload_page = getattr(cdp, "reload", None)
         if callable(reload_page):
             try:

@@ -69,3 +69,11 @@ Evidence: [docs/verification/WAKE_LIFECYCLE_LIVE_RECOVERY_2026_11_14.json](docs/
 Agent: Codex. Source: cc7b9aac8d920975125a5079fc9b69383d6490fb. Outcome: partial. Original USER and completed acknowledgment recovered through native history; matched development package selected, no-send browser readback refused RESPONSE_TARGET_DRIFT and retained original fence. Next: Add bounded route-class and observation-phase diagnostics, then recover the original exchange without resending before the two-turn Wake test.
 
 Evidence: [docs/verification/BOOTSTRAP_READBACK_RECOVERY_2026_11_14.json](docs/verification/BOOTSTRAP_READBACK_RECOVERY_2026_11_14.json); command: Local Rust and Python checks; existing development update-package and one no-send initialize recover; exit 2; SHA-256 a17e496d003207c313e851da7087eb6200124314acf946e9d7d9522a0338faec.
+
+<!-- catdesk-activity:wake-readback-home-diagnostics-nov15 sha256:fbef165bffef7cb1dfee8b0fdc0b4837c1a4492ebef09233bb73f91e9a7e3d3d -->
+
+## 2026-11-15T00:29:20.717629+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: c43265ad4d6054f92afd22762beb2740ffc34c81. Outcome: partial. Autonomous readback now retains exact Home/editor/phase failure states and safe CLI codes; live Home has no editor, original journal unchanged and native history still has one USER. Next: Reuse the existing verified-tab selector in immutable readback primitives, then verify the original conversation without sending again.
+
+Evidence: [docs/verification/READBACK_HOME_DIAGNOSTICS_2026_11_15.json](docs/verification/READBACK_HOME_DIAGNOSTICS_2026_11_15.json); command: Scoped local regressions and bounded no-send development readbacks with native no-replay proof; exit 2; SHA-256 68588e0105e2ec81fa6f0d93a59b06e663e5f9a9ee26cdcddc8f2f75254a8bfc.

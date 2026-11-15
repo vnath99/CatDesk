@@ -553,9 +553,57 @@ pub(crate) fn recover(
                     native_turn_started_utc: input.native_turn_started_utc,
                 },
                 keep_running,
+                &mut |observation| {
+                    retain_readback_observation(workspace, record, input, &observation)
+                },
             )
         },
     )
+}
+
+fn retain_readback_observation(
+    workspace: &Path,
+    record: &InitialConversation,
+    input: &RecoveryInput,
+    observation: &runtime::InitializationReadbackObservation,
+) -> Result<(), String> {
+    // Private, content-addressed diagnostic evidence in the existing project
+    // journal directory. It cannot change the frozen journal, receipt or fence.
+    observation.validate()?;
+    let root = workspace
+        .join(".catdesk/web-rollovers")
+        .join(&record.project_id);
+    plain(&root, true)?;
+    let original = root.join(FILE);
+    plain(&original, false)?;
+    use sha2::Digest;
+    if format!(
+        "{:x}",
+        sha2::Sha256::digest(fs::read(&original).map_err(|_| "WEB_INITIAL_JOURNAL_UNAVAILABLE")?)
+    ) != input.expected_record_sha256
+    {
+        return Err("WEB_INITIAL_RECOVERY_RECORD_CHANGED".into());
+    }
+    let evidence = json!({"schemaVersion":1,"purpose":"INITIALIZATION_READBACK_DIAGNOSTIC_NOT_RECEIPT",
+        "projectId":record.project_id,"intentId":record.intent_id,"sourceGeneration":0,
+        "registrationDigest":record.registration_digest,"messageDigest":record.message_digest,
+        "candidateDigest":digest(&input.candidate_url),"originalRecordSha256":input.expected_record_sha256,
+        "nativeProofSha256":input.native_proof_sha256,"observation":observation});
+    let path = root.join(format!(
+        "initial-readback-{}.json",
+        recovery_hash(&evidence)?
+    ));
+    if path
+        .try_exists()
+        .map_err(|_| "WEB_INITIAL_OBSERVATION_UNAVAILABLE")?
+    {
+        plain(&path, false)?;
+        if read::<Value>(&path)? != evidence {
+            return Err("WEB_INITIAL_OBSERVATION_CHANGED".into());
+        }
+        return Ok(());
+    }
+    create_private_once(&path, &evidence)
 }
 
 fn recover_with_observer(
@@ -988,6 +1036,54 @@ mod first_conversation_tests {
             .unwrap()["phase"],
             "BOUND"
         );
+    }
+
+    #[test]
+    fn first_conversation_readback_diagnostic_retains_evidence_without_changing_frozen_state() {
+        let (_parent, control, _wake, input) = unknown_fixture();
+        let store = ProjectStore::open_existing(&control, "first").unwrap();
+        let record = load(&store).unwrap().unwrap();
+        let before = fs::read(store.root.join(FILE)).unwrap();
+        let observation = runtime::InitializationReadbackObservation {
+            phase: "INITIAL_OBSERVATION".into(),
+            driver_route: "SAME_CONVERSATION".into(),
+            document_route: "HOME".into(),
+            failure_code: None,
+            surface: None,
+        };
+        retain_readback_observation(&control, &record, &input, &observation).unwrap();
+        retain_readback_observation(&control, &record, &input, &observation).unwrap();
+        assert_eq!(fs::read(store.root.join(FILE)).unwrap(), before);
+        let entries = fs::read_dir(&store.root)
+            .unwrap()
+            .flatten()
+            .filter(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .starts_with("initial-readback-")
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(entries.len(), 1);
+        let evidence: Value = read(&entries[0].path()).unwrap();
+        assert_eq!(
+            evidence["purpose"],
+            "INITIALIZATION_READBACK_DIAGNOSTIC_NOT_RECEIPT"
+        );
+        assert_eq!(evidence["observation"]["documentRoute"], "HOME");
+        assert_eq!(
+            evidence["originalRecordSha256"],
+            input.expected_record_sha256
+        );
+        assert_eq!(evidence["receipt"], Value::Null);
+        assert!(
+            !serde_json::to_string(&evidence)
+                .unwrap()
+                .contains(&input.candidate_url)
+        );
+        let mut invalid = observation;
+        invalid.document_route = "private context".into();
+        assert!(retain_readback_observation(&control, &record, &input, &invalid).is_err());
+        assert_eq!(fs::read(store.root.join(FILE)).unwrap(), before);
     }
 
     #[test]
