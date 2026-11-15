@@ -401,12 +401,120 @@ mod windows {
     #[cfg(test)]
     mod tests {
         use super::*;
-        fn native_canary(profile: CommandProfile, expected: impl Fn(&str) -> bool) {
-            let root = std::env::temp_dir().join(format!(
+        #[derive(Clone, Copy)]
+        enum RuntimePlacement {
+            Installed,
+            Workspace,
+            PrivateDenied,
+            PrivateProvisioned,
+        }
+
+        fn native_canary(
+            mut profile: CommandProfile,
+            expected: impl Fn(&str) -> bool,
+            placement: RuntimePlacement,
+        ) {
+            let fixture = std::env::temp_dir().join(format!(
                 "catdesk-native-command-canary-{}",
                 uuid::Uuid::new_v4()
             ));
+            std::fs::create_dir(&fixture).unwrap();
+            let root = fixture.join("work");
             std::fs::create_dir(&root).unwrap();
+            let mut staged_files = serde_json::Map::new();
+            let mut external_runtime = None;
+            if !matches!(placement, RuntimePlacement::Installed) {
+                let source = Path::new(&profile.argv[0]).parent().unwrap();
+                let target = if matches!(
+                    placement,
+                    RuntimePlacement::PrivateDenied | RuntimePlacement::PrivateProvisioned
+                ) {
+                    // Use a fresh private location outside the workspace's
+                    // ancestors/default temp access, so the negative control
+                    // cannot accidentally inherit access from the write root.
+                    let home = PathBuf::from(
+                        std::env::var_os("CATDESK_TEST_PRIVATE_RUNTIME_PARENT")
+                            .expect("PRIVATE_RUNTIME_FIXTURE_PARENT_REQUIRED"),
+                    );
+                    let target = home.join(format!(
+                        "catdesk-private-runtime-probe-{}",
+                        uuid::Uuid::new_v4()
+                    ));
+                    assert!(target.is_absolute() && target.parent() == Some(home.as_path()));
+                    external_runtime = Some(target.clone());
+                    target
+                } else {
+                    root.join("runtime")
+                };
+                std::fs::create_dir(&target).unwrap();
+                for name in [
+                    "python.exe",
+                    "python3.dll",
+                    "python312.dll",
+                    "vcruntime140.dll",
+                    "vcruntime140_1.dll",
+                ] {
+                    let (_source_pin, expected_sha) = retained_image(&source.join(name)).unwrap();
+                    std::fs::copy(source.join(name), target.join(name)).unwrap();
+                    let (_target_pin, actual_sha) = retained_image(&target.join(name)).unwrap();
+                    assert_eq!(actual_sha, expected_sha, "STAGED_RUNTIME_IMAGE_CHANGED");
+                    staged_files.insert(name.into(), serde_json::json!(actual_sha));
+                }
+                if matches!(
+                    placement,
+                    RuntimePlacement::PrivateDenied | RuntimePlacement::PrivateProvisioned
+                ) {
+                    std::fs::create_dir_all(target.join("Lib/encodings")).unwrap();
+                    let mut files = vec![source.join("Lib/os.py")];
+                    files.extend(
+                        std::fs::read_dir(source.join("Lib/encodings"))
+                            .unwrap()
+                            .map(|entry| entry.unwrap().path())
+                            .filter(|path| path.extension().is_some_and(|ext| ext == "py")),
+                    );
+                    files.sort();
+                    let mut manifest = Vec::new();
+                    for path in files {
+                        let (_pin, hash) = retained_image(&path).unwrap();
+                        let relative = path.strip_prefix(source).unwrap();
+                        std::fs::copy(&path, target.join(relative)).unwrap();
+                        let (_copy_pin, copy_hash) =
+                            retained_image(&target.join(relative)).unwrap();
+                        assert_eq!(hash, copy_hash, "STAGED_STDLIB_CHANGED");
+                        manifest.push((relative.to_string_lossy().into_owned(), hash));
+                    }
+                    staged_files.insert(
+                        "minimalStdlib".into(),
+                        serde_json::json!({
+                            "fileCount": manifest.len(),
+                            "manifestSha256": format!("{:x}", Sha256::digest(serde_json::to_vec(&manifest).unwrap()))
+                        }),
+                    );
+                }
+                // Only this disposable probe profile changes. Original tasks,
+                // installed interpreter, grants and saved configuration do not.
+                profile.id = "python-staged-version-only".into();
+                profile.argv[0] = target.join("python.exe").to_string_lossy().into_owned();
+            }
+            if matches!(placement, RuntimePlacement::PrivateDenied) {
+                let baseline = run(&root, &[], &profile, Duration::from_secs(15)).unwrap();
+                let receipt = serde_json::to_vec(&baseline).unwrap();
+                std::fs::write(root.join("baseline.private.json"), &receipt).unwrap();
+                let refused = !baseline.success
+                    && baseline.cleanup_proved
+                    && baseline.failure_diagnostic().is_some();
+                println!(
+                    "\nCATDESK_RUNTIME_BASELINE={}",
+                    serde_json::json!({
+                        "launchRefused": refused, "exitCode": baseline.exit_code,
+                        "cleanupProved": baseline.cleanup_proved, "timedOut": baseline.timed_out,
+                        "failureDiagnostic": baseline.failure_diagnostic(),
+                        "privateReceiptSha256": format!("{:x}", Sha256::digest(&receipt))
+                    })
+                );
+                assert!(refused, "RUNTIME_ACCESS_BASELINE_NOT_REPRODUCED");
+                return;
+            }
             let result = run(&root, &[], &profile, Duration::from_secs(15));
             let (passed, evidence) = match result {
                 Ok(value) => {
@@ -422,6 +530,7 @@ mod windows {
                             "elapsedMs": value.elapsed_ms,
                             "expectedOutputObserved": expected_output_observed,
                             "failureDiagnostic": value.failure_diagnostic(),
+                            "stagedRuntimeFiles": staged_files,
                             "privateReceiptSha256": format!("{:x}", Sha256::digest(&receipt))
                         }),
                     )
@@ -431,10 +540,58 @@ mod windows {
             // No arbitrary native output, profile paths or environment in test
             // reports. Failed fixtures remain local for bounded diagnosis.
             println!("\nCATDESK_NATIVE_COMMAND_CANARY={evidence}");
-            if passed {
-                std::fs::remove_dir_all(&root).unwrap();
+            let mut write_denied = true;
+            if passed && matches!(placement, RuntimePlacement::PrivateProvisioned) {
+                let mut check = profile.clone();
+                check.id = "runtime-read-only-write-probe".into();
+                check.argv = vec![
+                    profile.argv[0].clone(),
+                    "-I".into(),
+                    "-B".into(),
+                    "-S".into(),
+                    "-c".into(),
+                    "import sys\ntry:\n f=open(sys.executable+'.write-probe','wb')\nexcept PermissionError:\n print('READ_ONLY_RUNTIME_CONFIRMED')\nelse:\n f.close()\n raise SystemExit('RUNTIME_WRITE_SCOPE_BROKEN')".into(),
+                ];
+                let result = run(&root, &[], &check, Duration::from_secs(15)).unwrap();
+                let receipt = serde_json::to_vec(&result).unwrap();
+                std::fs::write(root.join("runtime-write-probe.private.json"), &receipt).unwrap();
+                write_denied = result.success
+                    && result.cleanup_proved
+                    && result.stdout.trim() == "READ_ONLY_RUNTIME_CONFIRMED"
+                    && !PathBuf::from(format!("{}.write-probe", profile.argv[0])).exists();
+                println!(
+                    "\nCATDESK_RUNTIME_WRITE_PROBE={}",
+                    serde_json::json!({
+                        "writeDenied": write_denied, "exitCode": result.exit_code,
+                        "cleanupProved": result.cleanup_proved,"timedOut": result.timed_out,
+                        "privateReceiptSha256": format!("{:x}", Sha256::digest(&receipt))
+                    })
+                );
+            }
+            if passed && write_denied {
+                if let Some(runtime) = external_runtime {
+                    let home = PathBuf::from(
+                        std::env::var_os("CATDESK_TEST_PRIVATE_RUNTIME_PARENT").unwrap(),
+                    )
+                    .canonicalize()
+                    .unwrap();
+                    assert_eq!(
+                        runtime.canonicalize().unwrap().parent(),
+                        Some(home.as_path())
+                    );
+                    assert!(
+                        runtime
+                            .file_name()
+                            .unwrap()
+                            .to_string_lossy()
+                            .starts_with("catdesk-private-runtime-probe-")
+                    );
+                    std::fs::remove_dir_all(runtime).unwrap();
+                }
+                std::fs::remove_dir_all(&fixture).unwrap();
             }
             assert!(passed, "NATIVE_COMMAND_CANARY_NOT_QUALIFIED");
+            assert!(write_denied, "NATIVE_RUNTIME_READ_ONLY_SCOPE_NOT_QUALIFIED");
         }
 
         #[test]
@@ -450,17 +607,19 @@ mod windows {
                 ],
                 timeout_seconds: 15,
             };
-            native_canary(profile, |output| {
-                output.lines().any(|line| {
-                    line.trim()
-                        .eq_ignore_ascii_case(&expected.to_string_lossy())
-                })
-            });
+            native_canary(
+                profile,
+                |output| {
+                    output.lines().any(|line| {
+                        line.trim()
+                            .eq_ignore_ascii_case(&expected.to_string_lossy())
+                    })
+                },
+                RuntimePlacement::Installed,
+            );
         }
 
-        #[test]
-        #[ignore = "version-only native probe; requires exact approved interpreter path and SHA"]
-        fn native_python_version_uses_actual_command_owner() {
+        fn approved_python_profile() -> (CommandProfile, File) {
             let image = PathBuf::from(
                 std::env::var_os("CATDESK_TEST_NATIVE_PYTHON")
                     .expect("APPROVED_TEST_INTERPRETER_REQUIRED"),
@@ -468,12 +627,12 @@ mod windows {
             let expected_sha = std::env::var("CATDESK_TEST_NATIVE_PYTHON_SHA256")
                 .expect("APPROVED_TEST_INTERPRETER_SHA_REQUIRED");
             assert!(image.is_absolute() && image.file_name().unwrap() == "python.exe");
-            let (_pin, actual_sha) = retained_image(&image).unwrap();
+            let (pin, actual_sha) = retained_image(&image).unwrap();
             assert_eq!(
                 actual_sha, expected_sha,
                 "APPROVED_TEST_INTERPRETER_CHANGED"
             );
-            native_canary(
+            (
                 CommandProfile {
                     id: "python-version-only".into(),
                     argv: vec![
@@ -484,7 +643,51 @@ mod windows {
                     ],
                     timeout_seconds: 15,
                 },
+                pin,
+            )
+        }
+
+        #[test]
+        #[ignore = "version-only native probe; requires exact approved interpreter path and SHA"]
+        fn native_python_version_uses_actual_command_owner() {
+            let (profile, _pin) = approved_python_profile();
+            native_canary(
+                profile,
                 |output| output.trim().starts_with("Python 3.12."),
+                RuntimePlacement::Installed,
+            );
+        }
+
+        #[test]
+        #[ignore = "version-only disposable runtime copy; requires exact approved interpreter identity"]
+        fn native_staged_python_version_uses_actual_command_owner() {
+            let (profile, _pin) = approved_python_profile();
+            native_canary(
+                profile,
+                |output| output.trim().starts_with("Python 3.12."),
+                RuntimePlacement::Workspace,
+            );
+        }
+
+        #[test]
+        #[ignore = "disposable runtime read/write boundary; requires exact approved interpreter identity"]
+        fn native_private_runtime_without_access_is_refused() {
+            let (profile, _pin) = approved_python_profile();
+            native_canary(
+                profile,
+                |output| output.trim().starts_with("Python 3.12."),
+                RuntimePlacement::PrivateDenied,
+            );
+        }
+
+        #[test]
+        #[ignore = "disposable preprovisioned read-only runtime; existing sandbox readers only"]
+        fn native_private_runtime_with_access_is_read_only() {
+            let (profile, _pin) = approved_python_profile();
+            native_canary(
+                profile,
+                |output| output.trim().starts_with("Python 3.12."),
+                RuntimePlacement::PrivateProvisioned,
             );
         }
 
