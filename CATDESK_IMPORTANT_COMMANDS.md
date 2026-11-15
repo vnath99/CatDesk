@@ -1,5 +1,17 @@
 # CatDesk important commands
 
+## 2026-11-15T21:34:58Z — Bounded real-runner qualification
+
+From the authorized source/build worktree, with the existing Rust toolchain and target directory configured:
+
+```text
+cargo test --locked --offline --bin catdesk project_task_command::windows::tests::native_system_lookup_uses_actual_command_owner -- --ignored --nocapture
+```
+
+This ignored Windows integration probe calls the actual fixed-command runner, not a separate sandbox approximation. It performs one system-only lookup in disposable state with a 15-second command bound, retains exact private failure receipts and emits only bounded metadata. No task/grant, model call, setup, install or Web send. The separate ignored `native_python_version_uses_actual_command_owner` requires test-only `CATDESK_TEST_NATIVE_PYTHON` and `CATDESK_TEST_NATIVE_PYTHON_SHA256` from the already approved interpreter identity; it runs only isolated/bytecode-disabled version inspection. Do not repeat its current known failure without a changed prerequisite. Never substitute these probes for the original verifier or full Web acceptance.
+
+Readiness was qualified through the existing app-server proxy using the documented WebSocket HTTP Upgrade, initialize and `windowsSandbox/readiness` only. Raw JSONL is not the Unix control-socket wire protocol. No new daemon, connection configuration, setup or credential was used. READY is scoped to that existing 0.169.0 daemon; it does not qualify the original 0.163.0 verifier or interpreter. [Evidence](docs/verification/NATIVE_SANDBOX_READINESS_AND_COMMAND_QUALIFICATION_2026_11_15.json).
+
 **Development update 2026-11-15T21:01:12Z:** future native verification receipts now have a bounded advisory sandbox-spawn diagnostic; source 7b4e1d6d passed five targeted command tests, strict Clippy and formatting. Original failed receipt/task and production/v5 remain unchanged. No new connection, package selection, replay, setup or release authority. [Evidence](docs/verification/NATIVE_COMMAND_FAILURE_DIAGNOSTIC_2026_11_15.json).
 
 Source-only follow-up 2026-11-15T20:32:08Z: `9d96f8e32f3fdf8b528d15eda453e9398f74a392` additionally validates retained operations against the original full preview-diff hash without executing or recording a tool call. The changed-operations denial, all eight native recovery tests, strict Clippy and formatting pass. The live-tested selected app remains the exact `79a449b` build; no candidate rebuild or protected promotion was performed for this follow-up.

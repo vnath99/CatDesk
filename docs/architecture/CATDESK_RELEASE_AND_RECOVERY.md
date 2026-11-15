@@ -1,5 +1,7 @@
 # CatDesk — Release, Diagnostics and Recovery
 
+**Decision 2026-11-15T21:34:58Z:** Native diagnostic probes qualify only their exact runtime layers. No candidate rebuild/selection or protected upgrade occurred; existing frozen production, fallback and canonical v5 remain unchanged. Interpreter qualification is a separate unresolved local dependency. [Evidence](../verification/NATIVE_SANDBOX_READINESS_AND_COMMAND_QUALIFICATION_2026_11_15.json).
+
 **Decision 2026-11-15T21:01:12Z:** This source-only diagnostic change does not rebuild/select a package or confer promotion authority. Selected development app remains 79a449b, prior verified fallback is retained, and production/v5 stay unchanged. [Evidence](../verification/NATIVE_COMMAND_FAILURE_DIAGNOSTIC_2026_11_15.json).
 
 **Source validation 2026-11-15T20:32:08Z:** retained proposal operations are now checked against their original full diff hash within the existing non-writing recovery validation. This adds no tool call, replay, authority, install or service. Source `9d96f8e32f3fdf8b528d15eda453e9398f74a392` passes eight native recovery tests and strict checks; selected live test app remains source `79a449b`.

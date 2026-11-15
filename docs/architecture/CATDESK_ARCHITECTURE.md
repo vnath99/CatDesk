@@ -1,5 +1,7 @@
 # CatDesk — System Architecture
 
+**Decision 2026-11-15T21:34:58Z:** Readiness and task verification are distinct: existing daemon READY and actual system-command success do not qualify the failed approved interpreter. Reuse the existing owner and diagnostics; no new infrastructure. [Evidence](../verification/NATIVE_SANDBOX_READINESS_AND_COMMAND_QUALIFICATION_2026_11_15.json).
+
 **Decision 2026-11-15T21:01:12Z:** Use the existing command receipt path for advisory native sandbox diagnostics; no new runtime, connection or recovery subsystem. The local verifier failure does not stop unrelated source or Wake work. [Evidence](../verification/NATIVE_COMMAND_FAILURE_DIAGNOSTIC_2026_11_15.json).
 
 **Source validation 2026-11-15T20:32:08Z:** retained proposal operations are now checked against their original full diff hash within the existing non-writing recovery validation. This adds no tool call, replay, authority, install or service. Source `9d96f8e32f3fdf8b528d15eda453e9398f74a392` passes eight native recovery tests and strict checks; selected live test app remains source `79a449b`.

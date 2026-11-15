@@ -1,5 +1,7 @@
 # CatDesk — Components and Interface Contracts
 
+**Decision 2026-11-15T21:34:58Z:** The Unix app-server control socket requires WebSocket HTTP Upgrade; JSONL applies to its stdio transport. Existing bounded proxy diagnosis now verifies readiness without a new daemon. Command probes reuse the real runner, not a parallel implementation. [Evidence](../verification/NATIVE_SANDBOX_READINESS_AND_COMMAND_QUALIFICATION_2026_11_15.json).
+
 **Decision 2026-11-15T21:01:12Z:** Future verify.command receipts optionally carry failureDiagnostic before the existing receipt hash/persistence. Successful receipts and existing tool contracts stay compatible; original private receipts are not rewritten. [Evidence](../verification/NATIVE_COMMAND_FAILURE_DIAGNOSTIC_2026_11_15.json).
 
 **Source validation 2026-11-15T20:32:08Z:** retained proposal operations are now checked against their original full diff hash within the existing non-writing recovery validation. This adds no tool call, replay, authority, install or service. Source `9d96f8e32f3fdf8b528d15eda453e9398f74a392` passes eight native recovery tests and strict checks; selected live test app remains source `79a449b`.
