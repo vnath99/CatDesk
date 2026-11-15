@@ -401,6 +401,93 @@ mod windows {
     #[cfg(test)]
     mod tests {
         use super::*;
+        fn native_canary(profile: CommandProfile, expected: impl Fn(&str) -> bool) {
+            let root = std::env::temp_dir().join(format!(
+                "catdesk-native-command-canary-{}",
+                uuid::Uuid::new_v4()
+            ));
+            std::fs::create_dir(&root).unwrap();
+            let result = run(&root, &[], &profile, Duration::from_secs(15));
+            let (passed, evidence) = match result {
+                Ok(value) => {
+                    let receipt = serde_json::to_vec(&value).unwrap();
+                    std::fs::write(root.join("command-result.private.json"), &receipt).unwrap();
+                    let expected_output_observed = expected(&value.stdout);
+                    (
+                        value.success && value.cleanup_proved && expected_output_observed,
+                        serde_json::json!({
+                            "exitCode": value.exit_code, "timedOut": value.timed_out,
+                            "cleanupProved": value.cleanup_proved,
+                            "nativeCliSha256": value.native_cli_sha256,
+                            "elapsedMs": value.elapsed_ms,
+                            "expectedOutputObserved": expected_output_observed,
+                            "failureDiagnostic": value.failure_diagnostic(),
+                            "privateReceiptSha256": format!("{:x}", Sha256::digest(&receipt))
+                        }),
+                    )
+                }
+                Err(reason) => (false, serde_json::json!({"error": reason})),
+            };
+            // No arbitrary native output, profile paths or environment in test
+            // reports. Failed fixtures remain local for bounded diagnosis.
+            println!("\nCATDESK_NATIVE_COMMAND_CANARY={evidence}");
+            if passed {
+                std::fs::remove_dir_all(&root).unwrap();
+            }
+            assert!(passed, "NATIVE_COMMAND_CANARY_NOT_QUALIFIED");
+        }
+
+        #[test]
+        #[ignore = "bounded real Windows sandbox check; requires already configured native CLI"]
+        fn native_system_lookup_uses_actual_command_owner() {
+            let system = PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32");
+            let expected = system.join("cmd.exe");
+            let profile = CommandProfile {
+                id: "system-lookup-only".into(),
+                argv: vec![
+                    system.join("where.exe").to_string_lossy().into_owned(),
+                    "cmd.exe".into(),
+                ],
+                timeout_seconds: 15,
+            };
+            native_canary(profile, |output| {
+                output.lines().any(|line| {
+                    line.trim()
+                        .eq_ignore_ascii_case(&expected.to_string_lossy())
+                })
+            });
+        }
+
+        #[test]
+        #[ignore = "version-only native probe; requires exact approved interpreter path and SHA"]
+        fn native_python_version_uses_actual_command_owner() {
+            let image = PathBuf::from(
+                std::env::var_os("CATDESK_TEST_NATIVE_PYTHON")
+                    .expect("APPROVED_TEST_INTERPRETER_REQUIRED"),
+            );
+            let expected_sha = std::env::var("CATDESK_TEST_NATIVE_PYTHON_SHA256")
+                .expect("APPROVED_TEST_INTERPRETER_SHA_REQUIRED");
+            assert!(image.is_absolute() && image.file_name().unwrap() == "python.exe");
+            let (_pin, actual_sha) = retained_image(&image).unwrap();
+            assert_eq!(
+                actual_sha, expected_sha,
+                "APPROVED_TEST_INTERPRETER_CHANGED"
+            );
+            native_canary(
+                CommandProfile {
+                    id: "python-version-only".into(),
+                    argv: vec![
+                        image.to_string_lossy().into_owned(),
+                        "-I".into(),
+                        "-B".into(),
+                        "--version".into(),
+                    ],
+                    timeout_seconds: 15,
+                },
+                |output| output.trim().starts_with("Python 3.12."),
+            );
+        }
+
         #[test]
         fn command_policy_has_one_write_root_and_native_metadata_read_only() {
             let root = Path::new("C:/fixture/task");
