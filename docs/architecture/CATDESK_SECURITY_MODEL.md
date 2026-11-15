@@ -1,5 +1,7 @@
 # CatDesk — Security and Authority Model
 
+**Decision 2026-11-15T21:01:12Z:** Reported sandbox error text is untrusted diagnostic evidence, never proof that a target did not run or authority for retry, permission changes or recovery. Original prelaunch allowlist and ownership fences are unchanged. [Evidence](../verification/NATIVE_COMMAND_FAILURE_DIAGNOSTIC_2026_11_15.json).
+
 **Source validation 2026-11-15T20:32:08Z:** retained proposal operations are now checked against their original full diff hash within the existing non-writing recovery validation. This adds no tool call, replay, authority, install or service. Source `9d96f8e32f3fdf8b528d15eda453e9398f74a392` passes eight native recovery tests and strict checks; selected live test app remains source `79a449b`.
 
 **Decision 2026-11-15T20:23:03Z:** Native Job/owner exit, exact task/registration/assignment, clean worktree and immutable journal snapshots still gate retirement. Only completed READ_ONLY read/search/preview calls with matching state/history/proposal/event evidence are newly eligible; original claims and completed call IDs are preserved. Any command, mutation, unsettled/unknown result, legacy owner or inconsistent receipt remains outside that path. Sandbox error text is a diagnostic, never authority to weaken permissions or infer a safe replay. See [dated proof](../verification/SETTLED_READ_ONLY_TASK_RECOVERY_2026_11_15.json).

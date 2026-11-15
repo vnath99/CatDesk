@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**Development update 2026-11-15T21:01:12Z:** future native verification receipts now have a bounded advisory sandbox-spawn diagnostic; source 7b4e1d6d passed five targeted command tests, strict Clippy and formatting. Original failed receipt/task and production/v5 remain unchanged. No new connection, package selection, replay, setup or release authority. [Evidence](docs/verification/NATIVE_COMMAND_FAILURE_DIAGNOSTIC_2026_11_15.json).
+
 Source-only follow-up 2026-11-15T20:32:08Z: `9d96f8e32f3fdf8b528d15eda453e9398f74a392` additionally validates retained operations against the original full preview-diff hash without executing or recording a tool call. The changed-operations denial, all eight native recovery tests, strict Clippy and formatting pass. The live-tested selected app remains the exact `79a449b` build; no candidate rebuild or protected promotion was performed for this follow-up.
 
 ## 2026-11-15T20:23:03Z — Use the existing event-bound body reader

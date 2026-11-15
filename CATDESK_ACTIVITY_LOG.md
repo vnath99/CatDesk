@@ -1,5 +1,13 @@
 # CatDesk activity log
 
+## 2026-11-15T21:01:12Z — Existing receipt diagnostics, no new runtime or authority
+
+The retained verifier used native CLI 0.163.0, while the existing external app-server owner reports 0.169.0. This version difference is observed, not proven to cause SpawnChild error 5. Read-only protocol inspection found a sandbox readiness method, but two bounded proxy initialize attempts returned no usable response; both proxy owners exited and the existing daemon remained unchanged. Readiness is UNVERIFIED. No setup, ACL/account/firewall/security setting, CLI selection, profile, model turn or original-task retry was performed. The retained sandbox-log profile-hiding access-denied warning is correlation only. Do not prescribe the modern `sandbox setup` command: the observed CLIs do not support it.
+
+The smallest source improvement annotates future failed command receipts with a fixed, content-free advisory. It requires a known nonzero exit, proved cleanup, no timeout and untruncated matching output. Arbitrary process output can spoof the text: target execution remains UNVERIFIED and retryAuthorized is false. The trusted prelaunch classification and recovery fences are unchanged. The annotation is hashed/persisted with existing task provenance; historical receipts are never backfilled. Successful receipts are unchanged. Source 7b4e1d6dd59bfa7f18a1038c4cd7bcfb066d10f6 passes five command tests, strict workspace/all-target/all-feature Clippy and formatting. All 23 documentation fixtures and 553-link consistency checks pass; bounded test owner exited normally with no timeout or termination failure.
+
+Production and the canonical v5 connection remain unchanged. Full Web-origin edit, successful verifier, permitted Git checkpoint and self-Wake remain open; a prior operator-origin diagnostic Wake/readback is not substituted. [Sanitized evidence](docs/verification/NATIVE_COMMAND_FAILURE_DIAGNOSTIC_2026_11_15.json).
+
 Source-only follow-up 2026-11-15T20:32:08Z: `9d96f8e32f3fdf8b528d15eda453e9398f74a392` additionally validates retained operations against the original full preview-diff hash without executing or recording a tool call. The changed-operations denial, all eight native recovery tests, strict Clippy and formatting pass. The live-tested selected app remains the exact `79a449b` build; no candidate rebuild or protected promotion was performed for this follow-up.
 
 ## 2026-11-15T20:23:03Z — Original local task recovered; edit and diagnostic continuation verified

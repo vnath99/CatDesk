@@ -1,5 +1,7 @@
 # CatDesk — System Architecture
 
+**Decision 2026-11-15T21:01:12Z:** Use the existing command receipt path for advisory native sandbox diagnostics; no new runtime, connection or recovery subsystem. The local verifier failure does not stop unrelated source or Wake work. [Evidence](../verification/NATIVE_COMMAND_FAILURE_DIAGNOSTIC_2026_11_15.json).
+
 **Source validation 2026-11-15T20:32:08Z:** retained proposal operations are now checked against their original full diff hash within the existing non-writing recovery validation. This adds no tool call, replay, authority, install or service. Source `9d96f8e32f3fdf8b528d15eda453e9398f74a392` passes eight native recovery tests and strict checks; selected live test app remains source `79a449b`.
 
 **Decision 2026-11-15T20:23:03Z:** The existing source/build/test lane now demonstrates a scoped local MCP edit and an actual diagnostic Wake plus automatic body readback while production remains unchanged. The failed fixed verifier is a native sandbox dependency, not a global development or Wake blocker. This is partial local/control-plane evidence; real Web-origin editing, verification, checkpoint and self-Wake acceptance remain open. See [dated proof](../verification/SETTLED_READ_ONLY_TASK_RECOVERY_2026_11_15.json).
