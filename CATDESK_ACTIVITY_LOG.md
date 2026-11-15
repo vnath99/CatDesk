@@ -1,5 +1,13 @@
 # CatDesk activity log
 
+## 2026-11-15T06:20:52Z — WAKE-LIFECYCLE fresh central Web project admitted
+
+Reused the exact installed executable, without a build, upgrade or daemon/tunnel start, for one supported web-only project registration. New disposable project `catdesk-web-direct-mvp-nov15` has a clean registered source worktree and a distinct clean, unregistered execution worktree at source `ac112e8c05c29566163dce8f6fb1f77f06a26a51`. It has no target, native owner, task or grant. All six original project records and every other registry field remain unchanged. One actual v5 registry call from Codex returned structured success and the exact seventh project; this is not a ChatGPT Web client proof.
+
+The bounded owner exited zero within its 80-second limit, with no timeout or cleanup failure. Of 1,699 pinned files, the intended registry append is the single changed pin; zero unexpected changes, unchanged profiles/task inventory and no rebaseline. No browser, Wake host, provider, serving process, key or message was created. Prepared an installed-compatible prospective assignment and one frozen setup-only message locally; neither was queued, associated, granted or sent. The single new-chat setup/actual-URL request is pending; no repeated sign-in or screenshot request.
+
+Exact installed-source inspection establishes a real separate limitation: scoped file/verification/manual-Wake routes exist, but scoped `git.checkpoint` and its grant flag do not. Full C1 therefore needs the qualified backend review/promotion path; global-root Git is not a substitute. Already-supported registration and eligible partial Web work need not wait for protected Wake migration. Preserve original d22/C1/C49 unknowns. [Actual operation, preservation and acceptance limits](docs/verification/CENTRAL_WEB_PROJECT_PREPARATION_2026_11_15.json).
+
 ## 2026-11-15T06:02:27Z — WAKE-LIFECYCLE direct Web preflight clarity
 
 Source `ebbbd96c916f1808bd5e27f660dd9708fc925a37`. The passive doctor's per-project guidance called local assignment/ownership validation native preflight, incorrectly suggesting that direct Web work requires Codex model execution. Replaced only that advice with existing local scoped-assignment preflight wording. The new regression failed against the old guidance; the corrected Windows facade matrix passed 213 assertions. Added missing/empty ledger guidance checks and verified that unavailable optional Codex tooling does not suppress an independently eligible project's metadata preflight. Scope, grant, unknown-outcome and execution denials remain unchanged. No Rust rebuild, browser, service, provider turn, task or binding mutation; fixture cleanup completed. Source-facade qualification is separate from installed Web acceptance.
