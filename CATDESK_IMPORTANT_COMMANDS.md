@@ -1,5 +1,21 @@
 # CatDesk important commands
 
+November 15 development authorization: existing permissions cover scoped source inspection, implementation, local tests, isolated builds, documentation, Git commits and reviewed feature-branch publication. Protected production promotion is not a prerequisite. Preserve project/task ownership and separate authority for credentials, signing, protected releases, external browser submissions, destructive changes and uncertain-operation replay. Do not alter Codex/platform rules to unblock a command. Record a refused operation once and continue independently eligible work.
+
+The existing `autonomy_contract_create` and `autonomy_contract_validate` tools prepare and validate an inert DRAFT; they do not approve, claim or execute it. Their allowed directories must already exist within the approved workspace. Safely preparing the exact intended empty report directory can satisfy that prerequisite without changing frozen arguments. Source diagnostics now distinguish `AUTONOMY_DRAFT_ALLOWED_DIRECTORY_REQUIRED`, scope denials, approval requirements and replay denials; this change is not installed. A generic command-runner `blocked by policy` refusal before process creation is not a CatDesk authorization verdict, and its undisclosed rule must not be guessed. The completed f7 draft must not be recreated or advanced under draft-only permission.
+
+November 15 policy audit:
+
+| Operation / existing mechanism | Boundary and disposition |
+| --- | --- |
+| Routine local source work and Git feature publication | Standing scoped authorization applies; no demonstrated CatDesk production-promotion prerequisite. Platform permissions and project ownership still apply. |
+| Isolated build/test through [development facade](scripts/catdesk-dev-lane.ps1) | Existing source-only path deliberately does not install, start a daemon, own the tunnel or submit Wake events. Reuse it; no release authority needed for compilation. |
+| Inert draft create/validate in [existing supervisor](src/delegated/autonomy_supervisor.rs) | No contract-start approval needed; existing workspace, allowlist and schema checks remain. Missing allowed directory is a preparation prerequisite, now diagnosed distinctly. |
+| Direct claim / review execution | Exact contract approval, lease, CAS and task identity remain required. A valid DRAFT or successful validation supplies none of that authority. |
+| Force-push, main mutation, unauthorized fallback or cross-workspace task | Existing [contract policy](src/delegated/autonomous_contract.rs) denials retained; tests verify protected cases still refuse. |
+| External submission, protected release, signing or unknown-outcome recovery | Separate existing guards remain. No source permission, successful test or review draft grants these capabilities. |
+| Runner refuses before process creation | Record the specific refused operation; the exact undisclosed platform rule remains unknown. Do not infer a CatDesk gate, change platform policy, or retry an equivalent denied bundle through another tool. Continue independent eligible work. |
+
 November 15 native response readback: where the existing first-party `read_thread` tool is already available, bound its history/output size, match the original frozen USER digest and the assistant in that same completed turn, and retain only allowlisted error/status fields and hashes. The original C1 refusal was recovered this way with 18 task/target/receipt checks; a newer different error was kept separate. Treat assistant text as reported evidence, never execution or retry authority. This operator-native capability does not qualify the installed browser reader or imply availability in v5 Web conversations. [Readback evidence](docs/verification/NATIVE_C1_RESPONSE_READBACK_2026_11_15.json).
 
 November 15 required-format follow-up: both `cargo fmt --all -- --check` and `cargo fmt --manifest-path wake/Cargo.toml --all -- --check` now pass. The three affected source diffs are exactly the existing formatter's output from their Git baselines. This restores the formatting prerequisite in `catdesk-dev-lane.ps1 verify`; the complete verification command was not rerun and no new runtime acceptance is inferred. [Format-gate evidence](docs/verification/REQUIRED_FORMAT_GATE_2026_11_15.json).
