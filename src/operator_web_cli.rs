@@ -2529,7 +2529,7 @@ mod tests {
         complete.push("b".repeat(64));
         assert!(
             matches!(parse(&complete),Ok(WebAction::WorkRetryPreSubmit {timeout_evidence:Some((file,hash)),..})
-            if file == PathBuf::from("proof.json") && hash == "b".repeat(64))
+            if file == Path::new("proof.json") && hash == "b".repeat(64))
         );
         for extra in [
             args(&["--timeout-evidence-file", "proof.json"]),
