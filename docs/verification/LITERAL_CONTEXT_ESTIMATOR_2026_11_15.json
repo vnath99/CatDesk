@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-15T04:25:04.174004+00:00",
+  "sourceCommit": "ccb1c34c3487172a1ec324506bdb7f1bdd3e2c22",
+  "sourceBase": "e97925b730e593698b128df0a96eea10e6dd7054",
+  "scope": "SOURCE_CORRECTION_WITH_ACTUAL_RUST_AND_ISOLATED_LOCAL_MCP_TESTS",
+  "priorFinding": "Literal special-token spellings in visible source/message text were treated as provider control tokens; November 3 calibration documented the undercount and the source still used that method",
+  "changedPath": "src/web_conversation_context.rs",
+  "changedFileSha256": "89fec30fd9bcc99c13679a243da84a4d975cff38aece1b3aec6c9c450ccc776b",
+  "correction": {
+    "newObservations": "Bounded 256-byte UTF-8-safe ordinary text encoding",
+    "methodStatus": "Explicit ordinary-literal V2 proxy with retained legacy estimates",
+    "existingExactReplay": "Original counts and ledger bytes preserved",
+    "changedRevision": "Current estimator only for the legitimately updated observation",
+    "schemaOrThresholdChange": false,
+    "providerExactnessClaimed": false,
+    "hiddenContextStillUnknown": true
+  },
+  "focusedQualification": {
+    "contextStoreTests": 36,
+    "projectMcpTests": 8,
+    "contextControlTests": 6,
+    "totalDistinctPassed": 50,
+    "projectMcpTestConcurrency": "One test at a time; individual tests still exercise simultaneous independent project requests",
+    "strictClippyPassed": true,
+    "changedFileFormatPassed": true
+  },
+  "retainedLimitations": {
+    "broaderInitialRun": {
+      "selected": 81,
+      "passed": 74,
+      "failed": 4,
+      "ignored": 3,
+      "failure": "Loopback request timeouts under concurrent test load",
+      "causeFullyIsolated": false,
+      "failuresDiscarded": false
+    },
+    "wholeRepositoryFormat": "FAIL: unchanged src/operator_facade.rs; no unrelated formatting edits made",
+    "fullProductAcceptance": "OPEN"
+  },
+  "stateAndEffects": {
+    "pinsChecked": 1699,
+    "unchangedPinsExceptPreviouslyClassifiedUsageCounters": true,
+    "oldD22ClaimPreserved": true,
+    "browserWakeOrTunnelStarts": 0,
+    "protectedInstallationOrBindingChanges": 0,
+    "newBuildCandidateCreated": false,
+    "selectedDevelopmentPackageChanged": false,
+    "sourceInstalled": false,
+    "independentReviewOrProducerAuthorityCreated": false
+  },
+  "separateReviewPreparation": {
+    "sourceWorktreePrepared": true,
+    "intakeCommandExecuted": false,
+    "toolFailure": "Command runner rejected preparation as blocked by policy; no more specific reason supplied",
+    "draftContractOrPromptCreated": false,
+    "blockedActionRetriedThroughAnotherRoute": false
+  },
+  "goalComplete": false
+}

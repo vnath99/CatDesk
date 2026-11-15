@@ -133,3 +133,11 @@ Evidence: [docs/verification/RETAINED_QUARANTINE_STATUS_2026_11_15.json](docs/ve
 Agent: Codex. Source: 374c62fe8a58701884f8bc27a9261dc3ca02a40f. Outcome: partial. Recovered the original approved d22 review claim once through the qualified corrected controller: WAITING_FOR_CHATGPT v4, unchanged contract and idempotency identity, no external resend or native model; independent review and producer authority remain absent. Next: Preserve the unresolved original external review; prepare exact source-bound review inputs for the current qualified Wake candidate through the existing workflow, with no new send or grant before its guards pass.
 
 Evidence: [docs/verification/EXISTING_D22_CLAIM_RECOVERY_2026_11_15.json](docs/verification/EXISTING_D22_CLAIM_RECOVERY_2026_11_15.json); command: Bounded authenticated existing approved direct-work claim using its original idempotency identity; no provider launch; exit 0; SHA-256 529489c7e91bd4501f11a12876a26ce03910040ee14d10b7e99fab5ddbcb8c6f.
+
+<!-- catdesk-activity:literal-context-estimator-correction-nov15 sha256:c66b46ecb73976c3123df7c50be26552cd9ae37d50095f9720c231975027da7e -->
+
+## 2026-11-15T04:25:04.174004+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: ccb1c34c3487172a1ec324506bdb7f1bdd3e2c22. Outcome: partial. Corrected the documented literal-special-token context undercount; 50 focused Rust/local-MCP tests and strict Clippy pass, legacy replay bytes remain unchanged; initial broad-run timeouts and unchanged formatting issue retained, source is not installed. Next: Keep the qualified Wake package and held d22 review intact; resolve the review-intake command policy refusal before new review authority, then pursue direct Web edit/checkpoint/self-Wake acceptance through existing guards.
+
+Evidence: [docs/verification/LITERAL_CONTEXT_ESTIMATOR_2026_11_15.json](docs/verification/LITERAL_CONTEXT_ESTIMATOR_2026_11_15.json); command: Bounded offline context-store, focused local project-MCP and context-control tests, strict Clippy and changed-file format check; retained failed broader run; exit 0; SHA-256 23dd5c8fb548fe0db00249fe4890e33b8caee8e64a978a12f01f2f6cca85bc80.

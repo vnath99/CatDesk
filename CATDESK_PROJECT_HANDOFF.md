@@ -70,5 +70,5 @@ Without a connector: clone GitHub, check out the canonical development branch, i
 The machine `source_sha` identifies the qualified integration checkpoint, not the self-referential publication SHA of this document. Read actual checkout HEAD and remote refs before work.
 
 ```json
-{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"f5d535e5fd81d36948d06e159c5d1de27c4a9687","branch":"codex/wake-lifecycle-nov14","status":"IN_PROGRESS","runtime_status":"VERIFIED_AT_RECORDED_TIME","blocker":"SERVING_SCOPE_RECEIPTS_AND_PROTECTED_WAKE_AUTHORITY_UNRESOLVED","next_action":"Preserve the unresolved original external review; prepare exact source-bound review inputs for the current qualified Wake candidate through the existing workflow, with no new send or grant before its guards pass"}
+{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"f5d535e5fd81d36948d06e159c5d1de27c4a9687","branch":"codex/wake-lifecycle-nov14","status":"IN_PROGRESS","runtime_status":"VERIFIED_AT_RECORDED_TIME","blocker":"SERVING_SCOPE_RECEIPTS_AND_PROTECTED_WAKE_AUTHORITY_UNRESOLVED","next_action":"Keep the qualified Wake package and held d22 review intact; resolve the review-intake command policy refusal before new review authority, then pursue direct Web edit/checkpoint/self-Wake acceptance through existing guards"}
 ```
