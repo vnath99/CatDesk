@@ -2717,10 +2717,20 @@ fn installed_ordinary_browser_directory(store: &Store) -> Result<PathBuf> {
 // fenced/native-entry contract. They do not authorize release or installation.
 // Retain previously supported pairs when a future GUI/observer changes; this is
 // deliberately independent of this controller's current include_bytes hashes.
-const SUPPORTED_SCOPED_NATIVE_ENTRY_PAIRS: &[(&str, &str)] = &[(
-    "47ef6ae0a8c36ee0086b8f5652a583dd5983e63bb65b8429fb24b895270094b7",
-    "00794db41eec0cea25a1300555603f0743d749b73c5006dc0c4a19610f56b1c0",
-)];
+const SUPPORTED_SCOPED_NATIVE_ENTRY_PAIRS: &[(&str, &str)] = &[
+    (
+        "47ef6ae0a8c36ee0086b8f5652a583dd5983e63bb65b8429fb24b895270094b7",
+        "00794db41eec0cea25a1300555603f0743d749b73c5006dc0c4a19610f56b1c0",
+    ),
+    // 2026-11-15 / source 5f45ce9e: initialization readback and closed
+    // diagnostics changed; ordinary attempt and native input/receipt primitives
+    // retain the previously qualified AST and acknowledged frame contract.
+    // Admit only this exact pair, not arbitrary controller-matching bytes.
+    (
+        "6d7c8b08bb993fa3e50c549337d701d09da3c35d19bf0a85f608f5d2e11708ad",
+        "f2d4c63bcedbfbdf6f234c586a7db2da68e2337dae736e4a17c551e057568d4e",
+    ),
+];
 
 fn installed_scoped_work_browser_directory(store: &Store) -> Result<PathBuf> {
     // Pointer/manifest/artifact integrity remains exact; release admission is
