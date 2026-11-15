@@ -584,7 +584,20 @@ pub async fn handle_request(
             Some(handle_initialize(req))
         }
         m if m.starts_with("notifications/") => None,
-        "tools/list" => Some(handle_tools_list(req, mode, tool_mode, devtools).await),
+        "tools/list" => {
+            let mut response = handle_tools_list(req, mode, tool_mode, devtools).await;
+            if !installed_control_scope_available(workspace_root) {
+                if let Some(tools) = response
+                    .result
+                    .as_mut()
+                    .and_then(|value| value.get_mut("tools"))
+                    .and_then(Value::as_array_mut)
+                {
+                    tools.retain(|tool| tool["name"] != STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL);
+                }
+            }
+            Some(response)
+        }
         "tools/call" => Some(
             handle_tools_call(
                 req,
@@ -1552,7 +1565,11 @@ where
                     name if tool_mode.supervisor_tools_enabled()
                         && stable_supervisor_lifecycle_mcp_tool_name(name) =>
                     {
-                        handle_stable_supervisor_lifecycle_mcp_tool(req)
+                        if name == STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL {
+                            installed_wake_command(req, workspace_root, handle_stable_supervisor_lifecycle_mcp_tool)
+                        } else {
+                            handle_stable_supervisor_lifecycle_mcp_tool(req)
+                        }
                     }
                     name if tool_mode.supervisor_tools_enabled() && is_autonomy_mcp_tool(name) => {
                         handle_autonomy_supervisor_mcp_tool(req, workspace_root).await
@@ -4580,15 +4597,25 @@ fn handle_wake_target_set(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpc
     }
 }
 
+fn installed_control_scope_available(workspace_root: &str) -> bool {
+    // Reuse the existing realm boundary: incomplete development authority
+    // must not fall back to fixed production controls either.
+    matches!(
+        catdesk_wake::development_runtime::root_for_workspace(Path::new(workspace_root)),
+        Ok(None)
+    )
+}
+
 fn installed_wake_command(
     req: &JsonRpcRequest,
     workspace_root: &str,
     command: fn(&JsonRpcRequest) -> JsonRpcResponse,
 ) -> JsonRpcResponse {
-    match catdesk_wake::development_runtime::root_for_workspace(Path::new(workspace_root)) {
-        Ok(None) => command(req),
-        Ok(Some(_)) | Err(_) => tool_error_response(req,
-            "WEB_DEVELOPMENT_INSTALLED_OPERATION_UNAVAILABLE: use the explicit development runtime operator commands".into()),
+    if installed_control_scope_available(workspace_root) {
+        command(req)
+    } else {
+        tool_error_response(req,
+            "WEB_DEVELOPMENT_INSTALLED_OPERATION_UNAVAILABLE: use the explicit development runtime operator commands".into())
     }
 }
 
@@ -12574,15 +12601,132 @@ mod tests {
         let root = std::env::temp_dir().join(format!("catdesk-dev-control-{}", Uuid::new_v4()));
         std::fs::create_dir_all(root.join(".catdesk/web-development"))
             .expect("partial development state");
-        let req = tool_call_request("catdesk_wake_restart_installed", json!({"confirm":true}));
-        let response = installed_wake_command(&req, root.to_str().expect("fixture path"), |_| {
-            panic!("installed control must not be invoked from incomplete development state")
-        });
-        assert!(result_text(&response).contains("WEB_DEVELOPMENT_INSTALLED_OPERATION_UNAVAILABLE"));
+        for name in [
+            "catdesk_wake_restart_installed",
+            STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL,
+        ] {
+            let req = tool_call_request(name, json!({"confirm":true}));
+            let response =
+                installed_wake_command(&req, root.to_str().expect("fixture path"), |_| {
+                    panic!(
+                        "installed control must not be invoked from incomplete development state"
+                    )
+                });
+            assert!(
+                result_text(&response).contains("WEB_DEVELOPMENT_INSTALLED_OPERATION_UNAVAILABLE")
+            );
+        }
         assert!(!root.join(".catdesk/web-development/runtime").exists());
         std::fs::remove_dir(root.join(".catdesk/web-development")).expect("empty dev fixture");
         std::fs::remove_dir(root.join(".catdesk")).expect("empty control fixture");
         std::fs::remove_dir(root).expect("empty workspace fixture");
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn development_catalog_omits_production_activation_but_keeps_ordinary_work() {
+        let (control, _, wake, _, _) = crate::web_work::tests::assignment_fixture_for("alpha");
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!("development-catalog")),
+            method: "tools/list".into(),
+            params: json!({}),
+        };
+        let ordinary = control.parent().unwrap().join("ordinary-control");
+        std::fs::create_dir(&ordinary).unwrap();
+        let baseline = handle_tools_list(&req, Mode::Computer, ToolMode::SupervisorOnly, &None)
+            .await
+            .result
+            .unwrap();
+        let baseline_names: std::collections::BTreeSet<String> = baseline["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|tool| tool["name"].as_str().unwrap().to_owned())
+            .collect();
+        for (workspace, production_activation) in [(&control, false), (&ordinary, true)] {
+            let response = handle_request(
+                &req,
+                workspace.to_str().unwrap(),
+                0,
+                None,
+                Mode::Computer,
+                ToolMode::SupervisorOnly,
+                false,
+                &None,
+            )
+            .await
+            .unwrap();
+            let result = response.result.unwrap();
+            let tools = result["tools"].as_array().unwrap();
+            let named = |name: &str| tools.iter().any(|tool| tool["name"] == name);
+            assert_eq!(
+                named(STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL),
+                production_activation
+            );
+            assert!(named(STABLE_SUPERVISOR_LIFECYCLE_STATUS_TOOL));
+            assert!(named(STABLE_SUPERVISOR_LIFECYCLE_PREFLIGHT_TOOL));
+            // Authentication-dependent tools retain their ordinary publication
+            // policy. A fixture with no bearer must not gain task authority.
+            let mut expected_names = baseline_names.clone();
+            if !production_activation {
+                expected_names.remove(STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL);
+            }
+            let actual_names: std::collections::BTreeSet<String> = tools
+                .iter()
+                .map(|tool| tool["name"].as_str().unwrap().to_owned())
+                .collect();
+            assert_eq!(actual_names, expected_names);
+            assert!(named("autonomy_contract_create"));
+        }
+        let parent = control.parent().unwrap().canonicalize().unwrap();
+        assert_eq!(
+            parent.parent(),
+            Some(std::env::temp_dir().canonicalize().unwrap().as_path())
+        );
+        assert!(
+            Uuid::parse_str(
+                parent
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .strip_prefix("project-task-")
+                    .unwrap()
+            )
+            .is_ok()
+        );
+        drop(wake);
+        std::fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[tokio::test]
+    async fn development_cached_production_activation_fails_closed() {
+        let root = std::env::temp_dir().join(format!("catdesk-dev-control-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join(".catdesk/web-development")).unwrap();
+        // False confirmation makes this a side-effect-free negative test even
+        // against the old dispatcher, which omitted the workspace realm gate.
+        let req = tool_call_request(
+            STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL,
+            json!({"confirm":false,"allow_without_plan":true}),
+        );
+        let response = handle_request(
+            &req,
+            root.to_str().unwrap(),
+            0,
+            None,
+            Mode::Computer,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await
+        .unwrap();
+        assert!(result_text(&response).contains("WEB_DEVELOPMENT_INSTALLED_OPERATION_UNAVAILABLE"));
+        assert!(!root.join(".catdesk/web-development/runtime").exists());
+        std::fs::remove_dir(root.join(".catdesk/web-development")).unwrap();
+        std::fs::remove_dir(root.join(".catdesk")).unwrap();
+        std::fs::remove_dir(root).unwrap();
     }
 
     #[test]
