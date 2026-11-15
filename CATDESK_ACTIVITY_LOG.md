@@ -77,3 +77,11 @@ Evidence: [docs/verification/BOOTSTRAP_READBACK_RECOVERY_2026_11_14.json](docs/v
 Agent: Codex. Source: c43265ad4d6054f92afd22762beb2740ffc34c81. Outcome: partial. Autonomous readback now retains exact Home/editor/phase failure states and safe CLI codes; live Home has no editor, original journal unchanged and native history still has one USER. Next: Reuse the existing verified-tab selector in immutable readback primitives, then verify the original conversation without sending again.
 
 Evidence: [docs/verification/READBACK_HOME_DIAGNOSTICS_2026_11_15.json](docs/verification/READBACK_HOME_DIAGNOSTICS_2026_11_15.json); command: Scoped local regressions and bounded no-send development readbacks with native no-replay proof; exit 2; SHA-256 68588e0105e2ec81fa6f0d93a59b06e663e5f9a9ee26cdcddc8f2f75254a8bfc.
+
+<!-- catdesk-activity:wake-verified-tab-login-diagnostic-nov15 sha256:377eb26793776e7a3c81a6e86d442593aaec9130c5825ece10e74c4228fad8b2 -->
+
+## 2026-11-15T01:04:11.271357+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 843c11a7cf49c1eaf8b0bde174dca35ce40bcc94. Outcome: partial. Existing tab selector and private navigation diagnostic are source-qualified; bounded original readback finds explicit sign-in-required Home, sends nothing and preserves the original journal. Next: Authenticate the same existing development profile through bounded login, then recover the original initialization without resend.
+
+Evidence: [docs/verification/VERIFIED_TAB_READBACK_2026_11_15.json](docs/verification/VERIFIED_TAB_READBACK_2026_11_15.json); command: operator web initialize recover --execute through the existing bounded development owner; no message send; exit 2; SHA-256 b12a080ca970979bd5aa583e2c5b969fe003bd5ec88dada3a622ad879e30053d.

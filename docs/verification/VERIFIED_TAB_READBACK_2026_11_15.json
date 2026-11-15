@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-15T01:04:11.270362+00:00",
+  "sourceCommit": "843c11a7cf49c1eaf8b0bde174dca35ce40bcc94",
+  "scope": "EXISTING_UNPROTECTED_DEVELOPMENT_PROFILE_ORIGINAL_NO_SEND_READBACK",
+  "goalState": "ACTIVE",
+  "sourceChanges": [
+    "Reuse existing qualified metadata-plus-document tab selector through immutable browser primitives",
+    "Bind tab/navigation hints to original project/intent/message/record; hints never grant a receipt",
+    "Classify HTTP status, document title category and Home-only fixed notices without exporting text or URLs",
+    "Keep unknown drafts, singleton USER proof, idle-before-refresh and persistence requirements"
+  ],
+  "sourceChecks": {
+    "pythonFocusedPreviousSelector": 213,
+    "pythonFocusedLatestIncludingActualJavaScript": 220,
+    "nativeClosedDiagnostic": 1,
+    "nativeJournalPreservation": 1,
+    "strictRootAndWakeClippy": "PASS",
+    "countsAreSeparateRunsNotAdditive": true,
+    "sourceTestsAreNotInstalledAcceptance": true
+  },
+  "liveAttempts": [
+    {
+      "startedUtc": "2026-11-15T00:49:01.704680+00:00",
+      "finishedUtc": "2026-11-15T00:49:46.022502+00:00",
+      "sourceCommit": "ac97ba10f83c10b12ccaab20ab1babc8f63f8c24",
+      "error": "INITIALIZATION_READBACK_TARGET_TAB_UNPROVEN",
+      "durablePhase": "SUBMITTING",
+      "sameTaskAndMessage": true,
+      "profileQuiescentAfter": true,
+      "otherRegistrationsUnchanged": true,
+      "otherWakeTargetsUnchanged": true,
+      "developmentControlStopped": true,
+      "messagesSubmitted": 0,
+      "bindingsCommitted": false,
+      "observations": [
+        {
+          "documentRoute": "HOME",
+          "driverRoute": "HOME",
+          "failureCode": "INITIALIZATION_READBACK_TARGET_TAB_UNPROVEN",
+          "phase": "TAB_SELECTION",
+          "surface": {
+            "assistant": "ABSENT",
+            "composer": "UNKNOWN",
+            "document": "COMPLETE",
+            "editor": "MISSING",
+            "exchange": "UNATTRIBUTED",
+            "generation": "IDLE",
+            "history": "ABSENT",
+            "recovery": "OBSERVATION_ONLY",
+            "route": "HOME"
+          },
+          "tab": {
+            "alternateRoute": false,
+            "candidateFrame": "TOP",
+            "candidateRoute": "HOME",
+            "candidateShape": "STRING",
+            "controlledRoute": "HOME",
+            "controlledShape": "STRING",
+            "metadataMatches": 1,
+            "schemaVersion": 1,
+            "stage": "DOCUMENT",
+            "state": "TARGET_TAB_DRIFT",
+            "tabCount": 1,
+            "unreadableMetadata": 0
+          }
+        }
+      ],
+      "ownerTimedOut": false,
+      "ownerTerminationFailed": false
+    },
+    {
+      "startedUtc": "2026-11-15T00:59:13.082830+00:00",
+      "finishedUtc": "2026-11-15T00:59:59.095289+00:00",
+      "sourceCommit": "843c11a7cf49c1eaf8b0bde174dca35ce40bcc94",
+      "error": "INITIALIZATION_READBACK_TARGET_TAB_UNPROVEN",
+      "durablePhase": "SUBMITTING",
+      "sameTaskAndMessage": true,
+      "profileQuiescentAfter": true,
+      "otherRegistrationsUnchanged": true,
+      "otherWakeTargetsUnchanged": true,
+      "developmentControlStopped": true,
+      "messagesSubmitted": 0,
+      "bindingsCommitted": false,
+      "observations": [
+        {
+          "documentRoute": "HOME",
+          "driverRoute": "HOME",
+          "failureCode": "INITIALIZATION_READBACK_TARGET_TAB_UNPROVEN",
+          "navigation": {
+            "body": "NONEMPTY",
+            "documentRoute": "HOME",
+            "historyRoute": "HOME",
+            "notice": "LOGIN_REQUIRED",
+            "responseStatus": 200,
+            "schemaVersion": 1,
+            "title": "CHATGPT"
+          },
+          "phase": "TAB_SELECTION",
+          "surface": {
+            "assistant": "ABSENT",
+            "composer": "UNKNOWN",
+            "document": "COMPLETE",
+            "editor": "MISSING",
+            "exchange": "UNATTRIBUTED",
+            "generation": "IDLE",
+            "history": "ABSENT",
+            "recovery": "OBSERVATION_ONLY",
+            "route": "HOME"
+          },
+          "tab": {
+            "alternateRoute": false,
+            "candidateFrame": "TOP",
+            "candidateRoute": "HOME",
+            "candidateShape": "STRING",
+            "controlledRoute": "HOME",
+            "controlledShape": "STRING",
+            "metadataMatches": 1,
+            "schemaVersion": 1,
+            "stage": "DOCUMENT",
+            "state": "TARGET_TAB_DRIFT",
+            "tabCount": 1,
+            "unreadableMetadata": 0
+          }
+        }
+      ],
+      "ownerTimedOut": false,
+      "ownerTerminationFailed": false
+    }
+  ],
+  "currentDevelopmentPackage": {
+    "packageId": "1.0.0-dev.85-726cc26040051f78d227ffb2a1f9f1625355daf96205a38a6d429285090457c9",
+    "artifacts": {
+      "CatDeskWakeHost.exe": "96c9a056ceacf29675e111b53d7ad247f75aace93718ef56d109d0697f767e17",
+      "CatDeskBinagotchy.exe": "a2803875b7d6ae2bfc470301c74888d7ab5a2bb14cfa624f8d7bfee934527652",
+      "adapter.py": "d0a6456c4701967694a927b9aeffcd0896749eba8be7e336520a211185e6139a",
+      "wake_bridge.py": "eea29aff3cb6518a2c03e97bbb361d3e52357b5e47a81ca63fdaaa69da890f5d"
+    },
+    "sourceCommit": "843c11a7cf49c1eaf8b0bde174dca35ce40bcc94",
+    "verifiedWorkingPreviousPreserved": true,
+    "workingHealthQualificationGranted": false,
+    "protectedInstallationChanged": false
+  },
+  "nativeNoReplayWitness": {
+    "observedUtc": "2026-11-15T01:03:19.575Z",
+    "completedTurns": 1,
+    "userMessageCount": 1,
+    "assistantMessageCount": 1,
+    "paginationComplete": true,
+    "allTurnsWithoutError": true,
+    "exactOriginalUserDigestMatches": true,
+    "noAdditionalUserMessages": true,
+    "expectedConversation": true
+  },
+  "preservation": {
+    "pinsChecked": 1691,
+    "expectedExistingPointerChanges": 1,
+    "newPrivateDiagnosticArtifacts": 1,
+    "originalJournalBytesUnchanged": true,
+    "profileIdentitiesUnchanged": true,
+    "missingSeedPathsUnchanged": true,
+    "unknownSubmissionStillFenced": true
+  },
+  "conclusion": {
+    "browserLayer": "EXPLICIT_LOGIN_REQUIRED_NOTICE_ON_HOME",
+    "tabMetadata": "EXACT_CANDIDATE_METADATA_IS_NOT_CURRENT_DOCUMENT_AUTHORITY",
+    "httpStatus": "200_FOR_HOME_NOT_MCP_OR_TARGET_READINESS",
+    "loginPreflight": "EXACT_SELECTED_CONTROLLER_PASSED_TO_INTERACTIVE_TERMINAL_GATE_NO_BROWSER_STARTED",
+    "operatorAction": "Interactive sign-in in the same existing development profile through standard bounded login",
+    "afterAuthentication": "Recover original initialization read-only; no initialization execute or replacement task",
+    "originalReceiptAndBinding": "NOT_ACCEPTED",
+    "freshTwoTurnWake": "OPEN",
+    "directWebWork": "OPEN",
+    "serialMultiProject": "OPEN"
+  }
+}
