@@ -1,5 +1,11 @@
 # CatDesk — Release, Diagnostics and Recovery
 
+**Release-model clarification 2026-11-15T19:33:36Z:** one system and one unchanged canonical v5 interface. Frozen independently verified releases are production; authorized source/worktrees/builds and isolated local fixture tests are development. Reuse current selection, immutable artifacts, existing fallback/promotion/rollback and bounded owners. No new installation, release manager, tunnel, plugin, external connection or backend infrastructure. Local source work proceeds independently of protected-release acceptance.
+
+## 2026-11-15T19:18:45Z — Development/production separation decision
+
+Unprotected development package updates and local verification records are independent of protected installer/broker/signing authority. The existing transaction preserves immutable versions and a previously verified fallback; new health must be measured before recording a working current package. Compiled script identity checks remain strict: use a controller from matching source instead of weakening them. Current package selection, authenticated local health and cleanup are qualified; protected promotion and fresh remote Web acceptance are not implied. The canonical external v5 connection remains unchanged. Missing installed delivery/Git/adapter capabilities are handled by the existing genuine reviewed release process, not a development tunnel or silent rerouting. See [dated qualification](../verification/DEVELOPMENT_PRODUCTION_SEPARATION_2026_11_15.json) and [current handoff](../../CATDESK_PROJECT_HANDOFF.md) for exact maturity and remaining gates.
+
 > **Revision timestamp (UTC):** `2026-11-14T18:47:56Z` · **Status:** Reviewed consolidation reference; does not authorize an installation, privileged broker operation, signer creation or recovery action.
 > **Contract:** Simple operator experience with conservative, evidence-driven restore. For architecture see [CATDESK_ARCHITECTURE.md](CATDESK_ARCHITECTURE.md); for security and journal prohibitions see [CATDESK_SECURITY_MODEL.md](CATDESK_SECURITY_MODEL.md).
 

@@ -1,5 +1,23 @@
 # CatDesk important commands
 
+Latest decision 2026-11-15T19:33:36Z: one system and canonical v5 connection; frozen releases are production, source/builds are development. Existing local test facilities require no external setup or production upgrade. Local task test reached accepted read/preview only, then stopped on a harness receipt-parsing error; its original task remains fenced, with no edit/verify/Git/Wake acceptance. Production/profiles preserved and test-process cleanup verified. See [dated audit](CATDESK_ACTIVITY_LOG.md) and [qualification](docs/verification/DEVELOPMENT_PRODUCTION_SEPARATION_2026_11_15.json).
+
+## 2026-11-15T19:18:45Z — Use the existing development owner, not production promotion
+
+From the already prepared development control workspace, invoke the hash-qualified development app/controller, never a production launcher:
+
+```text
+<qualified-dev-controller> operator web-dev-runtime status
+<matching-source-dev-controller> operator web-dev-runtime update-package --package <exact-four-file-directory>
+<qualified-dev-controller> operator web-dev-runtime record-verification --input-file <in-workspace-evidence.json>
+<qualified-dev-controller> operator web-dev-runtime run-backend --max-runtime-seconds 60
+<qualified-dev-controller> operator web-dev-runtime run-project-backend --project-id <registered-dev-id> --project-target-generation <n> --project-target-sha256 <digest> --max-runtime-seconds 180 --project-task-contract <absolute-contract>
+```
+
+`run-backend` requires a valid process-only `CATDESK_MCP_AUTH_TOKEN`; do not print it or put it on the command line. Use its issued random-loopback readiness URL, not production port 3200. The existing foreground owner bounds and drains the child; no recurring service is enabled. Package update requires stopped Host/browser/backend owners, exact inventory and scripts matching the controller's compiled source. A mismatch is a refusal, not permission to relax the check. Source build/test facade `scripts/catdesk-dev-lane.ps1` stays source-only; the existing operator commands above already supply the runtime lane. Local development verification is never production review authority. [development qualification](docs/verification/DEVELOPMENT_PRODUCTION_SEPARATION_2026_11_15.json).
+
+The installed-adapter refusal documented below blocks only that production send. Keep that original queued task unchanged; use separate registered development projects and bindings for development acceptance. Keep the single canonical v5 connection and its matching bootstrap; test newer functionality through local MCP harnesses without external infrastructure changes. Actual Web use of missing installed operations requires their genuine reviewed release authority. Protected review/migration is a separate track, not an ordinary build/test prerequisite.
+
 November 15 fresh central-chat qualification: the operator's one-time setup is complete. Native history verified one exact frozen setup USER and its completed acknowledgment. The installed `operator web target bind --project-id <new-project> --conversation-url <verified-issued-url> --expected-current-target-sha256 none --expected-wake-generation 0` paired only the new project at generation 1; do not rerun it. One request and its scoped assignment are now recorded and associated, without a grant/key or delivery. The original prepared zero retry budget failed validation; an unissued compatible revision changes only that field to the legacy schema minimum 1, retaining no-resend instructions and every existing replay fence. The old input is preserved.
 
 The installed source does not parse `operator web work deliver`. One bounded attempt using the retained hash-qualified development controller reached the existing selected-package preflight and refused `SCOPED_WORK_INSTALLED_ADAPTER_UPGRADE_REQUIRED` before browser creation. That source-controller operation is not installed-backend qualification. Do not repeat delivery, change its adapter/bridge allowlist or route around the guard. The selected package lacks the exact supported scoped native-entry pair; its reviewed upgrade is now a demonstrated delivery prerequisite. The backend's separate reviewed promotion is required for its missing delivery CLI and scoped Git checkpoint capability. Future first-chat creation must use CatDesk automation after legitimate installed capability qualification; repeated operator setup is not the intended workflow. [Actual results](docs/verification/FRESH_CENTRAL_WEB_PAIRING_2026_11_15.json).

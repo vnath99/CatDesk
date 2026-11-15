@@ -1,5 +1,11 @@
 # CatDesk — Components and Interface Contracts
 
+**Release-model clarification 2026-11-15T19:33:36Z:** one system and one unchanged canonical v5 interface. Frozen independently verified releases are production; authorized source/worktrees/builds and isolated local fixture tests are development. Reuse current selection, immutable artifacts, existing fallback/promotion/rollback and bounded owners. No new installation, release manager, tunnel, plugin, external connection or backend infrastructure. Local source work proceeds independently of protected-release acceptance.
+
+## 2026-11-15T19:18:45Z — Development/production separation decision
+
+The existing runtime is implemented in `wake/src/development_runtime.rs` and `src/operator_development_backend.rs` / `src/operator_development_project.rs`. Reuse `web-dev-runtime` package/status/run commands and the existing suspended-child owner. A normal root application build is the packaged Binagotchy app; unchanged Host/adapter/bridge may be retained with explicit component provenance. Production supervisor activation is omitted and refused in the development realm; read-only status/preflight remain available. See [dated qualification](../verification/DEVELOPMENT_PRODUCTION_SEPARATION_2026_11_15.json) and [current handoff](../../CATDESK_PROJECT_HANDOFF.md) for exact maturity and remaining gates.
+
 > **Revision timestamp (UTC):** `2026-11-14T18:47:56Z` · **Status:** Reviewed consolidation reference; source paths verified against the November 14 development inventory, not a claim of deployed qualification.
 > **Authority:** [System architecture](CATDESK_ARCHITECTURE.md) determines product flow; [security](CATDESK_SECURITY_MODEL.md) governs authorization; [release/recovery](CATDESK_RELEASE_AND_RECOVERY.md) governs operational lifecycle. Live capability status comes from the [project handoff](../../CATDESK_PROJECT_HANDOFF.md) and original journals.
 

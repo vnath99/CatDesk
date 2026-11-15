@@ -1,5 +1,15 @@
 # CatDesk milestones
 
+Latest decision 2026-11-15T19:33:36Z: one system and canonical v5 connection; frozen releases are production, source/builds are development. Existing local test facilities require no external setup or production upgrade. Local task test reached accepted read/preview only, then stopped on a harness receipt-parsing error; its original task remains fenced, with no edit/verify/Git/Wake acceptance. Production/profiles preserved and test-process cleanup verified. See [dated audit](CATDESK_ACTIVITY_LOG.md) and [qualification](docs/verification/DEVELOPMENT_PRODUCTION_SEPARATION_2026_11_15.json).
+
+## 2026-11-15T19:18:45Z — Three independent tracks
+
+- **Development ACTIVE / CONTROLLED_LIVE (local scope):** corrected source app selected in the existing runtime, bearer/catalog/production-control boundary and coexistence pass, cleanup verified. Continue local MCP file/verification/checkpoint and SeleniumBase tests independently; the single canonical v5 Web connection stays unchanged. Missing installed capabilities need exact reviewed release authority before Web acceptance. [development qualification](docs/verification/DEVELOPMENT_PRODUCTION_SEPARATION_2026_11_15.json).
+- **Protected release review WAITING:** f7 exact start decision and d22 genuine report/producer remain separate; neither blocks source work, local development packages or feature publication.
+- **Protected Wake migration BLOCKED:** retain expired proposals and physical-root comparison evidence; no collectors, signatures or protected-state reset. Production's earlier accepted backend/restart/authentication/Web results stay credited.
+
+The user authorizes ordinary isolated development and reviewed feature publication without per-step prompts. Separate approval remains necessary where original exact contracts/platform rules require it or effects change protected production, credentials, signing, external submissions, destruction or uncertain-operation replay. The full product goal remains ACTIVE and incomplete.
+
 Milestone dashboard; detailed runs belong in the [activity log](CATDESK_ACTIVITY_LOG.md). Status and verification maturity are independent. Historical scope evolution remains in the [immutable prior chronology](docs/archive/PRE_CONSOLIDATION_2026_11_14.md). No old completion phrase overrides original journals.
 
 | ID | Objective / originally requested | Priority | Status | Maturity | Tickets | Accomplishments / remaining acceptance / next major action |

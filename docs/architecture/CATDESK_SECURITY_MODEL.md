@@ -1,5 +1,11 @@
 # CatDesk — Security and Authority Model
 
+**Release-model clarification 2026-11-15T19:33:36Z:** one system and one unchanged canonical v5 interface. Frozen independently verified releases are production; authorized source/worktrees/builds and isolated local fixture tests are development. Reuse current selection, immutable artifacts, existing fallback/promotion/rollback and bounded owners. No new installation, release manager, tunnel, plugin, external connection or backend infrastructure. Local source work proceeds independently of protected-release acceptance.
+
+## 2026-11-15T19:18:45Z — Development/production separation decision
+
+Standing authorization covers source inspection/editing, local tests/builds, isolated development fixtures and recovery, inert review drafts and reviewed feature publication under existing workspace ownership. Preserve independent protected release/signing, credential, destructive, external-submission, cross-project and uncertain-replay boundaries. The existing realm predicate now refuses production supervisor activation from valid or incomplete development state, both in publication and cached dispatch. No platform rule or original exact review-start decision was weakened. See [dated qualification](../verification/DEVELOPMENT_PRODUCTION_SEPARATION_2026_11_15.json) and [current handoff](../../CATDESK_PROJECT_HANDOFF.md) for exact maturity and remaining gates.
+
 > **Revision timestamp (UTC):** `2026-11-14T18:47:56Z` · **Status:** Reviewed consolidation reference; defensive design reference, not a grant to execute local commands, select releases, change browser state or send messages.
 > **Security objective:** Give ChatGPT Web useful *bounded* local capabilities while preserving project isolation, exact task attribution, idempotent side-effect handling and externally owned trust boundaries.
 

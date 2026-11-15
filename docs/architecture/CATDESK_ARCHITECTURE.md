@@ -1,5 +1,11 @@
 # CatDesk — System Architecture
 
+**Release-model clarification 2026-11-15T19:33:36Z:** one system and one unchanged canonical v5 interface. Frozen independently verified releases are production; authorized source/worktrees/builds and isolated local fixture tests are development. Reuse current selection, immutable artifacts, existing fallback/promotion/rollback and bounded owners. No new installation, release manager, tunnel, plugin, external connection or backend infrastructure. Local source work proceeds independently of protected-release acceptance.
+
+## 2026-11-15T19:18:45Z — Development/production separation decision
+
+Development and production are separate execution realms using the same existing components. Source work, isolated package selection and bounded authenticated development backends do not depend on protected production review/signing. Only shared browser operations require their existing exclusive owner; do not add another launcher, scheduler or browser service. One canonical v5 interface serves ChatGPT Web. Local binaries/MCP harnesses/SeleniumBase tests provide independent development; no duplicate external infrastructure. Full actual Web acceptance remains OPEN until missing installed operations are legitimately qualified. See [dated qualification](../verification/DEVELOPMENT_PRODUCTION_SEPARATION_2026_11_15.json) and [current handoff](../../CATDESK_PROJECT_HANDOFF.md) for exact maturity and remaining gates.
+
 > **Architecture baseline:** 2026-11-14 · **Revision timestamp (UTC):** `2026-11-14T18:47:56Z`  
 > **Document status:** Reviewed consolidation; canonical design on integration of PR #8 into development. It is **not** an operational authorization.
 > **Product owner requirements:** November 14, 2026. **Code/evidence basis:** the existing `codex/web-rollover-oct17` development line and the documentation consolidation branch, checked November 14, 2026.  
