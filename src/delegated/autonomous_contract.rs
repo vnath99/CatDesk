@@ -154,6 +154,18 @@ pub fn runtime_capability_manifest() -> Value {
             "nativeProviderLaunch": false,
             "claimAndFinalizationRequired": true,
         },
+        "authorizationBoundaries": {
+            "declarativeOnly": true,
+            "draftCreationNeedsContractStartApproval": false,
+            "draftCreationStartsExecution": false,
+            "validationGrantsExecution": false,
+            "directClaimNeedsExactContractApproval": true,
+            "routineSourceWorkNeedsProtectedPromotion": false,
+            "scopeAndPlatformChecksStillApply": true,
+            "externalSubmissionsNeedSeparateAuthority": true,
+            "protectedReleaseChecksUnchanged": true,
+            "platformPolicyOverrideSupported": false,
+        },
     })
 }
 
@@ -325,6 +337,39 @@ pub enum ContractPolicyError {
     Lease(String),
     Approval(String),
     Idempotency(String),
+}
+
+impl ContractPolicyError {
+    /// Closed diagnostics only: never echo paths, credentials or caller text,
+    /// and never turn a preparation prerequisite into execution authority.
+    pub fn safe_reason_code(&self) -> &'static str {
+        match self {
+            Self::Validation(message)
+                if message == "allowed path must be an existing directory" =>
+            {
+                "AUTONOMY_DRAFT_ALLOWED_DIRECTORY_REQUIRED"
+            }
+            Self::Validation(message) if message == "forbidden path must exist" => {
+                "AUTONOMY_DRAFT_FORBIDDEN_PATH_REQUIRED"
+            }
+            Self::Validation(message)
+                if message == "allowed path escapes workspace"
+                    || message == "completion artifact is outside approved paths" =>
+            {
+                "AUTONOMY_CONTRACT_SCOPE_DENIED"
+            }
+            Self::Validation(message)
+                if message == "autonomous contract enables a prohibited operation or fallback" =>
+            {
+                "AUTONOMY_CONTRACT_PROHIBITED_OPERATION"
+            }
+            Self::Validation(_) => "AUTONOMY_CONTRACT_INVALID",
+            Self::Denied(_) => "AUTONOMY_CONTRACT_SCOPE_DENIED",
+            Self::Lease(_) => "AUTONOMY_CONTRACT_LEASE_DENIED",
+            Self::Approval(_) => "AUTONOMY_CONTRACT_APPROVAL_REQUIRED",
+            Self::Idempotency(_) => "AUTONOMY_CONTRACT_REPLAY_DENIED",
+        }
+    }
 }
 
 impl AutonomousDevelopmentContractV1 {
@@ -847,6 +892,63 @@ fn validate_slug(value: &str, label: &str) -> Result<(), ContractPolicyError> {
 mod tests {
     use super::*;
     use uuid::Uuid;
+
+    #[test]
+    fn preparation_diagnostics_distinguish_prerequisites_from_security_denials() {
+        let cases = [
+            (
+                ContractPolicyError::Validation(
+                    "allowed path must be an existing directory".into(),
+                ),
+                "AUTONOMY_DRAFT_ALLOWED_DIRECTORY_REQUIRED",
+            ),
+            (
+                ContractPolicyError::Validation("forbidden path must exist".into()),
+                "AUTONOMY_DRAFT_FORBIDDEN_PATH_REQUIRED",
+            ),
+            (
+                ContractPolicyError::Validation("allowed path escapes workspace".into()),
+                "AUTONOMY_CONTRACT_SCOPE_DENIED",
+            ),
+            (
+                ContractPolicyError::Validation(
+                    "autonomous contract enables a prohibited operation or fallback".into(),
+                ),
+                "AUTONOMY_CONTRACT_PROHIBITED_OPERATION",
+            ),
+            (
+                ContractPolicyError::Denied("private caller detail".into()),
+                "AUTONOMY_CONTRACT_SCOPE_DENIED",
+            ),
+            (
+                ContractPolicyError::Lease("private caller detail".into()),
+                "AUTONOMY_CONTRACT_LEASE_DENIED",
+            ),
+            (
+                ContractPolicyError::Approval("private caller detail".into()),
+                "AUTONOMY_CONTRACT_APPROVAL_REQUIRED",
+            ),
+            (
+                ContractPolicyError::Idempotency("private caller detail".into()),
+                "AUTONOMY_CONTRACT_REPLAY_DENIED",
+            ),
+            // Error text alone is not proof of a platform-policy refusal.
+            (
+                ContractPolicyError::Validation("blocked by policy; private caller detail".into()),
+                "AUTONOMY_CONTRACT_INVALID",
+            ),
+        ];
+        for (error, expected) in cases {
+            assert_eq!(error.safe_reason_code(), expected);
+            assert!(!error.safe_reason_code().contains("private"));
+        }
+        let boundaries = runtime_capability_manifest()["authorizationBoundaries"].clone();
+        assert_eq!(boundaries["draftCreationNeedsContractStartApproval"], false);
+        assert_eq!(boundaries["validationGrantsExecution"], false);
+        assert_eq!(boundaries["directClaimNeedsExactContractApproval"], true);
+        assert_eq!(boundaries["platformPolicyOverrideSupported"], false);
+        assert_eq!(boundaries["protectedReleaseChecksUnchanged"], true);
+    }
 
     fn contract() -> AutonomousDevelopmentContractV1 {
         let root = std::env::temp_dir().join(format!("catdesk-adc-{}", Uuid::new_v4()));

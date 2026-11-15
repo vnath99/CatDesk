@@ -385,7 +385,11 @@ pub fn tool_schemas() -> Vec<Value> {
             json!({
                 "name": name,
                 "title": name.replace('_', " "),
-                "description": "CatDesk autonomous-development control-plane operation. Operator executable and authentication configuration are never accepted through MCP.",
+                "description": match *name {
+                    "autonomy_contract_create" => "Prepare an inert, unapproved DRAFT in the exact MCP workspace. Existing allowlist directories and scope checks are required; contract start approval and production promotion are not draft-preparation prerequisites. Does not start execution, approve review, or authorize external submissions.",
+                    "autonomy_contract_validate" => "Read contract validity and separate start readiness. valid=true can coexist with startReadiness=APPROVAL_REQUIRED; this is successful validation, not a preparation refusal. Validation grants no execution, release, or submission authority.",
+                    _ => "CatDesk autonomous-development control-plane operation. Operator executable and authentication configuration are never accepted through MCP.",
+                },
                 "inputSchema": input_schema,
                 "annotations": {"readOnlyHint":read_only,"openWorldHint":false,"destructiveHint":matches!(*name,"autonomy_session_cancel" | "catdesk_daemon_reload")}
             })
@@ -2600,8 +2604,12 @@ impl AutonomousSupervisorV1 {
     }
 
     fn create_contract(&self, contract: AutonomousDevelopmentContractV1) -> Result<Value, String> {
-        let policy = AutonomousPolicyEngineV1::new(contract.clone())
-            .map_err(|_| "autonomous contract policy rejected the request".to_string())?;
+        let policy = AutonomousPolicyEngineV1::new(contract.clone()).map_err(|error| {
+            format!(
+                "autonomous contract policy rejected the request [{}]",
+                error.safe_reason_code()
+            )
+        })?;
         if policy.contract().workspace.canonicalize().ok().as_deref() != Some(&self.workspace) {
             return Err("autonomous contract workspace must match the MCP workspace".into());
         }
@@ -4676,6 +4684,107 @@ mod tests {
             supervisor.validate_contract_at("session-1", 20).unwrap()["startReadiness"]["state"],
             "SESSION_NOT_READY"
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn draft_preparation_validation_needs_no_start_approval_but_claim_still_does() {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-draft-boundaries-{}", Uuid::new_v4()));
+        fs::create_dir_all(root.join("src")).unwrap();
+        let output = root.join("review-output");
+        let mut draft = contract(&root);
+        draft.mode = "chatgpt_web_direct_autonomous".into();
+        draft.provider_policy.primary_provider = "chatgpt-web".into();
+        draft.provider_policy.primary_model = "conversation-selected".into();
+        draft.provider_policy.routine_provider = "none".into();
+        draft.provider_policy.routine_model = "none".into();
+        draft.autonomy_lease.issued_at_unix = now_unix().saturating_sub(1);
+        draft.autonomy_lease.expires_at_unix = now_unix() + 120;
+        draft.autonomy_lease.start_approval_required = true;
+        draft.allowed_paths = vec![output.clone()];
+        draft.completion_artifact_ids = vec!["review-output/report.json".into()];
+        let hash = draft.decision_hash().unwrap();
+        let missing =
+            handle_tool("autonomy_contract_create", json!({"contract":draft}), &root).unwrap_err();
+        assert!(missing.contains("AUTONOMY_DRAFT_ALLOWED_DIRECTORY_REQUIRED"));
+        let session = root.join(".catdesk/autonomy/session-1");
+        assert!(!session.exists());
+        fs::create_dir(&output).unwrap();
+        assert_eq!(
+            draft.decision_hash().unwrap(),
+            hash,
+            "preparing an output directory cannot rewrite the contract"
+        );
+        let created =
+            handle_tool("autonomy_contract_create", json!({"contract":draft}), &root).unwrap();
+        assert_eq!(created["state"], "DRAFT");
+        assert_eq!(created["contractHash"], hash);
+        let before_state = fs::read(session.join("state.json")).unwrap();
+        let before_events = fs::read(session.join("events.jsonl")).unwrap();
+        let valid = handle_tool(
+            "autonomy_contract_validate",
+            json!({"sessionId":"session-1"}),
+            &root,
+        )
+        .unwrap();
+        assert_eq!(valid["valid"], true);
+        assert_eq!(valid["startReadiness"]["state"], "APPROVAL_REQUIRED");
+        assert_eq!(valid["startReadiness"]["runtimeAdmissionVerified"], false);
+        assert!(handle_tool("autonomy_session_claim_direct_work", json!({
+            "sessionId":"session-1", "expectedStateVersion":1, "idempotencyKey":"unapproved-draft-claim"
+        }), &root).is_err());
+        assert_eq!(fs::read(session.join("state.json")).unwrap(), before_state);
+        assert_eq!(
+            fs::read(session.join("events.jsonl")).unwrap(),
+            before_events
+        );
+        let snapshot: Value = serde_json::from_slice(&before_state).unwrap();
+        assert_eq!(snapshot["approvedContractHash"], Value::Null);
+        assert_eq!(snapshot["providerTurnCount"], 0);
+        assert_eq!(snapshot["currentTaskId"], Value::Null);
+        for (name, read_only) in [
+            ("autonomy_contract_create", false),
+            ("autonomy_contract_validate", true),
+            ("autonomy_session_claim_direct_work", false),
+            ("catdesk_reviewed_build_promotion", false),
+        ] {
+            let schema = tool_schemas()
+                .into_iter()
+                .find(|v| v["name"] == name)
+                .unwrap();
+            assert_eq!(schema["annotations"]["readOnlyHint"], read_only);
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn draft_preparation_does_not_relax_cross_workspace_or_prohibited_git_guards() {
+        let root = std::env::temp_dir().join(format!("catdesk-draft-denials-{}", Uuid::new_v4()));
+        let external = root.join("separate-project");
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::create_dir_all(external.join("src")).unwrap();
+        let outside = contract(&external);
+        assert_eq!(
+            handle_tool(
+                "autonomy_contract_create",
+                json!({"contract":outside}),
+                &root
+            )
+            .unwrap_err(),
+            "autonomous contract workspace must match the MCP workspace"
+        );
+        let mut prohibited = contract(&root);
+        prohibited.git_policy.force_push = true;
+        let error = handle_tool(
+            "autonomy_contract_create",
+            json!({"contract":prohibited}),
+            &root,
+        )
+        .unwrap_err();
+        assert!(error.contains("AUTONOMY_CONTRACT_PROHIBITED_OPERATION"));
+        assert!(!root.join(".catdesk/autonomy/session-1").exists());
+        assert!(!external.join(".catdesk").exists());
         fs::remove_dir_all(root).unwrap();
     }
 
