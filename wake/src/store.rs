@@ -2294,7 +2294,7 @@ impl Store {
     }
 
     pub fn retry_pre_submit(&self, id: &str) -> Result<()> {
-        self.retry_pre_submit_inner(id, None).map(|_| ())
+        self.retry_pre_submit_inner(id, None, None).map(|_| ())
     }
 
     /// Local operator recovery after qualifying the original acknowledgment
@@ -2306,16 +2306,69 @@ impl Store {
         expected: &Delivery,
         expected_sha256: &str,
     ) -> Result<Delivery> {
-        self.retry_pre_submit_inner(id, Some((expected, expected_sha256)))
+        self.retry_pre_submit_inner(id, Some((expected, expected_sha256)), None)
+    }
+
+    /// Explicit recovery of an ordinary scoped timeout at the input barrier.
+    /// The frozen native frame supplements, never replaces, local absence of
+    /// submission witnesses. This transition sends nothing and retains both
+    /// the prior delivery and the exact proof hash in the existing audit log.
+    pub fn retry_ordinary_scoped_timeout_expected(
+        &self,
+        id: &str,
+        expected: &Delivery,
+        expected_sha256: &str,
+        timeout_bytes: &[u8],
+        timeout_sha256: &str,
+    ) -> Result<Delivery> {
+        self.retry_pre_submit_inner(
+            id,
+            Some((expected, expected_sha256)),
+            Some((timeout_bytes, timeout_sha256)),
+        )
     }
 
     fn retry_pre_submit_inner(
         &self,
         id: &str,
         expected: Option<(&Delivery, &str)>,
+        timeout_proof: Option<(&[u8], &str)>,
     ) -> Result<Delivery> {
         let _lock = self.lock()?;
         let mut delivery = self.read_delivery(id)?.ok_or("SUBMISSION_CLAIM_MISSING")?;
+        let timeout = if let Some((bytes, hash)) = timeout_proof {
+            use sha2::{Digest, Sha256};
+            if expected.is_none()
+                || bytes.len() > 16 * 1024
+                || format!("{:x}", Sha256::digest(bytes)) != hash
+            {
+                return Err("SUBMISSION_RETRY_TIMEOUT_PROOF_HASH_INVALID".into());
+            }
+            let value: serde_json::Value = serde_json::from_slice(bytes)
+                .map_err(|_| "SUBMISSION_RETRY_TIMEOUT_PROOF_INVALID")?;
+            if !crate::runtime::is_scoped_work_timeout(&value)
+                || value["action"] != "scoped_work_request_run"
+                || value["deliveryPhase"] != "ATTENTION"
+                || value["receiptPresent"] != false
+                || value["projectId"] != delivery.event.project_id
+                || value["eventId"] != id
+                || value["targetGeneration"] != delivery.target.generation
+                || value["targetDigest"] != delivery.target.digest
+                || value["messageSha256"] != delivery.message_digest
+                || value["diagnosis"]["lastAdapterStage"] != "BEFORE_SUBMIT"
+                || value["diagnosis"]["beforeSubmitCalls"] != 1
+                || value["diagnosis"]["guardCheckCalls"].as_u64().unwrap_or(0) == 0
+                || value["diagnosis"]["timingCapped"] != false
+                || value["diagnosis"]["elapsedMs"].as_u64().unwrap_or(0)
+                    < value["diagnosis"]["maximumSeconds"].as_u64().unwrap_or(181) * 1000
+                || delivery.reason.as_deref() != Some("SCOPED_REVIEW_TIMEOUT")
+            {
+                return Err("SUBMISSION_RETRY_TIMEOUT_PROOF_INVALID".into());
+            }
+            Some(value)
+        } else {
+            None
+        };
         if let Some((prior, hash)) = expected {
             use sha2::{Digest, Sha256};
             if hash.len() != 64
@@ -2335,7 +2388,12 @@ impl Store {
             }
             if delivery.event.event_type != "engineering_attention"
                 || !delivery.event.audit_references.is_empty()
-                || delivery.reason.as_deref() != Some("BROWSER_ATTEMPT_TIMEOUT")
+                || delivery.reason.as_deref()
+                    != Some(if timeout.is_some() {
+                        "SCOPED_REVIEW_TIMEOUT"
+                    } else {
+                        "BROWSER_ATTEMPT_TIMEOUT"
+                    })
                 || !id.strip_prefix("web-work-").is_some_and(|v| {
                     v.len() == 64
                         && v.bytes()
@@ -2367,8 +2425,12 @@ impl Store {
             return Err("TARGET_GENERATION_STALE".into());
         }
         if let Some((_, hash)) = expected {
-            let evidence = serde_json::json!({"schemaVersion":1,"purpose":"ORDINARY_PRE_SUBMIT_RECOVERY_PRIOR_DELIVERY",
+            let mut evidence = serde_json::json!({"schemaVersion":1,"purpose":"ORDINARY_PRE_SUBMIT_RECOVERY_PRIOR_DELIVERY",
                 "deliverySha256":hash,"delivery":delivery});
+            if let Some(value) = &timeout {
+                evidence["timeoutEvidence"] = value.clone();
+                evidence["timeoutEvidenceSha256"] = serde_json::json!(timeout_proof.unwrap().1);
+            }
             let path = self
                 .root
                 .join("logs")
@@ -3064,6 +3126,232 @@ mod ordinary_retry_cas_tests {
             .root
             .join("logs")
             .join(format!("pre-submit-retry-{}-{hash}.json", d.event.event_id))
+    }
+    fn scoped_timeout_fixture() -> (Store, Delivery, String, serde_json::Value) {
+        let (store, mut d, _) = fixture();
+        d.reason = Some("SCOPED_REVIEW_TIMEOUT".into());
+        atomic(&store.delivery_path(&d.event.event_id), &d).unwrap();
+        let hash = format!(
+            "{:x}",
+            Sha256::digest(fs::read(store.delivery_path(&d.event.event_id)).unwrap())
+        );
+        let proof = serde_json::json!({"action":"scoped_work_request_run","status":"attention",
+            "errorCode":"SCOPED_REVIEW_TIMEOUT","projectId":d.event.project_id,"eventId":d.event.event_id,
+            "targetGeneration":d.target.generation,"targetDigest":d.target.digest,"messageSha256":d.message_digest,
+            "deliveryPhase":"ATTENTION","receiptPresent":false,"submissionOutcome":"UNKNOWN",
+            "retryAuthorized":false,"nativeGrantCreatedBySender":false,"workResolved":false,
+            "diagnosis":{"schemaVersion":1,"lastAdapterStage":"BEFORE_SUBMIT","elapsedMs":123000,
+                "maximumSeconds":120,"guardCheckCalls":25,"guardCheckMaxMs":5300,
+                "beforeSubmitCalls":1,"beforeSubmitMaxMs":4700,"timingCapped":false}});
+        (store, d, hash, proof)
+    }
+    fn scoped_retry(
+        store: &Store,
+        d: &Delivery,
+        hash: &str,
+        proof: &serde_json::Value,
+    ) -> Result<Delivery> {
+        let bytes = serde_json::to_vec(proof).unwrap();
+        let proof_hash = format!("{:x}", Sha256::digest(&bytes));
+        store.retry_ordinary_scoped_timeout_expected(
+            &d.event.event_id,
+            d,
+            hash,
+            &bytes,
+            &proof_hash,
+        )
+    }
+    #[test]
+    fn scoped_timeout_requires_exact_evidence_and_never_rearms_an_unknown_submission() {
+        for case in [
+            "project",
+            "event",
+            "generation",
+            "target",
+            "message",
+            "stage",
+            "zero-before",
+            "duplicate-before",
+            "zero-guard",
+            "capped",
+            "early",
+            "private-field",
+            "diagnostic-field",
+            "action",
+            "receipt",
+            "submitting",
+            "sent",
+            "hash",
+            "stale-cas",
+            "queue",
+            "target-changed",
+            "witness",
+            "timer",
+            "archive",
+            "no-proof",
+        ] {
+            let (store, mut d, mut hash, mut proof) = scoped_timeout_fixture();
+            let id = d.event.event_id.clone();
+            match case {
+                "project" => proof["projectId"] = serde_json::json!("beta"),
+                "event" => {
+                    proof["eventId"] = serde_json::json!(format!("web-work-{}", "b".repeat(64)))
+                }
+                "generation" => proof["targetGeneration"] = serde_json::json!(2),
+                "target" => proof["targetDigest"] = serde_json::json!("b".repeat(64)),
+                "message" => proof["messageSha256"] = serde_json::json!("b".repeat(64)),
+                "stage" => {
+                    proof["diagnosis"]["lastAdapterStage"] = serde_json::json!("GENERATION_ACTIVE")
+                }
+                "zero-before" => proof["diagnosis"]["beforeSubmitCalls"] = serde_json::json!(0),
+                "duplicate-before" => {
+                    proof["diagnosis"]["beforeSubmitCalls"] = serde_json::json!(2)
+                }
+                "zero-guard" => proof["diagnosis"]["guardCheckCalls"] = serde_json::json!(0),
+                "capped" => proof["diagnosis"]["timingCapped"] = serde_json::json!(true),
+                "early" => proof["diagnosis"]["elapsedMs"] = serde_json::json!(119999),
+                "private-field" => proof["body"] = serde_json::json!("must not be archived"),
+                "diagnostic-field" => {
+                    proof["diagnosis"]["draft"] = serde_json::json!("must not be archived")
+                }
+                "action" => proof["action"] = serde_json::json!("scoped_manual_end_turn_run"),
+                "receipt" => {
+                    d.receipt = Some(Receipt {
+                        schema_version: 1,
+                        event_id: id.clone(),
+                        target_generation: d.target.generation,
+                        target_digest: d.target.digest.clone(),
+                        message_digest: d.message_digest.clone(),
+                        sent_utc: now(),
+                        evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+                    })
+                }
+                "submitting" => d.phase = Phase::Submitting,
+                "sent" => d.phase = Phase::Sent,
+                "stale-cas" => hash = "f".repeat(64),
+                "queue" => {
+                    let mut event = d.event.clone();
+                    event.message = "changed".into();
+                    atomic(&store.event_path(&id), &event).unwrap();
+                }
+                "target-changed" => {
+                    let mut c = store.config().unwrap();
+                    c.targets.insert(
+                        "alpha".into(),
+                        Target::new(2, "https://chatgpt.com/c/foreign".into()).unwrap(),
+                    );
+                    atomic(&store.root.join("config.json"), &c).unwrap();
+                }
+                "witness" => fs::write(store.submission_start_path(&id), b"retained").unwrap(),
+                "timer" => fs::write(store.timer_path(&id), b"retained").unwrap(),
+                "archive" => atomic(&store.archive_path(&id), &d.event).unwrap(),
+                _ => (),
+            }
+            if ["receipt", "submitting", "sent"].contains(&case) {
+                atomic(&store.delivery_path(&id), &d).unwrap();
+                hash = format!(
+                    "{:x}",
+                    Sha256::digest(fs::read(store.delivery_path(&id)).unwrap())
+                );
+            }
+            let before = fs::read(store.delivery_path(&id)).unwrap();
+            let result = if case == "hash" {
+                store.retry_ordinary_scoped_timeout_expected(
+                    &id,
+                    &d,
+                    &hash,
+                    &serde_json::to_vec(&proof).unwrap(),
+                    &"f".repeat(64),
+                )
+            } else if case == "no-proof" {
+                store.retry_ordinary_pre_submit_expected(&id, &d, &hash)
+            } else {
+                scoped_retry(&store, &d, &hash, &proof)
+            };
+            assert!(result.is_err(), "{case}");
+            assert_eq!(
+                fs::read(store.delivery_path(&id)).unwrap(),
+                before,
+                "{case}"
+            );
+            assert!(!evidence(&store, &d, &hash).exists(), "{case}");
+        }
+    }
+    #[test]
+    fn scoped_timeout_archives_exact_prior_and_proof_then_rearms_same_request_once() {
+        let (store, d, hash, proof) = scoped_timeout_fixture();
+        let queued = fs::read(store.event_path(&d.event.event_id)).unwrap();
+        let claimed = scoped_retry(&store, &d, &hash, &proof).unwrap();
+        assert_eq!(claimed.phase, Phase::Claimed);
+        assert_eq!(claimed.event, d.event);
+        assert_eq!(claimed.target, d.target);
+        assert_eq!(claimed.message_digest, d.message_digest);
+        assert!(claimed.receipt.is_none());
+        assert_eq!(
+            fs::read(store.event_path(&d.event.event_id)).unwrap(),
+            queued
+        );
+        let saved: serde_json::Value = read(&evidence(&store, &d, &hash)).unwrap();
+        assert_eq!(saved["delivery"], serde_json::to_value(&d).unwrap());
+        assert_eq!(saved["timeoutEvidence"], proof);
+        assert_eq!(
+            saved["timeoutEvidenceSha256"],
+            format!("{:x}", Sha256::digest(serde_json::to_vec(&proof).unwrap()))
+        );
+        assert!(!store.timer_path(&d.event.event_id).exists());
+        assert!(!store.submission_start_path(&d.event.event_id).exists());
+        assert!(!store.archive_path(&d.event.event_id).exists());
+        assert!(scoped_retry(&store, &d, &hash, &proof).is_err());
+    }
+    #[test]
+    fn scoped_timeout_interruption_preserves_proof_and_rejects_conflicting_prior_evidence() {
+        for conflict in [false, true] {
+            let (store, d, hash, proof) = scoped_timeout_fixture();
+            let proof_hash = format!("{:x}", Sha256::digest(serde_json::to_vec(&proof).unwrap()));
+            let mut saved = serde_json::json!({"schemaVersion":1,"purpose":"ORDINARY_PRE_SUBMIT_RECOVERY_PRIOR_DELIVERY",
+                "deliverySha256":hash,"delivery":d,"timeoutEvidence":proof,"timeoutEvidenceSha256":proof_hash});
+            if conflict {
+                saved["timeoutEvidenceSha256"] = serde_json::json!("f".repeat(64));
+            }
+            let path = evidence(&store, &d, &hash);
+            atomic(&path, &saved).unwrap();
+            let before = fs::read(&path).unwrap();
+            assert_eq!(scoped_retry(&store, &d, &hash, &proof).is_err(), conflict);
+            assert_eq!(fs::read(path).unwrap(), before);
+            if conflict {
+                assert_eq!(store.delivery(&d.event.event_id).unwrap(), Some(d));
+            }
+        }
+    }
+    #[test]
+    fn scoped_timeout_concurrent_recovery_has_only_one_cas_winner() {
+        let (store, d, hash, proof) = scoped_timeout_fixture();
+        let gate = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let jobs: Vec<_> = (0..2)
+            .map(|_| {
+                let root = store.root.clone();
+                let parent = root.parent().unwrap().to_path_buf();
+                let d = d.clone();
+                let hash = hash.clone();
+                let proof = proof.clone();
+                let gate = gate.clone();
+                std::thread::spawn(move || {
+                    let store = Store::open_scoped_for_test(&root, &parent).unwrap();
+                    gate.wait();
+                    scoped_retry(&store, &d, &hash, &proof).is_ok()
+                })
+            })
+            .collect();
+        assert_eq!(
+            jobs.into_iter()
+                .map(|j| j.join().unwrap())
+                .filter(|won| *won)
+                .count(),
+            1
+        );
+        let saved: serde_json::Value = read(&evidence(&store, &d, &hash)).unwrap();
+        assert_eq!(saved["delivery"], serde_json::to_value(&d).unwrap());
+        assert_eq!(saved["timeoutEvidence"], proof);
     }
     #[test]
     fn concurrent_exact_cas_has_one_winner_and_one_preserved_failure() {

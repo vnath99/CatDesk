@@ -36,7 +36,7 @@ fn validate_selection(
 enum Action<'a> {
     Deliver,
     Inspect,
-    Retry(&'a str),
+    Retry(&'a str, Option<(&'a [u8], &'a str)>),
     Reconcile,
     Response,
 }
@@ -120,7 +120,23 @@ pub(crate) fn retry_pre_submit(
     request_id: &str,
     hash: &str,
 ) -> Result<Value, String> {
-    selected_work(workspace, project, request_id, Action::Retry(hash))
+    selected_work(workspace, project, request_id, Action::Retry(hash, None))
+}
+
+pub(crate) fn retry_pre_submit_with_timeout(
+    workspace: &Path,
+    project: &str,
+    request_id: &str,
+    hash: &str,
+    timeout_bytes: &[u8],
+    timeout_sha256: &str,
+) -> Result<Value, String> {
+    selected_work(
+        workspace,
+        project,
+        request_id,
+        Action::Retry(hash, Some((timeout_bytes, timeout_sha256))),
+    )
 }
 
 fn selected_work(
@@ -132,12 +148,18 @@ fn selected_work(
     let inspect_only = matches!(action, Action::Inspect);
     let reconcile_only = matches!(action, Action::Reconcile);
     let response_only = matches!(action, Action::Response);
-    let retry_sha256 = if let Action::Retry(hash) = action {
-        Some(hash)
+    let (retry_sha256, timeout_proof) = if let Action::Retry(hash, proof) = action {
+        (Some(hash), proof)
     } else {
-        None
+        (None, None)
     };
-    if (inspect_only || retry_sha256.is_some() || reconcile_only || response_only)
+    // Exact pre-submit recovery is local metadata under the same stopped-host,
+    // browser-quiescence and paired-selection gates in either qualified mode.
+    // The installed-only response/DOM observers keep their existing scope.
+    if (inspect_only
+        || (retry_sha256.is_some() && timeout_proof.is_none())
+        || reconcile_only
+        || response_only)
         && wake_protocol_client::wake_runtime_mode_for_workspace(workspace)? != "INSTALLED_STORE"
     {
         return Err("WEB_BROWSER_INSTALLED_SCOPE_REQUIRED".into());
@@ -319,6 +341,7 @@ fn selected_work(
                 &target,
                 prior.as_ref().ok_or("WEB_WORK_DELIVERY_MISSING")?,
                 hash,
+                timeout_proof,
             )
         });
     }
@@ -351,6 +374,7 @@ fn retry_selected(
     target: &Target,
     prior: &catdesk_wake::store::Delivery,
     hash: &str,
+    timeout_proof: Option<(&[u8], &str)>,
 ) -> Result<Value, String> {
     validate_selection(project, record, target, &prior.event)?;
     if prior.target != *target {
@@ -360,12 +384,23 @@ fn retry_selected(
     if control.schema_version != 1 || control.desired != "STOPPED" {
         return Err("WEB_WORK_RECOVERY_HOST_NOT_STOPPED".into());
     }
-    let recovered = wake.retry_ordinary_pre_submit_expected(&record.event_id, prior, hash)?;
+    let recovered = if let Some((bytes, proof_hash)) = timeout_proof {
+        wake.retry_ordinary_scoped_timeout_expected(
+            &record.event_id,
+            prior,
+            hash,
+            bytes,
+            proof_hash,
+        )?
+    } else {
+        wake.retry_ordinary_pre_submit_expected(&record.event_id, prior, hash)?
+    };
     Ok(
         json!({"action":"web_work_retry_pre_submit","projectId":project,"requestId":record.request_id,
         "eventId":record.event_id,"phase":recovered.phase,"priorDeliverySha256":hash,
         "priorEvidencePreserved":true,"sendAttempted":false,"receiptCreated":false,
-        "browserStarted":false,"hostStarted":false,"nativeGrantCreated":false}),
+        "browserStarted":false,"hostStarted":false,"nativeGrantCreated":false,
+        "timeoutEvidenceRetained":timeout_proof.is_some()}),
     )
 }
 
@@ -542,16 +577,16 @@ mod tests {
             .unwrap();
         let ledger_path = control.join(".catdesk/web-work/alpha.json");
         let ledger_before = std::fs::read(&ledger_path).unwrap();
-        assert!(retry_selected(&wake, "beta", &record, &target, &prior, &hash).is_err());
+        assert!(retry_selected(&wake, "beta", &record, &target, &prior, &hash, None).is_err());
         let mut closed = record.clone();
         closed.phase = "CLOSED".into();
-        assert!(retry_selected(&wake, "alpha", &closed, &target, &prior, &hash).is_err());
-        let result = retry_selected(&wake, "alpha", &record, &target, &prior, &hash).unwrap();
+        assert!(retry_selected(&wake, "alpha", &closed, &target, &prior, &hash, None).is_err());
+        let result = retry_selected(&wake, "alpha", &record, &target, &prior, &hash, None).unwrap();
         assert_eq!(result["phase"], "CLAIMED");
         assert_eq!(result["sendAttempted"], false);
         assert_eq!(result["nativeGrantCreated"], false);
         assert_eq!(std::fs::read(ledger_path).unwrap(), ledger_before);
-        assert!(retry_selected(&wake, "alpha", &record, &target, &prior, &hash).is_err());
+        assert!(retry_selected(&wake, "alpha", &record, &target, &prior, &hash, None).is_err());
     }
     #[test]
     fn ordinary_retry_cannot_select_installed_resources_from_development_scope() {
