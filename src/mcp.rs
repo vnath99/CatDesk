@@ -4820,6 +4820,14 @@ fn handle_turn_timer(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcRespo
 
     let result: Result<catdesk_wake::store::TurnTimer, String> = (|| {
         let root = crate::wake_protocol_client::wake_root_for_workspace(Path::new(workspace_root))?;
+        // Wake already starts each project's event timer. Observing that exact
+        // stored timer neither needs a central conversation nor grants work.
+        // Do not initialize a store or acquire mutation authority for STATUS.
+        if action == "STATUS" {
+            return catdesk_wake::store::Store::open_read_only(&root)?
+                .timer(timer_id.expect("validated STATUS timerId"))?
+                .ok_or_else(|| "TURN_TIMER_MISSING".to_string());
+        }
         let store = catdesk_wake::store::Store::open(&root)?;
         let config = store.config()?;
         let target = config
@@ -4839,9 +4847,6 @@ fn handle_turn_timer(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcRespo
                 );
                 store.start_manual_turn_timer(&id, CATDESK_PROJECT_ID_V1, &target)
             }
-            "STATUS" => store
-                .timer(timer_id.expect("validated STATUS timerId"))?
-                .ok_or_else(|| "TURN_TIMER_MISSING".to_string()),
             "STOP" => store.complete_manual_turn_timer(
                 timer_id.expect("validated STOP timerId"),
                 CATDESK_PROJECT_ID_V1,
@@ -4853,6 +4858,9 @@ fn handle_turn_timer(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcRespo
 
     match result {
         Ok(timer) => {
+            let project_id = timer.project_id.clone();
+            let target_generation = timer.target_generation;
+            let target_digest = timer.target_digest.clone();
             let origin = if timer
                 .event_id
                 .starts_with(catdesk_wake::store::MANUAL_TURN_PREFIX)
@@ -4867,7 +4875,7 @@ fn handle_turn_timer(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcRespo
                 match crate::wake_protocol_client::wake_root_for_workspace(Path::new(
                     workspace_root,
                 ))
-                .and_then(|root| catdesk_wake::store::Store::open(&root))
+                .and_then(|root| catdesk_wake::store::Store::open_read_only(&root))
                 .and_then(|store| store.delivery(&status.event_id))
                 {
                     Ok(Some(delivery)) => ("PRESENT", Some(delivery)),
@@ -4885,6 +4893,13 @@ fn handle_turn_timer(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcRespo
                     "toolName": "catdesk_turn_timer",
                     "action": action,
                     "timerId": status.event_id,
+                    "projectId": project_id,
+                    "targetGeneration": target_generation,
+                    "targetDigest": target_digest,
+                    "bindingEvidence": "STORED_TIMER_METADATA",
+                    "readOnly": action == "STATUS",
+                    "timerAloneProvesDelivery": false,
+                    "timerAloneGrantsExecution": false,
                     "origin": origin,
                     "state": status.response_state,
                     "startedUtc": status.started_utc,
@@ -12359,6 +12374,199 @@ mod tests {
         let text = result_text(&response);
         assert!(text.contains("TURN_TIMER_INVALID_REQUEST"));
         assert!(text.contains("START generates its own timerId"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn shared_turn_timer_status_is_independent_of_central_target_and_preserves_mutation_scope() {
+        use catdesk_wake::store::{MANUAL_TURN_PREFIX, Phase};
+        let (control, _, wake, _, event) = crate::web_work::tests::assignment_fixture_for("alpha");
+        assert!(!wake.config().unwrap().targets.contains_key("catdesk"));
+        // This models Wake's existing project-specific submission timer. It is
+        // disposable metadata, not a real browser submission or delivery proof.
+        wake.publish(&event).unwrap();
+        let host = wake.host_lock().unwrap();
+        let delivery = wake.claim(&event, &host).unwrap();
+        wake.transition(
+            &event.event_id,
+            &delivery.owner,
+            Phase::Submitting,
+            None,
+            None,
+        )
+        .unwrap();
+        wake.start_submission_timer(&event.event_id).unwrap();
+        drop(host);
+        let beta = wake
+            .set_target("beta", 0, "https://chatgpt.com/c/timer-beta-fixture")
+            .unwrap();
+        let beta_id = format!("{MANUAL_TURN_PREFIX}beta-fixture");
+        wake.start_manual_turn_timer(&beta_id, "beta", &beta)
+            .unwrap();
+        let paths = [
+            wake.root().join("config.json"),
+            wake.root()
+                .join("deliveries")
+                .join(format!("{}.json", event.event_id)),
+            wake.root()
+                .join("turns")
+                .join(format!("{}.json", event.event_id)),
+            wake.root().join("turns").join(format!("{beta_id}.json")),
+        ];
+        let before: Vec<_> = paths.iter().map(|p| std::fs::read(p).unwrap()).collect();
+        for (id, project, generation, digest, origin) in [
+            (
+                event.event_id.as_str(),
+                "alpha",
+                delivery.target.generation,
+                delivery.target.digest.as_str(),
+                "WAKE_EVENT",
+            ),
+            (
+                beta_id.as_str(),
+                "beta",
+                beta.generation,
+                beta.digest.as_str(),
+                "MANUAL_WORK",
+            ),
+        ] {
+            let req = tool_call_request(
+                "catdesk_turn_timer",
+                json!({"action":"STATUS","timerId":id}),
+            );
+            let response = handle_turn_timer(&req, control.to_str().unwrap());
+            let result = response.result.as_ref().unwrap();
+            assert!(
+                result
+                    .get("isError")
+                    .is_none_or(|value| value == &json!(false)),
+                "{result}"
+            );
+            let value = &result["structuredContent"];
+            assert_eq!(value["timerId"], id);
+            assert_eq!(value["projectId"], project);
+            assert_eq!(value["targetGeneration"], generation);
+            assert_eq!(value["targetDigest"], digest);
+            assert_eq!(value["origin"], origin);
+            assert_eq!(value["readOnly"], true);
+            assert_eq!(value["bindingEvidence"], "STORED_TIMER_METADATA");
+            assert_eq!(value["timerAloneProvesDelivery"], false);
+            assert_eq!(value["timerAloneGrantsExecution"], false);
+            if project == "alpha" {
+                assert_eq!(value["deliveryPhase"], "SUBMITTING");
+                assert_eq!(value["deliveryHasReceipt"], false);
+            }
+            assert_eq!(
+                value["remainingSeconds"].as_u64().unwrap()
+                    + value["elapsedSeconds"].as_u64().unwrap(),
+                1200
+            );
+            assert!(!result.to_string().contains("chatgpt.com"));
+        }
+        assert_eq!(
+            paths
+                .iter()
+                .map(|p| std::fs::read(p).unwrap())
+                .collect::<Vec<_>>(),
+            before
+        );
+        wake.set_target("catdesk", 0, "https://chatgpt.com/c/timer-central-fixture")
+            .unwrap();
+        let config_before = std::fs::read(&paths[0]).unwrap();
+        for id in [event.event_id.as_str(), beta_id.as_str()] {
+            let req =
+                tool_call_request("catdesk_turn_timer", json!({"action":"STOP","timerId":id}));
+            assert_eq!(
+                handle_turn_timer(&req, control.to_str().unwrap())
+                    .result
+                    .unwrap()["isError"],
+                true
+            );
+        }
+        let missing = tool_call_request(
+            "catdesk_turn_timer",
+            json!({"action":"STATUS","timerId":"missing-project-timer"}),
+        );
+        assert!(
+            result_text(&handle_turn_timer(&missing, control.to_str().unwrap()))
+                .contains("TURN_TIMER_MISSING")
+        );
+        assert!(
+            !wake
+                .root()
+                .join("turns/missing-project-timer.json")
+                .exists()
+        );
+        assert_eq!(std::fs::read(&paths[0]).unwrap(), config_before);
+        for (path, bytes) in paths.iter().zip(before).skip(1) {
+            assert_eq!(std::fs::read(path).unwrap(), bytes);
+        }
+        let start = tool_call_request("catdesk_turn_timer", json!({"action":"START"}));
+        let started = handle_turn_timer(&start, control.to_str().unwrap())
+            .result
+            .unwrap();
+        assert!(
+            started
+                .get("isError")
+                .is_none_or(|value| value == &json!(false)),
+            "{started}"
+        );
+        assert_eq!(started["structuredContent"]["projectId"], "catdesk");
+        assert_eq!(started["structuredContent"]["readOnly"], false);
+        let stop = tool_call_request(
+            "catdesk_turn_timer",
+            json!({"action":"STOP",
+            "timerId":started["structuredContent"]["timerId"]}),
+        );
+        let stopped = handle_turn_timer(&stop, control.to_str().unwrap())
+            .result
+            .unwrap();
+        assert!(
+            stopped
+                .get("isError")
+                .is_none_or(|value| value == &json!(false)),
+            "{stopped}"
+        );
+        assert_eq!(stopped["structuredContent"]["state"], "COMPLETE");
+        let parent = control.parent().unwrap().canonicalize().unwrap();
+        assert_eq!(
+            parent.parent(),
+            Some(std::env::temp_dir().canonicalize().unwrap().as_path())
+        );
+        let name = parent.file_name().unwrap().to_str().unwrap();
+        assert!(Uuid::parse_str(name.strip_prefix("project-task-").unwrap()).is_ok());
+        drop(wake);
+        std::fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn shared_turn_timer_status_never_initializes_a_missing_store_directory() {
+        let (control, _, wake, _, _) = crate::web_work::tests::assignment_fixture_for("alpha");
+        let turns = wake.root().join("turns");
+        assert!(std::fs::read_dir(&turns).unwrap().next().is_none());
+        std::fs::remove_dir(&turns).unwrap();
+        let req = tool_call_request(
+            "catdesk_turn_timer",
+            json!({"action":"STATUS","timerId":"missing-timer"}),
+        );
+        let response = handle_turn_timer(&req, control.to_str().unwrap())
+            .result
+            .unwrap();
+        assert_eq!(response["isError"], true);
+        assert!(
+            !turns.exists(),
+            "read-only STATUS must not initialize runtime directories"
+        );
+        let parent = control.parent().unwrap().canonicalize().unwrap();
+        assert_eq!(
+            parent.parent(),
+            Some(std::env::temp_dir().canonicalize().unwrap().as_path())
+        );
+        let name = parent.file_name().unwrap().to_str().unwrap();
+        assert!(Uuid::parse_str(name.strip_prefix("project-task-").unwrap()).is_ok());
+        drop(wake);
+        std::fs::remove_dir_all(parent).unwrap();
     }
 
     #[test]
