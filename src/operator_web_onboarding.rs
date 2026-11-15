@@ -1049,6 +1049,7 @@ mod first_conversation_tests {
             driver_route: "SAME_CONVERSATION".into(),
             document_route: "HOME".into(),
             failure_code: None,
+            surface: None,
         };
         retain_readback_observation(&control, &record, &input, &observation).unwrap();
         retain_readback_observation(&control, &record, &input, &observation).unwrap();

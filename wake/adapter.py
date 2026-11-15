@@ -20,6 +20,7 @@ BOOTSTRAP_RESPONSE_LIFECYCLE_V1 = True
 INITIALIZATION_READBACK_DIAGNOSTICS_V1 = True
 INITIALIZATION_READBACK_HOME_ONLY_V1 = True
 INITIALIZATION_READBACK_FAILURE_CODES_V1 = True
+INITIALIZATION_READBACK_SURFACE_V1 = True
 INITIALIZATION_READBACK_FAILURE_CODES = frozenset({
     "INITIALIZATION_READBACK_USER_UNPROVEN", "INITIALIZATION_READBACK_FIXED_NAVIGATION_UNAVAILABLE",
     "RESPONSE_TARGET_DRIFT", "RESPONSE_USER_DOCUMENT_NOT_HYDRATED", "RESPONSE_STATE_QUERY_FAILED",
@@ -744,6 +745,12 @@ def initialization_readback(bridge, sb, request):
               "documentRoute":route(lambda:bridge.CdpSink.cdp_value(cdp.evaluate("location.href")))}
         if failure is not None:
             frame["failureCode"] = failure if failure in INITIALIZATION_READBACK_FAILURE_CODES else "OBSERVATION_UNPROVEN"
+        try:
+            # Reuse the qualified nine-field reader; it exports only closed
+            # Home/login/editor/draft/generation/history categories, no text.
+            frame["surface"] = sink.browser_surface_observation(cdp)
+        except Exception:
+            pass
         emit(frame)
     try:
         cdp = prepare_cdp_target(bridge, sb, candidate)

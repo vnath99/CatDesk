@@ -240,7 +240,7 @@ class ProjectInitializationTests(unittest.TestCase):
                     bridge.compose_initialization_message("project-first", "initialize-first",
                         registration, body)
 
-    def readback_case(self, *, request_change=None, fault=None):
+    def readback_case(self, *, request_change=None, fault=None, surface=False):
         original = self.request()
         request = {key: original[key] for key in ["projectId", "intentId", "registrationDigest", "handoff"]}
         request.update(initializationReadback=True, candidateUrl=ISSUED, nativeTurnStartedUtc=1)
@@ -269,6 +269,12 @@ class ProjectInitializationTests(unittest.TestCase):
                 return "RESPONSE_COMPLETE"
 
             def error(self, cdp, current=None): return False
+
+            def browser_surface_observation(self, cdp):
+                if not surface:raise AttributeError("fixture has no surface reader")
+                return {"route":"HOME","document":"COMPLETE","history":"ABSENT","editor":"MISSING",
+                    "composer":"UNKNOWN","generation":"IDLE","assistant":"ABSENT",
+                    "exchange":"UNATTRIBUTED","recovery":"OBSERVATION_ONLY"}
 
             def check_empty_home(self, cdp):
                 if cdp.draft: raise bridge.Attention("EXISTING_DRAFT")
@@ -385,6 +391,14 @@ class ProjectInitializationTests(unittest.TestCase):
         self.assertIsNotNone(error)
         self.assertEqual(output[-1]["failureCode"],"OBSERVATION_UNPROVEN")
         self.assertNotIn("private context execution key",json.dumps(output))
+
+    def test_initialization_readback_reuses_closed_browser_surface_metadata(self):
+        _,output,error,_=self.readback_case(fault="document-home",surface=True)
+        self.assertEqual(str(error),"RESPONSE_TARGET_DRIFT")
+        self.assertEqual(output[-1]["surface"]["editor"],"MISSING")
+        self.assertEqual(output[-1]["surface"]["document"],"COMPLETE")
+        self.assertEqual(output[-1]["surface"]["exchange"],"UNATTRIBUTED")
+        self.assertNotIn(ISSUED,json.dumps(output))
 
     def test_initialization_readback_failure_records_the_actual_phase_only(self):
         for fault,phase in [("wrong-user","ORIGINAL_USER_CHECK"),("RESPONSE_LOAD_ERROR","COMPLETION"),
