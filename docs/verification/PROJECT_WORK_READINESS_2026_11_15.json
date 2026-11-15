@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-15T03:31:29.533192+00:00",
+  "sourceCommit": "f5d535e5fd81d36948d06e159c5d1de27c4a9687",
+  "scope": "PROJECT_SCOPED_DOCTOR_AND_DIRECT_WEB_ELIGIBILITY_NOT_CODING_ACCEPTANCE",
+  "sourceFiles": {
+    "scripts/catdesk-doctor.ps1": "224c31bcaf184d19dbc090d6a07fc796af8c1d4e8ee8c4b0d433fada05c178f4",
+    "scripts/test-catdesk-doctor.ps1": "fabaa2f913fff89edfae78c829928e0fe1a7e6f3546d1cf98902b86375aa8d81"
+  },
+  "implementation": {
+    "existingDoctorLayer": "PROJECT_REGISTRY",
+    "newOwnerOrRegistry": false,
+    "perProjectRows": true,
+    "maximumLedgerBytes": 1048576,
+    "maximumRecordsPerLedger": 256,
+    "maximumProjectsObserved": 32,
+    "coverageCappingExplicit": true,
+    "deterministicProjectRequestEventIdentity": true,
+    "sourceMessageReceiptAndTargetTupleChecked": true,
+    "grantContentsRead": false,
+    "grantPresenceLabel": "PRESENT_UNVERIFIED",
+    "executionOrRetryAuthorizedByReport": false,
+    "independentNativePreflightNotGloballyBlocked": true,
+    "observedRootIsNotServingOwnerProof": true
+  },
+  "tests": {
+    "windowsFixtureAssertions": 206,
+    "realFacadeUsed": true,
+    "fixtureCoverage": [
+      "missing and closed ledger",
+      "singleton arrays",
+      "multiple open requests",
+      "schema and observation limits",
+      "foreign request/project/generation/message/receipt",
+      "unknown submission and unresolved attention",
+      "unread grant presence",
+      "malformed sibling does not block matching project",
+      "bounded 32-project coverage",
+      "JSON and human output privacy",
+      "no mutation"
+    ],
+    "initialHarnessAndSingletonArrayFailuresPreserved": true,
+    "actualBoundedWindowsScopes": [
+      {
+        "role": "isolated-development",
+        "rows": 12,
+        "registryCode": "REGISTRY_METADATA_PAIRED"
+      },
+      {
+        "role": "retained-store-view",
+        "rows": 6,
+        "registryCode": "PROJECT_WAKE_TARGET_MISMATCH"
+      },
+      {
+        "role": "current-pointer-view",
+        "rows": 6,
+        "registryCode": "PROJECT_WAKE_TARGET_MISMATCH"
+      }
+    ],
+    "ownerMaximumSeconds": 120,
+    "ownerExited": true,
+    "ownerTimedOut": false,
+    "terminationFailed": false,
+    "maturity": "SOURCE_FACADE_ACTUAL_READONLY_WINDOWS"
+  },
+  "directRouteProbe": {
+    "client": "CODEX_V5_CONNECTOR_NOT_CHATGPT_WEB",
+    "calls": 1,
+    "reservedEnvelopeContainedNoTaskOrKey": true,
+    "result": "WEB_TASK_ARGUMENTS_INVALID",
+    "cachedOuterTransportReachedInnerValidation": true,
+    "taskExecutionProved": false
+  },
+  "remainingSourceEvidence": {
+    "twoOlderDirectRequests": "ONE_SUBMITTING_UNKNOWN_ONE_ATTENTION_UNRESOLVED",
+    "expectedMessagesAbsentInNativeReadback": true,
+    "absenceIsNoSendProof": false,
+    "resendAuthorized": false,
+    "newGrantIssued": false,
+    "oldNativeCarrierContractsRemainNativeOnly": true,
+    "currentPointerViewNativeSourceDeliveries": "MISSING",
+    "retainedViewNativeSourceDeliveries": "SENT_METADATA_MATCHED",
+    "rootOrReceiptMigrationAuthorityInferred": false,
+    "freshDevelopmentCanaryClosed": true
+  },
+  "retainedReview": {
+    "allEightFrozenPayloadHashesUnchanged": true,
+    "matchingBatchMessagesInCompleteNativeReadback": 0,
+    "originalOutcome": "UNKNOWN_PRESERVED_NO_REPLAY",
+    "verdictOrProducerEvidenceCreated": false
+  },
+  "preservation": {
+    "pinsChecked": 1699,
+    "pinMismatches": 0,
+    "pinSetUnchanged": true,
+    "profileIdentitiesUnchanged": true,
+    "taskInventoryUnchanged": true,
+    "doctorNetworkRequests": 0,
+    "doctorRuntimeStarts": 0,
+    "doctorRepairs": 0,
+    "newBrowserOrWakeStarts": 0,
+    "newMessagesSent": 0,
+    "protectedInstallationOrBindingsChanged": false
+  },
+  "acceptance": {
+    "freshWakeAndTimer": "PRIOR_DEVELOPMENT_ACCEPTANCE_PRESERVED",
+    "directWebFileEditCheckpointSelfWake": "OPEN",
+    "twoProjectCoding": "OPEN",
+    "installedDoctor": "NOT_CLAIMED",
+    "goal": "ACTIVE"
+  },
+  "next": "Prepare source-bound independent review of the actually qualified current Wake candidate through the existing authorized reviewer workflow; keep d22 and all uncertain historical deliveries intact. A genuine review and protected Wake migration remain separate prerequisites."
+}
