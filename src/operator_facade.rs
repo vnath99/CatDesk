@@ -1118,9 +1118,16 @@ pub(crate) async fn execute_operator_action(
                 } => {
                     reconcile_web_development_login(workspace, &project_id, &marker_sha256, execute)
                 }
-                WebDevelopmentAction::ReconcileRootView { authority_sha256, root_view_sha256, execute } => {
-                    development_runtime::reconcile_root_view(workspace, &authority_sha256, root_view_sha256.as_deref(), execute)
-                }
+                WebDevelopmentAction::ReconcileRootView {
+                    authority_sha256,
+                    root_view_sha256,
+                    execute,
+                } => development_runtime::reconcile_root_view(
+                    workspace,
+                    &authority_sha256,
+                    root_view_sha256.as_deref(),
+                    execute,
+                ),
                 WebDevelopmentAction::Status => development_runtime::status(workspace),
                 WebDevelopmentAction::Start => development_runtime::start(workspace),
                 WebDevelopmentAction::Stop => development_runtime::stop(workspace),
@@ -3013,18 +3020,36 @@ mod tests {
 
     #[test]
     fn web_development_root_view_reconciliation_requires_two_hashes_for_commit() {
-        let mut args = vec!["operator".into(), "web-dev-runtime".into(),
-            "reconcile-root-view".into(), "--expected-authority-sha256".into(), "a".repeat(64)];
-        assert!(matches!(parse_operator_action(args.clone()), Ok(Some(OperatorAction::WebDevelopment(
-            WebDevelopmentAction::ReconcileRootView { execute: false, .. })) )));
+        let mut args = vec![
+            "operator".into(),
+            "web-dev-runtime".into(),
+            "reconcile-root-view".into(),
+            "--expected-authority-sha256".into(),
+            "a".repeat(64),
+        ];
+        assert!(matches!(
+            parse_operator_action(args.clone()),
+            Ok(Some(OperatorAction::WebDevelopment(
+                WebDevelopmentAction::ReconcileRootView { execute: false, .. }
+            )))
+        ));
         args.push("--execute".into());
         assert!(parse_operator_action(args.clone()).is_err());
         args.pop();
-        args.extend(["--expected-root-view-sha256".into(), "b".repeat(64), "--execute".into()]);
-        assert!(matches!(parse_operator_action(args.clone()), Ok(Some(OperatorAction::WebDevelopment(
-            WebDevelopmentAction::ReconcileRootView { execute: true, .. })) )));
+        args.extend([
+            "--expected-root-view-sha256".into(),
+            "b".repeat(64),
+            "--execute".into(),
+        ]);
+        assert!(matches!(
+            parse_operator_action(args.clone()),
+            Ok(Some(OperatorAction::WebDevelopment(
+                WebDevelopmentAction::ReconcileRootView { execute: true, .. }
+            )))
+        ));
         for flag in ["--force", "--profile", "--url", "--package", "--send"] {
-            let mut invalid = args.clone(); invalid.push(flag.into());
+            let mut invalid = args.clone();
+            invalid.push(flag.into());
             assert!(parse_operator_action(invalid).is_err());
         }
         args[6] = "A".repeat(64);
