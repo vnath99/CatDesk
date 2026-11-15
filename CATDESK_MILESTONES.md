@@ -11,6 +11,7 @@ Milestone dashboard; detailed runs belong in the [activity log](CATDESK_ACTIVITY
 
 ## Dated scope changes and boundaries
 
+- 2026-11-15T06:02:27Z: passive project diagnostics now name local scoped preflight without implying Codex model execution. New regression reproduces the old guidance; 213 actual Windows facade assertions pass, including optional Codex absence and independent project checks. The f7 review starter is frozen and unsent; review start authorization is pending once. Central serving and isolated development grants remain separate. These are source/fixture results, not completion of the direct Web acceptance gate.
 - 2026-11-15: standing authorization covers routine scoped development and inert review preparation within existing permissions. Draft creation/validation is not execution or release authority. A blocked operation does not block independent work; only mark the overall goal blocked when all useful remaining work genuinely depends on unavailable authority or resources. Platform policy remains outside CatDesk control.
 - 2026-10-17: context-aware continuation and genuine per-project rollover joined the multi-project MVP. Native CLI threads alone never establish Web acceptance.
 - 2026-10-24 onward: production release and isolated development are separate. Signed product authority is not automatically Wake-broker issuer authority.
