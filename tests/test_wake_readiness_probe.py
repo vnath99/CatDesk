@@ -795,6 +795,37 @@ class ReadinessProbeTests(unittest.TestCase):
         self.addCleanup(cdp.loop.close)
         return cdp, tabs
 
+    def test_probe_delegates_only_to_the_already_admitted_primitives_selector(self):
+        selector=mock.Mock(return_value="TARGET_TAB_EXACT")
+        cdp=object();report=mock.Mock();target="https://chatgpt.com/c/fixture"
+        with mock.patch.dict(sys.modules,{"catdesk_readiness_primitives":types.SimpleNamespace(select_registered_target_tab=selector)}):
+            self.assertEqual(self.probe.select_registered_target_tab(cdp,target,report),"TARGET_TAB_EXACT")
+        selector.assert_called_once_with(cdp,target,report)
+
+    def test_shared_immutable_selector_preserves_the_legacy_fixture_matrix(self):
+        path=Path(__file__).resolve().parents[1]/"scripts/wake_bridge.py"
+        target="https://chatgpt.com/c/readiness-fixture"
+        with tempfile.TemporaryDirectory() as profile:
+            self.probe.load_observation_sink(path,hashlib.sha256(path.read_bytes()).hexdigest(),Path(profile),target)
+            shared=sys.modules["catdesk_readiness_primitives"].select_registered_target_tab
+            for metadata,documents,controlled in [([target],[target],target),
+                ([target],["https://chatgpt.com/"],"https://chatgpt.com/"),
+                ([target,target],[target,target],target),([target,None],[target,target],target),
+                (["https://chatgpt.com/c/other"],[target],target),
+                ([target],[{"value":"PRIVATE_VALUE"}],target),
+                (["https://chatgpt.com/g/project/c/readiness-fixture"],[target],target)]:
+                first,_=self.target_tabs(metadata,documents,controlled)
+                second,_=self.target_tabs(metadata,documents,controlled)
+                legacy_facts=[];shared_facts=[]
+                with mock.patch.dict(sys.modules,{"catdesk_readiness_primitives":None}):
+                    legacy=self.probe.select_registered_target_tab(first,target,legacy_facts.append)
+                actual=shared(second,target,shared_facts.append)
+                self.assertEqual(actual,legacy)
+                self.assertEqual(shared_facts,legacy_facts)
+                self.assertEqual(first.switch_to_tab.call_count,second.switch_to_tab.call_count)
+                second.get.assert_not_called()
+                self.assertNotIn("PRIVATE_VALUE",json.dumps(shared_facts))
+
     def test_target_aliases_match_bridge_identity_without_relaxing_route_guards(self):
         target = "https://chatgpt.com/c/readiness-fixture"
         alternatives = [target, "https://chatgpt.com/g/project/c/readiness-fixture",

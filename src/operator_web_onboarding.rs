@@ -1050,6 +1050,7 @@ mod first_conversation_tests {
             document_route: "HOME".into(),
             failure_code: None,
             surface: None,
+            tab: None,
         };
         retain_readback_observation(&control, &record, &input, &observation).unwrap();
         retain_readback_observation(&control, &record, &input, &observation).unwrap();

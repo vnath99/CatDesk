@@ -1138,6 +1138,105 @@ def submission_diagnostic_sample(sink, cdp, message):
     return observation, (json.dumps(observation, sort_keys=True), tuple(private_tokens))
 
 
+def select_registered_target_tab(cdp, url, report=None):
+    """CDP's controlled tab may differ from the human-visible tab after login.
+
+    Select only a unique returned tab whose target metadata AND document URL
+    match the registered destination. Do not navigate, close tabs, read draft
+    contents, or export any other tab's URL. Uncertainty never permits selection.
+    """
+    # Shared with the owner-verified readiness probe. Use the existing strict
+    # bridge identity validator; returned facts never include tab IDs or URLs.
+    def exact_url(current, expected):
+        try:
+            return conversation_identity(current) == conversation_identity(expected)
+        except Attention:
+            return False
+    def value_shape(value):
+        return "STRING" if isinstance(value, str) else ("WRAPPED" if isinstance(value, (dict, tuple, list)) else "OTHER")
+    def route_class(value, expected):
+        if not isinstance(value, str):
+            return "UNKNOWN"
+        if value.startswith("chrome-error://"):
+            return "NETWORK"
+        if exact_url(value, expected):
+            return "EXACT"
+        try:
+            parsed = urlparse(value)
+            if (parsed.scheme != "https" or parsed.hostname not in {"chatgpt.com", "chat.openai.com"}
+                    or parsed.username or parsed.password or parsed.port is not None):
+                return "OTHER"
+            if parsed.path.startswith("/auth/"):
+                return "AUTH"
+            if parsed.path in {"", "/"} and not parsed.query and not parsed.fragment:
+                return "HOME"
+        except Exception:
+            return "INVALID"
+        return "OTHER"
+    facts = dict(schemaVersion=1, tabCount=-1, metadataMatches=0, unreadableMetadata=0,
+                 candidateShape="UNOBSERVED", candidateRoute="UNKNOWN", candidateFrame="UNKNOWN",
+                 controlledShape="UNOBSERVED", controlledRoute="UNKNOWN", alternateRoute=False,
+                 stage="ENUMERATION", state="TARGET_TAB_UNAVAILABLE")
+    def finish(state):
+        facts["state"] = state
+        if report is not None:
+            report(dict(facts))
+        return state
+    def controlled():
+        value = cdp.get_current_url()
+        facts["controlledShape"] = value_shape(value)
+        facts["controlledRoute"] = route_class(value, url)
+        return value
+    try:
+        try:
+            controlled()
+        except Exception:
+            facts["controlledShape"] = "OTHER"
+        tabs = cdp.get_tabs()
+        if not isinstance(tabs, (list, tuple)) or len(tabs) > 32:
+            return finish("TARGET_TAB_UNAVAILABLE")
+        facts["tabCount"] = len(tabs)
+        facts["stage"] = "METADATA"
+        matches = []
+        for tab in tabs:
+            try:
+                metadata = tab.target.url
+                if not isinstance(metadata, str):
+                    facts["unreadableMetadata"] += 1
+                elif exact_url(metadata, url):
+                    matches.append(tab)
+            except Exception:
+                facts["unreadableMetadata"] += 1
+        facts["metadataMatches"] = len(matches)
+        if facts["unreadableMetadata"]:
+            return finish("TARGET_TAB_UNAVAILABLE")
+        if not matches:
+            return finish("TARGET_TAB_MISSING")
+        if len(matches) != 1:
+            return finish("TARGET_TAB_AMBIGUOUS")
+        tab = matches[0]
+        facts["stage"] = "DOCUMENT"
+        document = cdp.loop.run_until_complete(tab.get_current_url())
+        facts["candidateShape"] = value_shape(document)
+        facts["candidateRoute"] = route_class(document, url)
+        try:
+            frame = cdp.loop.run_until_complete(tab.evaluate("window === window.top"))
+            facts["candidateFrame"] = "TOP" if frame is True else ("SUBFRAME" if frame is False else "UNKNOWN")
+        except Exception:
+            pass
+        if not exact_url(document, url):
+            return finish("TARGET_TAB_DRIFT")
+        facts["alternateRoute"] = document != url
+        facts["stage"] = "SWITCH"
+        cdp.switch_to_tab(tab)
+        if not exact_url(controlled(), url):
+            return finish("TARGET_TAB_DRIFT")
+        facts["stage"] = "VERIFIED"
+        return finish("TARGET_TAB_EXACT")
+    except Exception:
+        return finish("TARGET_TAB_UNAVAILABLE")
+
+
 class CdpSink:
     def submission_diagnostic_sample(self, cdp, message):
         return submission_diagnostic_sample(self, cdp, message)

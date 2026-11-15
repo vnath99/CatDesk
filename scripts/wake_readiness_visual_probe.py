@@ -338,6 +338,12 @@ def select_registered_target_tab(cdp, url, report=None):
     match the registered destination. Do not navigate, close tabs, read draft
     contents, or export any other tab's URL. Uncertainty never permits selection.
     """
+    # New admitted primitives share this selector with adapter readback. Keep
+    # the existing fallback for older protected packages without this helper.
+    primitives = sys.modules.get("catdesk_readiness_primitives")
+    shared = getattr(primitives, "select_registered_target_tab", None)
+    if callable(shared):
+        return shared(cdp, url, report)
     facts = dict(schemaVersion=1, tabCount=-1, metadataMatches=0, unreadableMetadata=0,
                  candidateShape="UNOBSERVED", candidateRoute="UNKNOWN", candidateFrame="UNKNOWN",
                  controlledShape="UNOBSERVED", controlledRoute="UNKNOWN", alternateRoute=False,
