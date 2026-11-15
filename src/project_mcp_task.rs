@@ -1984,6 +1984,9 @@ impl ProjectTask {
         // them wholesale as acceptance evidence.
         let mut receipt =
             serde_json::to_value(&result).map_err(|_| "PROJECT_TASK_COMMAND_RESULT_UNAVAILABLE")?;
+        if let Some(diagnostic) = result.failure_diagnostic() {
+            receipt["failureDiagnostic"] = diagnostic;
+        }
         receipt["provenance"] = json!({
             "schemaVersion":1,"projectId":self.project.project.project_id,
             "taskId":self.contract.task_id,"callId":request.tool_call_id,

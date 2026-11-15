@@ -65,6 +65,34 @@ pub(crate) struct CommandResult {
     pub task_completion_verified: bool,
 }
 
+impl CommandResult {
+    /// Advisory classification of bounded process output, never execution or
+    /// recovery authority: a child can print the same text as the sandbox.
+    pub(crate) fn failure_diagnostic(&self) -> Option<serde_json::Value> {
+        const SPAWN_DENIED: &str = "windows sandbox failed: runner failed during SpawnChild: CreateProcessAsUserW failed: 5 (Access is denied.)";
+        if self.success
+            || self.timed_out
+            || !self.cleanup_proved
+            || self.stderr_truncated
+            || !self.exit_code.is_some_and(|code| code != 0)
+            || !self.stderr.lines().any(|line| {
+                line.strip_prefix(SPAWN_DENIED)
+                    .is_some_and(|tail| tail.is_empty() || tail.starts_with(" | "))
+            })
+        {
+            return None;
+        }
+        Some(serde_json::json!({
+            "schemaVersion": 1,
+            "layer": "NATIVE_SANDBOX",
+            "reason": "SPAWN_ACCESS_DENIED_REPORTED",
+            "basis": "REPORTED_PROCESS_OUTPUT",
+            "targetExecution": "UNVERIFIED",
+            "retryAuthorized": false
+        }))
+    }
+}
+
 // Only failures emitted before spawning are known non-launches. Process/pipe/
 // exit/cleanup uncertainty always retains the task's durable writer marker.
 pub(crate) fn failed_before_launch(reason: &str) -> bool {
@@ -427,5 +455,80 @@ pub(crate) fn run(
     {
         let _ = (root, deny, profile, budget);
         Err("PROJECT_COMMAND_WINDOWS_SANDBOX_REQUIRED".into())
+    }
+}
+
+#[cfg(test)]
+mod diagnostic_tests {
+    use super::*;
+
+    fn result() -> CommandResult {
+        CommandResult {
+            profile_id: "fixed-check".into(),
+            exit_code: Some(1),
+            timed_out: false,
+            cleanup_proved: true,
+            success: false,
+            stdout: String::new(),
+            stderr: "windows sandbox failed: runner failed during SpawnChild: CreateProcessAsUserW failed: 5 (Access is denied.) | cwd=PRIVATE_PATH | cmd=PRIVATE_ARGUMENT".into(),
+            stdout_truncated: false,
+            stderr_truncated: false,
+            native_cli_sha256: String::new(),
+            executable_sha256: String::new(),
+            profile_sha256: String::new(),
+            elapsed_ms: 1,
+            preparation_ms: 0,
+            model_calls: 0,
+            native_session_action: "NONE",
+            write_scope: "ASSIGNED_WORKTREE_EXCEPT_CONTROL_METADATA",
+            read_scope: "EXISTING_NATIVE_ROOT_READ_POSTURE_FILE_TOOLS_REMAIN_PROJECT_SCOPED",
+            task_completion_verified: false,
+        }
+    }
+
+    #[test]
+    fn reported_spawn_denial_is_private_and_never_replay_authority() {
+        let diagnostic = result().failure_diagnostic().unwrap();
+        assert_eq!(diagnostic["layer"], "NATIVE_SANDBOX");
+        assert_eq!(diagnostic["reason"], "SPAWN_ACCESS_DENIED_REPORTED");
+        assert_eq!(diagnostic["basis"], "REPORTED_PROCESS_OUTPUT");
+        assert_eq!(diagnostic["targetExecution"], "UNVERIFIED");
+        assert_eq!(diagnostic["retryAuthorized"], false);
+        assert!(!diagnostic.to_string().contains("PRIVATE_"));
+        // Even spoofed process output must not enter the trusted prelaunch list.
+        assert!(!failed_before_launch("SPAWN_ACCESS_DENIED_REPORTED"));
+        assert!(!failed_before_launch(&result().stderr));
+    }
+
+    #[test]
+    fn uncertain_or_successful_results_do_not_get_failure_hints() {
+        for case in 0..6 {
+            let mut value = result();
+            match case {
+                0 => value.success = true,
+                1 => value.exit_code = Some(0),
+                2 => value.exit_code = None,
+                3 => value.timed_out = true,
+                4 => value.cleanup_proved = false,
+                5 => value.stderr_truncated = true,
+                _ => unreachable!(),
+            }
+            assert!(value.failure_diagnostic().is_none(), "case {case}");
+        }
+    }
+
+    #[test]
+    fn unrelated_errors_and_partial_native_signatures_are_not_classified() {
+        for text in [
+            "Access is denied.",
+            "CreateProcessAsUserW failed: 5 (Access is denied.)",
+            "windows sandbox failed: runner failed during SpawnChild: CreateProcessAsUserW failed: 50 (Access is denied.)",
+            "windows sandbox failed: runner failed during SpawnChild: CreateProcessAsUserW failed: 5 (Access is denied.)unexpected",
+            "quoted: windows sandbox failed: runner failed during SpawnChild: CreateProcessAsUserW failed: 5 (Access is denied.)",
+        ] {
+            let mut value = result();
+            value.stderr = text.into();
+            assert!(value.failure_diagnostic().is_none());
+        }
     }
 }
