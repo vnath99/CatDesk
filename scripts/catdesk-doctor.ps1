@@ -74,6 +74,103 @@ function Get-DoctorDefinitions {
     )
 }
 
+function Test-DoctorIntegerEqual($Value,[long]$Expected) {
+    return ($Value -is [int] -or $Value -is [long]) -and $Value -eq $Expected
+}
+
+function Get-DoctorProjectWorkReadiness([string]$ProjectWorkspace,[string]$WakeRoot,[string]$ProjectId,$Target,[bool]$Bound,[bool]$Paired) {
+    # Observe one existing ledger only. Never create a grant, import a receipt,
+    # select another root, or turn metadata absence into resend permission.
+    $row=[ordered]@{projectId=$ProjectId;routing=if(-not $Bound){'UNBOUND'}elseif($Paired){'PAIRED_METADATA'}else{'TARGET_PAIR_MISMATCH'};
+        workState='NOT_CHECKED';openRequests=0;sourceEvidence='NOT_CHECKED';executionGrant='NOT_CHECKED';
+        taskPreflightCandidate=$false;executionAuthorized=$false;retryAuthorized=$false;
+        nextDiagnostic='RECONCILE_EXACT_PROJECT_TARGET_WITHOUT_REBIND_OR_REPLAY'}
+    if(-not $Paired){return [pscustomobject]$row}
+    try {
+        $ledgerPath=Join-Path $ProjectWorkspace ('.catdesk/web-work/'+$ProjectId+'.json')
+        Assert-DoctorLocalPath $ledgerPath
+        try{$null=Get-Item -LiteralPath $ledgerPath -Force -ErrorAction Stop}
+        catch [System.Management.Automation.ItemNotFoundException] {
+            $row.workState='NO_WORK_LEDGER';$row.nextDiagnostic='PREPARE_NEW_TASK_THROUGH_EXISTING_NATIVE_PREFLIGHT';return [pscustomobject]$row
+        }
+        $ledger=Read-DoctorJson $ledgerPath
+        if(-not (Test-DoctorIntegerEqual (Get-DoctorProperty $ledger 'schemaVersion') 1)){
+            $row.workState='LEDGER_SCHEMA_UNSUPPORTED';return [pscustomobject]$row
+        }
+        if((Get-DoctorProperty $ledger 'projectId') -cne $ProjectId -or
+            -not $ledger.PSObject.Properties['records'] -or $ledger.records -isnot [array]){throw 'WORK_METADATA_INVALID'}
+        if($ledger.records.Count -gt 256){$row.workState='LEDGER_OBSERVATION_LIMIT';return [pscustomobject]$row}
+        foreach($record in $ledger.records){
+            if((Get-DoctorProperty $record 'phase') -cnotin @('OPEN','CLOSED')){throw 'WORK_METADATA_INVALID'}
+        }
+        $open=@($ledger.records|Where-Object{$_.phase -ceq 'OPEN'});$row.openRequests=$open.Count
+        $row.workState=if($open.Count -eq 0){'NO_OPEN_REQUEST'}elseif($open.Count -eq 1){'OPEN_REQUEST'}else{'MULTIPLE_OPEN_REQUESTS'}
+        $row.nextDiagnostic=if($open.Count -eq 0){'PREPARE_NEW_TASK_THROUGH_EXISTING_NATIVE_PREFLIGHT'}else{'RECONCILE_ORIGINAL_TASK_WITHOUT_REPLAY'}
+        if($open.Count -ne 1){return [pscustomobject]$row}
+        $record=$open[0];$requestId=Get-DoctorProperty $record 'requestId';$eventId=Get-DoctorProperty $record 'eventId';$message=Get-DoctorProperty $record 'messageSha256'
+        $targetDigest=Get-DoctorProperty $Target 'digest';$generation=Get-DoctorProperty $Target 'generation'
+        $recordTarget=Get-DoctorProperty $record 'target'
+        if($requestId -isnot [string] -or $requestId -cnotmatch '\A[A-Za-z0-9_-]{1,128}\z' -or
+            $eventId -isnot [string] -or $eventId -cnotmatch '\Aweb-work-[a-f0-9]{64}\z' -or
+            $eventId -cne ('web-work-'+(Get-LifecycleSha256Hex ($ProjectId+[char]0+$requestId))) -or
+            $message -isnot [string] -or $message -cnotmatch '\A[a-f0-9]{64}\z' -or
+            -not (Test-DoctorIntegerEqual (Get-DoctorProperty $recordTarget 'generation') $generation) -or
+            (Get-DoctorProperty $recordTarget 'digest') -cne $targetDigest -or
+            (Get-DoctorProperty $recordTarget 'url') -cne (Get-DoctorProperty $Target 'url')){throw 'WORK_METADATA_INVALID'}
+        $deliveryPath=Join-Path $WakeRoot ('deliveries/'+$eventId+'.json')
+        Assert-DoctorLocalPath $deliveryPath
+        try{$null=Get-Item -LiteralPath $deliveryPath -Force -ErrorAction Stop}
+        catch [System.Management.Automation.ItemNotFoundException] {
+            $row.sourceEvidence='MISSING_DELIVERY';return [pscustomobject]$row
+        }
+        $delivery=Read-DoctorJson $deliveryPath 65536;$event=Get-DoctorProperty $delivery 'event';$receipt=Get-DoctorProperty $delivery 'receipt'
+        $deliveryTarget=Get-DoctorProperty $delivery 'target'
+        $eventMessage=Get-DoctorProperty $event 'message'
+        if(-not (Test-DoctorIntegerEqual (Get-DoctorProperty $delivery 'schemaVersion') 1) -or
+            (Get-DoctorProperty $event 'projectId') -cne $ProjectId -or (Get-DoctorProperty $event 'eventId') -cne $eventId -or
+            (Get-DoctorProperty $event 'eventType') -cne 'engineering_attention' -or
+            -not (Test-DoctorIntegerEqual (Get-DoctorProperty $event 'targetGeneration') $generation) -or
+            $eventMessage -isnot [string] -or (Get-LifecycleSha256Hex $eventMessage) -cne $message -or
+            (Get-DoctorProperty $delivery 'messageDigest') -cne $message -or
+            -not (Test-DoctorIntegerEqual (Get-DoctorProperty $deliveryTarget 'generation') $generation) -or
+            (Get-DoctorProperty $deliveryTarget 'digest') -cne $targetDigest -or
+            (Get-DoctorProperty $deliveryTarget 'url') -cne (Get-DoctorProperty $Target 'url')){
+            $row.sourceEvidence='SCOPE_MISMATCH';return [pscustomobject]$row
+        }
+        switch -CaseSensitive (Get-DoctorProperty $delivery 'phase') {
+            'SUBMITTING' {$row.sourceEvidence='SUBMITTING_UNKNOWN';return [pscustomobject]$row}
+            'ATTENTION' {$row.sourceEvidence='ATTENTION_UNRESOLVED';return [pscustomobject]$row}
+            'SENT' {
+                if(-not (Test-DoctorIntegerEqual (Get-DoctorProperty $receipt 'schemaVersion') 1) -or
+                    (Get-DoctorProperty $receipt 'evidence') -cne 'EXACT_USER_MESSAGE_APPENDED' -or
+                    (Get-DoctorProperty $receipt 'eventId') -cne $eventId -or
+                    (Get-DoctorProperty $receipt 'messageDigest') -cne $message -or
+                    -not (Test-DoctorIntegerEqual (Get-DoctorProperty $receipt 'targetGeneration') $generation) -or
+                    (Get-DoctorProperty $receipt 'targetDigest') -cne $targetDigest){
+                    $row.sourceEvidence='SCOPE_MISMATCH';return [pscustomobject]$row
+                }
+            }
+            default {$row.sourceEvidence='UNRESOLVED_DELIVERY';return [pscustomobject]$row}
+        }
+        $row.sourceEvidence='SENT_METADATA_MATCHED'
+        $taskId=Get-DoctorProperty (Get-DoctorProperty $record 'taskAssignment') 'taskId'
+        if($taskId -isnot [string] -or $taskId -cnotmatch '\A[A-Za-z0-9_-]{1,128}\z'){
+            $row.executionGrant='ASSIGNMENT_NOT_ESTABLISHED';$row.nextDiagnostic='ASSOCIATE_AUTHORIZED_ASSIGNMENT_WITH_ORIGINAL_REQUEST';return [pscustomobject]$row
+        }
+        $grantPath=Join-Path $ProjectWorkspace ('.catdesk/project-mcp-tasks/'+$ProjectId+'/'+$taskId+'/execution-grant.json')
+        Assert-DoctorLocalPath $grantPath
+        try{
+            $grant=Get-Item -LiteralPath $grantPath -Force -ErrorAction Stop
+            if($grant -isnot [IO.FileInfo]){throw 'WORK_METADATA_INVALID'}
+            # Do not read/export the grant or its key digest. Presence cannot
+            # authenticate a conversation, validate a contract or grant a call.
+            $row.executionGrant='PRESENT_UNVERIFIED'
+        }catch [System.Management.Automation.ItemNotFoundException]{$row.executionGrant='ABSENT'}
+        $row.taskPreflightCandidate=$true;$row.nextDiagnostic='VERIFY_ORIGINAL_ASSIGNMENT_GRANT_AND_OWNER_THROUGH_NATIVE_PREFLIGHT'
+    }catch{$row.workState='METADATA_UNAVAILABLE_OR_INVALID';$row.taskPreflightCandidate=$false;$row.nextDiagnostic='RECONCILE_ORIGINAL_TASK_WITHOUT_REPLAY'}
+    return [pscustomobject]$row
+}
+
 function Test-DoctorFacadeWorkspaceScope([string]$FacadeRoot,[string]$ReleaseWorkspace) {
     # Get-AutostartDefinition intentionally pins the executing facade's own
     # supervisor. A source facade inspecting another release must not classify
@@ -189,7 +286,7 @@ function Invoke-CatDeskDoctor([string]$ObservationFile = '', [string]$ProjectWor
         $version=Get-DoctorProperty $registry 'schemaVersion'
         if(($version -isnot [int] -and $version -isnot [long]) -or $version -notin @(1,2)){throw 'REGISTRY_INVALID'}
         if(-not $registry.PSObject.Properties['projects'] -or $registry.projects -isnot [array]){throw 'REGISTRY_INVALID'}
-        $projects=$registry.projects;$seen=@{};$web=0;$paired=0;$native=0
+        $projects=$registry.projects;$seen=@{};$web=0;$paired=0;$native=0;$workReadiness=@()
         $wake=$null;$invalidWake=$false
         try{
             $wake=Read-DoctorJson (Join-Path $WakeRoot 'config.json');$wakeVersion=Get-DoctorProperty $wake 'schemaVersion'
@@ -209,15 +306,21 @@ function Invoke-CatDeskDoctor([string]$ObservationFile = '', [string]$ProjectWor
             $seen[$id]=$true
             if(Get-DoctorProperty $project 'codexThreadId'){$native++}
             $url=Get-DoctorProperty $project 'chatgptTargetUrl'
-            if(-not $url){continue};$web++
+            if(-not $url){
+                if($workReadiness.Count -lt 32){$workReadiness+=Get-DoctorProjectWorkReadiness $ProjectWorkspace $WakeRoot $id $null $false $false}
+                continue
+            };$web++
             $digest=Get-DoctorProperty $project 'chatgptTargetSha256'
             $target=Get-DoctorProperty (Get-DoctorProperty $wake 'targets') $id
             $generation=Get-DoctorProperty $target 'generation' 0
+            $projectPaired=$false
             if($url -is [string] -and $url.Length -le 512 -and $url -cmatch '\Ahttps://(?:chatgpt\.com|chat\.openai\.com)/(?:c/(?:WEB:)?[A-Za-z0-9_-]{1,200}|g/[A-Za-z0-9_-]{1,200}/c/(?:WEB:)?[A-Za-z0-9_-]{1,200})\z' -and
                 $digest -is [string] -and $digest -cmatch '\A[a-f0-9]{64}\z' -and $digest -ceq (Get-LifecycleSha256Hex $url) -and
-                (Get-DoctorProperty $target 'url') -ceq $url -and (Get-DoctorProperty $target 'digest') -ceq $digest -and ($generation -is [int] -or $generation -is [long]) -and $generation -gt 0){$paired++}
+                (Get-DoctorProperty $target 'url') -ceq $url -and (Get-DoctorProperty $target 'digest') -ceq $digest -and ($generation -is [int] -or $generation -is [long]) -and $generation -gt 0){$paired++;$projectPaired=$true}
+            if($workReadiness.Count -lt 32){$workReadiness+=Get-DoctorProjectWorkReadiness $ProjectWorkspace $WakeRoot $id $target $true $projectPaired}
         }
-        $facts=@{registeredProjects=$projects.Count;webBindings=$web;unboundProjects=($projects.Count-$web);pairedWakeTargets=$paired;unpairedWebBindings=($web-$paired);nativeOwnerRegistrations=$native;metadataOnly=$true;nativeOwnerLivenessVerified=$false}
+        $facts=@{registeredProjects=$projects.Count;webBindings=$web;unboundProjects=($projects.Count-$web);pairedWakeTargets=$paired;unpairedWebBindings=($web-$paired);nativeOwnerRegistrations=$native;metadataOnly=$true;nativeOwnerLivenessVerified=$false;
+            workReadiness=$workReadiness;workReadinessCapped=($projects.Count -gt 32);observedRootIsNotServingOwnerProof=$true;independentProjectPreflightsNotGloballyBlocked=$true}
         if($invalidWake -and $web -gt 0){Set-DoctorLayer 'PROJECT_REGISTRY' 'FAIL' 'WAKE_CONFIG_INVALID' $facts}
         elseif($paired -eq $web -and $web -lt $projects.Count){Set-DoctorLayer 'PROJECT_REGISTRY' 'UNVERIFIED' 'PROJECT_WEB_TARGET_UNBOUND' $facts}
         elseif($paired -eq $web){Set-DoctorLayer 'PROJECT_REGISTRY' 'PASS' 'REGISTRY_METADATA_PAIRED' $facts}
@@ -321,6 +424,12 @@ function Invoke-CatDeskDoctor([string]$ObservationFile = '', [string]$ProjectWor
         projectScope=if($ProjectWorkspace -ceq $Workspace){'RELEASE_WORKSPACE'}else{'EXPLICIT_OBSERVATION_WORKSPACE'};
         installedWebAcceptance='UNVERIFIED';layers=@($layers.Values)
     }
-    if($Human){foreach($layer in $report.layers){'{0}: {1} {2}; next={3}' -f $layer.layer,$layer.status,$layer.code,$layer.nextDiagnostic}}
+    if($Human){foreach($layer in $report.layers){
+        $summary='{0}: {1} {2}; next={3}' -f $layer.layer,$layer.status,$layer.code,$layer.nextDiagnostic
+        if($layer.layer -ceq 'PROJECT_REGISTRY' -and (Get-DoctorProperty $layer.facts 'workReadiness')){
+            $summary+='; work='+(@($layer.facts.workReadiness|ForEach-Object{'{0}={1}/{2}/{3}' -f $_.projectId,$_.routing,$_.workState,$_.sourceEvidence}) -join ',')
+        }
+        $summary
+    }}
     else{$report|ConvertTo-Json -Depth 12 -Compress}
 }

@@ -44,6 +44,7 @@ try{
  Require ($report.layers.Count -eq 19) 'doctor omitted a layer'
  Require ((Layer $report 'RELEASE_PAIR').status -ceq 'PASS') 'valid release not observed'
  Require ((Layer $report 'PROJECT_REGISTRY').facts.pairedWakeTargets -eq 1) 'paired metadata not observed'
+ Require ((Layer $report 'PROJECT_REGISTRY').facts.workReadiness[0].workState -ceq 'NO_WORK_LEDGER' -and -not (Layer $report 'PROJECT_REGISTRY').facts.workReadiness[0].executionAuthorized) 'missing ledger implied a task grant'
  $registryFixture=Join-Path $projectRoot '.catdesk/projects/projects.json'
  Save $registryFixture @{schemaVersion=1;projects=@(@{projectId='alpha';workspace=$projectRoot;chatgptTargetUrl=$url;chatgptTargetSha256=$digest},@{projectId='beta';workspace=$projectRoot})}
  $unbound=Layer (Invoke-Doctor) 'PROJECT_REGISTRY'
@@ -194,6 +195,106 @@ try{
   @(('a'*24),('b'*24),'MCP_BEARER_ENV_CONFLICT'),@('short','','MCP_BEARER_INVALID'),
   @('',(('a'*24)+"`n"),'MCP_BEARER_INVALID'),@((([string][char]233)*24),'','MCP_BEARER_INVALID'))){
   Require ((Get-DoctorBearerConfiguration $case[0] $case[1]) -ceq $case[2]) 'bearer configuration classification failed'
+ }
+ # Distinct projects keep independent source/ownership diagnostics. These are
+ # disposable metadata fixtures, never native grant or receipt authority.
+ [void][IO.Directory]::CreateDirectory((Join-Path $projectRoot '.catdesk/web-work'))
+ $targetAlpha=@{url=$url;digest=$digest;generation=1}
+ $urlBeta='https://chatgpt.com/c/doctor-beta';$targetBeta=@{url=$urlBeta;digest=(Digest $urlBeta);generation=1}
+ function Work-Fixture([string]$Id,$Target,[string]$Phase){
+  $eventId='web-work-'+(Digest ($Id+[char]0+'request-'+$Id));$messageHash=Digest 'PRIVATE_MARKER'
+  $record=@{requestId=('request-'+$Id);eventId=$eventId;messageSha256=$messageHash;target=$Target;phase='OPEN';taskAssignment=@{taskId=('task-'+$Id)}}
+  Save (Join-Path $projectRoot ('.catdesk/web-work/'+$Id+'.json')) @{schemaVersion=1;projectId=$Id;records=@($record)}
+  $receipt=@{schemaVersion=1;evidence='EXACT_USER_MESSAGE_APPENDED';eventId=$eventId;messageDigest=$messageHash;targetGeneration=1;targetDigest=$Target.digest}
+  $delivery=@{schemaVersion=1;event=@{schemaVersion=1;projectId=$Id;eventId=$eventId;eventType='engineering_attention';targetGeneration=1;message='PRIVATE_MARKER'};
+   target=$Target;phase=$Phase;messageDigest=$messageHash;receipt=if($Phase -ceq 'SENT'){$receipt}else{$null}}
+  Save (Join-Path $wakeRoot ('deliveries/'+$eventId+'.json')) $delivery
+  return $delivery
+ }
+ $null=Work-Fixture 'alpha' $targetAlpha 'SUBMITTING'
+ $betaDelivery=Work-Fixture 'beta' $targetBeta 'SENT'
+ $betaGrantDirectory=Join-Path $projectRoot '.catdesk/project-mcp-tasks/beta/task-beta'
+ [void][IO.Directory]::CreateDirectory($betaGrantDirectory)
+ # An intentionally unreadable-as-JSON body proves that mere presence does not
+ # parse a grant, export its contents, or establish an execution permission.
+ [IO.File]::WriteAllText((Join-Path $betaGrantDirectory 'execution-grant.json'),'PRIVATE_MARKER')
+ Save (Join-Path $projectRoot '.catdesk/projects/projects.json') @{schemaVersion=1;projects=@(@{projectId='alpha';workspace=$projectRoot;chatgptTargetUrl=$url;chatgptTargetSha256=$digest},@{projectId='beta';workspace=$projectRoot;chatgptTargetUrl=$urlBeta;chatgptTargetSha256=$targetBeta.digest})}
+ Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=1;targets=@{alpha=$targetAlpha;beta=$targetBeta}}
+ function Read-WorkFixtureRow([string]$Id){
+  $layer=Layer (Invoke-Doctor) 'PROJECT_REGISTRY'
+  return @($layer.facts.workReadiness|Where-Object{$_.projectId -ceq $Id})[0]
+ }
+ $alpha=Read-WorkFixtureRow 'alpha'
+ $beta=Read-WorkFixtureRow 'beta'
+ Require ($alpha.sourceEvidence -ceq 'SUBMITTING_UNKNOWN' -and -not $alpha.taskPreflightCandidate -and -not $alpha.retryAuthorized) 'unknown project gained replay or task admission'
+ Require ($beta.sourceEvidence -ceq 'SENT_METADATA_MATCHED' -and $beta.executionGrant -ceq 'PRESENT_UNVERIFIED' -and $beta.taskPreflightCandidate -and -not $beta.executionAuthorized) 'matching source metadata claimed execution authority or hid independent preflight'
+ $betaLedgerPath=Join-Path $projectRoot '.catdesk/web-work/beta.json';$betaLedgerBytes=[IO.File]::ReadAllBytes($betaLedgerPath)
+ foreach($case in @('empty','multiple','schema','limit','assignment','request')){
+  $ledger=[Text.Encoding]::UTF8.GetString($betaLedgerBytes)|ConvertFrom-Json
+  switch($case){
+   'empty' {$ledger.records=@()}
+   'multiple' {$ledger.records=@($ledger.records[0],$ledger.records[0])}
+   'schema' {$ledger.schemaVersion='1'}
+   'limit' {$ledger.records=@(1..257|ForEach-Object{$ledger.records[0]})}
+   'assignment' {$ledger.records[0].taskAssignment=$null}
+   'request' {$ledger.records[0].requestId='foreign-request'}
+  }
+  Save $betaLedgerPath $ledger;$row=Read-WorkFixtureRow 'beta'
+  Require (-not $row.taskPreflightCandidate -and -not $row.executionAuthorized -and -not $row.retryAuthorized) ('ledger edge case admitted: '+$case)
+  if($case -ceq 'limit'){Require ($row.workState -ceq 'LEDGER_OBSERVATION_LIMIT') 'ledger cap claimed corruption or complete coverage'}
+ }
+ [IO.File]::WriteAllBytes($betaLedgerPath,$betaLedgerBytes)
+ $fixturePins=@{};foreach($file in Get-ChildItem -LiteralPath $projectRoot -File -Recurse){$fixturePins[$file.FullName]=[IO.File]::ReadAllBytes($file.FullName)}
+ Save (Join-Path $projectRoot '.catdesk/projects/projects.json') @{schemaVersion=1;projects=@(@{projectId='alpha';workspace=$projectRoot;chatgptTargetUrl=$url;chatgptTargetSha256=$digest},@{projectId='beta';workspace=$projectRoot;chatgptTargetUrl=$urlBeta;chatgptTargetSha256=$targetBeta.digest})}
+ Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=1;targets=@{alpha=$targetAlpha;beta=$targetBeta}}
+ $independent=Layer (Invoke-Doctor) 'PROJECT_REGISTRY';$rows=@($independent.facts.workReadiness)
+ Require ($rows.Count -eq 2 -and $rows[0].sourceEvidence -ceq 'SUBMITTING_UNKNOWN' -and $rows[1].taskPreflightCandidate) 'global unknown project blocked independent metadata preflight'
+ Require ($independent.facts.observedRootIsNotServingOwnerProof -and $independent.facts.independentProjectPreflightsNotGloballyBlocked) 'root view or independent scope was overstated'
+ foreach($case in @('receipt','project','generation','event-message','schema','missing','malformed')){
+  $changed=$betaDelivery|ConvertTo-Json -Depth 15|ConvertFrom-Json
+  switch($case){
+   'receipt' {$changed.receipt.messageDigest='f'*64}
+   'project' {$changed.event.projectId='alpha'}
+   'generation' {$changed.target.generation='1'}
+   'event-message' {$changed.event.message='changed private body'}
+   'schema' {$changed.schemaVersion=$true}
+  }
+  $path=Join-Path $wakeRoot ('deliveries/'+$changed.event.eventId+'.json')
+  Save $path $changed
+  if($case -ceq 'missing'){[IO.File]::Delete($path)}
+  if($case -ceq 'malformed'){[IO.File]::WriteAllText($path,'PRIVATE_MARKER')}
+  $refusal=Read-WorkFixtureRow 'beta'
+  Require (-not $refusal.taskPreflightCandidate -and -not $refusal.executionAuthorized -and -not $refusal.retryAuthorized) ('invalid task source accepted: '+$case)
+ }
+ Save (Join-Path $wakeRoot ('deliveries/'+$betaDelivery.event.eventId+'.json')) $betaDelivery
+ foreach($state in @('ATTENTION','CLAIMED','PRIVATE_MARKER')){
+  $changed=$betaDelivery|ConvertTo-Json -Depth 15|ConvertFrom-Json;$changed.phase=$state
+  Save (Join-Path $wakeRoot ('deliveries/'+$changed.event.eventId+'.json')) $changed
+  $refusal=Read-WorkFixtureRow 'beta'
+  Require (-not $refusal.taskPreflightCandidate -and -not $refusal.retryAuthorized) 'unresolved delivery enabled task admission'
+ }
+ Save (Join-Path $wakeRoot ('deliveries/'+$betaDelivery.event.eventId+'.json')) $betaDelivery
+ $alphaLedger=Join-Path $projectRoot '.catdesk/web-work/alpha.json'
+ [IO.File]::WriteAllText($alphaLedger,'PRIVATE_MARKER')
+ $invalidSibling=Layer (Invoke-Doctor) 'PROJECT_REGISTRY'
+ Require ($invalidSibling.facts.workReadiness[0].workState -ceq 'METADATA_UNAVAILABLE_OR_INVALID' -and $invalidSibling.facts.workReadiness[1].taskPreflightCandidate) 'malformed sibling ledger disabled the valid project'
+ $workHuman=@(& $facade doctor -Workspace $testRoot -ProjectWorkspace $projectRoot -WakeRoot $wakeRoot -TestSeams $seams -Human)
+ Require (($workHuman -join "`n") -match 'work=alpha=' -and ($workHuman -join "`n") -notmatch 'PRIVATE_MARKER|https://|C:\\') 'human project-work diagnostics missing or private'
+ $many=@();$manyTargets=@{}
+ foreach($i in 1..33){
+  $id='bounded-'+$i;$u='https://chatgpt.com/c/doctor-bounded-'+$i;$d=Digest $u
+  $many+=@{projectId=$id;workspace=$projectRoot;chatgptTargetUrl=$u;chatgptTargetSha256=$d};$manyTargets[$id]=@{url=$u;digest=$d;generation=1}
+ }
+ Save (Join-Path $projectRoot '.catdesk/projects/projects.json') @{schemaVersion=1;projects=$many}
+ Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=1;targets=$manyTargets}
+ $bounded=Layer (Invoke-Doctor) 'PROJECT_REGISTRY'
+ Require ($bounded.facts.workReadiness.Count -eq 32 -and $bounded.facts.workReadinessCapped -and $bounded.facts.registeredProjects -eq 33) 'bounded project diagnostics claimed full coverage or changed pairing inventory'
+ foreach($file in $fixturePins.Keys){[IO.File]::WriteAllBytes($file,$fixturePins[$file])}
+ [IO.File]::WriteAllText((Join-Path $wakeRoot 'config.json'),$before[(Join-Path $wakeRoot 'config.json')])
+ foreach($file in $fixturePins.Keys){
+  $bytes=[IO.File]::ReadAllBytes($file)
+  $null=Read-WorkFixtureRow 'beta'
+  Require ([Convert]::ToBase64String([IO.File]::ReadAllBytes($file)) -ceq [Convert]::ToBase64String($bytes)) 'project-work diagnostic mutated a fixture'
  }
  $source=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'catdesk-doctor.ps1'))
  Require ($source -notmatch '(?im)^\s*(Start-Process|Stop-Process|Set-Content|Add-Content|Remove-Item|Invoke-WebRequest|Invoke-RestMethod)\b|\.WriteAll|Store::open\(') 'doctor gained active operations'
