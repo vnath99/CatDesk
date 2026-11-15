@@ -91,7 +91,7 @@ function Get-DoctorProjectWorkReadiness([string]$ProjectWorkspace,[string]$WakeR
         Assert-DoctorLocalPath $ledgerPath
         try{$null=Get-Item -LiteralPath $ledgerPath -Force -ErrorAction Stop}
         catch [System.Management.Automation.ItemNotFoundException] {
-            $row.workState='NO_WORK_LEDGER';$row.nextDiagnostic='PREPARE_NEW_TASK_THROUGH_EXISTING_NATIVE_PREFLIGHT';return [pscustomobject]$row
+            $row.workState='NO_WORK_LEDGER';$row.nextDiagnostic='PREPARE_NEW_SCOPED_ASSIGNMENT_WITH_EXISTING_LOCAL_PREFLIGHT';return [pscustomobject]$row
         }
         $ledger=Read-DoctorJson $ledgerPath
         if(-not (Test-DoctorIntegerEqual (Get-DoctorProperty $ledger 'schemaVersion') 1)){
@@ -105,7 +105,7 @@ function Get-DoctorProjectWorkReadiness([string]$ProjectWorkspace,[string]$WakeR
         }
         $open=@($ledger.records|Where-Object{$_.phase -ceq 'OPEN'});$row.openRequests=$open.Count
         $row.workState=if($open.Count -eq 0){'NO_OPEN_REQUEST'}elseif($open.Count -eq 1){'OPEN_REQUEST'}else{'MULTIPLE_OPEN_REQUESTS'}
-        $row.nextDiagnostic=if($open.Count -eq 0){'PREPARE_NEW_TASK_THROUGH_EXISTING_NATIVE_PREFLIGHT'}else{'RECONCILE_ORIGINAL_TASK_WITHOUT_REPLAY'}
+        $row.nextDiagnostic=if($open.Count -eq 0){'PREPARE_NEW_SCOPED_ASSIGNMENT_WITH_EXISTING_LOCAL_PREFLIGHT'}else{'RECONCILE_ORIGINAL_TASK_WITHOUT_REPLAY'}
         if($open.Count -ne 1){return [pscustomobject]$row}
         $record=$open[0];$requestId=Get-DoctorProperty $record 'requestId';$eventId=Get-DoctorProperty $record 'eventId';$message=Get-DoctorProperty $record 'messageSha256'
         $targetDigest=Get-DoctorProperty $Target 'digest';$generation=Get-DoctorProperty $Target 'generation'
@@ -166,7 +166,9 @@ function Get-DoctorProjectWorkReadiness([string]$ProjectWorkspace,[string]$WakeR
             # authenticate a conversation, validate a contract or grant a call.
             $row.executionGrant='PRESENT_UNVERIFIED'
         }catch [System.Management.Automation.ItemNotFoundException]{$row.executionGrant='ABSENT'}
-        $row.taskPreflightCandidate=$true;$row.nextDiagnostic='VERIFY_ORIGINAL_ASSIGNMENT_GRANT_AND_OWNER_THROUGH_NATIVE_PREFLIGHT'
+        # This names local scope validation, not a native model invocation.
+        # Optional Codex discovery cannot admit or block a direct Web task.
+        $row.taskPreflightCandidate=$true;$row.nextDiagnostic='VERIFY_ORIGINAL_ASSIGNMENT_GRANT_AND_OWNER_WITH_EXISTING_LOCAL_PREFLIGHT'
     }catch{$row.workState='METADATA_UNAVAILABLE_OR_INVALID';$row.taskPreflightCandidate=$false;$row.nextDiagnostic='RECONCILE_ORIGINAL_TASK_WITHOUT_REPLAY'}
     return [pscustomobject]$row
 }

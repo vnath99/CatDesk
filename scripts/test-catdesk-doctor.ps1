@@ -228,8 +228,12 @@ try{
  $beta=Read-WorkFixtureRow 'beta'
  Require ($alpha.sourceEvidence -ceq 'SUBMITTING_UNKNOWN' -and -not $alpha.taskPreflightCandidate -and -not $alpha.retryAuthorized) 'unknown project gained replay or task admission'
  Require ($beta.sourceEvidence -ceq 'SENT_METADATA_MATCHED' -and $beta.executionGrant -ceq 'PRESENT_UNVERIFIED' -and $beta.taskPreflightCandidate -and -not $beta.executionAuthorized) 'matching source metadata claimed execution authority or hid independent preflight'
+ Require ($beta.nextDiagnostic -ceq 'VERIFY_ORIGINAL_ASSIGNMENT_GRANT_AND_OWNER_WITH_EXISTING_LOCAL_PREFLIGHT') 'direct Web diagnostic implied native-model execution was a prerequisite'
+ $noCodex=Invoke-Doctor @{DoctorCodexCommand={$null}}
+ $withoutNative=@((Layer $noCodex 'PROJECT_REGISTRY').facts.workReadiness|Where-Object{$_.projectId -ceq 'beta'})[0]
+ Require ((Layer $noCodex 'CODEX_CLI').code -ceq 'CODEX_CLI_UNAVAILABLE' -and $withoutNative.taskPreflightCandidate -and -not $withoutNative.executionAuthorized -and -not $withoutNative.retryAuthorized) 'optional Codex absence globally blocked direct Web preflight or granted execution'
  $betaLedgerPath=Join-Path $projectRoot '.catdesk/web-work/beta.json';$betaLedgerBytes=[IO.File]::ReadAllBytes($betaLedgerPath)
- foreach($case in @('empty','multiple','schema','limit','assignment','request')){
+ foreach($case in @('empty','multiple','schema','limit','assignment','request','missing')){
   $ledger=[Text.Encoding]::UTF8.GetString($betaLedgerBytes)|ConvertFrom-Json
   switch($case){
    'empty' {$ledger.records=@()}
@@ -239,8 +243,12 @@ try{
    'assignment' {$ledger.records[0].taskAssignment=$null}
    'request' {$ledger.records[0].requestId='foreign-request'}
   }
-  Save $betaLedgerPath $ledger;$row=Read-WorkFixtureRow 'beta'
+  Save $betaLedgerPath $ledger
+  if($case -ceq 'missing'){[IO.File]::Delete($betaLedgerPath)}
+  $row=Read-WorkFixtureRow 'beta'
   Require (-not $row.taskPreflightCandidate -and -not $row.executionAuthorized -and -not $row.retryAuthorized) ('ledger edge case admitted: '+$case)
+  if($case -ceq 'empty'){Require ($row.nextDiagnostic -ceq 'PREPARE_NEW_SCOPED_ASSIGNMENT_WITH_EXISTING_LOCAL_PREFLIGHT') 'fresh direct Web task implied native-model execution was required'}
+  if($case -ceq 'missing'){Require ($row.workState -ceq 'NO_WORK_LEDGER' -and $row.nextDiagnostic -ceq 'PREPARE_NEW_SCOPED_ASSIGNMENT_WITH_EXISTING_LOCAL_PREFLIGHT') 'missing ledger selected a native-model-only path'}
   if($case -ceq 'limit'){Require ($row.workState -ceq 'LEDGER_OBSERVATION_LIMIT') 'ledger cap claimed corruption or complete coverage'}
  }
  [IO.File]::WriteAllBytes($betaLedgerPath,$betaLedgerBytes)
