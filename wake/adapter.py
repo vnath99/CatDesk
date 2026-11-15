@@ -19,6 +19,16 @@ SOURCE_SNAPSHOT_RESPONSE_BYTES = 64 * 1024
 BOOTSTRAP_RESPONSE_LIFECYCLE_V1 = True
 INITIALIZATION_READBACK_DIAGNOSTICS_V1 = True
 INITIALIZATION_READBACK_HOME_ONLY_V1 = True
+INITIALIZATION_READBACK_FAILURE_CODES_V1 = True
+INITIALIZATION_READBACK_FAILURE_CODES = frozenset({
+    "INITIALIZATION_READBACK_USER_UNPROVEN", "INITIALIZATION_READBACK_FIXED_NAVIGATION_UNAVAILABLE",
+    "RESPONSE_TARGET_DRIFT", "RESPONSE_USER_DOCUMENT_NOT_HYDRATED", "RESPONSE_STATE_QUERY_FAILED",
+    "BOOTSTRAP_INITIALIZATION_ACK_UNVERIFIED", "LOGIN_OR_PROFILE_REQUIRED", "CAPTCHA_OR_SECURITY_CHECK",
+    "EXISTING_DRAFT", "BOOTSTRAP_HOME_NOT_READY", "BOOTSTRAP_HOME_HAS_TURNS", "BOOTSTRAP_HOME_DRIFT",
+    "BOOTSTRAP_DRAFT_SERIALIZATION_UNVERIFIED", "BOOTSTRAP_RICH_DRAFT_UNVERIFIED", "CHATGPT_NOT_IDLE",
+    "RESPONSE_LOAD_ERROR", "RESPONSE_REFRESH_DRAFT_OR_EDITOR_UNPROVEN", "RESPONSE_PERSISTENCE_UNPROVEN",
+    "OBSERVATION_UNPROVEN",
+})
 
 
 def emit(value):
@@ -720,18 +730,21 @@ def initialization_readback(bridge, sb, request):
     sink = bridge.NewConversationSink(None, ROOT / "browser-profile", 30, 20)
     sink.url, sink.destination_url = candidate, candidate
     cdp, phase = None, "NAVIGATION"
-    def report(stage):
+    def report(stage, failure=None):
         def route(read):
             try:
                 value = read()
                 return bridge.bounded_route_class(value, candidate) if isinstance(value, str) else "INVALID_ROUTE"
             except Exception:
                 return "INVALID_ROUTE"
-        emit({"stage":stage, "schemaVersion":1,
+        frame = {"stage":stage, "schemaVersion":1,
               "projectId":project, "intentId":intent, "registrationDigest":registration,
               "messageDigest":expected, "candidateDigest":bridge.digest(candidate),
               "phase":phase, "driverRoute":route(lambda:cdp.get_current_url()),
-              "documentRoute":route(lambda:bridge.CdpSink.cdp_value(cdp.evaluate("location.href")))})
+              "documentRoute":route(lambda:bridge.CdpSink.cdp_value(cdp.evaluate("location.href")))}
+        if failure is not None:
+            frame["failureCode"] = failure if failure in INITIALIZATION_READBACK_FAILURE_CODES else "OBSERVATION_UNPROVEN"
+        emit(frame)
     try:
         cdp = prepare_cdp_target(bridge, sb, candidate)
         phase = "INITIAL_OBSERVATION"
@@ -772,10 +785,10 @@ def initialization_readback(bridge, sb, request):
         phase = "FINAL_USER_CHECK"
         if not sink.exact(str(cdp.get_current_url())) or sink.user_message_digests(cdp) != [expected]:
             raise bridge.Attention("INITIALIZATION_READBACK_USER_UNPROVEN")
-    except Exception:
+    except Exception as error:
         # Driver metadata is not document identity. Read both independently,
         # classify in this process, and emit only the closed structural labels.
-        report("INITIALIZATION_READBACK_DIAGNOSTIC")
+        report("INITIALIZATION_READBACK_DIAGNOSTIC", str(error) if isinstance(error,bridge.Attention) else "OBSERVATION_UNPROVEN")
         raise
     emit({"stage": "INITIALIZATION_READBACK_COMPLETE", "receipt": {
         "schemaVersion": 2, "projectId": project, "intentId": intent,

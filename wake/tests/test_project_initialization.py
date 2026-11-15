@@ -260,6 +260,7 @@ class ProjectInitializationTests(unittest.TestCase):
         class ReadbackSink(AttemptSink):
             cdp_value = staticmethod(bridge.CdpSink.cdp_value)
             def observe_cooperative_response(self, cdp, message, digest):
+                if fault == "private-error":raise RuntimeError("private context execution key")
                 if home_fault and cdp.url == bridge.NEW_CONVERSATION_HOME:
                     raise bridge.Attention("RESPONSE_TARGET_DRIFT")
                 if fault == "document-home": raise bridge.Attention("RESPONSE_TARGET_DRIFT")
@@ -322,7 +323,7 @@ class ProjectInitializationTests(unittest.TestCase):
             try:
                 adapter.initialization_readback(bridge,types.SimpleNamespace(cdp=cdp),request)
                 error = None
-            except (bridge.Attention, KeyboardInterrupt) as failure:
+            except (Exception, KeyboardInterrupt) as failure:
                 error = failure
         return cdp, output, error, opened.call_count
 
@@ -372,11 +373,18 @@ class ProjectInitializationTests(unittest.TestCase):
         self.assertEqual(diagnostic["phase"],"INITIAL_OBSERVATION")
         self.assertEqual(diagnostic["driverRoute"],"SAME_CONVERSATION")
         self.assertEqual(diagnostic["documentRoute"],"HOME")
+        self.assertEqual(diagnostic["failureCode"],"RESPONSE_TARGET_DRIFT")
         wire=json.dumps(diagnostic)
         for private in [ISSUED,"https://chatgpt.com/","untouched operator draft","handoff","workspace"]:
             self.assertNotIn(private,wire)
         self.assertEqual(set(diagnostic),{"stage","schemaVersion","projectId","intentId",
-            "registrationDigest","messageDigest","candidateDigest","phase","driverRoute","documentRoute"})
+            "registrationDigest","messageDigest","candidateDigest","phase","driverRoute","documentRoute","failureCode"})
+
+    def test_initialization_readback_never_exports_an_unknown_exception_message(self):
+        _,output,error,_=self.readback_case(fault="private-error")
+        self.assertIsNotNone(error)
+        self.assertEqual(output[-1]["failureCode"],"OBSERVATION_UNPROVEN")
+        self.assertNotIn("private context execution key",json.dumps(output))
 
     def test_initialization_readback_failure_records_the_actual_phase_only(self):
         for fault,phase in [("wrong-user","ORIGINAL_USER_CHECK"),("RESPONSE_LOAD_ERROR","COMPLETION"),

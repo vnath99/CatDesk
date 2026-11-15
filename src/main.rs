@@ -2779,6 +2779,21 @@ fn operator_web_error_code(error: &str) -> &str {
     if matches!(
         code,
         "CHATGPT_NOT_IDLE"
+            | "INITIALIZATION_READBACK_ADAPTER_EXITED"
+            | "INITIALIZATION_READBACK_DIAGNOSTIC_INVALID"
+            | "INITIALIZATION_READBACK_DIAGNOSTICS_PACKAGE_REQUIRED"
+            | "INITIALIZATION_READBACK_FIXED_NAVIGATION_UNAVAILABLE"
+            | "INITIALIZATION_READBACK_HOME_DRAFT_PRESERVED"
+            | "INITIALIZATION_READBACK_HOME_GENERATION_ACTIVE"
+            | "INITIALIZATION_READBACK_HOME_RECOVERY_PACKAGE_REQUIRED"
+            | "INITIALIZATION_READBACK_HOME_STATE_UNPROVEN"
+            | "INITIALIZATION_READBACK_OBSERVATION_UNPROVEN"
+            | "INITIALIZATION_READBACK_PACKAGE_REQUIRED"
+            | "INITIALIZATION_READBACK_PROTOCOL_INVALID"
+            | "INITIALIZATION_READBACK_RECEIPT_INVALID"
+            | "INITIALIZATION_READBACK_TIME_INVALID"
+            | "INITIALIZATION_READBACK_TIMEOUT"
+            | "INITIALIZATION_READBACK_USER_UNPROVEN"
             | "EDITOR_SELECTOR"
             | "CAPTCHA_OR_SECURITY_CHECK"
             | "SELENIUMBASE_IMPORT_FAILED"
@@ -3952,6 +3967,42 @@ fn render_toast(f: &mut Frame, palette: theme::Palette, msg: &str, pos: (u16, u1
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn initialization_readback_error_codes_survive_the_cli_without_private_details() {
+        for code in [
+            "INITIALIZATION_READBACK_HOME_DRAFT_PRESERVED",
+            "INITIALIZATION_READBACK_HOME_GENERATION_ACTIVE",
+            "INITIALIZATION_READBACK_HOME_STATE_UNPROVEN",
+            "INITIALIZATION_READBACK_FIXED_NAVIGATION_UNAVAILABLE",
+            "INITIALIZATION_READBACK_USER_UNPROVEN",
+            "INITIALIZATION_READBACK_DIAGNOSTIC_INVALID",
+            "INITIALIZATION_READBACK_RECEIPT_INVALID",
+            "INITIALIZATION_READBACK_TIMEOUT",
+            "INITIALIZATION_READBACK_DIAGNOSTICS_PACKAGE_REQUIRED",
+            "INITIALIZATION_READBACK_HOME_RECOVERY_PACKAGE_REQUIRED",
+            "INITIALIZATION_READBACK_PACKAGE_REQUIRED",
+            "INITIALIZATION_READBACK_TIME_INVALID",
+            "INITIALIZATION_READBACK_ADAPTER_EXITED",
+            "INITIALIZATION_READBACK_PROTOCOL_INVALID",
+            "INITIALIZATION_READBACK_OBSERVATION_UNPROVEN",
+        ] {
+            assert_eq!(super::operator_web_error_code(code), code);
+            assert_eq!(
+                super::operator_web_error_code(&format!("{code}: private detail")),
+                code
+            );
+        }
+        assert_eq!(
+            super::operator_web_error_code("INITIALIZATION_READBACK_PRIVATE_DETAIL"),
+            "WEB_OPERATION_REFUSED"
+        );
+        assert_eq!(
+            super::operator_web_error_code(
+                "INITIALIZATION_READBACK_HOME_STATE_UNPROVEN private detail"
+            ),
+            "WEB_OPERATION_REFUSED"
+        );
+    }
     #[test]
     fn scoped_native_entry_upgrade_error_is_fixed_without_arbitrary_scoped_details() {
         assert_eq!(

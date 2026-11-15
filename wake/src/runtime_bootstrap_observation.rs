@@ -186,6 +186,8 @@ pub struct InitializationReadbackObservation {
     pub phase: String,
     pub driver_route: String,
     pub document_route: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_code: Option<String>,
 }
 
 impl InitializationReadbackObservation {
@@ -218,6 +220,32 @@ impl InitializationReadbackObservation {
         {
             return Err("INITIALIZATION_READBACK_DIAGNOSTIC_INVALID".into());
         }
+        if self.failure_code.as_deref().is_some_and(|code| {
+            !matches!(
+                code,
+                "INITIALIZATION_READBACK_USER_UNPROVEN"
+                    | "INITIALIZATION_READBACK_FIXED_NAVIGATION_UNAVAILABLE"
+                    | "RESPONSE_TARGET_DRIFT"
+                    | "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"
+                    | "RESPONSE_STATE_QUERY_FAILED"
+                    | "BOOTSTRAP_INITIALIZATION_ACK_UNVERIFIED"
+                    | "LOGIN_OR_PROFILE_REQUIRED"
+                    | "CAPTCHA_OR_SECURITY_CHECK"
+                    | "EXISTING_DRAFT"
+                    | "BOOTSTRAP_HOME_NOT_READY"
+                    | "BOOTSTRAP_HOME_HAS_TURNS"
+                    | "BOOTSTRAP_HOME_DRIFT"
+                    | "BOOTSTRAP_DRAFT_SERIALIZATION_UNVERIFIED"
+                    | "BOOTSTRAP_RICH_DRAFT_UNVERIFIED"
+                    | "CHATGPT_NOT_IDLE"
+                    | "RESPONSE_LOAD_ERROR"
+                    | "RESPONSE_REFRESH_DRAFT_OR_EDITOR_UNPROVEN"
+                    | "RESPONSE_PERSISTENCE_UNPROVEN"
+                    | "OBSERVATION_UNPROVEN"
+            )
+        }) {
+            return Err("INITIALIZATION_READBACK_DIAGNOSTIC_INVALID".into());
+        }
         Ok(())
     }
 }
@@ -226,7 +254,12 @@ fn readback_observation(
     frame: &serde_json::Value,
     request: &InitializationReadbackRequest<'_>,
 ) -> Result<InitializationReadbackObservation> {
-    if frame.as_object().map(|v| v.len()) != Some(10)
+    if frame.as_object().map(|v| v.len())
+        != Some(if frame.get("failureCode").is_some() {
+            11
+        } else {
+            10
+        })
         || !matches!(
             frame["stage"].as_str(),
             Some("INITIALIZATION_READBACK_DIAGNOSTIC" | "INITIALIZATION_READBACK_HOME_RECOVERED")
@@ -246,13 +279,14 @@ fn readback_observation(
         return Err("INITIALIZATION_READBACK_DIAGNOSTIC_INVALID".into());
     }
     let observation: InitializationReadbackObservation = serde_json::from_value(serde_json::json!({
-        "phase":frame["phase"],"driverRoute":frame["driverRoute"],"documentRoute":frame["documentRoute"]}))
+        "phase":frame["phase"],"driverRoute":frame["driverRoute"],"documentRoute":frame["documentRoute"],"failureCode":frame["failureCode"]}))
         .map_err(|_|"INITIALIZATION_READBACK_DIAGNOSTIC_INVALID")?;
     observation.validate()?;
     if frame["stage"] == "INITIALIZATION_READBACK_HOME_RECOVERED"
         && (observation.phase != "HOME_RECOVERY"
             || observation.driver_route != "SAME_CONVERSATION"
-            || observation.document_route != "SAME_CONVERSATION")
+            || observation.document_route != "SAME_CONVERSATION"
+            || observation.failure_code.is_some())
     {
         return Err("INITIALIZATION_READBACK_DIAGNOSTIC_INVALID".into());
     }
@@ -295,6 +329,12 @@ pub fn read_initialization_candidate_guarded(
     if !bytes
         .windows(b"INITIALIZATION_READBACK_DIAGNOSTICS_V1 = True".len())
         .any(|part| part == b"INITIALIZATION_READBACK_DIAGNOSTICS_V1 = True")
+    {
+        return Err("INITIALIZATION_READBACK_DIAGNOSTICS_PACKAGE_REQUIRED".into());
+    }
+    if !bytes
+        .windows(b"INITIALIZATION_READBACK_FAILURE_CODES_V1 = True".len())
+        .any(|part| part == b"INITIALIZATION_READBACK_FAILURE_CODES_V1 = True")
     {
         return Err("INITIALIZATION_READBACK_DIAGNOSTICS_PACKAGE_REQUIRED".into());
     }
@@ -456,6 +496,17 @@ mod tests {
             "driverRoute":"SAME_CONVERSATION","documentRoute":"HOME"});
         let observed = readback_observation(&frame, &request).unwrap();
         assert_eq!(observed.document_route, "HOME");
+        let mut reasoned = frame.clone();
+        reasoned["failureCode"] = serde_json::json!("BOOTSTRAP_HOME_NOT_READY");
+        assert_eq!(
+            readback_observation(&reasoned, &request)
+                .unwrap()
+                .failure_code
+                .as_deref(),
+            Some("BOOTSTRAP_HOME_NOT_READY")
+        );
+        reasoned["failureCode"] = serde_json::json!("private context execution key");
+        assert!(readback_observation(&reasoned, &request).is_err());
         for (key, value) in [
             ("projectId", serde_json::json!("other")),
             ("intentId", serde_json::json!("other")),

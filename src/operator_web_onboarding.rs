@@ -1048,6 +1048,7 @@ mod first_conversation_tests {
             phase: "INITIAL_OBSERVATION".into(),
             driver_route: "SAME_CONVERSATION".into(),
             document_route: "HOME".into(),
+            failure_code: None,
         };
         retain_readback_observation(&control, &record, &input, &observation).unwrap();
         retain_readback_observation(&control, &record, &input, &observation).unwrap();
