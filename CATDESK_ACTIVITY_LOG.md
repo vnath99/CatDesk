@@ -85,3 +85,11 @@ Evidence: [docs/verification/READBACK_HOME_DIAGNOSTICS_2026_11_15.json](docs/ver
 Agent: Codex. Source: 843c11a7cf49c1eaf8b0bde174dca35ce40bcc94. Outcome: partial. Existing tab selector and private navigation diagnostic are source-qualified; bounded original readback finds explicit sign-in-required Home, sends nothing and preserves the original journal. Next: Authenticate the same existing development profile through bounded login, then recover the original initialization without resend.
 
 Evidence: [docs/verification/VERIFIED_TAB_READBACK_2026_11_15.json](docs/verification/VERIFIED_TAB_READBACK_2026_11_15.json); command: operator web initialize recover --execute through the existing bounded development owner; no message send; exit 2; SHA-256 b12a080ca970979bd5aa583e2c5b969fe003bd5ec88dada3a622ad879e30053d.
+
+<!-- catdesk-activity:wake-login-refusal-source-nov15 sha256:6f10ca34b1ade14cbfa7d2dacf57ba56d7eb12f0959a3a28ad99a4b2ee0a6bc5 -->
+
+## 2026-11-15T01:13:48.631027+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: cf5ea47b5d22f041b1bb68cfc5466785bc7a30e0. Outcome: partial. Source now returns the explicit login refusal from exact Home navigation diagnostics while preserving draft, generation and no-replay fences; no new browser or package run. Next: Authenticate the same existing development profile, then recover the original candidate without resend; qualify project-bound timer bookkeeping before multi-project acceptance.
+
+Evidence: [docs/verification/LOGIN_REFUSAL_CLASSIFICATION_2026_11_15.json](docs/verification/LOGIN_REFUSAL_CLASSIFICATION_2026_11_15.json); command: Targeted adapter/conversation/initialization tests, then initialization guard regression; exit 0; SHA-256 beb5ba43e769db87027348fa9733eeb06c398485b1da1ed2d5503f07ba066a4b.

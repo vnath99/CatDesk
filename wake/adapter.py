@@ -734,6 +734,7 @@ def initialization_readback(bridge, sb, request):
     sink = bridge.NewConversationSink(None, ROOT / "browser-profile", 30, 20)
     sink.url, sink.destination_url = candidate, candidate
     cdp, phase, tab_observation = None, "NAVIGATION", None
+    navigation_observation = None
     def report(stage, failure=None):
         def route(read):
             try:
@@ -757,7 +758,7 @@ def initialization_readback(bridge, sb, request):
         except Exception:
             pass
         try:
-            frame["navigation"] = sink.browser_navigation_observation(cdp)
+            frame["navigation"] = navigation_observation or sink.browser_navigation_observation(cdp)
         except Exception:
             pass
         emit(frame)
@@ -813,10 +814,24 @@ def initialization_readback(bridge, sb, request):
         if not sink.exact(str(cdp.get_current_url())) or sink.user_message_digests(cdp) != [expected]:
             raise bridge.Attention("INITIALIZATION_READBACK_USER_UNPROVEN")
     except Exception as error:
+        # Diagnose an explicit Home sign-in gate before returning generic
+        # navigation uncertainty. This changes only the refusal category;
+        # neither the notice nor HTTP status can authorize retry or receipt.
+        if (isinstance(error, bridge.Attention) and str(error) in {
+                "RESPONSE_TARGET_DRIFT", "INITIALIZATION_READBACK_TARGET_TAB_UNPROVEN",
+                "BOOTSTRAP_HOME_NOT_READY"}):
+            try:
+                navigation_observation = sink.browser_navigation_observation(cdp)
+                if (navigation_observation["documentRoute"] == "HOME"
+                        and navigation_observation["historyRoute"] == "HOME"
+                        and navigation_observation["notice"] == "LOGIN_REQUIRED"):
+                    error = bridge.Attention("LOGIN_OR_PROFILE_REQUIRED")
+            except Exception:
+                pass
         # Driver metadata is not document identity. Read both independently,
         # classify in this process, and emit only the closed structural labels.
         report("INITIALIZATION_READBACK_DIAGNOSTIC", str(error) if isinstance(error,bridge.Attention) else "OBSERVATION_UNPROVEN")
-        raise
+        raise error
     emit({"stage": "INITIALIZATION_READBACK_COMPLETE", "receipt": {
         "schemaVersion": 2, "projectId": project, "intentId": intent,
         "sourceGeneration": 0, "sourceDigest": registration,

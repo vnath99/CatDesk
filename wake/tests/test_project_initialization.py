@@ -240,7 +240,7 @@ class ProjectInitializationTests(unittest.TestCase):
                     bridge.compose_initialization_message("project-first", "initialize-first",
                         registration, body)
 
-    def readback_case(self, *, request_change=None, fault=None, surface=False):
+    def readback_case(self, *, request_change=None, fault=None, surface=False, navigation=None):
         original = self.request()
         request = {key: original[key] for key in ["projectId", "intentId", "registrationDigest", "handoff"]}
         request.update(initializationReadback=True, candidateUrl=ISSUED, nativeTurnStartedUtc=1)
@@ -261,6 +261,9 @@ class ProjectInitializationTests(unittest.TestCase):
 
         class ReadbackSink(AttemptSink):
             cdp_value = staticmethod(bridge.CdpSink.cdp_value)
+            def browser_navigation_observation(self, cdp):
+                if navigation is None: raise AttributeError("fixture has no navigation reader")
+                return dict(navigation)
             def observe_cooperative_response(self, cdp, message, digest):
                 if fault == "private-error":raise RuntimeError("private context execution key")
                 if home_fault and cdp.url == bridge.NEW_CONVERSATION_HOME:
@@ -496,6 +499,42 @@ class ProjectInitializationTests(unittest.TestCase):
         self.assertEqual(cdp.tab_switches,0)
         self.assertEqual(output[-1]["tab"]["state"],"TARGET_TAB_AMBIGUOUS")
         self.assertFalse(any("receipt" in row for row in output))
+
+    def test_explicit_home_login_notice_is_machine_actionable_without_input_or_receipt(self):
+        navigation=dict(schemaVersion=1,documentRoute="HOME",historyRoute="HOME",title="CHATGPT",
+            body="NONEMPTY",notice="LOGIN_REQUIRED",responseStatus=200)
+        cdp,output,error,_=self.readback_case(fault="home-ambiguous-target",navigation=navigation)
+        self.assertEqual(str(error),"LOGIN_OR_PROFILE_REQUIRED")
+        self.assertEqual(output[-1]["failureCode"],"LOGIN_OR_PROFILE_REQUIRED")
+        self.assertEqual(output[-1]["navigation"],navigation)
+        self.assertEqual(cdp.sent,0)
+        self.assertEqual(cdp.navigation,[])
+        self.assertEqual(cdp.tab_switches,0)
+        self.assertFalse(any("receipt" in row for row in output))
+
+    def test_incomplete_navigation_evidence_or_other_notice_keeps_original_refusal(self):
+        base=dict(schemaVersion=1,documentRoute="HOME",historyRoute="HOME",title="CHATGPT",
+            body="NONEMPTY",notice="LOGIN_REQUIRED",responseStatus=200)
+        for changes in [dict(historyRoute="UNAVAILABLE"),dict(documentRoute="SAME_CONVERSATION"),
+                dict(notice="NONE"),dict(notice="NOT_INSPECTED")]:
+            with self.subTest(changes=changes):
+                cdp,output,error,_=self.readback_case(fault="home-ambiguous-target",navigation=dict(base,**changes))
+                self.assertEqual(str(error),"INITIALIZATION_READBACK_TARGET_TAB_UNPROVEN")
+                self.assertEqual(cdp.sent,0)
+                self.assertEqual(cdp.navigation,[])
+                self.assertFalse(any("receipt" in row for row in output))
+
+    def test_login_notice_cannot_override_draft_or_generation_refusal(self):
+        navigation=dict(schemaVersion=1,documentRoute="HOME",historyRoute="HOME",title="CHATGPT",
+            body="NONEMPTY",notice="LOGIN_REQUIRED",responseStatus=200)
+        for fault,expected in [("home-draft","EXISTING_DRAFT"),("home-active","CHATGPT_NOT_IDLE")]:
+            with self.subTest(fault=fault):
+                cdp,output,error,_=self.readback_case(fault=fault,navigation=navigation)
+                self.assertEqual(str(error),expected)
+                self.assertEqual(cdp.draft,cdp.home_draft)
+                self.assertEqual(cdp.sent,0)
+                self.assertEqual(cdp.navigation,[])
+                self.assertFalse(any("receipt" in row for row in output))
 
 if __name__ == "__main__":
     unittest.main()
