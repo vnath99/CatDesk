@@ -1138,6 +1138,105 @@ def submission_diagnostic_sample(sink, cdp, message):
     return observation, (json.dumps(observation, sort_keys=True), tuple(private_tokens))
 
 
+def select_registered_target_tab(cdp, url, report=None):
+    """CDP's controlled tab may differ from the human-visible tab after login.
+
+    Select only a unique returned tab whose target metadata AND document URL
+    match the registered destination. Do not navigate, close tabs, read draft
+    contents, or export any other tab's URL. Uncertainty never permits selection.
+    """
+    # Shared with the owner-verified readiness probe. Use the existing strict
+    # bridge identity validator; returned facts never include tab IDs or URLs.
+    def exact_url(current, expected):
+        try:
+            return conversation_identity(current) == conversation_identity(expected)
+        except Attention:
+            return False
+    def value_shape(value):
+        return "STRING" if isinstance(value, str) else ("WRAPPED" if isinstance(value, (dict, tuple, list)) else "OTHER")
+    def route_class(value, expected):
+        if not isinstance(value, str):
+            return "UNKNOWN"
+        if value.startswith("chrome-error://"):
+            return "NETWORK"
+        if exact_url(value, expected):
+            return "EXACT"
+        try:
+            parsed = urlparse(value)
+            if (parsed.scheme != "https" or parsed.hostname not in {"chatgpt.com", "chat.openai.com"}
+                    or parsed.username or parsed.password or parsed.port is not None):
+                return "OTHER"
+            if parsed.path.startswith("/auth/"):
+                return "AUTH"
+            if parsed.path in {"", "/"} and not parsed.query and not parsed.fragment:
+                return "HOME"
+        except Exception:
+            return "INVALID"
+        return "OTHER"
+    facts = dict(schemaVersion=1, tabCount=-1, metadataMatches=0, unreadableMetadata=0,
+                 candidateShape="UNOBSERVED", candidateRoute="UNKNOWN", candidateFrame="UNKNOWN",
+                 controlledShape="UNOBSERVED", controlledRoute="UNKNOWN", alternateRoute=False,
+                 stage="ENUMERATION", state="TARGET_TAB_UNAVAILABLE")
+    def finish(state):
+        facts["state"] = state
+        if report is not None:
+            report(dict(facts))
+        return state
+    def controlled():
+        value = cdp.get_current_url()
+        facts["controlledShape"] = value_shape(value)
+        facts["controlledRoute"] = route_class(value, url)
+        return value
+    try:
+        try:
+            controlled()
+        except Exception:
+            facts["controlledShape"] = "OTHER"
+        tabs = cdp.get_tabs()
+        if not isinstance(tabs, (list, tuple)) or len(tabs) > 32:
+            return finish("TARGET_TAB_UNAVAILABLE")
+        facts["tabCount"] = len(tabs)
+        facts["stage"] = "METADATA"
+        matches = []
+        for tab in tabs:
+            try:
+                metadata = tab.target.url
+                if not isinstance(metadata, str):
+                    facts["unreadableMetadata"] += 1
+                elif exact_url(metadata, url):
+                    matches.append(tab)
+            except Exception:
+                facts["unreadableMetadata"] += 1
+        facts["metadataMatches"] = len(matches)
+        if facts["unreadableMetadata"]:
+            return finish("TARGET_TAB_UNAVAILABLE")
+        if not matches:
+            return finish("TARGET_TAB_MISSING")
+        if len(matches) != 1:
+            return finish("TARGET_TAB_AMBIGUOUS")
+        tab = matches[0]
+        facts["stage"] = "DOCUMENT"
+        document = cdp.loop.run_until_complete(tab.get_current_url())
+        facts["candidateShape"] = value_shape(document)
+        facts["candidateRoute"] = route_class(document, url)
+        try:
+            frame = cdp.loop.run_until_complete(tab.evaluate("window === window.top"))
+            facts["candidateFrame"] = "TOP" if frame is True else ("SUBFRAME" if frame is False else "UNKNOWN")
+        except Exception:
+            pass
+        if not exact_url(document, url):
+            return finish("TARGET_TAB_DRIFT")
+        facts["alternateRoute"] = document != url
+        facts["stage"] = "SWITCH"
+        cdp.switch_to_tab(tab)
+        if not exact_url(controlled(), url):
+            return finish("TARGET_TAB_DRIFT")
+        facts["stage"] = "VERIFIED"
+        return finish("TARGET_TAB_EXACT")
+    except Exception:
+        return finish("TARGET_TAB_UNAVAILABLE")
+
+
 class CdpSink:
     def submission_diagnostic_sample(self, cdp, message):
         return submission_diagnostic_sample(self, cdp, message)
@@ -1149,6 +1248,62 @@ class CdpSink:
     def visible(cdp: Any, selector: str) -> bool:
         try: return bool(cdp.is_element_visible(selector))
         except Exception: return False
+    def browser_navigation_observation(self, cdp: Any) -> dict[str, Any]:
+        """Classify a failed document without exporting title, body or URLs.
+
+        Browser navigation history is independent of Runtime.evaluate's realm.
+        Neither source is receipt authority. Inspect fixed error notices only
+        on Home with no editor or conversation turns; never scan a chat body.
+        """
+        script = """(() => {
+            const title = String(document.title || '').trim().toLowerCase();
+            const result = {documentUrl: document.URL, title:
+                !title ? 'EMPTY' : /^(just a moment|checking your browser|attention required)/.test(title)
+                    ? 'SECURITY_CHECK' : /^(this site can.t be reached|privacy error)/.test(title)
+                    ? 'NETWORK_ERROR' : title === 'chatgpt' ? 'CHATGPT' : 'OTHER',
+                body: document.body ? (document.body.childNodes.length ? 'NONEMPTY' : 'EMPTY') : 'ABSENT',
+                notice: 'NOT_INSPECTED', responseStatus: null};
+            try {
+                const entries = performance.getEntriesByType('navigation');
+                const status = entries.length === 1 ? entries[0].responseStatus : null;
+                if (Number.isInteger(status) && status >= 0 && status <= 599) result.responseStatus = status;
+            } catch (_) {}
+            let route;
+            try { route = new URL(location.href); } catch (_) { return result; }
+            if (route.protocol !== 'https:' || !['chatgpt.com','chat.openai.com'].includes(route.hostname) ||
+                route.username || route.password || route.port || route.search || route.hash ||
+                !['','/'].includes(route.pathname) ||
+                document.querySelector('#prompt-textarea,textarea[data-testid="prompt-textarea"], [data-message-author-role], [data-content-search-turn-key], [data-testid^="conversation-turn-"], article[data-turn]')) return result;
+            const text = String(document.body?.innerText || '').slice(0, 4096).toLowerCase();
+            result.notice = /too many requests|you have been rate limited|rate limit exceeded/.test(text) ? 'RATE_LIMITED' :
+                /verify you are human|checking your browser|performing security verification/.test(text) ? 'SECURITY_CHECK' :
+                /access denied|sorry, you have been blocked/.test(text) ? 'ACCESS_DENIED' :
+                /please (log|sign) in|you are logged out/.test(text) ? 'LOGIN_REQUIRED' :
+                /err_(internet_disconnected|connection_reset|name_not_resolved)|network connection (lost|failed)/.test(text) ? 'NETWORK_ERROR' : 'NONE';
+            return result;
+        })()"""
+        try:
+            value = self.cdp_value(cdp.evaluate(script))
+        except Exception as error:
+            raise Attention("BROWSER_NAVIGATION_OBSERVATION_UNAVAILABLE") from error
+        if (not isinstance(value, dict) or set(value) != {'documentUrl','title','body','notice','responseStatus'}
+                or not isinstance(value['documentUrl'], str)
+                or value['title'] not in {'EMPTY','SECURITY_CHECK','NETWORK_ERROR','CHATGPT','OTHER'}
+                or value['body'] not in {'ABSENT','EMPTY','NONEMPTY'}
+                or value['notice'] not in {'NOT_INSPECTED','NONE','RATE_LIMITED','SECURITY_CHECK','ACCESS_DENIED','LOGIN_REQUIRED','NETWORK_ERROR'}
+                or (value['responseStatus'] is not None and (type(value['responseStatus']) is not int or not 0 <= value['responseStatus'] <= 599))):
+            raise Attention("BROWSER_NAVIGATION_OBSERVATION_INVALID")
+        result = dict(schemaVersion=1, documentRoute=bounded_route_class(value['documentUrl'], self.url),
+            historyRoute='UNAVAILABLE', **{k:value[k] for k in ('title','body','notice','responseStatus')})
+        try:
+            history = cdp.get_navigation_history()
+            if (isinstance(history, (tuple,list)) and len(history) == 2 and type(history[0]) is int
+                    and isinstance(history[1], (tuple,list)) and 0 <= history[0] < len(history[1]) <= 64):
+                url = history[1][history[0]].url
+                if isinstance(url, str): result['historyRoute'] = bounded_route_class(url, self.url)
+        except Exception:
+            pass
+        return result
     def browser_surface_observation(self, cdp: Any) -> dict[str, str]:
         """Metadata only, with the route checked inside the same DOM read.
 

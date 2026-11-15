@@ -21,6 +21,8 @@ INITIALIZATION_READBACK_DIAGNOSTICS_V1 = True
 INITIALIZATION_READBACK_HOME_ONLY_V1 = True
 INITIALIZATION_READBACK_FAILURE_CODES_V1 = True
 INITIALIZATION_READBACK_SURFACE_V1 = True
+INITIALIZATION_READBACK_TAB_SELECTION_V1 = True
+INITIALIZATION_READBACK_NAVIGATION_V1 = True
 INITIALIZATION_READBACK_FAILURE_CODES = frozenset({
     "INITIALIZATION_READBACK_USER_UNPROVEN", "INITIALIZATION_READBACK_FIXED_NAVIGATION_UNAVAILABLE",
     "RESPONSE_TARGET_DRIFT", "RESPONSE_USER_DOCUMENT_NOT_HYDRATED", "RESPONSE_STATE_QUERY_FAILED",
@@ -29,6 +31,7 @@ INITIALIZATION_READBACK_FAILURE_CODES = frozenset({
     "BOOTSTRAP_DRAFT_SERIALIZATION_UNVERIFIED", "BOOTSTRAP_RICH_DRAFT_UNVERIFIED", "CHATGPT_NOT_IDLE",
     "RESPONSE_LOAD_ERROR", "RESPONSE_REFRESH_DRAFT_OR_EDITOR_UNPROVEN", "RESPONSE_PERSISTENCE_UNPROVEN",
     "OBSERVATION_UNPROVEN",
+    "INITIALIZATION_READBACK_TARGET_TAB_UNPROVEN",
 })
 
 
@@ -730,7 +733,7 @@ def initialization_readback(bridge, sb, request):
         raise bridge.Attention("INITIALIZATION_READBACK_REQUEST_INVALID")
     sink = bridge.NewConversationSink(None, ROOT / "browser-profile", 30, 20)
     sink.url, sink.destination_url = candidate, candidate
-    cdp, phase = None, "NAVIGATION"
+    cdp, phase, tab_observation = None, "NAVIGATION", None
     def report(stage, failure=None):
         def route(read):
             try:
@@ -745,10 +748,16 @@ def initialization_readback(bridge, sb, request):
               "documentRoute":route(lambda:bridge.CdpSink.cdp_value(cdp.evaluate("location.href")))}
         if failure is not None:
             frame["failureCode"] = failure if failure in INITIALIZATION_READBACK_FAILURE_CODES else "OBSERVATION_UNPROVEN"
+        if tab_observation is not None:
+            frame["tab"] = tab_observation
         try:
             # Reuse the qualified nine-field reader; it exports only closed
             # Home/login/editor/draft/generation/history categories, no text.
             frame["surface"] = sink.browser_surface_observation(cdp)
+        except Exception:
+            pass
+        try:
+            frame["navigation"] = sink.browser_navigation_observation(cdp)
         except Exception:
             pass
         emit(frame)
@@ -763,18 +772,29 @@ def initialization_readback(bridge, sb, request):
                     or cdp.get_current_url() != bridge.NEW_CONVERSATION_HOME
                     or bridge.CdpSink.cdp_value(cdp.evaluate("location.href")) != bridge.NEW_CONVERSATION_HOME):
                 raise
-            phase = "HOME_RECOVERY"
-            # Reuse the qualified native Home/draft/login/generation checks.
-            # Only a positively empty, idle Home can navigate once in-place.
-            sink.check_empty_home(cdp)
-            sink.check_plain_home_draft(cdp)
-            if not callable(getattr(cdp,"get",None)):
-                raise bridge.Attention("INITIALIZATION_READBACK_FIXED_NAVIGATION_UNAVAILABLE")
-            cdp = sink.retry_page_readiness(sb, cdp, home_only=True)
-            sink.require_response_document(cdp)
-            if not sink.exact(str(cdp.get_current_url())):
-                raise bridge.Attention("RESPONSE_TARGET_DRIFT")
-            report("INITIALIZATION_READBACK_HOME_RECOVERED")
+            phase = "TAB_SELECTION"
+            def tab_report(value):
+                nonlocal tab_observation
+                tab_observation = value
+            selected = bridge.select_registered_target_tab(cdp, candidate, tab_report)
+            if selected == "TARGET_TAB_EXACT":
+                # Selecting an existing independently matched tab neither
+                # navigates nor changes the Home tab's unknown draft.
+                sink.require_response_document(cdp)
+                report("INITIALIZATION_READBACK_TAB_SELECTED")
+            elif selected == "TARGET_TAB_MISSING":
+                phase = "HOME_RECOVERY"
+                sink.check_empty_home(cdp)
+                sink.check_plain_home_draft(cdp)
+                if not callable(getattr(cdp,"get",None)):
+                    raise bridge.Attention("INITIALIZATION_READBACK_FIXED_NAVIGATION_UNAVAILABLE")
+                cdp = sink.retry_page_readiness(sb, cdp, home_only=True)
+                sink.require_response_document(cdp)
+                if not sink.exact(str(cdp.get_current_url())):
+                    raise bridge.Attention("RESPONSE_TARGET_DRIFT")
+                report("INITIALIZATION_READBACK_HOME_RECOVERED")
+            else:
+                raise bridge.Attention("INITIALIZATION_READBACK_TARGET_TAB_UNPROVEN")
             phase = "INITIAL_OBSERVATION"
             bounded_response_observation(bridge, sink, cdp, message, expected)
         phase = "ORIGINAL_USER_CHECK"

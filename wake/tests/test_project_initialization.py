@@ -253,7 +253,9 @@ class ProjectInitializationTests(unittest.TestCase):
         home_fault = bool(fault and fault.startswith("home-"))
         if home_fault:
             cdp.url = bridge.NEW_CONVERSATION_HOME
-            cdp.draft = "untouched operator draft" if fault == "home-draft" else ""
+            cdp.draft = "untouched operator draft" if fault in {"home-draft","home-existing-target"} else ""
+        cdp.home_draft = cdp.draft
+        cdp.tab_switches = 0
         cdp.evaluate = lambda script: "https://chatgpt.com/" if fault == "document-home" else cdp.url
         output = []
 
@@ -318,11 +320,25 @@ class ProjectInitializationTests(unittest.TestCase):
                 cdp.timeline.append("ack-verified")
 
         bounded_observe=adapter.bounded_response_observation
+        def select_tab(cdp,url,report):
+            facts={"schemaVersion":1,"tabCount":1,"metadataMatches":0,"unreadableMetadata":0,
+                "candidateShape":"UNOBSERVED","candidateRoute":"UNKNOWN","candidateFrame":"UNKNOWN",
+                "controlledShape":"STRING","controlledRoute":"HOME","alternateRoute":False,
+                "stage":"METADATA","state":"TARGET_TAB_MISSING"}
+            if fault=="home-existing-target":
+                facts.update(metadataMatches=1,candidateShape="STRING",candidateRoute="EXACT",candidateFrame="TOP",
+                    controlledRoute="EXACT",stage="VERIFIED",state="TARGET_TAB_EXACT")
+                cdp.url=url;cdp.draft="";cdp.tab_switches+=1
+            elif fault=="home-ambiguous-target":
+                facts.update(tabCount=2,metadataMatches=2,state="TARGET_TAB_AMBIGUOUS")
+            report(facts)
+            return facts["state"]
         def observation(module,sink,cdp,message,expected):
             if home_fault: return sink.observe_cooperative_response(cdp,message,expected)
             return bounded_observe(module,sink,cdp,message,expected)
         with patch.object(bridge,"NewConversationSink",ReadbackSink), patch.object(adapter,"emit",output.append), \
              patch.object(adapter,"prepare_cdp_target",return_value=cdp) as opened, \
+             patch.object(bridge,"select_registered_target_tab",side_effect=select_tab), \
              patch.object(adapter,"bounded_response_observation",side_effect=observation), \
              patch.object(adapter,"read_request",side_effect=AssertionError("readback must not request submit ACK")), \
              patch.object(adapter.time,"sleep",return_value=None):
@@ -441,6 +457,7 @@ class ProjectInitializationTests(unittest.TestCase):
             sink=types.SimpleNamespace(url=ISSUED,error=lambda *_:True)
             self.assertIs(bridge.CdpSink.retry_page_readiness(sink,sb,cdp,home_only=True),cdp)
             self.assertEqual(actions,[])
+
         for guard in ["draft","rich","missing-native-navigation"]:
             cdp=types.SimpleNamespace(get_current_url=lambda:bridge.NEW_CONVERSATION_HOME,
                 reload=lambda **_:actions.append("reload"))
@@ -457,6 +474,28 @@ class ProjectInitializationTests(unittest.TestCase):
                 with self.assertRaises(bridge.Attention):bridge.CdpSink.retry_page_readiness(sink,sb,cdp,home_only=True)
             self.assertEqual(actions,[])
 
+
+    def test_readback_selects_an_existing_verified_tab_without_touching_the_home_draft(self):
+        cdp,output,error,_=self.readback_case(fault="home-existing-target")
+        self.assertIsNone(error)
+        self.assertEqual(cdp.sent,0)
+        self.assertEqual(cdp.navigation,[])
+        self.assertEqual(cdp.home_draft,"untouched operator draft")
+        self.assertEqual(cdp.tab_switches,1)
+        selected=[row for row in output if row["stage"]=="INITIALIZATION_READBACK_TAB_SELECTED"]
+        self.assertEqual(len(selected),1)
+        self.assertEqual(selected[0]["phase"],"TAB_SELECTION")
+        self.assertEqual(selected[0]["tab"]["state"],"TARGET_TAB_EXACT")
+        self.assertEqual(output[-1]["stage"],"INITIALIZATION_READBACK_COMPLETE")
+
+    def test_readback_refuses_ambiguous_target_tabs_without_navigation_or_input(self):
+        cdp,output,error,_=self.readback_case(fault="home-ambiguous-target")
+        self.assertEqual(str(error),"INITIALIZATION_READBACK_TARGET_TAB_UNPROVEN")
+        self.assertEqual(cdp.sent,0)
+        self.assertEqual(cdp.navigation,[])
+        self.assertEqual(cdp.tab_switches,0)
+        self.assertEqual(output[-1]["tab"]["state"],"TARGET_TAB_AMBIGUOUS")
+        self.assertFalse(any("receipt" in row for row in output))
 
 if __name__ == "__main__":
     unittest.main()

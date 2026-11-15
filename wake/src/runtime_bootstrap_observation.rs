@@ -190,6 +190,10 @@ pub struct InitializationReadbackObservation {
     pub failure_code: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub surface: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tab: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub navigation: Option<serde_json::Value>,
 }
 
 impl InitializationReadbackObservation {
@@ -198,6 +202,7 @@ impl InitializationReadbackObservation {
             "NAVIGATION",
             "INITIAL_OBSERVATION",
             "HOME_RECOVERY",
+            "TAB_SELECTION",
             "ORIGINAL_USER_CHECK",
             "COMPLETION",
             "REFRESH",
@@ -244,12 +249,65 @@ impl InitializationReadbackObservation {
                     | "RESPONSE_REFRESH_DRAFT_OR_EDITOR_UNPROVEN"
                     | "RESPONSE_PERSISTENCE_UNPROVEN"
                     | "OBSERVATION_UNPROVEN"
+                    | "INITIALIZATION_READBACK_TARGET_TAB_UNPROVEN"
             )
         }) {
             return Err("INITIALIZATION_READBACK_DIAGNOSTIC_INVALID".into());
         }
         if self.surface.as_ref().is_some_and(|value| {
             crate::readiness_probe::surface_observation(&format!("PROBE:SURFACE:{value}")).is_none()
+        }) {
+            return Err("INITIALIZATION_READBACK_DIAGNOSTIC_INVALID".into());
+        }
+        if self.tab.as_ref().is_some_and(|value| {
+            crate::readiness_probe::tab_observation(&format!("PROBE:TAB:{value}")).is_none()
+        }) {
+            return Err("INITIALIZATION_READBACK_DIAGNOSTIC_INVALID".into());
+        }
+        if self.navigation.as_ref().is_some_and(|value| {
+            value.as_object().is_none_or(|v| {
+                v.len() != 7
+                    || !v.keys().all(|key| {
+                        matches!(
+                            key.as_str(),
+                            "schemaVersion"
+                                | "documentRoute"
+                                | "historyRoute"
+                                | "title"
+                                | "body"
+                                | "notice"
+                                | "responseStatus"
+                        )
+                    })
+            }) || value["schemaVersion"] != 1
+                || !["documentRoute", "historyRoute"].iter().all(|field| {
+                    value[*field].as_str().is_some_and(|route| {
+                        routes.contains(&route)
+                            || (*field == "historyRoute" && route == "UNAVAILABLE")
+                    })
+                })
+                || !matches!(
+                    value["title"].as_str(),
+                    Some("EMPTY" | "SECURITY_CHECK" | "NETWORK_ERROR" | "CHATGPT" | "OTHER")
+                )
+                || !matches!(
+                    value["body"].as_str(),
+                    Some("ABSENT" | "EMPTY" | "NONEMPTY")
+                )
+                || !matches!(
+                    value["notice"].as_str(),
+                    Some(
+                        "NOT_INSPECTED"
+                            | "NONE"
+                            | "RATE_LIMITED"
+                            | "SECURITY_CHECK"
+                            | "ACCESS_DENIED"
+                            | "LOGIN_REQUIRED"
+                            | "NETWORK_ERROR"
+                    )
+                )
+                || !(value["responseStatus"].is_null()
+                    || value["responseStatus"].as_u64().is_some_and(|n| n <= 599))
         }) {
             return Err("INITIALIZATION_READBACK_DIAGNOSTIC_INVALID".into());
         }
@@ -264,11 +322,17 @@ fn readback_observation(
     if frame.as_object().map(|v| v.len())
         != Some(
             10 + usize::from(frame.get("failureCode").is_some())
-                + usize::from(frame.get("surface").is_some()),
+                + usize::from(frame.get("surface").is_some())
+                + usize::from(frame.get("tab").is_some())
+                + usize::from(frame.get("navigation").is_some()),
         )
         || !matches!(
             frame["stage"].as_str(),
-            Some("INITIALIZATION_READBACK_DIAGNOSTIC" | "INITIALIZATION_READBACK_HOME_RECOVERED")
+            Some(
+                "INITIALIZATION_READBACK_DIAGNOSTIC"
+                    | "INITIALIZATION_READBACK_HOME_RECOVERED"
+                    | "INITIALIZATION_READBACK_TAB_SELECTED"
+            )
         )
         || frame["schemaVersion"] != 1
         || frame["projectId"] != request.project
@@ -285,7 +349,7 @@ fn readback_observation(
         return Err("INITIALIZATION_READBACK_DIAGNOSTIC_INVALID".into());
     }
     let observation: InitializationReadbackObservation = serde_json::from_value(serde_json::json!({
-        "phase":frame["phase"],"driverRoute":frame["driverRoute"],"documentRoute":frame["documentRoute"],"failureCode":frame["failureCode"],"surface":frame["surface"]}))
+        "phase":frame["phase"],"driverRoute":frame["driverRoute"],"documentRoute":frame["documentRoute"],"failureCode":frame["failureCode"],"surface":frame["surface"],"tab":frame["tab"],"navigation":frame["navigation"]}))
         .map_err(|_|"INITIALIZATION_READBACK_DIAGNOSTIC_INVALID")?;
     observation.validate()?;
     if frame["stage"] == "INITIALIZATION_READBACK_HOME_RECOVERED"
@@ -293,6 +357,24 @@ fn readback_observation(
             || observation.driver_route != "SAME_CONVERSATION"
             || observation.document_route != "SAME_CONVERSATION"
             || observation.failure_code.is_some())
+    {
+        return Err("INITIALIZATION_READBACK_DIAGNOSTIC_INVALID".into());
+    }
+    if frame["stage"] == "INITIALIZATION_READBACK_TAB_SELECTED"
+        && (observation.phase != "TAB_SELECTION"
+            || observation.driver_route != "SAME_CONVERSATION"
+            || observation.document_route != "SAME_CONVERSATION"
+            || observation.failure_code.is_some()
+            || observation.tab.as_ref().is_none_or(|tab| {
+                tab["state"] != "TARGET_TAB_EXACT"
+                    || tab["stage"] != "VERIFIED"
+                    || tab["metadataMatches"] != 1
+                    || tab["unreadableMetadata"] != 0
+                    || tab["candidateRoute"] != "EXACT"
+                    || tab["controlledRoute"] != "EXACT"
+                    || tab["candidateShape"] != "STRING"
+                    || tab["controlledShape"] != "STRING"
+            }))
     {
         return Err("INITIALIZATION_READBACK_DIAGNOSTIC_INVALID".into());
     }
@@ -356,6 +438,18 @@ pub fn read_initialization_candidate_guarded(
     {
         return Err("INITIALIZATION_READBACK_HOME_RECOVERY_PACKAGE_REQUIRED".into());
     }
+    if !bytes
+        .windows(b"INITIALIZATION_READBACK_TAB_SELECTION_V1 = True".len())
+        .any(|part| part == b"INITIALIZATION_READBACK_TAB_SELECTION_V1 = True")
+    {
+        return Err("INITIALIZATION_READBACK_DIAGNOSTICS_PACKAGE_REQUIRED".into());
+    }
+    if !bytes
+        .windows(b"INITIALIZATION_READBACK_NAVIGATION_V1 = True".len())
+        .any(|part| part == b"INITIALIZATION_READBACK_NAVIGATION_V1 = True")
+    {
+        return Err("INITIALIZATION_READBACK_DIAGNOSTICS_PACKAGE_REQUIRED".into());
+    }
     let mut adapter = Adapter::spawn_from_installed_guarded(
         store.root(),
         &installed,
@@ -370,6 +464,7 @@ pub fn read_initialization_candidate_guarded(
     let deadline = Instant::now() + Duration::from_secs(TURN_TARGET_SECONDS);
     let mut diagnostic_seen = false;
     let mut home_recovered = false;
+    let mut tab_selected = false;
     while Instant::now() < deadline {
         let value = match guarded_browser_receive(&adapter.output, keep_running)? {
             Ok(Ok(value)) => value,
@@ -382,6 +477,20 @@ pub fn read_initialization_candidate_guarded(
             return Err("INITIALIZATION_READBACK_PROTOCOL_INVALID".into());
         }
         match value["stage"].as_str() {
+            Some("INITIALIZATION_READBACK_TAB_SELECTED") if !tab_selected => {
+                let request = InitializationReadbackRequest {
+                    project,
+                    intent,
+                    registration,
+                    handoff,
+                    candidate,
+                    native_turn_started_utc,
+                };
+                let observation = readback_observation(&value, &request)?;
+                keep_running()?;
+                observe(observation)?;
+                tab_selected = true;
+            }
             Some("INITIALIZATION_READBACK_HOME_RECOVERED") if !home_recovered => {
                 let request = InitializationReadbackRequest {
                     project,
@@ -467,6 +576,9 @@ pub fn read_initialization_candidate_guarded(
                     Some("INITIALIZATION_READBACK_FIXED_NAVIGATION_UNAVAILABLE") => {
                         "INITIALIZATION_READBACK_FIXED_NAVIGATION_UNAVAILABLE"
                     }
+                    Some("INITIALIZATION_READBACK_TARGET_TAB_UNPROVEN") => {
+                        "INITIALIZATION_READBACK_TARGET_TAB_UNPROVEN"
+                    }
                     _ => "INITIALIZATION_READBACK_OBSERVATION_UNPROVEN",
                 };
                 return Err(reason.into());
@@ -508,6 +620,25 @@ mod tests {
             "driverRoute":"SAME_CONVERSATION","documentRoute":"HOME"});
         let observed = readback_observation(&frame, &request).unwrap();
         assert_eq!(observed.document_route, "HOME");
+        let mut selected = frame.clone();
+        selected["stage"] = serde_json::json!("INITIALIZATION_READBACK_TAB_SELECTED");
+        selected["phase"] = serde_json::json!("TAB_SELECTION");
+        selected["documentRoute"] = serde_json::json!("SAME_CONVERSATION");
+        selected["tab"] = serde_json::json!({"schemaVersion":1,"tabCount":2,"metadataMatches":1,"unreadableMetadata":0,
+            "candidateShape":"STRING","candidateRoute":"EXACT","candidateFrame":"TOP",
+            "controlledShape":"STRING","controlledRoute":"EXACT","alternateRoute":false,
+            "stage":"VERIFIED","state":"TARGET_TAB_EXACT"});
+        assert!(readback_observation(&selected, &request).is_ok());
+        for (key, value) in [
+            ("metadataMatches", serde_json::json!(2)),
+            ("controlledRoute", serde_json::json!("HOME")),
+            ("candidateRoute", serde_json::json!("OTHER")),
+            ("state", serde_json::json!("TARGET_TAB_DRIFT")),
+        ] {
+            let mut invalid = selected.clone();
+            invalid["tab"][key] = value;
+            assert!(readback_observation(&invalid, &request).is_err());
+        }
         let mut surfaced = frame.clone();
         surfaced["surface"] = serde_json::json!({"route":"HOME","document":"COMPLETE","history":"ABSENT",
             "editor":"MISSING","composer":"UNKNOWN","generation":"IDLE","assistant":"ABSENT",
@@ -515,6 +646,28 @@ mod tests {
         assert!(readback_observation(&surfaced, &request).is_ok());
         surfaced["surface"]["body"] = serde_json::json!("private context");
         assert!(readback_observation(&surfaced, &request).is_err());
+        let mut navigation = frame.clone();
+        navigation["navigation"] = serde_json::json!({"schemaVersion":1,"documentRoute":"HOME",
+            "historyRoute":"SAME_CONVERSATION","title":"SECURITY_CHECK","body":"NONEMPTY",
+            "notice":"SECURITY_CHECK","responseStatus":403});
+        assert!(readback_observation(&navigation, &request).is_ok());
+        for (field, bad) in [
+            ("title", serde_json::json!("PRIVATE_TITLE")),
+            ("notice", serde_json::json!("PRIVATE_BODY")),
+            ("historyRoute", serde_json::json!(request.candidate)),
+            ("responseStatus", serde_json::json!(true)),
+            ("responseStatus", serde_json::json!(600)),
+        ] {
+            let mut invalid = navigation.clone();
+            invalid["navigation"][field] = bad;
+            assert!(readback_observation(&invalid, &request).is_err());
+        }
+        navigation["navigation"]
+            .as_object_mut()
+            .unwrap()
+            .remove("responseStatus");
+        navigation["navigation"]["rawBody"] = serde_json::json!("PRIVATE_BODY");
+        assert!(readback_observation(&navigation, &request).is_err());
         let mut reasoned = frame.clone();
         reasoned["failureCode"] = serde_json::json!("BOOTSTRAP_HOME_NOT_READY");
         assert_eq!(
@@ -556,11 +709,9 @@ mod tests {
         let mut changed = frame;
         changed["body"] = serde_json::json!("private context");
         assert!(readback_observation(&changed, &request).is_err());
-        assert!(
-            !serde_json::to_string(&observed)
-                .unwrap()
-                .contains(request.candidate)
-        );
+        assert!(!serde_json::to_string(&observed)
+            .unwrap()
+            .contains(request.candidate));
     }
 
     fn frame() -> serde_json::Value {
@@ -614,11 +765,9 @@ mod tests {
             saved.post_submit_diagnostic,
             Some(BootstrapDiagnostic::ResponseLoadError)
         );
-        assert!(
-            !serde_json::to_string(&saved)
-                .unwrap()
-                .contains("EXACT_USER_MESSAGE_APPENDED")
-        );
+        assert!(!serde_json::to_string(&saved)
+            .unwrap()
+            .contains("EXACT_USER_MESSAGE_APPENDED"));
     }
 
     #[test]
@@ -626,11 +775,9 @@ mod tests {
         let unknown =
             diagnostic(&serde_json::json!({"reason":"PRIVATE_CONTEXT_AND_EXECUTION_KEY"}));
         assert_eq!(unknown, BootstrapDiagnostic::UnclassifiedPostSubmitFailure);
-        assert!(
-            !serde_json::to_string(&unknown)
-                .unwrap()
-                .contains("PRIVATE_CONTEXT")
-        );
+        assert!(!serde_json::to_string(&unknown)
+            .unwrap()
+            .contains("PRIVATE_CONTEXT"));
         assert_eq!(
             diagnostic(&serde_json::json!({"reason":"BOOTSTRAP_URL_UNISSUED"})),
             BootstrapDiagnostic::UrlUnissued

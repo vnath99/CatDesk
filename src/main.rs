@@ -2794,6 +2794,7 @@ fn operator_web_error_code(error: &str) -> &str {
             | "INITIALIZATION_READBACK_TIME_INVALID"
             | "INITIALIZATION_READBACK_TIMEOUT"
             | "INITIALIZATION_READBACK_USER_UNPROVEN"
+            | "INITIALIZATION_READBACK_TARGET_TAB_UNPROVEN"
             | "EDITOR_SELECTOR"
             | "CAPTCHA_OR_SECURITY_CHECK"
             | "SELENIUMBASE_IMPORT_FAILED"
@@ -3971,6 +3972,7 @@ mod tests {
     fn initialization_readback_error_codes_survive_the_cli_without_private_details() {
         for code in [
             "INITIALIZATION_READBACK_HOME_DRAFT_PRESERVED",
+            "INITIALIZATION_READBACK_TARGET_TAB_UNPROVEN",
             "INITIALIZATION_READBACK_HOME_GENERATION_ACTIVE",
             "INITIALIZATION_READBACK_HOME_STATE_UNPROVEN",
             "INITIALIZATION_READBACK_FIXED_NAVIGATION_UNAVAILABLE",
