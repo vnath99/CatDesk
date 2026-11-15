@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+November 15 review recovery: the existing approved d22 claim reached `WAITING_FOR_CHATGPT` through the qualified development controller using its original idempotency identity. This is a recorded, completed claim operation; do not repeat its private one-shot wrapper. It does not establish an independent review verdict or release authority. The original external review delivery remains unknown. [Bounded recovery evidence](docs/verification/EXISTING_D22_CLAIM_RECOVERY_2026_11_15.json).
+
 Run shell examples in an ordinary PowerShell terminal from the intended checkout. Confirm `Get-Location` and ownership first. These are command references, not authorization to run protected lifecycle operations. Do not put credentials or private contexts on a command line. Installed executable, source facade and development packages are distinct.
 
 ## Environment and source identity

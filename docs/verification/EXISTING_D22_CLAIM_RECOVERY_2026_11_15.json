@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-15T04:05:45.717953+00:00",
+  "scope": "EXISTING_APPROVED_SOURCE_BOUND_REVIEW_CLAIM_ONLY",
+  "documentationSource": "374c62fe8a58701884f8bc27a9261dc3ca02a40f",
+  "controllerSource": "5d51a1dd9d176f94ac8e1ec04f44d6c91d18d4e5",
+  "controllerSha256": "5b345c4b3c22203b1d30659e5a5c05a049d09ac2fd5b9a4c1f56d3bbe034df59",
+  "reviewedSourceRequested": "d22e96ca8df48786737ca0a7b78e3e7439531e5a",
+  "contractHash": "fnv1a64:f41066fe9e6bf47f",
+  "originalFailure": "Pre-execution detached HEAD validation refusal",
+  "recovery": "Existing exact idempotent claim through the previously qualified corrected development controller",
+  "originalContractAndApprovalPreserved": true,
+  "stateBefore": {
+    "state": "QUEUED",
+    "version": 3,
+    "providerTurns": 0
+  },
+  "stateAfter": {
+    "state": "WAITING_FOR_CHATGPT",
+    "version": 4,
+    "providerTurns": 1,
+    "nativeProviderThreadCaptured": false
+  },
+  "accountingDistinction": "One direct-work accounting turn was recorded; no native model or independent reviewer was launched",
+  "result": {
+    "claimAccepted": true,
+    "independentReviewCompleted": false,
+    "reviewVerdictCreated": false,
+    "producerAuthorityCreated": false,
+    "newMessages": 0,
+    "browserWakeTunnelStarts": 0,
+    "protectedInstallationChanges": 0
+  },
+  "boundedOwner": {
+    "maximumMilliseconds": 120000,
+    "exitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false,
+    "backendExited": true,
+    "endpointClosed": true
+  },
+  "preservation": {
+    "pinsChecked": 1699,
+    "classifiedExistingUsageCounterChanges": 1,
+    "configurationAuthorityUnchanged": true,
+    "allOtherPinnedStateUnchanged": true,
+    "profileIdentitiesAndProjectInventoryUnchanged": true,
+    "otherReviewAndAccountingRecordsUnchanged": true,
+    "reviewSourceClean": true
+  },
+  "remaining": {
+    "originalExternalReviewSubmission": "UNKNOWN_PRESERVED_NO_RESEND",
+    "needed": "Genuine attributable independent review response before report finalization, acknowledgment, snapshot or reviewed-build producer",
+    "d22DoesNotReviewLaterWakeChanges": true,
+    "directWebEditCheckpointSelfWakeAcceptance": "OPEN",
+    "protectedWakeMigration": "BLOCKED_SEPARATELY"
+  },
+  "goalComplete": false
+}

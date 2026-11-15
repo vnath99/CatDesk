@@ -125,3 +125,11 @@ Evidence: [docs/verification/PROJECT_WORK_READINESS_2026_11_15.json](docs/verifi
 Agent: Codex. Source: f5d535e5fd81d36948d06e159c5d1de27c4a9687. Outcome: partial. Original CatDesk quarantine already has a valid completed ABANDONED_UNKNOWN_NO_REPLAY disposition; supported native no-send status verified its digest chain without repeating recovery, while preserving the original unknown outcome and source-task fence. Next: Prepare source-bound independent review of the qualified current Wake candidate using the existing reviewer workflow; preserve d22, historical deliveries and protected migration authority; no new send or grant before exact guards pass.
 
 Evidence: [docs/verification/RETAINED_QUARANTINE_STATUS_2026_11_15.json](docs/verification/RETAINED_QUARANTINE_STATUS_2026_11_15.json); command: Qualified development controller operator web rollover status for the original registered project; no browser or send; exit 0; SHA-256 8049e8aedc9fb8642aa9665d0515b82fe9f5929d2ba6ec6e7f3c20419e3759f6.
+
+<!-- catdesk-activity:existing-approved-d22-claim-recovery-nov15 sha256:d9120a783f590ad4770f905d07604486aa4b26acdc26b7aba76c64662bb10729 -->
+
+## 2026-11-15T04:05:45.717953+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 374c62fe8a58701884f8bc27a9261dc3ca02a40f. Outcome: partial. Recovered the original approved d22 review claim once through the qualified corrected controller: WAITING_FOR_CHATGPT v4, unchanged contract and idempotency identity, no external resend or native model; independent review and producer authority remain absent. Next: Preserve the unresolved original external review; prepare exact source-bound review inputs for the current qualified Wake candidate through the existing workflow, with no new send or grant before its guards pass.
+
+Evidence: [docs/verification/EXISTING_D22_CLAIM_RECOVERY_2026_11_15.json](docs/verification/EXISTING_D22_CLAIM_RECOVERY_2026_11_15.json); command: Bounded authenticated existing approved direct-work claim using its original idempotency identity; no provider launch; exit 0; SHA-256 529489c7e91bd4501f11a12876a26ce03910040ee14d10b7e99fab5ddbcb8c6f.
