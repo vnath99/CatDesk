@@ -1,9 +1,11 @@
-//! Cold recovery for newly claimed, dedicated, zero-call task owners only.
+//! Cold recovery for dedicated owners with no effects or an exact checkpoint.
 //! Legacy markers are never adopted. The original marker remains present until
 //! retirement is durably authorized, then its atomic archival is the commit.
 use super::*;
+use crate::delegated::journal::{PatchProposalRecordV1, ToolCallRecordV1, ToolMutationKind};
 use crate::reviewed_candidate_owner::{OwnedCandidateChild, StoppedControllerLifetime};
 use sha2::{Digest, Sha256};
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -167,7 +169,9 @@ fn check_claim(
     if claim.schema_version != 1
         || !matches!(
             claim.purpose.as_str(),
-            "PROJECT_TASK_ZERO_CALLS_V1" | "PROJECT_TASK_CHECKPOINT_V1"
+            "PROJECT_TASK_ZERO_CALLS_V1"
+                | "PROJECT_TASK_SETTLED_READS_V1"
+                | "PROJECT_TASK_CHECKPOINT_V1"
         )
         || !id_ok(&claim.claim_id)
         || !id_ok(&claim.lifetime_id)
@@ -200,6 +204,14 @@ fn check_claim(
 fn zero_journal(
     directory: &Path,
     inspected: &AssignmentInspection,
+) -> Result<Vec<(String, String)>, String> {
+    nonmutating_journal(directory, inspected, false)
+}
+
+fn nonmutating_journal(
+    directory: &Path,
+    inspected: &AssignmentInspection,
+    allow_settled_reads: bool,
 ) -> Result<Vec<(String, String)>, String> {
     let root = directory.join("journal");
     let mut files = Vec::new();
@@ -253,28 +265,41 @@ fn zero_journal(
     let snapshot = journal
         .load_run(&run)
         .map_err(|_| "PROJECT_TASK_RECOVERY_JOURNAL_UNAVAILABLE")?;
-    if serde_json::to_value(snapshot).map_err(|_| "PROJECT_TASK_RECOVERY_JOURNAL_UNAVAILABLE")?["state"]
+    if serde_json::to_value(&snapshot).map_err(|_| "PROJECT_TASK_RECOVERY_JOURNAL_UNAVAILABLE")?["state"]
         != "RUNNING"
     {
         return Err("PROJECT_TASK_RECOVERY_ACTIVITY_RECORDED".into());
     }
+    let calls = journal
+        .load_tool_calls(&run)
+        .map_err(|_| "PROJECT_TASK_RECOVERY_JOURNAL_UNAVAILABLE")?;
+    let proposals = journal
+        .load_patch_proposals(&run)
+        .map_err(|_| "PROJECT_TASK_RECOVERY_JOURNAL_UNAVAILABLE")?;
     if journal
         .load_contract(&run)
         .map_err(|_| "PROJECT_TASK_RECOVERY_JOURNAL_UNAVAILABLE")?
         != inspected.contract
         || !journal
-            .load_tool_calls(&run)
-            .map_err(|_| "PROJECT_TASK_RECOVERY_JOURNAL_UNAVAILABLE")?
-            .is_empty()
-        || !journal
-            .load_patch_proposals(&run)
-            .map_err(|_| "PROJECT_TASK_RECOVERY_JOURNAL_UNAVAILABLE")?
-            .is_empty()
-        || !journal
             .load_patch_applications(&run)
             .map_err(|_| "PROJECT_TASK_RECOVERY_JOURNAL_UNAVAILABLE")?
             .is_empty()
     {
+        return Err("PROJECT_TASK_RECOVERY_ACTIVITY_RECORDED".into());
+    }
+    if allow_settled_reads && !calls.is_empty() {
+        settled_read_history(
+            directory,
+            inspected,
+            &files,
+            &calls,
+            &proposals,
+            snapshot.last_event_sequence,
+        )?;
+        files.sort();
+        return Ok(files);
+    }
+    if !calls.is_empty() || !proposals.is_empty() {
         return Err("PROJECT_TASK_RECOVERY_ACTIVITY_RECORDED".into());
     }
     for (relative, _) in &files {
@@ -366,6 +391,214 @@ fn zero_journal(
     Ok(files)
 }
 
+/// Preserve completed observation receipts, rather than forgetting or replaying
+/// them. No command, application, native/provider action or unknown outcome is
+/// admitted. All files remain pinned by the existing retirement transaction.
+fn settled_read_history(
+    directory: &Path,
+    inspected: &AssignmentInspection,
+    files: &[(String, String)],
+    calls: &BTreeMap<String, ToolCallRecordV1>,
+    proposals: &[PatchProposalRecordV1],
+    last_sequence: u64,
+) -> Result<(), String> {
+    let refused = || "PROJECT_TASK_RECOVERY_ACTIVITY_RECORDED".to_owned();
+    let task = inspected.contract.task_id.as_str();
+    let hash_ok = |value: &str| value.strip_prefix("sha256:").is_some_and(digest_ok);
+    if calls.len() > inspected.contract.max_tool_calls as usize
+        || calls.iter().any(|(id, call)| {
+            call.schema_version != 1
+                || call.run_id.as_str() != task
+                || call.tool_call_id.as_str() != id
+                || !matches!(call.tool_name.as_str(), "read" | "search" | "patch.preview")
+                || call.mutation_kind != ToolMutationKind::ReadOnly
+                || call.status != ToolCallStatus::Completed
+                || call.request_hash != call.arguments_hash
+                || !hash_ok(&call.arguments_hash)
+                || !call.result_hash.as_deref().is_some_and(hash_ok)
+                || call.outcome_summary.is_none()
+        })
+    {
+        return Err(refused());
+    }
+    let mut state = None;
+    let mut events = None;
+    for (relative, _) in files {
+        let path = directory.join(relative);
+        let name = path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .ok_or_else(refused)?;
+        if path
+            == directory
+                .join("journal/integrated_state")
+                .join(format!("{task}.json"))
+        {
+            if state.replace(read::<Value>(&path)?).is_some() {
+                return Err(refused());
+            }
+        } else if name == "events.jsonl" {
+            if events.replace(path).is_some() {
+                return Err(refused());
+            }
+        } else if !matches!(
+            name,
+            "contract.json"
+                | "state.json"
+                | "tool_calls.json"
+                | "patch_proposals.json"
+                | "patch_applications.json"
+        ) {
+            return Err(refused());
+        }
+    }
+    let state = state.ok_or_else(refused)?;
+    let keys = [
+        "schemaVersion",
+        "runId",
+        "patchProposals",
+        "lastVerification",
+        "lastDiff",
+        "completedToolCallIds",
+        "providerHistory",
+        "completedToolCalls",
+        "consecutiveFailedVerifications",
+        "adviceConsultedForCurrentFailure",
+        "advisorConsultationsUsed",
+        "recentReadExcerpts",
+        "nextEventSequence",
+        "correctiveTurnsUsed",
+        "jsonToolRecoveryTurnsRemaining",
+    ];
+    if state["schemaVersion"] != 1
+        || state["runId"] != task
+        || state
+            .as_object()
+            .is_none_or(|m| m.keys().any(|key| !keys.contains(&key.as_str())))
+        || state["completedToolCalls"] != calls.len()
+        || !state["lastVerification"].is_null()
+        || !state["lastDiff"].is_null()
+        || state["adviceConsultedForCurrentFailure"] != false
+        || [
+            "consecutiveFailedVerifications",
+            "advisorConsultationsUsed",
+            "correctiveTurnsUsed",
+            "jsonToolRecoveryTurnsRemaining",
+        ]
+        .iter()
+        .any(|key| state[*key] != 0)
+        || state["nextEventSequence"].as_u64() != last_sequence.checked_add(1)
+        || !state["recentReadExcerpts"]
+            .as_array()
+            .is_some_and(|a| a.len() <= calls.len())
+    {
+        return Err(refused());
+    }
+    let ids: Vec<String> =
+        serde_json::from_value(state["completedToolCallIds"].clone()).map_err(|_| refused())?;
+    let expected: BTreeSet<_> = calls.keys().cloned().collect();
+    if ids.len() != calls.len() || ids.into_iter().collect::<BTreeSet<_>>() != expected {
+        return Err(refused());
+    }
+    let history: Vec<crate::delegated::runtime::ProviderMessageV1> =
+        serde_json::from_value(state["providerHistory"].clone()).map_err(|_| refused())?;
+    let mut seen = BTreeSet::new();
+    for message in &history {
+        let id = message.tool_call_id.as_deref().ok_or_else(refused)?;
+        let call = calls.get(id).ok_or_else(refused)?;
+        if message.role != "tool"
+            || message.tool_name.as_deref() != Some(call.tool_name.as_str())
+            || call.result_hash.as_deref() != Some(stable_text_hash(&message.content).as_str())
+            || !seen.insert(id.to_owned())
+        {
+            return Err(refused());
+        }
+    }
+    if history.len() != calls.len() || seen != expected {
+        return Err(refused());
+    }
+    let retained: Vec<crate::delegated::patch_engine::PatchProposalV1> =
+        serde_json::from_value(state["patchProposals"].clone()).map_err(|_| refused())?;
+    let mut preview_ids = BTreeSet::new();
+    if retained.len() != proposals.len()
+        || proposals.len()
+            > calls
+                .values()
+                .filter(|c| c.tool_name == "patch.preview")
+                .count()
+    {
+        return Err(refused());
+    }
+    for proposal in retained {
+        let record = proposals
+            .iter()
+            .find(|p| p.patch_id == proposal.patch_id)
+            .ok_or_else(refused)?;
+        if proposal.schema_version != 1
+            || proposal.run_id.as_str() != task
+            || record.schema_version != 1
+            || record.run_id != proposal.run_id
+            || record.turn_id != proposal.turn_id
+            || record.parent_patch_id != proposal.parent_patch_id
+            || record.base_snapshot_hash != proposal.base_snapshot_hash
+            || record.target_paths != proposal.target_paths
+            || record.expected_preimage_hashes
+                != proposal
+                    .expected_preimage_hashes
+                    .iter()
+                    .map(|h| h.hash.clone())
+                    .collect::<Vec<_>>()
+            || record.model_rationale != proposal.model_rationale
+            || !hash_ok(&record.proposed_diff_hash)
+            || !preview_ids.insert(proposal.patch_id.as_str().to_owned())
+        {
+            return Err(refused());
+        }
+    }
+    let text = String::from_utf8(read_assignment_bytes(&events.ok_or_else(refused)?)?)
+        .map_err(|_| refused())?;
+    let mut completions = BTreeMap::<String, usize>::new();
+    for call in calls.values() {
+        *completions
+            .entry(format!(
+                "tool {} completed: {}",
+                call.tool_name,
+                call.outcome_summary.as_deref().ok_or_else(refused)?
+            ))
+            .or_default() += 1;
+    }
+    let mut sequence = 0;
+    for line in text.lines() {
+        let event: crate::delegated::events::EventEnvelopeV1 =
+            serde_json::from_str(line).map_err(|_| refused())?;
+        sequence += 1;
+        event.validate().map_err(|_| refused())?;
+        if event.run_id.as_str() != task || event.event_sequence != sequence {
+            return Err(refused());
+        }
+        match (&event.lifecycle_event, &event.payload) {
+            (
+                crate::delegated::events::LifecycleEvent::Started,
+                crate::delegated::events::EventPayloadV1::RunStateChanged {
+                    state: crate::delegated::contracts::RunState::Running,
+                },
+            ) => {}
+            (
+                crate::delegated::events::LifecycleEvent::Delta,
+                crate::delegated::events::EventPayloadV1::Delta { text },
+            ) => {
+                let count = completions.get_mut(text).ok_or_else(refused)?;
+                *count = count.checked_sub(1).ok_or_else(refused)?;
+            }
+            _ => return Err(refused()),
+        }
+    }
+    if sequence != last_sequence || completions.values().any(|n| *n != 0) {
+        return Err(refused());
+    }
+    Ok(())
+}
+
 fn task_clean(
     project: &ResolvedProjectScopeV1,
     inspected: &AssignmentInspection,
@@ -395,7 +628,7 @@ fn recoverable_journal(
         )?;
         git_checkpoint::recovery_snapshot(directory, inspected)
     } else {
-        zero_journal(directory, inspected)
+        nonmutating_journal(directory, inspected, true)
     }
 }
 
@@ -537,8 +770,22 @@ pub(super) fn lock_and_recover(
         .map_err(|_| "PROJECT_TASK_RECOVERY_ARCHIVE_UNPROVEN")?;
     failpoint("ARCHIVED")?;
     let mut retired = authorized;
+    let observed_reads = if claim.purpose == "PROJECT_TASK_CHECKPOINT_V1" {
+        false
+    } else {
+        let journal = DelegatedJournal::open(directory.join("journal"))
+            .map_err(|_| "PROJECT_TASK_RECOVERY_JOURNAL_UNAVAILABLE")?;
+        let run = RunId::new(inspected.contract.task_id.clone())
+            .map_err(|_| "PROJECT_TASK_CONTRACT_INVALID")?;
+        !journal
+            .load_tool_calls(&run)
+            .map_err(|_| "PROJECT_TASK_RECOVERY_JOURNAL_UNAVAILABLE")?
+            .is_empty()
+    };
     retired.state = if claim.purpose == "PROJECT_TASK_CHECKPOINT_V1" {
         "RETIRED_EXACT_CHECKPOINT"
+    } else if observed_reads {
+        "RETIRED_SETTLED_READS"
     } else {
         "RETIRED_ZERO_CALLS"
     }
@@ -573,9 +820,10 @@ pub(super) fn begin(
     // warm resumption. Unknown or oversized status stays on the legacy gate.
     let checkpoint_owner =
         git_checkpoint::load_policy(&directory, &digest(&inspected.bytes))?.checkpoint;
+    let zero_calls = zero_journal(&directory, inspected).is_ok();
     if !checkpoint_owner
         && (!matches!(is_clean(&inspected.root), Ok(true))
-            || zero_journal(&directory, inspected).is_err())
+            || nonmutating_journal(&directory, inspected, true).is_err())
     {
         writer
             .begin_writer_turn()
@@ -587,6 +835,8 @@ pub(super) fn begin(
         schema_version: 1,
         purpose: if checkpoint_owner {
             "PROJECT_TASK_CHECKPOINT_V1"
+        } else if !zero_calls {
+            "PROJECT_TASK_SETTLED_READS_V1"
         } else {
             "PROJECT_TASK_ZERO_CALLS_V1"
         }
@@ -691,7 +941,7 @@ mod tests {
                 None
             };
             println!(
-                "{}",
+                "\n{}",
                 json!({"metadata":task.metadata(),"checkpointReplayError":replay,"commandSandboxQualified":false})
             );
             std::io::stdout().flush().unwrap();
@@ -708,6 +958,16 @@ mod tests {
                 .block_on(
                     task.execute(json!({"taskId":"task-fixture","callId":"observed-call",
                     "tool":"read","arguments":{"path":"src/lib.rs"}})),
+                )
+                .unwrap();
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(
+                    task.execute(json!({"taskId":"task-fixture","callId":"observed-preview",
+                    "tool":"patch.preview","arguments":{"patchId":"readonly-preview","operations":[
+                    {"path":"src/lib.rs","old":"{ 1 }","new":"{ 2 }"}]}})),
                 )
                 .unwrap();
         }
@@ -733,7 +993,9 @@ mod tests {
         } else {
             task
         };
-        println!("{}", task.metadata());
+        // libtest can print its test label without a trailing newline.
+        // Keep this child-only receipt on an independently parseable line.
+        println!("\n{}", task.metadata());
         std::io::stdout().flush().unwrap();
         std::thread::sleep(Duration::from_secs(20));
     }
@@ -789,7 +1051,7 @@ mod tests {
             if warm {
                 "LEGACY_NO_AUTORECOVERY"
             } else {
-                "DEDICATED_NAMED_JOB_ZERO_CALLS"
+                "DEDICATED_NAMED_JOB_NONMUTATING"
             }
         );
         let claim = ready["zeroCallRecoveryOwnerClaim"]
@@ -1002,8 +1264,15 @@ mod tests {
 
     #[test]
     fn recovery_real_owner_interruption_and_both_commit_phases() {
-        for stage in [None, Some("AUTHORIZED"), Some("ARCHIVED")] {
-            let (scope, root, assignment, id) = interrupted_owner(false);
+        for (activity, stage) in [
+            (false, None),
+            (false, Some("AUTHORIZED")),
+            (false, Some("ARCHIVED")),
+            (true, None),
+            (true, Some("AUTHORIZED")),
+            (true, Some("ARCHIVED")),
+        ] {
+            let (scope, root, assignment, id) = interrupted_owner(activity);
             let inspected = inspect_assignment(&scope, &assignment, 180).unwrap();
             let directory = task_directory(&scope, "task-fixture", false).unwrap();
             let original_claim = fs::read(directory.join(format!("owner-{id}.json"))).unwrap();
@@ -1041,7 +1310,14 @@ mod tests {
             );
             let retired: Recovery =
                 read(&directory.join(format!("recovery-{id}-retired.json"))).unwrap();
-            assert_eq!(retired.state, "RETIRED_ZERO_CALLS");
+            assert_eq!(
+                retired.state,
+                if activity {
+                    "RETIRED_SETTLED_READS"
+                } else {
+                    "RETIRED_ZERO_CALLS"
+                }
+            );
             // Idempotent cold read does not replay the retired operation.
             drop(lock_and_recover(&scope, &inspected).unwrap());
         }
@@ -1051,6 +1327,22 @@ mod tests {
     fn recovery_refuses_recorded_calls_and_legacy_markers() {
         let (scope, root, assignment, _) = interrupted_owner(true);
         let inspected = inspect_assignment(&scope, &assignment, 180).unwrap();
+        let journal =
+            DelegatedJournal::open(state_root(&scope, "task-fixture").join("journal")).unwrap();
+        journal
+            .record_tool_call_requested(crate::delegated::journal::ToolCallRecordV1 {
+                schema_version: 1,
+                run_id: RunId::new("task-fixture").unwrap(),
+                tool_call_id: ToolCallId::new("unsettled-mutation").unwrap(),
+                tool_name: "patch.apply".into(),
+                request_hash: stable_text_hash("mutation"),
+                arguments_hash: stable_text_hash("mutation"),
+                mutation_kind: ToolMutationKind::Mutating,
+                status: ToolCallStatus::Requested,
+                result_hash: None,
+                outcome_summary: None,
+            })
+            .unwrap();
         assert_eq!(
             lock_and_recover(&scope, &inspected).err().unwrap(),
             "PROJECT_TASK_RECOVERY_ACTIVITY_RECORDED"
@@ -1070,6 +1362,104 @@ mod tests {
             crate::delegated::autonomy_runtime::acquire_project_task_writer_lock(&legacy_root)
                 .unwrap();
         assert_eq!(writer.task_marker().unwrap().unwrap(), bytes);
+    }
+
+    #[tokio::test]
+    async fn recovery_preserves_settled_read_and_preview_without_replay() {
+        let (scope, root, assignment, _) = interrupted_owner(true);
+        let inspected = inspect_assignment(&scope, &assignment, 180).unwrap();
+        let directory = state_root(&scope, "task-fixture");
+        let journal = DelegatedJournal::open(directory.join("journal")).unwrap();
+        let run = RunId::new("task-fixture").unwrap();
+        let before = journal.load_tool_calls(&run).unwrap();
+        assert_eq!(before.len(), 2);
+        let proposals = journal.load_patch_proposals(&run).unwrap();
+        let writer = lock_and_recover(&scope, &inspected).unwrap();
+        assert!(writer.task_marker().unwrap().is_none());
+        assert_eq!(journal.load_tool_calls(&run).unwrap(), before);
+        assert_eq!(journal.load_patch_proposals(&run).unwrap(), proposals);
+        assert!(is_clean(&root).unwrap());
+        drop(writer);
+        let task = ProjectTask::open(&scope, &assignment).unwrap();
+        for (id, tool, arguments) in [
+            ("observed-call", "read", json!({"path":"src/lib.rs"})),
+            (
+                "observed-preview",
+                "patch.preview",
+                json!({"patchId":"readonly-preview","operations":[
+                {"path":"src/lib.rs","old":"{ 1 }","new":"{ 2 }"}]}),
+            ),
+        ] {
+            assert_eq!(
+                task.execute(json!({"taskId":"task-fixture","callId":id,
+                "tool":tool,"arguments":arguments}))
+                    .await
+                    .unwrap_err(),
+                "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+            );
+        }
+        task.execute(
+            json!({"taskId":"task-fixture","callId":"fresh-read-after-recovery",
+            "tool":"read","arguments":{"path":"src/lib.rs"}}),
+        )
+        .await
+        .unwrap();
+        task.close().await.unwrap();
+        assert!(is_clean(&root).unwrap());
+    }
+
+    #[test]
+    fn settled_reads_refuse_uncertain_mutating_or_inconsistent_receipts() {
+        let (scope, _, assignment, _) = interrupted_owner(true);
+        let inspected = inspect_assignment(&scope, &assignment, 180).unwrap();
+        let directory = state_root(&scope, "task-fixture");
+        let journal_root = directory.join("journal");
+        let calls_path = fs::read_dir(&journal_root)
+            .unwrap()
+            .map(|entry| entry.unwrap().path().join("tool_calls.json"))
+            .find(|path| path.is_file())
+            .unwrap();
+        let bytes = fs::read(&calls_path).unwrap();
+        let original: Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(nonmutating_journal(&directory, &inspected, true).is_ok());
+        for (field, value) in [
+            ("status", json!("REQUESTED")),
+            ("status", json!("EXECUTING")),
+            ("status", json!("OUTCOME_UNKNOWN")),
+            ("status", json!("FAILED")),
+            ("mutationKind", json!("MUTATING")),
+            ("toolName", json!("verify.command")),
+            ("resultHash", Value::Null),
+            ("argumentsHash", json!(stable_text_hash("different"))),
+        ] {
+            let mut changed = original.clone();
+            changed["observed-call"][field] = value;
+            fs::write(&calls_path, serde_json::to_vec(&changed).unwrap()).unwrap();
+            assert_eq!(
+                nonmutating_journal(&directory, &inspected, true).unwrap_err(),
+                "PROJECT_TASK_RECOVERY_ACTIVITY_RECORDED"
+            );
+        }
+        fs::write(&calls_path, bytes).unwrap();
+        let state_path = journal_root.join("integrated_state/task-fixture.json");
+        let bytes = fs::read(&state_path).unwrap();
+        let original: Value = serde_json::from_slice(&bytes).unwrap();
+        for changed_field in [
+            "completedToolCallIds",
+            "providerHistory",
+            "patchProposals",
+            "unknownAuthority",
+        ] {
+            let mut changed = original.clone();
+            changed[changed_field] = json!([]);
+            fs::write(&state_path, serde_json::to_vec(&changed).unwrap()).unwrap();
+            assert_eq!(
+                nonmutating_journal(&directory, &inspected, true).unwrap_err(),
+                "PROJECT_TASK_RECOVERY_ACTIVITY_RECORDED"
+            );
+        }
+        fs::write(&state_path, bytes).unwrap();
+        assert!(nonmutating_journal(&directory, &inspected, true).is_ok());
     }
 
     #[test]

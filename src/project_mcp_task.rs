@@ -1660,7 +1660,7 @@ impl ProjectTask {
     pub(crate) fn metadata(&self) -> Value {
         json!({"taskId":self.contract.task_id,"executionWorkspace":self.root,
             "zeroCallRecoveryOwnerClaim":self.recovery_claim,
-            "coldRecoveryProfile":if self.recovery_claim.is_some(){if self.git_policy.checkpoint {"DEDICATED_NAMED_JOB_EXACT_CHECKPOINT"} else {"DEDICATED_NAMED_JOB_ZERO_CALLS"}}else{"LEGACY_NO_AUTORECOVERY"},
+            "coldRecoveryProfile":if self.recovery_claim.is_some(){if self.git_policy.checkpoint {"DEDICATED_NAMED_JOB_EXACT_CHECKPOINT"} else {"DEDICATED_NAMED_JOB_NONMUTATING"}}else{"LEGACY_NO_AUTORECOVERY"},
             "registeredWorkspace":self.project.project.workspace,"access":if self.command_profiles.is_empty() {"CONTRACT_PATCH_TOOLS"} else {"CONTRACT_PATCH_AND_COMMAND_PROFILES"},
             "nativeWriterClaimed":false,"isolatedWorktreeWriterClaimed":true,
             "allowedPaths":self.contract.allowed_paths,"allowedTools":self.allowed_tools(),
