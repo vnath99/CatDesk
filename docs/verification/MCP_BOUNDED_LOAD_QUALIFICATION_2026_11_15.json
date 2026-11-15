@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-15T04:41:29.680702+00:00",
+  "sourceHeadTested": "837063f5cb6047c8f7af05580a8080b8ff77fc92",
+  "sourceCorrectionCommit": "ccb1c34c3487172a1ec324506bdb7f1bdd3e2c22",
+  "scope": "BOUNDED_LOCAL_HTTP_AND_NATIVE_TASK_FIXTURES_NOT_INSTALLED_WEB_ACCEPTANCE",
+  "newEvidence": [
+    {
+      "selection": "project_mcp::tests::",
+      "testThreads": 8,
+      "passed": 8,
+      "failed": 0,
+      "seconds": 23.37,
+      "requestDeadlinesUnchanged": true
+    },
+    {
+      "selection": "project_mcp",
+      "testThreads": 8,
+      "selected": 81,
+      "passed": 78,
+      "failed": 0,
+      "ignored": 3,
+      "seconds": 185.25,
+      "requestDeadlinesUnchanged": true
+    }
+  ],
+  "ignoredFixtures": [
+    "Dedicated child invoked by bounded recovery tests",
+    "Installed native Windows command-sandbox parallel verification",
+    "Installed native Windows command-sandbox timeout cleanup"
+  ],
+  "priorEvidencePreserved": {
+    "initialDefaultHarnessRun": {
+      "passed": 74,
+      "failed": 4,
+      "ignored": 3
+    },
+    "fourPriorTimeoutCasesNowPassWithBoundedMixedLoad": true,
+    "fullDefaultLoadCauseFullyIsolated": false,
+    "unrestrictedLoadOrUnattendedCapacityAccepted": false,
+    "hostDotnetProcessorCount": 24,
+    "rustHarnessDefaultThreadCountDirectlyMeasured": false
+  },
+  "acceptanceDecision": {
+    "literalEstimatorSourceCorrectionQualifiedAtExplicitBoundedLoad": true,
+    "newSourceEditsNeededForThisQualification": false,
+    "wholeRepositoryFormattingStillHasUnchangedFileFailure": true,
+    "productionInstallationAuthorized": false,
+    "realTwoWebConversationCodingAccepted": false
+  },
+  "cleanup": {
+    "exclusiveBoundedOwners": 2,
+    "maximumSeconds": [
+      240,
+      360
+    ],
+    "exitCodes": [
+      0,
+      0
+    ],
+    "timedOut": false,
+    "terminationFailed": false,
+    "browserWakeOrTunnelStarts": 0
+  },
+  "directWebRemainingPrerequisites": {
+    "installedSource": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+    "autonomousContractWorkspaceGuard": {
+      "path": "src/delegated/autonomy_supervisor.rs",
+      "line": 2582,
+      "refusal": "autonomous contract workspace must match the MCP workspace",
+      "notAnEquivalentCrossProjectExecutionRoute": true
+    },
+    "d22Claim": "WAITING_FOR_CHATGPT_WITH_ORIGINAL_APPROVAL",
+    "d22FrozenContinuationRequiresPriorNeededReads": true,
+    "priorReviewReportAvailable": false,
+    "unknownStarterDeliveryPreservedWithoutResend": true,
+    "wakeReviewDraftPreparation": "PENDING_EXPLICIT_OPERATOR_DECISION_AFTER_TOOL_POLICY_REFUSAL",
+    "protectedWakeMigration": "BLOCKED_PHYSICAL_STATE_AND_AUTHORITY_NOT_RECONCILED"
+  },
+  "goalComplete": false
+}

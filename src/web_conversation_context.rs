@@ -1258,9 +1258,9 @@ fn pressure_status(project: &ProjectState, ledger: &ConversationLedger) -> Press
         incomplete_history_rollover: project.policy.incomplete_history_rollover,
         rollover_intent: ledger.rollover_intent.clone(),
         estimate_method: if correlation.known == 0 {
-            "O200K_OBSERVED_CONTEXT_PROXY_WITH_CONFIGURED_UNKNOWN_RESERVE"
+            "O200K_ORDINARY_LITERAL_V2_PROXY_WITH_UNKNOWN_RESERVE_AND_RETAINED_LEGACY_ESTIMATES"
         } else {
-            "O200K_CANONICAL_USER_RECEIPTS_AND_OBSERVED_CONTEXT_PROXY_WITH_CONFIGURED_UNKNOWN_RESERVE"
+            "O200K_CANONICAL_USER_RECEIPTS_AND_ORDINARY_LITERAL_V2_PROXY_WITH_UNKNOWN_RESERVE_AND_RETAINED_LEGACY_ESTIMATES"
         }.into(),
         advisory: true,
         origin_authenticated: false,
@@ -1321,7 +1321,10 @@ fn estimate_tokens(text: &str) -> u64 {
         }
         tokens = tokens.saturating_add(
             tokenizer
-                .encode_with_special_tokens(&remaining[..length])
+                // These are visible characters from messages, code or JSON,
+                // not provider control tokens. Treat special-token spellings
+                // literally; exact replays retain their original stored count.
+                .encode_ordinary(&remaining[..length])
                 .len()
                 .try_into()
                 .unwrap_or(u64::MAX),
@@ -1432,6 +1435,97 @@ fn write_atomic<T: Serialize>(path: &Path, value: &T, maximum: usize) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn visible_special_token_spellings_are_literal_text() {
+        let tokenizer = o200k_base_singleton();
+        for text in [
+            "<|endoftext|>",
+            "<|endofprompt|>",
+            r#"{"message":"<|endoftext|>","literal":"<|endofprompt|>"}"#,
+            "// <|endoftext|> is documentation, not a control token",
+            "Unicode: 界 🌍 <|endoftext|> café",
+        ] {
+            let ordinary = tokenizer.encode_ordinary(text).len() as u64;
+            assert_eq!(estimate_tokens(text), ordinary, "{text}");
+            assert!(ordinary > tokenizer.encode_with_special_tokens(text).len() as u64);
+        }
+        assert_eq!(estimate_tokens("<|endoftext|>"), 7);
+        // Exercise both fixed work boundaries and multibyte UTF-8 boundaries.
+        let text = "界<|endoftext|>🌍".repeat(100);
+        assert!(estimate_tokens(&text) >= tokenizer.encode_ordinary(&text).len() as u64);
+    }
+
+    #[test]
+    fn literal_estimator_upgrade_preserves_legacy_replay_and_sibling_counts() {
+        let fixture = Fixture::new("literal-estimator-compatibility");
+        let alpha = Fixture::key("alpha", "legacy-literal", 1);
+        let beta = Fixture::key("beta", "new-literal", 1);
+        for key in [&alpha, &beta] {
+            fixture
+                .store
+                .bind_observed_target(key.clone(), None)
+                .unwrap();
+        }
+        let text = "<|endoftext|>";
+        fixture.observe(
+            &alpha,
+            "tool",
+            1,
+            "tool",
+            VisibleSourceKind::ToolResult,
+            Some(text),
+        );
+        let mut legacy = fixture.store.read_ledger(&alpha).unwrap();
+        let old_count = o200k_base_singleton()
+            .encode_with_special_tokens(text)
+            .len() as u64;
+        legacy.events[0].estimated_tokens = Some(old_count);
+        fixture.store.write_ledger(&legacy).unwrap();
+        let before = fs::read(fixture.store.ledger_path(&alpha)).unwrap();
+        let replay = fixture.observe(
+            &alpha,
+            "tool",
+            1,
+            "tool",
+            VisibleSourceKind::ToolResult,
+            Some(text),
+        );
+        assert_eq!(replay.observed_tool_result_tokens, old_count);
+        assert_eq!(fs::read(fixture.store.ledger_path(&alpha)).unwrap(), before);
+        assert!(replay.estimate_method.contains("RETAINED_LEGACY_ESTIMATES"));
+        let fresh = fixture.observe(
+            &beta,
+            "tool",
+            1,
+            "tool",
+            VisibleSourceKind::ToolResult,
+            Some(text),
+        );
+        assert_eq!(fresh.observed_tool_result_tokens, 7);
+        assert_eq!(fs::read(fixture.store.ledger_path(&alpha)).unwrap(), before);
+        let changed = "<|endoftext|> changed visible content";
+        let revised = fixture.observe(
+            &alpha,
+            "tool",
+            2,
+            "tool",
+            VisibleSourceKind::ToolResult,
+            Some(changed),
+        );
+        assert_eq!(
+            revised.observed_tool_result_tokens,
+            estimate_tokens(changed)
+        );
+        assert_eq!(
+            fixture
+                .store
+                .pressure(&beta)
+                .unwrap()
+                .observed_tool_result_tokens,
+            7
+        );
+    }
 
     #[test]
     fn browser_capture_freshness_is_durable_scoped_and_legacy_unknown() {

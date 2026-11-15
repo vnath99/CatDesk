@@ -1,5 +1,24 @@
 # T-0484 — Per-conversation context pressure, token accounting and safe automatic rollover
 
+## November 15 literal-text estimator correction — source only
+
+The November 3 calibration finding remained present in the Rust estimator:
+visible spellings such as `<|endoftext|>` were encoded as provider control tokens.
+New observations now use ordinary text encoding within the existing bounded,
+UTF-8-safe work units. Status identifies the ordinary-literal V2 proxy and the
+possibility of retained legacy estimates. Exact replays preserve original
+ledger bytes and counts; only genuinely updated observations use new estimates.
+There is no ledger migration, threshold change or claim of exact provider usage.
+
+Fifty focused Rust/local-MCP tests and strict Clippy pass. Follow-up qualification
+also passes all eight project-MCP tests concurrently and the full mixed selection
+at explicit eight-test load: 78 pass, three fixtures intentionally ignored.
+Request deadlines and source are unchanged. Preserve the initial default-load
+four loopback timeouts; unrestricted load and the unchanged-file repository
+formatting failure remain unqualified. No installed package, browser, Wake
+binding or producer authority changed. [Initial evidence](../../verification/LITERAL_CONTEXT_ESTIMATOR_2026_11_15.json)
+and [bounded-load follow-up](../../verification/MCP_BOUNDED_LOAD_QUALIFICATION_2026_11_15.json).
+
 ## November 1 operator clarification — full meter contract remains OPEN
 
 Keep three separate metrics: observed per-call MCP argument/result traffic,
