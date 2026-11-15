@@ -141,3 +141,11 @@ Evidence: [docs/verification/EXISTING_D22_CLAIM_RECOVERY_2026_11_15.json](docs/v
 Agent: Codex. Source: ccb1c34c3487172a1ec324506bdb7f1bdd3e2c22. Outcome: partial. Corrected the documented literal-special-token context undercount; 50 focused Rust/local-MCP tests and strict Clippy pass, legacy replay bytes remain unchanged; initial broad-run timeouts and unchanged formatting issue retained, source is not installed. Next: Keep the qualified Wake package and held d22 review intact; resolve the review-intake command policy refusal before new review authority, then pursue direct Web edit/checkpoint/self-Wake acceptance through existing guards.
 
 Evidence: [docs/verification/LITERAL_CONTEXT_ESTIMATOR_2026_11_15.json](docs/verification/LITERAL_CONTEXT_ESTIMATOR_2026_11_15.json); command: Bounded offline context-store, focused local project-MCP and context-control tests, strict Clippy and changed-file format check; retained failed broader run; exit 0; SHA-256 23dd5c8fb548fe0db00249fe4890e33b8caee8e64a978a12f01f2f6cca85bc80.
+
+<!-- catdesk-activity:bounded-mcp-timeout-isolation-nov15 sha256:7866294a9ac3484391b1436dd9c8de2538d31023ca90695cdfef9be7a989dcda -->
+
+## 2026-11-15T04:41:29.680702+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 837063f5cb6047c8f7af05580a8080b8ff77fc92. Outcome: partial. All eight project-MCP tests pass concurrently and the full 81-test mixed selection passes at explicit eight-test load: 78 passed, three intentionally ignored, unchanged request deadlines; initial default-load failures retained, source correction qualified for integration only. Next: Integrate the qualified context source correction; await the explicit draft-preparation decision after tool refusal, preserve the held d22 review and migration, then continue the actual project-scoped Web edit/checkpoint/self-Wake path when its original guards permit.
+
+Evidence: [docs/verification/MCP_BOUNDED_LOAD_QUALIFICATION_2026_11_15.json](docs/verification/MCP_BOUNDED_LOAD_QUALIFICATION_2026_11_15.json); command: Two bounded offline cargo test runs with explicit eight-test concurrency, unchanged source and request deadlines; both owned jobs exited; exit 0; SHA-256 5456152db2fecd8db2d19f7893b9b098c2f45986c8a1cf81ec0b9120a0282466.
