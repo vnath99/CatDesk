@@ -709,9 +709,11 @@ mod tests {
         let mut changed = frame;
         changed["body"] = serde_json::json!("private context");
         assert!(readback_observation(&changed, &request).is_err());
-        assert!(!serde_json::to_string(&observed)
-            .unwrap()
-            .contains(request.candidate));
+        assert!(
+            !serde_json::to_string(&observed)
+                .unwrap()
+                .contains(request.candidate)
+        );
     }
 
     fn frame() -> serde_json::Value {
@@ -765,9 +767,11 @@ mod tests {
             saved.post_submit_diagnostic,
             Some(BootstrapDiagnostic::ResponseLoadError)
         );
-        assert!(!serde_json::to_string(&saved)
-            .unwrap()
-            .contains("EXACT_USER_MESSAGE_APPENDED"));
+        assert!(
+            !serde_json::to_string(&saved)
+                .unwrap()
+                .contains("EXACT_USER_MESSAGE_APPENDED")
+        );
     }
 
     #[test]
@@ -775,9 +779,11 @@ mod tests {
         let unknown =
             diagnostic(&serde_json::json!({"reason":"PRIVATE_CONTEXT_AND_EXECUTION_KEY"}));
         assert_eq!(unknown, BootstrapDiagnostic::UnclassifiedPostSubmitFailure);
-        assert!(!serde_json::to_string(&unknown)
-            .unwrap()
-            .contains("PRIVATE_CONTEXT"));
+        assert!(
+            !serde_json::to_string(&unknown)
+                .unwrap()
+                .contains("PRIVATE_CONTEXT")
+        );
         assert_eq!(
             diagnostic(&serde_json::json!({"reason":"BOOTSTRAP_URL_UNISSUED"})),
             BootstrapDiagnostic::UrlUnissued

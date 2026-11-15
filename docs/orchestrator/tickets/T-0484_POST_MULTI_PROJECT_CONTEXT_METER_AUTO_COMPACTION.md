@@ -14,8 +14,10 @@ Fifty focused Rust/local-MCP tests and strict Clippy pass. Follow-up qualificati
 also passes all eight project-MCP tests concurrently and the full mixed selection
 at explicit eight-test load: 78 pass, three fixtures intentionally ignored.
 Request deadlines and source are unchanged. Preserve the initial default-load
-four loopback timeouts; unrestricted load and the unchanged-file repository
-formatting failure remain unqualified. No installed package, browser, Wake
+four loopback timeouts; unrestricted load remains unqualified. The required
+repository formatting gate subsequently passed after exact formatter-only
+changes in three files; [separate evidence](../../verification/REQUIRED_FORMAT_GATE_2026_11_15.json)
+does not add functional or installed acceptance. No installed package, browser, Wake
 binding or producer authority changed. [Initial evidence](../../verification/LITERAL_CONTEXT_ESTIMATOR_2026_11_15.json)
 and [bounded-load follow-up](../../verification/MCP_BOUNDED_LOAD_QUALIFICATION_2026_11_15.json).
 

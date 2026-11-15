@@ -149,3 +149,19 @@ Evidence: [docs/verification/LITERAL_CONTEXT_ESTIMATOR_2026_11_15.json](docs/ver
 Agent: Codex. Source: 837063f5cb6047c8f7af05580a8080b8ff77fc92. Outcome: partial. All eight project-MCP tests pass concurrently and the full 81-test mixed selection passes at explicit eight-test load: 78 passed, three intentionally ignored, unchanged request deadlines; initial default-load failures retained, source correction qualified for integration only. Next: Integrate the qualified context source correction; await the explicit draft-preparation decision after tool refusal, preserve the held d22 review and migration, then continue the actual project-scoped Web edit/checkpoint/self-Wake path when its original guards permit.
 
 Evidence: [docs/verification/MCP_BOUNDED_LOAD_QUALIFICATION_2026_11_15.json](docs/verification/MCP_BOUNDED_LOAD_QUALIFICATION_2026_11_15.json); command: Two bounded offline cargo test runs with explicit eight-test concurrency, unchanged source and request deadlines; both owned jobs exited; exit 0; SHA-256 5456152db2fecd8db2d19f7893b9b098c2f45986c8a1cf81ec0b9120a0282466.
+
+<!-- catdesk-activity:required-source-format-gate-nov15 sha256:dcd17007b4ef563c393a860afe69f6ede6e47ce7bd84ae28ece63fbc77283c44 -->
+
+## 2026-11-15T04:49:38.647783+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 288ab492f0983ff19337b6da26ad15762a5aa128. Outcome: partial. Restored the required development formatting gate in exactly three files; both complete root/Wake formatting checks pass and each diff is proven exact formatter output from its Git baseline, with no new runtime or functional acceptance claimed. Next: Await the pending draft-only preparation decision; preserve d22 unknown review and protected Wake migration; after authorization prepare and validate the existing qualified Wake source review draft once through the existing workflow without claiming or sending it.
+
+Evidence: [docs/verification/REQUIRED_FORMAT_GATE_2026_11_15.json](docs/verification/REQUIRED_FORMAT_GATE_2026_11_15.json); command: Existing rustfmt only; root and Wake cargo fmt --all checks plus exact formatter-output comparison to Git baseline; exit 0; SHA-256 cd3a0da1bb061630180d28388e18414ef2a0f0bd6ab7ce7b8c2bc658713738e7.
+
+<!-- catdesk-activity:native-original-c1-response-readback-nov15 sha256:a0c5ead14376cd868ed73af4f7bdd976b4dbfdbafda2a5358028bb76cf5e97ca -->
+
+## 2026-11-15T05:01:18.080863+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 288ab492f0983ff19337b6da26ad15762a5aa128. Outcome: partial. Retrieved and automatically classified the original completed C1 assistant refusal through one native read, with 18 frozen identity/receipt checks and no operator relay or resend; historical cached-argument refusal kept separate from the newest different error, with no structured tool receipt or installed-reader acceptance claimed. Next: Await the pending draft-only preparation decision; use bounded native readback where already supported, preserve original dispatch and d22 review fences, and continue actual Web editing/checkpoint/self-Wake only through its existing authorization gates.
+
+Evidence: [docs/verification/NATIVE_C1_RESPONSE_READBACK_2026_11_15.json](docs/verification/NATIVE_C1_RESPONSE_READBACK_2026_11_15.json); command: One existing first-party native read with complete bounded history; exact original USER digest and same-turn assistant classification, joined to immutable local task and SENT receipt records; exit 0; SHA-256 2d6391574d58b48c241d29f3e0f3164ab1f67f8dfebd4705130fd4d9ad077df5.
