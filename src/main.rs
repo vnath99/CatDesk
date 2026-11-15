@@ -2820,6 +2820,13 @@ fn operator_web_error_code(error: &str) -> &str {
             | "SCOPED_REVIEW_REPLAY_REFUSED"
             | "SCOPED_REVIEW_TIMEOUT"
             | "SCOPED_WORK_INSTALLED_ADAPTER_UPGRADE_REQUIRED"
+            | "SUBMISSION_RETRY_TIMEOUT_PROOF_HASH_INVALID"
+            | "SUBMISSION_RETRY_TIMEOUT_PROOF_INVALID"
+            | "SUBMISSION_RETRY_CAS_CHANGED"
+            | "SUBMISSION_RETRY_ORDINARY_SCOPE_INVALID"
+            | "SUBMISSION_RETRY_REFUSED"
+            | "SUBMISSION_RETRY_EVIDENCE_UNAVAILABLE"
+            | "SUBMISSION_RETRY_PRIOR_EVIDENCE_CONFLICT"
             | "CONVERSATION_NATIVE_ENTRY_REQUIRED"
             | "PROJECT_TASK_ASSIGNMENT_INVALID"
             | "PROJECT_TASK_ASSIGNMENT_DIGEST_CHANGED"
@@ -4020,6 +4027,29 @@ mod tests {
         assert_eq!(
             super::operator_web_error_code("CONVERSATION_NATIVE_ENTRY_REQUIRED: PRIVATE_DETAIL"),
             "CONVERSATION_NATIVE_ENTRY_REQUIRED"
+        );
+    }
+
+    #[test]
+    fn scoped_timeout_recovery_errors_are_fixed_and_redacted() {
+        for code in [
+            "SUBMISSION_RETRY_TIMEOUT_PROOF_HASH_INVALID",
+            "SUBMISSION_RETRY_TIMEOUT_PROOF_INVALID",
+            "SUBMISSION_RETRY_CAS_CHANGED",
+            "SUBMISSION_RETRY_ORDINARY_SCOPE_INVALID",
+            "SUBMISSION_RETRY_REFUSED",
+            "SUBMISSION_RETRY_EVIDENCE_UNAVAILABLE",
+            "SUBMISSION_RETRY_PRIOR_EVIDENCE_CONFLICT",
+        ] {
+            assert_eq!(super::operator_web_error_code(code), code);
+            assert_eq!(
+                super::operator_web_error_code(&format!("{code}: private detail")),
+                code
+            );
+        }
+        assert_eq!(
+            super::operator_web_error_code("SUBMISSION_RETRY_PRIVATE_CONTEXT"),
+            "WEB_OPERATION_REFUSED"
         );
     }
 

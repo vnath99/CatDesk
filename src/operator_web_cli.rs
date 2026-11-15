@@ -177,6 +177,7 @@ pub(crate) enum WebAction {
         project_id: String,
         request_id: String,
         expected_delivery_sha256: String,
+        timeout_evidence: Option<(PathBuf, String)>,
     },
     WorkResponse {
         project_id: String,
@@ -412,6 +413,28 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                                 .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
                     })
                     .ok_or("WEB_USAGE: --expected-delivery-sha256 is required")?;
+                let proof_file = options.remove("--timeout-evidence-file");
+                let proof_hash = options.remove("--expected-timeout-evidence-sha256");
+                let timeout_evidence = match (proof_file, proof_hash) {
+                    (None, None) => None,
+                    (Some(file), Some(hash))
+                        if !file.is_empty()
+                            && file.len() <= 4096
+                            && !file.chars().any(char::is_control)
+                            && hash.len() == 64
+                            && hash
+                                .bytes()
+                                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) =>
+                    {
+                        Some((PathBuf::from(file), hash.into()))
+                    }
+                    _ => {
+                        return Err(
+                            "WEB_USAGE: timeout evidence requires one file and exact SHA-256"
+                                .into(),
+                        );
+                    }
+                };
                 if !options.is_empty() {
                     return Err("WEB_USAGE: unexpected recovery option".into());
                 }
@@ -419,6 +442,7 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                     project_id: project_id.into(),
                     request_id: request_id.into(),
                     expected_delivery_sha256: hash.into(),
+                    timeout_evidence,
                 });
             }
             if !options.is_empty() {
@@ -1039,6 +1063,10 @@ fn reason(error: DesignatedChatTargetErrorV1) -> &'static str {
 }
 
 fn read_input<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> {
+    serde_json::from_slice(&read_input_bytes(path)?).map_err(|_| "WEB_INPUT_INVALID".into())
+}
+
+fn read_input_bytes(path: &Path) -> Result<Vec<u8>, String> {
     let metadata = std::fs::symlink_metadata(path).map_err(|_| "WEB_INPUT_UNAVAILABLE")?;
     if !metadata.is_file() || metadata.file_type().is_symlink() || metadata.len() > 512 * 1024 {
         return Err("WEB_INPUT_INVALID".into());
@@ -1059,7 +1087,7 @@ fn read_input<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> 
     if bytes.len() > 512 * 1024 {
         return Err("WEB_INPUT_TOO_LARGE".into());
     }
-    serde_json::from_slice(&bytes).map_err(|_| "WEB_INPUT_INVALID".into())
+    Ok(bytes)
 }
 
 fn read_work_input(path: &Path, project_id: &str) -> Result<Value, String> {
@@ -2142,12 +2170,30 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             project_id,
             request_id,
             expected_delivery_sha256,
-        } => crate::web_work::retry_pre_submit(
-            &workspace,
-            &project_id,
-            &request_id,
-            &expected_delivery_sha256,
-        ),
+            timeout_evidence,
+        } => {
+            if let Some((path, proof_hash)) = timeout_evidence {
+                let bytes = read_input_bytes(&path)?;
+                if bytes.len() > 16 * 1024 {
+                    return Err("WEB_INPUT_TOO_LARGE".into());
+                }
+                crate::web_work::retry_pre_submit_with_timeout(
+                    &workspace,
+                    &project_id,
+                    &request_id,
+                    &expected_delivery_sha256,
+                    &bytes,
+                    &proof_hash,
+                )
+            } else {
+                crate::web_work::retry_pre_submit(
+                    &workspace,
+                    &project_id,
+                    &request_id,
+                    &expected_delivery_sha256,
+                )
+            }
+        }
         WebAction::WorkResolve {
             project_id,
             input_file,
@@ -2458,6 +2504,55 @@ mod tests {
             *changed.last_mut().unwrap() = hash;
             assert!(parse(&changed).is_err());
         }
+    }
+
+    #[test]
+    fn ordinary_retry_timeout_proof_requires_both_frozen_file_and_hash() {
+        let mut base = args(&[
+            "operator",
+            "web",
+            "work",
+            "retry-pre-submit",
+            "--project-id",
+            "alpha",
+            "--request-id",
+            "request-a",
+            "--expected-delivery-sha256",
+        ]);
+        base.push("a".repeat(64));
+        let mut complete = base.clone();
+        complete.extend(args(&[
+            "--timeout-evidence-file",
+            "proof.json",
+            "--expected-timeout-evidence-sha256",
+        ]));
+        complete.push("b".repeat(64));
+        assert!(
+            matches!(parse(&complete),Ok(WebAction::WorkRetryPreSubmit {timeout_evidence:Some((file,hash)),..})
+            if file == PathBuf::from("proof.json") && hash == "b".repeat(64))
+        );
+        for extra in [
+            args(&["--timeout-evidence-file", "proof.json"]),
+            args(&["--expected-timeout-evidence-sha256", &"b".repeat(64)]),
+            args(&[
+                "--timeout-evidence-file",
+                "proof.json",
+                "--expected-timeout-evidence-sha256",
+                &"B".repeat(64),
+            ]),
+            args(&[
+                "--timeout-evidence-file",
+                "proof\n.json",
+                "--expected-timeout-evidence-sha256",
+                &"b".repeat(64),
+            ]),
+        ] {
+            let mut changed = base.clone();
+            changed.extend(extra);
+            assert!(parse(&changed).is_err());
+        }
+        complete.extend(args(&["--send", "true"]));
+        assert!(parse(&complete).is_err());
     }
 
     #[test]

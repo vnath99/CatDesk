@@ -101,3 +101,11 @@ Evidence: [docs/verification/LOGIN_REFUSAL_CLASSIFICATION_2026_11_15.json](docs/
 Agent: Codex. Source: 302fcff721c2bfd61f66915fb66aff860bd92e5c. Outcome: partial. Original initialization recovered and paired after standard login; exact browser pair qualified; one fresh same-task Wake timed out at its pre-submit boundary with slow target guards, no new USER observed and cleanup passed. Next: Profile expensive guard validation, retain equivalent integrity proofs and qualify explicit recovery of the same pre-submit request; no operator action is needed now.
 
 Evidence: [docs/verification/ORIGINAL_RECOVERY_AND_FRESH_WAKE_2026_11_15.json](docs/verification/ORIGINAL_RECOVERY_AND_FRESH_WAKE_2026_11_15.json); command: Standard login, original initialize recover, compatibility and DOM regressions, one bounded ordinary work deliver; exit 2; SHA-256 af95064eaea268f8721c283d3cf46cadf2dd32da24ec2c8df3fdcc564fbfe675.
+
+<!-- catdesk-activity:wake-fresh-two-turn-recovery-qualified-nov15 sha256:fb685b6cce5d855241c5e2cdb749fc8eb0f81a49e3b2c1afac242b22fad9ec64 -->
+
+## 2026-11-15T02:28:05.374400+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: f7f1dedeb2584469e252969f195c43c5b4d3aa6a. Outcome: partial. Fresh same-task two-turn Wake and timer passed in the bounded development runtime after causal hash-cost correction and exact pre-input recovery; original failure retained, no duplicate USER and cleanup verified; useful Web edit and self-Wake remain open. Next: Qualify a new scoped direct-Web file-edit, independent verification and Git checkpoint assignment with self-Wake permission; preserve historical uncertain tasks; no operator action needed now.
+
+Evidence: [docs/verification/FRESH_WAKE_RECOVERY_ACCEPTANCE_2026_11_15.json](docs/verification/FRESH_WAKE_RECOVERY_ACCEPTANCE_2026_11_15.json); command: 22 targeted Rust tests, strict Clippy, matched development build, exact pre-input recovery, one bounded deliver and automatic native readback; exit 0; SHA-256 72cde4af485b093b164cbaf4e1028cbb5fc2c7f73fd3299dbacd3251bf763fba.

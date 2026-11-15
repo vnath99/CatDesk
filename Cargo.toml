@@ -39,3 +39,8 @@ catdesk-wake = { path = "wake", features = ["test-support"] }
 lto = true
 strip = true
 codegen-units = 1
+
+# Admission repeatedly hashes retained executables. Keep every integrity check
+# practical in debug runtimes without changing application debug assertions.
+[profile.dev.package.sha2]
+opt-level = 3
