@@ -1,5 +1,7 @@
 # CatDesk — Security and Authority Model
 
+**Decision 2026-11-15T22:34:51Z:** Only new disposable ACLs were changed during testing. Changing the existing interpreter ACL remains a separate exact resource-owner decision. DACL-only access preserves owner/SACL and requests no elevation; it creates no signer, account, grant or replay authority. [Evidence](../verification/NATIVE_RUNTIME_READ_ACCESS_2026_11_15.json).
+
 **Decision 2026-11-15T21:34:58Z:** Interpreter launch denial is reproduced by version-only inspection; neither this output nor daemon readiness grants replay, ACL/configuration changes, grant replacement or protected promotion. Disposable access tests must preserve original task and installation. [Evidence](../verification/NATIVE_SANDBOX_READINESS_AND_COMMAND_QUALIFICATION_2026_11_15.json).
 
 **Decision 2026-11-15T21:01:12Z:** Reported sandbox error text is untrusted diagnostic evidence, never proof that a target did not run or authority for retry, permission changes or recovery. Original prelaunch allowlist and ownership fences are unchanged. [Evidence](../verification/NATIVE_COMMAND_FAILURE_DIAGNOSTIC_2026_11_15.json).

@@ -1,5 +1,7 @@
 # CatDesk — Release, Diagnostics and Recovery
 
+**Decision 2026-11-15T22:34:51Z:** No backend or Wake upgrade is needed to address the native interpreter permission dependency. A frozen owner-scoped read/execute repair is preflight-ready, not executed; genuine protected release/review gates still apply to separate missing installed Web capabilities. [Evidence](../verification/NATIVE_RUNTIME_READ_ACCESS_2026_11_15.json).
+
 **Decision 2026-11-15T21:34:58Z:** Native diagnostic probes qualify only their exact runtime layers. No candidate rebuild/selection or protected upgrade occurred; existing frozen production, fallback and canonical v5 remain unchanged. Interpreter qualification is a separate unresolved local dependency. [Evidence](../verification/NATIVE_SANDBOX_READINESS_AND_COMMAND_QUALIFICATION_2026_11_15.json).
 
 **Decision 2026-11-15T21:01:12Z:** This source-only diagnostic change does not rebuild/select a package or confer promotion authority. Selected development app remains 79a449b, prior verified fallback is retained, and production/v5 stay unchanged. [Evidence](../verification/NATIVE_COMMAND_FAILURE_DIAGNOSTIC_2026_11_15.json).

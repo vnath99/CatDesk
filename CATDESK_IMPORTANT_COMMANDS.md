@@ -1,5 +1,13 @@
 # CatDesk important commands
 
+## 2026-11-15T22:34:51Z — Runtime-owner repair is separate from release promotion
+
+The existing native sandbox accounts need OS read/execute access to the approved interpreter. Logical native root-read permissions did not provision a genuinely private fixture. A speculative application policy change was discarded; the production runner remains byte-for-byte unchanged. Existing accounts plus a DACL-only read/execute grant repaired a private fixture, including the exact previously refused copy, while an actual write probe was denied.
+
+The private frozen proposal is preflight-ready: directory identity/physical path, owner WRITE_DAC, five core image hashes and both existing native reader identities are checked. Only its exact resource-owner approval remains; do not run Execute, setup, elevation, fingerprint edits or original-task calls before that decision. Proposal SHA-256 `75b134ce8158328e22cc0b996cf7b6ae35cefc9493efb3e8633d8c482a159099`; script SHA-256 `99e25101082f52fe001cca93dbb546c97cf0d075df023e78191cf71fbc1d7f62`. Private path/SDDL/SIDs remain in the established local audit checkpoint, not GitHub. Timestamps/log references do not invalidate it; changed resource/ACL/image/account identities do.
+
+The source-only ignored probes `native_private_runtime_without_access_is_refused` and `native_private_runtime_with_access_is_read_only` require distinct unprovisioned/provisioned disposable parent states, exact approved interpreter path/SHA and test-only `CATDESK_TEST_PRIVATE_RUNTIME_PARENT`. Never point these fixture preparations at an existing install, project, profile or authentication directory. They preserve negative-control and private receipt evidence; ordinary tests skip live probes. No new installation, account, connector or release manager. [Evidence](docs/verification/NATIVE_RUNTIME_READ_ACCESS_2026_11_15.json).
+
 ## 2026-11-15T21:34:58Z — Bounded real-runner qualification
 
 From the authorized source/build worktree, with the existing Rust toolchain and target directory configured:

@@ -1,5 +1,7 @@
 # CatDesk — Components and Interface Contracts
 
+**Decision 2026-11-15T22:34:51Z:** Native logical filesystem permissions and OS resource ACLs are separate layers. Controlled private fixtures prove read/execute provisioning repairs this failure class and still denies writes; the application command implementation is unchanged. [Evidence](../verification/NATIVE_RUNTIME_READ_ACCESS_2026_11_15.json).
+
 **Decision 2026-11-15T21:34:58Z:** The Unix app-server control socket requires WebSocket HTTP Upgrade; JSONL applies to its stdio transport. Existing bounded proxy diagnosis now verifies readiness without a new daemon. Command probes reuse the real runner, not a parallel implementation. [Evidence](../verification/NATIVE_SANDBOX_READINESS_AND_COMMAND_QUALIFICATION_2026_11_15.json).
 
 **Decision 2026-11-15T21:01:12Z:** Future verify.command receipts optionally carry failureDiagnostic before the existing receipt hash/persistence. Successful receipts and existing tool contracts stay compatible; original private receipts are not rewritten. [Evidence](../verification/NATIVE_COMMAND_FAILURE_DIAGNOSTIC_2026_11_15.json).

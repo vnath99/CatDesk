@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**Runtime access update 2026-11-15T22:34:51Z:** private-runtime refusal and a read/execute-only repair are verified with real native processes; the same previously refused fixture now launches and writes remain denied. Production command code and the original installation/task remain unchanged. One frozen resource-owner ACL decision is pending; no backend/Wake promotion is needed for this permission dependency. [Evidence](docs/verification/NATIVE_RUNTIME_READ_ACCESS_2026_11_15.json).
+
 **Runtime qualification 2026-11-15T21:34:58Z:** existing app-server sandbox readiness is READY after the correct WebSocket handshake. Actual command-owner system lookup passes; the exact approved interpreter fails even on version-only invocation with the original reported spawn-access denial. Five deterministic tests, strict Clippy and formatting pass; the explicit interpreter qualification remains FAILED. No original-task retry, package selection, production or v5 change. [Evidence](docs/verification/NATIVE_SANDBOX_READINESS_AND_COMMAND_QUALIFICATION_2026_11_15.json).
 
 **Development update 2026-11-15T21:01:12Z:** future native verification receipts now have a bounded advisory sandbox-spawn diagnostic; source 7b4e1d6d passed five targeted command tests, strict Clippy and formatting. Original failed receipt/task and production/v5 remain unchanged. No new connection, package selection, replay, setup or release authority. [Evidence](docs/verification/NATIVE_COMMAND_FAILURE_DIAGNOSTIC_2026_11_15.json).
