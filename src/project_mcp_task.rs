@@ -106,12 +106,22 @@ fn continuation_contract(inspected: &AssignmentInspection) -> Value {
             "timeoutSeconds":profile.timeout_seconds})).collect::<Vec<_>>(),
         "contractLimits":{"maxToolCalls":contract.max_tool_calls,"maxElapsedSeconds":contract.max_elapsed_seconds,
             "maxTurns":contract.max_turns,"retryBudget":contract.retry_budget},
-        "limitsRestartedByRollover":false});
+        "limitsRestartedByRollover":false,
+        "elapsedBudgetScope":"PER_SERVING_CONNECTION",
+        "chatgptTurnUsageKnown":false});
     if !inspected.checkpoint_paths.is_empty() {
         value["checkpointPaths"] = json!(inspected.checkpoint_paths);
         value["gitCheckpointPolicy"] = json!({"localGrantRequired":true,"checkpointTool":"git.checkpoint","checkpointArguments":{"verificationCallIds":["successful-verify-call-id"]},"allAssignedCommandProfilesMustPass":true,"syncTool":"git.sync","syncArguments":{"checkpointCallId":"completed-checkpoint-call-id"},"manualEndTurnRequiresCurrentCheckpointWhenGranted":true,"pendingSyncBlocksManualWake":false});
     }
     value
+}
+
+fn tool_budget(maximum: u32, recorded: Option<usize>) -> Value {
+    // Readback only: the existing journal/dispatch guards remain authority.
+    // Missing or unreadable history must never look like a fresh full budget.
+    json!({"maximumToolCalls":maximum,"recordedToolCalls":recorded,
+        "remainingToolCalls":recorded.map(|count|(maximum as usize).saturating_sub(count)),
+        "includesFailedCalls":true,"journalReadSucceeded":recorded.is_some()})
 }
 
 /// Conversation URLs and generations are deliberately excluded: a proved
@@ -1461,6 +1471,7 @@ pub(crate) fn prepare_work_resume(
     )?;
     let mut output = admission;
     output["journaledCallCount"] = json!(call_count);
+    output["toolBudget"] = tool_budget(inspected.contract.max_tool_calls, Some(call_count));
     output["completedCallReplayAllowed"] = json!(false);
     output["nativeSessionAction"] = json!("NONE");
     // Add display context after preserving the original immutable admission
@@ -1658,6 +1669,10 @@ impl ProjectTask {
     }
 
     pub(crate) fn metadata(&self) -> Value {
+        let recorded = RunId::new(&self.contract.task_id)
+            .ok()
+            .and_then(|run| self.journal.load_tool_calls(&run).ok())
+            .map(|calls| calls.len());
         json!({"taskId":self.contract.task_id,"executionWorkspace":self.root,
             "zeroCallRecoveryOwnerClaim":self.recovery_claim,
             "coldRecoveryProfile":if self.recovery_claim.is_some(){if self.git_policy.checkpoint {"DEDICATED_NAMED_JOB_EXACT_CHECKPOINT"} else {"DEDICATED_NAMED_JOB_NONMUTATING"}}else{"LEGACY_NO_AUTORECOVERY"},
@@ -1666,7 +1681,10 @@ impl ProjectTask {
             "allowedPaths":self.contract.allowed_paths,"allowedTools":self.allowed_tools(),
             "commandsEnabled":!self.command_profiles.is_empty(),
             "commandProfiles":self.command_profiles.iter().map(|p|json!({"id":p.id,"timeoutSeconds":p.timeout_seconds})).collect::<Vec<_>>(),
-            "baseCommit":self.original_base,"branch":self.witness.3})
+            "baseCommit":self.original_base,"branch":self.witness.3,
+            "toolBudget":tool_budget(self.contract.max_tool_calls,recorded),
+            "maxServingConnectionSeconds":self.connection_budget.as_secs(),
+            "elapsedBudgetScope":"PER_SERVING_CONNECTION","chatgptTurnUsageKnown":false})
     }
 
     pub(crate) fn commands_enabled(&self) -> bool {
@@ -3329,6 +3347,13 @@ pub(crate) mod tests {
             assignment["contract"]["maxToolCalls"]
         );
         assert_eq!(context["limitsRestartedByRollover"], false);
+        assert_eq!(context["elapsedBudgetScope"], "PER_SERVING_CONNECTION");
+        assert_eq!(context["chatgptTurnUsageKnown"], false);
+        assert_eq!(output["toolBudget"]["recordedToolCalls"], 0);
+        assert_eq!(
+            output["toolBudget"]["remainingToolCalls"],
+            assignment["contract"]["maxToolCalls"]
+        );
         let admission_path = directory.join(format!(
             "resume-prepared-{}-{}.json",
             record.target.generation, record.target.digest
@@ -3371,6 +3396,74 @@ pub(crate) mod tests {
             fs::read(directory.join("assignment.json")).unwrap(),
             fs::read(path).unwrap()
         );
+    }
+
+    #[test]
+    fn prepared_resume_tool_budget_survives_rollover_with_failed_calls() {
+        use crate::delegated::journal::{ToolCallRecordV1, ToolMutationKind};
+        let (scope, _, path, record) = linked_fixture();
+        let initial = prepare_work_resume(&scope, &record, &record.target).unwrap();
+        let directory = state_root(&scope, "task-fixture");
+        let admission = directory.join(format!(
+            "resume-prepared-{}-{}.json",
+            record.target.generation, record.target.digest
+        ));
+        let immutable_before = fs::read(&admission).unwrap();
+        let contract = inspect_assignment(&scope, &path, 180).unwrap().contract;
+        let journal = DelegatedJournal::open(directory.join("journal")).unwrap();
+        journal.create_run(&contract).unwrap();
+        let run = RunId::new("task-fixture").unwrap();
+        for (id, status) in [
+            ("completed-read", ToolCallStatus::Completed),
+            ("failed-read", ToolCallStatus::Failed),
+        ] {
+            let call = ToolCallId::new(id).unwrap();
+            journal
+                .record_tool_call_requested(ToolCallRecordV1 {
+                    schema_version: 1,
+                    run_id: run.clone(),
+                    tool_call_id: call.clone(),
+                    tool_name: "read".into(),
+                    request_hash: "a".repeat(64),
+                    arguments_hash: "b".repeat(64),
+                    mutation_kind: ToolMutationKind::ReadOnly,
+                    status: ToolCallStatus::Requested,
+                    result_hash: None,
+                    outcome_summary: None,
+                })
+                .unwrap();
+            for phase in [
+                ToolCallStatus::PolicyAllowed,
+                ToolCallStatus::Executing,
+                status,
+            ] {
+                journal
+                    .transition_tool_call(&run, &call, phase, None, None)
+                    .unwrap();
+            }
+        }
+        let prepared = prepare_work_resume(&scope, &record, &record.target).unwrap();
+        assert_eq!(prepared["toolBudget"]["recordedToolCalls"], 2);
+        assert_eq!(
+            prepared["toolBudget"]["remainingToolCalls"],
+            contract.max_tool_calls - 2
+        );
+        assert_eq!(prepared["toolBudget"]["includesFailedCalls"], true);
+        assert_eq!(fs::read(&admission).unwrap(), immutable_before);
+        let replacement =
+            catdesk_wake::protocol::Target::new(2, "https://chatgpt.com/c/replacement".into())
+                .unwrap();
+        let mut rolled = scope.clone();
+        rolled.project.chatgpt_target_url = Some(replacement.url.clone());
+        rolled.project.chatgpt_target_sha256 = Some(replacement.digest.clone());
+        let after = prepare_work_resume(&rolled, &record, &replacement).unwrap();
+        assert_eq!(after["toolBudget"], prepared["toolBudget"]);
+        assert_eq!(
+            after["taskContract"]["contractLimits"],
+            initial["taskContract"]["contractLimits"]
+        );
+        assert_eq!(after["completedCallReplayAllowed"], false);
+        assert_eq!(after["launchAuthorized"], false);
     }
 
     #[test]
@@ -3687,6 +3780,10 @@ pub(crate) mod tests {
     async fn project_task_two_worktrees_patch_independently_and_resume_without_duplicate() {
         let (a_scope, a_root, a_assignment) = fixture("alpha");
         let (b_scope, b_root, b_assignment) = fixture("beta");
+        let mut assigned: Value =
+            serde_json::from_slice(&fs::read(&a_assignment).unwrap()).unwrap();
+        assigned["contract"]["maxToolCalls"] = json!(4);
+        fs::write(&a_assignment, serde_json::to_vec(&assigned).unwrap()).unwrap();
         let a = ProjectTask::open(&a_scope, &a_assignment).unwrap();
         let b = ProjectTask::open(&b_scope, &b_assignment).unwrap();
         assert!(acquire_project_writer_lock(&a_root).is_err());
@@ -3749,11 +3846,71 @@ pub(crate) mod tests {
         drop(a);
         drop(b);
         let resumed = ProjectTask::open(&a_scope, &a_assignment).unwrap();
+        assert_eq!(resumed.metadata()["toolBudget"]["recordedToolCalls"], 2);
+        assert_eq!(resumed.metadata()["toolBudget"]["remainingToolCalls"], 2);
         assert_eq!(
             resumed.execute(apply).await.unwrap_err(),
             "PROJECT_TASK_CALL_ALREADY_COMPLETED"
         );
+        assert!(
+            resumed
+                .execute(call(
+                    "bad-search",
+                    "search",
+                    json!({"path":"src","pattern":""})
+                ))
+                .await
+                .is_err()
+        );
+        let records = resumed
+            .journal
+            .load_tool_calls(&RunId::new("task-fixture").unwrap())
+            .unwrap();
+        assert_eq!(records["bad-search"].status, ToolCallStatus::Failed);
+        assert_eq!(resumed.metadata()["toolBudget"]["recordedToolCalls"], 3);
+        assert_eq!(resumed.metadata()["toolBudget"]["remainingToolCalls"], 1);
+        resumed
+            .execute(call(
+                "last-diff",
+                "diff.actual",
+                json!({"paths":["src/lib.rs"]}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resumed.metadata()["toolBudget"]["remainingToolCalls"], 0);
+        assert_eq!(
+            resumed
+                .execute(call("over-budget", "read", json!({"path":"src/lib.rs"})))
+                .await
+                .unwrap_err(),
+            "PROJECT_TASK_TOOL_BUDGET_EXCEEDED"
+        );
+        assert_eq!(resumed.metadata()["toolBudget"]["recordedToolCalls"], 4);
+        let peer = ProjectTask::open(&b_scope, &b_assignment).unwrap();
+        peer.execute(call(
+            "peer-still-progresses",
+            "diff.actual",
+            json!({"paths":["src/lib.rs"]}),
+        ))
+        .await
+        .unwrap();
+        peer.close().await.unwrap();
         resumed.close().await.unwrap();
+        // An unreadable synthetic journal must report unknown budget, never a
+        // refilled maximum. Readback itself must not repair or rewrite it.
+        let calls_path = resumed
+            .journal
+            .run_dir(&RunId::new("task-fixture").unwrap())
+            .unwrap()
+            .join("tool_calls.json");
+        let original = fs::read(&calls_path).unwrap();
+        fs::write(&calls_path, b"{").unwrap();
+        let unknown = resumed.metadata();
+        assert_eq!(unknown["toolBudget"]["journalReadSucceeded"], false);
+        assert!(unknown["toolBudget"]["recordedToolCalls"].is_null());
+        assert!(unknown["toolBudget"]["remainingToolCalls"].is_null());
+        assert_eq!(fs::read(&calls_path).unwrap(), b"{");
+        fs::write(&calls_path, original).unwrap();
         drop(acquire_project_writer_lock(&a_root).unwrap());
     }
 
