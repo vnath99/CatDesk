@@ -1,5 +1,9 @@
 # CatDesk activity log
 
+**Verified follow-up 2026-11-16T00:09:22.940282+00:00:** source `1ae346351db6c4659d08f1d0e755a46ddd49b411` adds journal-derived remaining tool-call budget to task metadata/resume. Counts survive close/reopen and conversation rollover, include failed calls, and remain unknown when the journal cannot be read. Elapsed scope is explicitly per serving connection; ChatGPT turn usage is unknown. Four targeted tests, strict workspace Clippy and formatting pass. This is source-only readback; no budget reset, grant change, selected-package rebuild or protected upgrade. The separately authorized actual-runtime RX repair and native version check passed. Full Web edit/checkpoint/self-Wake remains OPEN. [Evidence](docs/verification/NATIVE_RUNTIME_REPAIR_APPLIED_2026_11_15.json).
+
+**Approved runtime repair 2026-11-15T23:00:48.899963+00:00:** the frozen DACL-only operation applied once under explicit user authorization. The actual installed interpreter now passes its bounded native version check; images are unchanged, write/owner/audit rights were not granted, and both owners exited normally. No original-task replay, package, production release or v5 change. This supersedes the earlier pending runtime-owner decision. [Actual result](docs/verification/NATIVE_RUNTIME_REPAIR_APPLIED_2026_11_15.json).
+
 ## 2026-11-15T22:34:51Z — Private native runtime repair qualified without changing production
 
 Source ab1b6ddabbf8ad4d1bab05831b9bd06db94ad24b changes test fixtures only. Identical interpreter/core-runtime bytes launch inside the writable fixture. Default-copy inheritance initially made the negative control readable; that result was rejected as causal proof. A protected owner-controlled fixture then reproduced the native spawn-access denial. An explicit runtime-read policy declaration still failed; the speculative production change was removed before commit. Current production-command implementation is unchanged.

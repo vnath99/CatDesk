@@ -1,5 +1,7 @@
 # CatDesk — System Architecture
 
+**Decision 2026-11-16T00:09:22.940282+00:00:** The authorized resource ACL repair and actual installed-interpreter native version check are accepted. They add no backend, connection, release manager or native model dependency. Continue direct-Web acceptance separately; interpreter launch alone is not task verification. [Evidence](../verification/NATIVE_RUNTIME_REPAIR_APPLIED_2026_11_15.json).
+
 **Decision 2026-11-15T22:34:51Z:** Reuse the existing native runner. The verified private-runtime repair is resource-owner read/execute provisioning to existing accounts, not a new backend, policy or execution subsystem. Source development and protected production acceptance remain independent. [Evidence](../verification/NATIVE_RUNTIME_READ_ACCESS_2026_11_15.json).
 
 **Decision 2026-11-15T21:34:58Z:** Readiness and task verification are distinct: existing daemon READY and actual system-command success do not qualify the failed approved interpreter. Reuse the existing owner and diagnostics; no new infrastructure. [Evidence](../verification/NATIVE_SANDBOX_READINESS_AND_COMMAND_QUALIFICATION_2026_11_15.json).

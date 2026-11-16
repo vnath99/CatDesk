@@ -1,5 +1,7 @@
 # CatDesk — Components and Interface Contracts
 
+**Decision 2026-11-16T00:09:22.940282+00:00:** Existing task metadata/resume now exposes journal-derived toolBudget. Terminal failed calls count; unreadable journals return null recorded/remaining counts. Original immutable admission and contract limits are retained across rollover. Elapsed limits are per serving connection; hidden ChatGPT turn usage is unknown. No new tool or plugin is required; this source change is not installed. [Evidence](../verification/NATIVE_RUNTIME_REPAIR_APPLIED_2026_11_15.json).
+
 **Decision 2026-11-15T22:34:51Z:** Native logical filesystem permissions and OS resource ACLs are separate layers. Controlled private fixtures prove read/execute provisioning repairs this failure class and still denies writes; the application command implementation is unchanged. [Evidence](../verification/NATIVE_RUNTIME_READ_ACCESS_2026_11_15.json).
 
 **Decision 2026-11-15T21:34:58Z:** The Unix app-server control socket requires WebSocket HTTP Upgrade; JSONL applies to its stdio transport. Existing bounded proxy diagnosis now verifies readiness without a new daemon. Command probes reuse the real runner, not a parallel implementation. [Evidence](../verification/NATIVE_SANDBOX_READINESS_AND_COMMAND_QUALIFICATION_2026_11_15.json).

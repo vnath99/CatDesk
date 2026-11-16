@@ -1,5 +1,9 @@
 # CatDesk important commands
 
+**Verified follow-up 2026-11-16T00:09:22.940282+00:00:** source `1ae346351db6c4659d08f1d0e755a46ddd49b411` adds journal-derived remaining tool-call budget to task metadata/resume. Counts survive close/reopen and conversation rollover, include failed calls, and remain unknown when the journal cannot be read. Elapsed scope is explicitly per serving connection; ChatGPT turn usage is unknown. Four targeted tests, strict workspace Clippy and formatting pass. This is source-only readback; no budget reset, grant change, selected-package rebuild or protected upgrade. The separately authorized actual-runtime RX repair and native version check passed. Full Web edit/checkpoint/self-Wake remains OPEN. [Evidence](docs/verification/NATIVE_RUNTIME_REPAIR_APPLIED_2026_11_15.json).
+
+**Approved runtime repair 2026-11-15T23:00:48.899963+00:00:** the frozen DACL-only operation applied once under explicit user authorization. The actual installed interpreter now passes its bounded native version check; images are unchanged, write/owner/audit rights were not granted, and both owners exited normally. No original-task replay, package, production release or v5 change. This supersedes the earlier pending runtime-owner decision. [Actual result](docs/verification/NATIVE_RUNTIME_REPAIR_APPLIED_2026_11_15.json).
+
 ## 2026-11-15T22:34:51Z — Runtime-owner repair is separate from release promotion
 
 The existing native sandbox accounts need OS read/execute access to the approved interpreter. Logical native root-read permissions did not provision a genuinely private fixture. A speculative application policy change was discarded; the production runner remains byte-for-byte unchanged. Existing accounts plus a DACL-only read/execute grant repaired a private fixture, including the exact previously refused copy, while an actual write probe was denied.

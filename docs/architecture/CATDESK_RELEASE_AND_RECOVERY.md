@@ -1,5 +1,7 @@
 # CatDesk — Release, Diagnostics and Recovery
 
+**Decision 2026-11-16T00:09:22.940282+00:00:** The runtime-access failure was repaired through its approved resource-owner procedure without a CatDesk/Wake promotion. Actual interpreter version execution passed; the selected development package and protected production release remain unchanged. Source budget readback passed four targeted regressions, Clippy and formatting; it is not independently reviewed release authority. [Evidence](../verification/NATIVE_RUNTIME_REPAIR_APPLIED_2026_11_15.json).
+
 **Decision 2026-11-15T22:34:51Z:** No backend or Wake upgrade is needed to address the native interpreter permission dependency. A frozen owner-scoped read/execute repair is preflight-ready, not executed; genuine protected release/review gates still apply to separate missing installed Web capabilities. [Evidence](../verification/NATIVE_RUNTIME_READ_ACCESS_2026_11_15.json).
 
 **Decision 2026-11-15T21:34:58Z:** Native diagnostic probes qualify only their exact runtime layers. No candidate rebuild/selection or protected upgrade occurred; existing frozen production, fallback and canonical v5 remain unchanged. Interpreter qualification is a separate unresolved local dependency. [Evidence](../verification/NATIVE_SANDBOX_READINESS_AND_COMMAND_QUALIFICATION_2026_11_15.json).
